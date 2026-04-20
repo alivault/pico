@@ -20,10 +20,10 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 
 - [ ] Rebuild the session runtime in TypeScript around the Pi SDK
 - [ ] Implement `/events` with viewer-context replay/sync behavior
-- [ ] Implement prompt + abort + queued/steered follow-up flows
-- [ ] Implement session lifecycle routes: new, rename, delete, fork, tree, tree label
-- [ ] Implement model/thinking/settings/UI bridge routes
-- [ ] Implement supporting routes: highlight, directory resolve, path/file completions, git status, git changes, directory session indexes
+- [x] Implement prompt + abort + queued/steered follow-up flows
+- [x] Implement session lifecycle routes: new, rename, delete, fork, tree, tree label
+- [x] Implement model/thinking/settings/UI bridge routes
+- [x] Implement supporting routes: highlight, directory resolve, path/file completions, git status, git changes, directory session indexes
 - [ ] Commit backend milestones incrementally
 
 ## Phase 4 — frontend rewrite
@@ -52,3 +52,4 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - 2026-04-20: Verified the rewritten shell and initial native endpoints in zellij on `localhost:3142`.
 - 2026-04-20: Committed the cleanup reset as `feat: reset to native tanstack rewrite baseline`.
 - 2026-04-20: Added shared API response types and a live workspace preview in the native shell using the new git/path endpoints.
+- 2026-04-20: Replaced the proxy stubs with a native TypeScript session backend covering `/events`, prompt/abort, session lifecycle, tree, model/thinking, highlight, path completion, git, and extension UI request plumbing.

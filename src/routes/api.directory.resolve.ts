@@ -1,27 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { errorResponse, jsonResponse } from "@/server/http"
+import { jsonResponse } from "@/server/http"
+import { getPiWebRuntime } from "@/server/pi-web-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
+import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/directory/resolve")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = (await request.json().catch(() => ({}))) as {
-          path?: unknown
-        }
-        const pathInput = typeof body.path === "string" ? body.path : ""
-
         try {
-          const resolvedPath = await resolveDirectoryPath(
-            pathInput,
-            process.cwd()
-          )
-          return jsonResponse({ ok: true, path: resolvedPath })
+          const body = await readRequestJson<{ path?: unknown }>(request)
+          const { context, activeEntry } =
+            await getPiWebRuntime().resolveRequest(request)
+          const pathInput = typeof body.path === "string" ? body.path : ""
+          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+          return jsonResponse({
+            ok: true,
+            path: await resolveDirectoryPath(pathInput, baseCwd),
+          })
         } catch (error) {
-          return errorResponse(
-            error instanceof Error ? error.message : "Failed to resolve path"
-          )
+          return routeErrorResponse(error, "Failed to resolve directory")
         }
       },
     },

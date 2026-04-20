@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { createNotImplementedHandlers } from "@/server/not-implemented"
+import { getPiWebRuntime } from "@/server/pi-web-runtime"
 
 export const Route = createFileRoute("/events")({
   server: {
-    handlers: createNotImplementedHandlers("/events", ["GET"]),
+    handlers: {
+      GET: ({ request }) => getPiWebRuntime().createEventsResponse(request),
+    },
   },
 })

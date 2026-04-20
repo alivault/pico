@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
 import { readDirectoryGitChanges } from "@/server/git"
+import { getPiWebRuntime } from "@/server/pi-web-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
+import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/git-changes")({
   server: {
@@ -15,7 +17,10 @@ export const Route = createFileRoute("/api/git-changes")({
         }
 
         try {
-          const cwd = await resolveDirectoryPath(requestedCwd, process.cwd())
+          const { context, activeEntry } =
+            await getPiWebRuntime().resolveRequest(request)
+          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+          const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const gitChanges = await readDirectoryGitChanges(cwd)
           return jsonResponse({
             ok: true,
@@ -49,11 +54,7 @@ export const Route = createFileRoute("/api/git-changes")({
                 : [],
           })
         } catch (error) {
-          return errorResponse(
-            error instanceof Error
-              ? error.message
-              : "Failed to read git changes"
-          )
+          return routeErrorResponse(error, "Failed to read git changes")
         }
       },
     },

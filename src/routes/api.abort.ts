@@ -1,9 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { createNotImplementedHandlers } from "@/server/not-implemented"
+import { jsonResponse } from "@/server/http"
+import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/abort")({
   server: {
-    handlers: createNotImplementedHandlers("/api/abort", ["POST"]),
+    handlers: {
+      POST: async ({ request }) => {
+        try {
+          return jsonResponse(await getPiWebRuntime().abort(request))
+        } catch (error) {
+          return routeErrorResponse(error, "Failed to abort session")
+        }
+      },
+    },
   },
 })

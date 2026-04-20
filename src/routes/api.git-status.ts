@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
 import { readDirectoryGitStatus } from "@/server/git"
+import { getPiWebRuntime } from "@/server/pi-web-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
+import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/git-status")({
   server: {
@@ -15,13 +17,17 @@ export const Route = createFileRoute("/api/git-status")({
         }
 
         try {
-          const cwd = await resolveDirectoryPath(requestedCwd, process.cwd())
-          const gitStatus = await readDirectoryGitStatus(cwd)
-          return jsonResponse({ ok: true, cwd, gitStatus })
+          const { context, activeEntry } =
+            await getPiWebRuntime().resolveRequest(request)
+          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+          const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
+          return jsonResponse({
+            ok: true,
+            cwd,
+            gitStatus: await readDirectoryGitStatus(cwd),
+          })
         } catch (error) {
-          return errorResponse(
-            error instanceof Error ? error.message : "Failed to read git status"
-          )
+          return routeErrorResponse(error, "Failed to read git status")
         }
       },
     },
