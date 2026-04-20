@@ -56,3 +56,4 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - 2026-04-20: Completed the native frontend shell wiring for live SSE session state, route-linked session selection, conversation rendering, composer queue/steer flows, dialogs, and the git view.
 - 2026-04-20: Fixed a React update loop in the native shell, added sidebar session pagination, and made dev-mode Pi SDK loading work reliably from the installed external runtime package.
 - 2026-04-20: Restored more native parity from the old pi-web shell with an extracted command palette, shortcuts/status/settings dialogs, theme-aware sidebar actions, and session-finished notification settings backed by the new TanStack UI.
+- 2026-04-20: Fixed route/session synchronization so sidebar session selection does not get overwritten by stale local shell state while the next SSE stream is connecting.

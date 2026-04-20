@@ -234,6 +234,7 @@ export function PiWebAppShell({
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
+  const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
 
   const { resolvedTheme, setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -392,6 +393,30 @@ export function PiWebAppShell({
     })
   }, [sessionsEvent?.directories, sessionState.cwd])
 
+  const handleSelectSession = React.useCallback(
+    (nextSessionId?: string) => {
+      pendingRouteSessionIdRef.current = nextSessionId
+      onSelectSession?.(nextSessionId)
+    },
+    [onSelectSession]
+  )
+
+  React.useEffect(() => {
+    if (!sessionId) {
+      pendingRouteSessionIdRef.current = undefined
+      return
+    }
+
+    if (sessionId === sessionState.sessionId) {
+      if (pendingRouteSessionIdRef.current === sessionId) {
+        pendingRouteSessionIdRef.current = undefined
+      }
+      return
+    }
+
+    pendingRouteSessionIdRef.current = sessionId
+  }, [sessionId, sessionState.sessionId])
+
   React.useEffect(() => {
     if (!viewerContextId) return
 
@@ -477,10 +502,20 @@ export function PiWebAppShell({
   }, [viewerContextId, sessionId])
 
   React.useEffect(() => {
-    if (sessionState.sessionId && sessionState.sessionId !== sessionId) {
-      onSelectSession?.(sessionState.sessionId)
+    if (!sessionState.sessionId) return
+
+    const pendingRouteSessionId = pendingRouteSessionIdRef.current
+    if (pendingRouteSessionId) {
+      if (sessionState.sessionId === pendingRouteSessionId) {
+        pendingRouteSessionIdRef.current = undefined
+      }
+      return
     }
-  }, [onSelectSession, sessionId, sessionState.sessionId])
+
+    if (sessionState.sessionId !== sessionId) {
+      handleSelectSession(sessionState.sessionId)
+    }
+  }, [handleSelectSession, sessionId, sessionState.sessionId])
 
   React.useEffect(() => {
     const nextEditorText = sessionState.uiState.editorText || ""
@@ -1519,7 +1554,7 @@ export function PiWebAppShell({
           onOpenStatus={openStatusDialog}
           onOpenSettings={openSettingsDialog}
           onToggleDirectory={toggleDirectory}
-          onSelectSession={onSelectSession}
+          onSelectSession={handleSelectSession}
           onLoadMoreDirectorySessions={loadMoreDirectorySessions}
         />
 
