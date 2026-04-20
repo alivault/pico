@@ -31,6 +31,10 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
         keys: "Ctrl+S",
       },
       {
+        label: "Add a directory",
+        keys: "Ctrl+D",
+      },
+      {
         label: "Rename the current session",
         keys: "Ctrl+E",
       },
@@ -47,10 +51,6 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
         keys: "Ctrl+X",
       },
       {
-        label: "Add a directory",
-        keys: "Ctrl+D",
-      },
-      {
         label: "Open settings",
         keys: "Ctrl+,",
       },
@@ -62,16 +62,29 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
         label: "Toggle thinking blocks",
         keys: "Ctrl+T",
       },
+      {
+        label: "Toggle tool calls",
+        keys: "Ctrl+O",
+      },
+      {
+        label: "Cycle reasoning level",
+        description: "Shift reverses the direction.",
+        keys: "Ctrl+R / Ctrl+Shift+R",
+      },
     ],
   },
   {
-    title: "Lists & pickers",
+    title: "Sidebar & pickers",
     description:
-      "Works in the session list, command palette, and the add-directory and fork dialogs.",
+      "Covers the sidebar, command palette, and the model, thinking, and skill pickers.",
     items: [
       {
         label: "Move selection",
         keys: "↑ / ↓",
+      },
+      {
+        label: "Confirm the highlighted result",
+        keys: "Enter",
       },
       {
         label: "Select multiple sidebar sessions",
@@ -79,13 +92,9 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
         keys: "Cmd/Ctrl+Click or Shift+Click",
       },
       {
-        label: "Delete selected sidebar sessions",
-        description: "When sidebar session rows are selected or focused.",
-        keys: "Backspace / Delete",
-      },
-      {
-        label: "Run the first command palette result",
-        keys: "Enter",
+        label: "Delete focused or selected sidebar sessions",
+        description: "Backspace deletes only when multi-select is active.",
+        keys: "Delete / Backspace",
       },
     ],
   },
@@ -94,19 +103,29 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
     items: [
       {
         label: "Send or steer the current prompt",
-        keys: "Enter",
+        keys: "Cmd/Ctrl+Enter",
+      },
+      {
+        label: "Queue a follow-up",
+        description: "Works while streaming or when using steer/follow-up mode.",
+        keys: "Alt+Cmd/Ctrl+Enter",
       },
       {
         label: "Insert a newline",
         keys: "Shift+Enter",
       },
       {
-        label: "Queue a follow-up while streaming",
-        keys: "Use the Queue follow-up button",
+        label: "Move slash, file, or path suggestions",
+        keys: "↑ / ↓ or Ctrl+J / Ctrl+K",
       },
       {
-        label: "Attach images",
-        keys: "Use Add images",
+        label: "Accept a slash, path, or file suggestion",
+        description: "Tab accepts slash/path suggestions; Enter accepts the active completion.",
+        keys: "Tab / Enter",
+      },
+      {
+        label: "Clear the active skill pill when the prompt is empty",
+        keys: "Backspace",
       },
     ],
   },
@@ -114,7 +133,7 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
     title: "General",
     items: [
       {
-        label: "Close the active dialog",
+        label: "Close the active dialog or suggestion menu",
         keys: "Esc",
       },
     ],

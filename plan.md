@@ -125,11 +125,11 @@ Reference: `static/app.js`, `static/sidebar.js`, `static/shortcuts.js`
 
 Reference: `static/dialogs.js`
 
-- [ ] Expand command palette to the full old action set
-  - [ ] toggle tools
-  - [ ] cycle reasoning level
-  - [ ] parity wording / search terms for existing commands
-  - [ ] selection-aware actions when sidebar multi-select exists
+- [x] Expand command palette to the full old action set
+  - [x] toggle tools
+  - [x] cycle reasoning level
+  - [x] parity wording / search terms for existing commands
+  - [x] selection-aware actions when sidebar multi-select exists
 - [ ] Rebuild add-directory dialog parity
   - [ ] searchable results
   - [ ] recent directories
@@ -159,7 +159,7 @@ Reference: `static/app.js`, `static/dialogs.js`, `static/composer.js`
 - [x] Extend settings parity beyond theme + notifications
   - [x] tool visibility toggle
   - [x] any remaining shell/composer toggles that still exist in old `pi-web`
-- [ ] Align shortcuts dialog with the actual final shortcut map once parity behavior ships
+- [x] Align shortcuts dialog with the actual final shortcut map once parity behavior ships
 - [ ] Audit document title / completion notifications / unread-finished behavior against old `pi-web`
 
 ### 6) Verification, docs, and sign-off

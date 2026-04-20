@@ -2326,17 +2326,17 @@ export function PiWebAppShell({
       {
         id: "search-sessions",
         title: "Search sessions",
-        description: "Focus the sidebar session search",
+        description: "Search and jump through sessions in the sidebar",
         shortcut: "Ctrl+S",
-        keywords: ["sidebar", "filter", "search"],
+        keywords: ["sidebar", "filter", "search", "switch"],
         onSelect: focusSessionSearch,
       },
       {
         id: "set-model",
         title: "Set model",
-        description: "Focus the model picker",
+        description: "Open the model picker",
         shortcut: "Ctrl+M",
-        keywords: ["model", "provider", "picker"],
+        keywords: ["model", "provider", "picker", "choose"],
         onSelect: () => {
           if (sessionState.availableModels.length === 0) {
             throw new Error("No models are available right now.")
@@ -2347,10 +2347,10 @@ export function PiWebAppShell({
       },
       {
         id: "add-directory",
-        title: "Add directory",
-        description: "Add another directory to the sidebar",
+        title: "Add Directory",
+        description: "Add a directory accordion to the sidebar",
         shortcut: "Ctrl+D",
-        keywords: ["workspace", "sidebar", "directory"],
+        keywords: ["workspace", "sidebar", "directory", "folder"],
         onSelect: openAddDirectoryDialog,
       },
       {
@@ -2371,9 +2371,9 @@ export function PiWebAppShell({
       {
         id: "compact-session",
         title: "Compact",
-        description: "Manually compact the current session context",
+        description: "Manually compact the session context",
         shortcut: "Ctrl+C",
-        keywords: ["compact", "context", "summarize"],
+        keywords: ["compact", "context", "compress", "summarize"],
         onSelect: runCompact,
       },
       {
@@ -2385,7 +2385,7 @@ export function PiWebAppShell({
           ? "Show assistant thinking blocks"
           : "Hide assistant thinking blocks",
         shortcut: "Ctrl+T",
-        keywords: ["thinking", "reasoning", "visibility"],
+        keywords: ["thinking", "reasoning", "visibility", "show", "hide"],
         onSelect: toggleHideThinking,
       },
       {
@@ -2393,7 +2393,7 @@ export function PiWebAppShell({
         title: "Cycle reasoning level",
         description: `Current level: ${sessionState.thinkingLevel}`,
         shortcut: "Ctrl+R",
-        keywords: ["thinking", "reasoning", "level", "cycle"],
+        keywords: ["thinking", "reasoning", "level", "cycle", "next"],
         onSelect: () => {
           void cycleThinkingLevel(1)
         },
@@ -2402,18 +2402,18 @@ export function PiWebAppShell({
         id: "toggle-tools",
         title: hideToolBlocks ? "Show tool calls" : "Hide tool calls",
         description: hideToolBlocks
-          ? "Show assistant tool calls in the conversation"
-          : "Hide assistant tool calls in the conversation",
+          ? "Show assistant tool calls"
+          : "Hide assistant tool calls",
         shortcut: "Ctrl+O",
-        keywords: ["tools", "tool calls", "visibility"],
+        keywords: ["tools", "tool calls", "visibility", "show", "hide"],
         onSelect: toggleHideToolBlocks,
       },
       {
         id: "open-settings",
         title: "Open settings",
-        description: "Open theme and notification settings",
+        description: "Open app settings",
         shortcut: "Ctrl+,",
-        keywords: ["settings", "theme", "notifications"],
+        keywords: ["settings", "theme", "notifications", "display"],
         onSelect: openSettingsDialog,
       },
       {
@@ -2431,7 +2431,7 @@ export function PiWebAppShell({
           statusCount > 0
             ? `Open ${statusCount} active status ${statusCount === 1 ? "item" : "items"}`
             : "Open current status items",
-        keywords: ["status", "runtime", "extension"],
+        keywords: ["status", "runtime", "extension", "items"],
         onSelect: openStatusDialog,
       },
     ]
@@ -2456,6 +2456,15 @@ export function PiWebAppShell({
     }
 
     if (selectedSidebarSessions.length > 0) {
+      commands.push({
+        id: "clear-selected-sessions",
+        title: "Clear selected sidebar sessions",
+        description: `Clear ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
+        keywords: ["clear", "selected", "sidebar", "sessions"],
+        onSelect: () => {
+          setSidebarSelection([])
+        },
+      })
       commands.push({
         id: "delete-selected-sessions",
         title: "Delete selected sidebar sessions",
@@ -2486,6 +2495,7 @@ export function PiWebAppShell({
     hideToolBlocks,
     runCompact,
     selectedSidebarSessions,
+    setSidebarSelection,
     sessionState.availableModels.length,
     sessionState.hideThinkingBlock,
     sessionState.sessionFile,
