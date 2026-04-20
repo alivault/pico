@@ -3,6 +3,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  EllipsisIcon,
   FolderIcon,
   KeyboardIcon,
   PlusIcon,
@@ -24,6 +25,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Sidebar,
@@ -31,7 +38,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -91,6 +97,10 @@ type AppSidebarProps = {
     entry: SessionListEntry,
     modifiers: SessionClickModifiers
   ) => void
+  onRenameSession?: (entry: SessionListEntry) => void
+  onDeleteSession?: (entry: SessionListEntry) => void
+  onCreateSessionInDirectory?: (directory: string) => void
+  onRemoveDirectory?: (directory: string) => void
   onLoadMoreDirectorySessions: (directory: string) => void
   onDeleteSelectedSessions: () => void
   onClearSelectedSessions: () => void
@@ -122,6 +132,10 @@ export function AppSidebar({
   onToggleDirectory,
   onToggleAllDirectories,
   onSessionClick,
+  onRenameSession,
+  onDeleteSession,
+  onCreateSessionInDirectory,
+  onRemoveDirectory,
   onLoadMoreDirectorySessions,
   onDeleteSelectedSessions,
   onClearSelectedSessions,
@@ -286,35 +300,66 @@ export function AppSidebar({
 
             return (
               <SidebarGroup key={directory} className="py-1">
-                <SidebarGroupLabel
-                  render={<button type="button" />}
-                  className={cn(
-                    "h-auto items-start gap-2 rounded-lg px-2 py-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    searchActive && "cursor-default"
-                  )}
-                  onClick={() => {
-                    if (!searchActive) {
-                      onToggleDirectory(directory)
-                    }
-                  }}
-                >
-                  <FolderIcon className="mt-0.5" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-sidebar-foreground">
-                      {directory}
+                <div className="flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/70">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex min-w-0 flex-1 items-start gap-2 text-left text-sm text-sidebar-foreground",
+                      searchActive && "cursor-default"
+                    )}
+                    onClick={() => {
+                      if (!searchActive) {
+                        onToggleDirectory(directory)
+                      }
+                    }}
+                  >
+                    <FolderIcon className="mt-0.5 shrink-0" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-sidebar-foreground">
+                        {directory}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-sidebar-foreground/70">
+                        {countLabel}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block text-xs text-sidebar-foreground/70">
-                      {countLabel}
-                    </span>
-                  </span>
-                  {!searchActive ? (
-                    collapsed ? (
-                      <ChevronRightIcon />
-                    ) : (
-                      <ChevronDownIcon />
-                    )
-                  ) : null}
-                </SidebarGroupLabel>
+                    {!searchActive ? (
+                      collapsed ? (
+                        <ChevronRightIcon className="shrink-0" />
+                      ) : (
+                        <ChevronDownIcon className="shrink-0" />
+                      )
+                    ) : null}
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    {onCreateSessionInDirectory ? (
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        title={`Create a session in ${directory}`}
+                        onClick={() => onCreateSessionInDirectory(directory)}
+                      >
+                        <PlusIcon />
+                      </Button>
+                    ) : null}
+                    {onRemoveDirectory ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={<Button size="icon-xs" variant="ghost" />}
+                        >
+                          <EllipsisIcon />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem
+                            onClick={() => onRemoveDirectory(directory)}
+                          >
+                            Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
+                  </div>
+                </div>
 
                 {!collapsed ? (
                   <SidebarGroupContent className="pt-1">
@@ -342,60 +387,100 @@ export function AppSidebar({
                                   `${directory}-${entry.path || entry.title}`
                                 }
                               >
-                                <SidebarMenuButton
-                                  type="button"
-                                  data-sidebar-session-item
-                                  data-session-key={entryKey}
-                                  isActive={isActive}
-                                  tooltip={entry.title}
-                                  className={cn(
-                                    "h-auto items-start gap-3 py-2",
-                                    isActive &&
-                                      "ring-1 ring-primary/20 hover:bg-sidebar-accent",
-                                    isSelected &&
-                                      !isActive &&
-                                      "bg-primary/10 text-sidebar-foreground hover:bg-primary/15"
-                                  )}
-                                  onClick={(event) =>
-                                    onSessionClick?.(entry, {
-                                      metaKey: event.metaKey,
-                                      ctrlKey: event.ctrlKey,
-                                      shiftKey: event.shiftKey,
-                                    })
-                                  }
-                                >
-                                  <span
+                                <div className="relative">
+                                  <SidebarMenuButton
+                                    type="button"
+                                    data-sidebar-session-item
+                                    data-session-key={entryKey}
+                                    isActive={isActive}
+                                    tooltip={entry.title}
                                     className={cn(
-                                      "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                                      isSelected
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-sidebar-border bg-background"
+                                      "h-auto items-start gap-3 py-2 pr-10",
+                                      isActive &&
+                                        "ring-1 ring-primary/20 hover:bg-sidebar-accent",
+                                      isSelected &&
+                                        !isActive &&
+                                        "bg-primary/10 text-sidebar-foreground hover:bg-primary/15"
                                     )}
-                                    aria-hidden="true"
+                                    onClick={(event) =>
+                                      onSessionClick?.(entry, {
+                                        metaKey: event.metaKey,
+                                        ctrlKey: event.ctrlKey,
+                                        shiftKey: event.shiftKey,
+                                      })
+                                    }
                                   >
-                                    {isSelected ? (
-                                      <CheckIcon className="size-3" />
-                                    ) : null}
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="flex items-center justify-between gap-3">
-                                      <span className="min-w-0 flex-1 truncate font-medium">
-                                        {entry.title}
+                                    <span
+                                      className={cn(
+                                        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                                        isSelected
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-sidebar-border bg-background"
+                                      )}
+                                      aria-hidden="true"
+                                    >
+                                      {isSelected ? (
+                                        <CheckIcon className="size-3" />
+                                      ) : null}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="flex items-center justify-between gap-3">
+                                        <span className="min-w-0 flex-1 truncate font-medium">
+                                          {entry.title}
+                                        </span>
+                                        <span className="flex shrink-0 items-center gap-2">
+                                          {entry.streaming ? (
+                                            <Badge variant="outline">Live</Badge>
+                                          ) : null}
+                                          {entry.unread ? (
+                                            <span className="size-2 rounded-full bg-primary" />
+                                          ) : null}
+                                        </span>
                                       </span>
-                                      <span className="flex shrink-0 items-center gap-2">
-                                        {entry.streaming ? (
-                                          <Badge variant="outline">Live</Badge>
-                                        ) : null}
-                                        {entry.unread ? (
-                                          <span className="size-2 rounded-full bg-primary" />
-                                        ) : null}
+                                      <span className="mt-0.5 block text-xs text-sidebar-foreground/70">
+                                        {relativeTime(entry.modified)}
                                       </span>
                                     </span>
-                                    <span className="mt-0.5 block text-xs text-sidebar-foreground/70">
-                                      {relativeTime(entry.modified)}
-                                    </span>
-                                  </span>
-                                </SidebarMenuButton>
+                                  </SidebarMenuButton>
+
+                                  {entry.path && (onRenameSession || onDeleteSession) ? (
+                                    <div className="absolute top-2 right-2">
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                          render={
+                                            <Button
+                                              size="icon-xs"
+                                              variant="ghost"
+                                              title={`Session actions for ${entry.title}`}
+                                            />
+                                          }
+                                        >
+                                          <EllipsisIcon />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                          align="end"
+                                          className="w-40"
+                                        >
+                                          {onRenameSession ? (
+                                            <DropdownMenuItem
+                                              onClick={() => onRenameSession(entry)}
+                                            >
+                                              Rename
+                                            </DropdownMenuItem>
+                                          ) : null}
+                                          {onDeleteSession ? (
+                                            <DropdownMenuItem
+                                              variant="destructive"
+                                              onClick={() => onDeleteSession(entry)}
+                                            >
+                                              Delete
+                                            </DropdownMenuItem>
+                                          ) : null}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  ) : null}
+                                </div>
                               </SidebarMenuItem>
                             )
                           })}

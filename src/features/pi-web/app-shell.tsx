@@ -284,6 +284,9 @@ export function PiWebAppShell({
   const [addDirectoryOpen, setAddDirectoryOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
   const [renameOpen, setRenameOpen] = React.useState(false)
+  const [renameTarget, setRenameTarget] = React.useState<SessionListEntry | null>(
+    null
+  )
   const [renameValue, setRenameValue] = React.useState("")
   const [deleteTargets, setDeleteTargets] = React.useState<
     Array<SessionListEntry>
@@ -457,6 +460,7 @@ export function PiWebAppShell({
   }, [])
 
   const openRenameDialog = React.useCallback(() => {
+    setRenameTarget(null)
     setRenameValue(sessionState.sessionName || currentSessionTitle)
     setRenameOpen(true)
   }, [currentSessionTitle, sessionState.sessionName])
@@ -1312,10 +1316,11 @@ export function PiWebAppShell({
     [applyPendingDraftPromptToComposer, pendingDraftPrompt]
   )
 
-  const createSession = React.useCallback(async () => {
+  const createSession = React.useCallback(async (cwdOverride?: string) => {
     if (!viewerContextId) return
 
-    const nextCwd = sessionState.cwd || readStoredDraftDirectory() || undefined
+    const nextCwd =
+      cwdOverride || sessionState.cwd || readStoredDraftDirectory() || undefined
     const ownerKey = promptDraftKey({ cwd: nextCwd })
     setDraftSessionLoadingOwnerKey(ownerKey)
 
@@ -1949,7 +1954,8 @@ export function PiWebAppShell({
 
   const renameSessionToValue = React.useCallback(
     async (nextName: string, closeDialog = true) => {
-      if (!viewerContextId || !sessionState.sessionFile) return false
+      const targetPath = renameTarget?.path || sessionState.sessionFile
+      if (!viewerContextId || !targetPath) return false
       try {
         const response = await fetchJson<RenameSessionResponse>(
           buildRequestUrl("/api/session/rename", {
@@ -1960,7 +1966,7 @@ export function PiWebAppShell({
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              path: sessionState.sessionFile,
+              path: targetPath,
               name: nextName,
             }),
           }
@@ -1968,6 +1974,7 @@ export function PiWebAppShell({
         if (isApiErrorResponse(response)) throw new Error(response.error)
         if (closeDialog) {
           setRenameOpen(false)
+          setRenameTarget(null)
         }
         toast.success("Renamed session")
         return true
@@ -1978,7 +1985,7 @@ export function PiWebAppShell({
         return false
       }
     },
-    [activeSessionId, sessionState.sessionFile, viewerContextId]
+    [activeSessionId, renameTarget?.path, sessionState.sessionFile, viewerContextId]
   )
 
   const renameSession = React.useCallback(async () => {
@@ -2738,6 +2745,40 @@ export function PiWebAppShell({
         onToggleDirectory={toggleDirectory}
         onToggleAllDirectories={toggleAllDirectories}
         onSessionClick={handleSidebarSessionClick}
+        onRenameSession={(entry) => {
+          if (!entry.path) return
+          setRenameTarget(entry)
+          setRenameValue(entry.title || "")
+          setRenameOpen(true)
+        }}
+        onDeleteSession={(entry) => {
+          openDeleteDialog([entry])
+        }}
+        onCreateSessionInDirectory={(directory) => {
+          void createSession(directory)
+        }}
+        onRemoveDirectory={(directory) => {
+          setSidebarDirectories((current) => {
+            const next = current.filter((entry) => entry !== directory)
+            safeLocalStorageSetItem(
+              SIDEBAR_DIRECTORIES_STORAGE_KEY,
+              JSON.stringify(next)
+            )
+            return next
+          })
+          setCollapsedDirectories((current) => {
+            if (!Object.prototype.hasOwnProperty.call(current, directory)) {
+              return current
+            }
+            const next = { ...current }
+            delete next[directory]
+            safeLocalStorageSetItem(
+              COLLAPSED_DIRECTORIES_STORAGE_KEY,
+              JSON.stringify(next)
+            )
+            return next
+          })
+        }}
         onLoadMoreDirectorySessions={loadMoreDirectorySessions}
         onDeleteSelectedSessions={() => {
           openDeleteDialog(selectedSidebarSessions)
@@ -2965,11 +3006,23 @@ export function PiWebAppShell({
                               {draftGitSummary?.label ? (
                                 <Badge variant="outline">{draftGitSummary.label}</Badge>
                               ) : null}
-                              <Button onClick={createSession}>New session</Button>
+                              <Button
+                                onClick={() => {
+                                  void createSession()
+                                }}
+                              >
+                                New session
+                              </Button>
                             </EmptyContent>
                           ) : (
                             <EmptyContent>
-                              <Button onClick={createSession}>New session</Button>
+                              <Button
+                                onClick={() => {
+                                  void createSession()
+                                }}
+                              >
+                                New session
+                              </Button>
                             </EmptyContent>
                           )}
                         </Empty>
@@ -3127,7 +3180,12 @@ export function PiWebAppShell({
           void addDirectory()
         }}
         renameOpen={renameOpen}
-        onRenameOpenChange={setRenameOpen}
+        onRenameOpenChange={(open) => {
+          if (!open) {
+            setRenameTarget(null)
+          }
+          setRenameOpen(open)
+        }}
         renameValue={renameValue}
         onRenameValueChange={setRenameValue}
         onRenameSession={() => {

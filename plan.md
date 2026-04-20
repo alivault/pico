@@ -114,8 +114,8 @@ Reference: `static/app.js`, `static/sidebar.js`, `static/shortcuts.js`
 
 - [ ] Restore keyboard navigation parity for the sidebar session list
 - [ ] Restore keyboard navigation parity for list-style dialogs and pickers
-- [ ] Add per-session row action menu parity inside the sidebar
-- [ ] Add directory action menu parity inside the sidebar
+- [x] Add per-session row action menu parity inside the sidebar
+- [x] Add directory action menu parity inside the sidebar
 - [ ] Restore directory drag-reorder / sidebar ordering behavior
 - [ ] Restore session-scope / draft-directory selection UX for “new session in …” flows
 - [ ] Audit mobile drawer behavior against the old app and close gaps
