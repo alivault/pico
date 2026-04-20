@@ -1,44 +1,17 @@
-"use client"
-
 import * as React from "react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  FolderIcon,
-  FolderTreeIcon,
-  GitBranchIcon,
-  ImagePlusIcon,
-  LoaderCircleIcon,
   PencilIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  SendIcon,
   SparklesIcon,
   SplitIcon,
   Trash2Icon,
   WaypointsIcon,
 } from "lucide-react"
+import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -47,13 +20,36 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import {
-  buildItemsFromSync,
+  AppShellCommandPalette,
+  type AppCommand,
+} from "@/features/pi-web/app-shell-command-palette"
+import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
+import {
+  buildRequestUrl,
+  fetchJson,
+  readFileAsPromptImage,
+  updateStateFromSync,
+} from "@/features/pi-web/app-shell-utils"
+import { ComposerPanel } from "@/features/pi-web/composer-panel"
+import {
+  type DesktopNotificationPermission,
+  getDesktopNotificationPermission,
+  playSessionDoneSound,
+  primeSessionDoneSound,
+  requestDesktopNotificationPermission,
+  showSessionDoneDesktopNotification,
+} from "@/features/pi-web/session-done-notifications"
+import {
+  AssistantMessageCard,
+  UserMessageCard,
+  conversationItemSignature,
+} from "@/features/pi-web/conversation-view"
+import { GitPanel } from "@/features/pi-web/git-panel"
+import { AppSidebar } from "@/features/pi-web/sidebar"
+import {
   clampSidebarDirectories,
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
   createContextId,
@@ -65,15 +61,20 @@ import {
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   normalizePromptImage,
   normalizeStoredDirectoryList,
-  previewUrlForImage,
+  normalizeThemeMode,
   readStoredCollapsedDirectories,
+  readStoredSessionDoneDesktopNotificationsEnabled,
+  readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
   relativeTime,
   safeLocalStorageSetItem,
-  type ConversationItem,
+  SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+  SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  themeModeLabel,
   type PromptImage,
   type SessionState,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  type ThemeMode,
   VIEWER_CONTEXT_STORAGE_KEY,
 } from "@/lib/pi-web"
 import {
@@ -101,279 +102,35 @@ import {
   type UiRequestResponse,
 } from "@/lib/pi-web-api"
 
-function buildRequestUrl(
-  path: string,
-  {
-    contextId,
-    sessionId,
-  }: {
-    contextId: string
-    sessionId?: string
-  }
-) {
-  const url = new URL(path, window.location.origin)
-  url.searchParams.set("context", contextId)
-  if (sessionId) {
-    url.searchParams.set("session", sessionId)
-  }
-  return url.toString()
-}
-
-async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit) {
-  const response = await fetch(input, init)
-  const text = await response.text()
-  const data = text ? (JSON.parse(text) as T) : ({} as T)
-
-  if (!response.ok) {
-    const message = isApiErrorResponse(data)
-      ? data.error
-      : `${response.status} ${response.statusText}`
-    throw new Error(message)
-  }
-
-  if (isApiErrorResponse(data)) {
-    throw new Error(data.error)
-  }
-
-  return data
-}
-
-async function readFileAsPromptImage(file: File) {
-  const buffer = await file.arrayBuffer()
-  const bytes = new Uint8Array(buffer)
-  let binary = ""
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte)
-  }
-  const data = window.btoa(binary)
-  return {
-    type: "image",
-    mimeType: file.type || "image/png",
-    data,
-    previewUrl: previewUrlForImage({
-      mimeType: file.type || "image/png",
-      data,
-    }),
-  } satisfies PromptImage
-}
-
-function updateStateFromSync(
-  previous: SessionState,
-  sync: Parameters<typeof buildItemsFromSync>[0]
-) {
-  const { items } = buildItemsFromSync(sync)
-  return {
-    ...previous,
-    connected: true,
-    replaying: false,
-    streaming: Boolean(sync.streaming),
-    draft: Boolean(sync.draft),
-    items,
-    sessionId: sync.sessionId,
-    sessionKey: sync.sessionKey,
-    sessionName: sync.sessionName,
-    firstMessage: sync.firstMessage || "",
-    sessionFile: sync.sessionFile,
-    cwd: sync.cwd,
-    modified: sync.modified,
-    model: sync.model,
-    thinkingLevel: sync.thinkingLevel || previous.thinkingLevel,
-    availableThinkingLevels:
-      sync.availableThinkingLevels || previous.availableThinkingLevels,
-    availableModels: sync.availableModels || previous.availableModels,
-    availableSkills: sync.availableSkills || previous.availableSkills,
-    hideThinkingBlock:
-      typeof sync.hideThinkingBlock === "boolean"
-        ? sync.hideThinkingBlock
-        : previous.hideThinkingBlock,
-    contextUsage: sync.contextUsage,
-    uiState: sync.uiState || previous.uiState,
-  } satisfies SessionState
-}
-
-function MarkdownBlock({ text }: { text: string }) {
+function isEditableTarget(target: EventTarget | null) {
   return (
-    <div className="prose prose-sm dark:prose-invert prose-pre:overflow-x-auto prose-pre:rounded-lg prose-pre:border prose-pre:bg-muted prose-code:rounded prose-code:bg-muted/70 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.9em] prose-headings:font-semibold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 max-w-none break-words">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-    </div>
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
   )
 }
 
-function promptImageKey(image: Pick<PromptImage, "previewUrl" | "data">) {
-  return `${image.previewUrl}:${image.data.slice(0, 24)}`
-}
+function hasSelectedText(target: EventTarget | null) {
+  const selection =
+    typeof document.getSelection === "function" ? document.getSelection() : null
 
-function assistantBlockKey(
-  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
-) {
-  switch (block.type) {
-    case "text":
-      return `text:${block.text}`
-    case "thinking":
-      return `thinking:${block.text}`
-    case "tool":
-      return `tool:${block.callId || block.name || "tool"}:${block.output}`
-    case "compaction":
-      return `compaction:${block.tokensBefore}:${block.summary}`
-    default:
-      return "block"
-  }
-}
-
-function conversationItemSignature(item: ConversationItem) {
-  if (item.kind === "user") {
-    return `user:${item.pendingId || ""}:${item.text}:${item.images
-      .map((image) => promptImageKey(image))
-      .join(",")}:${item.streamingBehavior || ""}:${item.queued ? "1" : "0"}`
+  if (selection && !selection.isCollapsed && String(selection).length > 0) {
+    return true
   }
 
-  return `assistant:${item.blocks.map((block) => assistantBlockKey(block)).join("|")}:${
-    item.streaming ? "1" : "0"
-  }`
-}
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
+    return (
+      typeof target.selectionStart === "number" &&
+      typeof target.selectionEnd === "number" &&
+      target.selectionStart !== target.selectionEnd
+    )
+  }
 
-function UserMessageCard({
-  item,
-}: {
-  item: Extract<ConversationItem, { kind: "user" }>
-}) {
-  return (
-    <div className="ml-auto w-full max-w-3xl rounded-xl border bg-primary/5 p-4">
-      {item.images.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-3">
-          {item.images.map((image) => (
-            <img
-              key={promptImageKey(image)}
-              src={image.previewUrl}
-              alt="Prompt upload"
-              className="h-28 rounded-lg border object-cover"
-            />
-          ))}
-        </div>
-      )}
-      {item.text ? (
-        <MarkdownBlock text={item.text} />
-      ) : (
-        <div className="text-sm text-muted-foreground">Image prompt</div>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {item.queued && <Badge variant="outline">Queued</Badge>}
-        {item.streamingBehavior && (
-          <Badge variant="outline">
-            {item.streamingBehavior === "steer" ? "Steer" : "Follow-up"}
-          </Badge>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function AssistantMessageCard({
-  item,
-  hideThinking,
-  hiddenThinkingLabel,
-}: {
-  item: Extract<ConversationItem, { kind: "assistant" }>
-  hideThinking: boolean
-  hiddenThinkingLabel?: string
-}) {
-  return (
-    <div className="w-full max-w-3xl rounded-xl border bg-card p-4">
-      <div className="space-y-4">
-        {(() => {
-          const counts = new Map<string, number>()
-          return item.blocks.map((block) => {
-            const baseKey = assistantBlockKey(block)
-            const count = (counts.get(baseKey) ?? 0) + 1
-            counts.set(baseKey, count)
-            const key = `${baseKey}:${count}`
-
-            if (block.type === "text") {
-              return <MarkdownBlock key={key} text={block.text} />
-            }
-
-            if (block.type === "thinking") {
-              if (hideThinking) {
-                return (
-                  <div
-                    key={key}
-                    className="rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
-                  >
-                    {hiddenThinkingLabel || "Thinking hidden"}
-                  </div>
-                )
-              }
-
-              return (
-                <div key={key} className="rounded-lg border bg-muted/40 p-3">
-                  <div className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                    Thinking
-                  </div>
-                  <MarkdownBlock text={block.text} />
-                </div>
-              )
-            }
-
-            if (block.type === "tool") {
-              return (
-                <div
-                  key={key}
-                  className="rounded-lg border bg-muted/30 p-3 text-sm"
-                >
-                  <div className="mb-2 flex items-center gap-2 font-medium">
-                    <Badge variant="outline">Tool</Badge>
-                    <span>{block.name || "tool"}</span>
-                    {block.running && (
-                      <span className="inline-flex items-center gap-1 text-muted-foreground">
-                        <Spinner /> Running
-                      </span>
-                    )}
-                    {block.isError && (
-                      <Badge variant="destructive">Error</Badge>
-                    )}
-                  </div>
-                  {block.args !== undefined && (
-                    <pre className="overflow-x-auto rounded-md bg-background p-2 text-xs">
-                      {JSON.stringify(block.args, null, 2)}
-                    </pre>
-                  )}
-                  {block.output && (
-                    <pre className="mt-2 overflow-x-auto rounded-md bg-background p-2 text-xs whitespace-pre-wrap">
-                      {block.output}
-                    </pre>
-                  )}
-                </div>
-              )
-            }
-
-            if (block.type === "compaction") {
-              return (
-                <div
-                  key={key}
-                  className="rounded-lg border bg-muted/30 p-3 text-sm"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <Badge variant="outline">Compaction</Badge>
-                    <span className="text-muted-foreground">
-                      {block.tokensBefore.toLocaleString()} tokens before
-                    </span>
-                  </div>
-                  <MarkdownBlock text={block.summary} />
-                </div>
-              )
-            }
-
-            return null
-          })
-        })()}
-      </div>
-      {item.streaming && (
-        <div className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner /> Streaming…
-        </div>
-      )}
-    </div>
-  )
+  return false
 }
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
@@ -458,11 +215,29 @@ export function PiWebAppShell({
   const [pendingUiRequest, setPendingUiRequest] =
     React.useState<ExtensionUiEvent | null>(null)
   const [pendingUiValue, setPendingUiValue] = React.useState("")
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
+  const [statusOpen, setStatusOpen] = React.useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
+    React.useState(true)
+  const [
+    sessionDoneDesktopNotificationsEnabled,
+    setSessionDoneDesktopNotificationsEnabled,
+  ] = React.useState(true)
+  const [desktopNotificationPermission, setDesktopNotificationPermission] =
+    React.useState<DesktopNotificationPermission>("unsupported")
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const modelSelectRef = React.useRef<HTMLSelectElement | null>(null)
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
+
+  const { resolvedTheme, setTheme, theme } = useTheme()
+  const currentTheme = normalizeThemeMode(theme)
+  const currentThemeLabel = themeModeLabel(currentTheme, resolvedTheme)
 
   const activeSessionId = sessionState.sessionId || sessionId
   const directoryStates = sessionsEvent?.directoryStates || []
@@ -470,6 +245,14 @@ export function PiWebAppShell({
     () => new Map(directoryStates.map((state) => [state.path, state])),
     [directoryStates]
   )
+  const currentSessionTitle = getSessionTitle({
+    title:
+      sessionState.sessionName || sessionState.firstMessage || "New session",
+    name: sessionState.sessionName,
+  })
+  const statusCount = Object.entries(sessionState.uiState.statuses).filter(
+    ([key, value]) => key.trim().length > 0 && value.trim().length > 0
+  ).length
 
   React.useEffect(() => {
     const storedContext = window.localStorage.getItem(
@@ -485,7 +268,111 @@ export function PiWebAppShell({
     )
     setSidebarDirectories(nextDirectories)
     setCollapsedDirectories(readStoredCollapsedDirectories())
+    setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
+    setSessionDoneDesktopNotificationsEnabled(
+      readStoredSessionDoneDesktopNotificationsEnabled()
+    )
+    setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
+
+  React.useEffect(() => {
+    if (!sessionDoneSoundEnabled) return
+
+    const handleInteraction = () => {
+      void primeSessionDoneSound()
+    }
+
+    window.addEventListener("pointerdown", handleInteraction, true)
+    window.addEventListener("keydown", handleInteraction, true)
+
+    return () => {
+      window.removeEventListener("pointerdown", handleInteraction, true)
+      window.removeEventListener("keydown", handleInteraction, true)
+    }
+  }, [sessionDoneSoundEnabled])
+
+  const openCommandPalette = React.useCallback(() => {
+    setStatusOpen(false)
+    setShortcutsOpen(false)
+    setSettingsOpen(false)
+    setCommandPaletteOpen(true)
+  }, [])
+
+  const openStatusDialog = React.useCallback(() => {
+    setCommandPaletteOpen(false)
+    setShortcutsOpen(false)
+    setSettingsOpen(false)
+    setStatusOpen(true)
+  }, [])
+
+  const openShortcutsDialog = React.useCallback(() => {
+    setCommandPaletteOpen(false)
+    setStatusOpen(false)
+    setSettingsOpen(false)
+    setShortcutsOpen(true)
+  }, [])
+
+  const openSettingsDialog = React.useCallback(() => {
+    setCommandPaletteOpen(false)
+    setStatusOpen(false)
+    setShortcutsOpen(false)
+    setSettingsOpen(true)
+  }, [])
+
+  const openRenameDialog = React.useCallback(() => {
+    setRenameValue(sessionState.sessionName || currentSessionTitle)
+    setRenameOpen(true)
+  }, [currentSessionTitle, sessionState.sessionName])
+
+  const focusSessionSearch = React.useCallback(() => {
+    sessionSearchInputRef.current?.focus()
+    sessionSearchInputRef.current?.select()
+  }, [])
+
+  const focusModelSelector = React.useCallback(() => {
+    modelSelectRef.current?.focus()
+  }, [])
+
+  const handleSessionDoneSoundEnabledChange = React.useCallback(
+    (enabled: boolean) => {
+      setSessionDoneSoundEnabled(enabled)
+      safeLocalStorageSetItem(
+        SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+        enabled ? "1" : "0"
+      )
+
+      if (enabled) {
+        void primeSessionDoneSound()
+      }
+    },
+    []
+  )
+
+  const handleSessionDoneDesktopNotificationsEnabledChange = React.useCallback(
+    async (enabled: boolean) => {
+      setSessionDoneDesktopNotificationsEnabled(enabled)
+      safeLocalStorageSetItem(
+        SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+        enabled ? "1" : "0"
+      )
+
+      if (!enabled) {
+        return
+      }
+
+      const permission = await requestDesktopNotificationPermission()
+      setDesktopNotificationPermission(permission)
+
+      if (permission === "denied") {
+        toast.info(
+          "Allow notifications for this site in your browser to receive desktop alerts."
+        )
+      } else if (permission === "unsupported") {
+        toast.error("Desktop notifications are unavailable in this browser.")
+      }
+    },
+    []
+  )
 
   React.useEffect(() => {
     if (!sessionsEvent?.directories) return
@@ -605,10 +492,39 @@ export function PiWebAppShell({
 
   React.useEffect(() => {
     if (lastStreamingRef.current && !sessionState.streaming) {
-      toast.success("Session finished")
+      const finishedLabel =
+        currentSessionTitle !== "New session"
+          ? `Session finished: ${currentSessionTitle}`
+          : "Session finished"
+
+      toast.success(finishedLabel)
+
+      if (sessionDoneDesktopNotificationsEnabled) {
+        const pageVisible =
+          document.visibilityState === "visible" && document.hasFocus()
+
+        if (!pageVisible) {
+          showSessionDoneDesktopNotification({
+            title: finishedLabel,
+            body: sessionState.cwd || "Open Pi to Go to continue",
+            tag: sessionState.sessionId || currentSessionTitle,
+          })
+        }
+      }
+
+      if (sessionDoneSoundEnabled) {
+        void playSessionDoneSound()
+      }
     }
     lastStreamingRef.current = sessionState.streaming
-  }, [sessionState.streaming])
+  }, [
+    currentSessionTitle,
+    sessionDoneDesktopNotificationsEnabled,
+    sessionDoneSoundEnabled,
+    sessionState.cwd,
+    sessionState.sessionId,
+    sessionState.streaming,
+  ])
 
   React.useEffect(() => {
     const itemCount = sessionState.items.length
@@ -887,6 +803,25 @@ export function PiWebAppShell({
     },
     [activeSessionId, composerImages, composerText, viewerContextId]
   )
+
+  const abortSession = React.useCallback(async () => {
+    if (!viewerContextId) return
+    try {
+      await fetchJson<SimpleOkResponse>(
+        buildRequestUrl("/api/abort", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to abort session"
+      )
+    }
+  }, [activeSessionId, viewerContextId])
 
   const onPickImages = React.useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -1281,176 +1216,312 @@ export function PiWebAppShell({
       : []
   }, [treeData, treeQuery])
 
-  const currentSessionTitle = getSessionTitle({
-    title:
-      sessionState.sessionName || sessionState.firstMessage || "New session",
-    name: sessionState.sessionName,
-  })
+  const handleThemeChange = React.useCallback(
+    (value: ThemeMode) => {
+      setTheme(value)
+    },
+    [setTheme]
+  )
+
+  const commandPaletteCommands = React.useMemo<Array<AppCommand>>(() => {
+    const commands: Array<AppCommand> = [
+      {
+        id: "new-session",
+        title: "New session",
+        description: "Create a new draft session",
+        shortcut: "Ctrl+N",
+        keywords: ["create", "draft", "session"],
+        onSelect: createSession,
+      },
+      {
+        id: "search-sessions",
+        title: "Search sessions",
+        description: "Focus the sidebar session search",
+        shortcut: "Ctrl+S",
+        keywords: ["sidebar", "filter", "search"],
+        onSelect: focusSessionSearch,
+      },
+      {
+        id: "set-model",
+        title: "Set model",
+        description: "Focus the model picker",
+        shortcut: "Ctrl+M",
+        keywords: ["model", "provider", "picker"],
+        onSelect: () => {
+          if (sessionState.availableModels.length === 0) {
+            throw new Error("No models are available right now.")
+          }
+
+          focusModelSelector()
+        },
+      },
+      {
+        id: "add-directory",
+        title: "Add directory",
+        description: "Add another directory to the sidebar",
+        shortcut: "Ctrl+D",
+        keywords: ["workspace", "sidebar", "directory"],
+        onSelect: openAddDirectoryDialog,
+      },
+      {
+        id: "tree-session",
+        title: "Navigate tree",
+        description: "Jump to an earlier point in the current session tree",
+        keywords: ["tree", "branch", "history"],
+        onSelect: openTreeDialog,
+      },
+      {
+        id: "fork-session",
+        title: "Fork session",
+        description: "Create a new session from a previous user message",
+        shortcut: "Ctrl+F",
+        keywords: ["fork", "branch", "draft"],
+        onSelect: openForkDialog,
+      },
+      {
+        id: "compact-session",
+        title: "Compact",
+        description: "Manually compact the current session context",
+        shortcut: "Ctrl+C",
+        keywords: ["compact", "context", "summarize"],
+        onSelect: runCompact,
+      },
+      {
+        id: "toggle-thinking",
+        title: sessionState.hideThinkingBlock
+          ? "Show thinking blocks"
+          : "Hide thinking blocks",
+        description: sessionState.hideThinkingBlock
+          ? "Show assistant thinking blocks"
+          : "Hide assistant thinking blocks",
+        shortcut: "Ctrl+T",
+        keywords: ["thinking", "reasoning", "visibility"],
+        onSelect: toggleHideThinking,
+      },
+      {
+        id: "open-settings",
+        title: "Open settings",
+        description: "Open theme and notification settings",
+        shortcut: "Ctrl+,",
+        keywords: ["settings", "theme", "notifications"],
+        onSelect: openSettingsDialog,
+      },
+      {
+        id: "view-shortcuts",
+        title: "View keyboard shortcuts",
+        description: "Open the keyboard shortcuts dialog",
+        shortcut: "Ctrl+/",
+        keywords: ["shortcuts", "keyboard", "help"],
+        onSelect: openShortcutsDialog,
+      },
+      {
+        id: "view-status",
+        title: "View status",
+        description:
+          statusCount > 0
+            ? `Open ${statusCount} active status ${statusCount === 1 ? "item" : "items"}`
+            : "Open current status items",
+        keywords: ["status", "runtime", "extension"],
+        onSelect: openStatusDialog,
+      },
+    ]
+
+    if (sessionState.sessionFile) {
+      commands.splice(1, 0, {
+        id: "rename-session",
+        title: "Rename session",
+        description: "Rename the current session",
+        shortcut: "Ctrl+E",
+        keywords: ["rename", "title", "name"],
+        onSelect: openRenameDialog,
+      })
+      commands.push({
+        id: "delete-session",
+        title: "Delete session",
+        description: `Delete ${currentSessionTitle}`,
+        shortcut: "Ctrl+X",
+        keywords: ["delete", "remove", "session"],
+        onSelect: () => {
+          setDeleteOpen(true)
+        },
+      })
+    }
+
+    return commands
+  }, [
+    createSession,
+    currentSessionTitle,
+    focusModelSelector,
+    focusSessionSearch,
+    openAddDirectoryDialog,
+    openForkDialog,
+    openRenameDialog,
+    openSettingsDialog,
+    openShortcutsDialog,
+    openStatusDialog,
+    openTreeDialog,
+    runCompact,
+    sessionState.availableModels.length,
+    sessionState.hideThinkingBlock,
+    sessionState.sessionFile,
+    statusCount,
+    toggleHideThinking,
+  ])
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const ctrlOrMeta = event.ctrlKey || event.metaKey
+      if (!ctrlOrMeta || event.altKey) return
+
+      const key = event.key.toLowerCase()
+      const modalOpen =
+        addDirectoryOpen ||
+        renameOpen ||
+        deleteOpen ||
+        forkOpen ||
+        treeOpen ||
+        statusOpen ||
+        shortcutsOpen ||
+        settingsOpen ||
+        commandPaletteOpen ||
+        Boolean(pendingUiRequest)
+
+      if (key === "/" || key === "?") {
+        event.preventDefault()
+        openShortcutsDialog()
+        return
+      }
+
+      if (modalOpen) return
+
+      if (key === "p" && !event.shiftKey) {
+        event.preventDefault()
+        openCommandPalette()
+        return
+      }
+
+      if (key === "n" && !event.shiftKey) {
+        event.preventDefault()
+        void createSession()
+        return
+      }
+
+      if (key === "s" && !event.shiftKey) {
+        event.preventDefault()
+        focusSessionSearch()
+        return
+      }
+
+      if (key === "e" && !event.shiftKey) {
+        if (!sessionState.sessionFile) return
+        event.preventDefault()
+        openRenameDialog()
+        return
+      }
+
+      if (key === "f" && !event.shiftKey) {
+        event.preventDefault()
+        void openForkDialog()
+        return
+      }
+
+      if (key === "d" && !event.shiftKey) {
+        event.preventDefault()
+        openAddDirectoryDialog()
+        return
+      }
+
+      if (key === "," && !event.shiftKey) {
+        event.preventDefault()
+        openSettingsDialog()
+        return
+      }
+
+      if (key === "m" && !event.shiftKey) {
+        if (sessionState.availableModels.length === 0) return
+        event.preventDefault()
+        focusModelSelector()
+        return
+      }
+
+      if (key === "t" && !event.shiftKey) {
+        event.preventDefault()
+        void toggleHideThinking()
+        return
+      }
+
+      if (key === "c" && !event.shiftKey) {
+        if (hasSelectedText(event.target)) return
+        event.preventDefault()
+        void runCompact()
+        return
+      }
+
+      if (key === "x" && !event.shiftKey) {
+        if (isEditableTarget(event.target)) return
+        if (!sessionState.sessionFile) return
+        event.preventDefault()
+        setDeleteOpen(true)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [
+    addDirectoryOpen,
+    commandPaletteOpen,
+    createSession,
+    deleteOpen,
+    focusModelSelector,
+    focusSessionSearch,
+    forkOpen,
+    openAddDirectoryDialog,
+    openCommandPalette,
+    openForkDialog,
+    openRenameDialog,
+    openSettingsDialog,
+    openShortcutsDialog,
+    pendingUiRequest,
+    renameOpen,
+    runCompact,
+    sessionState.availableModels.length,
+    sessionState.sessionFile,
+    settingsOpen,
+    shortcutsOpen,
+    statusOpen,
+    toggleHideThinking,
+    treeOpen,
+  ])
 
   return (
     <div className="min-h-svh bg-background">
       <div className="grid min-h-svh lg:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="border-border/70 bg-card/50 lg:border-r">
-          <div className="flex h-full flex-col">
-            <div className="border-b border-border/70 px-5 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs text-muted-foreground">
-                    <SparklesIcon className="size-3.5" />
-                    Native Pi to Go
-                  </div>
-                  <div>
-                    <h1 className="text-xl font-semibold tracking-tight">
-                      Pi to Go
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                      TanStack Start + shadcn rebuild of pi-web.
-                    </p>
-                  </div>
-                </div>
-                <ConnectionBadge connected={sessionState.connected} />
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Button size="sm" onClick={createSession}>
-                  <PlusIcon /> New
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={openAddDirectoryDialog}
-                >
-                  <FolderIcon /> Add dir
-                </Button>
-              </div>
-              <div className="mt-4">
-                <Input
-                  value={sessionSearch}
-                  onChange={(event) => setSessionSearch(event.target.value)}
-                  placeholder="Search sessions"
-                />
-              </div>
-            </div>
-
-            <ScrollArea className="min-h-0 flex-1 px-4 py-4">
-              <div className="space-y-3">
-                {visibleDirectories.map((directory) => {
-                  const sessions = filteredDirectorySessions[directory] || []
-                  const directoryState = directoryStateByPath.get(directory)
-                  const collapsed = Boolean(collapsedDirectories[directory])
-                  const searchActive = sessionSearch.trim().length > 0
-                  const visibleCount = searchActive
-                    ? sessions.length
-                    : Math.min(
-                        sessions.length,
-                        directoryRenderCounts[directory] ??
-                          INITIAL_DIRECTORY_SESSION_RENDER_COUNT
-                      )
-                  const visibleSessions = sessions.slice(0, visibleCount)
-                  const hasMoreSessions = visibleCount < sessions.length
-
-                  return (
-                    <Card key={directory} size="sm">
-                      <CardHeader className="pb-2">
-                        <button
-                          type="button"
-                          className="flex items-center justify-between gap-3 text-left"
-                          onClick={() => toggleDirectory(directory)}
-                        >
-                          <div className="min-w-0">
-                            <CardTitle className="truncate text-sm">
-                              {directory}
-                            </CardTitle>
-                            <CardDescription>
-                              {directoryState?.totalCount ?? sessions.length}{" "}
-                              sessions
-                            </CardDescription>
-                          </div>
-                          {collapsed ? (
-                            <ChevronRightIcon />
-                          ) : (
-                            <ChevronDownIcon />
-                          )}
-                        </button>
-                      </CardHeader>
-                      {!collapsed && (
-                        <CardContent className="space-y-2">
-                          {directoryIndexLoading[directory] ? (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Spinner /> Loading sessions…
-                            </div>
-                          ) : sessions.length > 0 ? (
-                            <>
-                              {visibleSessions.map((entry) => {
-                                const isActive =
-                                  activeSessionId &&
-                                  entry.id === activeSessionId
-                                return (
-                                  <button
-                                    key={`${directory}-${entry.id || entry.path || entry.title}`}
-                                    type="button"
-                                    onClick={() => onSelectSession?.(entry.id)}
-                                    className={[
-                                      "w-full rounded-lg border px-3 py-2 text-left transition-colors",
-                                      isActive
-                                        ? "border-primary bg-primary/10"
-                                        : "hover:bg-muted/50",
-                                    ].join(" ")}
-                                  >
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <div className="truncate text-sm font-medium">
-                                          {entry.title}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {relativeTime(entry.modified)}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        {entry.streaming && (
-                                          <Badge variant="outline">Live</Badge>
-                                        )}
-                                        {entry.unread && (
-                                          <span className="size-2 rounded-full bg-primary" />
-                                        )}
-                                      </div>
-                                    </div>
-                                  </button>
-                                )
-                              })}
-                              {hasMoreSessions ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="w-full"
-                                  onClick={() =>
-                                    loadMoreDirectorySessions(directory)
-                                  }
-                                >
-                                  Show{" "}
-                                  {Math.min(
-                                    DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                                    sessions.length - visibleCount
-                                  )}{" "}
-                                  more
-                                </Button>
-                              ) : null}
-                            </>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">
-                              {searchActive
-                                ? "No matching sessions."
-                                : "No sessions yet."}
-                            </div>
-                          )}
-                        </CardContent>
-                      )}
-                    </Card>
-                  )
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-        </aside>
+        <AppSidebar
+          connected={sessionState.connected}
+          sessionSearch={sessionSearch}
+          onSessionSearchChange={setSessionSearch}
+          sessionSearchInputRef={sessionSearchInputRef}
+          visibleDirectories={visibleDirectories}
+          directoryStateByPath={directoryStateByPath}
+          filteredDirectorySessions={filteredDirectorySessions}
+          collapsedDirectories={collapsedDirectories}
+          directoryIndexLoading={directoryIndexLoading}
+          directoryRenderCounts={directoryRenderCounts}
+          activeSessionId={activeSessionId}
+          statusCount={statusCount}
+          currentThemeLabel={currentThemeLabel}
+          onCreateSession={createSession}
+          onOpenAddDirectoryDialog={openAddDirectoryDialog}
+          onOpenCommandPalette={openCommandPalette}
+          onOpenShortcuts={openShortcutsDialog}
+          onOpenStatus={openStatusDialog}
+          onOpenSettings={openSettingsDialog}
+          onToggleDirectory={toggleDirectory}
+          onSelectSession={onSelectSession}
+          onLoadMoreDirectorySessions={loadMoreDirectorySessions}
+        />
 
         <main className="flex min-h-svh min-w-0 flex-col">
           <div className="border-b border-border/70 px-6 py-4">
@@ -1492,12 +1563,7 @@ export function PiWebAppShell({
                   size="sm"
                   variant="outline"
                   disabled={!sessionState.sessionFile}
-                  onClick={() => {
-                    setRenameValue(
-                      sessionState.sessionName || currentSessionTitle
-                    )
-                    setRenameOpen(true)
-                  }}
+                  onClick={openRenameDialog}
                 >
                   <PencilIcon /> Rename
                 </Button>
@@ -1519,6 +1585,7 @@ export function PiWebAppShell({
                 </CardHeader>
                 <CardContent>
                   <select
+                    ref={modelSelectRef}
                     className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
                     value={
                       sessionState.model
@@ -1661,592 +1728,138 @@ export function PiWebAppShell({
                       )}
                     </ScrollArea>
 
-                    {currentPendingMessages &&
-                      currentPendingMessages.length > 0 && (
-                        <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                          <div className="text-sm font-medium">
-                            Pending prompts
-                          </div>
-                          <div className="space-y-2">
-                            {currentPendingMessages.map((message, index) => (
-                              <div
-                                key={message.pendingId}
-                                className="flex items-center gap-2 rounded-md border bg-background px-3 py-2"
-                              >
-                                <Badge variant="outline">
-                                  {message.streamingBehavior === "steer"
-                                    ? "Steer"
-                                    : "Follow-up"}
-                                </Badge>
-                                <div className="min-w-0 flex-1 truncate text-sm">
-                                  {message.pendingId}
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={index === 0}
-                                  onClick={() =>
-                                    void reorderPending(message.pendingId, -1)
-                                  }
-                                >
-                                  ↑
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={
-                                    index === currentPendingMessages.length - 1
-                                  }
-                                  onClick={() =>
-                                    void reorderPending(message.pendingId, 1)
-                                  }
-                                >
-                                  ↓
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    void removePendingMessage(message.pendingId)
-                                  }
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                    <Card>
-                      <CardContent className="space-y-3 pt-4">
-                        {composerImages.length > 0 && (
-                          <div className="flex flex-wrap gap-3">
-                            {composerImages.map((image, index) => (
-                              <div
-                                key={promptImageKey(image)}
-                                className="relative"
-                              >
-                                <img
-                                  src={image.previewUrl}
-                                  alt="Attachment preview"
-                                  className="h-24 rounded-lg border object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  className="absolute top-1 right-1 rounded-full bg-background/90 px-2 py-1 text-xs shadow"
-                                  onClick={() =>
-                                    setComposerImages((current) =>
-                                      current.filter(
-                                        (_, imageIndex) => imageIndex !== index
-                                      )
-                                    )
-                                  }
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <Textarea
-                          value={composerText}
-                          onChange={(event) =>
-                            setComposerText(event.target.value)
-                          }
-                          placeholder={
-                            sessionState.streaming
-                              ? "Write a steer or follow-up message…"
-                              : "Ask Pi to Go anything…"
-                          }
-                          onKeyDown={(event) => {
-                            if (
-                              event.key === "Enter" &&
-                              !event.shiftKey &&
-                              !event.metaKey &&
-                              !event.ctrlKey
-                            ) {
-                              event.preventDefault()
-                              void submitPrompt(
-                                sessionState.streaming ? "steer" : undefined
-                              )
-                            }
-                          }}
-                        />
-
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          onChange={(event) =>
-                            void onPickImages(event.target.files)
-                          }
-                        />
-
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => fileInputRef.current?.click()}
-                            >
-                              <ImagePlusIcon /> Add images
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={createSession}
-                            >
-                              <PlusIcon /> New session
-                            </Button>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            {sessionState.streaming && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isSubmitting}
-                                  onClick={() => void submitPrompt("followUp")}
-                                >
-                                  Queue follow-up
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isSubmitting}
-                                  onClick={() => void submitPrompt("steer")}
-                                >
-                                  Steer now
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={async () => {
-                                    try {
-                                      await fetchJson<SimpleOkResponse>(
-                                        buildRequestUrl("/api/abort", {
-                                          contextId: viewerContextId,
-                                          sessionId: activeSessionId,
-                                        }),
-                                        {
-                                          method: "POST",
-                                        }
-                                      )
-                                    } catch (error) {
-                                      toast.error(
-                                        error instanceof Error
-                                          ? error.message
-                                          : "Failed to abort session"
-                                      )
-                                    }
-                                  }}
-                                >
-                                  Abort
-                                </Button>
-                              </>
-                            )}
-                            <Button
-                              disabled={
-                                isSubmitting ||
-                                (!composerText.trim() &&
-                                  composerImages.length === 0)
-                              }
-                              onClick={() =>
-                                void submitPrompt(
-                                  sessionState.streaming ? "steer" : undefined
-                                )
-                              }
-                            >
-                              {isSubmitting ? (
-                                <LoaderCircleIcon className="animate-spin" />
-                              ) : (
-                                <SendIcon />
-                              )}
-                              Send
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <ComposerPanel
+                      currentPendingMessages={currentPendingMessages}
+                      composerImages={composerImages}
+                      composerText={composerText}
+                      isSubmitting={isSubmitting}
+                      isStreaming={sessionState.streaming}
+                      fileInputRef={fileInputRef}
+                      onComposerTextChange={setComposerText}
+                      onPickImages={(files) => {
+                        void onPickImages(files)
+                      }}
+                      onRemoveComposerImage={(index) => {
+                        setComposerImages((current) =>
+                          current.filter(
+                            (_, imageIndex) => imageIndex !== index
+                          )
+                        )
+                      }}
+                      onCreateSession={createSession}
+                      onSubmitPrompt={(streamingBehavior) => {
+                        void submitPrompt(streamingBehavior)
+                      }}
+                      onAbort={() => {
+                        void abortSession()
+                      }}
+                      onRemovePendingMessage={(pendingId) => {
+                        void removePendingMessage(pendingId)
+                      }}
+                      onReorderPending={(pendingId, direction) => {
+                        void reorderPending(pendingId, direction)
+                      }}
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="git" className="space-y-4">
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void refreshGit()}
-                  >
-                    <RefreshCwIcon /> Refresh
-                  </Button>
-                </div>
-                <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Repository status</CardTitle>
-                      <CardDescription>
-                        {sessionState.cwd || "No cwd"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      {gitLoading ? (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Spinner /> Loading git details…
-                        </div>
-                      ) : isApiErrorResponse(gitStatus) ? (
-                        <div className="text-destructive">
-                          {gitStatus.error}
-                        </div>
-                      ) : gitStatus?.gitStatus ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <GitBranchIcon className="size-4" />
-                            <span>{gitStatus.gitStatus.label}</span>
-                          </div>
-                          <div className="text-muted-foreground">
-                            {gitStatus.gitStatus.title}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-muted-foreground">
-                          No git repository detected.
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Changes</CardTitle>
-                      <CardDescription>
-                        Native git inspection powered by the new backend.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm">
-                      {gitLoading ? (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Spinner /> Loading changes…
-                        </div>
-                      ) : isApiErrorResponse(gitChanges) ? (
-                        <div className="text-destructive">
-                          {gitChanges.error}
-                        </div>
-                      ) : gitChanges?.files && gitChanges.files.length > 0 ? (
-                        <div className="space-y-2">
-                          {gitChanges.files.map((file) => (
-                            <div
-                              key={`${file.status}:${file.path}`}
-                              className="rounded-lg border px-3 py-2"
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0 truncate font-medium">
-                                  {file.path}
-                                </div>
-                                <Badge variant="outline">{file.status}</Badge>
-                              </div>
-                              {(file.linesAdded != null ||
-                                file.linesDeleted != null) && (
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                  +{file.linesAdded ?? 0} / -
-                                  {file.linesDeleted ?? 0}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-muted-foreground">
-                          Working tree is clean.
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                <GitPanel
+                  gitLoading={gitLoading}
+                  gitStatus={gitStatus}
+                  gitChanges={gitChanges}
+                  cwd={sessionState.cwd}
+                  onRefresh={() => {
+                    void refreshGit()
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </div>
         </main>
       </div>
 
-      <Dialog open={addDirectoryOpen} onOpenChange={setAddDirectoryOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add directory</DialogTitle>
-            <DialogDescription>
-              Add another project directory to the sidebar.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={directoryInput}
-            onChange={(event) => setDirectoryInput(event.target.value)}
-            placeholder="~/code/project"
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddDirectoryOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={() => void addDirectory()}>Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename session</DialogTitle>
-            <DialogDescription>
-              Update the display name shown in the sidebar.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(event) => setRenameValue(event.target.value)}
-            placeholder="Session name"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void renameSession()}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete session</DialogTitle>
-            <DialogDescription>
-              This deletes the session file from disk.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={() => void deleteSession()}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={forkOpen} onOpenChange={setForkOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Fork session</DialogTitle>
-            <DialogDescription>
-              Start a new draft from one of the earlier user prompts.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[60vh] pr-3">
-            <div className="space-y-2">
-              {forkLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Spinner /> Loading fork points…
-                </div>
-              ) : forkMessages && forkMessages.length > 0 ? (
-                forkMessages.map((message) => (
-                  <button
-                    key={message.entryId}
-                    type="button"
-                    className="w-full rounded-lg border px-3 py-2 text-left hover:bg-muted/50"
-                    onClick={() => void forkFromMessage(message.entryId)}
-                  >
-                    <div className="line-clamp-3 text-sm">{message.text}</div>
-                  </button>
-                ))
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  No forkable prompts found.
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={treeOpen} onOpenChange={setTreeOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Session tree</DialogTitle>
-            <DialogDescription>
-              Navigate branches and edit labels from the native tree UI.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="space-y-3">
-              <Input
-                value={treeQuery}
-                onChange={(event) => setTreeQuery(event.target.value)}
-                placeholder="Filter tree"
-              />
-              <ScrollArea className="h-[55vh] rounded-lg border p-3">
-                {treeLoading ? (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Spinner /> Loading tree…
-                  </div>
-                ) : flatTree.length > 0 ? (
-                  <div className="space-y-1">
-                    {flatTree.map((node) => (
-                      <button
-                        key={node.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTreeNodeId(node.id)
-                          setSelectedTreeNodeLabel(node.label || "")
-                        }}
-                        className={[
-                          "flex w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/50",
-                          selectedTreeNodeId === node.id ? "bg-muted" : "",
-                        ].join(" ")}
-                        style={{ paddingLeft: `${node.depth * 16 + 12}px` }}
-                      >
-                        <FolderTreeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {node.label || node.role || node.type}
-                          </div>
-                          <div className="truncate text-muted-foreground">
-                            {node.text}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No tree entries found.
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-            <div className="space-y-3 rounded-lg border p-3">
-              <div>
-                <div className="text-sm font-medium">Selected entry</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {selectedTreeNodeId || "Nothing selected"}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Label</div>
-                <Input
-                  value={selectedTreeNodeLabel}
-                  onChange={(event) =>
-                    setSelectedTreeNodeLabel(event.target.value)
-                  }
-                  placeholder="Optional label"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Button
-                  disabled={!selectedTreeNodeId}
-                  onClick={() =>
-                    selectedTreeNodeId &&
-                    void navigateTreeNode(selectedTreeNodeId)
-                  }
-                >
-                  Jump here
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!selectedTreeNodeId}
-                  onClick={() => void saveTreeLabel()}
-                >
-                  Save label
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(pendingUiRequest)}
-        onOpenChange={(open) => {
-          if (!open && pendingUiRequest) {
-            void resolveUiRequest({ cancelled: true })
-          }
+      <AppShellCommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        commands={commandPaletteCommands}
+        onCommandError={(error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to run command"
+          )
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{pendingUiRequest?.title || "Pi request"}</DialogTitle>
-            {pendingUiRequest?.message && (
-              <DialogDescription>{pendingUiRequest.message}</DialogDescription>
-            )}
-          </DialogHeader>
-          {(pendingUiRequest?.method === "input" ||
-            pendingUiRequest?.method === "editor") &&
-            (pendingUiRequest.method === "editor" ? (
-              <Textarea
-                value={pendingUiValue}
-                onChange={(event) => setPendingUiValue(event.target.value)}
-                placeholder={pendingUiRequest.placeholder}
-              />
-            ) : (
-              <Input
-                value={pendingUiValue}
-                onChange={(event) => setPendingUiValue(event.target.value)}
-                placeholder={pendingUiRequest.placeholder}
-              />
-            ))}
-          {pendingUiRequest?.method === "select" && (
-            <div className="space-y-2">
-              {pendingUiRequest.options?.map((option) => {
-                const value = typeof option === "string" ? option : option.value
-                const label =
-                  typeof option === "string"
-                    ? option
-                    : option.label || option.value
-                return (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => void resolveUiRequest({ value })}
-                  >
-                    {label}
-                  </Button>
-                )
-              })}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => void resolveUiRequest({ cancelled: true })}
-            >
-              Cancel
-            </Button>
-            {pendingUiRequest?.method === "confirm" && (
-              <Button
-                onClick={() => void resolveUiRequest({ confirmed: true })}
-              >
-                Confirm
-              </Button>
-            )}
-            {(pendingUiRequest?.method === "input" ||
-              pendingUiRequest?.method === "editor") && (
-              <Button
-                onClick={() => void resolveUiRequest({ value: pendingUiValue })}
-              >
-                Submit
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
+
+      <AppShellDialogs
+        addDirectoryOpen={addDirectoryOpen}
+        onAddDirectoryOpenChange={setAddDirectoryOpen}
+        directoryInput={directoryInput}
+        onDirectoryInputChange={setDirectoryInput}
+        onAddDirectory={() => {
+          void addDirectory()
+        }}
+        renameOpen={renameOpen}
+        onRenameOpenChange={setRenameOpen}
+        renameValue={renameValue}
+        onRenameValueChange={setRenameValue}
+        onRenameSession={() => {
+          void renameSession()
+        }}
+        deleteOpen={deleteOpen}
+        onDeleteOpenChange={setDeleteOpen}
+        onDeleteSession={() => {
+          void deleteSession()
+        }}
+        forkOpen={forkOpen}
+        onForkOpenChange={setForkOpen}
+        forkLoading={forkLoading}
+        forkMessages={forkMessages}
+        onForkFromMessage={(entryId) => {
+          void forkFromMessage(entryId)
+        }}
+        treeOpen={treeOpen}
+        onTreeOpenChange={setTreeOpen}
+        treeLoading={treeLoading}
+        treeQuery={treeQuery}
+        onTreeQueryChange={setTreeQuery}
+        flatTree={flatTree}
+        selectedTreeNodeId={selectedTreeNodeId}
+        onSelectedTreeNodeIdChange={setSelectedTreeNodeId}
+        selectedTreeNodeLabel={selectedTreeNodeLabel}
+        onSelectedTreeNodeLabelChange={setSelectedTreeNodeLabel}
+        onNavigateTreeNode={(targetId) => {
+          void navigateTreeNode(targetId)
+        }}
+        onSaveTreeLabel={() => {
+          void saveTreeLabel()
+        }}
+        statusOpen={statusOpen}
+        onStatusOpenChange={setStatusOpen}
+        statuses={sessionState.uiState.statuses}
+        shortcutsOpen={shortcutsOpen}
+        onShortcutsOpenChange={setShortcutsOpen}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
+        currentTheme={currentTheme}
+        currentThemeLabel={currentThemeLabel}
+        onThemeChange={handleThemeChange}
+        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+        onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
+        sessionDoneDesktopNotificationsEnabled={
+          sessionDoneDesktopNotificationsEnabled
+        }
+        onSessionDoneDesktopNotificationsEnabledChange={
+          handleSessionDoneDesktopNotificationsEnabledChange
+        }
+        desktopNotificationPermission={desktopNotificationPermission}
+        pendingUiRequest={pendingUiRequest}
+        pendingUiValue={pendingUiValue}
+        onPendingUiValueChange={setPendingUiValue}
+        onResolveUiRequest={(body) => {
+          void resolveUiRequest(body)
+        }}
+      />
     </div>
   )
 }

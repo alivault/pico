@@ -16,6 +16,7 @@ export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
 
 export type ThemeMode = "system" | "light" | "dark"
+export type ResolvedThemeMode = Exclude<ThemeMode, "system">
 export type StreamingBehavior = "followUp" | "steer"
 
 export type PromptImage = {
@@ -387,9 +388,35 @@ export function readStoredRecentDirectories() {
   }
 }
 
+export function normalizeThemeMode(value: unknown): ThemeMode {
+  return value === "light" || value === "dark" || value === "system"
+    ? value
+    : "system"
+}
+
+export function resolvedThemeMode(
+  theme: ThemeMode,
+  systemTheme?: string
+): ResolvedThemeMode {
+  if (theme === "system") {
+    return systemTheme === "light" ? "light" : "dark"
+  }
+
+  return theme
+}
+
+export function themeModeLabel(theme: ThemeMode, systemTheme?: string) {
+  if (theme === "system") {
+    return `System (${resolvedThemeMode(theme, systemTheme) === "light" ? "Light mode" : "Dark mode"})`
+  }
+
+  return theme === "light" ? "Light mode" : "Dark mode"
+}
+
 export function readStoredTheme() {
-  const raw = (safeLocalStorageGetItem(THEME_STORAGE_KEY) ?? "system").trim()
-  return raw === "light" || raw === "dark" ? raw : "system"
+  return normalizeThemeMode(
+    (safeLocalStorageGetItem(THEME_STORAGE_KEY) ?? "system").trim()
+  )
 }
 
 export function readStoredHideToolBlocks() {

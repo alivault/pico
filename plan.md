@@ -34,7 +34,7 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - [ ] Implement session sidebar grouping, search, collapse, multi-select affordances, and draft handling
 - [x] Implement composer flows: slash menu, images, queue/steer, model picker, thinking picker
 - [x] Use Sonner for all toast notifications (session done, errors, confirmations that should toast)
-- [ ] Implement dialogs: add directory, command palette, shortcuts, tree, fork, rename, delete, settings, status, extension UI requests
+- [x] Implement dialogs: add directory, command palette, shortcuts, tree, fork, rename, delete, settings, status, extension UI requests
 - [ ] Commit frontend milestones incrementally
 
 ## Phase 5 — verification
@@ -55,3 +55,4 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - 2026-04-20: Replaced the proxy stubs with a native TypeScript session backend covering `/events`, prompt/abort, session lifecycle, tree, model/thinking, highlight, path completion, git, and extension UI request plumbing.
 - 2026-04-20: Completed the native frontend shell wiring for live SSE session state, route-linked session selection, conversation rendering, composer queue/steer flows, dialogs, and the git view.
 - 2026-04-20: Fixed a React update loop in the native shell, added sidebar session pagination, and made dev-mode Pi SDK loading work reliably from the installed external runtime package.
+- 2026-04-20: Restored more native parity from the old pi-web shell with an extracted command palette, shortcuts/status/settings dialogs, theme-aware sidebar actions, and session-finished notification settings backed by the new TanStack UI.
