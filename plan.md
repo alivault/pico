@@ -151,14 +151,14 @@ Reference: `static/dialogs.js`
 
 Reference: `static/app.js`, `static/dialogs.js`, `static/composer.js`
 
-- [ ] Restore the old header session-actions menu parity
-  - [ ] new session
-  - [ ] toggle thinking
-  - [ ] toggle tools
-  - [ ] rename/delete current session
-- [ ] Extend settings parity beyond theme + notifications
-  - [ ] tool visibility toggle
-  - [ ] any remaining shell/composer toggles that still exist in old `pi-web`
+- [x] Restore the old header session-actions menu parity
+  - [x] new session
+  - [x] toggle thinking
+  - [x] toggle tools
+  - [x] rename/delete current session
+- [x] Extend settings parity beyond theme + notifications
+  - [x] tool visibility toggle
+  - [x] any remaining shell/composer toggles that still exist in old `pi-web`
 - [ ] Align shortcuts dialog with the actual final shortcut map once parity behavior ships
 - [ ] Audit document title / completion notifications / unread-finished behavior against old `pi-web`
 

@@ -1,9 +1,9 @@
 import * as React from "react"
 import {
-  PencilIcon,
+  EllipsisIcon,
+  PlusIcon,
   SparklesIcon,
   SplitIcon,
-  Trash2Icon,
   WaypointsIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -46,6 +46,14 @@ import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Empty,
   EmptyContent,
@@ -1732,28 +1740,35 @@ export function PiWebAppShell({
     [sessionState.availableThinkingLevels, sessionState.thinkingLevel, setThinkingLevel]
   )
 
+  const setThinkingBlocksHidden = React.useCallback(
+    async (hidden: boolean) => {
+      if (!viewerContextId) return
+      try {
+        await fetchJson(
+          buildRequestUrl("/api/settings/hide-thinking", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ hide: hidden }),
+          }
+        )
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update thinking visibility"
+        )
+      }
+    },
+    [activeSessionId, viewerContextId]
+  )
+
   const toggleHideThinking = React.useCallback(async () => {
-    if (!viewerContextId) return
-    try {
-      await fetchJson(
-        buildRequestUrl("/api/settings/hide-thinking", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ hide: !sessionState.hideThinkingBlock }),
-        }
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update thinking visibility"
-      )
-    }
-  }, [activeSessionId, sessionState.hideThinkingBlock, viewerContextId])
+    await setThinkingBlocksHidden(!sessionState.hideThinkingBlock)
+  }, [sessionState.hideThinkingBlock, setThinkingBlocksHidden])
 
   const setToolBlocksHidden = React.useCallback((hidden: boolean) => {
     setHideToolBlocks(hidden)
@@ -2750,7 +2765,7 @@ export function PiWebAppShell({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={runCompact}>
                 <SparklesIcon /> Compact
               </Button>
@@ -2763,19 +2778,64 @@ export function PiWebAppShell({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!sessionState.sessionFile}
-                onClick={openRenameDialog}
+                title={
+                  sessionState.cwd
+                    ? `Create a new session in ${sessionState.cwd}`
+                    : "Create a new session"
+                }
+                onClick={() => {
+                  void createSession()
+                }}
               >
-                <PencilIcon /> Rename
+                <PlusIcon /> New
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!sessionState.sessionFile}
-                onClick={openDeleteDialogForCurrentSession}
-              >
-                <Trash2Icon /> Delete
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
+                  <EllipsisIcon /> Session
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void createSession()
+                    }}
+                  >
+                    <span>Create new session</span>
+                    <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void toggleHideThinking()
+                    }}
+                  >
+                    <span>
+                      {sessionState.hideThinkingBlock
+                        ? "Show thinking"
+                        : "Hide thinking"}
+                    </span>
+                    <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={toggleHideToolBlocks}>
+                    <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
+                    <DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!sessionState.sessionFile}
+                    onClick={openRenameDialog}
+                  >
+                    <span>Rename session</span>
+                    <DropdownMenuShortcut>Ctrl+E</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={!sessionState.sessionFile}
+                    onClick={openDeleteDialogForCurrentSession}
+                  >
+                    <span>Delete session</span>
+                    <DropdownMenuShortcut>Ctrl+X</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -3107,6 +3167,12 @@ export function PiWebAppShell({
         currentTheme={currentTheme}
         currentThemeLabel={currentThemeLabel}
         onThemeChange={handleThemeChange}
+        hideThinkingBlocks={sessionState.hideThinkingBlock}
+        onHideThinkingBlocksChange={(hidden) => {
+          void setThinkingBlocksHidden(hidden)
+        }}
+        hideToolBlocks={hideToolBlocks}
+        onHideToolBlocksChange={setToolBlocksHidden}
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
         onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
         sessionDoneDesktopNotificationsEnabled={

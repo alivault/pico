@@ -66,6 +66,10 @@ type AppShellDialogsProps = {
   currentTheme: ThemeMode
   currentThemeLabel: string
   onThemeChange: (value: ThemeMode) => void
+  hideThinkingBlocks: boolean
+  onHideThinkingBlocksChange: (hidden: boolean) => void
+  hideToolBlocks: boolean
+  onHideToolBlocksChange: (hidden: boolean) => void
   sessionDoneSoundEnabled: boolean
   onSessionDoneSoundEnabledChange: (enabled: boolean) => void
   sessionDoneDesktopNotificationsEnabled: boolean
@@ -140,6 +144,10 @@ export function AppShellDialogs({
   currentTheme,
   currentThemeLabel,
   onThemeChange,
+  hideThinkingBlocks,
+  onHideThinkingBlocksChange,
+  hideToolBlocks,
+  onHideToolBlocksChange,
   sessionDoneSoundEnabled,
   onSessionDoneSoundEnabledChange,
   sessionDoneDesktopNotificationsEnabled,
@@ -458,6 +466,47 @@ export function AppShellDialogs({
                   </Button>
                 ))}
               </div>
+            </section>
+
+            <section className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold">Conversation display</h3>
+                <p className="text-sm text-muted-foreground">
+                  Match the old shell controls for hiding assistant internals.
+                </p>
+              </div>
+
+              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Hide thinking blocks</div>
+                  <div className="text-sm text-muted-foreground">
+                    Collapse assistant reasoning into the short hidden-thinking preview.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4"
+                  checked={hideThinkingBlocks}
+                  onChange={(event) =>
+                    onHideThinkingBlocksChange(event.target.checked)
+                  }
+                />
+              </label>
+
+              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Hide tool calls</div>
+                  <div className="text-sm text-muted-foreground">
+                    Hide assistant tool execution cards in the conversation view.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4"
+                  checked={hideToolBlocks}
+                  onChange={(event) => onHideToolBlocksChange(event.target.checked)}
+                />
+              </label>
             </section>
 
             <section className="space-y-4">
