@@ -156,14 +156,47 @@ export type SessionState = {
   uiRequest?: UiRequest
 }
 
+type UnknownRecord = Record<string, unknown>
+
+type MessageContentPart = UnknownRecord & {
+  type?: unknown
+  text?: unknown
+  thinking?: unknown
+  id?: unknown
+  name?: unknown
+  arguments?: unknown
+}
+
+type MessagePayload = UnknownRecord & {
+  role?: unknown
+  content?: unknown
+  queued?: unknown
+  metadata?: UnknownRecord
+  streamingBehavior?: unknown
+  deliverAs?: unknown
+  summary?: unknown
+  tokensBefore?: unknown
+  toolCallId?: unknown
+  details?: unknown
+  isError?: unknown
+}
+
+type PendingUserMessagePayload = UnknownRecord & {
+  pendingId?: unknown
+  text?: unknown
+  images?: unknown
+  queued?: unknown
+  streamingBehavior?: unknown
+}
+
 export type StateSyncPayload = {
   type: "state_sync"
   sessionKey?: string
-  messages?: Array<any>
-  pendingUserMessages?: Array<any>
+  messages?: Array<MessagePayload>
+  pendingUserMessages?: Array<PendingUserMessagePayload>
   draft?: boolean
   streaming?: boolean
-  streamingMessage?: any
+  streamingMessage?: MessagePayload
   contextUsage?: SessionState["contextUsage"]
   hideThinkingBlock?: boolean
   model?: ModelOption
@@ -191,7 +224,7 @@ export type SessionMetaPayload = {
   modified?: string
   draft?: boolean
   streaming?: boolean
-  pendingUserMessages?: Array<any>
+  pendingUserMessages?: Array<PendingUserMessagePayload>
 }
 
 export type SessionsPayload = {
@@ -428,16 +461,21 @@ export function extractMessageText(message: { content?: unknown }) {
     .join("\n")
 }
 
-export function extractToolText(result: { content?: Array<any> } | undefined) {
+export function extractToolText(
+  result: { content?: Array<MessageContentPart> } | undefined
+) {
   if (!result || !Array.isArray(result.content)) return ""
 
   return result.content
-    .filter((part) => part?.type === "text")
-    .map((part) => part.text || "")
+    .filter(
+      (part): part is MessageContentPart & { text: string } =>
+        part?.type === "text" && typeof part.text === "string"
+    )
+    .map((part) => part.text)
     .join("\n")
 }
 
-export function extractMessageImages(message: { content?: Array<any> }) {
+export function extractMessageImages(message: { content?: unknown }) {
   if (!Array.isArray(message?.content)) return []
 
   return message.content
@@ -446,7 +484,15 @@ export function extractMessageImages(message: { content?: Array<any> }) {
     .filter((part): part is PromptImage => Boolean(part))
 }
 
-export function assistantBlocksFromMessage(message: any) {
+function normalizeStreamingBehavior(
+  value: unknown
+): StreamingBehavior | undefined {
+  return value === "steer" || value === "followUp" ? value : undefined
+}
+
+export function assistantBlocksFromMessage(
+  message: MessagePayload | undefined
+) {
   const blocks: Array<AssistantBlock> = []
   const content = Array.isArray(message?.content) ? message.content : []
 
@@ -532,11 +578,12 @@ export function buildItemsFromSync(sync: StateSyncPayload) {
         text: extractMessageText(message),
         images: extractMessageImages(message),
         queued: Boolean(message.queued ?? message?.metadata?.queued),
-        streamingBehavior:
+        streamingBehavior: normalizeStreamingBehavior(
           message.streamingBehavior ??
-          message.deliverAs ??
-          message?.metadata?.streamingBehavior ??
-          message?.metadata?.deliverAs,
+            message.deliverAs ??
+            message?.metadata?.streamingBehavior ??
+            message?.metadata?.deliverAs
+        ),
       })
       continue
     }
@@ -558,12 +605,16 @@ export function buildItemsFromSync(sync: StateSyncPayload) {
     }
 
     if (message.role === "toolResult") {
-      mutateToolBlockInItems(items, message.toolCallId, (block) => {
-        block.output = extractMessageText(message)
-        block.details = message.details
-        block.isError = Boolean(message.isError)
-        block.running = false
-      })
+      mutateToolBlockInItems(
+        items,
+        typeof message.toolCallId === "string" ? message.toolCallId : undefined,
+        (block) => {
+          block.output = extractMessageText(message)
+          block.details = message.details
+          block.isError = Boolean(message.isError)
+          block.running = false
+        }
+      )
     }
   }
 
@@ -584,7 +635,7 @@ export function buildItemsFromSync(sync: StateSyncPayload) {
             )
         : [],
       queued: Boolean(message?.queued ?? true),
-      streamingBehavior: message?.streamingBehavior,
+      streamingBehavior: normalizeStreamingBehavior(message?.streamingBehavior),
     })
   }
 

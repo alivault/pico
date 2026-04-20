@@ -1,6 +1,10 @@
 import { basename } from "node:path"
 
 import { loadPiAi } from "@/server/pi-sdk"
+import type {
+  MessageContentPartLike,
+  ModelRegistryLike,
+} from "@/server/pi-sdk-types"
 
 const MAX_SESSION_NAME_LENGTH = 48
 const MAX_SESSION_NAME_WORDS = 6
@@ -235,17 +239,7 @@ export async function generateSessionNameWithLlm(
   entry: {
     cwd: string
     services: {
-      modelRegistry: {
-        find: (provider: string, id: string) => any
-        getApiKeyAndHeaders: (model: any) => Promise<
-          | {
-              ok: true
-              apiKey?: string
-              headers?: Record<string, string>
-            }
-          | { ok: false; error?: string }
-        >
-      }
+      modelRegistry: ModelRegistryLike
     }
   },
   text: string,
@@ -270,8 +264,8 @@ export async function generateSessionNameWithLlm(
     }
   }
 
-  const { complete } = await loadPiAi()
-  const response = await complete(
+  const piAi = await loadPiAi()
+  const response = await piAi.complete(
     model,
     {
       systemPrompt: SESSION_NAME_SYSTEM_PROMPT,
@@ -302,10 +296,10 @@ export async function generateSessionNameWithLlm(
   const raw = Array.isArray(response?.content)
     ? response.content
         .filter(
-          (block: { type?: unknown; text?: unknown }) =>
+          (block): block is MessageContentPartLike & { text: string } =>
             block?.type === "text" && typeof block.text === "string"
         )
-        .map((block: { text: string }) => block.text)
+        .map((block) => block.text)
         .join(" ")
     : ""
 

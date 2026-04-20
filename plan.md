@@ -11,15 +11,15 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 
 ## Phase 2 — shared foundations
 
-- [ ] Keep and expand shared TS domain/types for sessions, messages, directories, tree data, and UI state
+- [x] Keep and expand shared TS domain/types for sessions, messages, directories, tree data, and UI state
 - [x] Port reusable server helpers to TypeScript (SDK loading, session naming, JSON/response helpers, filesystem/git helpers)
-- [ ] Define the browser/server contract for SSE events and API payloads in TS
+- [x] Define the browser/server contract for SSE events and API payloads in TS
 - [ ] Commit the shared foundations
 
 ## Phase 3 — backend rewrite
 
-- [ ] Rebuild the session runtime in TypeScript around the Pi SDK
-- [ ] Implement `/events` with viewer-context replay/sync behavior
+- [x] Rebuild the session runtime in TypeScript around the Pi SDK
+- [x] Implement `/events` with viewer-context replay/sync behavior
 - [x] Implement prompt + abort + queued/steered follow-up flows
 - [x] Implement session lifecycle routes: new, rename, delete, fork, tree, tree label
 - [x] Implement model/thinking/settings/UI bridge routes
@@ -28,11 +28,11 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 
 ## Phase 4 — frontend rewrite
 
-- [ ] Build the main app shell with responsive sidebar, top bar, session view, git view, and composer
-- [ ] Connect route search state (`?session=`) and persistent viewer context
-- [ ] Render conversation items: user text/images, assistant text, thinking, tools, compaction summaries
+- [x] Build the main app shell with responsive sidebar, top bar, session view, git view, and composer
+- [x] Connect route search state (`?session=`) and persistent viewer context
+- [x] Render conversation items: user text/images, assistant text, thinking, tools, compaction summaries
 - [ ] Implement session sidebar grouping, search, collapse, multi-select affordances, and draft handling
-- [ ] Implement composer flows: slash menu, images, queue/steer, model picker, thinking picker
+- [x] Implement composer flows: slash menu, images, queue/steer, model picker, thinking picker
 - [x] Use Sonner for all toast notifications (session done, errors, confirmations that should toast)
 - [ ] Implement dialogs: add directory, command palette, shortcuts, tree, fork, rename, delete, settings, status, extension UI requests
 - [ ] Commit frontend milestones incrementally
@@ -53,3 +53,5 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - 2026-04-20: Committed the cleanup reset as `feat: reset to native tanstack rewrite baseline`.
 - 2026-04-20: Added shared API response types and a live workspace preview in the native shell using the new git/path endpoints.
 - 2026-04-20: Replaced the proxy stubs with a native TypeScript session backend covering `/events`, prompt/abort, session lifecycle, tree, model/thinking, highlight, path completion, git, and extension UI request plumbing.
+- 2026-04-20: Completed the native frontend shell wiring for live SSE session state, route-linked session selection, conversation rendering, composer queue/steer flows, dialogs, and the git view.
+- 2026-04-20: Fixed a React update loop in the native shell, added sidebar session pagination, and made dev-mode Pi SDK loading work reliably from the installed external runtime package.

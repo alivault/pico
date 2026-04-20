@@ -14,6 +14,20 @@ export const Route = createFileRoute("/")({
 
 function App() {
   const { session } = Route.useSearch()
+  const navigate = Route.useNavigate()
 
-  return <PiWebAppShell sessionId={session} />
+  return (
+    <PiWebAppShell
+      sessionId={session}
+      onSelectSession={(nextSessionId) => {
+        void navigate({
+          search: (previous) => ({
+            ...previous,
+            session: nextSessionId || undefined,
+          }),
+          replace: true,
+        })
+      }}
+    />
+  )
 }

@@ -4,6 +4,15 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { nitro } from "nitro/vite"
+import { searchForWorkspaceRoot } from "vite"
+
+import { tryResolvePiSdkDir } from "./src/server/pi-sdk-path.ts"
+
+const piSdkDir = tryResolvePiSdkDir()
+const fsAllow = [searchForWorkspaceRoot(process.cwd())]
+if (piSdkDir) {
+  fsAllow.push(piSdkDir)
+}
 
 const config = defineConfig({
   lint: {
@@ -26,6 +35,11 @@ const config = defineConfig({
   },
   resolve: {
     tsconfigPaths: true,
+  },
+  server: {
+    fs: {
+      allow: fsAllow,
+    },
   },
   plugins: [devtools(), nitro(), tailwindcss(), tanstackStart(), viteReact()],
 })

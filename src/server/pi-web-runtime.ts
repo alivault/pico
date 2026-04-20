@@ -20,6 +20,20 @@ import {
   makeSelfContainedSettingsManager,
   resolvePiSdkDir,
 } from "@/server/pi-sdk"
+import type {
+  AgentSessionLike,
+  MessageLike,
+  ModelLike,
+  PiSdkLike,
+  PromptImageInputLike,
+  SessionEventLike,
+  SessionListInfoLike,
+  SessionManagerLike,
+  SessionServicesLike,
+  SessionStartEventLike,
+  SessionTreeNodeLike,
+  SettingsManagerLike,
+} from "@/server/pi-sdk-types"
 
 const VALID_THINKING_LEVELS = new Set([
   "off",
@@ -49,11 +63,7 @@ const identityTheme = {
   getBashModeBorderColor: () => (text: string) => text,
 }
 
-type PromptImageInput = {
-  type: "image"
-  mimeType: string
-  data: string
-}
+type PromptImageInput = PromptImageInputLike
 
 type PendingUserMessage = {
   pendingId: string
@@ -61,202 +71,6 @@ type PendingUserMessage = {
   images: Array<PromptImageInput>
   queued: true
   streamingBehavior: "steer" | "followUp"
-}
-
-type SessionStartEventLike = {
-  type: "session_start"
-  reason?: string
-  previousSessionFile?: string
-}
-
-type ModelLike = {
-  id: string
-  provider: string
-  name?: string
-  reasoning?: boolean
-}
-
-type SkillLike = {
-  name: string
-  description?: string
-  sourceInfo?: {
-    scope?: string
-    source?: string
-  }
-}
-
-type SessionListInfoLike = {
-  path?: string
-  id?: string
-  cwd: string
-  name?: string
-  modified?: string | Date
-  messageCount?: number
-  firstMessage?: string
-}
-
-type SessionTreeNodeLike = {
-  entry: Record<string, unknown>
-  children: Array<SessionTreeNodeLike>
-  label?: string
-  labelTimestamp?: string
-}
-
-type SessionManagerLike = {
-  getCwd(): string
-  getSessionDir?(): string | undefined
-  getSessionName?(): string | undefined
-  getTree?(): Array<SessionTreeNodeLike>
-  getLeafId?(): string | null
-  getEntry?(id: string): Record<string, any> | undefined
-  getLabel?(id: string): string | undefined
-  getBranch?(id?: string | null): Array<Record<string, any>>
-  createBranchedSession?(leafId: string): string | undefined
-  appendLabelChange?(targetId: string, label?: string): string
-  appendSessionInfo?(name: string): string
-  newSession?(options?: {
-    id?: string
-    parentSession?: string
-  }): string | undefined
-  isPersisted?(): boolean
-  getHeader?(): unknown
-  fileEntries?: Array<unknown>
-  flushed?: boolean
-  _buildIndex?(): void
-}
-
-type SettingsManagerLike = {
-  getHideThinkingBlock(): boolean
-  setHideThinkingBlock(hide: boolean): void
-  getGlobalSettings?(): unknown
-  getProjectSettings?(): unknown
-  getPackages?(): unknown[]
-  getExtensionPaths?(): string[]
-  getSkillPaths?(): string[]
-  getPromptTemplatePaths?(): string[]
-  getThemePaths?(): string[]
-}
-
-type ModelRegistryLike = {
-  getAvailable(): Array<ModelLike>
-  find(provider: string, id: string): ModelLike | undefined
-  getApiKeyAndHeaders(model: ModelLike): Promise<
-    | {
-        ok: true
-        apiKey?: string
-        headers?: Record<string, string>
-      }
-    | { ok: false; error?: string }
-  >
-}
-
-type ResourceLoaderLike = {
-  getSkills(): {
-    skills: Array<SkillLike>
-  }
-}
-
-type SessionServicesLike = {
-  settingsManager: SettingsManagerLike
-  modelRegistry: ModelRegistryLike
-  resourceLoader: ResourceLoaderLike
-  diagnostics: Array<{
-    type: string
-    message: string
-  }>
-}
-
-type AgentSessionLike = {
-  agent: {
-    waitForIdle(): Promise<void>
-  }
-  sessionManager: SessionManagerLike
-  messages: Array<Record<string, any>>
-  state: {
-    streamingMessage?: Record<string, any>
-  }
-  model?: ModelLike
-  thinkingLevel: string
-  sessionFile?: string
-  sessionId: string
-  sessionName?: string
-  isStreaming: boolean
-  prompt(
-    text: string,
-    options?: {
-      images?: Array<PromptImageInput>
-      streamingBehavior?: "steer" | "followUp"
-    }
-  ): Promise<void>
-  abort(): Promise<void>
-  abortCompaction?(): void
-  abortBranchSummary?(): void
-  compact(customInstructions?: string): Promise<unknown>
-  setModel(model: ModelLike): Promise<void>
-  setThinkingLevel(level: string): void
-  getAvailableThinkingLevels(): Array<string>
-  getContextUsage(): unknown
-  subscribe(listener: (event: Record<string, any>) => void): () => void
-  bindExtensions(bindings: Record<string, unknown>): Promise<void>
-  dispose(): void
-  setSessionName(name: string): void
-  navigateTree(
-    targetId: string,
-    options?: {
-      summarize?: boolean
-      customInstructions?: string
-      replaceInstructions?: boolean
-      label?: string
-    }
-  ): Promise<{
-    editorText?: string
-    cancelled: boolean
-    aborted?: boolean
-    summaryEntry?: unknown
-  }>
-  getUserMessagesForForking?(): Array<{
-    entryId: string
-    text: string
-  }>
-  getSteeringMessages?(): readonly string[]
-  getFollowUpMessages?(): readonly string[]
-  clearQueue(): {
-    steering: string[]
-    followUp: string[]
-  }
-  reload?(): Promise<void>
-}
-
-type PiSdkLike = {
-  getAgentDir(): string
-  SettingsManager: {
-    create(cwd: string, agentDir: string): SettingsManagerLike
-  }
-  createAgentSessionServices(options: {
-    cwd: string
-    agentDir: string
-    settingsManager: SettingsManagerLike
-    resourceLoaderOptions?: {
-      noExtensions?: boolean
-    }
-  }): Promise<SessionServicesLike>
-  createAgentSessionFromServices(options: {
-    services: SessionServicesLike
-    sessionManager: SessionManagerLike
-    sessionStartEvent?: SessionStartEventLike
-  }): Promise<{
-    session: AgentSessionLike
-  }>
-  SessionManager: {
-    create(cwd: string, sessionDir?: string): SessionManagerLike
-    open(
-      path: string,
-      sessionDir?: string,
-      cwdOverride?: string
-    ): SessionManagerLike
-    inMemory(cwd?: string): SessionManagerLike
-    listAll(): Promise<Array<SessionListInfoLike>>
-  }
 }
 
 type SessionNamingState = {
@@ -483,7 +297,7 @@ function sortPendingUserMessages(messages: Array<PendingUserMessage>) {
   ]
 }
 
-function extractMessageText(message: Record<string, any> | undefined) {
+function extractMessageText(message: MessageLike | undefined) {
   if (!message || typeof message !== "object") return ""
 
   const content = message.content
@@ -650,7 +464,7 @@ function serializeSessionTreeNode(node: SessionTreeNodeLike): TreeNode | null {
   if (entry.type === "message") {
     const message =
       typeof entry.message === "object" && entry.message
-        ? (entry.message as Record<string, any>)
+        ? (entry.message as MessageLike)
         : undefined
     const content = serializeTreeMessageContent(message?.content)
 
@@ -741,7 +555,7 @@ function extractForkableUserMessages(entry: SessionEntry) {
   while (stack.length > 0) {
     const node = stack.pop()
     if (!node) continue
-    const message = (node.entry as { message?: Record<string, any> }).message
+    const message = node.entry.message
     if (node.entry.type === "message" && message?.role === "user") {
       const text = extractMessageText(message)
       if (typeof node.entry.id === "string" && text) {
@@ -2175,7 +1989,7 @@ export class PiWebRuntime {
 
   private async handleSessionEvent(
     entry: SessionEntry,
-    event: Record<string, any>
+    event: SessionEventLike
   ) {
     const type = typeof event.type === "string" ? event.type : ""
 
@@ -2697,9 +2511,7 @@ export class PiWebRuntime {
     parentSession: string | undefined
   ) {
     return this.getSdk().then((sdk) => {
-      const nextManager = sdk.SessionManager.inMemory(
-        sourceManager.getCwd()
-      ) as SessionManagerLike & Record<string, any>
+      const nextManager = sdk.SessionManager.inMemory(sourceManager.getCwd())
       nextManager.newSession?.({ parentSession })
 
       if (!leafId) {
@@ -2737,6 +2549,10 @@ export class PiWebRuntime {
 
     const currentManager = activeEntry.session.sessionManager
     const selectedEntry = currentManager.getEntry?.(entryId)
+    const selectedParentId =
+      typeof selectedEntry?.parentId === "string"
+        ? selectedEntry.parentId
+        : undefined
     if (
       !selectedEntry ||
       selectedEntry.type !== "message" ||
@@ -2757,7 +2573,7 @@ export class PiWebRuntime {
     let sessionManager: SessionManagerLike
     if (currentManager.isPersisted?.()) {
       const sdk = await this.getSdk()
-      if (!selectedEntry.parentId) {
+      if (!selectedParentId) {
         sessionManager = sdk.SessionManager.create(
           activeEntry.cwd,
           sourceSessionDir
@@ -2773,9 +2589,8 @@ export class PiWebRuntime {
           sourceSessionDir,
           activeEntry.cwd
         )
-        const branchedPath = sourceManager.createBranchedSession?.(
-          selectedEntry.parentId
-        )
+        const branchedPath =
+          sourceManager.createBranchedSession?.(selectedParentId)
         if (!branchedPath) {
           throw new Error("Failed to create forked session")
         }
@@ -2788,13 +2603,13 @@ export class PiWebRuntime {
     } else {
       sessionManager = await this.createForkedInMemorySessionManager(
         currentManager,
-        selectedEntry.parentId,
+        selectedParentId,
         previousSessionFile
       )
     }
 
     const nextEntry = await this.createSessionEntry(sessionManager, {
-      draft: !selectedEntry.parentId,
+      draft: !selectedParentId,
       sessionStartEvent,
     })
     const baseName =
@@ -2809,7 +2624,7 @@ export class PiWebRuntime {
       )
     }
     nextEntry.uiState.editorText = selectedText
-    if (!selectedEntry.parentId) {
+    if (!selectedParentId) {
       nextEntry.firstMessageHint = selectedText
     }
     this.touchSessionEntry(nextEntry)

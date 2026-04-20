@@ -1,81 +1,27 @@
-import fs from "node:fs"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
+
+import { resolvePiSdkDir } from "@/server/pi-sdk-path"
+import type { PiAiModuleLike, PiSdkLike } from "@/server/pi-sdk-types"
 
 const SELF_CONTAINED_SETTINGS_MANAGER = Symbol(
   "pi-to-go.self-contained-settings-manager"
 )
 
-export function resolvePiSdkDir() {
-  if (process.env.PI_REMOTE_PI_SDK_DIR) {
-    return process.env.PI_REMOTE_PI_SDK_DIR
-  }
+export { resolvePiSdkDir } from "@/server/pi-sdk-path"
 
-  const explicitPiBin = process.env.PI_REAL_PI_BIN
-  if (explicitPiBin) {
-    return path.dirname(path.dirname(fs.realpathSync(explicitPiBin)))
-  }
-
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue
-
-    const candidate = path.join(dir, "pi")
-    if (!fs.existsSync(candidate)) continue
-
-    try {
-      const resolved = fs.realpathSync(candidate)
-      if (
-        resolved.endsWith(
-          path.join("@mariozechner", "pi-coding-agent", "dist", "cli.js")
-        )
-      ) {
-        return path.dirname(path.dirname(resolved))
-      }
-    } catch {
-      // ignore and keep scanning
-    }
-  }
-
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE
-  if (homeDir) {
-    const jsRuntimeRoot = path.join(homeDir, ".vite-plus", "js_runtime", "node")
-    try {
-      const versions = fs.readdirSync(jsRuntimeRoot).sort((left, right) =>
-        left.localeCompare(right, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        })
-      )
-
-      for (const version of versions.reverse()) {
-        const sdkDir = path.join(
-          jsRuntimeRoot,
-          version,
-          "lib",
-          "node_modules",
-          "@mariozechner",
-          "pi-coding-agent"
-        )
-        if (fs.existsSync(path.join(sdkDir, "dist", "index.js"))) {
-          return sdkDir
-        }
-      }
-    } catch {
-      // ignore and keep scanning
-    }
-  }
-
-  throw new Error(
-    "Could not locate the installed pi SDK package. Set PI_REMOTE_PI_SDK_DIR."
-  )
+async function importExternalModule<T>(entry: string): Promise<T> {
+  const url = pathToFileURL(entry).href
+  return (await import(/* @vite-ignore */ url)) as T
 }
 
-export async function loadPiSdk() {
+export async function loadPiSdk(): Promise<PiSdkLike> {
   const sdkDir = resolvePiSdkDir()
   const entry = path.join(sdkDir, "dist", "index.js")
-  return await import(entry)
+  return await importExternalModule<PiSdkLike>(entry)
 }
 
-export async function loadPiAi() {
+export async function loadPiAi(): Promise<PiAiModuleLike> {
   const sdkDir = resolvePiSdkDir()
   const entry = path.join(
     sdkDir,
@@ -85,7 +31,7 @@ export async function loadPiAi() {
     "dist",
     "index.js"
   )
-  return await import(entry)
+  return await importExternalModule<PiAiModuleLike>(entry)
 }
 
 export function makeSelfContainedSettingsManager<T extends object>(
