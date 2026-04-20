@@ -135,9 +135,9 @@ Reference: `static/dialogs.js`
   - [x] recent directories
   - [x] known directories
   - [x] keyboard navigation / first-result open behavior
-- [ ] Rebuild fork dialog parity
-  - [ ] filter/search fork points
-  - [ ] keyboard navigation
+- [x] Rebuild fork dialog parity
+  - [x] filter/search fork points
+  - [x] keyboard navigation
 - [ ] Upgrade the tree dialog from MVP to old-browser parity
   - [ ] tree-specific shortcuts/help
   - [ ] branch expand/collapse keyboard controls

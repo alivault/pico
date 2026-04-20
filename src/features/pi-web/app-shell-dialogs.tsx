@@ -1,3 +1,4 @@
+import * as React from "react"
 import { FolderTreeIcon } from "lucide-react"
 
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
@@ -193,6 +194,14 @@ export function AppShellDialogs({
   onPendingUiValueChange,
   onResolveUiRequest,
 }: AppShellDialogsProps) {
+  const [forkQuery, setForkQuery] = React.useState("")
+
+  React.useEffect(() => {
+    if (!forkOpen && forkQuery) {
+      setForkQuery("")
+    }
+  }, [forkOpen, forkQuery])
+
   const statusEntries = Object.entries(statuses).filter(
     ([key, value]) => key.trim().length > 0 && value.trim().length > 0
   )
@@ -233,6 +242,9 @@ export function AppShellDialogs({
     currentMatching.length > 0 ||
     recentMatching.length > 0 ||
     knownMatching.length > 0
+  const filteredForkMessages = (forkMessages ?? []).filter((message) =>
+    message.text.toLowerCase().includes(forkQuery.trim().toLowerCase())
+  )
 
   return (
     <>
@@ -398,33 +410,47 @@ export function AppShellDialogs({
           <DialogHeader>
             <DialogTitle>Fork session</DialogTitle>
             <DialogDescription>
-              Start a new draft from one of the earlier user prompts.
+              Search earlier user prompts and branch from a specific point.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[60vh] pr-3">
-            <div className="space-y-2">
-              {forkLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Spinner /> Loading fork points…
-                </div>
-              ) : forkMessages && forkMessages.length > 0 ? (
-                forkMessages.map((message) => (
-                  <button
-                    key={message.entryId}
-                    type="button"
-                    className="w-full rounded-lg border px-3 py-2 text-left hover:bg-muted/50"
-                    onClick={() => onForkFromMessage(message.entryId)}
-                  >
-                    <div className="line-clamp-3 text-sm">{message.text}</div>
-                  </button>
-                ))
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  No forkable prompts found.
-                </div>
-              )}
+          {forkLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Spinner /> Loading fork points…
             </div>
-          </ScrollArea>
+          ) : (
+            <Command shouldFilter={false} className="rounded-lg border">
+              <CommandInput
+                autoFocus
+                value={forkQuery}
+                onValueChange={setForkQuery}
+                placeholder="Search fork points"
+              />
+              <CommandList className="max-h-[60vh]">
+                <CommandEmpty>
+                  {forkMessages && forkMessages.length > 0
+                    ? "No fork points match your search."
+                    : "No forkable prompts found."}
+                </CommandEmpty>
+                {filteredForkMessages.length > 0 ? (
+                  <CommandGroup heading="Fork points">
+                    {filteredForkMessages.map((message) => (
+                      <CommandItem
+                        key={message.entryId}
+                        value={message.text}
+                        onSelect={() => onForkFromMessage(message.entryId)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-3 whitespace-pre-wrap text-sm text-foreground">
+                            {message.text}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                ) : null}
+              </CommandList>
+            </Command>
+          )}
         </DialogContent>
       </Dialog>
 
