@@ -80,31 +80,31 @@ When auditing parity, compare against these old `pi-web` modules first:
 
 Reference: `static/composer.js`
 
-- [ ] Replace the current basic textarea workflow with full composer parity
-- [ ] Restore slash-command suggestion menu behavior
-- [ ] Restore `@` / file / path completion UX using the existing completion APIs
-- [ ] Restore skill pill / skill selection / skill clear behavior
-- [ ] Replace simple model/thinking `<select>` controls with searchable picker/popover parity
-- [ ] Match old keyboard behavior for composer actions:
-  - [ ] Cmd/Ctrl+Enter send / steer
-  - [ ] Alt+Cmd/Ctrl+Enter queue follow-up
-  - [ ] Up/Down and Ctrl+J/K completion navigation
-  - [ ] Enter / Tab completion acceptance rules
-- [ ] Restore pending draft prompt + pending draft follow-up handoff behavior when creating a fresh draft session
-- [ ] Restore working indicator parity for slash commands, compaction, first-turn, and waiting states
-- [ ] Add hide/show tool calls UI and persist it via `pi-web-hide-tools`
+- [x] Replace the current basic textarea workflow with full composer parity
+- [x] Restore slash-command suggestion menu behavior
+- [x] Restore `@` / file / path completion UX using the existing completion APIs
+- [x] Restore skill pill / skill selection / skill clear behavior
+- [x] Replace simple model/thinking `<select>` controls with searchable picker/popover parity
+- [x] Match old keyboard behavior for composer actions:
+  - [x] Cmd/Ctrl+Enter send / steer
+  - [x] Alt+Cmd/Ctrl+Enter queue follow-up
+  - [x] Up/Down and Ctrl+J/K completion navigation
+  - [x] Enter / Tab completion acceptance rules
+- [x] Restore pending draft prompt + pending draft follow-up handoff behavior when creating a fresh draft session
+- [x] Restore working indicator parity for slash commands, compaction, first-turn, and waiting states
+- [x] Add hide/show tool calls UI and persist it via `pi-web-hide-tools`
 
 ### 2) Session view and message parity
 
 Reference: `static/messages.js`
 
-- [ ] Use the existing `/api/highlight` endpoint for syntax-highlighted code blocks
+- [x] Use the existing `/api/highlight` endpoint for syntax-highlighted code blocks
 - [ ] Restore draft-session state card parity for fresh drafts (directory + git summary)
 - [ ] Restore loading-state presentation parity while switching/loading sessions
 - [ ] Restore scroll affordances:
   - [ ] scroll-to-bottom button
   - [ ] jump-to-last-message button
-- [ ] Respect hidden tool-block state in conversation rendering
+- [x] Respect hidden tool-block state in conversation rendering
 - [ ] Audit assistant/tool/thinking/compaction block styling against old `pi-web` and close remaining visual gaps
 - [ ] Match old streaming/working-state polish where still missing
 

@@ -10,17 +10,24 @@ import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
-import type { PromptImage, SessionState, ThemeMode } from "@/lib/pi-web"
+import type {
+  PromptImage,
+  SessionState,
+  StreamingBehavior,
+  ThemeMode,
+} from "@/lib/pi-web"
 import type {
   DeleteSessionResponse,
   DirectoryResolveResponse,
   DirectorySessionsIndexResponse,
   ExtensionUiEvent,
+  FileCompletionsResponse,
   ForkSessionResponse,
   ForkableMessagesResponse,
   GitChangesResponse,
   GitStatusResponse,
   NavigateSessionTreeResponse,
+  PathCompletionsResponse,
   PendingMessageRemoveResponse,
   PendingMessagesResponse,
   PiWebServerEvent,
@@ -33,9 +40,12 @@ import type {
   UiRequestResponse,
 } from "@/lib/pi-web-api"
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
+import type { ComposerPanelHandle } from "@/features/pi-web/composer-panel"
+import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -72,12 +82,17 @@ import {
   UserMessageCard,
   conversationItemSignature,
 } from "@/features/pi-web/conversation-view"
+import {
+  parseComposerSkillMessage,
+  serializeComposerDraft,
+} from "@/features/pi-web/composer-utils"
 import { GitPanel } from "@/features/pi-web/git-panel"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   DRAFT_DIRECTORY_STORAGE_KEY,
+  HIDE_TOOL_BLOCKS_STORAGE_KEY,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
@@ -96,6 +111,7 @@ import {
   promptDraftKey,
   readStoredCollapsedDirectories,
   readStoredDraftDirectory,
+  readStoredHideToolBlocks,
   readStoredPromptDraft,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
@@ -182,8 +198,32 @@ export function PiWebAppShell({
   const [sessionSearch, setSessionSearch] = React.useState("")
   const [currentTab, setCurrentTab] = React.useState("session")
   const [composerText, setComposerText] = React.useState("")
+  const [composerSkill, setComposerSkill] = React.useState<string | undefined>()
   const [composerImages, setComposerImages] = React.useState<
     Array<PromptImage>
+  >([])
+  const [hideToolBlocks, setHideToolBlocks] = React.useState(false)
+  const [awaitingFirstTurn, setAwaitingFirstTurn] = React.useState(false)
+  const [runningSlashCommand, setRunningSlashCommand] = React.useState<
+    string | null
+  >(null)
+  const [draftSessionLoadingOwnerKey, setDraftSessionLoadingOwnerKey] =
+    React.useState<string | null>(null)
+  const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<
+    | {
+        ownerKey: string
+        message: string
+        images: Array<PromptImage>
+        streamingBehavior?: StreamingBehavior
+      }
+    | null
+  >(null)
+  const [pendingDraftFollowUps, setPendingDraftFollowUps] = React.useState<
+    Array<{
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior: "steer" | "followUp"
+    }>
   >([])
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [pendingMessages, setPendingMessages] = React.useState<
@@ -245,12 +285,13 @@ export function PiWebAppShell({
     React.useState<DesktopNotificationPermission>("unsupported")
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const modelSelectRef = React.useRef<HTMLSelectElement | null>(null)
+  const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
   const composerTextRef = React.useRef(composerText)
+  const composerSkillRef = React.useRef<string | undefined>(composerSkill)
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
 
@@ -282,11 +323,24 @@ export function PiWebAppShell({
     composerTextRef.current = composerText
   }, [composerText])
 
+  React.useEffect(() => {
+    composerSkillRef.current = composerSkill
+  }, [composerSkill])
+
   const updateComposerDraft = React.useCallback(
     (value: string, target = sessionStateRef.current) => {
-      composerTextRef.current = value
-      setComposerText(value)
-      rememberStoredPromptDraft(target, value)
+      const parsed = parseComposerSkillMessage(value)
+      const nextText = parsed.matched ? parsed.text : value
+      const nextSkill = parsed.matched ? parsed.skillName : undefined
+
+      composerTextRef.current = nextText
+      composerSkillRef.current = nextSkill
+      setComposerText(nextText)
+      setComposerSkill(nextSkill)
+      rememberStoredPromptDraft(
+        target,
+        serializeComposerDraft({ text: nextText, skillName: nextSkill })
+      )
     },
     []
   )
@@ -309,6 +363,7 @@ export function PiWebAppShell({
     setSessionDoneDesktopNotificationsEnabled(
       readStoredSessionDoneDesktopNotificationsEnabled()
     )
+    setHideToolBlocks(readStoredHideToolBlocks())
     setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
 
@@ -367,7 +422,7 @@ export function PiWebAppShell({
   }, [])
 
   const focusModelSelector = React.useCallback(() => {
-    modelSelectRef.current?.focus()
+    composerPanelRef.current?.openModelPicker()
   }, [])
 
   const handleSessionDoneSoundEnabledChange = React.useCallback(
@@ -480,7 +535,13 @@ export function PiWebAppShell({
           promptDraftKey(payload) !== promptDraftKey(previousState)
         const localPromptText = composerTextRef.current
 
-        rememberStoredPromptDraft(previousState, localPromptText)
+        rememberStoredPromptDraft(
+          previousState,
+          serializeComposerDraft({
+            text: localPromptText,
+            skillName: composerSkillRef.current,
+          })
+        )
 
         const previousEditorText = previousState.uiState.editorText || ""
         const preserveLocalPrompt =
@@ -1125,8 +1186,47 @@ export function PiWebAppShell({
     })
   }, [])
 
+  const applyPendingDraftPromptToComposer = React.useCallback(
+    (pendingPrompt: {
+      message: string
+      images: Array<PromptImage>
+    }) => {
+      updateComposerDraft(pendingPrompt.message)
+      setComposerImages(
+        pendingPrompt.images.map((image) => ({ ...image }))
+      )
+      return true
+    },
+    [updateComposerDraft]
+  )
+
+  const normalizeQueuedStreamingBehavior = React.useCallback(
+    (streamingBehavior?: StreamingBehavior) =>
+      streamingBehavior === "followUp" ? "followUp" : "steer",
+    []
+  )
+
+  const restorePendingDraftPrompt = React.useCallback(
+    (ownerKey: string) => {
+      if (!pendingDraftPrompt || pendingDraftPrompt.ownerKey !== ownerKey) {
+        return false
+      }
+      const nextPrompt = pendingDraftPrompt
+      setPendingDraftPrompt(null)
+      setPendingDraftFollowUps([])
+      setAwaitingFirstTurn(false)
+      return applyPendingDraftPromptToComposer(nextPrompt)
+    },
+    [applyPendingDraftPromptToComposer, pendingDraftPrompt]
+  )
+
   const createSession = React.useCallback(async () => {
     if (!viewerContextId) return
+
+    const nextCwd = sessionState.cwd || readStoredDraftDirectory() || undefined
+    const ownerKey = promptDraftKey({ cwd: nextCwd })
+    setDraftSessionLoadingOwnerKey(ownerKey)
+
     try {
       await fetchJson<SimpleOkResponse>(
         buildRequestUrl("/api/session/new", {
@@ -1137,23 +1237,99 @@ export function PiWebAppShell({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            cwd: sessionState.cwd || readStoredDraftDirectory() || undefined,
+            cwd: nextCwd,
           }),
         }
       )
     } catch (error) {
+      setDraftSessionLoadingOwnerKey((current) =>
+        current === ownerKey ? null : current
+      )
+      restorePendingDraftPrompt(ownerKey)
       toast.error(
         error instanceof Error ? error.message : "Failed to create session"
       )
     }
-  }, [activeSessionId, sessionState.cwd, viewerContextId])
+  }, [
+    activeSessionId,
+    restorePendingDraftPrompt,
+    sessionState.cwd,
+    viewerContextId,
+  ])
+
+  const queuePendingDraftPrompt = React.useCallback(
+    (streamingBehavior?: StreamingBehavior) => {
+      if (!draftSessionLoadingOwnerKey) return false
+
+      const message = serializeComposerDraft({
+        text: composerText,
+        skillName: composerSkill,
+      }).trim()
+      const images = composerImages.map((image) => ({ ...image }))
+      if (!message && images.length === 0) return false
+
+      if (!pendingDraftPrompt) {
+        setPendingDraftPrompt({
+          ownerKey: draftSessionLoadingOwnerKey,
+          message,
+          images,
+          streamingBehavior,
+        })
+      } else {
+        setPendingDraftFollowUps((current) => [
+          ...current,
+          {
+            message,
+            images,
+            streamingBehavior: normalizeQueuedStreamingBehavior(streamingBehavior),
+          },
+        ])
+      }
+
+      updateComposerDraft("")
+      setComposerImages([])
+      lastSyncedEditorTextRef.current = ""
+
+      if (!pendingDraftPrompt) {
+        toast.info("Prompt will send when the new session is ready.")
+      }
+
+      return true
+    },
+    [
+      composerImages,
+      composerSkill,
+      composerText,
+      draftSessionLoadingOwnerKey,
+      normalizeQueuedStreamingBehavior,
+      pendingDraftPrompt,
+      updateComposerDraft,
+    ]
+  )
 
   const submitPrompt = React.useCallback(
-    async (streamingBehavior?: "steer" | "followUp") => {
-      if (!viewerContextId) return
-      if (!composerText.trim() && composerImages.length === 0) return
+    async (streamingBehavior?: StreamingBehavior) => {
+      if (!viewerContextId) return false
+      if (draftSessionLoadingOwnerKey) {
+        return queuePendingDraftPrompt(streamingBehavior)
+      }
+
+      const message = serializeComposerDraft({
+        text: composerText,
+        skillName: composerSkill,
+      }).trim()
+      if (!message && composerImages.length === 0) return false
+
+      const treatAsQueuedPrompt = Boolean(sessionState.streaming || awaitingFirstTurn)
+      const normalizedStreamingBehavior = treatAsQueuedPrompt
+        ? normalizeQueuedStreamingBehavior(streamingBehavior)
+        : streamingBehavior
 
       setIsSubmitting(true)
+      if (!treatAsQueuedPrompt) {
+        setAwaitingFirstTurn(true)
+      }
+
       try {
         const response = await fetchJson<PromptResponse>(
           buildRequestUrl("/api/prompt", {
@@ -1164,9 +1340,9 @@ export function PiWebAppShell({
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              message: composerText,
+              message,
               images: composerImages,
-              streamingBehavior,
+              streamingBehavior: normalizedStreamingBehavior,
             }),
           }
         )
@@ -1176,22 +1352,147 @@ export function PiWebAppShell({
         updateComposerDraft("")
         setComposerImages([])
         lastSyncedEditorTextRef.current = ""
+        return true
       } catch (error) {
+        if (!treatAsQueuedPrompt) {
+          setAwaitingFirstTurn(false)
+        }
         toast.error(
           error instanceof Error ? error.message : "Failed to submit prompt"
         )
+        return false
       } finally {
         setIsSubmitting(false)
       }
     },
     [
       activeSessionId,
+      awaitingFirstTurn,
       composerImages,
+      composerSkill,
       composerText,
+      draftSessionLoadingOwnerKey,
+      normalizeQueuedStreamingBehavior,
+      queuePendingDraftPrompt,
+      sessionState.streaming,
       updateComposerDraft,
       viewerContextId,
     ]
   )
+
+  const flushPendingDraftFollowUps = React.useCallback(async () => {
+    if (draftSessionLoadingOwnerKey || pendingDraftFollowUps.length === 0) {
+      return false
+    }
+
+    const followUps = pendingDraftFollowUps.map((entry) => ({
+      message: entry.message,
+      images: entry.images.map((image) => ({ ...image })),
+      streamingBehavior: entry.streamingBehavior,
+    }))
+
+    setPendingDraftFollowUps([])
+
+    for (const followUp of followUps) {
+      try {
+        await fetchJson<PromptResponse>(
+          buildRequestUrl("/api/prompt", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              message: followUp.message,
+              images: followUp.images,
+              streamingBehavior: followUp.streamingBehavior,
+            }),
+          }
+        )
+      } catch (error) {
+        if (!composerTextRef.current) {
+          updateComposerDraft(followUp.message)
+          setComposerImages(followUp.images)
+        }
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to submit queued follow-up"
+        )
+        return false
+      }
+    }
+
+    return true
+  }, [
+    activeSessionId,
+    draftSessionLoadingOwnerKey,
+    pendingDraftFollowUps,
+    updateComposerDraft,
+    viewerContextId,
+  ])
+
+  const flushPendingDraftPrompt = React.useCallback(
+    async (ownerKey: string) => {
+      if (
+        !pendingDraftPrompt ||
+        pendingDraftPrompt.ownerKey !== ownerKey ||
+        draftSessionLoadingOwnerKey
+      ) {
+        return false
+      }
+
+      const nextPrompt = pendingDraftPrompt
+      setPendingDraftPrompt(null)
+      applyPendingDraftPromptToComposer(nextPrompt)
+      const sent = await submitPrompt(nextPrompt.streamingBehavior)
+      if (!sent) {
+        setPendingDraftFollowUps([])
+        return false
+      }
+      await flushPendingDraftFollowUps()
+      return true
+    },
+    [
+      applyPendingDraftPromptToComposer,
+      draftSessionLoadingOwnerKey,
+      flushPendingDraftFollowUps,
+      pendingDraftPrompt,
+      submitPrompt,
+    ]
+  )
+
+  React.useEffect(() => {
+    if (!draftSessionLoadingOwnerKey) return
+    const currentOwnerKey = promptDraftKey(sessionState)
+    if (!sessionState.draft || currentOwnerKey !== draftSessionLoadingOwnerKey) {
+      return
+    }
+
+    setDraftSessionLoadingOwnerKey(null)
+    if (pendingDraftPrompt?.ownerKey === draftSessionLoadingOwnerKey) {
+      void flushPendingDraftPrompt(draftSessionLoadingOwnerKey)
+    }
+  }, [
+    draftSessionLoadingOwnerKey,
+    flushPendingDraftPrompt,
+    pendingDraftPrompt?.ownerKey,
+    sessionState,
+  ])
+
+  React.useEffect(() => {
+    if (!awaitingFirstTurn) return
+    const hasAssistantOutput = sessionState.items.some(
+      (item) =>
+        item.kind === "assistant" &&
+        item.blocks.some((block) => block.type === "text" && block.text.trim())
+    )
+
+    if (sessionState.streaming || hasAssistantOutput || pendingMessages.length > 0) {
+      setAwaitingFirstTurn(false)
+    }
+  }, [awaitingFirstTurn, pendingMessages.length, sessionState.items, sessionState.streaming])
 
   const abortSession = React.useCallback(async () => {
     if (!viewerContextId) return
@@ -1333,6 +1634,21 @@ export function PiWebAppShell({
     [activeSessionId, viewerContextId]
   )
 
+  const cycleThinkingLevel = React.useCallback(
+    async (direction: -1 | 1) => {
+      const levels = sessionState.availableThinkingLevels.length
+        ? sessionState.availableThinkingLevels
+        : ["off"]
+      const currentIndex = levels.indexOf(sessionState.thinkingLevel || "off")
+      const safeIndex = currentIndex >= 0 ? currentIndex : 0
+      const nextLevel =
+        levels[(safeIndex + direction + levels.length) % levels.length] ||
+        levels[0]
+      await setThinkingLevel(nextLevel)
+    },
+    [sessionState.availableThinkingLevels, sessionState.thinkingLevel, setThinkingLevel]
+  )
+
   const toggleHideThinking = React.useCallback(async () => {
     if (!viewerContextId) return
     try {
@@ -1356,8 +1672,22 @@ export function PiWebAppShell({
     }
   }, [activeSessionId, sessionState.hideThinkingBlock, viewerContextId])
 
+  const setToolBlocksHidden = React.useCallback((hidden: boolean) => {
+    setHideToolBlocks(hidden)
+    safeLocalStorageSetItem(
+      HIDE_TOOL_BLOCKS_STORAGE_KEY,
+      hidden ? "1" : "0"
+    )
+  }, [])
+
+  const toggleHideToolBlocks = React.useCallback(() => {
+    setToolBlocksHidden(!hideToolBlocks)
+    toast.info(hideToolBlocks ? "Tools shown" : "Tools hidden")
+  }, [hideToolBlocks, setToolBlocksHidden])
+
   const runCompact = React.useCallback(async () => {
     if (!viewerContextId) return
+    setRunningSlashCommand("compact")
     try {
       await fetchJson(
         buildRequestUrl("/api/slash-command", {
@@ -1375,6 +1705,8 @@ export function PiWebAppShell({
       toast.error(
         error instanceof Error ? error.message : "Failed to compact session"
       )
+    } finally {
+      setRunningSlashCommand(null)
     }
   }, [activeSessionId, viewerContextId])
 
@@ -1516,32 +1848,43 @@ export function PiWebAppShell({
     [activeSessionId, viewerContextId]
   )
 
-  const renameSession = React.useCallback(async () => {
-    if (!viewerContextId || !sessionState.sessionFile) return
-    try {
-      const response = await fetchJson<RenameSessionResponse>(
-        buildRequestUrl("/api/session/rename", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            path: sessionState.sessionFile,
-            name: renameValue,
+  const renameSessionToValue = React.useCallback(
+    async (nextName: string, closeDialog = true) => {
+      if (!viewerContextId || !sessionState.sessionFile) return false
+      try {
+        const response = await fetchJson<RenameSessionResponse>(
+          buildRequestUrl("/api/session/rename", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
           }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              path: sessionState.sessionFile,
+              name: nextName,
+            }),
+          }
+        )
+        if (isApiErrorResponse(response)) throw new Error(response.error)
+        if (closeDialog) {
+          setRenameOpen(false)
         }
-      )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
-      setRenameOpen(false)
-      toast.success("Renamed session")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to rename session"
-      )
-    }
-  }, [activeSessionId, renameValue, sessionState.sessionFile, viewerContextId])
+        toast.success("Renamed session")
+        return true
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to rename session"
+        )
+        return false
+      }
+    },
+    [activeSessionId, sessionState.sessionFile, viewerContextId]
+  )
+
+  const renameSession = React.useCallback(async () => {
+    return await renameSessionToValue(renameValue)
+  }, [renameSessionToValue, renameValue])
 
   const deleteSession = React.useCallback(async () => {
     if (!viewerContextId || deleteTargets.length === 0) return
@@ -1602,6 +1945,104 @@ export function PiWebAppShell({
     viewerContextId,
   ])
 
+  const runBuiltinSlashCommand = React.useCallback(
+    async (name: string, args: string) => {
+      const trimmedArgs = args.trim()
+
+      switch (name) {
+        case "compact": {
+          if (composerImages.length > 0) {
+            toast.error("Built-in slash commands do not support images.")
+            return
+          }
+          updateComposerDraft("")
+          await runCompact()
+          return
+        }
+        case "rename": {
+          if (!sessionState.sessionFile) {
+            toast.error("Start the session before renaming it.")
+            return
+          }
+          if (!trimmedArgs) {
+            openRenameDialog()
+            return
+          }
+          updateComposerDraft("")
+          await renameSessionToValue(trimmedArgs, false)
+          return
+        }
+        case "delete": {
+          if (!sessionState.sessionFile) {
+            toast.error("Start the session before deleting it.")
+            return
+          }
+          updateComposerDraft("")
+          openDeleteDialogForCurrentSession()
+          return
+        }
+        case "fork": {
+          if (trimmedArgs) {
+            toast.error("/fork does not take any arguments.")
+            return
+          }
+          updateComposerDraft("")
+          await openForkDialog()
+          return
+        }
+        case "tree": {
+          if (trimmedArgs) {
+            toast.error("/tree does not take any arguments.")
+            return
+          }
+          updateComposerDraft("")
+          await openTreeDialog()
+          return
+        }
+        case "hide-thinking": {
+          updateComposerDraft("")
+          if (!sessionState.hideThinkingBlock) {
+            await toggleHideThinking()
+          }
+          return
+        }
+        case "show-thinking": {
+          updateComposerDraft("")
+          if (sessionState.hideThinkingBlock) {
+            await toggleHideThinking()
+          }
+          return
+        }
+        case "hide-tools": {
+          updateComposerDraft("")
+          setToolBlocksHidden(true)
+          return
+        }
+        case "show-tools": {
+          updateComposerDraft("")
+          setToolBlocksHidden(false)
+          return
+        }
+        default:
+          toast.error(`Unsupported slash command: /${name}`)
+      }
+    },
+    [
+      composerImages.length,
+      openDeleteDialogForCurrentSession,
+      openForkDialog,
+      openRenameDialog,
+      openTreeDialog,
+      renameSessionToValue,
+      runCompact,
+      sessionState.hideThinkingBlock,
+      sessionState.sessionFile,
+      setToolBlocksHidden,
+      toggleHideThinking,
+      updateComposerDraft,
+    ]
+  )
+
   const resolveUiRequest = React.useCallback(
     async (body: Record<string, unknown>) => {
       if (!viewerContextId || !pendingUiRequest) return
@@ -1645,6 +2086,134 @@ export function PiWebAppShell({
     },
     [setTheme]
   )
+
+  const slashCommands = React.useMemo<Array<SlashCommandDescriptor>>(
+    () => [
+      {
+        kind: "builtin",
+        name: "compact",
+        description: "Summarize the session to reduce context size",
+      },
+      {
+        kind: "builtin",
+        name: "delete",
+        description: "Delete the current session",
+      },
+      {
+        kind: "builtin",
+        name: "fork",
+        description: "Create a new session from a previous message",
+      },
+      {
+        kind: "builtin",
+        name: "tree",
+        description: "Navigate to an earlier point in the current session tree",
+      },
+      {
+        kind: "builtin",
+        name: "rename",
+        description: "Rename the current session",
+      },
+      ...(sessionState.hideThinkingBlock
+        ? [
+            {
+              kind: "builtin" as const,
+              name: "show-thinking",
+              description: "Show assistant thinking blocks",
+            },
+          ]
+        : [
+            {
+              kind: "builtin" as const,
+              name: "hide-thinking",
+              description: "Hide assistant thinking blocks",
+            },
+          ]),
+      ...(hideToolBlocks
+        ? [
+            {
+              kind: "builtin" as const,
+              name: "show-tools",
+              description: "Show assistant tool calls",
+            },
+          ]
+        : [
+            {
+              kind: "builtin" as const,
+              name: "hide-tools",
+              description: "Hide assistant tool calls",
+            },
+          ]),
+      ...sessionState.availableSkills.map((skill) => ({
+        kind: "skill" as const,
+        name: `skill:${skill.name}` as const,
+        skillName: skill.name,
+        description: skill.description || "Use this skill",
+        scope: skill.scope,
+        source: skill.source,
+      })),
+    ],
+    [hideToolBlocks, sessionState.availableSkills, sessionState.hideThinkingBlock]
+  )
+
+  const workingState = React.useMemo(() => {
+    if (draftSessionLoadingOwnerKey && pendingDraftPrompt) {
+      return {
+        label: "Waiting for new session…",
+      }
+    }
+
+    if (awaitingFirstTurn && !sessionState.streaming) {
+      return {
+        label: "Waiting for first response…",
+      }
+    }
+
+    if (runningSlashCommand === "compact") {
+      return {
+        label: "Compacting context…",
+      }
+    }
+
+    if (sessionState.streaming) {
+      return {
+        label: sessionState.uiState.workingMessage || "Working…",
+        summary: sessionState.hideThinkingBlock
+          ? sessionState.uiState.hiddenThinkingLabel ||
+            sessionState.hiddenThinkingPreview
+          : undefined,
+      }
+    }
+
+    const hasAssistantOutput = sessionState.items.some(
+      (item) =>
+        item.kind === "assistant" &&
+        item.blocks.some(
+          (block) =>
+            block.type === "text" &&
+            typeof block.text === "string" &&
+            block.text.trim().length > 0
+        )
+    )
+
+    return hasAssistantOutput
+      ? {
+          label: "Done",
+          done: true,
+        }
+      : null
+  }, [
+    awaitingFirstTurn,
+    draftSessionLoadingOwnerKey,
+    pendingDraftPrompt,
+    runningSlashCommand,
+    sessionState.hiddenThinkingPreview,
+    sessionState.hideThinkingBlock,
+    sessionState.items,
+    sessionState.streaming,
+    sessionState.uiState.hiddenThinkingLabel,
+    sessionState.uiState.workingMessage,
+  ])
 
   const commandPaletteCommands = React.useMemo<Array<AppCommand>>(() => {
     const commands: Array<AppCommand> = [
@@ -1722,6 +2291,26 @@ export function PiWebAppShell({
         onSelect: toggleHideThinking,
       },
       {
+        id: "cycle-reasoning",
+        title: "Cycle reasoning level",
+        description: `Current level: ${sessionState.thinkingLevel}`,
+        shortcut: "Ctrl+R",
+        keywords: ["thinking", "reasoning", "level", "cycle"],
+        onSelect: () => {
+          void cycleThinkingLevel(1)
+        },
+      },
+      {
+        id: "toggle-tools",
+        title: hideToolBlocks ? "Show tool calls" : "Hide tool calls",
+        description: hideToolBlocks
+          ? "Show assistant tool calls in the conversation"
+          : "Hide assistant tool calls in the conversation",
+        shortcut: "Ctrl+O",
+        keywords: ["tools", "tool calls", "visibility"],
+        onSelect: toggleHideToolBlocks,
+      },
+      {
         id: "open-settings",
         title: "Open settings",
         description: "Open theme and notification settings",
@@ -1795,13 +2384,17 @@ export function PiWebAppShell({
     openShortcutsDialog,
     openStatusDialog,
     openTreeDialog,
+    cycleThinkingLevel,
+    hideToolBlocks,
     runCompact,
     selectedSidebarSessions,
     sessionState.availableModels.length,
     sessionState.hideThinkingBlock,
     sessionState.sessionFile,
+    sessionState.thinkingLevel,
     statusCount,
     toggleHideThinking,
+    toggleHideToolBlocks,
   ])
 
   React.useEffect(() => {
@@ -1922,6 +2515,18 @@ export function PiWebAppShell({
         return
       }
 
+      if (key === "r") {
+        event.preventDefault()
+        void cycleThinkingLevel(event.shiftKey ? -1 : 1)
+        return
+      }
+
+      if (key === "o" && !event.shiftKey) {
+        event.preventDefault()
+        toggleHideToolBlocks()
+        return
+      }
+
       if (key === "c" && !event.shiftKey) {
         if (hasSelectedText(event.target)) return
         event.preventDefault()
@@ -1968,7 +2573,9 @@ export function PiWebAppShell({
     sidebarSessionEntriesByKey,
     statusOpen,
     toggleHideThinking,
+    toggleHideToolBlocks,
     treeOpen,
+    cycleThinkingLevel,
   ])
 
   return (
@@ -2066,83 +2673,20 @@ export function PiWebAppShell({
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Model</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <select
-                  ref={modelSelectRef}
-                  className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
-                  value={
-                    sessionState.model
-                      ? `${sessionState.model.provider}/${sessionState.model.id}`
-                      : ""
-                  }
-                  onChange={(event) => void setModel(event.target.value)}
-                >
-                  {sessionState.availableModels.map((model) => (
-                    <option
-                      key={`${model.provider}/${model.id}`}
-                      value={`${model.provider}/${model.id}`}
-                    >
-                      {model.provider}/{model.name || model.id}
-                    </option>
-                  ))}
-                </select>
-              </CardContent>
-            </Card>
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Thinking</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <select
-                  className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
-                  value={sessionState.thinkingLevel}
-                  onChange={(event) =>
-                    void setThinkingLevel(event.target.value)
-                  }
-                >
-                  {sessionState.availableThinkingLevels.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
-                </select>
-              </CardContent>
-            </Card>
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Thinking blocks</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleHideThinking}
-                >
-                  {sessionState.hideThinkingBlock ? "Show" : "Hide"} thinking
-                </Button>
-              </CardContent>
-            </Card>
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Skills</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {sessionState.availableSkills.length} available
-              </CardContent>
-            </Card>
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="text-sm">Connection</CardTitle>
-              </CardHeader>
-              <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-                <ConnectionBadge connected={sessionState.connected} />
-              </CardContent>
-            </Card>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {sessionState.model ? (
+              <Badge variant="outline">
+                Model {sessionState.model.name || sessionState.model.id}
+              </Badge>
+            ) : null}
+            <Badge variant="outline">Thinking {sessionState.thinkingLevel}</Badge>
+            <Badge variant="outline">
+              {hideToolBlocks ? "Tools hidden" : "Tools visible"}
+            </Badge>
+            <Badge variant="outline">
+              {sessionState.availableSkills.length} skills
+            </Badge>
+            <ConnectionBadge connected={sessionState.connected} />
           </div>
         </div>
 
@@ -2183,6 +2727,7 @@ export function PiWebAppShell({
                                 <AssistantMessageCard
                                   item={item}
                                   hideThinking={sessionState.hideThinkingBlock}
+                                  hideToolBlocks={hideToolBlocks}
                                   hiddenThinkingLabel={
                                     sessionState.uiState.hiddenThinkingLabel ||
                                     sessionState.hiddenThinkingPreview
@@ -2221,13 +2766,27 @@ export function PiWebAppShell({
                   </ScrollArea>
 
                   <ComposerPanel
+                    ref={composerPanelRef}
                     currentPendingMessages={currentPendingMessages}
                     composerImages={composerImages}
                     composerText={composerText}
+                    composerSkill={composerSkill}
+                    availableSkills={sessionState.availableSkills}
+                    availableModels={sessionState.availableModels}
+                    model={sessionState.model}
+                    thinkingLevel={sessionState.thinkingLevel}
+                    availableThinkingLevels={sessionState.availableThinkingLevels}
+                    hideToolBlocks={hideToolBlocks}
                     isSubmitting={isSubmitting}
                     isStreaming={sessionState.streaming}
+                    awaitingFirstTurn={awaitingFirstTurn}
+                    isDraftSessionLoading={Boolean(draftSessionLoadingOwnerKey)}
+                    hasPendingDraftPrompt={Boolean(pendingDraftPrompt)}
+                    workingState={workingState}
                     fileInputRef={fileInputRef}
+                    slashCommands={slashCommands}
                     onComposerTextChange={updateComposerDraft}
+                    onSetComposerSkill={setComposerSkill}
                     onPickImages={(files) => {
                       void onPickImages(files)
                     }}
@@ -2248,6 +2807,48 @@ export function PiWebAppShell({
                     }}
                     onReorderPending={(pendingId, direction) => {
                       void reorderPending(pendingId, direction)
+                    }}
+                    onRunBuiltinSlashCommand={(name, args) => {
+                      void runBuiltinSlashCommand(name, args)
+                    }}
+                    onSelectModel={(value) => {
+                      void setModel(value)
+                    }}
+                    onSelectThinkingLevel={(level) => {
+                      void setThinkingLevel(level)
+                    }}
+                    onToggleHideToolBlocks={toggleHideToolBlocks}
+                    requestPathCompletions={async (prefix) => {
+                      const response = await fetchJson<PathCompletionsResponse>(
+                        buildRequestUrl("/api/path-completions", {
+                          contextId: viewerContextId,
+                          sessionId: activeSessionId,
+                        }),
+                        {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ prefix }),
+                        }
+                      )
+                      return isApiErrorResponse(response)
+                        ? []
+                        : response.items
+                    }}
+                    requestFileCompletions={async (query, isQuotedPrefix) => {
+                      const response = await fetchJson<FileCompletionsResponse>(
+                        buildRequestUrl("/api/file-completions", {
+                          contextId: viewerContextId,
+                          sessionId: activeSessionId,
+                        }),
+                        {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ query, isQuotedPrefix }),
+                        }
+                      )
+                      return isApiErrorResponse(response)
+                        ? []
+                        : response.items
                     }}
                   />
                 </CardContent>
