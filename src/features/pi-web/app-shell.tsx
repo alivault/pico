@@ -55,6 +55,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
 import {
   SidebarInset,
   SidebarProvider,
@@ -157,6 +158,36 @@ function hasSelectedText(target: EventTarget | null) {
   }
 
   return false
+}
+
+function findMessageViewport(root: HTMLElement | null) {
+  if (!root) return null
+  return root.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]')
+}
+
+function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
+  return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold
+}
+
+function previousMessageJumpTarget(viewport: HTMLDivElement) {
+  const anchors = [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
+  if (anchors.length === 0) return null
+
+  const viewportTop = viewport.scrollTop + 8
+  let candidate: HTMLElement | null = null
+
+  for (const anchor of anchors) {
+    if (anchor.offsetTop < viewportTop - 8) {
+      candidate = anchor
+      continue
+    }
+
+    if (candidate) {
+      break
+    }
+  }
+
+  return candidate
 }
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
@@ -286,7 +317,12 @@ export function PiWebAppShell({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
+  const messagesScrollAreaRef = React.useRef<HTMLDivElement | null>(null)
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
+  const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
+  const [isMessagesNearBottom, setIsMessagesNearBottom] = React.useState(true)
+  const [hasPreviousMessageJumpTarget, setHasPreviousMessageJumpTarget] =
+    React.useState(false)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
@@ -682,12 +718,59 @@ export function PiWebAppShell({
   ])
 
   React.useEffect(() => {
-    const itemCount = sessionState.items.length
-    const streaming = sessionState.streaming
-    void itemCount
-    void streaming
+    const viewport = findMessageViewport(messagesScrollAreaRef.current)
+    messageViewportRef.current = viewport
+    if (!viewport) return
+
+    const syncScrollState = () => {
+      setIsMessagesNearBottom(isViewportNearBottom(viewport))
+      setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
+    }
+
+    syncScrollState()
+    viewport.addEventListener("scroll", syncScrollState, { passive: true })
+    return () => {
+      viewport.removeEventListener("scroll", syncScrollState)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    if (!isMessagesNearBottom && !sessionState.streaming) return
+
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
-  }, [sessionState.items.length, sessionState.streaming])
+  }, [isMessagesNearBottom, sessionState.streaming])
+
+  React.useEffect(() => {
+    if (
+      !viewerContextId ||
+      !sessionState.draft ||
+      sessionState.items.length > 0 ||
+      !sessionState.cwd
+    ) {
+      return
+    }
+
+    void fetchJson<GitStatusResponse>(
+      buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(sessionState.cwd)}`, {
+        contextId: viewerContextId,
+        sessionId: activeSessionId,
+      })
+    )
+      .then((response) => {
+        setGitStatus(response)
+      })
+      .catch(() => {
+        // Ignore draft card git summary failures.
+      })
+  }, [
+    activeSessionId,
+    sessionState.cwd,
+    sessionState.draft,
+    sessionState.items.length,
+    viewerContextId,
+  ])
 
   const loadDirectoryIndex = React.useCallback(
     async (directory: string, revision?: string) => {
@@ -2578,6 +2661,29 @@ export function PiWebAppShell({
     cycleThinkingLevel,
   ])
 
+  const isSessionViewLoading = Boolean(sessionId && sessionId !== sessionState.sessionId)
+  const draftGitSummary =
+    sessionState.draft &&
+    sessionState.items.length === 0 &&
+    gitStatus &&
+    !isApiErrorResponse(gitStatus)
+      ? gitStatus.gitStatus
+      : null
+
+  const scrollConversationToBottom = React.useCallback(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
+  }, [])
+
+  const jumpToPreviousMessage = React.useCallback(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    const target = previousMessageJumpTarget(viewport)
+    if (!target) return
+    viewport.scrollTo({ top: Math.max(0, target.offsetTop - 8), behavior: "smooth" })
+  }, [])
+
   return (
     <SidebarProvider className="h-full overflow-hidden bg-background">
       <AppSidebar
@@ -2707,63 +2813,115 @@ export function PiWebAppShell({
             >
               <Card className="min-h-0 flex-1">
                 <CardContent className="flex h-full min-h-0 flex-col gap-4 pt-4">
-                  <ScrollArea className="min-h-0 flex-1 pr-4">
-                    {sessionState.items.length > 0 ? (
-                      <div className="space-y-4">
-                        {(() => {
-                          const counts = new Map<string, number>()
-                          return sessionState.items.map((item) => {
-                            const baseKey = conversationItemSignature(item)
-                            const count = (counts.get(baseKey) ?? 0) + 1
-                            counts.set(baseKey, count)
-                            const key = `${baseKey}:${count}`
+                  <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1">
+                    <ScrollArea className="h-full pr-4">
+                      {isSessionViewLoading ? (
+                        <div className="flex min-h-full items-center justify-center py-10">
+                          <div className="flex flex-col items-center gap-3 rounded-xl border bg-card/70 px-6 py-8 text-sm text-muted-foreground">
+                            <Spinner />
+                            <div className="font-medium text-foreground">Loading session…</div>
+                            <div>Switching to the selected conversation.</div>
+                          </div>
+                        </div>
+                      ) : sessionState.items.length > 0 ? (
+                        <div className="flex flex-col gap-4 pb-6">
+                          {(() => {
+                            const counts = new Map<string, number>()
+                            return sessionState.items.map((item) => {
+                              const baseKey = conversationItemSignature(item)
+                              const count = (counts.get(baseKey) ?? 0) + 1
+                              counts.set(baseKey, count)
+                              const key = `${baseKey}:${count}`
 
-                            return item.kind === "user" ? (
-                              <div key={key} className="flex justify-end">
-                                <UserMessageCard item={item} />
-                              </div>
-                            ) : (
-                              <div key={key} className="flex justify-start">
-                                <AssistantMessageCard
-                                  item={item}
-                                  hideThinking={sessionState.hideThinkingBlock}
-                                  hideToolBlocks={hideToolBlocks}
-                                  hiddenThinkingLabel={
-                                    sessionState.uiState.hiddenThinkingLabel ||
-                                    sessionState.hiddenThinkingPreview
-                                  }
-                                />
-                              </div>
-                            )
-                          })
-                        })()}
-                        <div ref={bottomRef} />
-                      </div>
-                    ) : (
-                      <Empty className="border border-dashed bg-card/60">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <SparklesIcon />
-                          </EmptyMedia>
-                          <EmptyTitle>
-                            {sessionState.draft
-                              ? "Draft session ready"
-                              : "Start a new conversation"}
-                          </EmptyTitle>
-                          <EmptyDescription>
-                            {sessionState.draft
-                              ? sessionState.cwd
-                                ? `You are in a fresh draft for ${sessionState.cwd}. Unsent composer text is restored per session and directory, matching pi-web.`
-                                : "You are in a fresh draft session. Unsent composer text is restored per session and directory, matching pi-web."
-                              : "This is the native Pi to Go session view backed by the new TypeScript runtime."}
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <Button onClick={createSession}>New session</Button>
-                        </EmptyContent>
-                      </Empty>
-                    )}
-                  </ScrollArea>
+                              return item.kind === "user" ? (
+                                <div
+                                  key={key}
+                                  data-message-anchor="true"
+                                  className="flex justify-end"
+                                >
+                                  <UserMessageCard item={item} />
+                                </div>
+                              ) : (
+                                <div
+                                  key={key}
+                                  data-message-anchor="true"
+                                  className="flex justify-start"
+                                >
+                                  <AssistantMessageCard
+                                    item={item}
+                                    hideThinking={sessionState.hideThinkingBlock}
+                                    hideToolBlocks={hideToolBlocks}
+                                    hiddenThinkingLabel={
+                                      sessionState.uiState.hiddenThinkingLabel ||
+                                      sessionState.hiddenThinkingPreview
+                                    }
+                                  />
+                                </div>
+                              )
+                            })
+                          })()}
+                          <div ref={bottomRef} />
+                        </div>
+                      ) : (
+                        <Empty className="border border-dashed bg-card/60">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <SparklesIcon />
+                            </EmptyMedia>
+                            <EmptyTitle>
+                              {sessionState.draft
+                                ? "Draft session ready"
+                                : "Start a new conversation"}
+                            </EmptyTitle>
+                            <EmptyDescription>
+                              {sessionState.draft
+                                ? sessionState.cwd
+                                  ? `You are in a fresh draft for ${sessionState.cwd}. Unsent composer text is restored per session and directory, matching pi-web.`
+                                  : "You are in a fresh draft session. Unsent composer text is restored per session and directory, matching pi-web."
+                                : "This is the native Pi to Go session view backed by the new TypeScript runtime."}
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          {sessionState.draft ? (
+                            <EmptyContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                              {sessionState.cwd ? (
+                                <Badge variant="outline">{sessionState.cwd}</Badge>
+                              ) : null}
+                              {draftGitSummary?.label ? (
+                                <Badge variant="outline">{draftGitSummary.label}</Badge>
+                              ) : null}
+                              <Button onClick={createSession}>New session</Button>
+                            </EmptyContent>
+                          ) : (
+                            <EmptyContent>
+                              <Button onClick={createSession}>New session</Button>
+                            </EmptyContent>
+                          )}
+                        </Empty>
+                      )}
+                    </ScrollArea>
+
+                    {!isSessionViewLoading && !isMessagesNearBottom ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="absolute right-4 bottom-4 z-10 shadow-sm"
+                        onClick={scrollConversationToBottom}
+                      >
+                        Bottom
+                      </Button>
+                    ) : null}
+
+                    {!isSessionViewLoading && hasPreviousMessageJumpTarget ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="absolute right-24 bottom-4 z-10 shadow-sm"
+                        onClick={jumpToPreviousMessage}
+                      >
+                        Last message
+                      </Button>
+                    ) : null}
+                  </div>
 
                   <ComposerPanel
                     ref={composerPanelRef}

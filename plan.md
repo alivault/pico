@@ -99,11 +99,11 @@ Reference: `static/composer.js`
 Reference: `static/messages.js`
 
 - [x] Use the existing `/api/highlight` endpoint for syntax-highlighted code blocks
-- [ ] Restore draft-session state card parity for fresh drafts (directory + git summary)
-- [ ] Restore loading-state presentation parity while switching/loading sessions
-- [ ] Restore scroll affordances:
-  - [ ] scroll-to-bottom button
-  - [ ] jump-to-last-message button
+- [x] Restore draft-session state card parity for fresh drafts (directory + git summary)
+- [x] Restore loading-state presentation parity while switching/loading sessions
+- [x] Restore scroll affordances:
+  - [x] scroll-to-bottom button
+  - [x] jump-to-last-message button
 - [x] Respect hidden tool-block state in conversation rendering
 - [ ] Audit assistant/tool/thinking/compaction block styling against old `pi-web` and close remaining visual gaps
 - [ ] Match old streaming/working-state polish where still missing
