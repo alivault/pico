@@ -11,6 +11,7 @@ export const SESSION_DONE_SOUND_ENABLED_STORAGE_KEY =
 export const SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
   "pi-web-session-done-desktop-notifications"
 export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pi-web-hide-tools"
+export const PROMPT_DRAFTS_STORAGE_KEY = "pi-web-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pi-to-go-context-id"
 export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
@@ -41,6 +42,17 @@ export type DirectoryState = {
   path: string
   totalCount: number
   revision: string
+}
+
+export type PromptDraftTarget = {
+  sessionId?: string
+  sessionFile?: string
+  cwd?: string
+}
+
+export type SessionEntryIdentity = {
+  path?: string
+  id?: string
 }
 
 export type ModelOption = {
@@ -338,6 +350,74 @@ export function normalizeStoredDirectoryList(value: unknown) {
   }
 
   return nextDirectories
+}
+
+export function sessionListEntryKey(sessionLike: SessionEntryIdentity = {}) {
+  if (sessionLike.path) return `path:${sessionLike.path}`
+  if (sessionLike.id) return `id:${sessionLike.id}`
+  return ""
+}
+
+export function normalizeSessionSelectionKeys(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  const keys: Array<string> = []
+  const seen = new Set<string>()
+
+  for (const entry of value) {
+    const key = typeof entry === "string" ? entry.trim() : ""
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    keys.push(key)
+  }
+
+  return keys
+}
+
+export function promptDraftKey(target: PromptDraftTarget = {}) {
+  if (target.sessionId) return `session:${target.sessionId}`
+  if (target.sessionFile) return `file:${target.sessionFile}`
+  return `draft:${target.cwd?.trim() || "default"}`
+}
+
+export function loadStoredPromptDrafts() {
+  try {
+    const raw = safeSessionStorageGetItem(PROMPT_DRAFTS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+export function readStoredPromptDraft(target: PromptDraftTarget = {}) {
+  const drafts = loadStoredPromptDrafts()
+  const key = promptDraftKey(target)
+  const value = drafts[key]
+  return typeof value === "string" ? value : undefined
+}
+
+export function rememberStoredPromptDraft(
+  target: PromptDraftTarget = {},
+  text = ""
+) {
+  const key = promptDraftKey(target)
+  const drafts = loadStoredPromptDrafts()
+  const nextValue = typeof text === "string" ? text : ""
+
+  if (nextValue) {
+    drafts[key] = nextValue
+  } else {
+    delete drafts[key]
+  }
+
+  return safeSessionStorageSetItem(
+    PROMPT_DRAFTS_STORAGE_KEY,
+    JSON.stringify(drafts)
+  )
 }
 
 export function readStoredSidebarDirectories() {

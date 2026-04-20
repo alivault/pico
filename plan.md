@@ -1,59 +1,193 @@
-# Pi to Go rewrite plan
+# Pi to Go parity plan
 
-Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + shadcn/base-ui + Tailwind v4 + TypeScript**, using `~/code/pi-web` only as a reference source during the rewrite.
+Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + shadcn/base-ui + Tailwind v4 + TypeScript**, using `~/code/pi-web` as the reference source until the new app reaches user-facing feature parity.
 
-## Phase 1 — reset the direction
+## Reference source of truth
 
-- [x] Remove vendored legacy `pi-web` files and runtime shims from this repo
-- [x] Replace the embedded legacy shell with a native React/TanStack Start app shell
-- [x] Add a focused rewrite plan and keep it updated as work lands
-- [x] Commit the cleanup baseline
+When auditing parity, compare against these old `pi-web` modules first:
 
-## Phase 2 — shared foundations
+- `~/code/pi-web/static/app.js` — shell orchestration, session switching, top-level UX
+- `~/code/pi-web/static/composer.js` — composer behavior, slash commands, completions, model/reasoning pickers
+- `~/code/pi-web/static/messages.js` — conversation rendering, loading/draft states, scroll controls, tool visibility
+- `~/code/pi-web/static/dialogs.js` — command palette, settings, shortcuts, add-directory, fork, tree dialogs
+- `~/code/pi-web/static/shortcuts.js` — keyboard behavior and list navigation
+- `~/code/pi-web/static/sidebar.js` — viewport/sidebar layout behavior
+- `~/code/pi-web/static/transport.js` — SSE/request plumbing expectations
+- `~/code/pi-web/static/state.js` — persisted UI state and draft behavior
 
-- [x] Keep and expand shared TS domain/types for sessions, messages, directories, tree data, and UI state
-- [x] Port reusable server helpers to TypeScript (SDK loading, session naming, JSON/response helpers, filesystem/git helpers)
-- [x] Define the browser/server contract for SSE events and API payloads in TS
-- [ ] Commit the shared foundations
+## Current snapshot — 2026-04-20
 
-## Phase 3 — backend rewrite
+### Validation state
 
-- [x] Rebuild the session runtime in TypeScript around the Pi SDK
-- [x] Implement `/events` with viewer-context replay/sync behavior
-- [x] Implement prompt + abort + queued/steered follow-up flows
-- [x] Implement session lifecycle routes: new, rename, delete, fork, tree, tree label
-- [x] Implement model/thinking/settings/UI bridge routes
-- [x] Implement supporting routes: highlight, directory resolve, path/file completions, git status, git changes, directory session indexes
-- [ ] Commit backend milestones incrementally
+- [x] `tsgo_diagnostics` is clean
+- [x] `pnpm build` passes
+- [x] Lint passes for touched parity files
+- [ ] `pnpm test` exits cleanly without the existing Vite/Vitest shutdown warning
+- [ ] End-to-end manual parity pass in zellij session `pi` on port `3142`
 
-## Phase 4 — frontend rewrite
+### What is already working in the new TanStack app
 
-- [x] Build the main app shell with responsive sidebar, top bar, session view, git view, and composer
-- [x] Connect route search state (`?session=`) and persistent viewer context
-- [x] Render conversation items: user text/images, assistant text, thinking, tools, compaction summaries
-- [ ] Implement session sidebar grouping, search, collapse, multi-select affordances, and draft handling
-- [x] Implement composer flows: slash menu, images, queue/steer, model picker, thinking picker
-- [x] Use Sonner for all toast notifications (session done, errors, confirmations that should toast)
-- [x] Implement dialogs: add directory, command palette, shortcuts, tree, fork, rename, delete, settings, status, extension UI requests
-- [ ] Commit frontend milestones incrementally
+#### Core architecture
 
-## Phase 5 — verification
+- [x] Native TanStack Start shell is in place
+- [x] Shared TypeScript domain types and API contracts exist
+- [x] Native Pi SDK-backed session runtime is in place
+- [x] SSE `/events` streaming with viewer-context replay/sync is wired
+- [x] Route-linked session selection via `?session=` works
 
-- [x] Run `vp check --fix`
-- [x] Run `vp build`
-- [x] Manually verify in zellij session `pi` on port `3142`
-- [ ] Update docs/readme as the rewrite stabilizes
+#### Backend parity already landed
 
-## Progress log
+- [x] Prompt submission
+- [x] Abort
+- [x] Queued follow-up / steer request plumbing
+- [x] Session lifecycle routes: new, rename, delete, fork
+- [x] Session tree load / navigate / label APIs
+- [x] Model and thinking routes
+- [x] Extension UI request bridge
+- [x] Git status and git changes APIs
+- [x] Directory resolve and directory session index APIs
+- [x] Path/file completion APIs are available
+- [x] Highlight API is available
 
-- 2026-04-20: Added this rewrite plan and reset scope away from embedding the legacy app.
-- 2026-04-20: Locked toast direction to Sonner for the rewrite.
-- 2026-04-20: Removed vendored legacy runtime/assets, replaced the home route with a native TanStack Start shell, and ported initial TS server helpers plus git/path endpoints.
-- 2026-04-20: Verified the rewritten shell and initial native endpoints in zellij on `localhost:3142`.
-- 2026-04-20: Committed the cleanup reset as `feat: reset to native tanstack rewrite baseline`.
-- 2026-04-20: Added shared API response types and a live workspace preview in the native shell using the new git/path endpoints.
-- 2026-04-20: Replaced the proxy stubs with a native TypeScript session backend covering `/events`, prompt/abort, session lifecycle, tree, model/thinking, highlight, path completion, git, and extension UI request plumbing.
-- 2026-04-20: Completed the native frontend shell wiring for live SSE session state, route-linked session selection, conversation rendering, composer queue/steer flows, dialogs, and the git view.
-- 2026-04-20: Fixed a React update loop in the native shell, added sidebar session pagination, and made dev-mode Pi SDK loading work reliably from the installed external runtime package.
-- 2026-04-20: Restored more native parity from the old pi-web shell with an extracted command palette, shortcuts/status/settings dialogs, theme-aware sidebar actions, and session-finished notification settings backed by the new TanStack UI.
-- 2026-04-20: Fixed route/session synchronization so sidebar session selection does not get overwritten by stale local shell state while the next SSE stream is connecting.
+#### Frontend parity already landed
+
+- [x] Main shell layout with sidebar + main session area + git tab
+- [x] shadcn `SidebarProvider` / `SidebarInset` shell integration
+- [x] Session sidebar grouping by directory
+- [x] Sidebar search
+- [x] Sidebar collapse / expand per directory
+- [x] Collapse-all / expand-all sidebar control
+- [x] Sidebar multi-select and bulk delete affordances
+- [x] Draft prompt persistence by session/file/directory
+- [x] Conversation rendering for user text + images
+- [x] Conversation rendering for assistant text, thinking, tool, and compaction blocks
+- [x] Composer image attachments
+- [x] Queue / steer controls while streaming
+- [x] Git panel
+- [x] Command palette dialog
+- [x] Shortcuts dialog
+- [x] Status dialog
+- [x] Add-directory dialog
+- [x] Fork dialog
+- [x] Tree dialog
+- [x] Rename/delete dialogs
+- [x] Settings dialog for theme + session-finished notifications
+- [x] Sonner toasts for errors / completion / confirmations
+
+## Remaining work to reach old `pi-web` feature parity
+
+### 1) Composer parity — highest priority
+
+Reference: `static/composer.js`
+
+- [ ] Replace the current basic textarea workflow with full composer parity
+- [ ] Restore slash-command suggestion menu behavior
+- [ ] Restore `@` / file / path completion UX using the existing completion APIs
+- [ ] Restore skill pill / skill selection / skill clear behavior
+- [ ] Replace simple model/thinking `<select>` controls with searchable picker/popover parity
+- [ ] Match old keyboard behavior for composer actions:
+  - [ ] Cmd/Ctrl+Enter send / steer
+  - [ ] Alt+Cmd/Ctrl+Enter queue follow-up
+  - [ ] Up/Down and Ctrl+J/K completion navigation
+  - [ ] Enter / Tab completion acceptance rules
+- [ ] Restore pending draft prompt + pending draft follow-up handoff behavior when creating a fresh draft session
+- [ ] Restore working indicator parity for slash commands, compaction, first-turn, and waiting states
+- [ ] Add hide/show tool calls UI and persist it via `pi-web-hide-tools`
+
+### 2) Session view and message parity
+
+Reference: `static/messages.js`
+
+- [ ] Use the existing `/api/highlight` endpoint for syntax-highlighted code blocks
+- [ ] Restore draft-session state card parity for fresh drafts (directory + git summary)
+- [ ] Restore loading-state presentation parity while switching/loading sessions
+- [ ] Restore scroll affordances:
+  - [ ] scroll-to-bottom button
+  - [ ] jump-to-last-message button
+- [ ] Respect hidden tool-block state in conversation rendering
+- [ ] Audit assistant/tool/thinking/compaction block styling against old `pi-web` and close remaining visual gaps
+- [ ] Match old streaming/working-state polish where still missing
+
+### 3) Sidebar and navigation parity
+
+Reference: `static/app.js`, `static/sidebar.js`, `static/shortcuts.js`
+
+- [ ] Restore keyboard navigation parity for the sidebar session list
+- [ ] Restore keyboard navigation parity for list-style dialogs and pickers
+- [ ] Add per-session row action menu parity inside the sidebar
+- [ ] Add directory action menu parity inside the sidebar
+- [ ] Restore directory drag-reorder / sidebar ordering behavior
+- [ ] Restore session-scope / draft-directory selection UX for “new session in …” flows
+- [ ] Audit mobile drawer behavior against the old app and close gaps
+- [ ] Revisit sidebar search/index-loading behavior if full-index loading diverges too much from old search coverage behavior
+
+### 4) Dialog and command palette parity
+
+Reference: `static/dialogs.js`
+
+- [ ] Expand command palette to the full old action set
+  - [ ] toggle tools
+  - [ ] cycle reasoning level
+  - [ ] parity wording / search terms for existing commands
+  - [ ] selection-aware actions when sidebar multi-select exists
+- [ ] Rebuild add-directory dialog parity
+  - [ ] searchable results
+  - [ ] recent directories
+  - [ ] known directories
+  - [ ] keyboard navigation / first-result open behavior
+- [ ] Rebuild fork dialog parity
+  - [ ] filter/search fork points
+  - [ ] keyboard navigation
+- [ ] Upgrade the tree dialog from MVP to old-browser parity
+  - [ ] tree-specific shortcuts/help
+  - [ ] branch expand/collapse keyboard controls
+  - [ ] filter presets / filter cycling
+  - [ ] continue-with-summary options
+  - [ ] custom summary instructions
+  - [ ] label timestamp toggle
+  - [ ] richer status/footer state
+
+### 5) Header, settings, and shell controls parity
+
+Reference: `static/app.js`, `static/dialogs.js`, `static/composer.js`
+
+- [ ] Restore the old header session-actions menu parity
+  - [ ] new session
+  - [ ] toggle thinking
+  - [ ] toggle tools
+  - [ ] rename/delete current session
+- [ ] Extend settings parity beyond theme + notifications
+  - [ ] tool visibility toggle
+  - [ ] any remaining shell/composer toggles that still exist in old `pi-web`
+- [ ] Align shortcuts dialog with the actual final shortcut map once parity behavior ships
+- [ ] Audit document title / completion notifications / unread-finished behavior against old `pi-web`
+
+### 6) Verification, docs, and sign-off
+
+- [ ] Create a parity checklist that maps each old module to its new implementation or explicit removal
+- [ ] Manually verify every checklist item in zellij session `pi` on port `3142`
+- [ ] Update `README.md` with:
+  - [ ] current architecture
+  - [ ] local dev / build commands
+  - [ ] parity status
+  - [ ] known gaps
+- [ ] Document or fix the existing Vitest shutdown warning
+- [ ] Cut commits in clean milestones once each remaining parity slice lands
+
+## Suggested implementation order
+
+1. Composer parity
+2. Message/session-view parity
+3. Tool visibility + header/settings parity
+4. Sidebar keyboard/menu/reorder parity
+5. Add-directory / fork / tree dialog parity
+6. Verification checklist + README + cleanup
+
+## Definition of done
+
+Pi to Go is only considered parity-complete when:
+
+- [ ] Every user-visible feature from old `pi-web/static/*.js` is either implemented in this TanStack app or intentionally removed with documentation
+- [ ] Build, lint, and `tsgo_diagnostics` are clean
+- [ ] Manual parity checklist passes in the zellij `pi` session on port `3142`
+- [ ] README reflects the new architecture and final feature set

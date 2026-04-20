@@ -9,6 +9,30 @@ import {
 import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
+import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
+import type { PromptImage, SessionState, ThemeMode } from "@/lib/pi-web"
+import type {
+  DeleteSessionResponse,
+  DirectoryResolveResponse,
+  DirectorySessionsIndexResponse,
+  ExtensionUiEvent,
+  ForkSessionResponse,
+  ForkableMessagesResponse,
+  GitChangesResponse,
+  GitStatusResponse,
+  NavigateSessionTreeResponse,
+  PendingMessageRemoveResponse,
+  PendingMessagesResponse,
+  PiWebServerEvent,
+  PromptResponse,
+  RenameSessionResponse,
+  SessionListEntry,
+  SessionTreeResponse,
+  SessionsEvent,
+  SimpleOkResponse,
+  UiRequestResponse,
+} from "@/lib/pi-web-api"
+import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,11 +45,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  AppShellCommandPalette,
-  type AppCommand,
-} from "@/features/pi-web/app-shell-command-palette"
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AppShellCommandPalette } from "@/features/pi-web/app-shell-command-palette"
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
   buildRequestUrl,
@@ -35,7 +61,6 @@ import {
 } from "@/features/pi-web/app-shell-utils"
 import { ComposerPanel } from "@/features/pi-web/composer-panel"
 import {
-  type DesktopNotificationPermission,
   getDesktopNotificationPermission,
   playSessionDoneSound,
   primeSessionDoneSound,
@@ -50,56 +75,41 @@ import {
 import { GitPanel } from "@/features/pi-web/git-panel"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
-  clampSidebarDirectories,
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
+  DIRECTORY_SESSION_LOAD_MORE_COUNT,
+  DRAFT_DIRECTORY_STORAGE_KEY,
+  INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
+  SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+  SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  VIEWER_CONTEXT_STORAGE_KEY,
+  clampSidebarDirectories,
   createContextId,
   createInitialSessionState,
-  DIRECTORY_SESSION_LOAD_MORE_COUNT,
   filterFlatTree,
   flattenTree,
   getSessionTitle,
-  INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   normalizePromptImage,
+  normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   normalizeThemeMode,
+  promptDraftKey,
   readStoredCollapsedDirectories,
+  readStoredDraftDirectory,
+  readStoredPromptDraft,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
   relativeTime,
+  rememberStoredPromptDraft,
   safeLocalStorageSetItem,
-  SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
-  SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  sessionListEntryKey,
   themeModeLabel,
-  type PromptImage,
-  type SessionState,
-  type ThemeMode,
-  VIEWER_CONTEXT_STORAGE_KEY,
 } from "@/lib/pi-web"
 import {
-  type DeleteSessionResponse,
-  type DirectoryResolveResponse,
-  type DirectorySessionsIndexResponse,
-  type ExtensionUiEvent,
-  type ForkableMessagesResponse,
-  type ForkSessionResponse,
-  type GitChangesResponse,
-  type GitStatusResponse,
   isApiErrorResponse,
   isSessionsEvent,
   isStateSyncEvent,
-  type NavigateSessionTreeResponse,
-  type PendingMessageRemoveResponse,
-  type PendingMessagesResponse,
-  type PiWebServerEvent,
-  type PromptResponse,
-  type RenameSessionResponse,
-  type SessionListEntry,
-  type SessionTreeResponse,
-  type SessionsEvent,
-  type SimpleOkResponse,
-  type UiRequestResponse,
 } from "@/lib/pi-web-api"
 
 function isEditableTarget(target: EventTarget | null) {
@@ -195,7 +205,9 @@ export function PiWebAppShell({
   const [directoryInput, setDirectoryInput] = React.useState("")
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [renameValue, setRenameValue] = React.useState("")
-  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [deleteTargets, setDeleteTargets] = React.useState<
+    Array<SessionListEntry>
+  >([])
   const [forkOpen, setForkOpen] = React.useState(false)
   const [forkMessages, setForkMessages] = React.useState<Array<{
     entryId: string
@@ -219,6 +231,10 @@ export function PiWebAppShell({
   const [statusOpen, setStatusOpen] = React.useState(false)
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [selectedSidebarSessionKeys, setSelectedSidebarSessionKeys] =
+    React.useState<Array<string>>([])
+  const [sidebarSessionSelectionAnchor, setSidebarSessionSelectionAnchor] =
+    React.useState("")
   const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
     React.useState(true)
   const [
@@ -233,6 +249,8 @@ export function PiWebAppShell({
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
+  const sessionStateRef = React.useRef(sessionState)
+  const composerTextRef = React.useRef(composerText)
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
 
@@ -254,6 +272,24 @@ export function PiWebAppShell({
   const statusCount = Object.entries(sessionState.uiState.statuses).filter(
     ([key, value]) => key.trim().length > 0 && value.trim().length > 0
   ).length
+  const deleteOpen = deleteTargets.length > 0
+
+  React.useEffect(() => {
+    sessionStateRef.current = sessionState
+  }, [sessionState])
+
+  React.useEffect(() => {
+    composerTextRef.current = composerText
+  }, [composerText])
+
+  const updateComposerDraft = React.useCallback(
+    (value: string, target = sessionStateRef.current) => {
+      composerTextRef.current = value
+      setComposerText(value)
+      rememberStoredPromptDraft(target, value)
+    },
+    []
+  )
 
   React.useEffect(() => {
     const storedContext = window.localStorage.getItem(
@@ -439,16 +475,41 @@ export function PiWebAppShell({
       const payload = JSON.parse(event.data) as PiWebServerEvent
 
       if (isStateSyncEvent(payload)) {
-        setSessionState((current) => updateStateFromSync(current, payload))
+        const previousState = sessionStateRef.current
+        const sessionChanged =
+          promptDraftKey(payload) !== promptDraftKey(previousState)
+        const localPromptText = composerTextRef.current
+
+        rememberStoredPromptDraft(previousState, localPromptText)
+
+        const previousEditorText = previousState.uiState.editorText || ""
+        const preserveLocalPrompt =
+          !sessionChanged && localPromptText !== previousEditorText
+        const nextState = updateStateFromSync(previousState, payload)
+        const nextPromptText = preserveLocalPrompt
+          ? localPromptText
+          : (readStoredPromptDraft(nextState) ??
+            nextState.uiState.editorText ??
+            "")
+
+        setSessionState(nextState)
+        sessionStateRef.current = nextState
+
+        if (sessionChanged) {
+          setComposerImages([])
+        }
+
+        updateComposerDraft(nextPromptText, nextState)
+        lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
         setPendingMessages(
           Array.isArray(payload.pendingUserMessages)
             ? payload.pendingUserMessages.map((message) => ({
                 pendingId:
-                  typeof message?.pendingId === "string"
+                  typeof message.pendingId === "string"
                     ? message.pendingId
                     : "",
-                text: typeof message?.text === "string" ? message.text : "",
-                images: Array.isArray(message?.images)
+                text: typeof message.text === "string" ? message.text : "",
+                images: Array.isArray(message.images)
                   ? message.images
                       .map((image: unknown) => normalizePromptImage(image))
                       .filter(
@@ -457,7 +518,7 @@ export function PiWebAppShell({
                       )
                   : [],
                 streamingBehavior:
-                  message?.streamingBehavior === "steer" ? "steer" : "followUp",
+                  message.streamingBehavior === "steer" ? "steer" : "followUp",
               }))
             : []
         )
@@ -499,7 +560,7 @@ export function PiWebAppShell({
     return () => {
       source.close()
     }
-  }, [viewerContextId, sessionId])
+  }, [sessionId, updateComposerDraft, viewerContextId])
 
   React.useEffect(() => {
     if (!sessionState.sessionId) return
@@ -518,12 +579,10 @@ export function PiWebAppShell({
   }, [handleSelectSession, sessionId, sessionState.sessionId])
 
   React.useEffect(() => {
-    const nextEditorText = sessionState.uiState.editorText || ""
-    if (nextEditorText !== lastSyncedEditorTextRef.current) {
-      setComposerText(nextEditorText)
-      lastSyncedEditorTextRef.current = nextEditorText
-    }
-  }, [sessionState.uiState.editorText])
+    const nextDirectory = sessionState.cwd?.trim()
+    if (!nextDirectory) return
+    safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
+  }, [sessionState.cwd])
 
   React.useEffect(() => {
     if (lastStreamingRef.current && !sessionState.streaming) {
@@ -632,10 +691,13 @@ export function PiWebAppShell({
 
     for (const directory of sidebarDirectories) {
       const state = directoryStateByPath.get(directory)
-      const currentSessions = directoryIndexes[directory]
+      const hasCurrentSessions = Object.prototype.hasOwnProperty.call(
+        directoryIndexes,
+        directory
+      )
       const isLoading = Boolean(directoryIndexLoading[directory])
       const loadedRevision = loadedDirectoryRevisionRef.current[directory]
-      const needsInitialLoad = currentSessions === undefined
+      const needsInitialLoad = !hasCurrentSessions
       const needsRevisionRefresh =
         typeof state?.revision === "string" && state.revision !== loadedRevision
 
@@ -693,29 +755,313 @@ export function PiWebAppShell({
     }
   }, [currentTab, refreshGit])
 
-  const visibleDirectories = React.useMemo(
+  const baseSidebarDirectories = React.useMemo(
     () => clampSidebarDirectories(sidebarDirectories, sessionState.cwd),
     [sessionState.cwd, sidebarDirectories]
   )
 
-  const filteredDirectorySessions = React.useMemo(() => {
+  const {
+    visibleDirectories,
+    filteredDirectorySessions,
+    emptySidebarStateText,
+  } = React.useMemo(() => {
     const query = sessionSearch.trim().toLowerCase()
-    return Object.fromEntries(
-      visibleDirectories.map((directory) => {
-        const sessions = directoryIndexes[directory] || []
-        const filtered = query
-          ? sessions.filter((entry) => {
-              const haystack = [entry.title, entry.name, entry.path]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase()
-              return haystack.includes(query)
-            })
-          : sessions
-        return [directory, filtered]
-      })
-    ) as Record<string, Array<SessionListEntry>>
-  }, [directoryIndexes, sessionSearch, visibleDirectories])
+    const nextVisibleDirectories: Array<string> = []
+    const nextFilteredSessions: Record<string, Array<SessionListEntry>> = {}
+
+    for (const directory of baseSidebarDirectories) {
+      const sessions = Object.prototype.hasOwnProperty.call(
+        directoryIndexes,
+        directory
+      )
+        ? directoryIndexes[directory]
+        : []
+
+      if (!query) {
+        nextVisibleDirectories.push(directory)
+        nextFilteredSessions[directory] = sessions
+        continue
+      }
+
+      const directoryMatches = directory.toLowerCase().includes(query)
+      const filteredSessions = directoryMatches
+        ? sessions
+        : sessions.filter((entry) => {
+            const haystack = [entry.title, entry.name, entry.path, entry.cwd]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+            return haystack.includes(query)
+          })
+
+      if (directoryMatches || filteredSessions.length > 0) {
+        nextVisibleDirectories.push(directory)
+        nextFilteredSessions[directory] = filteredSessions
+      }
+    }
+
+    return {
+      visibleDirectories: nextVisibleDirectories,
+      filteredDirectorySessions: nextFilteredSessions,
+      emptySidebarStateText: query
+        ? "No sessions or directories match your search."
+        : baseSidebarDirectories.length > 0
+          ? "No directories match this view."
+          : "No directories added yet.",
+    }
+  }, [baseSidebarDirectories, directoryIndexes, sessionSearch])
+
+  const allDirectoriesCollapsed = React.useMemo(
+    () =>
+      baseSidebarDirectories.length > 0 &&
+      baseSidebarDirectories.every(
+        (directory) => collapsedDirectories[directory]
+      ),
+    [baseSidebarDirectories, collapsedDirectories]
+  )
+
+  const toggleAllDirectories = React.useCallback(() => {
+    setCollapsedDirectories((current) => {
+      const next = { ...current }
+      const nextCollapsed = !allDirectoriesCollapsed
+
+      for (const directory of baseSidebarDirectories) {
+        if (nextCollapsed) {
+          next[directory] = true
+        } else {
+          delete next[directory]
+        }
+      }
+
+      safeLocalStorageSetItem(
+        COLLAPSED_DIRECTORIES_STORAGE_KEY,
+        JSON.stringify(next)
+      )
+      return next
+    })
+  }, [allDirectoriesCollapsed, baseSidebarDirectories])
+
+  const sidebarSessionEntriesByKey = React.useMemo(() => {
+    const nextEntries = new Map<string, SessionListEntry>()
+
+    for (const directory of baseSidebarDirectories) {
+      const entries = Object.prototype.hasOwnProperty.call(
+        directoryIndexes,
+        directory
+      )
+        ? directoryIndexes[directory]
+        : []
+
+      for (const entry of entries) {
+        const key = sessionListEntryKey(entry)
+        if (!key || nextEntries.has(key)) continue
+        nextEntries.set(key, entry)
+      }
+    }
+
+    return nextEntries
+  }, [baseSidebarDirectories, directoryIndexes])
+
+  const renderedSidebarSessionKeys = React.useMemo(() => {
+    const searchActive = sessionSearch.trim().length > 0
+    const nextKeys: Array<string> = []
+
+    for (const directory of visibleDirectories) {
+      if (!searchActive && collapsedDirectories[directory]) continue
+
+      const sessions = Object.prototype.hasOwnProperty.call(
+        filteredDirectorySessions,
+        directory
+      )
+        ? filteredDirectorySessions[directory]
+        : []
+      const visibleCount = searchActive
+        ? sessions.length
+        : Math.min(
+            sessions.length,
+            directoryRenderCounts[directory] ??
+              INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+          )
+
+      for (const entry of sessions.slice(0, visibleCount)) {
+        const key = sessionListEntryKey(entry)
+        if (key) {
+          nextKeys.push(key)
+        }
+      }
+    }
+
+    return nextKeys
+  }, [
+    collapsedDirectories,
+    directoryRenderCounts,
+    filteredDirectorySessions,
+    sessionSearch,
+    visibleDirectories,
+  ])
+
+  React.useEffect(() => {
+    const validKeys = new Set(sidebarSessionEntriesByKey.keys())
+
+    setSelectedSidebarSessionKeys((current) => {
+      const next = normalizeSessionSelectionKeys(
+        current.filter((key) => validKeys.has(key))
+      )
+      return current.length === next.length &&
+        current.every((key, index) => key === next[index])
+        ? current
+        : next
+    })
+
+    setSidebarSessionSelectionAnchor((current) =>
+      current && validKeys.has(current) ? current : ""
+    )
+  }, [sidebarSessionEntriesByKey])
+
+  const selectedSidebarSessions = React.useMemo(
+    () =>
+      selectedSidebarSessionKeys
+        .map((key) => sidebarSessionEntriesByKey.get(key))
+        .filter((entry): entry is SessionListEntry =>
+          Boolean(entry?.path || entry?.id)
+        ),
+    [selectedSidebarSessionKeys, sidebarSessionEntriesByKey]
+  )
+
+  const setSidebarSelection = React.useCallback(
+    (nextKeys: Array<string>, anchorKey = "") => {
+      const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
+      setSelectedSidebarSessionKeys(normalizedKeys)
+      setSidebarSessionSelectionAnchor(
+        normalizedKeys.length === 0
+          ? ""
+          : anchorKey && normalizedKeys.includes(anchorKey)
+            ? anchorKey
+            : (normalizedKeys[normalizedKeys.length - 1] ?? "")
+      )
+    },
+    []
+  )
+
+  const selectSidebarSessionRange = React.useCallback(
+    (targetKey: string) => {
+      const normalizedTargetKey = targetKey.trim()
+      if (!normalizedTargetKey) return
+
+      const orderedKeys = renderedSidebarSessionKeys
+      const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
+      if (targetIndex < 0) {
+        setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
+        return
+      }
+
+      const anchorKey = orderedKeys.includes(sidebarSessionSelectionAnchor)
+        ? sidebarSessionSelectionAnchor
+        : (selectedSidebarSessionKeys.find((key) =>
+            orderedKeys.includes(key)
+          ) ?? normalizedTargetKey)
+      const anchorIndex = orderedKeys.indexOf(anchorKey)
+      if (anchorIndex < 0) {
+        setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
+        return
+      }
+
+      const start = Math.min(anchorIndex, targetIndex)
+      const end = Math.max(anchorIndex, targetIndex)
+      setSidebarSelection(orderedKeys.slice(start, end + 1), anchorKey)
+    },
+    [
+      renderedSidebarSessionKeys,
+      selectedSidebarSessionKeys,
+      setSidebarSelection,
+      sidebarSessionSelectionAnchor,
+    ]
+  )
+
+  const openDeleteDialog = React.useCallback(
+    (targets: Array<SessionListEntry>) => {
+      const nextTargets: Array<SessionListEntry> = []
+      const seenKeys = new Set<string>()
+
+      for (const target of targets) {
+        if (!target.path) continue
+        const key = sessionListEntryKey(target)
+        if (!key || seenKeys.has(key)) continue
+        seenKeys.add(key)
+        nextTargets.push(target)
+      }
+
+      if (nextTargets.length > 0) {
+        setDeleteTargets(nextTargets)
+      }
+    },
+    []
+  )
+
+  const openDeleteDialogForCurrentSession = React.useCallback(() => {
+    if (!sessionState.sessionFile) return
+
+    openDeleteDialog([
+      {
+        path: sessionState.sessionFile,
+        id: sessionState.sessionId,
+        title: currentSessionTitle,
+        name: sessionState.sessionName,
+        modified: sessionState.modified,
+      },
+    ])
+  }, [
+    currentSessionTitle,
+    openDeleteDialog,
+    sessionState.modified,
+    sessionState.sessionFile,
+    sessionState.sessionId,
+    sessionState.sessionName,
+  ])
+
+  const handleSidebarSessionClick = React.useCallback(
+    (
+      entry: SessionListEntry,
+      modifiers: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }
+    ) => {
+      const key = sessionListEntryKey(entry)
+
+      if (!key) {
+        if (entry.id) {
+          handleSelectSession(entry.id)
+        }
+        return
+      }
+
+      if (modifiers.shiftKey) {
+        selectSidebarSessionRange(key)
+        return
+      }
+
+      if (modifiers.metaKey || modifiers.ctrlKey) {
+        setSidebarSelection(
+          selectedSidebarSessionKeys.includes(key)
+            ? selectedSidebarSessionKeys.filter(
+                (currentKey) => currentKey !== key
+              )
+            : [...selectedSidebarSessionKeys, key],
+          key
+        )
+        return
+      }
+
+      setSidebarSelection([key], key)
+      if (entry.id) {
+        handleSelectSession(entry.id)
+      }
+    },
+    [
+      handleSelectSession,
+      selectSidebarSessionRange,
+      selectedSidebarSessionKeys,
+      setSidebarSelection,
+    ]
+  )
 
   const openAddDirectoryDialog = React.useCallback(() => {
     setDirectoryInput("")
@@ -790,7 +1136,9 @@ export function PiWebAppShell({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: sessionState.cwd }),
+          body: JSON.stringify({
+            cwd: sessionState.cwd || readStoredDraftDirectory() || undefined,
+          }),
         }
       )
     } catch (error) {
@@ -825,7 +1173,7 @@ export function PiWebAppShell({
         if (isApiErrorResponse(response)) {
           throw new Error(response.error)
         }
-        setComposerText("")
+        updateComposerDraft("")
         setComposerImages([])
         lastSyncedEditorTextRef.current = ""
       } catch (error) {
@@ -836,7 +1184,13 @@ export function PiWebAppShell({
         setIsSubmitting(false)
       }
     },
-    [activeSessionId, composerImages, composerText, viewerContextId]
+    [
+      activeSessionId,
+      composerImages,
+      composerText,
+      updateComposerDraft,
+      viewerContextId,
+    ]
   )
 
   const abortSession = React.useCallback(async () => {
@@ -903,7 +1257,6 @@ export function PiWebAppShell({
       const targetIndex = index + direction
       if (targetIndex < 0 || targetIndex >= next.length) return
       const [item] = next.splice(index, 1)
-      if (!item) return
       next.splice(targetIndex, 0, item)
       try {
         await fetchJson<PendingMessagesResponse>(
@@ -1191,28 +1544,63 @@ export function PiWebAppShell({
   }, [activeSessionId, renameValue, sessionState.sessionFile, viewerContextId])
 
   const deleteSession = React.useCallback(async () => {
-    if (!viewerContextId || !sessionState.sessionFile) return
+    if (!viewerContextId || deleteTargets.length === 0) return
+
+    const orderedTargets = [
+      ...deleteTargets.filter(
+        (target) => target.path && target.path !== sessionState.sessionFile
+      ),
+      ...deleteTargets.filter(
+        (target) => target.path && target.path === sessionState.sessionFile
+      ),
+    ]
+
     try {
-      const response = await fetchJson<DeleteSessionResponse>(
-        buildRequestUrl("/api/session/delete", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: sessionState.sessionFile }),
-        }
+      for (const target of orderedTargets) {
+        if (!target.path) continue
+
+        const response = await fetchJson<DeleteSessionResponse>(
+          buildRequestUrl("/api/session/delete", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: target.path }),
+          }
+        )
+        if (isApiErrorResponse(response)) throw new Error(response.error)
+      }
+
+      const deletedKeys = new Set(
+        orderedTargets
+          .map((target) => sessionListEntryKey(target))
+          .filter(Boolean)
       )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
-      setDeleteOpen(false)
-      toast.success("Deleted session")
+      setSelectedSidebarSessionKeys((current) =>
+        current.filter((key) => !deletedKeys.has(key))
+      )
+      setSidebarSessionSelectionAnchor((current) =>
+        current && deletedKeys.has(current) ? "" : current
+      )
+      setDeleteTargets([])
+      toast.success(
+        orderedTargets.length === 1
+          ? "Deleted session"
+          : `Deleted ${orderedTargets.length} sessions`
+      )
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete session"
       )
     }
-  }, [activeSessionId, sessionState.sessionFile, viewerContextId])
+  }, [
+    activeSessionId,
+    deleteTargets,
+    sessionState.sessionFile,
+    viewerContextId,
+  ])
 
   const resolveUiRequest = React.useCallback(
     async (body: Record<string, unknown>) => {
@@ -1376,8 +1764,18 @@ export function PiWebAppShell({
         description: `Delete ${currentSessionTitle}`,
         shortcut: "Ctrl+X",
         keywords: ["delete", "remove", "session"],
+        onSelect: openDeleteDialogForCurrentSession,
+      })
+    }
+
+    if (selectedSidebarSessions.length > 0) {
+      commands.push({
+        id: "delete-selected-sessions",
+        title: "Delete selected sidebar sessions",
+        description: `Delete ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
+        keywords: ["delete", "selected", "sidebar", "sessions"],
         onSelect: () => {
-          setDeleteOpen(true)
+          openDeleteDialog(selectedSidebarSessions)
         },
       })
     }
@@ -1389,6 +1787,8 @@ export function PiWebAppShell({
     focusModelSelector,
     focusSessionSearch,
     openAddDirectoryDialog,
+    openDeleteDialog,
+    openDeleteDialogForCurrentSession,
     openForkDialog,
     openRenameDialog,
     openSettingsDialog,
@@ -1396,6 +1796,7 @@ export function PiWebAppShell({
     openStatusDialog,
     openTreeDialog,
     runCompact,
+    selectedSidebarSessions,
     sessionState.availableModels.length,
     sessionState.hideThinkingBlock,
     sessionState.sessionFile,
@@ -1405,9 +1806,6 @@ export function PiWebAppShell({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const ctrlOrMeta = event.ctrlKey || event.metaKey
-      if (!ctrlOrMeta || event.altKey) return
-
       const key = event.key.toLowerCase()
       const modalOpen =
         addDirectoryOpen ||
@@ -1420,6 +1818,45 @@ export function PiWebAppShell({
         settingsOpen ||
         commandPaletteOpen ||
         Boolean(pendingUiRequest)
+
+      const activeElement = document.activeElement
+      const focusedSidebarSessionKey =
+        activeElement instanceof HTMLElement
+          ? (activeElement.dataset.sessionKey?.trim() ?? "")
+          : ""
+      const focusedSidebarSession = focusedSidebarSessionKey
+        ? sidebarSessionEntriesByKey.get(focusedSidebarSessionKey)
+        : undefined
+
+      if (
+        !modalOpen &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !isEditableTarget(event.target)
+      ) {
+        if (
+          key === "delete" ||
+          (key === "backspace" && selectedSidebarSessions.length > 0)
+        ) {
+          const targetsToDelete =
+            selectedSidebarSessions.length > 0
+              ? selectedSidebarSessions
+              : focusedSidebarSession?.path
+                ? [focusedSidebarSession]
+                : []
+
+          if (targetsToDelete.length > 0) {
+            event.preventDefault()
+            openDeleteDialog(targetsToDelete)
+            return
+          }
+        }
+      }
+
+      const ctrlOrMeta = event.ctrlKey || event.metaKey
+      if (!ctrlOrMeta || event.altKey) return
 
       if (key === "/" || key === "?") {
         event.preventDefault()
@@ -1496,7 +1933,7 @@ export function PiWebAppShell({
         if (isEditableTarget(event.target)) return
         if (!sessionState.sessionFile) return
         event.preventDefault()
-        setDeleteOpen(true)
+        openDeleteDialogForCurrentSession()
       }
     }
 
@@ -1514,6 +1951,8 @@ export function PiWebAppShell({
     forkOpen,
     openAddDirectoryDialog,
     openCommandPalette,
+    openDeleteDialog,
+    openDeleteDialogForCurrentSession,
     openForkDialog,
     openRenameDialog,
     openSettingsDialog,
@@ -1521,46 +1960,59 @@ export function PiWebAppShell({
     pendingUiRequest,
     renameOpen,
     runCompact,
+    selectedSidebarSessions,
     sessionState.availableModels.length,
     sessionState.sessionFile,
     settingsOpen,
     shortcutsOpen,
+    sidebarSessionEntriesByKey,
     statusOpen,
     toggleHideThinking,
     treeOpen,
   ])
 
   return (
-    <div className="h-full overflow-hidden bg-background">
-      <div className="grid h-full min-h-0 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)]">
-        <AppSidebar
-          connected={sessionState.connected}
-          sessionSearch={sessionSearch}
-          onSessionSearchChange={setSessionSearch}
-          sessionSearchInputRef={sessionSearchInputRef}
-          visibleDirectories={visibleDirectories}
-          directoryStateByPath={directoryStateByPath}
-          filteredDirectorySessions={filteredDirectorySessions}
-          collapsedDirectories={collapsedDirectories}
-          directoryIndexLoading={directoryIndexLoading}
-          directoryRenderCounts={directoryRenderCounts}
-          activeSessionId={activeSessionId}
-          statusCount={statusCount}
-          currentThemeLabel={currentThemeLabel}
-          onCreateSession={createSession}
-          onOpenAddDirectoryDialog={openAddDirectoryDialog}
-          onOpenCommandPalette={openCommandPalette}
-          onOpenShortcuts={openShortcutsDialog}
-          onOpenStatus={openStatusDialog}
-          onOpenSettings={openSettingsDialog}
-          onToggleDirectory={toggleDirectory}
-          onSelectSession={handleSelectSession}
-          onLoadMoreDirectorySessions={loadMoreDirectorySessions}
-        />
+    <SidebarProvider className="h-full overflow-hidden bg-background">
+      <AppSidebar
+        connected={sessionState.connected}
+        sessionSearch={sessionSearch}
+        onSessionSearchChange={setSessionSearch}
+        sessionSearchInputRef={sessionSearchInputRef}
+        visibleDirectories={visibleDirectories}
+        directoryStateByPath={directoryStateByPath}
+        filteredDirectorySessions={filteredDirectorySessions}
+        collapsedDirectories={collapsedDirectories}
+        directoryIndexLoading={directoryIndexLoading}
+        directoryRenderCounts={directoryRenderCounts}
+        selectedSessionKeys={selectedSidebarSessionKeys}
+        activeSessionId={activeSessionId}
+        statusCount={statusCount}
+        currentThemeLabel={currentThemeLabel}
+        emptyStateText={emptySidebarStateText}
+        allDirectoriesCollapsed={allDirectoriesCollapsed}
+        onCreateSession={createSession}
+        onOpenAddDirectoryDialog={openAddDirectoryDialog}
+        onOpenCommandPalette={openCommandPalette}
+        onOpenShortcuts={openShortcutsDialog}
+        onOpenStatus={openStatusDialog}
+        onOpenSettings={openSettingsDialog}
+        onToggleDirectory={toggleDirectory}
+        onToggleAllDirectories={toggleAllDirectories}
+        onSessionClick={handleSidebarSessionClick}
+        onLoadMoreDirectorySessions={loadMoreDirectorySessions}
+        onDeleteSelectedSessions={() => {
+          openDeleteDialog(selectedSidebarSessions)
+        }}
+        onClearSelectedSessions={() => {
+          setSidebarSelection([])
+        }}
+      />
 
-        <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-border/70 px-6 py-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <SidebarInset className="min-h-0 overflow-hidden">
+        <div className="shrink-0 border-b border-border/70 px-6 py-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex items-start gap-3">
+              <SidebarTrigger className="mt-0.5 shrink-0" />
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold tracking-tight">
@@ -1583,240 +2035,242 @@ export function PiWebAppShell({
                   )}
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={runCompact}>
-                  <SparklesIcon /> Compact
-                </Button>
-                <Button size="sm" variant="outline" onClick={openTreeDialog}>
-                  <WaypointsIcon /> Tree
-                </Button>
-                <Button size="sm" variant="outline" onClick={openForkDialog}>
-                  <SplitIcon /> Fork
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!sessionState.sessionFile}
-                  onClick={openRenameDialog}
-                >
-                  <PencilIcon /> Rename
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!sessionState.sessionFile}
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2Icon /> Delete
-                </Button>
-              </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Model</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <select
-                    ref={modelSelectRef}
-                    className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
-                    value={
-                      sessionState.model
-                        ? `${sessionState.model.provider}/${sessionState.model.id}`
-                        : ""
-                    }
-                    onChange={(event) => void setModel(event.target.value)}
-                  >
-                    {sessionState.availableModels.map((model) => (
-                      <option
-                        key={`${model.provider}/${model.id}`}
-                        value={`${model.provider}/${model.id}`}
-                      >
-                        {model.provider}/{model.name || model.id}
-                      </option>
-                    ))}
-                  </select>
-                </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Thinking</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <select
-                    className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
-                    value={sessionState.thinkingLevel}
-                    onChange={(event) =>
-                      void setThinkingLevel(event.target.value)
-                    }
-                  >
-                    {sessionState.availableThinkingLevels.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Thinking blocks</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleHideThinking}
-                  >
-                    {sessionState.hideThinkingBlock ? "Show" : "Hide"} thinking
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Skills</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {sessionState.availableSkills.length} available
-                </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">Connection</CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <ConnectionBadge connected={sessionState.connected} />
-                </CardContent>
-              </Card>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={runCompact}>
+                <SparklesIcon /> Compact
+              </Button>
+              <Button size="sm" variant="outline" onClick={openTreeDialog}>
+                <WaypointsIcon /> Tree
+              </Button>
+              <Button size="sm" variant="outline" onClick={openForkDialog}>
+                <SplitIcon /> Fork
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!sessionState.sessionFile}
+                onClick={openRenameDialog}
+              >
+                <PencilIcon /> Rename
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!sessionState.sessionFile}
+                onClick={openDeleteDialogForCurrentSession}
+              >
+                <Trash2Icon /> Delete
+              </Button>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden p-6">
-            <Tabs
-              value={currentTab}
-              onValueChange={setCurrentTab}
-              className="flex h-full min-h-0 flex-col gap-6"
+          <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Model</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <select
+                  ref={modelSelectRef}
+                  className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
+                  value={
+                    sessionState.model
+                      ? `${sessionState.model.provider}/${sessionState.model.id}`
+                      : ""
+                  }
+                  onChange={(event) => void setModel(event.target.value)}
+                >
+                  {sessionState.availableModels.map((model) => (
+                    <option
+                      key={`${model.provider}/${model.id}`}
+                      value={`${model.provider}/${model.id}`}
+                    >
+                      {model.provider}/{model.name || model.id}
+                    </option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Thinking</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <select
+                  className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
+                  value={sessionState.thinkingLevel}
+                  onChange={(event) =>
+                    void setThinkingLevel(event.target.value)
+                  }
+                >
+                  {sessionState.availableThinkingLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Thinking blocks</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleHideThinking}
+                >
+                  {sessionState.hideThinkingBlock ? "Show" : "Hide"} thinking
+                </Button>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Skills</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                {sessionState.availableSkills.length} available
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="text-sm">Connection</CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ConnectionBadge connected={sessionState.connected} />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden p-6">
+          <Tabs
+            value={currentTab}
+            onValueChange={setCurrentTab}
+            className="flex h-full min-h-0 flex-col gap-6"
+          >
+            <TabsList variant="line">
+              <TabsTrigger value="session">Session</TabsTrigger>
+              <TabsTrigger value="git">Git</TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value="session"
+              className="flex min-h-0 flex-1 flex-col gap-4"
             >
-              <TabsList variant="line">
-                <TabsTrigger value="session">Session</TabsTrigger>
-                <TabsTrigger value="git">Git</TabsTrigger>
-              </TabsList>
+              <Card className="min-h-0 flex-1">
+                <CardContent className="flex h-full min-h-0 flex-col gap-4 pt-4">
+                  <ScrollArea className="min-h-0 flex-1 pr-4">
+                    {sessionState.items.length > 0 ? (
+                      <div className="space-y-4">
+                        {(() => {
+                          const counts = new Map<string, number>()
+                          return sessionState.items.map((item) => {
+                            const baseKey = conversationItemSignature(item)
+                            const count = (counts.get(baseKey) ?? 0) + 1
+                            counts.set(baseKey, count)
+                            const key = `${baseKey}:${count}`
 
-              <TabsContent
-                value="session"
-                className="flex min-h-0 flex-1 flex-col gap-4"
-              >
-                <Card className="min-h-0 flex-1">
-                  <CardContent className="flex h-full min-h-0 flex-col gap-4 pt-4">
-                    <ScrollArea className="min-h-0 flex-1 pr-4">
-                      {sessionState.items.length > 0 ? (
-                        <div className="space-y-4">
-                          {(() => {
-                            const counts = new Map<string, number>()
-                            return sessionState.items.map((item) => {
-                              const baseKey = conversationItemSignature(item)
-                              const count = (counts.get(baseKey) ?? 0) + 1
-                              counts.set(baseKey, count)
-                              const key = `${baseKey}:${count}`
+                            return item.kind === "user" ? (
+                              <div key={key} className="flex justify-end">
+                                <UserMessageCard item={item} />
+                              </div>
+                            ) : (
+                              <div key={key} className="flex justify-start">
+                                <AssistantMessageCard
+                                  item={item}
+                                  hideThinking={sessionState.hideThinkingBlock}
+                                  hiddenThinkingLabel={
+                                    sessionState.uiState.hiddenThinkingLabel ||
+                                    sessionState.hiddenThinkingPreview
+                                  }
+                                />
+                              </div>
+                            )
+                          })
+                        })()}
+                        <div ref={bottomRef} />
+                      </div>
+                    ) : (
+                      <Empty className="border border-dashed bg-card/60">
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <SparklesIcon />
+                          </EmptyMedia>
+                          <EmptyTitle>
+                            {sessionState.draft
+                              ? "Draft session ready"
+                              : "Start a new conversation"}
+                          </EmptyTitle>
+                          <EmptyDescription>
+                            {sessionState.draft
+                              ? sessionState.cwd
+                                ? `You are in a fresh draft for ${sessionState.cwd}. Unsent composer text is restored per session and directory, matching pi-web.`
+                                : "You are in a fresh draft session. Unsent composer text is restored per session and directory, matching pi-web."
+                              : "This is the native Pi to Go session view backed by the new TypeScript runtime."}
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button onClick={createSession}>New session</Button>
+                        </EmptyContent>
+                      </Empty>
+                    )}
+                  </ScrollArea>
 
-                              return item.kind === "user" ? (
-                                <div key={key} className="flex justify-end">
-                                  <UserMessageCard item={item} />
-                                </div>
-                              ) : (
-                                <div key={key} className="flex justify-start">
-                                  <AssistantMessageCard
-                                    item={item}
-                                    hideThinking={
-                                      sessionState.hideThinkingBlock
-                                    }
-                                    hiddenThinkingLabel={
-                                      sessionState.uiState
-                                        .hiddenThinkingLabel ||
-                                      sessionState.hiddenThinkingPreview
-                                    }
-                                  />
-                                </div>
-                              )
-                            })
-                          })()}
-                          <div ref={bottomRef} />
-                        </div>
-                      ) : (
-                        <Empty className="border border-dashed bg-card/60">
-                          <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                              <SparklesIcon />
-                            </EmptyMedia>
-                            <EmptyTitle>Start a new conversation</EmptyTitle>
-                            <EmptyDescription>
-                              This is the native Pi to Go session view backed by
-                              the new TypeScript runtime.
-                            </EmptyDescription>
-                          </EmptyHeader>
-                          <EmptyContent>
-                            <Button onClick={createSession}>New session</Button>
-                          </EmptyContent>
-                        </Empty>
-                      )}
-                    </ScrollArea>
+                  <ComposerPanel
+                    currentPendingMessages={currentPendingMessages}
+                    composerImages={composerImages}
+                    composerText={composerText}
+                    isSubmitting={isSubmitting}
+                    isStreaming={sessionState.streaming}
+                    fileInputRef={fileInputRef}
+                    onComposerTextChange={updateComposerDraft}
+                    onPickImages={(files) => {
+                      void onPickImages(files)
+                    }}
+                    onRemoveComposerImage={(index) => {
+                      setComposerImages((current) =>
+                        current.filter((_, imageIndex) => imageIndex !== index)
+                      )
+                    }}
+                    onCreateSession={createSession}
+                    onSubmitPrompt={(streamingBehavior) => {
+                      void submitPrompt(streamingBehavior)
+                    }}
+                    onAbort={() => {
+                      void abortSession()
+                    }}
+                    onRemovePendingMessage={(pendingId) => {
+                      void removePendingMessage(pendingId)
+                    }}
+                    onReorderPending={(pendingId, direction) => {
+                      void reorderPending(pendingId, direction)
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                    <ComposerPanel
-                      currentPendingMessages={currentPendingMessages}
-                      composerImages={composerImages}
-                      composerText={composerText}
-                      isSubmitting={isSubmitting}
-                      isStreaming={sessionState.streaming}
-                      fileInputRef={fileInputRef}
-                      onComposerTextChange={setComposerText}
-                      onPickImages={(files) => {
-                        void onPickImages(files)
-                      }}
-                      onRemoveComposerImage={(index) => {
-                        setComposerImages((current) =>
-                          current.filter(
-                            (_, imageIndex) => imageIndex !== index
-                          )
-                        )
-                      }}
-                      onCreateSession={createSession}
-                      onSubmitPrompt={(streamingBehavior) => {
-                        void submitPrompt(streamingBehavior)
-                      }}
-                      onAbort={() => {
-                        void abortSession()
-                      }}
-                      onRemovePendingMessage={(pendingId) => {
-                        void removePendingMessage(pendingId)
-                      }}
-                      onReorderPending={(pendingId, direction) => {
-                        void reorderPending(pendingId, direction)
-                      }}
-                    />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent
-                value="git"
-                className="min-h-0 flex-1 space-y-4 overflow-auto"
-              >
-                <GitPanel
-                  gitLoading={gitLoading}
-                  gitStatus={gitStatus}
-                  gitChanges={gitChanges}
-                  cwd={sessionState.cwd}
-                  onRefresh={() => {
-                    void refreshGit()
-                  }}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-        </main>
-      </div>
+            <TabsContent
+              value="git"
+              className="min-h-0 flex-1 space-y-4 overflow-auto"
+            >
+              <GitPanel
+                gitLoading={gitLoading}
+                gitStatus={gitStatus}
+                gitChanges={gitChanges}
+                cwd={sessionState.cwd}
+                onRefresh={() => {
+                  void refreshGit()
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </SidebarInset>
 
       <AppShellCommandPalette
         open={commandPaletteOpen}
@@ -1845,7 +2299,19 @@ export function PiWebAppShell({
           void renameSession()
         }}
         deleteOpen={deleteOpen}
-        onDeleteOpenChange={setDeleteOpen}
+        onDeleteOpenChange={(open) => {
+          if (!open) {
+            setDeleteTargets([])
+          }
+        }}
+        deleteTitle={
+          deleteTargets.length === 1 ? "Delete session" : "Delete sessions"
+        }
+        deleteDescription={
+          deleteTargets.length === 1
+            ? `Delete "${deleteTargets[0]?.title || currentSessionTitle}" from disk?`
+            : `Delete ${deleteTargets.length} selected sessions from disk?`
+        }
         onDeleteSession={() => {
           void deleteSession()
         }}
@@ -1898,6 +2364,6 @@ export function PiWebAppShell({
           void resolveUiRequest(body)
         }}
       />
-    </div>
+    </SidebarProvider>
   )
 }

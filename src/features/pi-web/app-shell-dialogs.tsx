@@ -1,5 +1,8 @@
 import { FolderTreeIcon } from "lucide-react"
 
+import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
+import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
+import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,9 +17,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { APP_SHELL_SHORTCUT_SECTIONS } from "@/features/pi-web/app-shell-shortcuts"
-import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
-import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
-import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 
 type ForkMessage = {
   entryId: string
@@ -36,6 +36,8 @@ type AppShellDialogsProps = {
   onRenameSession: () => void
   deleteOpen: boolean
   onDeleteOpenChange: (open: boolean) => void
+  deleteTitle: string
+  deleteDescription: string
   onDeleteSession: () => void
   forkOpen: boolean
   onForkOpenChange: (open: boolean) => void
@@ -108,6 +110,8 @@ export function AppShellDialogs({
   onRenameSession,
   deleteOpen,
   onDeleteOpenChange,
+  deleteTitle,
+  deleteDescription,
   onDeleteSession,
   forkOpen,
   onForkOpenChange,
@@ -202,10 +206,8 @@ export function AppShellDialogs({
       <Dialog open={deleteOpen} onOpenChange={onDeleteOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete session</DialogTitle>
-            <DialogDescription>
-              This deletes the session file from disk.
-            </DialogDescription>
+            <DialogTitle>{deleteTitle}</DialogTitle>
+            <DialogDescription>{deleteDescription}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => onDeleteOpenChange(false)}>
@@ -451,7 +453,7 @@ export function AppShellDialogs({
                     }
                     onClick={() => onThemeChange(themeOption)}
                   >
-                    {themeOption[0]?.toUpperCase()}
+                    {themeOption[0].toUpperCase()}
                     {themeOption.slice(1)}
                   </Button>
                 ))}
