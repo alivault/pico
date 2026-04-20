@@ -51,3 +51,4 @@ Goal: rebuild `pi-web` natively in this repo with **TanStack Start + Vite+ + sha
 - 2026-04-20: Removed vendored legacy runtime/assets, replaced the home route with a native TanStack Start shell, and ported initial TS server helpers plus git/path endpoints.
 - 2026-04-20: Verified the rewritten shell and initial native endpoints in zellij on `localhost:3142`.
 - 2026-04-20: Committed the cleanup reset as `feat: reset to native tanstack rewrite baseline`.
+- 2026-04-20: Added shared API response types and a live workspace preview in the native shell using the new git/path endpoints.

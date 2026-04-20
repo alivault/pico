@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   FolderTreeIcon,
   GitBranchIcon,
@@ -26,7 +27,16 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  type CompletionItem,
+  type DirectoryResolveResponse,
+  type GitStatusResponse,
+  type GitStatusSummary,
+  isApiErrorResponse,
+  type PathCompletionsResponse,
+} from "@/lib/pi-web-api"
 
 const rewriteMilestones = [
   {
@@ -67,7 +77,97 @@ const rewriteTracks = [
   },
 ]
 
+type WorkspacePreviewState = {
+  loading: boolean
+  cwd?: string
+  gitInline?: string
+  gitTitle?: string
+  pathPreview: Array<CompletionItem>
+}
+
+async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit) {
+  const response = await fetch(input, init)
+  return (await response.json()) as T
+}
+
+function formatGitStatusInline(status?: GitStatusSummary | null) {
+  if (!status) return "No git repo detected"
+  return (
+    status.inline || status.label || status.branch || "Git status available"
+  )
+}
+
 export function PiWebAppShell({ sessionId }: { sessionId?: string }) {
+  const isMountedRef = React.useRef(true)
+  const [workspacePreview, setWorkspacePreview] =
+    React.useState<WorkspacePreviewState>({
+      loading: true,
+      pathPreview: [],
+    })
+
+  React.useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const loadWorkspacePreview = React.useCallback(async () => {
+    setWorkspacePreview((current) => ({ ...current, loading: true }))
+
+    try {
+      const [directoryResponse, gitStatusResponse, pathResponse] =
+        await Promise.all([
+          fetchJson<DirectoryResolveResponse>("/api/directory/resolve", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: "." }),
+          }),
+          fetchJson<GitStatusResponse>("/api/git-status?cwd=."),
+          fetchJson<PathCompletionsResponse>("/api/path-completions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prefix: "./" }),
+          }),
+        ])
+
+      if (isApiErrorResponse(directoryResponse)) {
+        throw new Error(directoryResponse.error)
+      }
+      if (isApiErrorResponse(gitStatusResponse)) {
+        throw new Error(gitStatusResponse.error)
+      }
+      if (isApiErrorResponse(pathResponse)) {
+        throw new Error(pathResponse.error)
+      }
+
+      if (!isMountedRef.current) return
+
+      setWorkspacePreview({
+        loading: false,
+        cwd: directoryResponse.path,
+        gitInline: formatGitStatusInline(gitStatusResponse.gitStatus),
+        gitTitle: gitStatusResponse.gitStatus?.title,
+        pathPreview: pathResponse.items.slice(0, 4),
+      })
+    } catch (error) {
+      if (!isMountedRef.current) return
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load workspace preview"
+      setWorkspacePreview({
+        loading: false,
+        pathPreview: [],
+      })
+      toast.error(message)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void loadWorkspacePreview()
+  }, [loadWorkspacePreview])
+
   return (
     <div className="min-h-svh bg-background">
       <div className="grid min-h-svh lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -118,13 +218,82 @@ export function PiWebAppShell({ sessionId }: { sessionId?: string }) {
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>
-                    Legacy copied JS/CSS/backend files are being removed from
-                    this repo.
+                    Legacy copied JS/CSS/backend files are out of this repo.
                   </p>
                   <p>
                     The next milestone is a native session runtime and
                     SSE-backed UI state.
                   </p>
+                </CardContent>
+              </Card>
+
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Workspace preview</CardTitle>
+                  <CardDescription>
+                    Live data loaded from the new native endpoints.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {workspacePreview.loading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Spinner />
+                      Loading workspace details…
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                          Directory
+                        </div>
+                        <div className="mt-1 text-sm break-all">
+                          {workspacePreview.cwd || "Unavailable"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                          Git
+                        </div>
+                        <div
+                          className="mt-1 text-sm"
+                          title={workspacePreview.gitTitle}
+                        >
+                          {workspacePreview.gitInline || "Unavailable"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                          Path suggestions
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {workspacePreview.pathPreview.length > 0 ? (
+                            workspacePreview.pathPreview.map((item) => (
+                              <span
+                                key={item.value}
+                                className="rounded-full border px-2 py-1 text-xs text-muted-foreground"
+                              >
+                                {item.label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              No suggestions returned.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadWorkspacePreview()}
+                  >
+                    Refresh preview
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -232,6 +401,10 @@ export function PiWebAppShell({ sessionId }: { sessionId?: string }) {
                       so this tab can match pi-web behavior without legacy code.
                     </CardDescription>
                   </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Current shell preview uses the native git status route
+                    already; the full changes UI is next.
+                  </CardContent>
                 </Card>
               </TabsContent>
             </Tabs>
