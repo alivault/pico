@@ -2587,18 +2587,63 @@ export function PiWebAppShell({
       const focusedSidebarSession = focusedSidebarSessionKey
         ? sidebarSessionEntriesByKey.get(focusedSidebarSessionKey)
         : undefined
+      const targetIsSessionSearch =
+        event.target instanceof HTMLInputElement &&
+        event.target === sessionSearchInputRef.current
 
       if (
         !modalOpen &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
-        !event.shiftKey &&
-        !isEditableTarget(event.target)
+        (!isEditableTarget(event.target) || targetIsSessionSearch)
       ) {
         if (
-          key === "delete" ||
-          (key === "backspace" && selectedSidebarSessions.length > 0)
+          (key === "arrowdown" ||
+            key === "arrowup" ||
+            key === "home" ||
+            key === "end") &&
+          renderedSidebarSessionKeys.length > 0
+        ) {
+          const sessionButtons = Array.from(
+            document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+          )
+          const focusedSessionButton =
+            activeElement instanceof HTMLElement
+              ? activeElement.closest<HTMLElement>("[data-sidebar-session-item]")
+              : null
+
+          if (sessionButtons.length > 0) {
+            const currentIndex = focusedSessionButton
+              ? sessionButtons.findIndex((button) => button === focusedSessionButton)
+              : -1
+            const nextIndex =
+              key === "home"
+                ? 0
+                : key === "end"
+                  ? sessionButtons.length - 1
+                  : currentIndex >= 0
+                    ? Math.max(
+                        0,
+                        Math.min(
+                          sessionButtons.length - 1,
+                          currentIndex + (key === "arrowdown" ? 1 : -1)
+                        )
+                      )
+                    : (key === "arrowup" ? sessionButtons.length - 1 : 0)
+
+            event.preventDefault()
+            sessionButtons[nextIndex]?.focus()
+            return
+          }
+        }
+
+        if (
+          !event.shiftKey &&
+          (
+            key === "delete" ||
+            (key === "backspace" && selectedSidebarSessions.length > 0)
+          )
         ) {
           const targetsToDelete =
             selectedSidebarSessions.length > 0
@@ -2732,6 +2777,7 @@ export function PiWebAppShell({
     pendingUiRequest,
     renameOpen,
     runCompact,
+    renderedSidebarSessionKeys,
     selectedSidebarSessions,
     sessionState.availableModels.length,
     sessionState.sessionFile,

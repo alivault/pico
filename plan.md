@@ -112,8 +112,8 @@ Reference: `static/messages.js`
 
 Reference: `static/app.js`, `static/sidebar.js`, `static/shortcuts.js`
 
-- [ ] Restore keyboard navigation parity for the sidebar session list
-- [ ] Restore keyboard navigation parity for list-style dialogs and pickers
+- [x] Restore keyboard navigation parity for the sidebar session list
+- [x] Restore keyboard navigation parity for list-style dialogs and pickers
 - [x] Add per-session row action menu parity inside the sidebar
 - [x] Add directory action menu parity inside the sidebar
 - [ ] Restore directory drag-reorder / sidebar ordering behavior
