@@ -244,7 +244,10 @@ export type FlatTreeNode = {
 }
 
 export function createContextId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return `ctx-${crypto.randomUUID()}`
   }
 
@@ -372,7 +375,9 @@ export function readStoredSessionDoneDesktopNotificationsEnabled() {
   return value == null ? true : value !== "0"
 }
 
-export function previewUrlForImage(image: Pick<PromptImage, "mimeType" | "data">) {
+export function previewUrlForImage(
+  image: Pick<PromptImage, "mimeType" | "data">
+) {
   return `data:${image.mimeType};base64,${image.data}`
 }
 
@@ -474,7 +479,10 @@ export function assistantBlocksFromMessage(message: any) {
   return blocks
 }
 
-export function createCompactionSummaryItem(summary: unknown, tokensBefore: unknown) {
+export function createCompactionSummaryItem(
+  summary: unknown,
+  tokensBefore: unknown
+) {
   return {
     kind: "assistant",
     blocks: [
@@ -543,7 +551,9 @@ export function buildItemsFromSync(sync: StateSyncPayload) {
     }
 
     if (message.role === "compactionSummary") {
-      items.push(createCompactionSummaryItem(message.summary, message.tokensBefore))
+      items.push(
+        createCompactionSummaryItem(message.summary, message.tokensBefore)
+      )
       continue
     }
 
@@ -569,7 +579,9 @@ export function buildItemsFromSync(sync: StateSyncPayload) {
       images: Array.isArray(message?.images)
         ? message.images
             .map((image: unknown) => normalizePromptImage(image))
-            .filter((image: PromptImage | null): image is PromptImage => Boolean(image))
+            .filter((image: PromptImage | null): image is PromptImage =>
+              Boolean(image)
+            )
         : [],
       queued: Boolean(message?.queued ?? true),
       streamingBehavior: message?.streamingBehavior,
@@ -617,7 +629,9 @@ export function relativeTime(value?: string) {
   return `${formatDistanceToNowStrict(date, { addSuffix: true })}`
 }
 
-export function getSessionTitle(summary?: Pick<SessionSummary, "title" | "name">) {
+export function getSessionTitle(
+  summary?: Pick<SessionSummary, "title" | "name">
+) {
   if (summary?.title?.trim()) return summary.title.trim()
   if (summary?.name?.trim()) return summary.name.trim()
   return "New session"
@@ -667,12 +681,14 @@ export function flattenTree(tree: Array<TreeNode>) {
       entry.message?.text,
       entry.summary,
       entry.text,
-      entry.command,
+      entry.message?.command,
       entry.modelId,
       entry.thinkingLevel,
       entry.name,
       entry.label,
-      ...(entry.message?.toolCalls?.map((toolCall) => toolCall.preview || toolCall.name || "") ?? []),
+      ...(entry.message?.toolCalls?.map(
+        (toolCall) => toolCall.preview || toolCall.name || ""
+      ) ?? []),
     ]
 
     flatNodes.push({
@@ -704,5 +720,7 @@ export function filterFlatTree(nodes: Array<FlatTreeNode>, query: string) {
   const normalizedQuery = query.trim().toLowerCase()
   if (!normalizedQuery) return nodes
 
-  return nodes.filter((node) => node.text.toLowerCase().includes(normalizedQuery))
+  return nodes.filter((node) =>
+    node.text.toLowerCase().includes(normalizedQuery)
+  )
 }

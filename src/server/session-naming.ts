@@ -1,6 +1,6 @@
 import { basename } from "node:path"
 
-import { loadPiAi } from "../common.mjs"
+import { loadPiAi } from "@/server/pi-sdk"
 
 const MAX_SESSION_NAME_LENGTH = 48
 const MAX_SESSION_NAME_WORDS = 6
@@ -20,15 +20,15 @@ Rules:
 - Avoid repeating the current folder name unless it is essential.
 - If the prompt is mostly logs or code, infer the likely task from the important nouns and errors.`
 
-function normalizeWhitespace(text) {
-  return typeof text === "string" ? text.replace(/\s+/g, " ").trim() : ""
+function normalizeWhitespace(text: string) {
+  return text.replace(/\s+/g, " ").trim()
 }
 
-function trimTrailingPunctuation(text) {
+function trimTrailingPunctuation(text: string) {
   return text.replace(/[.!?…,:;\-–—\s]+$/g, "").trim()
 }
 
-function stripLeadingFiller(text) {
+function stripLeadingFiller(text: string) {
   const patterns = [
     /^(please\s+)+/i,
     /^(can|could|would|will)\s+you\s+/i,
@@ -45,6 +45,7 @@ function stripLeadingFiller(text) {
 
   let current = text.trim()
   let changed = true
+
   while (changed) {
     changed = false
     for (const pattern of patterns) {
@@ -55,10 +56,14 @@ function stripLeadingFiller(text) {
       }
     }
   }
+
   return current
 }
 
-function truncateSessionName(text, maxLength = MAX_SESSION_NAME_LENGTH) {
+function truncateSessionName(
+  text: string,
+  maxLength = MAX_SESSION_NAME_LENGTH
+) {
   if (text.length <= maxLength) return text
 
   const slice = text.slice(0, Math.max(0, maxLength - 1))
@@ -68,7 +73,7 @@ function truncateSessionName(text, maxLength = MAX_SESSION_NAME_LENGTH) {
   return `${cutoff.trimEnd()}…`
 }
 
-function stripTrailingStopWords(text) {
+function stripTrailingStopWords(text: string) {
   const trailingWords = new Set([
     "a",
     "an",
@@ -85,20 +90,35 @@ function stripTrailingStopWords(text) {
   const words = text.split(" ")
   while (
     words.length > 2 &&
-    trailingWords.has(words[words.length - 1].toLowerCase())
+    trailingWords.has(words[words.length - 1]?.toLowerCase() ?? "")
   ) {
     words.pop()
   }
   return words.join(" ")
 }
 
-export function cleanupSessionNameCandidate(raw) {
+function stringifyNameCandidate(raw: unknown) {
+  if (typeof raw === "string") return raw
+  if (
+    typeof raw === "number" ||
+    typeof raw === "boolean" ||
+    typeof raw === "bigint"
+  ) {
+    return String(raw)
+  }
+
+  try {
+    return JSON.stringify(raw) ?? ""
+  } catch {
+    return ""
+  }
+}
+
+export function cleanupSessionNameCandidate(raw: unknown) {
   if (!raw) return undefined
 
-  let text =
-    String(raw)
-      .split(/\r?\n/)
-      .find((line) => line.trim()) ?? String(raw)
+  const rawText = stringifyNameCandidate(raw)
+  let text = rawText.split(/\r?\n/).find((line) => line.trim()) ?? rawText
   text = text.replace(/^[\s>*`"'#[\]-]+/, "")
   text = text.replace(/^(title|session title|name)\s*:\s*/i, "")
   text = normalizeWhitespace(text)
@@ -120,9 +140,9 @@ export function cleanupSessionNameCandidate(raw) {
   return text || undefined
 }
 
-function simplifyPromptForSessionName(text) {
+function simplifyPromptForSessionName(text: string) {
   return normalizeWhitespace(
-    String(text)
+    text
       .replace(/```[\s\S]*?```/g, " code ")
       .replace(/`([^`]+)`/g, "$1")
       .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
@@ -130,7 +150,10 @@ function simplifyPromptForSessionName(text) {
   )
 }
 
-export function deriveHeuristicSessionNameAttempt(text, imageCount) {
+export function deriveHeuristicSessionNameAttempt(
+  text: string,
+  imageCount: number
+) {
   const simplified = simplifyPromptForSessionName(text)
   if (!simplified) {
     return imageCount > 0
@@ -149,14 +172,16 @@ export function deriveHeuristicSessionNameAttempt(text, imageCount) {
     return { name: IMAGE_ONLY_SESSION_NAME }
   }
 
-  return { reason: "first prompt did not contain a usable title after cleanup" }
+  return {
+    reason: "first prompt did not contain a usable title after cleanup",
+  }
 }
 
-export function deriveHeuristicSessionName(text, imageCount) {
+export function deriveHeuristicSessionName(text: string, imageCount: number) {
   return deriveHeuristicSessionNameAttempt(text, imageCount).name
 }
 
-export function summarizePromptContent(content) {
+export function summarizePromptContent(content: unknown) {
   if (typeof content === "string") {
     return { text: content, imageCount: 0 }
   }
@@ -169,10 +194,13 @@ export function summarizePromptContent(content) {
   const text = content
     .map((block) => {
       if (!block || typeof block !== "object") return ""
-      if (block.type === "text" && typeof block.text === "string") {
-        return block.text
+      if (
+        (block as { type?: unknown; text?: unknown }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string"
+      ) {
+        return (block as { text: string }).text
       }
-      if (block.type === "image") {
+      if ((block as { type?: unknown }).type === "image") {
         imageCount += 1
       }
       return ""
@@ -182,11 +210,16 @@ export function summarizePromptContent(content) {
   return { text, imageCount }
 }
 
-export function buildSessionNamePrompt(prompt, cwdBasename, imageCount) {
+export function buildSessionNamePrompt(
+  prompt: string,
+  cwdBasename: string,
+  imageCount: number
+) {
   const normalizedPrompt = normalizeWhitespace(prompt).slice(
     0,
     MAX_SESSION_NAME_PROMPT_CHARS
   )
+
   return [
     `Current folder: ${cwdBasename || "unknown"}`,
     imageCount > 0 ? `Attached images: ${imageCount}` : "",
@@ -198,7 +231,26 @@ export function buildSessionNamePrompt(prompt, cwdBasename, imageCount) {
     .join("\n")
 }
 
-export async function generateSessionNameWithLlm(entry, text, imageCount) {
+export async function generateSessionNameWithLlm(
+  entry: {
+    cwd: string
+    services: {
+      modelRegistry: {
+        find: (provider: string, id: string) => any
+        getApiKeyAndHeaders: (model: any) => Promise<
+          | {
+              ok: true
+              apiKey?: string
+              headers?: Record<string, string>
+            }
+          | { ok: false; error?: string }
+        >
+      }
+    }
+  },
+  text: string,
+  imageCount: number
+) {
   const model = entry.services.modelRegistry.find(
     "openai-codex",
     "gpt-5.4-mini"
@@ -250,9 +302,10 @@ export async function generateSessionNameWithLlm(entry, text, imageCount) {
   const raw = Array.isArray(response?.content)
     ? response.content
         .filter(
-          (block) => block?.type === "text" && typeof block.text === "string"
+          (block: { type?: unknown; text?: unknown }) =>
+            block?.type === "text" && typeof block.text === "string"
         )
-        .map((block) => block.text)
+        .map((block: { text: string }) => block.text)
         .join(" ")
     : ""
 

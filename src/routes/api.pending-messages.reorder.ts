@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { createLegacyProxyHandlers } from "@/server/legacy-pi-web"
+import { createNotImplementedHandlers } from "@/server/not-implemented"
 
 export const Route = createFileRoute("/api/pending-messages/reorder")({
   server: {
-    handlers: createLegacyProxyHandlers("/api/pending-messages/reorder", [
+    handlers: createNotImplementedHandlers("/api/pending-messages/reorder", [
       "POST",
     ]),
   },

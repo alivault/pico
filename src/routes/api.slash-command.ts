@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { createLegacyProxyHandlers } from "@/server/legacy-pi-web"
+import { createNotImplementedHandlers } from "@/server/not-implemented"
 
 export const Route = createFileRoute("/api/slash-command")({
   server: {
-    handlers: createLegacyProxyHandlers("/api/slash-command", ["POST"]),
+    handlers: createNotImplementedHandlers("/api/slash-command", ["POST"]),
   },
 })

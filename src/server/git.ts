@@ -1,0 +1,649 @@
+import { spawn } from "node:child_process"
+
+export type GitStatusSummary = {
+  branch?: string
+  detached: boolean
+  revision?: string
+  dirty: boolean
+  ahead: number
+  behind: number
+  inline: string
+  label: string
+  title: string
+}
+
+export type GitChangeFile = {
+  status: string
+  path: string
+  previousPath?: string
+  linesAdded?: number
+  linesDeleted?: number
+}
+
+export type GitLocalBranch = {
+  name: string
+  current: boolean
+  upstream?: string
+  ahead: number
+  behind: number
+  upstreamGone: boolean
+  hash?: string
+  subject?: string
+  relativeDate?: string
+}
+
+export type GitRemoteBranch = {
+  name: string
+  hash?: string
+  subject?: string
+  relativeDate?: string
+}
+
+export type GitChangesSummary = {
+  files: Array<GitChangeFile>
+  localBranches: Array<GitLocalBranch>
+  remoteBranches: Array<GitRemoteBranch>
+  commits: Array<string>
+  unpushedCommitShortHashes: Array<string>
+}
+
+const GIT_STATUS_CACHE_TTL_MS = 5_000
+const GIT_CHANGES_CACHE_TTL_MS = 5_000
+const GIT_COMMITS_LIMIT = 20
+
+const gitStatusCache = new Map<
+  string,
+  { value: GitStatusSummary | null; expiresAt: number }
+>()
+const gitChangesCache = new Map<
+  string,
+  { value: GitChangesSummary | null; expiresAt: number }
+>()
+
+async function runCommand(
+  command: string,
+  args: Array<string>,
+  { cwd, timeoutMs = 2_000 }: { cwd?: string; timeoutMs?: number } = {}
+) {
+  return await new Promise<{
+    code: number | undefined
+    stdout: string
+    stderr: string
+    error?: unknown
+    timedOut?: boolean
+  }>((resolveResult) => {
+    let child: ReturnType<typeof spawn>
+    try {
+      child = spawn(command, args, {
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+    } catch (error) {
+      resolveResult({ code: undefined, stdout: "", stderr: "", error })
+      return
+    }
+
+    let stdout = ""
+    let stderr = ""
+    let finished = false
+    let timeoutId: NodeJS.Timeout | undefined
+
+    const finish = (value: {
+      code: number | undefined
+      stdout: string
+      stderr: string
+      error?: unknown
+      timedOut?: boolean
+    }) => {
+      if (finished) return
+      finished = true
+      if (timeoutId) clearTimeout(timeoutId)
+      resolveResult(value)
+    }
+
+    const childStdout = child.stdout
+    const childStderr = child.stderr
+    if (!childStdout || !childStderr) {
+      finish({ code: undefined, stdout, stderr })
+      return
+    }
+
+    childStdout.setEncoding("utf8")
+    childStderr.setEncoding("utf8")
+    childStdout.on("data", (chunk) => {
+      stdout += chunk
+    })
+    childStderr.on("data", (chunk) => {
+      stderr += chunk
+    })
+    child.on("error", (error) => {
+      finish({ code: undefined, stdout, stderr, error })
+    })
+    child.on("close", (code) => {
+      finish({ code: code ?? undefined, stdout, stderr })
+    })
+
+    if (timeoutMs > 0) {
+      timeoutId = setTimeout(() => {
+        child.kill("SIGTERM")
+        finish({ code: undefined, stdout, stderr, timedOut: true })
+      }, timeoutMs)
+    }
+  })
+}
+
+function formatDirectoryGitStatus(value: {
+  branch?: string
+  detached?: boolean
+  revision?: string
+  dirty?: boolean
+  ahead?: number
+  behind?: number
+}) {
+  if (!value) return null
+
+  const dirty = Boolean(value.dirty)
+  const ahead =
+    Number.isInteger(value.ahead) && (value.ahead ?? 0) > 0
+      ? (value.ahead ?? 0)
+      : 0
+  const behind =
+    Number.isInteger(value.behind) && (value.behind ?? 0) > 0
+      ? (value.behind ?? 0)
+      : 0
+
+  if (value.detached) {
+    const revision =
+      typeof value.revision === "string" ? value.revision.trim() : ""
+    const inline = ["detached", revision || undefined].filter(Boolean).join(" ")
+    const label = revision ? `Detached HEAD (${revision})` : "Detached HEAD"
+    const titleParts = [label]
+    if (dirty) titleParts.push("modified")
+    if (ahead > 0) titleParts.push(`ahead ${ahead}`)
+    if (behind > 0) titleParts.push(`behind ${behind}`)
+    return {
+      branch: undefined,
+      detached: true,
+      revision: revision || undefined,
+      dirty,
+      ahead,
+      behind,
+      inline,
+      label,
+      title: titleParts.join(" · "),
+    } satisfies GitStatusSummary
+  }
+
+  const branch = typeof value.branch === "string" ? value.branch.trim() : ""
+  if (!branch) return null
+
+  const label = `Main branch (${branch})`
+  const inlineParts = [branch]
+  if (dirty) inlineParts.push("*")
+  if (ahead > 0) inlineParts.push(`↑${ahead}`)
+  if (behind > 0) inlineParts.push(`↓${behind}`)
+  const titleParts = [label]
+  if (dirty) titleParts.push("modified")
+  if (ahead > 0) titleParts.push(`ahead ${ahead}`)
+  if (behind > 0) titleParts.push(`behind ${behind}`)
+
+  return {
+    branch,
+    detached: false,
+    revision:
+      typeof value.revision === "string" && value.revision.trim()
+        ? value.revision.trim()
+        : undefined,
+    dirty,
+    ahead,
+    behind,
+    inline: inlineParts.join(" "),
+    label,
+    title: titleParts.join(" · "),
+  } satisfies GitStatusSummary
+}
+
+function parseCommandNullList(output: string) {
+  return output
+    .split("\u0000")
+    .filter((entry) => typeof entry === "string" && entry.length > 0)
+}
+
+function parseCommandLines(
+  output: string,
+  { trim = false }: { trim?: boolean } = {}
+) {
+  return output
+    .split(/\r?\n/)
+    .map((entry) => (trim ? entry.trim() : entry))
+    .filter((entry) => Boolean(trim ? entry : entry.length))
+}
+
+function parseGitStatusEntries(output: string) {
+  const entries = parseCommandNullList(output)
+  const files: Array<GitChangeFile> = []
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+    if (typeof entry !== "string" || entry.length < 3) continue
+
+    const status = entry.slice(0, 2)
+    const filePath = entry.slice(3)
+    let previousPath: string | undefined
+
+    if (
+      (status.startsWith("R") || status.startsWith("C")) &&
+      typeof entries[index + 1] === "string"
+    ) {
+      previousPath = entries[index + 1]
+      index += 1
+    }
+
+    files.push({
+      status,
+      path: filePath,
+      previousPath,
+    })
+  }
+
+  return files
+}
+
+function parseGitNumstatEntries(output: string) {
+  const entries = parseCommandNullList(output)
+  const diffs = new Map<
+    string,
+    {
+      previousPath?: string
+      linesAdded?: number
+      linesDeleted?: number
+    }
+  >()
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+    if (typeof entry !== "string" || !entry.includes("\t")) continue
+
+    const [addedRaw = "", deletedRaw = "", ...pathParts] = entry.split("\t")
+    let filePath = pathParts.join("\t")
+    let previousPath: string | undefined
+
+    if (!filePath) {
+      previousPath =
+        typeof entries[index + 1] === "string" ? entries[index + 1] : undefined
+      filePath =
+        typeof entries[index + 2] === "string" ? entries[index + 2] : ""
+      if (filePath) {
+        index += 2
+      }
+    }
+
+    if (!filePath) continue
+
+    const parsedAdded = Number.parseInt(addedRaw, 10)
+    const parsedDeleted = Number.parseInt(deletedRaw, 10)
+    diffs.set(filePath, {
+      previousPath,
+      linesAdded: Number.isFinite(parsedAdded) ? parsedAdded : undefined,
+      linesDeleted: Number.isFinite(parsedDeleted) ? parsedDeleted : undefined,
+    })
+  }
+
+  return diffs
+}
+
+function parseGitRefRows(output: string) {
+  return parseCommandLines(output)
+    .map((line) => line.split("\u0000"))
+    .filter((fields) =>
+      fields.some((field) => typeof field === "string" && field.length > 0)
+    )
+}
+
+function parseGitBranchTrack(track: string, upstream: string) {
+  const trackValue = typeof track === "string" ? track.trim() : ""
+  const hasUpstream = typeof upstream === "string" && upstream.trim().length > 0
+
+  if (!hasUpstream) {
+    return {
+      ahead: 0,
+      behind: 0,
+      upstreamGone: false,
+    }
+  }
+
+  if (trackValue === "[gone]") {
+    return {
+      ahead: 0,
+      behind: 0,
+      upstreamGone: true,
+    }
+  }
+
+  const aheadMatch = trackValue.match(/ahead\s+(\d+)/i)
+  const behindMatch = trackValue.match(/behind\s+(\d+)/i)
+
+  return {
+    ahead: aheadMatch ? Number.parseInt(aheadMatch[1], 10) || 0 : 0,
+    behind: behindMatch ? Number.parseInt(behindMatch[1], 10) || 0 : 0,
+    upstreamGone: false,
+  }
+}
+
+function parseGitLocalBranches(output: string) {
+  const branches: Array<GitLocalBranch> = []
+
+  for (const fields of parseGitRefRows(output)) {
+    const [
+      headMarker = "",
+      name = "",
+      upstream = "",
+      track = "",
+      hash = "",
+      subject = "",
+      relativeDate = "",
+    ] = fields
+    const branchName = typeof name === "string" ? name.trim() : ""
+    if (!branchName) continue
+
+    const trackInfo = parseGitBranchTrack(track, upstream)
+    branches.push({
+      name: branchName,
+      current: headMarker.trim() === "*",
+      upstream:
+        typeof upstream === "string" && upstream.trim()
+          ? upstream.trim()
+          : undefined,
+      ahead: trackInfo.ahead,
+      behind: trackInfo.behind,
+      upstreamGone: trackInfo.upstreamGone,
+      hash: typeof hash === "string" && hash.trim() ? hash.trim() : undefined,
+      subject:
+        typeof subject === "string" && subject.trim()
+          ? subject.trim()
+          : undefined,
+      relativeDate:
+        typeof relativeDate === "string" && relativeDate.trim()
+          ? relativeDate.trim()
+          : undefined,
+    })
+  }
+
+  branches.sort((left, right) => {
+    if (left.current !== right.current) {
+      return left.current ? -1 : 1
+    }
+    return left.name.localeCompare(right.name)
+  })
+
+  return branches
+}
+
+function parseGitRemoteBranches(output: string) {
+  const branches: Array<GitRemoteBranch> = []
+
+  for (const fields of parseGitRefRows(output)) {
+    const [name = "", hash = "", subject = "", relativeDate = ""] = fields
+    const branchName = typeof name === "string" ? name.trim() : ""
+    if (
+      !branchName ||
+      !branchName.includes("/") ||
+      /\/HEAD$/i.test(branchName)
+    ) {
+      continue
+    }
+
+    branches.push({
+      name: branchName,
+      hash: typeof hash === "string" && hash.trim() ? hash.trim() : undefined,
+      subject:
+        typeof subject === "string" && subject.trim()
+          ? subject.trim()
+          : undefined,
+      relativeDate:
+        typeof relativeDate === "string" && relativeDate.trim()
+          ? relativeDate.trim()
+          : undefined,
+    })
+  }
+
+  return branches
+}
+
+async function isInsideWorkTree(cwd: string) {
+  const insideWorkTree = await runCommand(
+    "git",
+    ["rev-parse", "--is-inside-work-tree"],
+    {
+      cwd,
+      timeoutMs: 1_500,
+    }
+  )
+
+  return insideWorkTree.code === 0 && insideWorkTree.stdout.trim() === "true"
+}
+
+export async function readDirectoryGitStatus(
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
+) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (force) {
+    gitStatusCache.delete(normalizedCwd)
+  }
+
+  const cached = gitStatusCache.get(normalizedCwd)
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    gitStatusCache.set(normalizedCwd, {
+      value: null,
+      expiresAt: Date.now() + GIT_STATUS_CACHE_TTL_MS,
+    })
+    return null
+  }
+
+  const [branchResult, revisionResult, dirtyResult, upstreamResult] =
+    await Promise.all([
+      runCommand("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }),
+      runCommand("git", ["rev-parse", "--short", "HEAD"], {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }),
+      runCommand("git", ["status", "--porcelain"], {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }),
+      runCommand(
+        "git",
+        ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: 1_500,
+        }
+      ),
+    ])
+
+  const upstreamCounts = upstreamResult.stdout.trim().split(/\s+/)
+  const ahead =
+    upstreamResult.code === 0
+      ? Number.parseInt(upstreamCounts[0] || "0", 10) || 0
+      : 0
+  const behind =
+    upstreamResult.code === 0
+      ? Number.parseInt(upstreamCounts[1] || "0", 10) || 0
+      : 0
+
+  const value = formatDirectoryGitStatus({
+    branch: branchResult.code === 0 ? branchResult.stdout : "",
+    detached: branchResult.code !== 0,
+    revision: revisionResult.code === 0 ? revisionResult.stdout : "",
+    dirty: dirtyResult.code === 0 && Boolean(dirtyResult.stdout.trim()),
+    ahead,
+    behind,
+  })
+
+  gitStatusCache.set(normalizedCwd, {
+    value,
+    expiresAt: Date.now() + GIT_STATUS_CACHE_TTL_MS,
+  })
+
+  return value
+}
+
+export async function readDirectoryGitChanges(
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
+) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (force) {
+    gitChangesCache.delete(normalizedCwd)
+  }
+
+  const cached = gitChangesCache.get(normalizedCwd)
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    gitChangesCache.set(normalizedCwd, {
+      value: null,
+      expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+    })
+    return null
+  }
+
+  const [
+    statusResult,
+    numstatResult,
+    localBranchesResult,
+    remoteBranchesResult,
+    commitsResult,
+    unpushedResult,
+  ] = await Promise.all([
+    runCommand(
+      "git",
+      [
+        "status",
+        "--porcelain",
+        "-z",
+        "--find-renames=50%",
+        "--untracked-files=all",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand("git", ["diff", "--numstat", "-z", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand(
+      "git",
+      [
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)",
+        "refs/heads",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand(
+      "git",
+      [
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(refname:short)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)",
+        "refs/remotes",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand(
+      "git",
+      [
+        "log",
+        "--graph",
+        "--pretty=format:%h%x09%s",
+        "--abbrev-commit",
+        "--date-order",
+        "-n",
+        String(GIT_COMMITS_LIMIT),
+        "--no-color",
+        "HEAD",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand(
+      "git",
+      ["rev-list", "--abbrev-commit", "--abbrev=7", "@{upstream}..HEAD"],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+  ])
+
+  const numstatByPath =
+    numstatResult.code === 0
+      ? parseGitNumstatEntries(numstatResult.stdout)
+      : new Map()
+  const files =
+    statusResult.code === 0
+      ? parseGitStatusEntries(statusResult.stdout).map((file) => {
+          const diff = numstatByPath.get(file.path)
+          if (!diff) {
+            return file
+          }
+
+          return {
+            ...file,
+            linesAdded: diff.linesAdded,
+            linesDeleted: diff.linesDeleted,
+          }
+        })
+      : []
+
+  const value: GitChangesSummary = {
+    files,
+    localBranches:
+      localBranchesResult.code === 0
+        ? parseGitLocalBranches(localBranchesResult.stdout)
+        : [],
+    remoteBranches:
+      remoteBranchesResult.code === 0
+        ? parseGitRemoteBranches(remoteBranchesResult.stdout)
+        : [],
+    commits:
+      commitsResult.code === 0 ? parseCommandLines(commitsResult.stdout) : [],
+    unpushedCommitShortHashes:
+      unpushedResult.code === 0
+        ? parseCommandLines(unpushedResult.stdout, { trim: true })
+        : [],
+  }
+
+  gitChangesCache.set(normalizedCwd, {
+    value,
+    expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+  })
+
+  return value
+}

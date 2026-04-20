@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { createLegacyProxyHandlers } from "@/server/legacy-pi-web"
+import { createNotImplementedHandlers } from "@/server/not-implemented"
 
 export const Route = createFileRoute("/api/session/delete")({
   server: {
-    handlers: createLegacyProxyHandlers("/api/session/delete", ["POST"]),
+    handlers: createNotImplementedHandlers("/api/session/delete", ["POST"]),
   },
 })

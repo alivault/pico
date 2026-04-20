@@ -7,7 +7,7 @@ import { nitro } from "nitro/vite"
 
 const config = defineConfig({
   lint: {
-    ignorePatterns: ["legacy/**", "src/routeTree.gen.ts"],
+    ignorePatterns: ["src/routeTree.gen.ts"],
     options: { typeAware: true, typeCheck: true },
   },
   fmt: {
