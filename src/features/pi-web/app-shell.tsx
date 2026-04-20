@@ -104,6 +104,8 @@ import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
+  RECENT_DIRECTORIES_LIMIT,
+  RECENT_DIRECTORIES_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -123,6 +125,7 @@ import {
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
   readStoredPromptDraft,
+  readStoredRecentDirectories,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
@@ -283,6 +286,7 @@ export function PiWebAppShell({
   const [gitLoading, setGitLoading] = React.useState(false)
   const [addDirectoryOpen, setAddDirectoryOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
+  const [recentDirectories, setRecentDirectories] = React.useState<Array<string>>([])
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [renameTarget, setRenameTarget] = React.useState<SessionListEntry | null>(
     null
@@ -412,6 +416,7 @@ export function PiWebAppShell({
       readStoredSessionDoneDesktopNotificationsEnabled()
     )
     setHideToolBlocks(readStoredHideToolBlocks())
+    setRecentDirectories(readStoredRecentDirectories())
     setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
 
@@ -917,6 +922,19 @@ export function PiWebAppShell({
     [sessionState.cwd, sidebarDirectories]
   )
 
+  const knownDirectories = React.useMemo(
+    () =>
+      normalizeStoredDirectoryList([
+        ...sidebarDirectories,
+        sessionState.cwd || "",
+        ...Array.from(directoryStateByPath.keys()),
+        ...Object.values(directoryIndexes).flatMap((entries) =>
+          entries.map((entry) => entry.cwd || "")
+        ),
+      ]),
+    [directoryIndexes, directoryStateByPath, sessionState.cwd, sidebarDirectories]
+  )
+
   const {
     visibleDirectories,
     filteredDirectorySessions,
@@ -1234,39 +1252,68 @@ export function PiWebAppShell({
     }))
   }, [])
 
-  const addDirectory = React.useCallback(async () => {
-    if (!viewerContextId) return
-    try {
-      const response = await fetchJson<DirectoryResolveResponse>(
-        buildRequestUrl("/api/directory/resolve", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: directoryInput }),
-        }
+  const rememberRecentDirectory = React.useCallback((directory: string) => {
+    const normalizedDirectory = directory.trim()
+    if (!normalizedDirectory) return
+
+    setRecentDirectories((current) => {
+      const next = normalizeStoredDirectoryList([
+        normalizedDirectory,
+        ...current,
+      ]).slice(0, RECENT_DIRECTORIES_LIMIT)
+      safeLocalStorageSetItem(
+        RECENT_DIRECTORIES_STORAGE_KEY,
+        JSON.stringify(next)
       )
-      if (isApiErrorResponse(response)) {
-        throw new Error(response.error)
-      }
-      setSidebarDirectories((current) => {
-        const next = normalizeStoredDirectoryList([...current, response.path])
-        safeLocalStorageSetItem(
-          SIDEBAR_DIRECTORIES_STORAGE_KEY,
-          JSON.stringify(next)
+      return next
+    })
+  }, [])
+
+  const addDirectoryPath = React.useCallback(
+    async (path: string) => {
+      if (!viewerContextId) return
+      const requestedPath = path.trim()
+      if (!requestedPath) return
+
+      try {
+        const response = await fetchJson<DirectoryResolveResponse>(
+          buildRequestUrl("/api/directory/resolve", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: requestedPath }),
+          }
         )
-        return next
-      })
-      setAddDirectoryOpen(false)
-      void loadDirectoryIndex(response.path)
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to add directory"
-      )
-    }
-  }, [activeSessionId, directoryInput, loadDirectoryIndex, viewerContextId])
+        if (isApiErrorResponse(response)) {
+          throw new Error(response.error)
+        }
+        setSidebarDirectories((current) => {
+          const next = normalizeStoredDirectoryList([...current, response.path])
+          safeLocalStorageSetItem(
+            SIDEBAR_DIRECTORIES_STORAGE_KEY,
+            JSON.stringify(next)
+          )
+          return next
+        })
+        rememberRecentDirectory(response.path)
+        setDirectoryInput("")
+        setAddDirectoryOpen(false)
+        void loadDirectoryIndex(response.path)
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to add directory"
+        )
+      }
+    },
+    [activeSessionId, loadDirectoryIndex, rememberRecentDirectory, viewerContextId]
+  )
+
+  const addDirectory = React.useCallback(async () => {
+    await addDirectoryPath(directoryInput)
+  }, [addDirectoryPath, directoryInput])
 
   const toggleDirectory = React.useCallback((directory: string) => {
     setCollapsedDirectories((current) => {
@@ -1321,6 +1368,9 @@ export function PiWebAppShell({
 
     const nextCwd =
       cwdOverride || sessionState.cwd || readStoredDraftDirectory() || undefined
+    if (nextCwd) {
+      rememberRecentDirectory(nextCwd)
+    }
     const ownerKey = promptDraftKey({ cwd: nextCwd })
     setDraftSessionLoadingOwnerKey(ownerKey)
 
@@ -1349,6 +1399,7 @@ export function PiWebAppShell({
     }
   }, [
     activeSessionId,
+    rememberRecentDirectory,
     restorePendingDraftPrompt,
     sessionState.cwd,
     viewerContextId,
@@ -3176,8 +3227,15 @@ export function PiWebAppShell({
         onAddDirectoryOpenChange={setAddDirectoryOpen}
         directoryInput={directoryInput}
         onDirectoryInputChange={setDirectoryInput}
+        openedDirectories={sidebarDirectories}
+        currentDirectory={sessionState.cwd}
+        recentDirectories={recentDirectories}
+        knownDirectories={knownDirectories}
         onAddDirectory={() => {
           void addDirectory()
+        }}
+        onAddDirectoryPath={(path) => {
+          void addDirectoryPath(path)
         }}
         renameOpen={renameOpen}
         onRenameOpenChange={(open) => {

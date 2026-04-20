@@ -130,11 +130,11 @@ Reference: `static/dialogs.js`
   - [x] cycle reasoning level
   - [x] parity wording / search terms for existing commands
   - [x] selection-aware actions when sidebar multi-select exists
-- [ ] Rebuild add-directory dialog parity
-  - [ ] searchable results
-  - [ ] recent directories
-  - [ ] known directories
-  - [ ] keyboard navigation / first-result open behavior
+- [x] Rebuild add-directory dialog parity
+  - [x] searchable results
+  - [x] recent directories
+  - [x] known directories
+  - [x] keyboard navigation / first-result open behavior
 - [ ] Rebuild fork dialog parity
   - [ ] filter/search fork points
   - [ ] keyboard navigation
