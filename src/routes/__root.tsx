@@ -36,7 +36,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-svh bg-background text-foreground antialiased">
+      <body className="h-svh overflow-hidden bg-background text-foreground antialiased">
         <AppProviders>
           {children}
           <TanStackDevtools

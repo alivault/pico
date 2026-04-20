@@ -1531,8 +1531,8 @@ export function PiWebAppShell({
   ])
 
   return (
-    <div className="min-h-svh bg-background">
-      <div className="grid min-h-svh lg:grid-cols-[340px_minmax(0,1fr)]">
+    <div className="h-full overflow-hidden bg-background">
+      <div className="grid h-full min-h-0 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)]">
         <AppSidebar
           connected={sessionState.connected}
           sessionSearch={sessionSearch}
@@ -1558,8 +1558,8 @@ export function PiWebAppShell({
           onLoadMoreDirectorySessions={loadMoreDirectorySessions}
         />
 
-        <main className="flex min-h-svh min-w-0 flex-col">
-          <div className="border-b border-border/70 px-6 py-4">
+        <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-border/70 px-6 py-4">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1693,7 +1693,7 @@ export function PiWebAppShell({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 p-6">
+          <div className="min-h-0 flex-1 overflow-hidden p-6">
             <Tabs
               value={currentTab}
               onValueChange={setCurrentTab}
@@ -1799,7 +1799,10 @@ export function PiWebAppShell({
                 </Card>
               </TabsContent>
 
-              <TabsContent value="git" className="space-y-4">
+              <TabsContent
+                value="git"
+                className="min-h-0 flex-1 space-y-4 overflow-auto"
+              >
                 <GitPanel
                   gitLoading={gitLoading}
                   gitStatus={gitStatus}

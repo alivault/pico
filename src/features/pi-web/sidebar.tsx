@@ -90,8 +90,8 @@ export function AppSidebar({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    <aside className="border-border/70 bg-card/50 lg:border-r">
-      <div className="flex h-full flex-col">
+    <aside className="min-h-0 overflow-hidden border-border/70 bg-card/50 lg:border-r">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="border-b border-border/70 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
