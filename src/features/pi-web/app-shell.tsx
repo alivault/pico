@@ -88,6 +88,7 @@ import {
 } from "@/features/pi-web/session-done-notifications"
 import {
   AssistantMessageCard,
+  MessagesWorkingIndicator,
   UserMessageCard,
   conversationItemSignature,
 } from "@/features/pi-web/conversation-view"
@@ -2930,6 +2931,11 @@ export function PiWebAppShell({
                               )
                             })
                           })()}
+                          {workingState ? (
+                            <div className="flex justify-start">
+                              <MessagesWorkingIndicator state={workingState} />
+                            </div>
+                          ) : null}
                           <div ref={bottomRef} />
                         </div>
                       ) : (

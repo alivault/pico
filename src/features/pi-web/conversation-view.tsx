@@ -5,7 +5,7 @@
 import * as React from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { CheckIcon, CopyIcon, WrenchIcon } from "lucide-react"
+import { CheckIcon, ChevronRightIcon, CopyIcon, WrenchIcon } from "lucide-react"
 
 import type { ConversationItem, PromptImage } from "@/lib/pi-web"
 import type { HighlightResponse } from "@/lib/pi-web-api"
@@ -225,15 +225,326 @@ export function conversationItemSignature(item: ConversationItem) {
   }`
 }
 
+function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
+  if (item.streamingBehavior === "steer") return "Steer"
+  if (item.queued || item.streamingBehavior === "followUp") return "Queue"
+  return ""
+}
+
+function toolDisplayName(name?: string) {
+  switch (name) {
+    case "bash":
+      return "Shell"
+    case "read":
+      return "Read"
+    case "write":
+      return "Write"
+    case "edit":
+      return "Edit"
+    case "grep":
+      return "Search"
+    case "find":
+      return "Find"
+    case "ls":
+      return "List"
+    default:
+      return name || "Tool"
+  }
+}
+
+function normalizeToolArgs(args: unknown) {
+  if (!args) return undefined
+  if (typeof args === "object") {
+    return args as Record<string, unknown>
+  }
+  if (typeof args !== "string") return undefined
+
+  try {
+    const parsed = JSON.parse(args)
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function getToolArgText(args: Record<string, unknown> | undefined, key: string) {
+  const value = args?.[key]
+  return typeof value === "string" && value.trim() ? value.trim() : ""
+}
+
+function toolCommandPreview(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+  if (block.type !== "tool") return ""
+
+  if (typeof block.args === "string" && block.args.trim()) {
+    return block.args.trim()
+  }
+
+  const args = normalizeToolArgs(block.args)
+  return (
+    getToolArgText(args, "description") ||
+    getToolArgText(args, "command") ||
+    getToolArgText(args, "path") ||
+    getToolArgText(args, "filePath")
+  )
+}
+
+function toolReadLocation(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+  if (block.type !== "tool") return ""
+
+  const args = normalizeToolArgs(block.args)
+  const filePath = getToolArgText(args, "path") || getToolArgText(args, "filePath")
+  const offset = args?.offset
+  const limit = args?.limit
+
+  if (typeof offset === "number" && typeof limit === "number" && limit > 0) {
+    return `${filePath}:${offset}-${offset + limit - 1}`
+  }
+  if (typeof offset === "number") {
+    return `${filePath}:${offset}`
+  }
+  if (typeof limit === "number" && limit > 0) {
+    return `${filePath} limit=${limit}`.trim()
+  }
+  return filePath
+}
+
+function toolSummary(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+  if (block.type !== "tool") return ""
+  const preview = block.name === "read" ? toolReadLocation(block) : toolCommandPreview(block)
+  if (preview) return preview
+  if (block.running) return "Running"
+  if (block.isError) return "Failed"
+  return "Done"
+}
+
+type ToolDiffLine = {
+  type: "add" | "remove" | "context"
+  lineNumber?: string
+  text: string
+}
+
+function parseToolDiffLine(line: string): ToolDiffLine | null {
+  if (!line) return null
+  const match = line.match(/^([+\- ])(\s*\d*)\s(.*)$/)
+  if (!match) {
+    return { type: "context", text: line }
+  }
+
+  return {
+    type: match[1] === "+" ? "add" : match[1] === "-" ? "remove" : "context",
+    lineNumber: match[2] || undefined,
+    text: match[3],
+  }
+}
+
+function toolDiffPreview(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+  if (block.type !== "tool" || block.name !== "edit" || block.isError) return []
+  const diff =
+    block.details &&
+    typeof block.details === "object" &&
+    "diff" in block.details &&
+    typeof block.details.diff === "string"
+      ? block.details.diff
+      : ""
+
+  return diff
+    .split("\n")
+    .map(parseToolDiffLine)
+    .filter((line): line is ToolDiffLine => Boolean(line))
+}
+
+function hideSuccessfulToolOutput(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+  return (
+    block.type === "tool" &&
+    !block.isError &&
+    !block.running &&
+    ["edit", "bash", "grep", "find", "ls"].includes(block.name || "")
+  )
+}
+
+function compactionTriggerText(
+  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]
+) {
+  if (block.type !== "compaction") return "Compaction"
+  return block.tokensBefore > 0
+    ? `Compaction: Compacted from ${block.tokensBefore.toLocaleString()} tokens`
+    : "Compaction"
+}
+
+function ToolDiffPreview({ lines }: { lines: Array<ToolDiffLine> }) {
+  const counts = new Map<string, number>()
+
+  return (
+    <pre className="overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5">
+      {lines.map((line) => {
+        const baseKey = `${line.type}:${line.lineNumber || ""}:${line.text}`
+        const count = (counts.get(baseKey) ?? 0) + 1
+        counts.set(baseKey, count)
+
+        return (
+          <div
+            key={`${baseKey}:${count}`}
+            className={cn(
+              "whitespace-pre-wrap font-mono",
+              line.type === "add" && "text-emerald-700 dark:text-emerald-400",
+              line.type === "remove" && "text-red-700 dark:text-red-400",
+              line.type === "context" && "text-muted-foreground"
+            )}
+          >
+            {line.lineNumber ? `${line.lineNumber} ` : ""}
+            {line.text}
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
+function ToolBlockCard({
+  block,
+}: {
+  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number] & {
+    type: "tool"
+  }
+}) {
+  const diffLines = toolDiffPreview(block)
+  const output = hideSuccessfulToolOutput(block) ? "" : block.output
+
+  return (
+    <section
+      className={cn(
+        "rounded-xl border px-3 py-3 text-sm",
+        block.running && "border-amber-500/30 bg-amber-500/5",
+        block.isError && "border-destructive/30 bg-destructive/5",
+        !block.running && !block.isError && "bg-muted/20"
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <WrenchIcon className="text-muted-foreground" />
+            <span>{toolDisplayName(block.name)}</span>
+          </div>
+          {toolSummary(block) ? (
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              {toolSummary(block)}
+            </div>
+          ) : null}
+        </div>
+        {block.running ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Spinner /> Running
+          </span>
+        ) : block.isError ? (
+          <Badge variant="destructive">Error</Badge>
+        ) : (
+          <Badge variant="outline">Done</Badge>
+        )}
+      </div>
+
+      {diffLines.length > 0 ? (
+        <div className="mt-3">
+          <ToolDiffPreview lines={diffLines} />
+        </div>
+      ) : null}
+
+      {output ? (
+        <pre className="mt-3 overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5 whitespace-pre-wrap">
+          {output}
+        </pre>
+      ) : null}
+    </section>
+  )
+}
+
+function CompactionBlockCard({
+  block,
+}: {
+  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number] & {
+    type: "compaction"
+  }
+}) {
+  return (
+    <details className="rounded-xl border bg-muted/20 px-3 py-2">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-foreground">
+        <ChevronRightIcon className="size-4 text-muted-foreground" />
+        <span>{compactionTriggerText(block)}</span>
+      </summary>
+      <div className="mt-3 border-t pt-3">
+        {block.summary.trim() ? (
+          <MarkdownBlock text={block.summary} />
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            No compaction summary available.
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
+export function MessagesWorkingIndicator({
+  state,
+}: {
+  state: {
+    label: string
+    summary?: string
+    done?: boolean
+  }
+}) {
+  const visibleLabel = state.done ? "Done" : state.label
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "flex w-full max-w-3xl items-start gap-3 rounded-xl px-1 py-1 text-sm",
+        state.done ? "text-muted-foreground" : "text-muted-foreground"
+      )}
+    >
+      <span className="mt-0.5 inline-flex items-center justify-center">
+        {state.done ? (
+          <CheckIcon className="size-4 text-emerald-600" />
+        ) : (
+          <Spinner />
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-foreground">{visibleLabel}</div>
+        {state.summary ? (
+          <div className="truncate text-muted-foreground">{state.summary}</div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function UserMessageCard({
   item,
 }: {
   item: Extract<ConversationItem, { kind: "user" }>
 }) {
+  const labelText = userMessageLabel(item)
+
   return (
-    <div className="ml-auto w-full max-w-3xl rounded-2xl border bg-primary/6 p-4 shadow-sm">
+    <div className="ml-auto w-full max-w-3xl rounded-xl border bg-primary/6 px-4 py-3">
+      {labelText ? (
+        <div className="mb-2 flex items-center gap-2">
+          <Badge variant="outline">{labelText}</Badge>
+        </div>
+      ) : null}
+      {item.text ? (
+        <div className="text-sm text-foreground">
+          <MarkdownBlock text={item.text} />
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">Image prompt</div>
+      )}
       {item.images.length > 0 ? (
-        <div className="mb-3 flex flex-wrap gap-3">
+        <div className="mt-3 flex flex-wrap gap-3">
           {item.images.map((image) => (
             <img
               key={promptImageKey(image)}
@@ -244,19 +555,6 @@ export function UserMessageCard({
           ))}
         </div>
       ) : null}
-      {item.text ? (
-        <MarkdownBlock text={item.text} />
-      ) : (
-        <div className="text-sm text-muted-foreground">Image prompt</div>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {item.queued ? <Badge variant="outline">Queued</Badge> : null}
-        {item.streamingBehavior ? (
-          <Badge variant="outline">
-            {item.streamingBehavior === "steer" ? "Steer" : "Follow-up"}
-          </Badge>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -273,7 +571,7 @@ export function AssistantMessageCard({
   hiddenThinkingLabel?: string
 }) {
   return (
-    <div className="w-full max-w-3xl rounded-2xl border bg-card p-4 shadow-sm">
+    <div className="w-full max-w-3xl rounded-2xl border bg-card px-4 py-4">
       <div className="flex flex-col gap-4">
         {(() => {
           const counts = new Map<string, number>()
@@ -291,7 +589,7 @@ export function AssistantMessageCard({
                   return (
                     <div
                       key={key}
-                      className="rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+                      className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
                     >
                       {hiddenThinkingLabel || "Thinking hidden"}
                     </div>
@@ -299,68 +597,27 @@ export function AssistantMessageCard({
                 }
 
                 return (
-                  <div key={key} className="rounded-xl border bg-muted/35 p-3">
-                    <div className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                      Thinking
-                    </div>
+                  <section
+                    key={key}
+                    className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
+                  >
                     <MarkdownBlock text={block.text} />
-                  </div>
+                  </section>
                 )
               case "tool":
                 if (hideToolBlocks) {
                   return null
                 }
 
-                return (
-                  <div key={key} className="rounded-xl border bg-muted/25 p-3 text-sm">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 font-medium">
-                      <Badge variant="outline">
-                        <WrenchIcon data-icon="inline-start" />
-                        Tool
-                      </Badge>
-                      <span>{block.name || "tool"}</span>
-                      {block.running ? (
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          <Spinner /> Running
-                        </span>
-                      ) : null}
-                      {block.isError ? <Badge variant="destructive">Error</Badge> : null}
-                    </div>
-                    {block.args !== undefined ? (
-                      <div className="mb-2 overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs">
-                        <pre>{JSON.stringify(block.args, null, 2)}</pre>
-                      </div>
-                    ) : null}
-                    {block.output ? (
-                      <div className="overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs whitespace-pre-wrap">
-                        <pre>{block.output}</pre>
-                      </div>
-                    ) : null}
-                  </div>
-                )
+                return <ToolBlockCard key={key} block={block} />
               case "compaction":
-                return (
-                  <div key={key} className="rounded-xl border bg-muted/25 p-3 text-sm">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">Compaction</Badge>
-                      <span className="text-muted-foreground">
-                        {block.tokensBefore.toLocaleString()} tokens before
-                      </span>
-                    </div>
-                    <MarkdownBlock text={block.summary} />
-                  </div>
-                )
+                return <CompactionBlockCard key={key} block={block} />
               default:
                 return null
             }
           })
         })()}
       </div>
-      {item.streaming ? (
-        <div className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner /> Streaming…
-        </div>
-      ) : null}
     </div>
   )
 }

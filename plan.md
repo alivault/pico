@@ -105,8 +105,8 @@ Reference: `static/messages.js`
   - [x] scroll-to-bottom button
   - [x] jump-to-last-message button
 - [x] Respect hidden tool-block state in conversation rendering
-- [ ] Audit assistant/tool/thinking/compaction block styling against old `pi-web` and close remaining visual gaps
-- [ ] Match old streaming/working-state polish where still missing
+- [x] Audit assistant/tool/thinking/compaction block styling against old `pi-web` and close remaining visual gaps
+- [x] Match old streaming/working-state polish where still missing
 
 ### 3) Sidebar and navigation parity
 
