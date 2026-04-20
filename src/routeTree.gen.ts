@@ -9,38 +9,362 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as EventsRouteImport } from './routes/events'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiThinkingRouteImport } from './routes/api.thinking'
+import { Route as ApiSlashCommandRouteImport } from './routes/api.slash-command'
+import { Route as ApiPromptRouteImport } from './routes/api.prompt'
+import { Route as ApiPathCompletionsRouteImport } from './routes/api.path-completions'
+import { Route as ApiModelRouteImport } from './routes/api.model'
+import { Route as ApiHighlightRouteImport } from './routes/api.highlight'
+import { Route as ApiGitStatusRouteImport } from './routes/api.git-status'
+import { Route as ApiGitChangesRouteImport } from './routes/api.git-changes'
+import { Route as ApiFileCompletionsRouteImport } from './routes/api.file-completions'
+import { Route as ApiDirectorySessionsIndexRouteImport } from './routes/api.directory-sessions-index'
+import { Route as ApiDirectorySessionsRouteImport } from './routes/api.directory-sessions'
+import { Route as ApiAbortRouteImport } from './routes/api.abort'
+import { Route as ApiUiIdRouteImport } from './routes/api.ui.$id'
+import { Route as ApiSettingsHideThinkingRouteImport } from './routes/api.settings.hide-thinking'
+import { Route as ApiSessionTreeRouteImport } from './routes/api.session.tree'
+import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
+import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
+import { Route as ApiSessionForkRouteImport } from './routes/api.session.fork'
+import { Route as ApiSessionDeleteRouteImport } from './routes/api.session.delete'
+import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pending-messages.reorder'
+import { Route as ApiPendingMessageRemoveRouteImport } from './routes/api.pending-message.remove'
+import { Route as ApiDirectoryResolveRouteImport } from './routes/api.directory.resolve'
+import { Route as ApiSessionTreeLabelRouteImport } from './routes/api.session.tree.label'
 
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiThinkingRoute = ApiThinkingRouteImport.update({
+  id: '/api/thinking',
+  path: '/api/thinking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSlashCommandRoute = ApiSlashCommandRouteImport.update({
+  id: '/api/slash-command',
+  path: '/api/slash-command',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPromptRoute = ApiPromptRouteImport.update({
+  id: '/api/prompt',
+  path: '/api/prompt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPathCompletionsRoute = ApiPathCompletionsRouteImport.update({
+  id: '/api/path-completions',
+  path: '/api/path-completions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiModelRoute = ApiModelRouteImport.update({
+  id: '/api/model',
+  path: '/api/model',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHighlightRoute = ApiHighlightRouteImport.update({
+  id: '/api/highlight',
+  path: '/api/highlight',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitStatusRoute = ApiGitStatusRouteImport.update({
+  id: '/api/git-status',
+  path: '/api/git-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitChangesRoute = ApiGitChangesRouteImport.update({
+  id: '/api/git-changes',
+  path: '/api/git-changes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFileCompletionsRoute = ApiFileCompletionsRouteImport.update({
+  id: '/api/file-completions',
+  path: '/api/file-completions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDirectorySessionsIndexRoute =
+  ApiDirectorySessionsIndexRouteImport.update({
+    id: '/api/directory-sessions-index',
+    path: '/api/directory-sessions-index',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDirectorySessionsRoute = ApiDirectorySessionsRouteImport.update({
+  id: '/api/directory-sessions',
+  path: '/api/directory-sessions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAbortRoute = ApiAbortRouteImport.update({
+  id: '/api/abort',
+  path: '/api/abort',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUiIdRoute = ApiUiIdRouteImport.update({
+  id: '/api/ui/$id',
+  path: '/api/ui/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSettingsHideThinkingRoute = ApiSettingsHideThinkingRouteImport.update({
+  id: '/api/settings/hide-thinking',
+  path: '/api/settings/hide-thinking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionTreeRoute = ApiSessionTreeRouteImport.update({
+  id: '/api/session/tree',
+  path: '/api/session/tree',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionRenameRoute = ApiSessionRenameRouteImport.update({
+  id: '/api/session/rename',
+  path: '/api/session/rename',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionNewRoute = ApiSessionNewRouteImport.update({
+  id: '/api/session/new',
+  path: '/api/session/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionForkRoute = ApiSessionForkRouteImport.update({
+  id: '/api/session/fork',
+  path: '/api/session/fork',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionDeleteRoute = ApiSessionDeleteRouteImport.update({
+  id: '/api/session/delete',
+  path: '/api/session/delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPendingMessagesReorderRoute =
+  ApiPendingMessagesReorderRouteImport.update({
+    id: '/api/pending-messages/reorder',
+    path: '/api/pending-messages/reorder',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPendingMessageRemoveRoute = ApiPendingMessageRemoveRouteImport.update({
+  id: '/api/pending-message/remove',
+  path: '/api/pending-message/remove',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDirectoryResolveRoute = ApiDirectoryResolveRouteImport.update({
+  id: '/api/directory/resolve',
+  path: '/api/directory/resolve',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionTreeLabelRoute = ApiSessionTreeLabelRouteImport.update({
+  id: '/label',
+  path: '/label',
+  getParentRoute: () => ApiSessionTreeRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/events': typeof EventsRoute
+  '/api/abort': typeof ApiAbortRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/file-completions': typeof ApiFileCompletionsRoute
+  '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-status': typeof ApiGitStatusRoute
+  '/api/highlight': typeof ApiHighlightRoute
+  '/api/model': typeof ApiModelRoute
+  '/api/path-completions': typeof ApiPathCompletionsRoute
+  '/api/prompt': typeof ApiPromptRoute
+  '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
+  '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/delete': typeof ApiSessionDeleteRoute
+  '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
+  '/api/ui/$id': typeof ApiUiIdRoute
+  '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/events': typeof EventsRoute
+  '/api/abort': typeof ApiAbortRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/file-completions': typeof ApiFileCompletionsRoute
+  '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-status': typeof ApiGitStatusRoute
+  '/api/highlight': typeof ApiHighlightRoute
+  '/api/model': typeof ApiModelRoute
+  '/api/path-completions': typeof ApiPathCompletionsRoute
+  '/api/prompt': typeof ApiPromptRoute
+  '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
+  '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/delete': typeof ApiSessionDeleteRoute
+  '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
+  '/api/ui/$id': typeof ApiUiIdRoute
+  '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/events': typeof EventsRoute
+  '/api/abort': typeof ApiAbortRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/file-completions': typeof ApiFileCompletionsRoute
+  '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-status': typeof ApiGitStatusRoute
+  '/api/highlight': typeof ApiHighlightRoute
+  '/api/model': typeof ApiModelRoute
+  '/api/path-completions': typeof ApiPathCompletionsRoute
+  '/api/prompt': typeof ApiPromptRoute
+  '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
+  '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/delete': typeof ApiSessionDeleteRoute
+  '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
+  '/api/ui/$id': typeof ApiUiIdRoute
+  '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/events'
+    | '/api/abort'
+    | '/api/directory-sessions'
+    | '/api/directory-sessions-index'
+    | '/api/file-completions'
+    | '/api/git-changes'
+    | '/api/git-status'
+    | '/api/highlight'
+    | '/api/model'
+    | '/api/path-completions'
+    | '/api/prompt'
+    | '/api/slash-command'
+    | '/api/thinking'
+    | '/api/directory/resolve'
+    | '/api/pending-message/remove'
+    | '/api/pending-messages/reorder'
+    | '/api/session/delete'
+    | '/api/session/fork'
+    | '/api/session/new'
+    | '/api/session/rename'
+    | '/api/session/tree'
+    | '/api/settings/hide-thinking'
+    | '/api/ui/$id'
+    | '/api/session/tree/label'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/events'
+    | '/api/abort'
+    | '/api/directory-sessions'
+    | '/api/directory-sessions-index'
+    | '/api/file-completions'
+    | '/api/git-changes'
+    | '/api/git-status'
+    | '/api/highlight'
+    | '/api/model'
+    | '/api/path-completions'
+    | '/api/prompt'
+    | '/api/slash-command'
+    | '/api/thinking'
+    | '/api/directory/resolve'
+    | '/api/pending-message/remove'
+    | '/api/pending-messages/reorder'
+    | '/api/session/delete'
+    | '/api/session/fork'
+    | '/api/session/new'
+    | '/api/session/rename'
+    | '/api/session/tree'
+    | '/api/settings/hide-thinking'
+    | '/api/ui/$id'
+    | '/api/session/tree/label'
+  id:
+    | '__root__'
+    | '/'
+    | '/events'
+    | '/api/abort'
+    | '/api/directory-sessions'
+    | '/api/directory-sessions-index'
+    | '/api/file-completions'
+    | '/api/git-changes'
+    | '/api/git-status'
+    | '/api/highlight'
+    | '/api/model'
+    | '/api/path-completions'
+    | '/api/prompt'
+    | '/api/slash-command'
+    | '/api/thinking'
+    | '/api/directory/resolve'
+    | '/api/pending-message/remove'
+    | '/api/pending-messages/reorder'
+    | '/api/session/delete'
+    | '/api/session/fork'
+    | '/api/session/new'
+    | '/api/session/rename'
+    | '/api/session/tree'
+    | '/api/settings/hide-thinking'
+    | '/api/ui/$id'
+    | '/api/session/tree/label'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EventsRoute: typeof EventsRoute
+  ApiAbortRoute: typeof ApiAbortRoute
+  ApiDirectorySessionsRoute: typeof ApiDirectorySessionsRoute
+  ApiDirectorySessionsIndexRoute: typeof ApiDirectorySessionsIndexRoute
+  ApiFileCompletionsRoute: typeof ApiFileCompletionsRoute
+  ApiGitChangesRoute: typeof ApiGitChangesRoute
+  ApiGitStatusRoute: typeof ApiGitStatusRoute
+  ApiHighlightRoute: typeof ApiHighlightRoute
+  ApiModelRoute: typeof ApiModelRoute
+  ApiPathCompletionsRoute: typeof ApiPathCompletionsRoute
+  ApiPromptRoute: typeof ApiPromptRoute
+  ApiSlashCommandRoute: typeof ApiSlashCommandRoute
+  ApiThinkingRoute: typeof ApiThinkingRoute
+  ApiDirectoryResolveRoute: typeof ApiDirectoryResolveRoute
+  ApiPendingMessageRemoveRoute: typeof ApiPendingMessageRemoveRoute
+  ApiPendingMessagesReorderRoute: typeof ApiPendingMessagesReorderRoute
+  ApiSessionDeleteRoute: typeof ApiSessionDeleteRoute
+  ApiSessionForkRoute: typeof ApiSessionForkRoute
+  ApiSessionNewRoute: typeof ApiSessionNewRoute
+  ApiSessionRenameRoute: typeof ApiSessionRenameRoute
+  ApiSessionTreeRoute: typeof ApiSessionTreeRouteWithChildren
+  ApiSettingsHideThinkingRoute: typeof ApiSettingsHideThinkingRoute
+  ApiUiIdRoute: typeof ApiUiIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +372,207 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/thinking': {
+      id: '/api/thinking'
+      path: '/api/thinking'
+      fullPath: '/api/thinking'
+      preLoaderRoute: typeof ApiThinkingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/slash-command': {
+      id: '/api/slash-command'
+      path: '/api/slash-command'
+      fullPath: '/api/slash-command'
+      preLoaderRoute: typeof ApiSlashCommandRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/prompt': {
+      id: '/api/prompt'
+      path: '/api/prompt'
+      fullPath: '/api/prompt'
+      preLoaderRoute: typeof ApiPromptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/path-completions': {
+      id: '/api/path-completions'
+      path: '/api/path-completions'
+      fullPath: '/api/path-completions'
+      preLoaderRoute: typeof ApiPathCompletionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/model': {
+      id: '/api/model'
+      path: '/api/model'
+      fullPath: '/api/model'
+      preLoaderRoute: typeof ApiModelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/highlight': {
+      id: '/api/highlight'
+      path: '/api/highlight'
+      fullPath: '/api/highlight'
+      preLoaderRoute: typeof ApiHighlightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-status': {
+      id: '/api/git-status'
+      path: '/api/git-status'
+      fullPath: '/api/git-status'
+      preLoaderRoute: typeof ApiGitStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-changes': {
+      id: '/api/git-changes'
+      path: '/api/git-changes'
+      fullPath: '/api/git-changes'
+      preLoaderRoute: typeof ApiGitChangesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/file-completions': {
+      id: '/api/file-completions'
+      path: '/api/file-completions'
+      fullPath: '/api/file-completions'
+      preLoaderRoute: typeof ApiFileCompletionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/directory-sessions-index': {
+      id: '/api/directory-sessions-index'
+      path: '/api/directory-sessions-index'
+      fullPath: '/api/directory-sessions-index'
+      preLoaderRoute: typeof ApiDirectorySessionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/directory-sessions': {
+      id: '/api/directory-sessions'
+      path: '/api/directory-sessions'
+      fullPath: '/api/directory-sessions'
+      preLoaderRoute: typeof ApiDirectorySessionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/abort': {
+      id: '/api/abort'
+      path: '/api/abort'
+      fullPath: '/api/abort'
+      preLoaderRoute: typeof ApiAbortRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ui/$id': {
+      id: '/api/ui/$id'
+      path: '/api/ui/$id'
+      fullPath: '/api/ui/$id'
+      preLoaderRoute: typeof ApiUiIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/settings/hide-thinking': {
+      id: '/api/settings/hide-thinking'
+      path: '/api/settings/hide-thinking'
+      fullPath: '/api/settings/hide-thinking'
+      preLoaderRoute: typeof ApiSettingsHideThinkingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/tree': {
+      id: '/api/session/tree'
+      path: '/api/session/tree'
+      fullPath: '/api/session/tree'
+      preLoaderRoute: typeof ApiSessionTreeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/rename': {
+      id: '/api/session/rename'
+      path: '/api/session/rename'
+      fullPath: '/api/session/rename'
+      preLoaderRoute: typeof ApiSessionRenameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/new': {
+      id: '/api/session/new'
+      path: '/api/session/new'
+      fullPath: '/api/session/new'
+      preLoaderRoute: typeof ApiSessionNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/fork': {
+      id: '/api/session/fork'
+      path: '/api/session/fork'
+      fullPath: '/api/session/fork'
+      preLoaderRoute: typeof ApiSessionForkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/delete': {
+      id: '/api/session/delete'
+      path: '/api/session/delete'
+      fullPath: '/api/session/delete'
+      preLoaderRoute: typeof ApiSessionDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pending-messages/reorder': {
+      id: '/api/pending-messages/reorder'
+      path: '/api/pending-messages/reorder'
+      fullPath: '/api/pending-messages/reorder'
+      preLoaderRoute: typeof ApiPendingMessagesReorderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pending-message/remove': {
+      id: '/api/pending-message/remove'
+      path: '/api/pending-message/remove'
+      fullPath: '/api/pending-message/remove'
+      preLoaderRoute: typeof ApiPendingMessageRemoveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/directory/resolve': {
+      id: '/api/directory/resolve'
+      path: '/api/directory/resolve'
+      fullPath: '/api/directory/resolve'
+      preLoaderRoute: typeof ApiDirectoryResolveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/tree/label': {
+      id: '/api/session/tree/label'
+      path: '/label'
+      fullPath: '/api/session/tree/label'
+      preLoaderRoute: typeof ApiSessionTreeLabelRouteImport
+      parentRoute: typeof ApiSessionTreeRoute
+    }
   }
 }
 
+interface ApiSessionTreeRouteChildren {
+  ApiSessionTreeLabelRoute: typeof ApiSessionTreeLabelRoute
+}
+
+const ApiSessionTreeRouteChildren: ApiSessionTreeRouteChildren = {
+  ApiSessionTreeLabelRoute: ApiSessionTreeLabelRoute,
+}
+
+const ApiSessionTreeRouteWithChildren = ApiSessionTreeRoute._addFileChildren(
+  ApiSessionTreeRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EventsRoute: EventsRoute,
+  ApiAbortRoute: ApiAbortRoute,
+  ApiDirectorySessionsRoute: ApiDirectorySessionsRoute,
+  ApiDirectorySessionsIndexRoute: ApiDirectorySessionsIndexRoute,
+  ApiFileCompletionsRoute: ApiFileCompletionsRoute,
+  ApiGitChangesRoute: ApiGitChangesRoute,
+  ApiGitStatusRoute: ApiGitStatusRoute,
+  ApiHighlightRoute: ApiHighlightRoute,
+  ApiModelRoute: ApiModelRoute,
+  ApiPathCompletionsRoute: ApiPathCompletionsRoute,
+  ApiPromptRoute: ApiPromptRoute,
+  ApiSlashCommandRoute: ApiSlashCommandRoute,
+  ApiThinkingRoute: ApiThinkingRoute,
+  ApiDirectoryResolveRoute: ApiDirectoryResolveRoute,
+  ApiPendingMessageRemoveRoute: ApiPendingMessageRemoveRoute,
+  ApiPendingMessagesReorderRoute: ApiPendingMessagesReorderRoute,
+  ApiSessionDeleteRoute: ApiSessionDeleteRoute,
+  ApiSessionForkRoute: ApiSessionForkRoute,
+  ApiSessionNewRoute: ApiSessionNewRoute,
+  ApiSessionRenameRoute: ApiSessionRenameRoute,
+  ApiSessionTreeRoute: ApiSessionTreeRouteWithChildren,
+  ApiSettingsHideThinkingRoute: ApiSettingsHideThinkingRoute,
+  ApiUiIdRoute: ApiUiIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
