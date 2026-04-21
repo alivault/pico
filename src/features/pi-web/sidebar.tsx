@@ -1,6 +1,24 @@
 import * as React from "react"
 
 import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ActivityIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -117,46 +135,10 @@ type SessionClickModifiers = {
   shiftKey: boolean
 }
 
-type DirectoryDropPosition = "before" | "after"
-
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
 
   return left.every((directory, index) => directory === right[index])
-}
-
-function reorderDirectories(
-  directories: Array<string>,
-  sourceDirectory: string,
-  targetDirectory: string,
-  position: DirectoryDropPosition
-) {
-  const normalizedSource = sourceDirectory.trim()
-  const normalizedTarget = targetDirectory.trim()
-
-  if (
-    !normalizedSource ||
-    !normalizedTarget ||
-    normalizedSource === normalizedTarget ||
-    !directories.includes(normalizedSource) ||
-    !directories.includes(normalizedTarget)
-  ) {
-    return null
-  }
-
-  const reordered = directories.filter(
-    (directory) => directory !== normalizedSource
-  )
-  const targetIndex = reordered.indexOf(normalizedTarget)
-  const insertIndex =
-    targetIndex < 0
-      ? reordered.length
-      : position === "before"
-        ? targetIndex
-        : targetIndex + 1
-
-  reordered.splice(insertIndex, 0, normalizedSource)
-  return directoryOrderEqual(reordered, directories) ? null : reordered
 }
 
 type AppSidebarProps = {
@@ -191,12 +173,43 @@ type AppSidebarProps = {
   onDeleteSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
-  onReorderDirectories?: (
-    sourceDirectory: string,
-    targetDirectory: string,
-    position: DirectoryDropPosition
-  ) => void
+  onReorderDirectories?: (nextDirectories: Array<string>) => void
   onLoadMoreDirectorySessions: (directory: string) => void
+}
+
+type SortableDirectoryGroupProps = {
+  id: string
+  disabled: boolean
+  children: (args: {
+    attributes: Record<string, unknown>
+    listeners: Record<string, unknown>
+    isDragging: boolean
+  }) => React.ReactNode
+}
+
+function SortableDirectoryGroup({
+  id,
+  disabled,
+  children,
+}: SortableDirectoryGroupProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    >
+      {children({
+        attributes: attributes as unknown as Record<string, unknown>,
+        listeners: listeners as unknown as Record<string, unknown>,
+        isDragging,
+      })}
+    </div>
+  )
 }
 
 export function AppSidebar({
@@ -231,35 +244,24 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const searchActive = sessionSearch.trim().length > 0
   const directoryOrderingEnabled = !searchActive && visibleDirectories.length > 1
-  const [draggingDirectory, setDraggingDirectory] = React.useState("")
+  const [activeDirectory, setActiveDirectory] = React.useState<string | null>(null)
   const [previewDirectoryOrder, setPreviewDirectoryOrder] = React.useState<
     Array<string> | null
   >(null)
-  const directoryDropCommittedRef = React.useRef(false)
-  const directoryGroupRefs = React.useRef(new Map<string, HTMLDivElement>())
-  const directoryDragPreviewRef = React.useRef<HTMLDivElement | null>(null)
-  const previousDirectoryPositionsRef = React.useRef(
-    new Map<string, number>()
-  )
 
-  const clearDirectoryDragPreview = React.useCallback(() => {
-    directoryDragPreviewRef.current?.remove()
-    directoryDragPreviewRef.current = null
-  }, [])
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    })
+  )
 
   React.useEffect(() => {
     if (directoryOrderingEnabled) return
-    setDraggingDirectory("")
+    setActiveDirectory(null)
     setPreviewDirectoryOrder(null)
-    directoryDropCommittedRef.current = false
-    clearDirectoryDragPreview()
-  }, [clearDirectoryDragPreview, directoryOrderingEnabled])
-
-  React.useEffect(() => {
-    return () => {
-      clearDirectoryDragPreview()
-    }
-  }, [clearDirectoryDragPreview])
+  }, [directoryOrderingEnabled])
 
   const orderedVisibleDirectories = React.useMemo(() => {
     if (!previewDirectoryOrder || previewDirectoryOrder.length === 0) {
@@ -284,41 +286,7 @@ export function AppSidebar({
     }
 
     setPreviewDirectoryOrder(null)
-    directoryDropCommittedRef.current = false
   }, [orderedVisibleDirectories, previewDirectoryOrder, visibleDirectories])
-
-  React.useLayoutEffect(() => {
-    const nextPositions = new Map<string, number>()
-
-    for (const directory of orderedVisibleDirectories) {
-      const node = directoryGroupRefs.current.get(directory)
-      if (!node) continue
-
-      const top = node.getBoundingClientRect().top
-      nextPositions.set(directory, top)
-
-      const previousTop = previousDirectoryPositionsRef.current.get(directory)
-      const deltaY = previousTop == null ? 0 : previousTop - top
-      if (Math.abs(deltaY) < 1) continue
-
-      node.style.transition = "none"
-      node.style.transform = `translateY(${deltaY}px)`
-      node.style.willChange = "transform"
-      node.getBoundingClientRect()
-      node.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)"
-      node.style.transform = ""
-
-      const cleanup = () => {
-        node.style.transition = ""
-        node.style.willChange = ""
-        node.removeEventListener("transitionend", cleanup)
-      }
-
-      node.addEventListener("transitionend", cleanup)
-    }
-
-    previousDirectoryPositionsRef.current = nextPositions
-  })
 
   const matchingSessionCount = visibleDirectories.reduce((total, directory) => {
     const sessions = Object.prototype.hasOwnProperty.call(
@@ -330,6 +298,307 @@ export function AppSidebar({
 
     return total + sessions.length
   }, 0)
+
+  const movePreviewDirectory = React.useCallback(
+    (activeId: string, overId: string) => {
+      setPreviewDirectoryOrder((current) => {
+        const baseOrder = current && current.length > 0 ? current : visibleDirectories
+        const oldIndex = baseOrder.indexOf(activeId)
+        const newIndex = baseOrder.indexOf(overId)
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+          return current
+        }
+        return arrayMove(baseOrder, oldIndex, newIndex)
+      })
+    },
+    [visibleDirectories]
+  )
+
+  const handleDragStart = React.useCallback((event: DragStartEvent) => {
+    setActiveDirectory(String(event.active.id))
+    setPreviewDirectoryOrder(visibleDirectories)
+  }, [visibleDirectories])
+
+  const handleDragOver = React.useCallback((event: DragOverEvent) => {
+    const activeId = String(event.active.id)
+    const overId = event.over ? String(event.over.id) : ""
+    if (!activeId || !overId || activeId === overId) return
+    movePreviewDirectory(activeId, overId)
+  }, [movePreviewDirectory])
+
+  const handleDragCancel = React.useCallback(() => {
+    setActiveDirectory(null)
+    setPreviewDirectoryOrder(null)
+  }, [])
+
+  const handleDragEnd = React.useCallback(
+    (event: DragEndEvent) => {
+      const activeId = String(event.active.id)
+      const overId = event.over ? String(event.over.id) : ""
+
+      let nextOrder = previewDirectoryOrder
+      if ((!nextOrder || nextOrder.length === 0) && activeId && overId && activeId !== overId) {
+        const oldIndex = visibleDirectories.indexOf(activeId)
+        const newIndex = visibleDirectories.indexOf(overId)
+        if (oldIndex !== -1 && newIndex !== -1) {
+          nextOrder = arrayMove(visibleDirectories, oldIndex, newIndex)
+        }
+      }
+
+      if (
+        nextOrder &&
+        nextOrder.length > 0 &&
+        !directoryOrderEqual(nextOrder, visibleDirectories)
+      ) {
+        onReorderDirectories?.(nextOrder)
+      }
+
+      setActiveDirectory(null)
+      setPreviewDirectoryOrder(null)
+    },
+    [onReorderDirectories, previewDirectoryOrder, visibleDirectories]
+  )
+
+  const renderDirectoryGroup = React.useCallback(
+    (
+      directory: string,
+      options?: {
+        isDragging?: boolean
+        overlay?: boolean
+        attributes?: Record<string, unknown>
+        listeners?: Record<string, unknown>
+      }
+    ) => {
+      const sessions = Object.prototype.hasOwnProperty.call(
+        filteredDirectorySessions,
+        directory
+      )
+        ? filteredDirectorySessions[directory]
+        : []
+      const collapsed = searchActive ? false : Boolean(collapsedDirectories[directory])
+      const visibleCount = searchActive
+        ? sessions.length
+        : Math.min(
+            sessions.length,
+            directoryRenderCounts[directory] ?? INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+          )
+      const visibleSessions = sessions.slice(0, visibleCount)
+      const hasMoreSessions = visibleCount < sessions.length
+
+      return (
+        <SidebarGroup
+          className={cn(
+            "rounded-lg py-1",
+            options?.isDragging && !options?.overlay && "opacity-0"
+          )}
+        >
+          <div className="flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/70">
+            <button
+              type="button"
+              className={cn(
+                "flex min-w-0 flex-1 items-start gap-2 text-left text-sm text-sidebar-foreground",
+                directoryOrderingEnabled && !options?.overlay && "cursor-grab active:cursor-grabbing",
+                searchActive && "cursor-default"
+              )}
+              aria-grabbed={
+                directoryOrderingEnabled && !options?.overlay
+                  ? Boolean(options?.isDragging)
+                  : undefined
+              }
+              onClick={() => {
+                if (!searchActive && !options?.overlay) {
+                  onToggleDirectory(directory)
+                }
+              }}
+              title={directory}
+              {...(options?.attributes ?? {})}
+              {...(options?.listeners ?? {})}
+            >
+              {!searchActive ? (
+                collapsed ? (
+                  <ChevronRightIcon className="mt-0.5 size-4 shrink-0" />
+                ) : (
+                  <ChevronDownIcon className="mt-0.5 size-4 shrink-0" />
+                )
+              ) : null}
+              <FolderIcon className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <DirectoryPathLabel path={directory} />
+              </span>
+            </button>
+
+            <div className="flex shrink-0 items-center gap-1">
+              {onCreateSessionInDirectory && !options?.overlay ? (
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  title={`Create a session in ${directory}`}
+                  onClick={() => onCreateSessionInDirectory(directory)}
+                >
+                  <SquarePenIcon className="size-4" />
+                </Button>
+              ) : null}
+              {onRemoveDirectory && !options?.overlay ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<Button size="icon-xs" variant="ghost" />}
+                  >
+                    <EllipsisIcon className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => onRemoveDirectory(directory)}>
+                      Remove
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
+          </div>
+
+          {!collapsed ? (
+            <SidebarGroupContent className="pt-1">
+              {directoryIndexLoading[directory] ? (
+                <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
+                  <Spinner />
+                  Loading sessions…
+                </div>
+              ) : sessions.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <SidebarMenu>
+                    {visibleSessions.map((entry) => {
+                      const entryKey = sessionListEntryKey(entry)
+                      const isActive =
+                        Boolean(activeSessionId) && entry.id === activeSessionId
+                      const isSelected =
+                        entryKey.length > 0 && selectedSessionKeys.includes(entryKey)
+
+                      return (
+                        <SidebarMenuItem
+                          key={entryKey || `${directory}-${entry.path || entry.title}`}
+                        >
+                          <div className="relative">
+                            <SidebarMenuButton
+                              type="button"
+                              data-sidebar-session-item
+                              data-session-key={entryKey}
+                              isActive={isActive}
+                              tooltip={entry.title}
+                              className={cn(
+                                "h-auto items-start gap-2 py-2 pr-10",
+                                isActive && "ring-1 ring-primary/20",
+                                isSelected &&
+                                  "bg-primary/10 text-sidebar-foreground hover:bg-primary/15"
+                              )}
+                              onClick={(event) =>
+                                onSessionClick?.(entry, {
+                                  ctrlKey: event.ctrlKey,
+                                  shiftKey: event.shiftKey,
+                                })
+                              }
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center justify-between gap-3">
+                                  <span className="min-w-0 flex-1 truncate font-medium">
+                                    {entry.title}
+                                  </span>
+                                  <span className="flex shrink-0 items-center gap-2">
+                                    {entry.streaming ? (
+                                      <Badge variant="outline">Live</Badge>
+                                    ) : null}
+                                    {entry.unread ? (
+                                      <span className="size-2 rounded-full bg-primary" />
+                                    ) : null}
+                                  </span>
+                                </span>
+                              </span>
+                            </SidebarMenuButton>
+
+                            {entry.path &&
+                            (onRenameSession || onDeleteSession) &&
+                            !options?.overlay ? (
+                              <div className="absolute top-2 right-2">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        size="icon-xs"
+                                        variant="ghost"
+                                        title={`Session actions for ${entry.title}`}
+                                      />
+                                    }
+                                  >
+                                    <EllipsisIcon />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    {onRenameSession ? (
+                                      <DropdownMenuItem
+                                        onClick={() => onRenameSession(entry)}
+                                      >
+                                        Rename
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                    {onDeleteSession ? (
+                                      <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={() => onDeleteSession(entry)}
+                                      >
+                                        Delete
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            ) : null}
+                          </div>
+                        </SidebarMenuItem>
+                      )
+                    })}
+                  </SidebarMenu>
+
+                  {hasMoreSessions && !options?.overlay ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => onLoadMoreDirectorySessions(directory)}
+                    >
+                      Show {" "}
+                      {Math.min(
+                        DIRECTORY_SESSION_LOAD_MORE_COUNT,
+                        sessions.length - visibleCount
+                      )}{" "}
+                      more
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="px-2 py-2 text-sm text-sidebar-foreground/70">
+                  {searchActive ? "No matching sessions." : "No sessions yet."}
+                </div>
+              )}
+            </SidebarGroupContent>
+          ) : null}
+        </SidebarGroup>
+      )
+    },
+    [
+      activeSessionId,
+      collapsedDirectories,
+      directoryIndexLoading,
+      directoryOrderingEnabled,
+      directoryRenderCounts,
+      filteredDirectorySessions,
+      onCreateSessionInDirectory,
+      onDeleteSession,
+      onLoadMoreDirectorySessions,
+      onRemoveDirectory,
+      onRenameSession,
+      onSessionClick,
+      onToggleDirectory,
+      searchActive,
+      selectedSessionKeys,
+    ]
+  )
 
   return (
     <Sidebar
@@ -409,352 +678,43 @@ export function AppSidebar({
             </Empty>
           </SidebarGroup>
         ) : (
-          orderedVisibleDirectories.map((directory) => {
-            const sessions = Object.prototype.hasOwnProperty.call(
-              filteredDirectorySessions,
-              directory
-            )
-              ? filteredDirectorySessions[directory]
-              : []
-            const collapsed = searchActive
-              ? false
-              : Boolean(collapsedDirectories[directory])
-            const visibleCount = searchActive
-              ? sessions.length
-              : Math.min(
-                  sessions.length,
-                  directoryRenderCounts[directory] ??
-                    INITIAL_DIRECTORY_SESSION_RENDER_COUNT
-                )
-            const visibleSessions = sessions.slice(0, visibleCount)
-            const hasMoreSessions = visibleCount < sessions.length
-            const isDragSource = draggingDirectory === directory
-
-            return (
-              <div
-                key={directory}
-                ref={(node) => {
-                  if (node) {
-                    directoryGroupRefs.current.set(directory, node)
-                  } else {
-                    directoryGroupRefs.current.delete(directory)
-                  }
-                }}
-              >
-                <SidebarGroup
-                  className={cn(
-                    "rounded-lg py-1 transition-opacity",
-                    isDragSource && "opacity-60"
-                  )}
-                  onDragOver={(event) => {
-                    if (!directoryOrderingEnabled || draggingDirectory === directory) {
-                      return
-                    }
-                    event.preventDefault()
-                    const bounds = event.currentTarget.getBoundingClientRect()
-                    const position: DirectoryDropPosition =
-                      event.clientY < bounds.top + bounds.height / 2
-                        ? "before"
-                        : "after"
-                    const nextOrder = reorderDirectories(
-                      orderedVisibleDirectories,
-                      draggingDirectory,
-                      directory,
-                      position
-                    )
-
-                    if (!nextOrder) return
-                    setPreviewDirectoryOrder(nextOrder)
-                    event.dataTransfer.dropEffect = "move"
-                  }}
-                  onDrop={(event) => {
-                    if (!directoryOrderingEnabled) return
-                    event.preventDefault()
-                    const sourceDirectory =
-                      event.dataTransfer.getData("text/pi-sidebar-directory") ||
-                      draggingDirectory
-                    const bounds = event.currentTarget.getBoundingClientRect()
-                    const position: DirectoryDropPosition =
-                      event.clientY < bounds.top + bounds.height / 2
-                        ? "before"
-                        : "after"
-                    const nextOrder = reorderDirectories(
-                      visibleDirectories,
-                      sourceDirectory,
-                      directory,
-                      position
-                    )
-
-                    setDraggingDirectory("")
-                    if (!sourceDirectory || !onReorderDirectories || !nextOrder) {
-                      setPreviewDirectoryOrder(null)
-                      directoryDropCommittedRef.current = false
-                      return
-                    }
-
-                    directoryDropCommittedRef.current = true
-                    setPreviewDirectoryOrder(nextOrder)
-                    onReorderDirectories(sourceDirectory, directory, position)
-                  }}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={directoryOrderingEnabled ? handleDragStart : undefined}
+            onDragOver={directoryOrderingEnabled ? handleDragOver : undefined}
+            onDragEnd={directoryOrderingEnabled ? handleDragEnd : undefined}
+            onDragCancel={directoryOrderingEnabled ? handleDragCancel : undefined}
+          >
+            <SortableContext
+              items={orderedVisibleDirectories}
+              strategy={verticalListSortingStrategy}
+            >
+              {orderedVisibleDirectories.map((directory) => (
+                <SortableDirectoryGroup
+                  key={directory}
+                  id={directory}
+                  disabled={!directoryOrderingEnabled}
                 >
-                <div className="flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/70">
-                  <button
-                    type="button"
-                    draggable={directoryOrderingEnabled}
-                    className={cn(
-                      "flex min-w-0 flex-1 items-start gap-2 text-left text-sm text-sidebar-foreground",
-                      directoryOrderingEnabled &&
-                        "cursor-grab active:cursor-grabbing",
-                      searchActive && "cursor-default"
-                    )}
-                    aria-grabbed={directoryOrderingEnabled ? isDragSource : undefined}
-                    onDragStart={(event) => {
-                      if (!directoryOrderingEnabled) {
-                        event.preventDefault()
-                        return
-                      }
+                  {({ attributes, listeners, isDragging }) =>
+                    renderDirectoryGroup(directory, {
+                      attributes,
+                      listeners,
+                      isDragging,
+                    })
+                  }
+                </SortableDirectoryGroup>
+              ))}
+            </SortableContext>
 
-                      directoryDropCommittedRef.current = false
-                      setDraggingDirectory(directory)
-                      setPreviewDirectoryOrder(visibleDirectories)
-                      event.dataTransfer.effectAllowed = "move"
-                      event.dataTransfer.setData(
-                        "text/pi-sidebar-directory",
-                        directory
-                      )
-
-                      clearDirectoryDragPreview()
-                      const dragPreviewSource =
-                        directoryGroupRefs.current.get(directory)
-
-                      if (dragPreviewSource) {
-                        const rect = dragPreviewSource.getBoundingClientRect()
-                        const preview = dragPreviewSource.cloneNode(
-                          true
-                        ) as HTMLDivElement
-
-                        preview.setAttribute("aria-hidden", "true")
-                        preview.style.position = "fixed"
-                        preview.style.top = "0"
-                        preview.style.left = "0"
-                        preview.style.width = `${Math.round(rect.width)}px`
-                        preview.style.pointerEvents = "none"
-                        preview.style.zIndex = "9999"
-                        preview.style.margin = "0"
-                        preview.style.boxSizing = "border-box"
-                        preview.style.transition = "none"
-                        preview.style.transform = "translate(-200vw, -200vh)"
-
-                        for (const control of preview.querySelectorAll("button")) {
-                          if (control instanceof HTMLButtonElement) {
-                            control.disabled = true
-                            control.tabIndex = -1
-                          }
-                        }
-
-                        document.body.appendChild(preview)
-                        directoryDragPreviewRef.current = preview
-                        event.dataTransfer.setDragImage(
-                          preview,
-                          event.clientX - rect.left,
-                          event.clientY - rect.top
-                        )
-                      }
-                    }}
-                    onDragEnd={() => {
-                      setDraggingDirectory("")
-                      clearDirectoryDragPreview()
-                      if (!directoryDropCommittedRef.current) {
-                        setPreviewDirectoryOrder(null)
-                      }
-                    }}
-                    onClick={() => {
-                      if (!searchActive) {
-                        onToggleDirectory(directory)
-                      }
-                    }}
-                    title={directory}
-                  >
-                    {!searchActive ? (
-                      collapsed ? (
-                        <ChevronRightIcon className="mt-0.5 size-4 shrink-0" />
-                      ) : (
-                        <ChevronDownIcon className="mt-0.5 size-4 shrink-0" />
-                      )
-                    ) : null}
-                    <FolderIcon className="mt-0.5 size-4 shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <DirectoryPathLabel path={directory} />
-                    </span>
-                  </button>
-
-                  <div className="flex shrink-0 items-center gap-1">
-                    {onCreateSessionInDirectory ? (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        title={`Create a session in ${directory}`}
-                        onClick={() => onCreateSessionInDirectory(directory)}
-                      >
-                        <SquarePenIcon className="size-4" />
-                      </Button>
-                    ) : null}
-                    {onRemoveDirectory ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={<Button size="icon-xs" variant="ghost" />}
-                        >
-                          <EllipsisIcon className="size-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem
-                            onClick={() => onRemoveDirectory(directory)}
-                          >
-                            Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
-                  </div>
-                </div>
-
-                {!collapsed ? (
-                  <SidebarGroupContent className="pt-1">
-                    {directoryIndexLoading[directory] ? (
-                      <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
-                        <Spinner />
-                        Loading sessions…
-                      </div>
-                    ) : sessions.length > 0 ? (
-                      <div className="flex flex-col gap-1">
-                        <SidebarMenu>
-                          {visibleSessions.map((entry) => {
-                            const entryKey = sessionListEntryKey(entry)
-                            const isActive =
-                              Boolean(activeSessionId) &&
-                              entry.id === activeSessionId
-                            const isSelected =
-                              entryKey.length > 0 &&
-                              selectedSessionKeys.includes(entryKey)
-
-                            return (
-                              <SidebarMenuItem
-                                key={
-                                  entryKey ||
-                                  `${directory}-${entry.path || entry.title}`
-                                }
-                              >
-                                <div className="relative">
-                                  <SidebarMenuButton
-                                    type="button"
-                                    data-sidebar-session-item
-                                    data-session-key={entryKey}
-                                    isActive={isActive}
-                                    tooltip={entry.title}
-                                    className={cn(
-                                      "h-auto items-start gap-2 py-2 pr-10",
-                                      isActive && "ring-1 ring-primary/20",
-                                      isSelected &&
-                                        "bg-primary/10 text-sidebar-foreground hover:bg-primary/15"
-                                    )}
-                                    onClick={(event) =>
-                                      onSessionClick?.(entry, {
-                                        ctrlKey: event.ctrlKey,
-                                        shiftKey: event.shiftKey,
-                                      })
-                                    }
-                                  >
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex items-center justify-between gap-3">
-                                        <span className="min-w-0 flex-1 truncate font-medium">
-                                          {entry.title}
-                                        </span>
-                                        <span className="flex shrink-0 items-center gap-2">
-                                          {entry.streaming ? (
-                                            <Badge variant="outline">Live</Badge>
-                                          ) : null}
-                                          {entry.unread ? (
-                                            <span className="size-2 rounded-full bg-primary" />
-                                          ) : null}
-                                        </span>
-                                      </span>
-                                    </span>
-                                  </SidebarMenuButton>
-
-                                  {entry.path && (onRenameSession || onDeleteSession) ? (
-                                    <div className="absolute top-2 right-2">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger
-                                          render={
-                                            <Button
-                                              size="icon-xs"
-                                              variant="ghost"
-                                              title={`Session actions for ${entry.title}`}
-                                            />
-                                          }
-                                        >
-                                          <EllipsisIcon />
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                          align="end"
-                                          className="w-40"
-                                        >
-                                          {onRenameSession ? (
-                                            <DropdownMenuItem
-                                              onClick={() => onRenameSession(entry)}
-                                            >
-                                              Rename
-                                            </DropdownMenuItem>
-                                          ) : null}
-                                          {onDeleteSession ? (
-                                            <DropdownMenuItem
-                                              variant="destructive"
-                                              onClick={() => onDeleteSession(entry)}
-                                            >
-                                              Delete
-                                            </DropdownMenuItem>
-                                          ) : null}
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </SidebarMenuItem>
-                            )
-                          })}
-                        </SidebarMenu>
-
-                        {hasMoreSessions ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="justify-start"
-                            onClick={() =>
-                              onLoadMoreDirectorySessions(directory)
-                            }
-                          >
-                            Show{" "}
-                            {Math.min(
-                              DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                              sessions.length - visibleCount
-                            )}{" "}
-                            more
-                          </Button>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="px-2 py-2 text-sm text-sidebar-foreground/70">
-                        {searchActive
-                          ? "No matching sessions."
-                          : "No sessions yet."}
-                      </div>
-                    )}
-                  </SidebarGroupContent>
-                ) : null}
-                </SidebarGroup>
-              </div>
-            )
-          })
+            <DragOverlay>
+              {activeDirectory
+                ? renderDirectoryGroup(activeDirectory, {
+                    overlay: true,
+                  })
+                : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </SidebarContent>
 

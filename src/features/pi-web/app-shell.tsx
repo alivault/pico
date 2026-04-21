@@ -1165,42 +1165,21 @@ export function PiWebAppShell({
   }, [allDirectoriesCollapsed, baseSidebarDirectories])
 
   const reorderSidebarDirectories = React.useCallback(
-    (
-      sourceDirectory: string,
-      targetDirectory: string,
-      position: "before" | "after"
-    ) => {
-      const normalizedSource = sourceDirectory.trim()
-      const normalizedTarget = targetDirectory.trim()
-      if (!normalizedSource || !normalizedTarget) return
-      if (normalizedSource === normalizedTarget) return
+    (nextDirectories: Array<string>) => {
+      const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
+      if (normalizedNext.length === 0) return
 
       setSidebarDirectories((current) => {
-        const next = normalizeStoredDirectoryList(current)
-        if (
-          !next.includes(normalizedSource) ||
-          !next.includes(normalizedTarget)
-        ) {
+        const previous = normalizeStoredDirectoryList(current)
+        if (JSON.stringify(previous) === JSON.stringify(normalizedNext)) {
           return current
         }
 
-        const reordered = next.filter(
-          (directory) => directory !== normalizedSource
-        )
-        const targetIndex = reordered.indexOf(normalizedTarget)
-        const insertIndex =
-          targetIndex < 0
-            ? reordered.length
-            : position === "before"
-              ? targetIndex
-              : targetIndex + 1
-
-        reordered.splice(insertIndex, 0, normalizedSource)
         safeLocalStorageSetItem(
           SIDEBAR_DIRECTORIES_STORAGE_KEY,
-          JSON.stringify(reordered)
+          JSON.stringify(normalizedNext)
         )
-        return reordered
+        return normalizedNext
       })
     },
     []
