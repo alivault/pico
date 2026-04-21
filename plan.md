@@ -117,7 +117,7 @@ Reference: `static/app.js`, `static/sidebar.js`, `static/shortcuts.js`
 - [x] Add per-session row action menu parity inside the sidebar
 - [x] Add directory action menu parity inside the sidebar
 - [ ] Restore directory drag-reorder / sidebar ordering behavior
-- [ ] Restore session-scope / draft-directory selection UX for “new session in …” flows
+- [x] Restore session-scope / draft-directory selection UX for “new session in …” flows
 - [ ] Audit mobile drawer behavior against the old app and close gaps
 - [ ] Revisit sidebar search/index-loading behavior if full-index loading diverges too much from old search coverage behavior
 

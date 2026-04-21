@@ -52,6 +52,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -1008,6 +1011,34 @@ export function PiWebAppShell({
     () => clampSidebarDirectories(sidebarDirectories, sessionState.cwd),
     [sessionState.cwd, sidebarDirectories]
   )
+  const storedDraftDirectory = readStoredDraftDirectory() || ""
+  const defaultNewSessionDirectory =
+    sessionState.cwd?.trim() ||
+    baseSidebarDirectories[0] ||
+    storedDraftDirectory ||
+    ""
+  const newSessionDirectoryOptions = React.useMemo(() => {
+    const nextOptions: Array<{ path: string; label: string }> = []
+    const seen = new Set<string>()
+    const pushDirectoryOption = (path: string, label: string) => {
+      const normalizedPath = path.trim()
+      if (!normalizedPath || seen.has(normalizedPath)) return
+      seen.add(normalizedPath)
+      nextOptions.push({ path: normalizedPath, label })
+    }
+
+    if (sessionState.cwd?.trim()) {
+      pushDirectoryOption(sessionState.cwd, "Current session directory")
+    }
+    if (storedDraftDirectory) {
+      pushDirectoryOption(storedDraftDirectory, "Draft directory")
+    }
+    for (const directory of baseSidebarDirectories) {
+      pushDirectoryOption(directory, "Sidebar directory")
+    }
+
+    return nextOptions
+  }, [baseSidebarDirectories, sessionState.cwd, storedDraftDirectory])
 
   const knownDirectories = React.useMemo(
     () =>
@@ -1534,10 +1565,10 @@ export function PiWebAppShell({
   const createSession = React.useCallback(async (cwdOverride?: string) => {
     if (!viewerContextId) return
 
-    const nextCwd =
-      cwdOverride || sessionState.cwd || readStoredDraftDirectory() || undefined
+    const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
     if (nextCwd) {
       rememberRecentDirectory(nextCwd)
+      safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextCwd)
     }
     const ownerKey = promptDraftKey({ cwd: nextCwd })
     setDraftSessionLoadingOwnerKey(ownerKey)
@@ -1567,9 +1598,9 @@ export function PiWebAppShell({
     }
   }, [
     activeSessionId,
+    defaultNewSessionDirectory,
     rememberRecentDirectory,
     restorePendingDraftPrompt,
-    sessionState.cwd,
     viewerContextId,
   ])
 
@@ -3145,8 +3176,8 @@ export function PiWebAppShell({
                 size="sm"
                 variant="outline"
                 title={
-                  sessionState.cwd
-                    ? `Create a new session in ${sessionState.cwd}`
+                  defaultNewSessionDirectory
+                    ? `Create a new session in ${defaultNewSessionDirectory}`
                     : "Create a new session"
                 }
                 onClick={() => {
@@ -3168,6 +3199,33 @@ export function PiWebAppShell({
                     <span>Create new session</span>
                     <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
                   </DropdownMenuItem>
+                  {newSessionDirectoryOptions.length > 0 ? (
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        New session in…
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-72">
+                        {newSessionDirectoryOptions.map((option) => (
+                          <DropdownMenuItem
+                            key={option.path}
+                            onClick={() => {
+                              void createSession(option.path)
+                            }}
+                          >
+                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="text-xs text-muted-foreground">
+                                {option.label}
+                              </span>
+                              <span className="truncate">{option.path}</span>
+                            </div>
+                            {option.path === defaultNewSessionDirectory ? (
+                              <DropdownMenuShortcut>Default</DropdownMenuShortcut>
+                            ) : null}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  ) : null}
                   <DropdownMenuItem
                     onClick={() => {
                       void toggleHideThinking()
