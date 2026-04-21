@@ -3426,59 +3426,61 @@ export function PiWebAppShell({
                           <div>Loading...</div>
                         </div>
                       ) : sessionState.items.length > 0 ? (
-                        <div className="flex flex-col gap-4">
-                          {(() => {
-                            const counts = new Map<string, number>()
-                            return mergeAssistantTurns(sessionState.items).map((item) => {
-                              const baseKey = conversationItemSignature(item)
-                              const count = (counts.get(baseKey) ?? 0) + 1
-                              counts.set(baseKey, count)
-                              const key = `${baseKey}:${count}`
+                        <>
+                          <div className="flex flex-col gap-4">
+                            {(() => {
+                              const counts = new Map<string, number>()
+                              return mergeAssistantTurns(sessionState.items).map((item) => {
+                                const baseKey = conversationItemSignature(item)
+                                const count = (counts.get(baseKey) ?? 0) + 1
+                                counts.set(baseKey, count)
+                                const key = `${baseKey}:${count}`
 
-                              if (item.kind === "user") {
+                                if (item.kind === "user") {
+                                  return (
+                                    <div
+                                      key={key}
+                                      data-message-anchor="true"
+                                      className="flex justify-end"
+                                    >
+                                      <UserMessageCard item={item} />
+                                    </div>
+                                  )
+                                }
+
+                                if (
+                                  !assistantMessageHasVisibleBlocks({
+                                    item,
+                                    hideThinking: sessionState.hideThinkingBlock,
+                                    hideToolBlocks,
+                                  })
+                                ) {
+                                  return null
+                                }
+
                                 return (
                                   <div
                                     key={key}
                                     data-message-anchor="true"
-                                    className="flex justify-end"
+                                    className="flex justify-start"
                                   >
-                                    <UserMessageCard item={item} />
+                                    <AssistantMessageCard
+                                      item={item}
+                                      hideThinking={sessionState.hideThinkingBlock}
+                                      hideToolBlocks={hideToolBlocks}
+                                    />
                                   </div>
                                 )
-                              }
-
-                              if (
-                                !assistantMessageHasVisibleBlocks({
-                                  item,
-                                  hideThinking: sessionState.hideThinkingBlock,
-                                  hideToolBlocks,
-                                })
-                              ) {
-                                return null
-                              }
-
-                              return (
-                                <div
-                                  key={key}
-                                  data-message-anchor="true"
-                                  className="flex justify-start"
-                                >
-                                  <AssistantMessageCard
-                                    item={item}
-                                    hideThinking={sessionState.hideThinkingBlock}
-                                    hideToolBlocks={hideToolBlocks}
-                                  />
-                                </div>
-                              )
-                            })
-                          })()}
-                          {workingState ? (
-                            <div className="flex justify-start">
-                              <MessagesWorkingIndicator state={workingState} />
-                            </div>
-                          ) : null}
+                              })
+                            })()}
+                            {workingState ? (
+                              <div className="flex justify-start">
+                                <MessagesWorkingIndicator state={workingState} />
+                              </div>
+                            ) : null}
+                          </div>
                           <div ref={bottomRef} />
-                        </div>
+                        </>
                       ) : (
                         <Empty>
                           <EmptyHeader>
