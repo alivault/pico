@@ -898,7 +898,7 @@ export const ComposerPanel = React.forwardRef<
                   </Button>
                 </>
               ) : null}
-              {(isStreaming || awaitingFirstTurn || isDraftSessionLoading) ? (
+              {isStreaming ? (
                 <Button variant="outline" size="sm" onClick={onAbort}>
                   Abort
                 </Button>

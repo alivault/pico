@@ -3419,9 +3419,7 @@ export function PiWebAppShell({
                             </EmptyTitle>
                             <EmptyDescription>
                               {sessionState.draft
-                                ? sessionState.cwd
-                                  ? `You are in a fresh draft for ${sessionState.cwd}. Unsent composer text is restored per session and directory, matching pi-web.`
-                                  : "You are in a fresh draft session. Unsent composer text is restored per session and directory, matching pi-web."
+                                ? undefined
                                 : "This is the native Pi session view backed by the new TypeScript runtime."}
                             </EmptyDescription>
                           </EmptyHeader>
@@ -3433,13 +3431,6 @@ export function PiWebAppShell({
                               {draftGitSummary?.label ? (
                                 <Badge variant="outline">{draftGitSummary.label}</Badge>
                               ) : null}
-                              <Button
-                                onClick={() => {
-                                  void createSession()
-                                }}
-                              >
-                                New session
-                              </Button>
                             </EmptyContent>
                           ) : (
                             <EmptyContent>
@@ -3456,7 +3447,10 @@ export function PiWebAppShell({
                       )}
                     </ScrollArea>
 
-                    {!isSessionViewLoading && !isMessagesNearBottom ? (
+                    {!isSessionViewLoading &&
+                    !sessionState.draft &&
+                    sessionState.items.length > 0 &&
+                    !isMessagesNearBottom ? (
                       <Button
                         size="icon-lg"
                         className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)] md:bottom-[18px]"
