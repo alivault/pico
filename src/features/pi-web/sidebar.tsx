@@ -658,6 +658,7 @@ export function AppSidebar({
               )}
             </Button>
             <Button
+              variant="secondary"
               size="icon-sm"
               onClick={onOpenAddDirectoryDialog}
               aria-label="Add directory"

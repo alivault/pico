@@ -3222,7 +3222,7 @@ export function PiWebAppShell({
                 <DropdownMenuTrigger
                   render={
                     <Button
-                      size="sm"
+                      size="icon-sm"
                       variant="outline"
                       aria-label="Session menu"
                       title="Session menu"
@@ -3313,7 +3313,7 @@ export function PiWebAppShell({
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button
-                size="sm"
+                size="icon-sm"
                 variant="outline"
                 aria-label="Create a new session"
                 title={
@@ -3451,8 +3451,9 @@ export function PiWebAppShell({
                         sessionState.items.length > 0 &&
                         !isMessagesNearBottom ? (
                           <Button
+                            variant="secondary"
                             size="icon-lg"
-                            className="rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
                             title="Jump to latest message"
                             aria-label="Jump to latest message"
                             onClick={scrollConversationToBottom}
@@ -3463,8 +3464,9 @@ export function PiWebAppShell({
 
                         {hasPreviousMessageJumpTarget ? (
                           <Button
+                            variant="secondary"
                             size="icon-lg"
-                            className="rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
                             title="Jump to previous message"
                             aria-label="Jump to previous message"
                             onClick={jumpToPreviousMessage}
