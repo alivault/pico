@@ -5,7 +5,7 @@ import { resolvePiSdkDir } from "@/server/pi-sdk-path"
 import type { PiAiModuleLike, PiSdkLike } from "@/server/pi-sdk-types"
 
 const SELF_CONTAINED_SETTINGS_MANAGER = Symbol(
-  "pi-to-go.self-contained-settings-manager"
+  "pi-web.self-contained-settings-manager"
 )
 
 export { resolvePiSdkDir } from "@/server/pi-sdk-path"

@@ -836,7 +836,7 @@ export const ComposerPanel = React.forwardRef<
                         ? "Write a steer or follow-up message…"
                         : composerSkill
                           ? `Ask with ${formatComposerSkillName(composerSkill)}…`
-                          : "Ask Pi to Go anything…"
+                          : "Ask Pi anything…"
                     }
                     className="min-h-[22px] flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
                   />

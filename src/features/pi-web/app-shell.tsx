@@ -399,7 +399,7 @@ export function PiWebAppShell({
   })
   const currentPageTitle =
     sessionState.uiState.title?.trim() ||
-    (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi to Go")
+    (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
   const statusCount = Object.entries(sessionState.uiState.statuses).filter(
     ([key, value]) => key.trim().length > 0 && value.trim().length > 0
   ).length
@@ -803,7 +803,7 @@ export function PiWebAppShell({
       if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
         showSessionDoneDesktopNotification({
           title: finishedLabel,
-          body: sessionState.cwd || "Open Pi to Go to continue",
+          body: sessionState.cwd || "Open Pi to continue",
           tag:
             sessionState.sessionFile || sessionState.sessionId || currentSessionTitle,
         })
@@ -1292,7 +1292,7 @@ export function PiWebAppShell({
       if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
         showSessionDoneDesktopNotification({
           title: finishedLabel,
-          body: session.cwd || "Open Pi to Go to continue",
+          body: session.cwd || "Open Pi to continue",
           tag: session.path || session.id || session.title,
         })
       }
@@ -3424,7 +3424,7 @@ export function PiWebAppShell({
                                 ? sessionState.cwd
                                   ? `You are in a fresh draft for ${sessionState.cwd}. Unsent composer text is restored per session and directory, matching pi-web.`
                                   : "You are in a fresh draft session. Unsent composer text is restored per session and directory, matching pi-web."
-                                : "This is the native Pi to Go session view backed by the new TypeScript runtime."}
+                                : "This is the native Pi session view backed by the new TypeScript runtime."}
                             </EmptyDescription>
                           </EmptyHeader>
                           {sessionState.draft ? (

@@ -1075,7 +1075,7 @@ export function AppShellDialogs({
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate font-medium">{directoryPath}</span>
                         <span className="truncate text-xs text-muted-foreground">
-                          Use the current Pi to Go working directory.
+                          Use the current Pi working directory.
                         </span>
                       </div>
                     </CommandItem>

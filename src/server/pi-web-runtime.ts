@@ -663,7 +663,7 @@ export class PiWebRuntime {
           : diagnostic.type === "warning"
             ? "warn"
             : "info"
-      console.log(`[pi-to-go:${prefix}] ${diagnostic.message}`)
+      console.log(`[pi-web:${prefix}] ${diagnostic.message}`)
     }
 
     this.servicesByCwd.set(cwd, services)
@@ -850,7 +850,7 @@ export class PiWebRuntime {
         (entry) => (entry.messageCount ?? 0) > 0
       )
     } catch (error) {
-      console.error("[pi-to-go] failed to list sessions:", error)
+      console.error("[pi-web] failed to list sessions:", error)
       return []
     }
   }
@@ -1360,7 +1360,7 @@ export class PiWebRuntime {
     try {
       entry.session.dispose()
     } catch (error) {
-      console.error("[pi-to-go] session dispose error:", error)
+      console.error("[pi-web] session dispose error:", error)
     }
     this.sessionEntries.delete(entry.key)
   }
@@ -1405,7 +1405,7 @@ export class PiWebRuntime {
       imageCount: number
     }
   ) {
-    console.error("[pi-to-go] auto session naming failed:", {
+    console.error("[pi-web] auto session naming failed:", {
       sessionId: entry.session.sessionId,
       cwd: entry.cwd,
       promptPreview: normalizeSessionListTitle(input.text, 160) || undefined,
@@ -1870,7 +1870,7 @@ export class PiWebRuntime {
         },
         custom: async () => {
           throw new Error(
-            "Custom extension UI is not supported in Pi to Go browser mode."
+            "Custom extension UI is not supported in Pi browser mode."
           )
         },
         pasteToEditor: (text: string) => {
@@ -1888,7 +1888,7 @@ export class PiWebRuntime {
         getTheme: () => undefined,
         setTheme: () => ({
           success: false,
-          error: "Theme switching is not supported in Pi to Go browser mode.",
+          error: "Theme switching is not supported in Pi browser mode.",
         }),
       },
       commandContextActions: {
@@ -1967,7 +1967,7 @@ export class PiWebRuntime {
       },
       shutdownHandler: () => {
         this.dispose().catch((error) => {
-          console.error("[pi-to-go] shutdown failed:", error)
+          console.error("[pi-web] shutdown failed:", error)
         })
       },
       onError: (error: Record<string, unknown>) => {
@@ -2234,7 +2234,7 @@ export class PiWebRuntime {
             await this.broadcastEntryState(activeEntry)
             await this.broadcastSessionsAll()
           }
-          console.error("[pi-to-go] prompt error", error)
+          console.error("[pi-web] prompt error", error)
           this.broadcastToViewers(activeEntry.key, {
             type: "request_error",
             scope: "prompt",
@@ -2850,7 +2850,7 @@ export class PiWebRuntime {
       if (!this.highlightLoadErrorLogged) {
         this.highlightLoadErrorLogged = true
         console.warn(
-          `[pi-to-go:warn] Syntax highlighting unavailable: ${formatError(error)}`
+          `[pi-web:warn] Syntax highlighting unavailable: ${formatError(error)}`
         )
       }
       return {

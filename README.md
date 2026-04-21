@@ -1,8 +1,8 @@
-# Pi to Go
+# Pi
 
-Native rebuild of `pi-web` in this repo using TanStack Start, Vite+, shadcn/base-ui, Tailwind v4, and TypeScript.
+Native rebuild of the legacy `pi-web` app in this repo using TanStack Start, Vite+, shadcn/base-ui, Tailwind v4, and TypeScript.
 
-The legacy browser app at `~/code/pi-web` is still the parity reference until manual sign-off is complete.
+The legacy browser app now lives at `~/code/pi-web-legacy` and remains the parity reference until manual sign-off is complete.
 
 ## Stack
 
@@ -106,14 +106,14 @@ The new app already covers the main legacy `pi-web` feature surface:
 
 See `parity-checklist.md` for the detailed mapping from:
 
-- `~/code/pi-web/static/app.js`
-- `~/code/pi-web/static/composer.js`
-- `~/code/pi-web/static/messages.js`
-- `~/code/pi-web/static/dialogs.js`
-- `~/code/pi-web/static/shortcuts.js`
-- `~/code/pi-web/static/sidebar.js`
-- `~/code/pi-web/static/transport.js`
-- `~/code/pi-web/static/state.js`
+- `~/code/pi-web-legacy/static/app.js`
+- `~/code/pi-web-legacy/static/composer.js`
+- `~/code/pi-web-legacy/static/messages.js`
+- `~/code/pi-web-legacy/static/dialogs.js`
+- `~/code/pi-web-legacy/static/shortcuts.js`
+- `~/code/pi-web-legacy/static/sidebar.js`
+- `~/code/pi-web-legacy/static/transport.js`
+- `~/code/pi-web-legacy/static/state.js`
 
 to the new implementation files in this repo.
 
@@ -137,4 +137,4 @@ Current repo snapshot matches the plan status on 2026-04-20:
 ## Notes
 
 - Storage keys intentionally preserve old `pi-web` names where useful, including `pi-web-hide-tools`, to keep user-facing behavior aligned.
-- Until manual verification is complete, `~/code/pi-web` remains the UX source of truth for parity decisions.
+- Until manual verification is complete, `~/code/pi-web-legacy` remains the UX source of truth for parity decisions.

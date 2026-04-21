@@ -12,7 +12,7 @@ export const SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
   "pi-web-session-done-desktop-notifications"
 export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pi-web-hide-tools"
 export const PROMPT_DRAFTS_STORAGE_KEY = "pi-web-prompt-drafts"
-export const VIEWER_CONTEXT_STORAGE_KEY = "pi-to-go-context-id"
+export const VIEWER_CONTEXT_STORAGE_KEY = "pi-web-context-id"
 export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
 

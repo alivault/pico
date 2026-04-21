@@ -348,7 +348,7 @@ export function AppSidebar({
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col">
             <h1 className="truncate text-xl font-semibold tracking-tight text-sidebar-foreground">
-              Pi to Go
+              Pi
             </h1>
           </div>
           <ConnectionBadge connected={connected} />
