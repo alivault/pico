@@ -3000,21 +3000,25 @@ export function PiWebAppShell({
     sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
   )
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
 
     const nextSessionScrollKey = sessionScrollKey(sessionState)
     if (!nextSessionScrollKey) return
     if (lastLoadedSessionScrollKeyRef.current === nextSessionScrollKey) return
 
-    lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
+    const viewport =
+      messageViewportRef.current ||
+      findMessageViewport(messagesScrollAreaRef.current)
+    if (!viewport) return
 
-    requestAnimationFrame(() => {
-      const viewport = messageViewportRef.current
-      if (!viewport) return
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" })
-      setIsMessagesNearBottom(true)
-    })
+    messageViewportRef.current = viewport
+    lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
+    viewport.scrollTop = viewport.scrollHeight
+    setIsMessagesNearTop(isViewportNearTop(viewport))
+    setIsMessagesNearBottom(isViewportNearBottom(viewport))
+    setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
+    setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
   }, [isSessionViewLoading, sessionState])
   const draftGitSummary =
     sessionState.draft &&
