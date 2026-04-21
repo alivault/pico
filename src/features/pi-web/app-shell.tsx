@@ -89,6 +89,7 @@ import {
   AssistantMessageCard,
   MessagesWorkingIndicator,
   UserMessageCard,
+  assistantMessageHasVisibleBlocks,
   conversationItemSignature,
 } from "@/features/pi-web/conversation-view"
 import {
@@ -3397,15 +3398,29 @@ export function PiWebAppShell({
                               counts.set(baseKey, count)
                               const key = `${baseKey}:${count}`
 
-                              return item.kind === "user" ? (
-                                <div
-                                  key={key}
-                                  data-message-anchor="true"
-                                  className="flex justify-end"
-                                >
-                                  <UserMessageCard item={item} />
-                                </div>
-                              ) : (
+                              if (item.kind === "user") {
+                                return (
+                                  <div
+                                    key={key}
+                                    data-message-anchor="true"
+                                    className="flex justify-end"
+                                  >
+                                    <UserMessageCard item={item} />
+                                  </div>
+                                )
+                              }
+
+                              if (
+                                !assistantMessageHasVisibleBlocks({
+                                  item,
+                                  hideThinking: sessionState.hideThinkingBlock,
+                                  hideToolBlocks,
+                                })
+                              ) {
+                                return null
+                              }
+
+                              return (
                                 <div
                                   key={key}
                                   data-message-anchor="true"

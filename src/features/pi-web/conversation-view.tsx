@@ -580,6 +580,30 @@ export function UserMessageCard({
   )
 }
 
+export function assistantMessageHasVisibleBlocks({
+  item,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  item: Extract<ConversationItem, { kind: "assistant" }>
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  return item.blocks.some((block) => {
+    switch (block.type) {
+      case "text":
+      case "compaction":
+        return true
+      case "thinking":
+        return !hideThinking
+      case "tool":
+        return !hideToolBlocks
+      default:
+        return false
+    }
+  })
+}
+
 export function AssistantMessageCard({
   item,
   hideThinking,
@@ -627,7 +651,7 @@ export function AssistantMessageCard({
     })
   })()
 
-  if (renderedBlocks.length === 0) {
+  if (!assistantMessageHasVisibleBlocks({ item, hideThinking, hideToolBlocks })) {
     return null
   }
 
