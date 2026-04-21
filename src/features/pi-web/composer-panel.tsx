@@ -865,6 +865,18 @@ export const ComposerPanel = React.forwardRef<
               </div>
             </div>
 
+            <div className="absolute bottom-3 left-3 flex items-center">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Add images"
+                aria-label="Add images"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlusIcon />
+              </Button>
+            </div>
+
             <div className="absolute right-3 bottom-3 flex flex-wrap items-center justify-end gap-2">
               {acceptFollowUps ? (
                 <>
@@ -919,7 +931,7 @@ export const ComposerPanel = React.forwardRef<
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
                 <PopoverTrigger
@@ -1007,15 +1019,6 @@ export const ComposerPanel = React.forwardRef<
                 </PopoverContent>
               </Popover>
             </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlusIcon data-icon="inline-start" />
-              Add images
-            </Button>
           </div>
         </div>
 
