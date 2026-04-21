@@ -203,6 +203,35 @@ export type AgentSessionLike = {
   reload?(): Promise<void>
 }
 
+export type AgentSessionRuntimeLike = {
+  services: SessionServicesLike
+  session: AgentSessionLike
+  cwd: string
+  diagnostics: Array<{
+    type: string
+    message: string
+  }>
+  modelFallbackMessage?: string
+  switchSession(
+    sessionPath: string,
+    cwdOverride?: string
+  ): Promise<{ cancelled: boolean }>
+  newSession(options?: {
+    parentSession?: string
+    setup?: (sessionManager: SessionManagerLike) => Promise<void>
+  }): Promise<{ cancelled: boolean }>
+  fork(
+    entryId: string,
+    options?: {
+      position?: "before" | "at"
+    }
+  ): Promise<{
+    cancelled: boolean
+    selectedText?: string
+  }>
+  dispose(): Promise<void>
+}
+
 export type PiSdkLike = {
   getAgentDir(): string
   SettingsManager: {
@@ -223,6 +252,27 @@ export type PiSdkLike = {
   }): Promise<{
     session: AgentSessionLike
   }>
+  createAgentSessionRuntime(
+    createRuntime: (options: {
+      cwd: string
+      agentDir: string
+      sessionManager: SessionManagerLike
+      sessionStartEvent?: SessionStartEventLike
+    }) => Promise<{
+      session: AgentSessionLike
+      services: SessionServicesLike
+      diagnostics: Array<{
+        type: string
+        message: string
+      }>
+    }>,
+    options: {
+      cwd: string
+      agentDir: string
+      sessionManager: SessionManagerLike
+      sessionStartEvent?: SessionStartEventLike
+    }
+  ): Promise<AgentSessionRuntimeLike>
   SessionManager: {
     create(cwd: string, sessionDir?: string): SessionManagerLike
     open(

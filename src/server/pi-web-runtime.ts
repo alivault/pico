@@ -22,6 +22,7 @@ import {
 } from "@/server/pi-sdk"
 import type {
   AgentSessionLike,
+  AgentSessionRuntimeLike,
   MessageLike,
   ModelLike,
   PiSdkLike,
@@ -84,6 +85,7 @@ type SessionEntry = {
   key: string
   cwd: string
   services: SessionServicesLike
+  runtime: AgentSessionRuntimeLike
   session: AgentSessionLike
   draft: boolean
   streamingState: boolean
@@ -637,6 +639,25 @@ export class PiWebRuntime {
     return await this.sdkPromise
   }
 
+  private logRuntimeDiagnostics(
+    diagnostics:
+      | Array<{
+          type: string
+          message: string
+        }>
+      | undefined
+  ) {
+    for (const diagnostic of diagnostics ?? []) {
+      const prefix =
+        diagnostic.type === "error"
+          ? "error"
+          : diagnostic.type === "warning"
+            ? "warn"
+            : "info"
+      console.log(`[pi-web:${prefix}] ${diagnostic.message}`)
+    }
+  }
+
   private async getServicesForCwd(cwd: string) {
     const cached = this.servicesByCwd.get(cwd)
     if (cached) return cached
@@ -656,18 +677,42 @@ export class PiWebRuntime {
       },
     })
 
-    for (const diagnostic of services.diagnostics ?? []) {
-      const prefix =
-        diagnostic.type === "error"
-          ? "error"
-          : diagnostic.type === "warning"
-            ? "warn"
-            : "info"
-      console.log(`[pi-web:${prefix}] ${diagnostic.message}`)
-    }
-
+    this.logRuntimeDiagnostics(services.diagnostics)
     this.servicesByCwd.set(cwd, services)
     return services
+  }
+
+  private async createSessionRuntime(
+    sessionManager: SessionManagerLike,
+    options?: {
+      sessionStartEvent?: SessionStartEventLike
+    }
+  ) {
+    const sdk = await this.getSdk()
+    const agentDir = sdk.getAgentDir()
+    const cwd = sessionManager.getCwd()
+
+    return await sdk.createAgentSessionRuntime(
+      async ({ cwd: runtimeCwd, sessionManager, sessionStartEvent }) => {
+        const services = await this.getServicesForCwd(runtimeCwd)
+        const result = await sdk.createAgentSessionFromServices({
+          services,
+          sessionManager,
+          sessionStartEvent,
+        })
+        return {
+          ...result,
+          services,
+          diagnostics: services.diagnostics ?? [],
+        }
+      },
+      {
+        cwd,
+        agentDir,
+        sessionManager,
+        sessionStartEvent: options?.sessionStartEvent,
+      }
+    )
   }
 
   private listAvailableModels(entry: SessionEntry) {
@@ -783,6 +828,8 @@ export class PiWebRuntime {
   }
 
   private currentStatePayload(entry: SessionEntry) {
+    const draft = this.isDraftEntry(entry)
+
     return {
       type: "state_sync",
       sessionKey: entry.key,
@@ -790,7 +837,7 @@ export class PiWebRuntime {
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)
       ),
-      draft: this.isDraftEntry(entry),
+      draft,
       streaming: this.getEntryStreamingState(entry),
       streamingMessage: this.getEntryStreamingState(entry)
         ? entry.session.state.streamingMessage
@@ -802,8 +849,8 @@ export class PiWebRuntime {
       availableThinkingLevels: entry.session.getAvailableThinkingLevels(),
       availableModels: this.listAvailableModels(entry),
       availableSkills: this.listAvailableSkills(entry),
-      sessionId: entry.session.sessionId,
-      sessionFile: entry.session.sessionFile,
+      sessionId: draft ? undefined : entry.session.sessionId,
+      sessionFile: draft ? undefined : entry.session.sessionFile,
       sessionName: entry.session.sessionName,
       firstMessage: this.getSessionFirstMessage(entry),
       cwd: entry.cwd,
@@ -1244,25 +1291,21 @@ export class PiWebRuntime {
     )
   }
 
-  private async createSessionEntry(
-    sessionManager: SessionManagerLike,
+  private async createSessionEntryFromRuntime(
+    runtime: AgentSessionRuntimeLike,
     options?: {
       draft?: boolean
-      sessionStartEvent?: SessionStartEventLike
     }
   ) {
-    const sdk = await this.getSdk()
-    const cwd = sessionManager.getCwd()
-    const services = await this.getServicesForCwd(cwd)
-    const { session } = await sdk.createAgentSessionFromServices({
-      services,
-      sessionManager,
-      sessionStartEvent: options?.sessionStartEvent,
-    })
+    this.logRuntimeDiagnostics(runtime.diagnostics)
+
+    const session = runtime.session
+    const services = runtime.services
+    const cwd = runtime.cwd
     const key = session.sessionFile ?? `ephemeral:${cryptoRandomId()}`
     const existing = this.sessionEntries.get(key)
     if (existing) {
-      session.dispose()
+      await runtime.dispose()
       return existing
     }
 
@@ -1270,6 +1313,7 @@ export class PiWebRuntime {
       key,
       cwd,
       services,
+      runtime,
       session,
       draft: Boolean(options?.draft),
       streamingState: Boolean(session.isStreaming),
@@ -1296,11 +1340,26 @@ export class PiWebRuntime {
     return entry
   }
 
+  private async createSessionEntry(
+    sessionManager: SessionManagerLike,
+    options?: {
+      draft?: boolean
+      sessionStartEvent?: SessionStartEventLike
+    }
+  ) {
+    const runtime = await this.createSessionRuntime(sessionManager, {
+      sessionStartEvent: options?.sessionStartEvent,
+    })
+    return await this.createSessionEntryFromRuntime(runtime, {
+      draft: options?.draft,
+    })
+  }
+
   async createNewSessionEntry(
     cwd: string,
     options?: {
       draft?: boolean
-      newSessionOptions?: { id?: string; parentSession?: string }
+      newSessionOptions?: { parentSession?: string }
       sessionStartEvent?: SessionStartEventLike
     }
   ) {
@@ -1321,7 +1380,67 @@ export class PiWebRuntime {
 
     const sdk = await this.getSdk()
     const sessionManager = sdk.SessionManager.open(sessionPath)
-    return await this.createSessionEntry(sessionManager)
+    return await this.createSessionEntry(sessionManager, {
+      sessionStartEvent: {
+        type: "session_start",
+        reason: "resume",
+      },
+    })
+  }
+
+  private async cloneSessionManagerForEntry(entry: SessionEntry) {
+    const currentManager = entry.session.sessionManager
+    if (currentManager.isPersisted?.()) {
+      const currentSessionFile = entry.session.sessionFile
+      if (!currentSessionFile) {
+        throw new Error("Persisted session is missing a session file")
+      }
+
+      const sdk = await this.getSdk()
+      return sdk.SessionManager.open(
+        currentSessionFile,
+        currentManager.getSessionDir?.(),
+        entry.cwd
+      )
+    }
+
+    return await this.createForkedInMemorySessionManager(
+      currentManager,
+      currentManager.getLeafId?.(),
+      entry.session.sessionFile
+    )
+  }
+
+  private async createTransitionSessionEntry(
+    sourceEntry: SessionEntry,
+    transition: (runtime: AgentSessionRuntimeLike) => Promise<{
+      cancelled?: boolean
+      draft?: boolean
+      selectedText?: string
+    }>
+  ) {
+    const runtime = await this.createSessionRuntime(
+      await this.cloneSessionManagerForEntry(sourceEntry)
+    )
+
+    try {
+      const result = await transition(runtime)
+      if (result.cancelled) {
+        await runtime.dispose()
+        return { cancelled: true as const, entry: undefined }
+      }
+
+      const nextEntry = await this.createSessionEntryFromRuntime(runtime, {
+        draft: Boolean(result.draft),
+      })
+      if (result.selectedText && !nextEntry.uiState.editorText) {
+        nextEntry.uiState.editorText = result.selectedText
+      }
+      return { cancelled: false as const, entry: nextEntry }
+    } catch (error) {
+      await runtime.dispose().catch(() => {})
+      throw error
+    }
   }
 
   private installSessionMetadataSync(entry: SessionEntry) {
@@ -1358,7 +1477,7 @@ export class PiWebRuntime {
       // ignore abort errors during disposal
     }
     try {
-      entry.session.dispose()
+      await entry.runtime.dispose()
     } catch (error) {
       console.error("[pi-web] session dispose error:", error)
     }
@@ -1894,16 +2013,27 @@ export class PiWebRuntime {
       commandContextActions: {
         waitForIdle: () => session.agent.waitForIdle(),
         newSession: async (newSessionOptions?: {
-          id?: string
           parentSession?: string
         }) => {
-          const nextEntry = await this.createNewSessionEntry(entry.cwd, {
-            draft: true,
-            newSessionOptions,
-          })
+          const result = await this.createTransitionSessionEntry(
+            entry,
+            async (runtime) => {
+              const next = await runtime.newSession({
+                parentSession: newSessionOptions?.parentSession,
+              })
+              return {
+                cancelled: next.cancelled,
+                draft: true,
+              }
+            }
+          )
+          if (!result.entry) {
+            return { sessionId: undefined, sessionFile: undefined }
+          }
+
           for (const context of viewers()) {
-            context.draftKey = nextEntry.key
-            await this.activateContextSession(context, nextEntry)
+            context.draftKey = result.entry.key
+            await this.activateContextSession(context, result.entry)
           }
           await this.broadcastSessionsAll()
           return { sessionId: undefined, sessionFile: undefined }
@@ -1948,7 +2078,20 @@ export class PiWebRuntime {
           }
         },
         switchSession: async (sessionPath: string) => {
-          const nextEntry = await this.ensureSessionEntryByPath(sessionPath)
+          const result = await this.createTransitionSessionEntry(
+            entry,
+            async (runtime) => {
+              const next = await runtime.switchSession(sessionPath)
+              return { cancelled: next.cancelled, draft: false }
+            }
+          )
+          const nextEntry = result.entry
+          if (!nextEntry) {
+            return {
+              sessionId: entry.session.sessionId,
+              sessionFile: entry.session.sessionFile,
+            }
+          }
           for (const context of viewers()) {
             await this.activateContextSession(context, nextEntry)
           }
@@ -2334,9 +2477,31 @@ export class PiWebRuntime {
         ? body.cwd.trim()
         : undefined
     const nextCwd = requestedCwd || context.sessionScope || activeEntry.cwd
-    const nextEntry = await this.createNewSessionEntry(nextCwd, {
-      draft: true,
-    })
+
+    const nextEntry =
+      nextCwd === activeEntry.cwd
+        ? (
+            await this.createTransitionSessionEntry(activeEntry, async (runtime) => {
+              const next = await runtime.newSession()
+              return {
+                cancelled: next.cancelled,
+                draft: true,
+              }
+            })
+          ).entry
+        : await this.createNewSessionEntry(nextCwd, {
+            draft: true,
+            sessionStartEvent: {
+              type: "session_start",
+              reason: "new",
+              previousSessionFile: activeEntry.session.sessionFile,
+            },
+          })
+
+    if (!nextEntry) {
+      return { ok: true, draft: true, cancelled: true }
+    }
+
     context.draftKey = nextEntry.key
     await this.activateContextSession(context, nextEntry)
     await this.broadcastSessionsAll()
@@ -2564,54 +2729,59 @@ export class PiWebRuntime {
     const selectedText = extractMessageText(selectedEntry.message)
     const previousSessionFile = activeEntry.session.sessionFile
     const sourceSessionDir = currentManager.getSessionDir?.()
-    const sessionStartEvent: SessionStartEventLike = {
-      type: "session_start",
-      reason: "fork",
-      previousSessionFile,
-    }
 
-    let sessionManager: SessionManagerLike
+    let nextEntry: SessionEntry
     if (currentManager.isPersisted?.()) {
       const sdk = await this.getSdk()
-      if (!selectedParentId) {
-        sessionManager = sdk.SessionManager.create(
-          activeEntry.cwd,
-          sourceSessionDir
-        )
-        sessionManager.newSession?.({ parentSession: previousSessionFile })
-      } else {
-        const currentSessionFile = activeEntry.session.sessionFile
-        if (!currentSessionFile) {
-          throw new Error("Persisted session is missing a session file")
+      const currentSessionFile = activeEntry.session.sessionFile
+      if (!currentSessionFile) {
+        throw new Error("Persisted session is missing a session file")
+      }
+
+      const sourceManager = sdk.SessionManager.open(
+        currentSessionFile,
+        sourceSessionDir,
+        activeEntry.cwd
+      )
+      const runtime = await this.createSessionRuntime(sourceManager)
+      try {
+        const result = await runtime.fork(entryId, {
+          position: "before",
+        })
+        if (result.cancelled) {
+          await runtime.dispose()
+          return { ok: true, cancelled: true }
         }
-        const sourceManager = sdk.SessionManager.open(
-          currentSessionFile,
-          sourceSessionDir,
-          activeEntry.cwd
-        )
-        const branchedPath =
-          sourceManager.createBranchedSession?.(selectedParentId)
-        if (!branchedPath) {
-          throw new Error("Failed to create forked session")
+
+        nextEntry = await this.createSessionEntryFromRuntime(runtime, {
+          draft: !selectedParentId,
+        })
+        if (result.selectedText) {
+          nextEntry.uiState.editorText = result.selectedText
         }
-        sessionManager = sdk.SessionManager.open(
-          branchedPath,
-          sourceSessionDir,
-          activeEntry.cwd
-        )
+      } catch (error) {
+        await runtime.dispose().catch(() => {})
+        throw error
       }
     } else {
-      sessionManager = await this.createForkedInMemorySessionManager(
+      const sessionStartEvent: SessionStartEventLike = {
+        type: "session_start",
+        reason: "fork",
+        previousSessionFile,
+      }
+      const sessionManager = await this.createForkedInMemorySessionManager(
         currentManager,
         selectedParentId,
         previousSessionFile
       )
+      nextEntry = await this.createSessionEntry(sessionManager, {
+        draft: !selectedParentId,
+        sessionStartEvent,
+      })
     }
-
-    const nextEntry = await this.createSessionEntry(sessionManager, {
-      draft: !selectedParentId,
-      sessionStartEvent,
-    })
+    if (!nextEntry.uiState.editorText) {
+      nextEntry.uiState.editorText = selectedText
+    }
     const baseName =
       cleanupSessionNameCandidate(activeEntry.session.sessionName) ||
       getSessionListTitle({

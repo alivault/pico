@@ -716,7 +716,7 @@ export function PiWebAppShell({
   }, [sessionId, updateComposerDraft, viewerContextId])
 
   React.useEffect(() => {
-    if (!sessionState.sessionId) return
+    if (sessionState.draft || !sessionState.sessionId) return
 
     const pendingRouteSessionId = pendingRouteSessionIdRef.current
     if (pendingRouteSessionId) {
@@ -729,7 +729,7 @@ export function PiWebAppShell({
     if (sessionState.sessionId !== sessionId) {
       handleSelectSession(sessionState.sessionId)
     }
-  }, [handleSelectSession, sessionId, sessionState.sessionId])
+  }, [handleSelectSession, sessionId, sessionState.draft, sessionState.sessionId])
 
   const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
 
@@ -3111,7 +3111,9 @@ export function PiWebAppShell({
     cycleThinkingLevel,
   ])
 
-  const isSessionViewLoading = Boolean(sessionId && sessionId !== sessionState.sessionId)
+  const isSessionViewLoading = Boolean(
+    sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
+  )
   const draftGitSummary =
     sessionState.draft &&
     sessionState.items.length === 0 &&
