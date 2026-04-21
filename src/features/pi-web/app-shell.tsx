@@ -1053,6 +1053,29 @@ export function PiWebAppShell({
     [directoryIndexes, directoryStateByPath, sessionState.cwd, sidebarDirectories]
   )
 
+  const sidebarSearchPending = React.useMemo(() => {
+    const query = sessionSearch.trim()
+    if (!query) return false
+
+    return baseSidebarDirectories.some((directory) => {
+      const totalCount = directoryStateByPath.get(directory)?.totalCount ?? 0
+      const loadedCount = Object.prototype.hasOwnProperty.call(
+        directoryIndexes,
+        directory
+      )
+        ? directoryIndexes[directory].length
+        : 0
+      const loading = Boolean(directoryIndexLoading[directory])
+      return loading || (!loadedCount && totalCount > 0)
+    })
+  }, [
+    baseSidebarDirectories,
+    directoryIndexes,
+    directoryIndexLoading,
+    directoryStateByPath,
+    sessionSearch,
+  ])
+
   const {
     visibleDirectories,
     filteredDirectorySessions,
@@ -1097,12 +1120,19 @@ export function PiWebAppShell({
       visibleDirectories: nextVisibleDirectories,
       filteredDirectorySessions: nextFilteredSessions,
       emptySidebarStateText: query
-        ? "No sessions or directories match your search."
+        ? sidebarSearchPending
+          ? "Searching sessions…"
+          : "No sessions or directories match your search."
         : baseSidebarDirectories.length > 0
           ? "No directories match this view."
           : "No directories added yet.",
     }
-  }, [baseSidebarDirectories, directoryIndexes, sessionSearch])
+  }, [
+    baseSidebarDirectories,
+    directoryIndexes,
+    sessionSearch,
+    sidebarSearchPending,
+  ])
 
   const allDirectoriesCollapsed = React.useMemo(
     () =>
