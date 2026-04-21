@@ -508,9 +508,8 @@ export function AppSidebar({
                             tooltip={entry.title}
                             className={cn(
                               "h-auto items-start gap-2 py-2 pr-10",
-                              isActive && "ring-1 ring-primary/20",
-                              isSelected &&
-                                "bg-primary/10 text-sidebar-foreground hover:bg-primary/15"
+                              (isActive || isSelected) &&
+                                "bg-sidebar-accent text-sidebar-accent-foreground"
                             )}
                             onClick={(event) =>
                               onSessionClick?.(entry, {
