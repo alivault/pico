@@ -23,6 +23,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
+  ChevronsUpDown,
   EllipsisIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -650,7 +651,11 @@ export function AppSidebar({
                   : "Collapse all directories"
               }
             >
-              <ChevronsDownUpIcon />
+              {allDirectoriesCollapsed ? (
+                <ChevronsUpDown />
+              ) : (
+                <ChevronsDownUpIcon />
+              )}
             </Button>
             <Button
               size="icon-sm"
