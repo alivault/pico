@@ -180,6 +180,28 @@ function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
   return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold
 }
 
+const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
+const TITLE_STREAMING_INTERVAL_MS = 500
+
+function sessionNotificationKey(sessionLike: {
+  sessionFile?: string
+  path?: string
+  sessionId?: string
+  id?: string
+}) {
+  const sessionFile = (sessionLike.sessionFile || sessionLike.path || "").trim()
+  if (sessionFile) return `path:${sessionFile}`
+
+  const sessionId = (sessionLike.sessionId || sessionLike.id || "").trim()
+  if (sessionId) return `id:${sessionId}`
+
+  return ""
+}
+
+function finishedSessionLabel(title: string) {
+  return title !== "New session" ? `Session finished: ${title}` : "Session finished"
+}
+
 function previousMessageJumpTarget(viewport: HTMLDivElement) {
   const anchors = [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
   if (anchors.length === 0) return null
@@ -330,6 +352,15 @@ export function PiWebAppShell({
   ] = React.useState(true)
   const [desktopNotificationPermission, setDesktopNotificationPermission] =
     React.useState<DesktopNotificationPermission>("unsupported")
+  const [isPageForeground, setIsPageForeground] = React.useState(() =>
+    typeof document === "undefined"
+      ? true
+      : document.visibilityState === "visible" && document.hasFocus()
+  )
+  const [titleStreamingFrameIndex, setTitleStreamingFrameIndex] =
+    React.useState(0)
+  const [backgroundCurrentSessionUnreadKey, setBackgroundCurrentSessionUnreadKey] =
+    React.useState("")
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
@@ -347,6 +378,8 @@ export function PiWebAppShell({
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const lastEscapePressedAtRef = React.useRef(0)
+  const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(new Map())
+  const sessionUnreadSnapshotsReadyRef = React.useRef(false)
 
   const { resolvedTheme, setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -363,6 +396,13 @@ export function PiWebAppShell({
       sessionState.sessionName || sessionState.firstMessage || "New session",
     name: sessionState.sessionName,
   })
+  const activeSessionNotificationKey = sessionNotificationKey({
+    sessionId: sessionState.sessionId,
+    sessionFile: sessionState.sessionFile,
+  })
+  const currentPageTitle =
+    sessionState.uiState.title?.trim() ||
+    (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi to Go")
   const statusCount = Object.entries(sessionState.uiState.statuses).filter(
     ([key, value]) => key.trim().length > 0 && value.trim().length > 0
   ).length
@@ -701,25 +741,68 @@ export function PiWebAppShell({
   }, [sessionState.cwd])
 
   React.useEffect(() => {
-    if (lastStreamingRef.current && !sessionState.streaming) {
-      const finishedLabel =
-        currentSessionTitle !== "New session"
-          ? `Session finished: ${currentSessionTitle}`
-          : "Session finished"
+    const syncPageForeground = () => {
+      setIsPageForeground(
+        document.visibilityState === "visible" && document.hasFocus()
+      )
+    }
 
+    syncPageForeground()
+    window.addEventListener("focus", syncPageForeground)
+    window.addEventListener("blur", syncPageForeground)
+    document.addEventListener("visibilitychange", syncPageForeground)
+
+    return () => {
+      window.removeEventListener("focus", syncPageForeground)
+      window.removeEventListener("blur", syncPageForeground)
+      document.removeEventListener("visibilitychange", syncPageForeground)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (isPageForeground || !activeSessionNotificationKey) {
+      setBackgroundCurrentSessionUnreadKey("")
+      return
+    }
+
+    setBackgroundCurrentSessionUnreadKey((current) =>
+      current && current !== activeSessionNotificationKey ? "" : current
+    )
+  }, [activeSessionNotificationKey, isPageForeground])
+
+  React.useEffect(() => {
+    if (!sessionState.streaming) {
+      setTitleStreamingFrameIndex(0)
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setTitleStreamingFrameIndex(
+        (current) => (current + 1) % TITLE_STREAMING_FRAMES.length
+      )
+    }, TITLE_STREAMING_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [sessionState.streaming])
+
+  React.useEffect(() => {
+    if (lastStreamingRef.current && !sessionState.streaming) {
+      const finishedLabel = finishedSessionLabel(currentSessionTitle)
       toast.success(finishedLabel)
 
-      if (sessionDoneDesktopNotificationsEnabled) {
-        const pageVisible =
-          document.visibilityState === "visible" && document.hasFocus()
+      if (!isPageForeground && activeSessionNotificationKey) {
+        setBackgroundCurrentSessionUnreadKey(activeSessionNotificationKey)
+      }
 
-        if (!pageVisible) {
-          showSessionDoneDesktopNotification({
-            title: finishedLabel,
-            body: sessionState.cwd || "Open Pi to Go to continue",
-            tag: sessionState.sessionId || currentSessionTitle,
-          })
-        }
+      if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
+        showSessionDoneDesktopNotification({
+          title: finishedLabel,
+          body: sessionState.cwd || "Open Pi to Go to continue",
+          tag:
+            sessionState.sessionFile || sessionState.sessionId || currentSessionTitle,
+        })
       }
 
       if (sessionDoneSoundEnabled) {
@@ -728,10 +811,13 @@ export function PiWebAppShell({
     }
     lastStreamingRef.current = sessionState.streaming
   }, [
+    activeSessionNotificationKey,
     currentSessionTitle,
+    isPageForeground,
     sessionDoneDesktopNotificationsEnabled,
     sessionDoneSoundEnabled,
     sessionState.cwd,
+    sessionState.sessionFile,
     sessionState.sessionId,
     sessionState.streaming,
   ])
@@ -1037,6 +1123,87 @@ export function PiWebAppShell({
 
     return nextEntries
   }, [baseSidebarDirectories, directoryIndexes])
+
+  const sidebarSessions = React.useMemo(
+    () => Array.from(sidebarSessionEntriesByKey.values()),
+    [sidebarSessionEntriesByKey]
+  )
+  const unreadSessionCount = React.useMemo(() => {
+    const unreadKeys = new Set<string>()
+
+    for (const session of sidebarSessions) {
+      const key = sessionNotificationKey(session)
+      if (!key || !session.unread) continue
+      unreadKeys.add(key)
+    }
+
+    if (
+      backgroundCurrentSessionUnreadKey &&
+      !unreadKeys.has(backgroundCurrentSessionUnreadKey)
+    ) {
+      unreadKeys.add(backgroundCurrentSessionUnreadKey)
+    }
+
+    return unreadKeys.size
+  }, [backgroundCurrentSessionUnreadKey, sidebarSessions])
+
+  React.useEffect(() => {
+    const streamingPrefix = sessionState.streaming
+      ? `${TITLE_STREAMING_FRAMES[titleStreamingFrameIndex]} `
+      : ""
+    const nextTitle = `${streamingPrefix}${currentPageTitle}`
+    document.title =
+      unreadSessionCount > 0 ? `(${unreadSessionCount}) ${nextTitle}` : nextTitle
+  }, [
+    currentPageTitle,
+    titleStreamingFrameIndex,
+    unreadSessionCount,
+    sessionState.streaming,
+  ])
+
+  React.useEffect(() => {
+    const nextSnapshots = new Map<string, boolean>()
+    const finishedSessions: Array<SessionListEntry> = []
+
+    for (const session of sidebarSessions) {
+      const key = sessionNotificationKey(session)
+      if (!key) continue
+
+      const unread = Boolean(session.unread)
+      const previous = sessionUnreadSnapshotsRef.current.get(key)
+      if (sessionUnreadSnapshotsReadyRef.current && unread && !previous) {
+        finishedSessions.push(session)
+      }
+      nextSnapshots.set(key, unread)
+    }
+
+    const ready = sessionUnreadSnapshotsReadyRef.current
+    sessionUnreadSnapshotsRef.current = nextSnapshots
+    sessionUnreadSnapshotsReadyRef.current = true
+    if (!ready) return
+
+    for (const [index, session] of finishedSessions.entries()) {
+      const finishedLabel = finishedSessionLabel(session.title || "New session")
+      toast.success(finishedLabel)
+
+      if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
+        showSessionDoneDesktopNotification({
+          title: finishedLabel,
+          body: session.cwd || "Open Pi to Go to continue",
+          tag: session.path || session.id || session.title,
+        })
+      }
+
+      if (sessionDoneSoundEnabled && index === 0) {
+        void playSessionDoneSound()
+      }
+    }
+  }, [
+    isPageForeground,
+    sessionDoneDesktopNotificationsEnabled,
+    sessionDoneSoundEnabled,
+    sidebarSessions,
+  ])
 
   const renderedSidebarSessionKeys = React.useMemo(() => {
     const searchActive = sessionSearch.trim().length > 0

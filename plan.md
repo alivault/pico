@@ -160,7 +160,7 @@ Reference: `static/app.js`, `static/dialogs.js`, `static/composer.js`
   - [x] tool visibility toggle
   - [x] any remaining shell/composer toggles that still exist in old `pi-web`
 - [x] Align shortcuts dialog with the actual final shortcut map once parity behavior ships
-- [ ] Audit document title / completion notifications / unread-finished behavior against old `pi-web`
+- [x] Audit document title / completion notifications / unread-finished behavior against old `pi-web`
 
 ### 6) Verification, docs, and sign-off
 
