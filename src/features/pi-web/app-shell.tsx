@@ -1660,6 +1660,7 @@ export function PiWebAppShell({
           }),
         }
       )
+      handleSelectSession(undefined)
     } catch (error) {
       setDraftSessionLoadingOwnerKey((current) =>
         current === ownerKey ? null : current
@@ -1672,6 +1673,7 @@ export function PiWebAppShell({
   }, [
     activeSessionId,
     defaultNewSessionDirectory,
+    handleSelectSession,
     rememberRecentDirectory,
     restorePendingDraftPrompt,
     viewerContextId,
