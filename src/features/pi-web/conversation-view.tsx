@@ -196,6 +196,17 @@ export function promptImageKey(
   return `${image.previewUrl}:${image.data.slice(0, 24)}`
 }
 
+function toolArgsKey(args: unknown) {
+  if (typeof args === "string") return args
+  if (args == null) return ""
+
+  try {
+    return JSON.stringify(args)
+  } catch {
+    return ""
+  }
+}
+
 function assistantBlockKey(
   block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]
 ) {
@@ -205,7 +216,7 @@ function assistantBlockKey(
     case "thinking":
       return `thinking:${block.text}`
     case "tool":
-      return `tool:${block.callId || block.name || "tool"}:${block.output}`
+      return `tool:${block.callId || block.name || "tool"}:${toolArgsKey(block.args)}`
     case "compaction":
       return `compaction:${block.tokensBefore}:${block.summary}`
     default:
@@ -411,27 +422,31 @@ function ToolBlockCard({
 }) {
   const diffLines = toolDiffPreview(block)
   const output = hideSuccessfulToolOutput(block) ? "" : block.output
+  const hasContent = diffLines.length > 0 || Boolean(output)
 
   return (
-    <section
+    <details
       className={cn(
-        "rounded-xl border px-3 py-3 text-sm",
+        "group rounded-xl border text-sm",
         block.running && "border-amber-500/30 bg-amber-500/5",
         block.isError && "border-destructive/30 bg-destructive/5",
         !block.running && !block.isError && "bg-muted/20"
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 font-medium text-foreground">
-            <WrenchIcon className="text-muted-foreground" />
-            <span>{toolDisplayName(block.name)}</span>
-          </div>
-          {toolSummary(block) ? (
-            <div className="mt-1 truncate text-xs text-muted-foreground">
-              {toolSummary(block)}
+      <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 px-3 py-2.5 select-none [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0 flex flex-1 items-start gap-2">
+          <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+          <WrenchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-foreground">
+              {toolDisplayName(block.name)}
             </div>
-          ) : null}
+            {toolSummary(block) ? (
+              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                {toolSummary(block)}
+              </div>
+            ) : null}
+          </div>
         </div>
         {block.running ? (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -442,20 +457,26 @@ function ToolBlockCard({
         ) : (
           <Badge variant="outline">Done</Badge>
         )}
+      </summary>
+
+      <div className="border-t px-3 py-3">
+        {diffLines.length > 0 ? (
+          <div className={cn(output && "mb-3")}>
+            <ToolDiffPreview lines={diffLines} />
+          </div>
+        ) : null}
+
+        {output ? (
+          <pre className="overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5 whitespace-pre-wrap">
+            {output}
+          </pre>
+        ) : null}
+
+        {!hasContent ? (
+          <div className="text-xs text-muted-foreground">No output available.</div>
+        ) : null}
       </div>
-
-      {diffLines.length > 0 ? (
-        <div className="mt-3">
-          <ToolDiffPreview lines={diffLines} />
-        </div>
-      ) : null}
-
-      {output ? (
-        <pre className="mt-3 overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5 whitespace-pre-wrap">
-          {output}
-        </pre>
-      ) : null}
-    </section>
+    </details>
   )
 }
 

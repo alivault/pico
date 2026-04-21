@@ -1,5 +1,7 @@
 import * as React from "react"
 import {
+  ArrowDownIcon,
+  ArrowUpToLineIcon,
   EllipsisIcon,
   PlusIcon,
   SparklesIcon,
@@ -224,14 +226,6 @@ function previousMessageJumpTarget(viewport: HTMLDivElement) {
   }
 
   return candidate
-}
-
-function ConnectionBadge({ connected }: { connected: boolean }) {
-  return (
-    <Badge variant={connected ? "default" : "destructive"}>
-      {connected ? "Connected" : "Disconnected"}
-    </Badge>
-  )
 }
 
 export function PiWebAppShell({
@@ -737,10 +731,17 @@ export function PiWebAppShell({
     }
   }, [handleSelectSession, sessionId, sessionState.sessionId])
 
+  const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
+
+  React.useEffect(() => {
+    setStoredDraftDirectory(readStoredDraftDirectory() || "")
+  }, [])
+
   React.useEffect(() => {
     const nextDirectory = sessionState.cwd?.trim()
     if (!nextDirectory) return
     safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
+    setStoredDraftDirectory(nextDirectory)
   }, [sessionState.cwd])
 
   React.useEffect(() => {
@@ -1011,7 +1012,6 @@ export function PiWebAppShell({
     () => clampSidebarDirectories(sidebarDirectories, sessionState.cwd),
     [sessionState.cwd, sidebarDirectories]
   )
-  const storedDraftDirectory = readStoredDraftDirectory() || ""
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
     baseSidebarDirectories[0] ||
@@ -1468,7 +1468,7 @@ export function PiWebAppShell({
   const handleSidebarSessionClick = React.useCallback(
     (
       entry: SessionListEntry,
-      modifiers: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }
+      modifiers: { ctrlKey: boolean; shiftKey: boolean }
     ) => {
       const key = sessionListEntryKey(entry)
 
@@ -1484,7 +1484,7 @@ export function PiWebAppShell({
         return
       }
 
-      if (modifiers.metaKey || modifiers.ctrlKey) {
+      if (modifiers.ctrlKey) {
         setSidebarSelection(
           selectedSidebarSessionKeys.includes(key)
             ? selectedSidebarSessionKeys.filter(
@@ -1641,6 +1641,7 @@ export function PiWebAppShell({
     if (nextCwd) {
       rememberRecentDirectory(nextCwd)
       safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextCwd)
+      setStoredDraftDirectory(nextCwd)
     }
     const ownerKey = promptDraftKey({ cwd: nextCwd })
     setDraftSessionLoadingOwnerKey(ownerKey)
@@ -2978,8 +2979,7 @@ export function PiWebAppShell({
         }
       }
 
-      const ctrlOrMeta = event.ctrlKey || event.metaKey
-      if (!ctrlOrMeta || event.altKey) return
+      if (!event.ctrlKey || event.metaKey || event.altKey) return
 
       if (key === "/" || key === "?") {
         if (treeOpen) return
@@ -3150,7 +3150,6 @@ export function PiWebAppShell({
         selectedSessionKeys={selectedSidebarSessionKeys}
         activeSessionId={activeSessionId}
         statusCount={statusCount}
-        currentThemeLabel={currentThemeLabel}
         emptyStateText={emptySidebarStateText}
         allDirectoriesCollapsed={allDirectoriesCollapsed}
         onCreateSession={createSession}
@@ -3211,9 +3210,9 @@ export function PiWebAppShell({
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="flex items-start gap-3">
               <SidebarTrigger className="mt-0.5 shrink-0" />
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold tracking-tight">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <h2 className="text-[15px] font-semibold leading-tight">
                     {currentSessionTitle}
                   </h2>
                   {sessionState.draft && <Badge variant="outline">Draft</Badge>}
@@ -3221,7 +3220,7 @@ export function PiWebAppShell({
                     <Badge variant="outline">Streaming</Badge>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   {sessionState.cwd && <span>{sessionState.cwd}</span>}
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
@@ -3336,21 +3335,6 @@ export function PiWebAppShell({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            {sessionState.model ? (
-              <Badge variant="outline">
-                Model {sessionState.model.name || sessionState.model.id}
-              </Badge>
-            ) : null}
-            <Badge variant="outline">Thinking {sessionState.thinkingLevel}</Badge>
-            <Badge variant="outline">
-              {hideToolBlocks ? "Tools hidden" : "Tools visible"}
-            </Badge>
-            <Badge variant="outline">
-              {sessionState.availableSkills.length} skills
-            </Badge>
-            <ConnectionBadge connected={sessionState.connected} />
-          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden p-6">
@@ -3476,23 +3460,25 @@ export function PiWebAppShell({
 
                     {!isSessionViewLoading && !isMessagesNearBottom ? (
                       <Button
-                        size="sm"
-                        variant="outline"
-                        className="absolute right-4 bottom-4 z-10 shadow-sm"
+                        size="icon-lg"
+                        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)] md:bottom-[18px]"
+                        title="Jump to latest message"
+                        aria-label="Jump to latest message"
                         onClick={scrollConversationToBottom}
                       >
-                        Bottom
+                        <ArrowDownIcon className="size-4" />
                       </Button>
                     ) : null}
 
                     {!isSessionViewLoading && hasPreviousMessageJumpTarget ? (
                       <Button
-                        size="sm"
-                        variant="outline"
-                        className="absolute right-24 bottom-4 z-10 shadow-sm"
+                        size="icon-lg"
+                        className="absolute right-4 bottom-4 z-10 rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)] md:right-[18px] md:bottom-[18px]"
+                        title="Jump to previous message"
+                        aria-label="Jump to previous message"
                         onClick={jumpToPreviousMessage}
                       >
-                        Last message
+                        <ArrowUpToLineIcon className="size-4" />
                       </Button>
                     ) : null}
                   </div>
@@ -3503,12 +3489,10 @@ export function PiWebAppShell({
                     composerImages={composerImages}
                     composerText={composerText}
                     composerSkill={composerSkill}
-                    availableSkills={sessionState.availableSkills}
                     availableModels={sessionState.availableModels}
                     model={sessionState.model}
                     thinkingLevel={sessionState.thinkingLevel}
                     availableThinkingLevels={sessionState.availableThinkingLevels}
-                    hideToolBlocks={hideToolBlocks}
                     isSubmitting={isSubmitting}
                     isStreaming={sessionState.streaming}
                     awaitingFirstTurn={awaitingFirstTurn}
@@ -3527,7 +3511,6 @@ export function PiWebAppShell({
                         current.filter((_, imageIndex) => imageIndex !== index)
                       )
                     }}
-                    onCreateSession={createSession}
                     onSubmitPrompt={(streamingBehavior) => {
                       void submitPrompt(streamingBehavior)
                     }}
@@ -3549,7 +3532,6 @@ export function PiWebAppShell({
                     onSelectThinkingLevel={(level) => {
                       void setThinkingLevel(level)
                     }}
-                    onToggleHideToolBlocks={toggleHideToolBlocks}
                     requestPathCompletions={async (prefix) => {
                       const response = await fetchJson<PathCompletionsResponse>(
                         buildRequestUrl("/api/path-completions", {

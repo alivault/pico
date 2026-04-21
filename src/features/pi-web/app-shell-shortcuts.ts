@@ -94,7 +94,7 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
       {
         label: "Select multiple sidebar sessions",
         description: "Works in the sidebar session list with the mouse.",
-        keys: "Cmd/Ctrl+Click or Shift+Click",
+        keys: "Ctrl+Click or Shift+Click",
       },
       {
         label: "Delete focused or selected sidebar sessions",
@@ -108,12 +108,12 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
     items: [
       {
         label: "Send or steer the current prompt",
-        keys: "Cmd/Ctrl+Enter",
+        keys: "Ctrl+Enter / Cmd+Enter",
       },
       {
         label: "Queue a follow-up",
         description: "Works while streaming or when using steer/follow-up mode.",
-        keys: "Alt+Cmd/Ctrl+Enter",
+        keys: "Alt+Ctrl+Enter",
       },
       {
         label: "Insert a newline",

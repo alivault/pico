@@ -795,7 +795,7 @@ export function AppShellDialogs({
     if (!treeOpen) return
 
     const handleTreeKeyDown = (event: KeyboardEvent) => {
-      if (!event.defaultPrevented && (event.ctrlKey || event.metaKey)) {
+      if (!event.defaultPrevented && event.ctrlKey && !event.metaKey) {
         const key = event.key.toLowerCase()
 
         if (key === "/" || key === "?") {
@@ -890,7 +890,7 @@ export function AppShellDialogs({
         if (
           key === "arrowdown" ||
           key === "arrowup" ||
-          ((event.ctrlKey || event.metaKey) && (key === "j" || key === "k"))
+          (event.ctrlKey && !event.metaKey && (key === "j" || key === "k"))
         ) {
           if (treeViewModel.orderedVisibleNodes.length === 0) return
           event.preventDefault()
