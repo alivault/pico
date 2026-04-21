@@ -213,6 +213,19 @@ function finishedSessionLabel(title: string) {
   return title !== "New session" ? `Session finished: ${title}` : "Session finished"
 }
 
+function sessionScrollKey(sessionState: {
+  draft: boolean
+  sessionFile?: string
+  sessionId?: string
+  cwd?: string
+}) {
+  if (sessionState.draft) {
+    return `draft:${sessionState.cwd || ""}`
+  }
+
+  return sessionState.sessionFile || sessionState.sessionId || ""
+}
+
 function previousMessageJumpTarget(viewport: HTMLDivElement) {
   const anchors = [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
   if (anchors.length === 0) return null
@@ -383,6 +396,7 @@ export function PiWebAppShell({
   const lastEscapePressedAtRef = React.useRef(0)
   const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(new Map())
   const sessionUnreadSnapshotsReadyRef = React.useRef(false)
+  const lastLoadedSessionScrollKeyRef = React.useRef("")
 
   const { resolvedTheme, setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -3101,6 +3115,23 @@ export function PiWebAppShell({
   const isSessionViewLoading = Boolean(
     sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
   )
+
+  React.useEffect(() => {
+    if (isSessionViewLoading) return
+
+    const nextSessionScrollKey = sessionScrollKey(sessionState)
+    if (!nextSessionScrollKey) return
+    if (lastLoadedSessionScrollKeyRef.current === nextSessionScrollKey) return
+
+    lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
+
+    requestAnimationFrame(() => {
+      const viewport = messageViewportRef.current
+      if (!viewport) return
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" })
+      setIsMessagesNearBottom(true)
+    })
+  }, [isSessionViewLoading, sessionState])
   const draftGitSummary =
     sessionState.draft &&
     sessionState.items.length === 0 &&
@@ -3352,12 +3383,9 @@ export function PiWebAppShell({
                   className="h-full overflow-auto px-4"
                 >
                       {isSessionViewLoading ? (
-                        <div className="flex min-h-full items-center justify-center py-10">
-                          <div className="flex flex-col items-center gap-3 border bg-card/70 px-6 py-8 text-sm text-muted-foreground">
-                            <Spinner />
-                            <div className="font-medium text-foreground">Loading session…</div>
-                            <div>Switching to the selected conversation.</div>
-                          </div>
+                        <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+                          <Spinner />
+                          <div>Loading...</div>
                         </div>
                       ) : sessionState.items.length > 0 ? (
                         <div className="flex flex-col gap-4">
