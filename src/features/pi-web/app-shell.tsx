@@ -1,5 +1,11 @@
 import * as React from "react"
 import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import {
   ArrowDownIcon,
   ArrowDownToLineIcon,
   ArrowUpIcon,
@@ -101,6 +107,10 @@ import {
   serializeComposerDraft,
 } from "@/features/pi-web/composer-utils"
 import { GitPanel } from "@/features/pi-web/git-panel"
+import {
+  piWebQueryKeys,
+  piWebSessionScopeKey,
+} from "@/features/pi-web/query-keys"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
@@ -262,17 +272,138 @@ function finishedSessionLabel(title: string) {
     : "Session finished"
 }
 
+type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
+type DirectorySessionsIndexData = Extract<
+  DirectorySessionsIndexResponse,
+  { ok: true }
+>
+type GitStatusData = Extract<GitStatusResponse, { ok: true }>
+type GitChangesData = Extract<GitChangesResponse, { ok: true }>
+type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
+type NavigateSessionTreeData = Extract<
+  NavigateSessionTreeResponse,
+  { ok: true }
+>
+type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
+
 function sessionScrollKey(sessionState: {
   draft: boolean
   sessionFile?: string
   sessionId?: string
   cwd?: string
 }) {
-  if (sessionState.draft) {
-    return `draft:${sessionState.cwd || ""}`
-  }
+  return piWebSessionScopeKey(sessionState)
+}
 
-  return sessionState.sessionFile || sessionState.sessionId || ""
+function directorySessionsIndexQueryOptions({
+  viewerContextId,
+  directory,
+}: {
+  viewerContextId: string
+  directory: string
+}) {
+  return {
+    queryKey: piWebQueryKeys.directorySessionsIndex(viewerContextId, directory),
+    queryFn: () =>
+      fetchJson<DirectorySessionsIndexData>(
+        buildRequestUrl(
+          `/api/directory-sessions-index?directory=${encodeURIComponent(
+            directory
+          )}`,
+          {
+            contextId: viewerContextId,
+          }
+        )
+      ),
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 10,
+  }
+}
+
+function gitStatusQueryOptions({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd: string
+}) {
+  return {
+    queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
+    queryFn: () =>
+      fetchJson<GitStatusData>(
+        buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
+          contextId: viewerContextId,
+        })
+      ),
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 10,
+  }
+}
+
+function gitChangesQueryOptions({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd: string
+}) {
+  return {
+    queryKey: piWebQueryKeys.gitChanges(viewerContextId, cwd),
+    queryFn: () =>
+      fetchJson<GitChangesData>(
+        buildRequestUrl(`/api/git-changes?cwd=${encodeURIComponent(cwd)}`, {
+          contextId: viewerContextId,
+        })
+      ),
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 10,
+  }
+}
+
+function sessionTreeQueryOptions({
+  viewerContextId,
+  sessionScopeKey,
+  sessionId,
+}: {
+  viewerContextId: string
+  sessionScopeKey: string
+  sessionId?: string
+}) {
+  return {
+    queryKey: piWebQueryKeys.sessionTree(viewerContextId, sessionScopeKey),
+    queryFn: () =>
+      fetchJson<SessionTreeData>(
+        buildRequestUrl("/api/session/tree", {
+          contextId: viewerContextId,
+          sessionId,
+        })
+      ),
+    staleTime: 0,
+    gcTime: 1000 * 60 * 10,
+  }
+}
+
+function forkableMessagesQueryOptions({
+  viewerContextId,
+  sessionScopeKey,
+  sessionId,
+}: {
+  viewerContextId: string
+  sessionScopeKey: string
+  sessionId?: string
+}) {
+  return {
+    queryKey: piWebQueryKeys.forkableMessages(viewerContextId, sessionScopeKey),
+    queryFn: () =>
+      fetchJson<ForkableMessagesData>(
+        buildRequestUrl("/api/session/fork", {
+          contextId: viewerContextId,
+          sessionId,
+        })
+      ),
+    staleTime: 0,
+    gcTime: 1000 * 60 * 10,
+  }
 }
 
 function messageAnchors(viewport: HTMLDivElement) {
@@ -335,12 +466,6 @@ export function PiWebAppShell({
   )
   const [sessionsEvent, setSessionsEvent] =
     React.useState<SessionsEvent | null>(null)
-  const [directoryIndexes, setDirectoryIndexes] = React.useState<
-    Record<string, Array<SessionListEntry>>
-  >({})
-  const [directoryIndexLoading, setDirectoryIndexLoading] = React.useState<
-    Record<string, boolean>
-  >({})
   const [sidebarDirectories, setSidebarDirectories] = React.useState<
     Array<string>
   >([])
@@ -388,13 +513,6 @@ export function PiWebAppShell({
       streamingBehavior: "steer" | "followUp"
     }>
   >([])
-  const [gitStatus, setGitStatus] = React.useState<GitStatusResponse | null>(
-    null
-  )
-  const [gitChanges, setGitChanges] = React.useState<GitChangesResponse | null>(
-    null
-  )
-  const [gitLoading, setGitLoading] = React.useState(false)
   const [addDirectoryOpen, setAddDirectoryOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
   const [recentDirectories, setRecentDirectories] = React.useState<
@@ -408,17 +526,7 @@ export function PiWebAppShell({
     Array<SessionListEntry>
   >([])
   const [forkOpen, setForkOpen] = React.useState(false)
-  const [forkMessages, setForkMessages] = React.useState<Array<{
-    entryId: string
-    text: string
-  }> | null>(null)
-  const [forkLoading, setForkLoading] = React.useState(false)
   const [treeOpen, setTreeOpen] = React.useState(false)
-  const [treeLoading, setTreeLoading] = React.useState(false)
-  const [treeSubmitting, setTreeSubmitting] = React.useState(false)
-  const [treeData, setTreeData] = React.useState<SessionTreeResponse | null>(
-    null
-  )
   const [treeQuery, setTreeQuery] = React.useState("")
   const [selectedTreeNodeId, setSelectedTreeNodeId] = React.useState<
     string | null
@@ -473,7 +581,12 @@ export function PiWebAppShell({
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeed.skillName
   )
-  const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
+  const sidebarDirectorySessionsSnapshotRef = React.useRef<{
+    activeSessionId: string
+    activeSessionKey: string
+    activeSessionPath: string
+    revisions: Record<string, string>
+  } | null>(null)
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const lastEscapePressedAtRef = React.useRef(0)
   const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(
@@ -487,9 +600,86 @@ export function PiWebAppShell({
   const currentThemeLabel = themeModeLabel(currentTheme, resolvedTheme)
 
   const activeSessionId = sessionState.sessionId || sessionId
+  const queryClient = useQueryClient()
   const directoryStates = sessionsEvent?.directoryStates || []
   const directoryStateByPath = (() =>
     new Map(directoryStates.map((state) => [state.path, state])))()
+  const baseSidebarDirectories = (() =>
+    normalizeStoredDirectoryList(sidebarDirectories))()
+  const directoryIndexQueries = useQueries({
+    queries: baseSidebarDirectories.map((directory) => ({
+      ...directorySessionsIndexQueryOptions({
+        viewerContextId,
+        directory,
+      }),
+      enabled: Boolean(viewerContextId),
+      placeholderData: (previousData?: DirectorySessionsIndexData) =>
+        previousData,
+    })),
+  })
+  const directoryIndexes = (() => {
+    const nextIndexes: Record<string, Array<SessionListEntry>> = {}
+
+    for (const [index, directory] of baseSidebarDirectories.entries()) {
+      const response = directoryIndexQueries[index]?.data
+      nextIndexes[directory] = response?.sessions || []
+    }
+
+    return nextIndexes
+  })()
+  const directoryIndexLoading = (() => {
+    const nextLoading: Record<string, boolean> = {}
+
+    for (const [index, directory] of baseSidebarDirectories.entries()) {
+      const query = directoryIndexQueries[index]
+      nextLoading[directory] = Boolean(query?.isPending && !query.data)
+    }
+
+    return nextLoading
+  })()
+  const currentSessionQueryScope = sessionScrollKey(sessionState)
+  const shouldLoadDraftGitStatus = Boolean(
+    viewerContextId &&
+    sessionState.draft &&
+    sessionState.items.length === 0 &&
+    sessionState.cwd
+  )
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions({
+      viewerContextId,
+      cwd: sessionState.cwd || "",
+    }),
+    enabled: Boolean(
+      viewerContextId &&
+      sessionState.cwd &&
+      (currentTab === "git" || shouldLoadDraftGitStatus)
+    ),
+  })
+  const gitChangesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: sessionState.cwd || "",
+    }),
+    enabled: Boolean(
+      viewerContextId && sessionState.cwd && currentTab === "git"
+    ),
+  })
+  const treeQueryResult = useQuery({
+    ...sessionTreeQueryOptions({
+      viewerContextId,
+      sessionScopeKey: currentSessionQueryScope,
+      sessionId: activeSessionId,
+    }),
+    enabled: Boolean(viewerContextId && treeOpen && currentSessionQueryScope),
+  })
+  const forkMessagesQuery = useQuery({
+    ...forkableMessagesQueryOptions({
+      viewerContextId,
+      sessionScopeKey: currentSessionQueryScope,
+      sessionId: activeSessionId,
+    }),
+    enabled: Boolean(viewerContextId && forkOpen && currentSessionQueryScope),
+  })
   const currentSessionTitle = getSessionTitle({
     title:
       sessionState.sessionName || sessionState.firstMessage || "New session",
@@ -506,6 +696,21 @@ export function PiWebAppShell({
     ([key, value]) => key.trim().length > 0 && value.trim().length > 0
   ).length
   const deleteOpen = deleteTargets.length > 0
+  const gitStatus = gitStatusQuery.data ?? null
+  const gitChanges = gitChangesQuery.data ?? null
+  const gitLoading = Boolean(
+    currentTab === "git" &&
+    ((gitStatusQuery.isPending && !gitStatusQuery.data) ||
+      (gitChangesQuery.isPending && !gitChangesQuery.data))
+  )
+  const treeData = treeQueryResult.data ?? null
+  const treeLoading = Boolean(
+    treeQueryResult.isPending && !treeQueryResult.data
+  )
+  const forkMessages = forkMessagesQuery.data?.messages ?? null
+  const forkLoading = Boolean(
+    forkMessagesQuery.isPending && !forkMessagesQuery.data
+  )
 
   React.useEffect(() => {
     sessionStateRef.current = sessionState
@@ -949,166 +1154,145 @@ export function PiWebAppShell({
   }, [isMessagesNearBottom, sessionState.streaming])
 
   React.useEffect(() => {
-    if (
-      !viewerContextId ||
-      !sessionState.draft ||
-      sessionState.items.length > 0 ||
-      !sessionState.cwd
-    ) {
-      return
+    if (!viewerContextId || !sessionsEvent) return
+
+    const previousSnapshot = sidebarDirectorySessionsSnapshotRef.current
+    const activeSessionChanged =
+      Boolean(previousSnapshot) &&
+      (previousSnapshot?.activeSessionId !==
+        (sessionsEvent.activeSessionId || "") ||
+        previousSnapshot?.activeSessionKey !==
+          (sessionsEvent.activeSessionKey || "") ||
+        previousSnapshot?.activeSessionPath !==
+          (sessionsEvent.activeSessionPath || ""))
+    const nextRevisions: Record<string, string> = {}
+
+    for (const directory of baseSidebarDirectories) {
+      const nextRevision = directoryStateByPath.get(directory)?.revision || ""
+      const previousRevision = previousSnapshot?.revisions[directory] || ""
+      nextRevisions[directory] = nextRevision
+
+      if (!activeSessionChanged && previousRevision === nextRevision) {
+        continue
+      }
+
+      const queryState = queryClient.getQueryState(
+        piWebQueryKeys.directorySessionsIndex(viewerContextId, directory)
+      )
+      if (!queryState?.dataUpdatedAt) {
+        continue
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: piWebQueryKeys.directorySessionsIndex(
+          viewerContextId,
+          directory
+        ),
+        exact: true,
+        refetchType: "active",
+      })
     }
 
-    void fetchJson<GitStatusResponse>(
-      buildRequestUrl(
-        `/api/git-status?cwd=${encodeURIComponent(sessionState.cwd)}`,
-        {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }
-      )
-    )
-      .then((response) => {
-        setGitStatus(response)
-      })
-      .catch(() => {
-        // Ignore draft card git summary failures.
-      })
+    sidebarDirectorySessionsSnapshotRef.current = {
+      activeSessionId: sessionsEvent.activeSessionId || "",
+      activeSessionKey: sessionsEvent.activeSessionKey || "",
+      activeSessionPath: sessionsEvent.activeSessionPath || "",
+      revisions: nextRevisions,
+    }
   }, [
-    activeSessionId,
-    sessionState.cwd,
-    sessionState.draft,
-    sessionState.items.length,
+    baseSidebarDirectories,
+    directoryStateByPath,
+    queryClient,
+    sessionsEvent,
     viewerContextId,
   ])
-
-  const loadDirectoryIndex = async (directory: string, revision?: string) => {
-    if (!viewerContextId) return
-
-    setDirectoryIndexLoading((current) => {
-      if (current[directory]) {
-        return current
-      }
-
-      return { ...current, [directory]: true }
-    })
-
-    try {
-      const response = await fetchJson<DirectorySessionsIndexResponse>(
-        buildRequestUrl(
-          `/api/directory-sessions-index?directory=${encodeURIComponent(
-            directory
-          )}`,
-          {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }
-        )
-      )
-
-      if (isApiErrorResponse(response)) {
-        throw new Error(response.error)
-      }
-
-      loadedDirectoryRevisionRef.current[directory] =
-        revision || `loaded:${response.sessions.length}`
-
-      setDirectoryIndexes((current) => ({
-        ...current,
-        [directory]: response.sessions,
-      }))
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Failed to load sessions for ${directory}`
-      )
-    } finally {
-      setDirectoryIndexLoading((current) => {
-        if (!current[directory]) {
-          return current
-        }
-
-        return {
-          ...current,
-          [directory]: false,
-        }
-      })
-    }
-  }
-  const loadDirectoryIndexRef = useLatestRef(loadDirectoryIndex)
 
   React.useEffect(() => {
-    if (!viewerContextId || sidebarDirectories.length === 0) return
+    if (currentTab !== "git") return
 
-    for (const directory of sidebarDirectories) {
-      const state = directoryStateByPath.get(directory)
-      const hasCurrentSessions = Object.prototype.hasOwnProperty.call(
-        directoryIndexes,
-        directory
-      )
-      const isLoading = Boolean(directoryIndexLoading[directory])
-      const loadedRevision = loadedDirectoryRevisionRef.current[directory]
-      const needsInitialLoad = !hasCurrentSessions
-      const needsRevisionRefresh =
-        typeof state?.revision === "string" && state.revision !== loadedRevision
+    const error = gitChangesQuery.error || gitStatusQuery.error
+    if (!error) return
 
-      if (!isLoading && (needsInitialLoad || needsRevisionRefresh)) {
-        void loadDirectoryIndexRef.current(directory, state?.revision)
-      }
-    }
+    toast.error(
+      error instanceof Error ? error.message : "Failed to load git view"
+    )
   }, [
-    directoryIndexes,
-    directoryIndexLoading,
-    directoryStateByPath,
-    loadDirectoryIndexRef,
-    sidebarDirectories,
-    viewerContextId,
+    currentTab,
+    gitChangesQuery.error,
+    gitChangesQuery.errorUpdatedAt,
+    gitStatusQuery.error,
+    gitStatusQuery.errorUpdatedAt,
   ])
+
+  React.useEffect(() => {
+    if (!treeOpen || !treeQueryResult.error) return
+
+    toast.error(
+      treeQueryResult.error instanceof Error
+        ? treeQueryResult.error.message
+        : "Failed to load tree"
+    )
+    setTreeOpen(false)
+  }, [treeOpen, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
+
+  React.useEffect(() => {
+    if (!forkOpen || !forkMessagesQuery.error) return
+
+    toast.error(
+      forkMessagesQuery.error instanceof Error
+        ? forkMessagesQuery.error.message
+        : "Failed to load forks"
+    )
+    setForkOpen(false)
+  }, [forkMessagesQuery.error, forkMessagesQuery.errorUpdatedAt, forkOpen])
+
+  React.useEffect(() => {
+    if (!treeOpen || !treeData) return
+
+    const flat = flattenTree(treeData.tree)
+    setSelectedTreeNodeId((current) => {
+      if (current && flat.some((entry) => entry.id === current)) {
+        return current
+      }
+      return treeData.leafId
+    })
+  }, [treeData, treeOpen])
+
+  React.useEffect(() => {
+    if (!treeData) return
+
+    const flat = flattenTree(treeData.tree)
+    const fallbackId = selectedTreeNodeId || treeData.leafId
+    const selected = flat.find((entry) => entry.id === fallbackId)
+    setSelectedTreeNodeLabel(selected?.label || "")
+  }, [selectedTreeNodeId, treeData])
 
   const refreshGit = async () => {
     if (!viewerContextId || !sessionState.cwd) return
-    setGitLoading(true)
+
     try {
-      const [nextStatus, nextChanges] = await Promise.all([
-        fetchJson<GitStatusResponse>(
-          buildRequestUrl(
-            `/api/git-status?cwd=${encodeURIComponent(sessionState.cwd)}`,
-            {
-              contextId: viewerContextId,
-              sessionId: activeSessionId,
-            }
-          )
-        ),
-        fetchJson<GitChangesResponse>(
-          buildRequestUrl(
-            `/api/git-changes?cwd=${encodeURIComponent(sessionState.cwd)}`,
-            {
-              contextId: viewerContextId,
-              sessionId: activeSessionId,
-            }
-          )
-        ),
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: piWebQueryKeys.gitStatus(viewerContextId, sessionState.cwd),
+          exact: true,
+          refetchType: "all",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: piWebQueryKeys.gitChanges(
+            viewerContextId,
+            sessionState.cwd
+          ),
+          exact: true,
+          refetchType: "all",
+        }),
       ])
-      setGitStatus(nextStatus)
-      setGitChanges(nextChanges)
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load git view"
       )
-    } finally {
-      setGitLoading(false)
     }
   }
-  const refreshGitRef = useLatestRef(refreshGit)
 
-  React.useEffect(() => {
-    if (currentTab === "git") {
-      void refreshGitRef.current()
-    }
-  }, [currentTab, refreshGitRef])
-
-  const baseSidebarDirectories = (() =>
-    normalizeStoredDirectoryList(sidebarDirectories))()
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
     baseSidebarDirectories[0] ||
@@ -1557,13 +1741,13 @@ export function PiWebAppShell({
     })
   }
 
-  const addDirectoryPath = async (path: string) => {
-    if (!viewerContextId) return
-    const requestedPath = path.trim()
-    if (!requestedPath) return
+  const addDirectoryMutation = useMutation({
+    mutationFn: async (requestedPath: string) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
 
-    try {
-      const response = await fetchJson<DirectoryResolveResponse>(
+      return await fetchJson<DirectoryResolveData>(
         buildRequestUrl("/api/directory/resolve", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -1574,9 +1758,16 @@ export function PiWebAppShell({
           body: JSON.stringify({ path: requestedPath }),
         }
       )
-      if (isApiErrorResponse(response)) {
-        throw new Error(response.error)
-      }
+    },
+  })
+
+  const addDirectoryPath = async (path: string) => {
+    if (!viewerContextId) return
+    const requestedPath = path.trim()
+    if (!requestedPath) return
+
+    try {
+      const response = await addDirectoryMutation.mutateAsync(requestedPath)
       setSidebarDirectories((current) => {
         const next = normalizeStoredDirectoryList([...current, response.path])
         safeLocalStorageSetItem(
@@ -1588,7 +1779,12 @@ export function PiWebAppShell({
       rememberRecentDirectory(response.path)
       setDirectoryInput("")
       setAddDirectoryOpen(false)
-      void loadDirectoryIndex(response.path)
+      void queryClient.prefetchQuery(
+        directorySessionsIndexQueryOptions({
+          viewerContextId,
+          directory: response.path,
+        })
+      )
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to add directory"
@@ -1638,6 +1834,26 @@ export function PiWebAppShell({
     return applyPendingDraftPromptToComposer(nextPrompt)
   }
 
+  const createSessionMutation = useMutation({
+    mutationFn: async ({ cwd }: { cwd?: string }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<SimpleOkResponse>(
+        buildRequestUrl("/api/session/new", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd }),
+        }
+      )
+    },
+  })
+
   const createSession = async (cwdOverride?: string) => {
     if (!viewerContextId) return
 
@@ -1651,19 +1867,7 @@ export function PiWebAppShell({
     setDraftSessionLoadingOwnerKey(ownerKey)
 
     try {
-      await fetchJson<SimpleOkResponse>(
-        buildRequestUrl("/api/session/new", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            cwd: nextCwd,
-          }),
-        }
-      )
+      await createSessionMutation.mutateAsync({ cwd: nextCwd })
       handleSelectSession(undefined)
     } catch (error) {
       setDraftSessionLoadingOwnerKey((current) =>
@@ -1716,6 +1920,38 @@ export function PiWebAppShell({
     return true
   }
 
+  const promptMutation = useMutation({
+    mutationFn: async ({
+      message,
+      images,
+      streamingBehavior,
+    }: {
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior?: StreamingBehavior
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<PromptResponse>(
+        buildRequestUrl("/api/prompt", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            message,
+            images,
+            streamingBehavior,
+          }),
+        }
+      )
+    },
+  })
+
   const submitPrompt = async (streamingBehavior?: StreamingBehavior) => {
     if (!viewerContextId) return false
     if (draftSessionLoadingOwnerKey) {
@@ -1741,24 +1977,11 @@ export function PiWebAppShell({
     }
 
     try {
-      const response = await fetchJson<PromptResponse>(
-        buildRequestUrl("/api/prompt", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            message,
-            images: composerImages,
-            streamingBehavior: normalizedStreamingBehavior,
-          }),
-        }
-      )
-      if (isApiErrorResponse(response)) {
-        throw new Error(response.error)
-      }
+      await promptMutation.mutateAsync({
+        message,
+        images: composerImages,
+        streamingBehavior: normalizedStreamingBehavior,
+      })
       replaceComposerDraft("")
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
@@ -1791,21 +2014,11 @@ export function PiWebAppShell({
 
     for (const followUp of followUps) {
       try {
-        await fetchJson<PromptResponse>(
-          buildRequestUrl("/api/prompt", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              message: followUp.message,
-              images: followUp.images,
-              streamingBehavior: followUp.streamingBehavior,
-            }),
-          }
-        )
+        await promptMutation.mutateAsync({
+          message: followUp.message,
+          images: followUp.images,
+          streamingBehavior: followUp.streamingBehavior,
+        })
       } catch (error) {
         if (!composerTextRef.current) {
           replaceComposerDraft(followUp.message)
@@ -1888,10 +2101,13 @@ export function PiWebAppShell({
     sessionState.streaming,
   ])
 
-  const abortSession = async () => {
-    if (!viewerContextId) return
-    try {
-      await fetchJson<SimpleOkResponse>(
+  const abortSessionMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<SimpleOkResponse>(
         buildRequestUrl("/api/abort", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -1900,6 +2116,13 @@ export function PiWebAppShell({
           method: "POST",
         }
       )
+    },
+  })
+
+  const abortSession = async () => {
+    if (!viewerContextId) return
+    try {
+      await abortSessionMutation.mutateAsync()
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to abort session"
@@ -1915,10 +2138,13 @@ export function PiWebAppShell({
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
-  const removePendingMessage = async (pendingId: string) => {
-    if (!viewerContextId) return
-    try {
-      await fetchJson<PendingMessageRemoveResponse>(
+  const removePendingMessageMutation = useMutation({
+    mutationFn: async (pendingId: string) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<PendingMessageRemoveResponse>(
         buildRequestUrl("/api/pending-message/remove", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -1929,6 +2155,13 @@ export function PiWebAppShell({
           body: JSON.stringify({ pendingId }),
         }
       )
+    },
+  })
+
+  const removePendingMessage = async (pendingId: string) => {
+    if (!viewerContextId) return
+    try {
+      await removePendingMessageMutation.mutateAsync(pendingId)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1940,6 +2173,33 @@ export function PiWebAppShell({
 
   const currentPendingMessages = pendingMessages
 
+  const reorderPendingMessagesMutation = useMutation({
+    mutationFn: async (
+      nextPendingMessages: Array<{
+        pendingId: string
+        text: string
+        images: Array<PromptImage>
+        streamingBehavior: "steer" | "followUp"
+      }>
+    ) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<PendingMessagesResponse>(
+        buildRequestUrl("/api/pending-messages/reorder", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pendingMessages: nextPendingMessages }),
+        }
+      )
+    },
+  })
+
   const reorderPending = async (pendingId: string, direction: -1 | 1) => {
     if (!viewerContextId) return
     const next = [...pendingMessages]
@@ -1950,17 +2210,7 @@ export function PiWebAppShell({
     const [item] = next.splice(index, 1)
     next.splice(targetIndex, 0, item)
     try {
-      await fetchJson<PendingMessagesResponse>(
-        buildRequestUrl("/api/pending-messages/reorder", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingMessages: next }),
-        }
-      )
+      await reorderPendingMessagesMutation.mutateAsync(next)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1970,12 +2220,19 @@ export function PiWebAppShell({
     }
   }
 
-  const setModel = async (value: string) => {
-    if (!viewerContextId) return
-    const [provider, modelId] = value.split("/")
-    if (!provider || !modelId) return
-    try {
-      await fetchJson(
+  const setModelMutation = useMutation({
+    mutationFn: async ({
+      provider,
+      modelId,
+    }: {
+      provider: string
+      modelId: string
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson(
         buildRequestUrl("/api/model", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -1986,6 +2243,15 @@ export function PiWebAppShell({
           body: JSON.stringify({ provider, modelId }),
         }
       )
+    },
+  })
+
+  const setModel = async (value: string) => {
+    if (!viewerContextId) return
+    const [provider, modelId] = value.split("/")
+    if (!provider || !modelId) return
+    try {
+      await setModelMutation.mutateAsync({ provider, modelId })
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to update model"
@@ -1993,10 +2259,13 @@ export function PiWebAppShell({
     }
   }
 
-  const setThinkingLevel = async (level: string) => {
-    if (!viewerContextId) return
-    try {
-      await fetchJson(
+  const setThinkingLevelMutation = useMutation({
+    mutationFn: async (level: string) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson(
         buildRequestUrl("/api/thinking", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2007,6 +2276,13 @@ export function PiWebAppShell({
           body: JSON.stringify({ level }),
         }
       )
+    },
+  })
+
+  const setThinkingLevel = async (level: string) => {
+    if (!viewerContextId) return
+    try {
+      await setThinkingLevelMutation.mutateAsync(level)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -2028,10 +2304,13 @@ export function PiWebAppShell({
     await setThinkingLevel(nextLevel)
   }
 
-  const setThinkingBlocksHidden = async (hidden: boolean) => {
-    if (!viewerContextId) return
-    try {
-      await fetchJson(
+  const setThinkingBlocksHiddenMutation = useMutation({
+    mutationFn: async (hidden: boolean) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson(
         buildRequestUrl("/api/settings/hide-thinking", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2042,6 +2321,13 @@ export function PiWebAppShell({
           body: JSON.stringify({ hide: hidden }),
         }
       )
+    },
+  })
+
+  const setThinkingBlocksHidden = async (hidden: boolean) => {
+    if (!viewerContextId) return
+    try {
+      await setThinkingBlocksHiddenMutation.mutateAsync(hidden)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -2065,11 +2351,13 @@ export function PiWebAppShell({
     toast.info(hideToolBlocks ? "Tools shown" : "Tools hidden")
   }
 
-  const runCompact = async () => {
-    if (!viewerContextId) return
-    setRunningSlashCommand("compact")
-    try {
-      await fetchJson(
+  const compactMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson(
         buildRequestUrl("/api/slash-command", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2080,6 +2368,14 @@ export function PiWebAppShell({
           body: JSON.stringify({ name: "compact", args: "" }),
         }
       )
+    },
+  })
+
+  const runCompact = async () => {
+    if (!viewerContextId) return
+    setRunningSlashCommand("compact")
+    try {
+      await compactMutation.mutateAsync()
       toast.success("Started compaction")
     } catch (error) {
       toast.error(
@@ -2093,37 +2389,30 @@ export function PiWebAppShell({
   const openTreeDialog = async () => {
     if (!viewerContextId) return
     setTreeOpen(true)
-    setTreeLoading(true)
-    setTreeSubmitting(false)
     setTreeQuery("")
-    try {
-      const response = await fetchJson<SessionTreeResponse>(
-        buildRequestUrl("/api/session/tree", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        })
-      )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
-      setTreeData(response)
-      setSelectedTreeNodeId(response.leafId)
-      const flat = flattenTree(response.tree)
-      const selected = flat.find((entry) => entry.id === response.leafId)
-      setSelectedTreeNodeLabel(selected?.label || "")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load tree"
-      )
-      setTreeOpen(false)
-    } finally {
-      setTreeLoading(false)
-    }
+    await queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.sessionTree(
+        viewerContextId,
+        currentSessionQueryScope
+      ),
+      exact: true,
+      refetchType: "active",
+    })
   }
 
-  const saveTreeLabel = async () => {
-    if (!viewerContextId || !selectedTreeNodeId) return
-    setTreeSubmitting(true)
-    try {
-      const response = await fetchJson<SessionTreeResponse>(
+  const saveTreeLabelMutation = useMutation({
+    mutationFn: async ({
+      entryId,
+      label,
+    }: {
+      entryId: string
+      label: string
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<SessionTreeData>(
         buildRequestUrl("/api/session/tree/label", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2131,32 +2420,48 @@ export function PiWebAppShell({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            entryId: selectedTreeNodeId,
-            label: selectedTreeNodeLabel,
-          }),
+          body: JSON.stringify({ entryId, label }),
         }
       )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
-      setTreeData(response)
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData(
+        piWebQueryKeys.sessionTree(viewerContextId, currentSessionQueryScope),
+        response
+      )
+    },
+  })
+
+  const saveTreeLabel = async () => {
+    if (!viewerContextId || !selectedTreeNodeId) return
+    try {
+      await saveTreeLabelMutation.mutateAsync({
+        entryId: selectedTreeNodeId,
+        label: selectedTreeNodeLabel,
+      })
       toast.success("Saved tree label")
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save label"
       )
-    } finally {
-      setTreeSubmitting(false)
     }
   }
 
-  const navigateTreeNode = async (
-    targetId: string,
-    options?: { summarize?: boolean; customInstructions?: string }
-  ) => {
-    if (!viewerContextId) return
-    setTreeSubmitting(true)
-    try {
-      const response = await fetchJson<NavigateSessionTreeResponse>(
+  const navigateTreeNodeMutation = useMutation({
+    mutationFn: async ({
+      targetId,
+      summarize,
+      customInstructions,
+    }: {
+      targetId: string
+      summarize?: boolean
+      customInstructions?: string
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<NavigateSessionTreeData>(
         buildRequestUrl("/api/session/tree", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2166,12 +2471,25 @@ export function PiWebAppShell({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             targetId,
-            summarize: Boolean(options?.summarize),
-            customInstructions: options?.customInstructions,
+            summarize: Boolean(summarize),
+            customInstructions,
           }),
         }
       )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
+    },
+  })
+
+  const navigateTreeNode = async (
+    targetId: string,
+    options?: { summarize?: boolean; customInstructions?: string }
+  ) => {
+    if (!viewerContextId) return
+    try {
+      const response = await navigateTreeNodeMutation.mutateAsync({
+        targetId,
+        summarize: options?.summarize,
+        customInstructions: options?.customInstructions,
+      })
       if (response.aborted) {
         toast.info("Branch summarization cancelled")
         return
@@ -2190,38 +2508,29 @@ export function PiWebAppShell({
       toast.error(
         error instanceof Error ? error.message : "Failed to navigate tree"
       )
-    } finally {
-      setTreeSubmitting(false)
     }
   }
 
   const openForkDialog = async () => {
     if (!viewerContextId) return
     setForkOpen(true)
-    setForkLoading(true)
-    try {
-      const response = await fetchJson<ForkableMessagesResponse>(
-        buildRequestUrl("/api/session/fork", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        })
-      )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
-      setForkMessages(response.messages)
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load forks"
-      )
-      setForkOpen(false)
-    } finally {
-      setForkLoading(false)
-    }
+    await queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.forkableMessages(
+        viewerContextId,
+        currentSessionQueryScope
+      ),
+      exact: true,
+      refetchType: "active",
+    })
   }
 
-  const forkFromMessage = async (entryId: string) => {
-    if (!viewerContextId) return
-    try {
-      const response = await fetchJson<ForkSessionResponse>(
+  const forkFromMessageMutation = useMutation({
+    mutationFn: async (entryId: string) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<ForkSessionResponse>(
         buildRequestUrl("/api/session/fork", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2232,7 +2541,13 @@ export function PiWebAppShell({
           body: JSON.stringify({ entryId }),
         }
       )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
+    },
+  })
+
+  const forkFromMessage = async (entryId: string) => {
+    if (!viewerContextId) return
+    try {
+      await forkFromMessageMutation.mutateAsync(entryId)
       setForkOpen(false)
       toast.success("Forked session")
     } catch (error) {
@@ -2242,11 +2557,13 @@ export function PiWebAppShell({
     }
   }
 
-  const renameSessionToValue = async (nextName: string, closeDialog = true) => {
-    const targetPath = renameTarget?.path || sessionState.sessionFile
-    if (!viewerContextId || !targetPath) return false
-    try {
-      const response = await fetchJson<RenameSessionResponse>(
+  const renameSessionMutation = useMutation({
+    mutationFn: async ({ path, name }: { path: string; name: string }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<RenameSessionResponse>(
         buildRequestUrl("/api/session/rename", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -2254,13 +2571,20 @@ export function PiWebAppShell({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            path: targetPath,
-            name: nextName,
-          }),
+          body: JSON.stringify({ path, name }),
         }
       )
-      if (isApiErrorResponse(response)) throw new Error(response.error)
+    },
+  })
+
+  const renameSessionToValue = async (nextName: string, closeDialog = true) => {
+    const targetPath = renameTarget?.path || sessionState.sessionFile
+    if (!viewerContextId || !targetPath) return false
+    try {
+      await renameSessionMutation.mutateAsync({
+        path: targetPath,
+        name: nextName,
+      })
       if (closeDialog) {
         setRenameOpen(false)
         setRenameTarget(null)
@@ -2279,6 +2603,28 @@ export function PiWebAppShell({
     return await renameSessionToValue(renameValue)
   }
 
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (paths: Array<string>) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      for (const path of paths) {
+        await fetchJson<DeleteSessionResponse>(
+          buildRequestUrl("/api/session/delete", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path }),
+          }
+        )
+      }
+    },
+  })
+
   const deleteSession = async () => {
     if (!viewerContextId || deleteTargets.length === 0) return
 
@@ -2292,22 +2638,9 @@ export function PiWebAppShell({
     ]
 
     try {
-      for (const target of orderedTargets) {
-        if (!target.path) continue
-
-        const response = await fetchJson<DeleteSessionResponse>(
-          buildRequestUrl("/api/session/delete", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ path: target.path }),
-          }
-        )
-        if (isApiErrorResponse(response)) throw new Error(response.error)
-      }
+      await deleteSessionMutation.mutateAsync(
+        orderedTargets.flatMap((target) => (target.path ? [target.path] : []))
+      )
 
       const deletedKeys = new Set(
         orderedTargets
@@ -2415,11 +2748,20 @@ export function PiWebAppShell({
     }
   }
 
-  const resolveUiRequest = async (body: Record<string, unknown>) => {
-    if (!viewerContextId || !pendingUiRequest) return
-    try {
-      await fetchJson<UiRequestResponse>(
-        buildRequestUrl(`/api/ui/${encodeURIComponent(pendingUiRequest.id)}`, {
+  const resolveUiRequestMutation = useMutation({
+    mutationFn: async ({
+      requestId,
+      body,
+    }: {
+      requestId: string
+      body: Record<string, unknown>
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<UiRequestResponse>(
+        buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -2429,6 +2771,16 @@ export function PiWebAppShell({
           body: JSON.stringify(body),
         }
       )
+    },
+  })
+
+  const resolveUiRequest = async (body: Record<string, unknown>) => {
+    if (!viewerContextId || !pendingUiRequest) return
+    try {
+      await resolveUiRequestMutation.mutateAsync({
+        requestId: pendingUiRequest.id,
+        body,
+      })
       setPendingUiRequest(null)
       setPendingUiValue("")
     } catch (error) {
@@ -2438,13 +2790,14 @@ export function PiWebAppShell({
     }
   }
 
-  const flatTree = (() => {
-    return treeData && !isApiErrorResponse(treeData)
-      ? flattenTree(treeData.tree)
-      : []
-  })()
-  const treeLeafId =
-    treeData && !isApiErrorResponse(treeData) ? treeData.leafId : null
+  const forkDialogLoading = Boolean(
+    forkLoading || forkFromMessageMutation.isPending
+  )
+  const treeSubmitting = Boolean(
+    saveTreeLabelMutation.isPending || navigateTreeNodeMutation.isPending
+  )
+  const flatTree = treeData ? flattenTree(treeData.tree) : []
+  const treeLeafId = treeData?.leafId ?? null
   const treeSummaryAvailable = sessionState.availableModels.length > 0
 
   const handleThemeChange = (value: ThemeMode) => {
@@ -3017,7 +3370,9 @@ export function PiWebAppShell({
     viewport.scrollTop = viewport.scrollHeight
     setIsMessagesNearTop(isViewportNearTop(viewport))
     setIsMessagesNearBottom(isViewportNearBottom(viewport))
-    setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
+    setHasPreviousMessageJumpTarget(
+      Boolean(previousMessageJumpTarget(viewport))
+    )
     setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
   }, [isSessionViewLoading, sessionState])
   const draftGitSummary =
@@ -3644,7 +3999,7 @@ export function PiWebAppShell({
         }}
         forkOpen={forkOpen}
         onForkOpenChange={setForkOpen}
-        forkLoading={forkLoading}
+        forkLoading={forkDialogLoading}
         forkMessages={forkMessages}
         onForkFromMessage={(entryId) => {
           void forkFromMessage(entryId)
