@@ -584,61 +584,56 @@ export function AssistantMessageCard({
   item,
   hideThinking,
   hideToolBlocks,
-  hiddenThinkingLabel,
 }: {
   item: Extract<ConversationItem, { kind: "assistant" }>
   hideThinking: boolean
   hideToolBlocks: boolean
-  hiddenThinkingLabel?: string
 }) {
+  const renderedBlocks = (() => {
+    const counts = new Map<string, number>()
+    return item.blocks.flatMap((block) => {
+      const baseKey = assistantBlockKey(block)
+      const count = (counts.get(baseKey) ?? 0) + 1
+      counts.set(baseKey, count)
+      const key = `${baseKey}:${count}`
+
+      switch (block.type) {
+        case "text":
+          return <MarkdownBlock key={key} text={block.text} />
+        case "thinking":
+          if (hideThinking) {
+            return []
+          }
+
+          return (
+            <section
+              key={key}
+              className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
+            >
+              <MarkdownBlock text={block.text} />
+            </section>
+          )
+        case "tool":
+          if (hideToolBlocks) {
+            return []
+          }
+
+          return <ToolBlockCard key={key} block={block} />
+        case "compaction":
+          return <CompactionBlockCard key={key} block={block} />
+        default:
+          return []
+      }
+    })
+  })()
+
+  if (renderedBlocks.length === 0) {
+    return null
+  }
+
   return (
     <div className="w-full max-w-3xl rounded-2xl border bg-card px-4 py-4">
-      <div className="flex flex-col gap-4">
-        {(() => {
-          const counts = new Map<string, number>()
-          return item.blocks.map((block) => {
-            const baseKey = assistantBlockKey(block)
-            const count = (counts.get(baseKey) ?? 0) + 1
-            counts.set(baseKey, count)
-            const key = `${baseKey}:${count}`
-
-            switch (block.type) {
-              case "text":
-                return <MarkdownBlock key={key} text={block.text} />
-              case "thinking":
-                if (hideThinking) {
-                  return (
-                    <div
-                      key={key}
-                      className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
-                    >
-                      {hiddenThinkingLabel || "Thinking hidden"}
-                    </div>
-                  )
-                }
-
-                return (
-                  <section
-                    key={key}
-                    className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
-                  >
-                    <MarkdownBlock text={block.text} />
-                  </section>
-                )
-              case "tool":
-                if (hideToolBlocks) {
-                  return null
-                }
-
-                return <ToolBlockCard key={key} block={block} />
-              case "compaction":
-                return <CompactionBlockCard key={key} block={block} />
-              default:
-                return null
-            }
-          })
-        })()}
-      </div>
+      <div className="flex flex-col gap-4">{renderedBlocks}</div>
     </div>
   )
 }

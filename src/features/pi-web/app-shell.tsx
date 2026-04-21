@@ -3415,10 +3415,6 @@ export function PiWebAppShell({
                                     item={item}
                                     hideThinking={sessionState.hideThinkingBlock}
                                     hideToolBlocks={hideToolBlocks}
-                                    hiddenThinkingLabel={
-                                      sessionState.uiState.hiddenThinkingLabel ||
-                                      sessionState.hiddenThinkingPreview
-                                    }
                                   />
                                 </div>
                               )
