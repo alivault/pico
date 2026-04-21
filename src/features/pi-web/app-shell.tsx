@@ -3349,7 +3349,7 @@ export function PiWebAppShell({
               <div className="relative min-h-0 flex-1">
                 <div
                   ref={messagesScrollAreaRef}
-                  className="h-full overflow-auto px-6"
+                  className="h-full overflow-auto px-4"
                 >
                       {isSessionViewLoading ? (
                         <div className="flex min-h-full items-center justify-center py-10">

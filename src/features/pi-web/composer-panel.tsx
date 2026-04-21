@@ -618,7 +618,7 @@ export const ComposerPanel = React.forwardRef<
   )
 
   return (
-    <div className="flex flex-col gap-3 p-6">
+    <div className="flex flex-col gap-3 p-4">
         {currentPendingMessages.length > 0 ? (
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/15 p-3">
             <div className="flex items-center justify-between gap-3">
