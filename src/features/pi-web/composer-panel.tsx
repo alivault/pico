@@ -712,7 +712,7 @@ export const ComposerPanel = React.forwardRef<
         ) : null}
 
         <div className="overflow-visible rounded-[18px] border bg-card">
-          <div className="relative flex min-h-28 overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3 pb-14">
+          <div className="relative flex overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3 pb-14">
             <div className="min-w-0 flex-1">
               <div className="relative flex flex-col gap-3">
                 {visibleCompletion || slashMenuState ? (

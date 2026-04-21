@@ -3,7 +3,6 @@ import {
   ArrowDownIcon,
   ArrowUpToLineIcon,
   EllipsisIcon,
-  SparklesIcon,
   SquarePenIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -62,7 +61,6 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -3405,14 +3403,11 @@ export function PiWebAppShell({
                           <div ref={bottomRef} />
                         </div>
                       ) : (
-                        <Empty className="border border-dashed bg-card/60">
+                        <Empty className="bg-card/60">
                           <EmptyHeader>
-                            <EmptyMedia variant="icon">
-                              <SparklesIcon />
-                            </EmptyMedia>
                             <EmptyTitle>
                               {sessionState.draft
-                                ? "Draft session ready"
+                                ? "New session"
                                 : "Start a new conversation"}
                             </EmptyTitle>
                             <EmptyDescription>
@@ -3422,7 +3417,7 @@ export function PiWebAppShell({
                             </EmptyDescription>
                           </EmptyHeader>
                           {sessionState.draft ? (
-                            <EmptyContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <EmptyContent className="flex flex-col items-center gap-3">
                               {sessionState.cwd ? (
                                 <Badge variant="outline">{formatDisplayPath(sessionState.cwd)}</Badge>
                               ) : null}
