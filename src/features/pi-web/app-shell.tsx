@@ -1134,6 +1134,48 @@ export function PiWebAppShell({
     })
   }, [allDirectoriesCollapsed, baseSidebarDirectories])
 
+  const reorderSidebarDirectories = React.useCallback(
+    (
+      sourceDirectory: string,
+      targetDirectory: string,
+      position: "before" | "after"
+    ) => {
+      const normalizedSource = sourceDirectory.trim()
+      const normalizedTarget = targetDirectory.trim()
+      if (!normalizedSource || !normalizedTarget) return
+      if (normalizedSource === normalizedTarget) return
+
+      setSidebarDirectories((current) => {
+        const next = normalizeStoredDirectoryList(current)
+        if (
+          !next.includes(normalizedSource) ||
+          !next.includes(normalizedTarget)
+        ) {
+          return current
+        }
+
+        const reordered = next.filter(
+          (directory) => directory !== normalizedSource
+        )
+        const targetIndex = reordered.indexOf(normalizedTarget)
+        const insertIndex =
+          targetIndex < 0
+            ? reordered.length
+            : position === "before"
+              ? targetIndex
+              : targetIndex + 1
+
+        reordered.splice(insertIndex, 0, normalizedSource)
+        safeLocalStorageSetItem(
+          SIDEBAR_DIRECTORIES_STORAGE_KEY,
+          JSON.stringify(reordered)
+        )
+        return reordered
+      })
+    },
+    []
+  )
+
   const sidebarSessionEntriesByKey = React.useMemo(() => {
     const nextEntries = new Map<string, SessionListEntry>()
 
@@ -3124,6 +3166,7 @@ export function PiWebAppShell({
             return next
           })
         }}
+        onReorderDirectories={reorderSidebarDirectories}
         onLoadMoreDirectorySessions={loadMoreDirectorySessions}
         onDeleteSelectedSessions={() => {
           openDeleteDialog(selectedSidebarSessions)

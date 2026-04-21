@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import {
   ActivityIcon,
   CheckIcon,
@@ -5,6 +7,7 @@ import {
   ChevronRightIcon,
   EllipsisIcon,
   FolderIcon,
+  GripVerticalIcon,
   KeyboardIcon,
   PlusIcon,
   SearchIcon,
@@ -68,6 +71,8 @@ type SessionClickModifiers = {
   shiftKey: boolean
 }
 
+type DirectoryDropPosition = "before" | "after"
+
 type AppSidebarProps = {
   connected: boolean
   sessionSearch: string
@@ -101,6 +106,11 @@ type AppSidebarProps = {
   onDeleteSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
+  onReorderDirectories?: (
+    sourceDirectory: string,
+    targetDirectory: string,
+    position: DirectoryDropPosition
+  ) => void
   onLoadMoreDirectorySessions: (directory: string) => void
   onDeleteSelectedSessions: () => void
   onClearSelectedSessions: () => void
@@ -136,12 +146,25 @@ export function AppSidebar({
   onDeleteSession,
   onCreateSessionInDirectory,
   onRemoveDirectory,
+  onReorderDirectories,
   onLoadMoreDirectorySessions,
   onDeleteSelectedSessions,
   onClearSelectedSessions,
 }: AppSidebarProps) {
   const searchActive = sessionSearch.trim().length > 0
   const selectedSessionCount = selectedSessionKeys.length
+  const directoryOrderingEnabled = !searchActive && visibleDirectories.length > 1
+  const [draggingDirectory, setDraggingDirectory] = React.useState("")
+  const [directoryDropTarget, setDirectoryDropTarget] = React.useState<{
+    directory: string
+    position: DirectoryDropPosition
+  } | null>(null)
+
+  React.useEffect(() => {
+    if (directoryOrderingEnabled) return
+    setDraggingDirectory("")
+    setDirectoryDropTarget(null)
+  }, [directoryOrderingEnabled])
   const matchingSessionCount = visibleDirectories.reduce((total, directory) => {
     const sessions = Object.prototype.hasOwnProperty.call(
       filteredDirectorySessions,
@@ -297,9 +320,75 @@ export function AppSidebar({
             const countLabel = searchActive
               ? `${sessions.length} match${sessions.length === 1 ? "" : "es"}`
               : `${directoryState ? directoryState.totalCount : sessions.length} sessions`
+            const isDragSource = draggingDirectory === directory
+            const dropPosition =
+              directoryDropTarget?.directory === directory
+                ? directoryDropTarget.position
+                : null
 
             return (
-              <SidebarGroup key={directory} className="py-1">
+              <SidebarGroup
+                key={directory}
+                className={cn(
+                  "rounded-lg border border-transparent py-1 transition-colors",
+                  isDragSource && "opacity-60",
+                  dropPosition === "before" && "border-t-primary",
+                  dropPosition === "after" && "border-b-primary"
+                )}
+                draggable={directoryOrderingEnabled}
+                onDragStart={(event) => {
+                  if (!directoryOrderingEnabled) {
+                    event.preventDefault()
+                    return
+                  }
+                  setDraggingDirectory(directory)
+                  setDirectoryDropTarget({ directory, position: "after" })
+                  event.dataTransfer.effectAllowed = "move"
+                  event.dataTransfer.setData("text/pi-sidebar-directory", directory)
+                }}
+                onDragOver={(event) => {
+                  if (!directoryOrderingEnabled || draggingDirectory === directory) {
+                    return
+                  }
+                  event.preventDefault()
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  setDirectoryDropTarget({
+                    directory,
+                    position:
+                      event.clientY < bounds.top + bounds.height / 2
+                        ? "before"
+                        : "after",
+                  })
+                  event.dataTransfer.dropEffect = "move"
+                }}
+                onDragEnd={() => {
+                  setDraggingDirectory("")
+                  setDirectoryDropTarget(null)
+                }}
+                onDrop={(event) => {
+                  if (!directoryOrderingEnabled) return
+                  event.preventDefault()
+                  const sourceDirectory =
+                    event.dataTransfer.getData("text/pi-sidebar-directory") ||
+                    draggingDirectory
+                  const bounds = event.currentTarget.getBoundingClientRect()
+                  const position: DirectoryDropPosition =
+                    event.clientY < bounds.top + bounds.height / 2
+                      ? "before"
+                      : "after"
+
+                  setDraggingDirectory("")
+                  setDirectoryDropTarget(null)
+                  if (
+                    !sourceDirectory ||
+                    sourceDirectory === directory ||
+                    !onReorderDirectories
+                  ) {
+                    return
+                  }
+                  onReorderDirectories(sourceDirectory, directory, position)
+                }}
+              >
                 <div className="flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/70">
                   <button
                     type="button"
@@ -313,6 +402,9 @@ export function AppSidebar({
                       }
                     }}
                   >
+                    {directoryOrderingEnabled ? (
+                      <GripVerticalIcon className="mt-0.5 shrink-0 text-sidebar-foreground/40" />
+                    ) : null}
                     <FolderIcon className="mt-0.5 shrink-0" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium text-sidebar-foreground">
