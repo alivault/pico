@@ -44,7 +44,6 @@ import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -3331,28 +3330,25 @@ export function PiWebAppShell({
 
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden p-6">
-          <Tabs
-            value={currentTab}
-            onValueChange={setCurrentTab}
-            className="flex h-full min-h-0 flex-col gap-6"
-          >
-            <TabsList variant="line">
+        <Tabs
+          value={currentTab}
+          onValueChange={setCurrentTab}
+          className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden"
+        >
+            <TabsList className="w-full rounded-none">
               <TabsTrigger value="session">Session</TabsTrigger>
               <TabsTrigger value="git">Git</TabsTrigger>
             </TabsList>
 
             <TabsContent
               value="session"
-              className="flex min-h-0 flex-1 flex-col gap-4"
+              className="flex min-h-0 flex-1 flex-col px-6 pb-6"
             >
-              <Card className="min-h-0 flex-1">
-                <CardContent className="flex h-full min-h-0 flex-col gap-4 pt-4">
-                  <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1">
-                    <ScrollArea className="h-full pr-4">
+              <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1">
+                    <ScrollArea className="h-full">
                       {isSessionViewLoading ? (
                         <div className="flex min-h-full items-center justify-center py-10">
-                          <div className="flex flex-col items-center gap-3 rounded-xl border bg-card/70 px-6 py-8 text-sm text-muted-foreground">
+                          <div className="flex flex-col items-center gap-3 border bg-card/70 px-6 py-8 text-sm text-muted-foreground">
                             <Spinner />
                             <div className="font-medium text-foreground">Loading session…</div>
                             <div>Switching to the selected conversation.</div>
@@ -3403,7 +3399,7 @@ export function PiWebAppShell({
                           <div ref={bottomRef} />
                         </div>
                       ) : (
-                        <Empty className="bg-card/60">
+                        <Empty>
                           <EmptyHeader>
                             <EmptyTitle>
                               {sessionState.draft
@@ -3481,8 +3477,6 @@ export function PiWebAppShell({
                     isSubmitting={isSubmitting}
                     isStreaming={sessionState.streaming}
                     awaitingFirstTurn={awaitingFirstTurn}
-                    isDraftSessionLoading={Boolean(draftSessionLoadingOwnerKey)}
-                    hasPendingDraftPrompt={Boolean(pendingDraftPrompt)}
                     workingState={workingState}
                     fileInputRef={fileInputRef}
                     slashCommands={slashCommands}
@@ -3550,8 +3544,6 @@ export function PiWebAppShell({
                         : response.items
                     }}
                   />
-                </CardContent>
-              </Card>
             </TabsContent>
 
             <TabsContent
@@ -3568,8 +3560,7 @@ export function PiWebAppShell({
                 }}
               />
             </TabsContent>
-          </Tabs>
-        </div>
+        </Tabs>
       </SidebarInset>
 
       <AppShellCommandPalette

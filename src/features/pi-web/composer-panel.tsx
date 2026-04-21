@@ -1,11 +1,11 @@
 import * as React from "react"
 import {
+  ArrowUpIcon,
   CheckIcon,
   ChevronDownIcon,
   FolderSearchIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
-  SendIcon,
   XIcon,
 } from "lucide-react"
 
@@ -81,8 +81,6 @@ type ComposerPanelProps = {
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
-  isDraftSessionLoading: boolean
-  hasPendingDraftPrompt: boolean
   workingState: WorkingState | null
   fileInputRef: React.RefObject<HTMLInputElement | null>
   slashCommands: Array<SlashCommandDescriptor>
@@ -188,8 +186,6 @@ export const ComposerPanel = React.forwardRef<
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
-    isDraftSessionLoading,
-    hasPendingDraftPrompt,
     fileInputRef,
     slashCommands,
     onComposerTextChange,
@@ -621,19 +617,6 @@ export const ComposerPanel = React.forwardRef<
     ]
   )
 
-  const primaryButtonLabel = React.useMemo(() => {
-    if (isStreaming && !hasSubmittableContent) {
-      return "Stop"
-    }
-    if (hasPendingDraftPrompt && isDraftSessionLoading) {
-      return "Send when ready"
-    }
-    if (acceptFollowUps) {
-      return "Steer"
-    }
-    return "Send"
-  }, [acceptFollowUps, hasPendingDraftPrompt, hasSubmittableContent, isDraftSessionLoading, isStreaming])
-
   return (
     <div className="flex flex-col gap-3">
         {currentPendingMessages.length > 0 ? (
@@ -904,10 +887,13 @@ export const ComposerPanel = React.forwardRef<
                 </Button>
               ) : null}
               <Button
+                size="icon-sm"
                 disabled={
                   isSubmitting ||
                   (!hasSubmittableContent && !isStreaming && !slashMenuState)
                 }
+                title="Send"
+                aria-label="Send"
                 onClick={() => {
                   if (isStreaming && !hasSubmittableContent) {
                     onAbort()
@@ -919,14 +905,10 @@ export const ComposerPanel = React.forwardRef<
                 }}
               >
                 {isSubmitting ? (
-                  <LoaderCircleIcon
-                    className="animate-spin"
-                    data-icon="inline-start"
-                  />
+                  <LoaderCircleIcon className="animate-spin" />
                 ) : (
-                  <SendIcon data-icon="inline-start" />
+                  <ArrowUpIcon />
                 )}
-                {primaryButtonLabel}
               </Button>
             </div>
           </div>
