@@ -1,6 +1,8 @@
 import * as React from "react"
 import {
   ArrowDownIcon,
+  ArrowDownToLineIcon,
+  ArrowUpIcon,
   ArrowUpToLineIcon,
   EllipsisIcon,
   SquarePenIcon,
@@ -216,6 +218,10 @@ function findMessageViewport(root: HTMLElement | null) {
   )
 }
 
+function isViewportNearTop(viewport: HTMLDivElement, threshold = 48) {
+  return viewport.scrollTop < threshold
+}
+
 function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
   return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold
 }
@@ -264,25 +270,40 @@ function sessionScrollKey(sessionState: {
   return sessionState.sessionFile || sessionState.sessionId || ""
 }
 
-function previousMessageJumpTarget(viewport: HTMLDivElement) {
-  const anchors = [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
-  if (anchors.length === 0) return null
+function messageAnchors(viewport: HTMLDivElement) {
+  return [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
+}
+
+function currentMessageAnchorIndex(anchors: Array<HTMLElement>, viewport: HTMLDivElement) {
+  if (anchors.length === 0) return -1
 
   const viewportTop = viewport.scrollTop + 8
-  let candidate: HTMLElement | null = null
+  let currentIndex = 0
 
-  for (const anchor of anchors) {
-    if (anchor.offsetTop < viewportTop - 8) {
-      candidate = anchor
+  for (let index = 0; index < anchors.length; index += 1) {
+    if (anchors[index].offsetTop <= viewportTop) {
+      currentIndex = index
       continue
     }
 
-    if (candidate) {
-      break
-    }
+    break
   }
 
-  return candidate
+  return currentIndex
+}
+
+function previousMessageJumpTarget(viewport: HTMLDivElement) {
+  const anchors = messageAnchors(viewport)
+  const currentIndex = currentMessageAnchorIndex(anchors, viewport)
+  if (currentIndex <= 0) return null
+  return anchors[currentIndex - 1]
+}
+
+function nextMessageJumpTarget(viewport: HTMLDivElement) {
+  const anchors = messageAnchors(viewport)
+  const currentIndex = currentMessageAnchorIndex(anchors, viewport)
+  if (currentIndex < 0 || currentIndex >= anchors.length - 1) return null
+  return anchors[currentIndex + 1]
 }
 
 export function PiWebAppShell({
@@ -421,8 +442,11 @@ export function PiWebAppShell({
   const messagesScrollAreaRef = React.useRef<HTMLDivElement | null>(null)
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
+  const [isMessagesNearTop, setIsMessagesNearTop] = React.useState(true)
   const [isMessagesNearBottom, setIsMessagesNearBottom] = React.useState(true)
   const [hasPreviousMessageJumpTarget, setHasPreviousMessageJumpTarget] =
+    React.useState(false)
+  const [hasNextMessageJumpTarget, setHasNextMessageJumpTarget] =
     React.useState(false)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -890,8 +914,10 @@ export function PiWebAppShell({
     if (!viewport) return
 
     const syncScrollState = () => {
+      setIsMessagesNearTop(isViewportNearTop(viewport))
       setIsMessagesNearBottom(isViewportNearBottom(viewport))
       setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
+      setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
     }
 
     syncScrollState()
@@ -3178,6 +3204,12 @@ export function PiWebAppShell({
       ? gitStatus.gitStatus
       : null
 
+  const scrollConversationToTop = React.useCallback(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    viewport.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
+
   const scrollConversationToBottom = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
@@ -3188,6 +3220,14 @@ export function PiWebAppShell({
     const viewport = messageViewportRef.current
     if (!viewport) return
     const target = previousMessageJumpTarget(viewport)
+    if (!target) return
+    viewport.scrollTo({ top: Math.max(0, target.offsetTop - 8), behavior: "smooth" })
+  }, [])
+
+  const jumpToNextMessage = React.useCallback(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    const target = nextMessageJumpTarget(viewport)
     if (!target) return
     viewport.scrollTo({ top: Math.max(0, target.offsetTop - 8), behavior: "smooth" })
   }, [])
@@ -3519,39 +3559,61 @@ export function PiWebAppShell({
                       )}
                 </div>
 
-                    {!isSessionViewLoading &&
-                    ((!sessionState.draft &&
-                      sessionState.items.length > 0 &&
-                      !isMessagesNearBottom) ||
-                      hasPreviousMessageJumpTarget) ? (
-                      <div className="absolute right-4 bottom-4 z-10 flex items-center gap-4 md:right-[18px] md:bottom-[18px]">
-                        {!sessionState.draft &&
-                        sessionState.items.length > 0 &&
-                        !isMessagesNearBottom ? (
+                    {!isSessionViewLoading ? (
+                      <div className="absolute right-4 bottom-4 z-10 flex justify-end md:right-[18px] md:bottom-[18px]">
+                        <div className="flex items-center gap-4">
                           <Button
                             variant="secondary"
                             size="icon-lg"
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
-                            title="Jump to latest message"
-                            aria-label="Jump to latest message"
-                            onClick={scrollConversationToBottom}
+                            disabled={isMessagesNearTop}
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                            title="Go to top"
+                            aria-label="Go to top"
+                            onClick={scrollConversationToTop}
                           >
-                            <ArrowDownIcon className="size-4" />
+                            <ArrowUpIcon className="size-4" />
                           </Button>
-                        ) : null}
 
-                        {hasPreviousMessageJumpTarget ? (
                           <Button
                             variant="secondary"
                             size="icon-lg"
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                            disabled={!hasPreviousMessageJumpTarget}
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
                             title="Jump to previous message"
                             aria-label="Jump to previous message"
                             onClick={jumpToPreviousMessage}
                           >
                             <ArrowUpToLineIcon className="size-4" />
                           </Button>
-                        ) : null}
+
+                          <Button
+                            variant="secondary"
+                            size="icon-lg"
+                            disabled={!hasNextMessageJumpTarget}
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                            title="Jump to next message"
+                            aria-label="Jump to next message"
+                            onClick={jumpToNextMessage}
+                          >
+                            <ArrowDownToLineIcon className="size-4" />
+                          </Button>
+
+                          <Button
+                            variant="secondary"
+                            size="icon-lg"
+                            disabled={
+                              sessionState.draft ||
+                              sessionState.items.length === 0 ||
+                              isMessagesNearBottom
+                            }
+                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                            title="Jump to latest message"
+                            aria-label="Jump to latest message"
+                            onClick={scrollConversationToBottom}
+                          >
+                            <ArrowDownIcon className="size-4" />
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
