@@ -3333,7 +3333,7 @@ export function PiWebAppShell({
         <Tabs
           value={currentTab}
           onValueChange={setCurrentTab}
-          className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
             <TabsList className="w-full rounded-none">
               <TabsTrigger value="session">Session</TabsTrigger>
@@ -3342,9 +3342,9 @@ export function PiWebAppShell({
 
             <TabsContent
               value="session"
-              className="flex min-h-0 flex-1 flex-col px-6 pb-6"
+              className="flex min-h-0 flex-1 flex-col"
             >
-              <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1">
+              <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1 px-6">
                     <ScrollArea className="h-full">
                       {isSessionViewLoading ? (
                         <div className="flex min-h-full items-center justify-center py-10">
@@ -3355,7 +3355,7 @@ export function PiWebAppShell({
                           </div>
                         </div>
                       ) : sessionState.items.length > 0 ? (
-                        <div className="flex flex-col gap-4 pb-6">
+                        <div className="flex flex-col gap-4">
                           {(() => {
                             const counts = new Map<string, number>()
                             return sessionState.items.map((item) => {
@@ -3548,7 +3548,7 @@ export function PiWebAppShell({
 
             <TabsContent
               value="git"
-              className="min-h-0 flex-1 space-y-4 overflow-auto"
+              className="min-h-0 flex-1 space-y-4 overflow-auto px-6 pb-6"
             >
               <GitPanel
                 gitLoading={gitLoading}
