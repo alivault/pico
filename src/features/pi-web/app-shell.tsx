@@ -3434,13 +3434,31 @@ export function PiWebAppShell({
                     <Button
                       variant="secondary"
                       size="icon-lg"
-                      disabled={isMessagesNearTop}
+                      disabled={
+                        sessionState.draft ||
+                        sessionState.items.length === 0 ||
+                        isMessagesNearBottom
+                      }
                       className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                      title="Go to top"
-                      aria-label="Go to top"
-                      onClick={scrollConversationToTop}
+                      title="Jump to latest message"
+                      aria-label="Jump to latest message"
+                      onClick={scrollConversationToBottom}
                     >
-                      <ArrowUpIcon className="size-4" />
+                      <ArrowDownIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      disabled={
+                        !hasNextMessageJumpTarget || isMessagesNearBottom
+                      }
+                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                      title="Jump to next message"
+                      aria-label="Jump to next message"
+                      onClick={jumpToNextMessage}
+                    >
+                      <ArrowDownToLineIcon className="size-4" />
                     </Button>
 
                     <Button
@@ -3458,29 +3476,13 @@ export function PiWebAppShell({
                     <Button
                       variant="secondary"
                       size="icon-lg"
-                      disabled={!hasNextMessageJumpTarget}
+                      disabled={isMessagesNearTop}
                       className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                      title="Jump to next message"
-                      aria-label="Jump to next message"
-                      onClick={jumpToNextMessage}
+                      title="Go to top"
+                      aria-label="Go to top"
+                      onClick={scrollConversationToTop}
                     >
-                      <ArrowDownToLineIcon className="size-4" />
-                    </Button>
-
-                    <Button
-                      variant="secondary"
-                      size="icon-lg"
-                      disabled={
-                        sessionState.draft ||
-                        sessionState.items.length === 0 ||
-                        isMessagesNearBottom
-                      }
-                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                      title="Jump to latest message"
-                      aria-label="Jump to latest message"
-                      onClick={scrollConversationToBottom}
-                    >
-                      <ArrowDownIcon className="size-4" />
+                      <ArrowUpIcon className="size-4" />
                     </Button>
                   </div>
                 </div>
