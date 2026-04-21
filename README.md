@@ -60,6 +60,7 @@ pnpm dev
 ```
 
 Default dev port from `package.json`:
+
 - `3000`
 
 ### Build

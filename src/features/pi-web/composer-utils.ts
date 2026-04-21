@@ -113,8 +113,10 @@ export function parseSlashCommandInput(value = ""): SlashCommandInput | null {
 
   const afterSlash = trimmedStart.slice(1)
   const whitespaceIndex = afterSlash.search(/\s/)
-  const name = whitespaceIndex >= 0 ? afterSlash.slice(0, whitespaceIndex) : afterSlash
-  const args = whitespaceIndex >= 0 ? afterSlash.slice(whitespaceIndex).trim() : ""
+  const name =
+    whitespaceIndex >= 0 ? afterSlash.slice(0, whitespaceIndex) : afterSlash
+  const args =
+    whitespaceIndex >= 0 ? afterSlash.slice(whitespaceIndex).trim() : ""
 
   return {
     rawValue,
@@ -208,11 +210,15 @@ export function matchingSlashCommands(
   query: string
 ) {
   return commands
-    .map((command) => ({ command, rank: slashCommandMatchRank(command, query) }))
+    .map((command) => ({
+      command,
+      rank: slashCommandMatchRank(command, query),
+    }))
     .filter((entry) => Number.isFinite(entry.rank))
     .sort(
       (left, right) =>
-        left.rank - right.rank || left.command.name.localeCompare(right.command.name)
+        left.rank - right.rank ||
+        left.command.name.localeCompare(right.command.name)
     )
     .map((entry) => entry.command)
 }
@@ -322,7 +328,10 @@ export function getPathCompletionQuery({
 }): PathCompletionQuery | null {
   if (selectionStart !== selectionEnd) return null
 
-  const currentLine = currentPromptLineBeforeCursor(value, selectionStart).trimStart()
+  const currentLine = currentPromptLineBeforeCursor(
+    value,
+    selectionStart
+  ).trimStart()
   if (currentLine.startsWith("/") && !currentLine.includes(" ")) {
     return null
   }
@@ -417,12 +426,13 @@ export function applyCompletionItem({
 }) {
   const before = value.slice(0, query.start)
   const after = value.slice(query.end)
-  const suffix =
-    query.kind === "file-reference" && !item.isDirectory ? " " : ""
+  const suffix = query.kind === "file-reference" && !item.isDirectory ? " " : ""
   const nextValue = `${before}${item.value}${suffix}${after}`
   const hasTrailingQuote = item.value.endsWith('"')
   const cursorOffset =
-    item.isDirectory && hasTrailingQuote ? item.value.length - 1 : item.value.length
+    item.isDirectory && hasTrailingQuote
+      ? item.value.length - 1
+      : item.value.length
   const selection = before.length + cursorOffset + suffix.length
 
   return {

@@ -25,6 +25,22 @@ function parseCodeLanguage(className?: string) {
   return match?.[1]
 }
 
+function markdownNodeText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node)
+  }
+
+  if (Array.isArray(node)) {
+    return node.map((child) => markdownNodeText(child)).join("")
+  }
+
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return markdownNodeText(node.props.children)
+  }
+
+  return ""
+}
+
 async function getHighlightedCode(code: string, language?: string) {
   const cacheKey = `${language || "plaintext"}\u0000${code}`
   const cached = highlightCache.get(cacheKey)
@@ -47,14 +63,9 @@ async function getHighlightedCode(code: string, language?: string) {
   return payload
 }
 
-function CodeBlock({
-  code,
-  language,
-}: {
-  code: string
-  language?: string
-}) {
-  const [highlighted, setHighlighted] = React.useState<HighlightResponse | null>(null)
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  const [highlighted, setHighlighted] =
+    React.useState<HighlightResponse | null>(null)
   const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
     "idle"
   )
@@ -78,7 +89,7 @@ function CodeBlock({
       ? highlighted.language
       : language
 
-  const copyCode = React.useCallback(async () => {
+  const copyCode = async () => {
     try {
       await navigator.clipboard.writeText(code)
       setCopyState("copied")
@@ -87,18 +98,15 @@ function CodeBlock({
       setCopyState("error")
       window.setTimeout(() => setCopyState("idle"), 1400)
     }
-  }, [code])
+  }
 
   const highlightedHtml = hasHighlightHtml(highlighted)
     ? highlighted.html
     : null
 
-  const highlightedMarkup = React.useMemo(
-    () => ({ __html: highlightedHtml || "" }),
-    [highlightedHtml]
-  )
+  const highlightedMarkup = (() => ({ __html: highlightedHtml || "" }))()
 
-  const highlightedContent = React.useMemo(() => {
+  const highlightedContent = (() => {
     if (!highlightedHtml) return null
 
     return React.createElement("code", {
@@ -106,12 +114,12 @@ function CodeBlock({
       // biome-ignore lint/security/noDangerouslySetInnerHtml: syntax highlighting HTML is generated server-side by highlight.js
       dangerouslySetInnerHTML: highlightedMarkup,
     })
-  }, [highlightedHtml, highlightedMarkup, renderedLanguage])
+  })()
 
   return (
     <div className="overflow-hidden rounded-xl border bg-muted/40">
       <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-        <div className="truncate font-medium uppercase tracking-wide">
+        <div className="truncate font-medium tracking-wide uppercase">
           {renderedLanguage || "code"}
         </div>
         <Button variant="ghost" size="xs" onClick={copyCode}>
@@ -153,17 +161,19 @@ function hasHighlightHtml(
   HighlightResponse,
   { ok: false; error: string; routePath?: string }
 > & { html: string } {
-  return Boolean(payload && !isHighlightSkipped(payload) && !isHighlightUnavailable(payload))
+  return Boolean(
+    payload && !isHighlightSkipped(payload) && !isHighlightUnavailable(payload)
+  )
 }
 
 function MarkdownBlock({ text }: { text: string }) {
   return (
-    <div className="prose prose-sm dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-pre:m-0 max-w-none break-words">
+    <div className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           code({ className, children, ...props }) {
-            const code = String(children).replace(/\n$/, "")
+            const code = markdownNodeText(children).replace(/\n$/, "")
             const language = parseCodeLanguage(className)
 
             if (!className) {
@@ -208,7 +218,7 @@ function toolArgsKey(args: unknown) {
 }
 
 function assistantBlockKey(
-  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   switch (block.type) {
     case "text":
@@ -280,12 +290,17 @@ function normalizeToolArgs(args: unknown) {
   }
 }
 
-function getToolArgText(args: Record<string, unknown> | undefined, key: string) {
+function getToolArgText(
+  args: Record<string, unknown> | undefined,
+  key: string
+) {
   const value = args?.[key]
   return typeof value === "string" && value.trim() ? value.trim() : ""
 }
 
-function toolCommandPreview(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+function toolCommandPreview(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
   if (block.type !== "tool") return ""
 
   if (typeof block.args === "string" && block.args.trim()) {
@@ -301,11 +316,14 @@ function toolCommandPreview(block: Extract<ConversationItem, { kind: "assistant"
   )
 }
 
-function toolReadLocation(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+function toolReadLocation(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
   if (block.type !== "tool") return ""
 
   const args = normalizeToolArgs(block.args)
-  const filePath = getToolArgText(args, "path") || getToolArgText(args, "filePath")
+  const filePath =
+    getToolArgText(args, "path") || getToolArgText(args, "filePath")
   const offset = args?.offset
   const limit = args?.limit
 
@@ -321,9 +339,12 @@ function toolReadLocation(block: Extract<ConversationItem, { kind: "assistant" }
   return filePath
 }
 
-function toolSummary(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+function toolSummary(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
   if (block.type !== "tool") return ""
-  const preview = block.name === "read" ? toolReadLocation(block) : toolCommandPreview(block)
+  const preview =
+    block.name === "read" ? toolReadLocation(block) : toolCommandPreview(block)
   if (preview) return preview
   if (block.running) return "Running"
   if (block.isError) return "Failed"
@@ -350,7 +371,9 @@ function parseToolDiffLine(line: string): ToolDiffLine | null {
   }
 }
 
-function toolDiffPreview(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+function toolDiffPreview(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
   if (block.type !== "tool" || block.name !== "edit" || block.isError) return []
   const diff =
     block.details &&
@@ -366,7 +389,9 @@ function toolDiffPreview(block: Extract<ConversationItem, { kind: "assistant" }>
     .filter((line): line is ToolDiffLine => Boolean(line))
 }
 
-function hideSuccessfulToolOutput(block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]) {
+function hideSuccessfulToolOutput(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
   return (
     block.type === "tool" &&
     !block.isError &&
@@ -376,7 +401,7 @@ function hideSuccessfulToolOutput(block: Extract<ConversationItem, { kind: "assi
 }
 
 function compactionTriggerText(
-  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number]
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   if (block.type !== "compaction") return "Compaction"
   return block.tokensBefore > 0
@@ -398,7 +423,7 @@ function ToolDiffPreview({ lines }: { lines: Array<ToolDiffLine> }) {
           <div
             key={`${baseKey}:${count}`}
             className={cn(
-              "whitespace-pre-wrap font-mono",
+              "font-mono whitespace-pre-wrap",
               line.type === "add" && "text-emerald-700 dark:text-emerald-400",
               line.type === "remove" && "text-red-700 dark:text-red-400",
               line.type === "context" && "text-muted-foreground"
@@ -416,7 +441,7 @@ function ToolDiffPreview({ lines }: { lines: Array<ToolDiffLine> }) {
 function ToolBlockCard({
   block,
 }: {
-  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number] & {
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
     type: "tool"
   }
 }) {
@@ -434,7 +459,7 @@ function ToolBlockCard({
       )}
     >
       <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 px-3 py-2.5 select-none [&::-webkit-details-marker]:hidden">
-        <div className="min-w-0 flex flex-1 items-start gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           <WrenchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
@@ -473,7 +498,9 @@ function ToolBlockCard({
         ) : null}
 
         {!hasContent ? (
-          <div className="text-xs text-muted-foreground">No output available.</div>
+          <div className="text-xs text-muted-foreground">
+            No output available.
+          </div>
         ) : null}
       </div>
     </details>
@@ -483,7 +510,7 @@ function ToolBlockCard({
 function CompactionBlockCard({
   block,
 }: {
-  block: Extract<ConversationItem, { kind: "assistant" }>['blocks'][number] & {
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
     type: "compaction"
   }
 }) {
@@ -651,7 +678,9 @@ export function AssistantMessageCard({
     })
   })()
 
-  if (!assistantMessageHasVisibleBlocks({ item, hideThinking, hideToolBlocks })) {
+  if (
+    !assistantMessageHasVisibleBlocks({ item, hideThinking, hideToolBlocks })
+  ) {
     return null
   }
 

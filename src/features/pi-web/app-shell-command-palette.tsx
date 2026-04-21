@@ -47,15 +47,12 @@ export function AppShellCommandPalette({
     }
   }, [open, query])
 
-  const handleSelect = React.useCallback(
-    (command: AppCommand) => {
-      onOpenChange(false)
-      void Promise.resolve(command.onSelect()).catch((error: unknown) => {
-        onCommandError?.(error)
-      })
-    },
-    [onCommandError, onOpenChange]
-  )
+  const handleSelect = (command: AppCommand) => {
+    onOpenChange(false)
+    void Promise.resolve(command.onSelect()).catch((error: unknown) => {
+      onCommandError?.(error)
+    })
+  }
 
   return (
     <CommandDialog

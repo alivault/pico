@@ -1,7 +1,8 @@
 import { defineConfig } from "vite-plus"
 import { devtools } from "@tanstack/devtools-vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
-import viteReact from "@vitejs/plugin-react"
+import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react"
+import babel from "@rolldown/plugin-babel"
 import tailwindcss from "@tailwindcss/vite"
 import { nitro } from "nitro/vite"
 import { searchForWorkspaceRoot } from "vite"
@@ -31,7 +32,12 @@ const config = defineConfig({
       functions: ["cn", "cva"],
     },
     sortPackageJson: false,
-    ignorePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
+    ignorePatterns: [
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "src/routeTree.gen.ts",
+      "yarn.lock",
+    ],
   },
   resolve: {
     tsconfigPaths: true,
@@ -41,7 +47,16 @@ const config = defineConfig({
       allow: fsAllow,
     },
   },
-  plugins: [devtools(), nitro(), tailwindcss(), tanstackStart(), viteReact()],
+  plugins: [
+    devtools(),
+    nitro(),
+    tailwindcss(),
+    tanstackStart(),
+    viteReact(),
+    babel({
+      presets: [reactCompilerPreset()],
+    }),
+  ],
 })
 
 export default config

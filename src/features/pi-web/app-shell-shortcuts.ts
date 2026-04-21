@@ -112,7 +112,8 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
       },
       {
         label: "Queue a follow-up",
-        description: "Works while streaming or when using steer/follow-up mode.",
+        description:
+          "Works while streaming or when using steer/follow-up mode.",
         keys: "Alt+Ctrl+Enter",
       },
       {
@@ -125,7 +126,8 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
       },
       {
         label: "Accept a slash, path, or file suggestion",
-        description: "Tab accepts slash/path suggestions; Enter accepts the active completion.",
+        description:
+          "Tab accepts slash/path suggestions; Enter accepts the active completion.",
         keys: "Tab / Enter",
       },
       {

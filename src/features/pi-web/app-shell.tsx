@@ -157,7 +157,8 @@ function mergeAssistantTurns(items: Array<ConversationItem>) {
         }
       } else {
         pendingAssistant.blocks.push(...item.blocks)
-        pendingAssistant.streaming = pendingAssistant.streaming || item.streaming
+        pendingAssistant.streaming =
+          pendingAssistant.streaming || item.streaming
       }
 
       continue
@@ -222,7 +223,10 @@ function isViewportNearTop(viewport: HTMLDivElement, threshold = 48) {
 }
 
 function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
-  return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < threshold
+  return (
+    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
+    threshold
+  )
 }
 
 const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
@@ -253,7 +257,9 @@ function formatDisplayPath(value: string | undefined) {
 }
 
 function finishedSessionLabel(title: string) {
-  return title !== "New session" ? `Session finished: ${title}` : "Session finished"
+  return title !== "New session"
+    ? `Session finished: ${title}`
+    : "Session finished"
 }
 
 function sessionScrollKey(sessionState: {
@@ -270,10 +276,15 @@ function sessionScrollKey(sessionState: {
 }
 
 function messageAnchors(viewport: HTMLDivElement) {
-  return [...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']")]
+  return [
+    ...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']"),
+  ]
 }
 
-function currentMessageAnchorIndex(anchors: Array<HTMLElement>, viewport: HTMLDivElement) {
+function currentMessageAnchorIndex(
+  anchors: Array<HTMLElement>,
+  viewport: HTMLDivElement
+) {
   if (anchors.length === 0) return -1
 
   const viewportTop = viewport.scrollTop + 8
@@ -303,6 +314,12 @@ function nextMessageJumpTarget(viewport: HTMLDivElement) {
   const currentIndex = currentMessageAnchorIndex(anchors, viewport)
   if (currentIndex < 0 || currentIndex >= anchors.length - 1) return null
   return anchors[currentIndex + 1]
+}
+
+function useLatestRef<T>(value: T) {
+  const ref = React.useRef(value)
+  ref.current = value
+  return ref
 }
 
 export function PiWebAppShell({
@@ -349,15 +366,12 @@ export function PiWebAppShell({
   >(null)
   const [draftSessionLoadingOwnerKey, setDraftSessionLoadingOwnerKey] =
     React.useState<string | null>(null)
-  const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<
-    | {
-        ownerKey: string
-        message: string
-        images: Array<PromptImage>
-        streamingBehavior?: StreamingBehavior
-      }
-    | null
-  >(null)
+  const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<{
+    ownerKey: string
+    message: string
+    images: Array<PromptImage>
+    streamingBehavior?: StreamingBehavior
+  } | null>(null)
   const [pendingDraftFollowUps, setPendingDraftFollowUps] = React.useState<
     Array<{
       message: string
@@ -383,11 +397,12 @@ export function PiWebAppShell({
   const [gitLoading, setGitLoading] = React.useState(false)
   const [addDirectoryOpen, setAddDirectoryOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
-  const [recentDirectories, setRecentDirectories] = React.useState<Array<string>>([])
+  const [recentDirectories, setRecentDirectories] = React.useState<
+    Array<string>
+  >([])
   const [renameOpen, setRenameOpen] = React.useState(false)
-  const [renameTarget, setRenameTarget] = React.useState<SessionListEntry | null>(
-    null
-  )
+  const [renameTarget, setRenameTarget] =
+    React.useState<SessionListEntry | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
   const [deleteTargets, setDeleteTargets] = React.useState<
     Array<SessionListEntry>
@@ -435,8 +450,10 @@ export function PiWebAppShell({
   )
   const [titleStreamingFrameIndex, setTitleStreamingFrameIndex] =
     React.useState(0)
-  const [backgroundCurrentSessionUnreadKey, setBackgroundCurrentSessionUnreadKey] =
-    React.useState("")
+  const [
+    backgroundCurrentSessionUnreadKey,
+    setBackgroundCurrentSessionUnreadKey,
+  ] = React.useState("")
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
@@ -453,11 +470,15 @@ export function PiWebAppShell({
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
   const composerTextRef = React.useRef(composerDraftSeed.text)
-  const composerSkillRef = React.useRef<string | undefined>(composerDraftSeed.skillName)
+  const composerSkillRef = React.useRef<string | undefined>(
+    composerDraftSeed.skillName
+  )
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const lastEscapePressedAtRef = React.useRef(0)
-  const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(new Map())
+  const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(
+    new Map()
+  )
   const sessionUnreadSnapshotsReadyRef = React.useRef(false)
   const lastLoadedSessionScrollKeyRef = React.useRef("")
 
@@ -467,10 +488,8 @@ export function PiWebAppShell({
 
   const activeSessionId = sessionState.sessionId || sessionId
   const directoryStates = sessionsEvent?.directoryStates || []
-  const directoryStateByPath = React.useMemo(
-    () => new Map(directoryStates.map((state) => [state.path, state])),
-    [directoryStates]
-  )
+  const directoryStateByPath = (() =>
+    new Map(directoryStates.map((state) => [state.path, state])))()
   const currentSessionTitle = getSessionTitle({
     title:
       sessionState.sessionName || sessionState.firstMessage || "New session",
@@ -492,38 +511,39 @@ export function PiWebAppShell({
     sessionStateRef.current = sessionState
   }, [sessionState])
 
-  const syncComposerDraft = React.useCallback(
-    (value: string, target = sessionStateRef.current) => {
-      const parsed = parseComposerSkillMessage(value)
-      const nextText = parsed.matched ? parsed.text : value
-      const nextSkill = parsed.matched ? parsed.skillName : undefined
+  const syncComposerDraft = (
+    value: string,
+    target = sessionStateRef.current
+  ) => {
+    const parsed = parseComposerSkillMessage(value)
+    const nextText = parsed.matched ? parsed.text : value
+    const nextSkill = parsed.matched ? parsed.skillName : undefined
 
-      composerTextRef.current = nextText
-      composerSkillRef.current = nextSkill
-      rememberStoredPromptDraft(
-        target,
-        serializeComposerDraft({ text: nextText, skillName: nextSkill })
-      )
-    },
-    []
-  )
+    composerTextRef.current = nextText
+    composerSkillRef.current = nextSkill
+    rememberStoredPromptDraft(
+      target,
+      serializeComposerDraft({ text: nextText, skillName: nextSkill })
+    )
+  }
 
-  const replaceComposerDraft = React.useCallback(
-    (value: string, target = sessionStateRef.current) => {
-      const parsed = parseComposerSkillMessage(value)
-      const nextText = parsed.matched ? parsed.text : value
-      const nextSkill = parsed.matched ? parsed.skillName : undefined
+  const replaceComposerDraft = (
+    value: string,
+    target = sessionStateRef.current
+  ) => {
+    const parsed = parseComposerSkillMessage(value)
+    const nextText = parsed.matched ? parsed.text : value
+    const nextSkill = parsed.matched ? parsed.skillName : undefined
 
-      composerTextRef.current = nextText
-      composerSkillRef.current = nextSkill
-      setComposerDraftSeed({ text: nextText, skillName: nextSkill })
-      rememberStoredPromptDraft(
-        target,
-        serializeComposerDraft({ text: nextText, skillName: nextSkill })
-      )
-    },
-    []
-  )
+    composerTextRef.current = nextText
+    composerSkillRef.current = nextSkill
+    setComposerDraftSeed({ text: nextText, skillName: nextSkill })
+    rememberStoredPromptDraft(
+      target,
+      serializeComposerDraft({ text: nextText, skillName: nextSkill })
+    )
+  }
+  const replaceComposerDraftRef = useLatestRef(replaceComposerDraft)
 
   React.useEffect(() => {
     const storedContext = window.localStorage.getItem(
@@ -564,97 +584,91 @@ export function PiWebAppShell({
     }
   }, [sessionDoneSoundEnabled])
 
-  const openCommandPalette = React.useCallback(() => {
+  const openCommandPalette = () => {
     setStatusOpen(false)
     setShortcutsOpen(false)
     setSettingsOpen(false)
     setCommandPaletteOpen(true)
-  }, [])
+  }
 
-  const openStatusDialog = React.useCallback(() => {
+  const openStatusDialog = () => {
     setCommandPaletteOpen(false)
     setShortcutsOpen(false)
     setSettingsOpen(false)
     setStatusOpen(true)
-  }, [])
+  }
 
-  const openShortcutsDialog = React.useCallback(() => {
+  const openShortcutsDialog = () => {
     setCommandPaletteOpen(false)
     setStatusOpen(false)
     setSettingsOpen(false)
     setShortcutsOpen(true)
-  }, [])
+  }
 
-  const openSettingsDialog = React.useCallback(() => {
+  const openSettingsDialog = () => {
     setCommandPaletteOpen(false)
     setStatusOpen(false)
     setShortcutsOpen(false)
     setSettingsOpen(true)
-  }, [])
+  }
 
-  const openRenameDialog = React.useCallback(() => {
+  const openRenameDialog = () => {
     setRenameTarget(null)
     setRenameValue(sessionState.sessionName || currentSessionTitle)
     setRenameOpen(true)
-  }, [currentSessionTitle, sessionState.sessionName])
+  }
 
-  const focusSessionSearch = React.useCallback(() => {
+  const focusSessionSearch = () => {
     sessionSearchInputRef.current?.focus()
     sessionSearchInputRef.current?.select()
-  }, [])
+  }
 
-  const focusModelSelector = React.useCallback(() => {
+  const focusModelSelector = () => {
     composerPanelRef.current?.openModelPicker()
-  }, [])
+  }
 
-  const handleSessionDoneSoundEnabledChange = React.useCallback(
-    (enabled: boolean) => {
-      setSessionDoneSoundEnabled(enabled)
-      safeLocalStorageSetItem(
-        SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
-        enabled ? "1" : "0"
+  const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
+    setSessionDoneSoundEnabled(enabled)
+    safeLocalStorageSetItem(
+      SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+      enabled ? "1" : "0"
+    )
+
+    if (enabled) {
+      void primeSessionDoneSound()
+    }
+  }
+
+  const handleSessionDoneDesktopNotificationsEnabledChange = async (
+    enabled: boolean
+  ) => {
+    setSessionDoneDesktopNotificationsEnabled(enabled)
+    safeLocalStorageSetItem(
+      SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+      enabled ? "1" : "0"
+    )
+
+    if (!enabled) {
+      return
+    }
+
+    const permission = await requestDesktopNotificationPermission()
+    setDesktopNotificationPermission(permission)
+
+    if (permission === "denied") {
+      toast.info(
+        "Allow notifications for this site in your browser to receive desktop alerts."
       )
+    } else if (permission === "unsupported") {
+      toast.error("Desktop notifications are unavailable in this browser.")
+    }
+  }
 
-      if (enabled) {
-        void primeSessionDoneSound()
-      }
-    },
-    []
-  )
-
-  const handleSessionDoneDesktopNotificationsEnabledChange = React.useCallback(
-    async (enabled: boolean) => {
-      setSessionDoneDesktopNotificationsEnabled(enabled)
-      safeLocalStorageSetItem(
-        SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
-        enabled ? "1" : "0"
-      )
-
-      if (!enabled) {
-        return
-      }
-
-      const permission = await requestDesktopNotificationPermission()
-      setDesktopNotificationPermission(permission)
-
-      if (permission === "denied") {
-        toast.info(
-          "Allow notifications for this site in your browser to receive desktop alerts."
-        )
-      } else if (permission === "unsupported") {
-        toast.error("Desktop notifications are unavailable in this browser.")
-      }
-    },
-    []
-  )
-
-  const handleSelectSession = React.useCallback(
-    (nextSessionId?: string) => {
-      pendingRouteSessionIdRef.current = nextSessionId
-      onSelectSession?.(nextSessionId)
-    },
-    [onSelectSession]
-  )
+  const handleSelectSession = (nextSessionId?: string) => {
+    pendingRouteSessionIdRef.current = nextSessionId
+    onSelectSession?.(nextSessionId)
+  }
+  const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
   React.useEffect(() => {
     if (!sessionId) {
@@ -724,7 +738,7 @@ export function PiWebAppShell({
           setComposerImages([])
         }
 
-        replaceComposerDraft(nextPromptText, nextState)
+        replaceComposerDraftRef.current(nextPromptText, nextState)
         lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
         setPendingMessages(
           Array.isArray(payload.pendingUserMessages)
@@ -785,7 +799,7 @@ export function PiWebAppShell({
     return () => {
       source.close()
     }
-  }, [replaceComposerDraft, sessionId, viewerContextId])
+  }, [replaceComposerDraftRef, sessionId, viewerContextId])
 
   React.useEffect(() => {
     if (sessionState.draft || !sessionState.sessionId) return
@@ -799,9 +813,14 @@ export function PiWebAppShell({
     }
 
     if (sessionState.sessionId !== sessionId) {
-      handleSelectSession(sessionState.sessionId)
+      handleSelectSessionRef.current(sessionState.sessionId)
     }
-  }, [handleSelectSession, sessionId, sessionState.draft, sessionState.sessionId])
+  }, [
+    handleSelectSessionRef,
+    sessionId,
+    sessionState.draft,
+    sessionState.sessionId,
+  ])
 
   const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
 
@@ -877,7 +896,9 @@ export function PiWebAppShell({
           title: finishedLabel,
           body: sessionState.cwd || "Open Pi to continue",
           tag:
-            sessionState.sessionFile || sessionState.sessionId || currentSessionTitle,
+            sessionState.sessionFile ||
+            sessionState.sessionId ||
+            currentSessionTitle,
         })
       }
 
@@ -906,7 +927,9 @@ export function PiWebAppShell({
     const syncScrollState = () => {
       setIsMessagesNearTop(isViewportNearTop(viewport))
       setIsMessagesNearBottom(isViewportNearBottom(viewport))
-      setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
+      setHasPreviousMessageJumpTarget(
+        Boolean(previousMessageJumpTarget(viewport))
+      )
       setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
     }
 
@@ -936,10 +959,13 @@ export function PiWebAppShell({
     }
 
     void fetchJson<GitStatusResponse>(
-      buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(sessionState.cwd)}`, {
-        contextId: viewerContextId,
-        sessionId: activeSessionId,
-      })
+      buildRequestUrl(
+        `/api/git-status?cwd=${encodeURIComponent(sessionState.cwd)}`,
+        {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }
+      )
     )
       .then((response) => {
         setGitStatus(response)
@@ -955,63 +981,61 @@ export function PiWebAppShell({
     viewerContextId,
   ])
 
-  const loadDirectoryIndex = React.useCallback(
-    async (directory: string, revision?: string) => {
-      if (!viewerContextId) return
+  const loadDirectoryIndex = async (directory: string, revision?: string) => {
+    if (!viewerContextId) return
 
+    setDirectoryIndexLoading((current) => {
+      if (current[directory]) {
+        return current
+      }
+
+      return { ...current, [directory]: true }
+    })
+
+    try {
+      const response = await fetchJson<DirectorySessionsIndexResponse>(
+        buildRequestUrl(
+          `/api/directory-sessions-index?directory=${encodeURIComponent(
+            directory
+          )}`,
+          {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }
+        )
+      )
+
+      if (isApiErrorResponse(response)) {
+        throw new Error(response.error)
+      }
+
+      loadedDirectoryRevisionRef.current[directory] =
+        revision || `loaded:${response.sessions.length}`
+
+      setDirectoryIndexes((current) => ({
+        ...current,
+        [directory]: response.sessions,
+      }))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Failed to load sessions for ${directory}`
+      )
+    } finally {
       setDirectoryIndexLoading((current) => {
-        if (current[directory]) {
+        if (!current[directory]) {
           return current
         }
 
-        return { ...current, [directory]: true }
-      })
-
-      try {
-        const response = await fetchJson<DirectorySessionsIndexResponse>(
-          buildRequestUrl(
-            `/api/directory-sessions-index?directory=${encodeURIComponent(
-              directory
-            )}`,
-            {
-              contextId: viewerContextId,
-              sessionId: activeSessionId,
-            }
-          )
-        )
-
-        if (isApiErrorResponse(response)) {
-          throw new Error(response.error)
-        }
-
-        loadedDirectoryRevisionRef.current[directory] =
-          revision || `loaded:${response.sessions.length}`
-
-        setDirectoryIndexes((current) => ({
+        return {
           ...current,
-          [directory]: response.sessions,
-        }))
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : `Failed to load sessions for ${directory}`
-        )
-      } finally {
-        setDirectoryIndexLoading((current) => {
-          if (!current[directory]) {
-            return current
-          }
-
-          return {
-            ...current,
-            [directory]: false,
-          }
-        })
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
+          [directory]: false,
+        }
+      })
+    }
+  }
+  const loadDirectoryIndexRef = useLatestRef(loadDirectoryIndex)
 
   React.useEffect(() => {
     if (!viewerContextId || sidebarDirectories.length === 0) return
@@ -1029,19 +1053,19 @@ export function PiWebAppShell({
         typeof state?.revision === "string" && state.revision !== loadedRevision
 
       if (!isLoading && (needsInitialLoad || needsRevisionRefresh)) {
-        void loadDirectoryIndex(directory, state?.revision)
+        void loadDirectoryIndexRef.current(directory, state?.revision)
       }
     }
   }, [
     directoryIndexes,
     directoryIndexLoading,
     directoryStateByPath,
-    loadDirectoryIndex,
+    loadDirectoryIndexRef,
     sidebarDirectories,
     viewerContextId,
   ])
 
-  const refreshGit = React.useCallback(async () => {
+  const refreshGit = async () => {
     if (!viewerContextId || !sessionState.cwd) return
     setGitLoading(true)
     try {
@@ -1074,24 +1098,23 @@ export function PiWebAppShell({
     } finally {
       setGitLoading(false)
     }
-  }, [activeSessionId, sessionState.cwd, viewerContextId])
+  }
+  const refreshGitRef = useLatestRef(refreshGit)
 
   React.useEffect(() => {
     if (currentTab === "git") {
-      void refreshGit()
+      void refreshGitRef.current()
     }
-  }, [currentTab, refreshGit])
+  }, [currentTab, refreshGitRef])
 
-  const baseSidebarDirectories = React.useMemo(
-    () => normalizeStoredDirectoryList(sidebarDirectories),
-    [sidebarDirectories]
-  )
+  const baseSidebarDirectories = (() =>
+    normalizeStoredDirectoryList(sidebarDirectories))()
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
     baseSidebarDirectories[0] ||
     storedDraftDirectory ||
     ""
-  const newSessionDirectoryOptions = React.useMemo(() => {
+  const newSessionDirectoryOptions = (() => {
     const nextOptions: Array<{ path: string; label: string }> = []
     const seen = new Set<string>()
     const pushDirectoryOption = (path: string, label: string) => {
@@ -1112,22 +1135,19 @@ export function PiWebAppShell({
     }
 
     return nextOptions
-  }, [baseSidebarDirectories, sessionState.cwd, storedDraftDirectory])
+  })()
 
-  const knownDirectories = React.useMemo(
-    () =>
-      normalizeStoredDirectoryList([
-        ...sidebarDirectories,
-        sessionState.cwd || "",
-        ...Array.from(directoryStateByPath.keys()),
-        ...Object.values(directoryIndexes).flatMap((entries) =>
-          entries.map((entry) => entry.cwd || "")
-        ),
-      ]),
-    [directoryIndexes, directoryStateByPath, sessionState.cwd, sidebarDirectories]
-  )
+  const knownDirectories = (() =>
+    normalizeStoredDirectoryList([
+      ...sidebarDirectories,
+      sessionState.cwd || "",
+      ...Array.from(directoryStateByPath.keys()),
+      ...Object.values(directoryIndexes).flatMap((entries) =>
+        entries.map((entry) => entry.cwd || "")
+      ),
+    ]))()
 
-  const sidebarSearchPending = React.useMemo(() => {
+  const sidebarSearchPending = (() => {
     const query = sessionSearch.trim()
     if (!query) return false
 
@@ -1142,19 +1162,13 @@ export function PiWebAppShell({
       const loading = Boolean(directoryIndexLoading[directory])
       return loading || (!loadedCount && totalCount > 0)
     })
-  }, [
-    baseSidebarDirectories,
-    directoryIndexes,
-    directoryIndexLoading,
-    directoryStateByPath,
-    sessionSearch,
-  ])
+  })()
 
   const {
     visibleDirectories,
     filteredDirectorySessions,
     emptySidebarStateText,
-  } = React.useMemo(() => {
+  } = (() => {
     const query = sessionSearch.trim().toLowerCase()
     const nextVisibleDirectories: Array<string> = []
     const nextFilteredSessions: Record<string, Array<SessionListEntry>> = {}
@@ -1201,23 +1215,15 @@ export function PiWebAppShell({
           ? "No directories match this view."
           : "No directories added yet.",
     }
-  }, [
-    baseSidebarDirectories,
-    directoryIndexes,
-    sessionSearch,
-    sidebarSearchPending,
-  ])
+  })()
 
-  const allDirectoriesCollapsed = React.useMemo(
-    () =>
-      baseSidebarDirectories.length > 0 &&
-      baseSidebarDirectories.every(
-        (directory) => collapsedDirectories[directory]
-      ),
-    [baseSidebarDirectories, collapsedDirectories]
-  )
+  const allDirectoriesCollapsed = (() =>
+    baseSidebarDirectories.length > 0 &&
+    baseSidebarDirectories.every(
+      (directory) => collapsedDirectories[directory]
+    ))()
 
-  const toggleAllDirectories = React.useCallback(() => {
+  const toggleAllDirectories = () => {
     setCollapsedDirectories((current) => {
       const next = { ...current }
       const nextCollapsed = !allDirectoriesCollapsed
@@ -1236,30 +1242,27 @@ export function PiWebAppShell({
       )
       return next
     })
-  }, [allDirectoriesCollapsed, baseSidebarDirectories])
+  }
 
-  const reorderSidebarDirectories = React.useCallback(
-    (nextDirectories: Array<string>) => {
-      const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
-      if (normalizedNext.length === 0) return
+  const reorderSidebarDirectories = (nextDirectories: Array<string>) => {
+    const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
+    if (normalizedNext.length === 0) return
 
-      setSidebarDirectories((current) => {
-        const previous = normalizeStoredDirectoryList(current)
-        if (JSON.stringify(previous) === JSON.stringify(normalizedNext)) {
-          return current
-        }
+    setSidebarDirectories((current) => {
+      const previous = normalizeStoredDirectoryList(current)
+      if (JSON.stringify(previous) === JSON.stringify(normalizedNext)) {
+        return current
+      }
 
-        safeLocalStorageSetItem(
-          SIDEBAR_DIRECTORIES_STORAGE_KEY,
-          JSON.stringify(normalizedNext)
-        )
-        return normalizedNext
-      })
-    },
-    []
-  )
+      safeLocalStorageSetItem(
+        SIDEBAR_DIRECTORIES_STORAGE_KEY,
+        JSON.stringify(normalizedNext)
+      )
+      return normalizedNext
+    })
+  }
 
-  const sidebarSessionEntriesByKey = React.useMemo(() => {
+  const sidebarSessionEntriesByKey = (() => {
     const nextEntries = new Map<string, SessionListEntry>()
 
     for (const directory of baseSidebarDirectories) {
@@ -1278,13 +1281,11 @@ export function PiWebAppShell({
     }
 
     return nextEntries
-  }, [baseSidebarDirectories, directoryIndexes])
+  })()
 
-  const sidebarSessions = React.useMemo(
-    () => Array.from(sidebarSessionEntriesByKey.values()),
-    [sidebarSessionEntriesByKey]
-  )
-  const unreadSessionCount = React.useMemo(() => {
+  const sidebarSessions = (() =>
+    Array.from(sidebarSessionEntriesByKey.values()))()
+  const unreadSessionCount = (() => {
     const unreadKeys = new Set<string>()
 
     for (const session of sidebarSessions) {
@@ -1301,7 +1302,7 @@ export function PiWebAppShell({
     }
 
     return unreadKeys.size
-  }, [backgroundCurrentSessionUnreadKey, sidebarSessions])
+  })()
 
   React.useEffect(() => {
     const streamingPrefix = sessionState.streaming
@@ -1309,7 +1310,9 @@ export function PiWebAppShell({
       : ""
     const nextTitle = `${streamingPrefix}${currentPageTitle}`
     document.title =
-      unreadSessionCount > 0 ? `(${unreadSessionCount}) ${nextTitle}` : nextTitle
+      unreadSessionCount > 0
+        ? `(${unreadSessionCount}) ${nextTitle}`
+        : nextTitle
   }, [
     currentPageTitle,
     titleStreamingFrameIndex,
@@ -1361,7 +1364,7 @@ export function PiWebAppShell({
     sidebarSessions,
   ])
 
-  const renderedSidebarSessionKeys = React.useMemo(() => {
+  const renderedSidebarSessionKeys = (() => {
     const searchActive = sessionSearch.trim().length > 0
     const nextKeys: Array<string> = []
 
@@ -1391,13 +1394,7 @@ export function PiWebAppShell({
     }
 
     return nextKeys
-  }, [
-    collapsedDirectories,
-    directoryRenderCounts,
-    filteredDirectorySessions,
-    sessionSearch,
-    visibleDirectories,
-  ])
+  })()
 
   React.useEffect(() => {
     const validKeys = new Set(sidebarSessionEntriesByKey.keys())
@@ -1417,87 +1414,69 @@ export function PiWebAppShell({
     )
   }, [sidebarSessionEntriesByKey])
 
-  const selectedSidebarSessions = React.useMemo(
-    () =>
-      selectedSidebarSessionKeys
-        .map((key) => sidebarSessionEntriesByKey.get(key))
-        .filter((entry): entry is SessionListEntry =>
-          Boolean(entry?.path || entry?.id)
-        ),
-    [selectedSidebarSessionKeys, sidebarSessionEntriesByKey]
-  )
+  const selectedSidebarSessions = (() =>
+    selectedSidebarSessionKeys
+      .map((key) => sidebarSessionEntriesByKey.get(key))
+      .filter((entry): entry is SessionListEntry =>
+        Boolean(entry?.path || entry?.id)
+      ))()
 
-  const setSidebarSelection = React.useCallback(
-    (nextKeys: Array<string>, anchorKey = "") => {
-      const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
-      setSelectedSidebarSessionKeys(normalizedKeys)
-      setSidebarSessionSelectionAnchor(
-        normalizedKeys.length === 0
-          ? ""
-          : anchorKey && normalizedKeys.includes(anchorKey)
-            ? anchorKey
-            : (normalizedKeys[normalizedKeys.length - 1] ?? "")
-      )
-    },
-    []
-  )
+  const setSidebarSelection = (nextKeys: Array<string>, anchorKey = "") => {
+    const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
+    setSelectedSidebarSessionKeys(normalizedKeys)
+    setSidebarSessionSelectionAnchor(
+      normalizedKeys.length === 0
+        ? ""
+        : anchorKey && normalizedKeys.includes(anchorKey)
+          ? anchorKey
+          : (normalizedKeys[normalizedKeys.length - 1] ?? "")
+    )
+  }
 
-  const selectSidebarSessionRange = React.useCallback(
-    (targetKey: string) => {
-      const normalizedTargetKey = targetKey.trim()
-      if (!normalizedTargetKey) return
+  const selectSidebarSessionRange = (targetKey: string) => {
+    const normalizedTargetKey = targetKey.trim()
+    if (!normalizedTargetKey) return
 
-      const orderedKeys = renderedSidebarSessionKeys
-      const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
-      if (targetIndex < 0) {
-        setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
-        return
-      }
+    const orderedKeys = renderedSidebarSessionKeys
+    const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
+    if (targetIndex < 0) {
+      setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
+      return
+    }
 
-      const anchorKey = orderedKeys.includes(sidebarSessionSelectionAnchor)
-        ? sidebarSessionSelectionAnchor
-        : (selectedSidebarSessionKeys.find((key) =>
-            orderedKeys.includes(key)
-          ) ?? normalizedTargetKey)
-      const anchorIndex = orderedKeys.indexOf(anchorKey)
-      if (anchorIndex < 0) {
-        setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
-        return
-      }
+    const anchorKey = orderedKeys.includes(sidebarSessionSelectionAnchor)
+      ? sidebarSessionSelectionAnchor
+      : (selectedSidebarSessionKeys.find((key) => orderedKeys.includes(key)) ??
+        normalizedTargetKey)
+    const anchorIndex = orderedKeys.indexOf(anchorKey)
+    if (anchorIndex < 0) {
+      setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
+      return
+    }
 
-      const start = Math.min(anchorIndex, targetIndex)
-      const end = Math.max(anchorIndex, targetIndex)
-      setSidebarSelection(orderedKeys.slice(start, end + 1), anchorKey)
-    },
-    [
-      renderedSidebarSessionKeys,
-      selectedSidebarSessionKeys,
-      setSidebarSelection,
-      sidebarSessionSelectionAnchor,
-    ]
-  )
+    const start = Math.min(anchorIndex, targetIndex)
+    const end = Math.max(anchorIndex, targetIndex)
+    setSidebarSelection(orderedKeys.slice(start, end + 1), anchorKey)
+  }
 
-  const openDeleteDialog = React.useCallback(
-    (targets: Array<SessionListEntry>) => {
-      const nextTargets: Array<SessionListEntry> = []
-      const seenKeys = new Set<string>()
+  const openDeleteDialog = (targets: Array<SessionListEntry>) => {
+    const nextTargets: Array<SessionListEntry> = []
+    const seenKeys = new Set<string>()
 
-      for (const target of targets) {
-        if (!target.path) continue
-        const key = sessionListEntryKey(target)
-        if (!key || seenKeys.has(key)) continue
-        seenKeys.add(key)
-        nextTargets.push(target)
-      }
+    for (const target of targets) {
+      if (!target.path) continue
+      const key = sessionListEntryKey(target)
+      if (!key || seenKeys.has(key)) continue
+      seenKeys.add(key)
+      nextTargets.push(target)
+    }
 
-      if (nextTargets.length > 0) {
-        setDeleteTargets(nextTargets)
-      }
-    },
-    []
-  )
+    if (nextTargets.length > 0) {
+      setDeleteTargets(nextTargets)
+    }
+  }
 
-  const openDeleteDialogForCurrentSession = React.useCallback(() => {
+  const openDeleteDialogForCurrentSession = () => {
     if (!sessionState.sessionFile) return
 
     openDeleteDialog([
@@ -1509,74 +1488,59 @@ export function PiWebAppShell({
         modified: sessionState.modified,
       },
     ])
-  }, [
-    currentSessionTitle,
-    openDeleteDialog,
-    sessionState.modified,
-    sessionState.sessionFile,
-    sessionState.sessionId,
-    sessionState.sessionName,
-  ])
+  }
 
-  const handleSidebarSessionClick = React.useCallback(
-    (
-      entry: SessionListEntry,
-      modifiers: { ctrlKey: boolean; shiftKey: boolean }
-    ) => {
-      const key = sessionListEntryKey(entry)
+  const handleSidebarSessionClick = (
+    entry: SessionListEntry,
+    modifiers: { ctrlKey: boolean; shiftKey: boolean }
+  ) => {
+    const key = sessionListEntryKey(entry)
 
-      if (!key) {
-        if (entry.id) {
-          handleSelectSession(entry.id)
-        }
-        return
-      }
-
-      if (modifiers.shiftKey) {
-        selectSidebarSessionRange(key)
-        return
-      }
-
-      if (modifiers.ctrlKey) {
-        setSidebarSelection(
-          selectedSidebarSessionKeys.includes(key)
-            ? selectedSidebarSessionKeys.filter(
-                (currentKey) => currentKey !== key
-              )
-            : [...selectedSidebarSessionKeys, key],
-          key
-        )
-        return
-      }
-
-      setSidebarSelection([key], key)
+    if (!key) {
       if (entry.id) {
         handleSelectSession(entry.id)
       }
-    },
-    [
-      handleSelectSession,
-      selectSidebarSessionRange,
-      selectedSidebarSessionKeys,
-      setSidebarSelection,
-    ]
-  )
+      return
+    }
 
-  const openAddDirectoryDialog = React.useCallback(() => {
+    if (modifiers.shiftKey) {
+      selectSidebarSessionRange(key)
+      return
+    }
+
+    if (modifiers.ctrlKey) {
+      setSidebarSelection(
+        selectedSidebarSessionKeys.includes(key)
+          ? selectedSidebarSessionKeys.filter(
+              (currentKey) => currentKey !== key
+            )
+          : [...selectedSidebarSessionKeys, key],
+        key
+      )
+      return
+    }
+
+    setSidebarSelection([key], key)
+    if (entry.id) {
+      handleSelectSession(entry.id)
+    }
+  }
+
+  const openAddDirectoryDialog = () => {
     setDirectoryInput("")
     setAddDirectoryOpen(true)
-  }, [])
+  }
 
-  const loadMoreDirectorySessions = React.useCallback((directory: string) => {
+  const loadMoreDirectorySessions = (directory: string) => {
     setDirectoryRenderCounts((current) => ({
       ...current,
       [directory]:
         (current[directory] ?? INITIAL_DIRECTORY_SESSION_RENDER_COUNT) +
         DIRECTORY_SESSION_LOAD_MORE_COUNT,
     }))
-  }, [])
+  }
 
-  const rememberRecentDirectory = React.useCallback((directory: string) => {
+  const rememberRecentDirectory = (directory: string) => {
     const normalizedDirectory = directory.trim()
     if (!normalizedDirectory) return
 
@@ -1591,55 +1555,52 @@ export function PiWebAppShell({
       )
       return next
     })
-  }, [])
+  }
 
-  const addDirectoryPath = React.useCallback(
-    async (path: string) => {
-      if (!viewerContextId) return
-      const requestedPath = path.trim()
-      if (!requestedPath) return
+  const addDirectoryPath = async (path: string) => {
+    if (!viewerContextId) return
+    const requestedPath = path.trim()
+    if (!requestedPath) return
 
-      try {
-        const response = await fetchJson<DirectoryResolveResponse>(
-          buildRequestUrl("/api/directory/resolve", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ path: requestedPath }),
-          }
-        )
-        if (isApiErrorResponse(response)) {
-          throw new Error(response.error)
+    try {
+      const response = await fetchJson<DirectoryResolveResponse>(
+        buildRequestUrl("/api/directory/resolve", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: requestedPath }),
         }
-        setSidebarDirectories((current) => {
-          const next = normalizeStoredDirectoryList([...current, response.path])
-          safeLocalStorageSetItem(
-            SIDEBAR_DIRECTORIES_STORAGE_KEY,
-            JSON.stringify(next)
-          )
-          return next
-        })
-        rememberRecentDirectory(response.path)
-        setDirectoryInput("")
-        setAddDirectoryOpen(false)
-        void loadDirectoryIndex(response.path)
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to add directory"
-        )
+      )
+      if (isApiErrorResponse(response)) {
+        throw new Error(response.error)
       }
-    },
-    [activeSessionId, loadDirectoryIndex, rememberRecentDirectory, viewerContextId]
-  )
+      setSidebarDirectories((current) => {
+        const next = normalizeStoredDirectoryList([...current, response.path])
+        safeLocalStorageSetItem(
+          SIDEBAR_DIRECTORIES_STORAGE_KEY,
+          JSON.stringify(next)
+        )
+        return next
+      })
+      rememberRecentDirectory(response.path)
+      setDirectoryInput("")
+      setAddDirectoryOpen(false)
+      void loadDirectoryIndex(response.path)
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add directory"
+      )
+    }
+  }
 
-  const addDirectory = React.useCallback(async () => {
+  const addDirectory = async () => {
     await addDirectoryPath(directoryInput)
-  }, [addDirectoryPath, directoryInput])
+  }
 
-  const toggleDirectory = React.useCallback((directory: string) => {
+  const toggleDirectory = (directory: string) => {
     setCollapsedDirectories((current) => {
       const next = {
         ...current,
@@ -1651,43 +1612,33 @@ export function PiWebAppShell({
       )
       return next
     })
-  }, [])
+  }
 
-  const applyPendingDraftPromptToComposer = React.useCallback(
-    (pendingPrompt: {
-      message: string
-      images: Array<PromptImage>
-    }) => {
-      replaceComposerDraft(pendingPrompt.message)
-      setComposerImages(
-        pendingPrompt.images.map((image) => ({ ...image }))
-      )
-      return true
-    },
-    [replaceComposerDraft]
-  )
+  const applyPendingDraftPromptToComposer = (pendingPrompt: {
+    message: string
+    images: Array<PromptImage>
+  }) => {
+    replaceComposerDraft(pendingPrompt.message)
+    setComposerImages(pendingPrompt.images.map((image) => ({ ...image })))
+    return true
+  }
 
-  const normalizeQueuedStreamingBehavior = React.useCallback(
-    (streamingBehavior?: StreamingBehavior) =>
-      streamingBehavior === "followUp" ? "followUp" : "steer",
-    []
-  )
+  const normalizeQueuedStreamingBehavior = (
+    streamingBehavior?: StreamingBehavior
+  ) => (streamingBehavior === "followUp" ? "followUp" : "steer")
 
-  const restorePendingDraftPrompt = React.useCallback(
-    (ownerKey: string) => {
-      if (!pendingDraftPrompt || pendingDraftPrompt.ownerKey !== ownerKey) {
-        return false
-      }
-      const nextPrompt = pendingDraftPrompt
-      setPendingDraftPrompt(null)
-      setPendingDraftFollowUps([])
-      setAwaitingFirstTurn(false)
-      return applyPendingDraftPromptToComposer(nextPrompt)
-    },
-    [applyPendingDraftPromptToComposer, pendingDraftPrompt]
-  )
+  const restorePendingDraftPrompt = (ownerKey: string) => {
+    if (!pendingDraftPrompt || pendingDraftPrompt.ownerKey !== ownerKey) {
+      return false
+    }
+    const nextPrompt = pendingDraftPrompt
+    setPendingDraftPrompt(null)
+    setPendingDraftFollowUps([])
+    setAwaitingFirstTurn(false)
+    return applyPendingDraftPromptToComposer(nextPrompt)
+  }
 
-  const createSession = React.useCallback(async (cwdOverride?: string) => {
+  const createSession = async (cwdOverride?: string) => {
     if (!viewerContextId) return
 
     const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
@@ -1723,135 +1674,109 @@ export function PiWebAppShell({
         error instanceof Error ? error.message : "Failed to create session"
       )
     }
-  }, [
-    activeSessionId,
-    defaultNewSessionDirectory,
-    handleSelectSession,
-    rememberRecentDirectory,
-    restorePendingDraftPrompt,
-    viewerContextId,
-  ])
+  }
 
-  const queuePendingDraftPrompt = React.useCallback(
-    (streamingBehavior?: StreamingBehavior) => {
-      if (!draftSessionLoadingOwnerKey) return false
+  const queuePendingDraftPrompt = (streamingBehavior?: StreamingBehavior) => {
+    if (!draftSessionLoadingOwnerKey) return false
 
-      const message = serializeComposerDraft({
-        text: composerTextRef.current,
-        skillName: composerSkillRef.current,
-      }).trim()
-      const images = composerImages.map((image) => ({ ...image }))
-      if (!message && images.length === 0) return false
+    const message = serializeComposerDraft({
+      text: composerTextRef.current,
+      skillName: composerSkillRef.current,
+    }).trim()
+    const images = composerImages.map((image) => ({ ...image }))
+    if (!message && images.length === 0) return false
 
-      if (!pendingDraftPrompt) {
-        setPendingDraftPrompt({
-          ownerKey: draftSessionLoadingOwnerKey,
+    if (!pendingDraftPrompt) {
+      setPendingDraftPrompt({
+        ownerKey: draftSessionLoadingOwnerKey,
+        message,
+        images,
+        streamingBehavior,
+      })
+    } else {
+      setPendingDraftFollowUps((current) => [
+        ...current,
+        {
           message,
           images,
-          streamingBehavior,
-        })
-      } else {
-        setPendingDraftFollowUps((current) => [
-          ...current,
-          {
-            message,
-            images,
-            streamingBehavior: normalizeQueuedStreamingBehavior(streamingBehavior),
-          },
-        ])
-      }
+          streamingBehavior:
+            normalizeQueuedStreamingBehavior(streamingBehavior),
+        },
+      ])
+    }
 
+    replaceComposerDraft("")
+    setComposerImages([])
+    lastSyncedEditorTextRef.current = ""
+
+    if (!pendingDraftPrompt) {
+      toast.info("Prompt will send when the new session is ready.")
+    }
+
+    return true
+  }
+
+  const submitPrompt = async (streamingBehavior?: StreamingBehavior) => {
+    if (!viewerContextId) return false
+    if (draftSessionLoadingOwnerKey) {
+      return queuePendingDraftPrompt(streamingBehavior)
+    }
+
+    const message = serializeComposerDraft({
+      text: composerTextRef.current,
+      skillName: composerSkillRef.current,
+    }).trim()
+    if (!message && composerImages.length === 0) return false
+
+    const treatAsQueuedPrompt = Boolean(
+      sessionState.streaming || awaitingFirstTurn
+    )
+    const normalizedStreamingBehavior = treatAsQueuedPrompt
+      ? normalizeQueuedStreamingBehavior(streamingBehavior)
+      : streamingBehavior
+
+    setIsSubmitting(true)
+    if (!treatAsQueuedPrompt) {
+      setAwaitingFirstTurn(true)
+    }
+
+    try {
+      const response = await fetchJson<PromptResponse>(
+        buildRequestUrl("/api/prompt", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            message,
+            images: composerImages,
+            streamingBehavior: normalizedStreamingBehavior,
+          }),
+        }
+      )
+      if (isApiErrorResponse(response)) {
+        throw new Error(response.error)
+      }
       replaceComposerDraft("")
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
-
-      if (!pendingDraftPrompt) {
-        toast.info("Prompt will send when the new session is ready.")
-      }
-
       return true
-    },
-    [
-      composerImages,
-      draftSessionLoadingOwnerKey,
-      normalizeQueuedStreamingBehavior,
-      pendingDraftPrompt,
-      replaceComposerDraft,
-    ]
-  )
-
-  const submitPrompt = React.useCallback(
-    async (streamingBehavior?: StreamingBehavior) => {
-      if (!viewerContextId) return false
-      if (draftSessionLoadingOwnerKey) {
-        return queuePendingDraftPrompt(streamingBehavior)
-      }
-
-      const message = serializeComposerDraft({
-        text: composerTextRef.current,
-        skillName: composerSkillRef.current,
-      }).trim()
-      if (!message && composerImages.length === 0) return false
-
-      const treatAsQueuedPrompt = Boolean(sessionState.streaming || awaitingFirstTurn)
-      const normalizedStreamingBehavior = treatAsQueuedPrompt
-        ? normalizeQueuedStreamingBehavior(streamingBehavior)
-        : streamingBehavior
-
-      setIsSubmitting(true)
+    } catch (error) {
       if (!treatAsQueuedPrompt) {
-        setAwaitingFirstTurn(true)
+        setAwaitingFirstTurn(false)
       }
+      toast.error(
+        error instanceof Error ? error.message : "Failed to submit prompt"
+      )
+      return false
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-      try {
-        const response = await fetchJson<PromptResponse>(
-          buildRequestUrl("/api/prompt", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              message,
-              images: composerImages,
-              streamingBehavior: normalizedStreamingBehavior,
-            }),
-          }
-        )
-        if (isApiErrorResponse(response)) {
-          throw new Error(response.error)
-        }
-        replaceComposerDraft("")
-        setComposerImages([])
-        lastSyncedEditorTextRef.current = ""
-        return true
-      } catch (error) {
-        if (!treatAsQueuedPrompt) {
-          setAwaitingFirstTurn(false)
-        }
-        toast.error(
-          error instanceof Error ? error.message : "Failed to submit prompt"
-        )
-        return false
-      } finally {
-        setIsSubmitting(false)
-      }
-    },
-    [
-      activeSessionId,
-      awaitingFirstTurn,
-      composerImages,
-      draftSessionLoadingOwnerKey,
-      normalizeQueuedStreamingBehavior,
-      queuePendingDraftPrompt,
-      replaceComposerDraft,
-      sessionState.streaming,
-      viewerContextId,
-    ]
-  )
-
-  const flushPendingDraftFollowUps = React.useCallback(async () => {
+  const flushPendingDraftFollowUps = async () => {
     if (draftSessionLoadingOwnerKey || pendingDraftFollowUps.length === 0) {
       return false
     }
@@ -1896,58 +1821,47 @@ export function PiWebAppShell({
     }
 
     return true
-  }, [
-    activeSessionId,
-    draftSessionLoadingOwnerKey,
-    pendingDraftFollowUps,
-    replaceComposerDraft,
-    viewerContextId,
-  ])
+  }
 
-  const flushPendingDraftPrompt = React.useCallback(
-    async (ownerKey: string) => {
-      if (
-        !pendingDraftPrompt ||
-        pendingDraftPrompt.ownerKey !== ownerKey ||
-        draftSessionLoadingOwnerKey
-      ) {
-        return false
-      }
+  const flushPendingDraftPrompt = async (ownerKey: string) => {
+    if (
+      !pendingDraftPrompt ||
+      pendingDraftPrompt.ownerKey !== ownerKey ||
+      draftSessionLoadingOwnerKey
+    ) {
+      return false
+    }
 
-      const nextPrompt = pendingDraftPrompt
-      setPendingDraftPrompt(null)
-      applyPendingDraftPromptToComposer(nextPrompt)
-      const sent = await submitPrompt(nextPrompt.streamingBehavior)
-      if (!sent) {
-        setPendingDraftFollowUps([])
-        return false
-      }
-      await flushPendingDraftFollowUps()
-      return true
-    },
-    [
-      applyPendingDraftPromptToComposer,
-      draftSessionLoadingOwnerKey,
-      flushPendingDraftFollowUps,
-      pendingDraftPrompt,
-      submitPrompt,
-    ]
-  )
+    const nextPrompt = pendingDraftPrompt
+    setPendingDraftPrompt(null)
+    applyPendingDraftPromptToComposer(nextPrompt)
+    const sent = await submitPrompt(nextPrompt.streamingBehavior)
+    if (!sent) {
+      setPendingDraftFollowUps([])
+      return false
+    }
+    await flushPendingDraftFollowUps()
+    return true
+  }
+  const flushPendingDraftPromptRef = useLatestRef(flushPendingDraftPrompt)
 
   React.useEffect(() => {
     if (!draftSessionLoadingOwnerKey) return
     const currentOwnerKey = promptDraftKey(sessionState)
-    if (!sessionState.draft || currentOwnerKey !== draftSessionLoadingOwnerKey) {
+    if (
+      !sessionState.draft ||
+      currentOwnerKey !== draftSessionLoadingOwnerKey
+    ) {
       return
     }
 
     setDraftSessionLoadingOwnerKey(null)
     if (pendingDraftPrompt?.ownerKey === draftSessionLoadingOwnerKey) {
-      void flushPendingDraftPrompt(draftSessionLoadingOwnerKey)
+      void flushPendingDraftPromptRef.current(draftSessionLoadingOwnerKey)
     }
   }, [
     draftSessionLoadingOwnerKey,
-    flushPendingDraftPrompt,
+    flushPendingDraftPromptRef,
     pendingDraftPrompt?.ownerKey,
     sessionState,
   ])
@@ -1960,12 +1874,21 @@ export function PiWebAppShell({
         item.blocks.some((block) => block.type === "text" && block.text.trim())
     )
 
-    if (sessionState.streaming || hasAssistantOutput || pendingMessages.length > 0) {
+    if (
+      sessionState.streaming ||
+      hasAssistantOutput ||
+      pendingMessages.length > 0
+    ) {
       setAwaitingFirstTurn(false)
     }
-  }, [awaitingFirstTurn, pendingMessages.length, sessionState.items, sessionState.streaming])
+  }, [
+    awaitingFirstTurn,
+    pendingMessages.length,
+    sessionState.items,
+    sessionState.streaming,
+  ])
 
-  const abortSession = React.useCallback(async () => {
+  const abortSession = async () => {
     if (!viewerContextId) return
     try {
       await fetchJson<SimpleOkResponse>(
@@ -1982,188 +1905,167 @@ export function PiWebAppShell({
         error instanceof Error ? error.message : "Failed to abort session"
       )
     }
-  }, [activeSessionId, viewerContextId])
+  }
 
-  const onPickImages = React.useCallback(async (files: FileList | null) => {
+  const onPickImages = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const nextImages = await Promise.all(
       [...files].slice(0, 8).map((file) => readFileAsPromptImage(file))
     )
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
-  }, [])
+  }
 
-  const removePendingMessage = React.useCallback(
-    async (pendingId: string) => {
-      if (!viewerContextId) return
-      try {
-        await fetchJson<PendingMessageRemoveResponse>(
-          buildRequestUrl("/api/pending-message/remove", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ pendingId }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to remove pending prompt"
-        )
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
+  const removePendingMessage = async (pendingId: string) => {
+    if (!viewerContextId) return
+    try {
+      await fetchJson<PendingMessageRemoveResponse>(
+        buildRequestUrl("/api/pending-message/remove", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pendingId }),
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to remove pending prompt"
+      )
+    }
+  }
 
   const currentPendingMessages = pendingMessages
 
-  const reorderPending = React.useCallback(
-    async (pendingId: string, direction: -1 | 1) => {
-      if (!viewerContextId) return
-      const next = [...pendingMessages]
-      const index = next.findIndex((entry) => entry.pendingId === pendingId)
-      if (index === -1) return
-      const targetIndex = index + direction
-      if (targetIndex < 0 || targetIndex >= next.length) return
-      const [item] = next.splice(index, 1)
-      next.splice(targetIndex, 0, item)
-      try {
-        await fetchJson<PendingMessagesResponse>(
-          buildRequestUrl("/api/pending-messages/reorder", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ pendingMessages: next }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to reorder pending prompts"
-        )
-      }
-    },
-    [activeSessionId, pendingMessages, viewerContextId]
-  )
+  const reorderPending = async (pendingId: string, direction: -1 | 1) => {
+    if (!viewerContextId) return
+    const next = [...pendingMessages]
+    const index = next.findIndex((entry) => entry.pendingId === pendingId)
+    if (index === -1) return
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= next.length) return
+    const [item] = next.splice(index, 1)
+    next.splice(targetIndex, 0, item)
+    try {
+      await fetchJson<PendingMessagesResponse>(
+        buildRequestUrl("/api/pending-messages/reorder", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pendingMessages: next }),
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to reorder pending prompts"
+      )
+    }
+  }
 
-  const setModel = React.useCallback(
-    async (value: string) => {
-      if (!viewerContextId) return
-      const [provider, modelId] = value.split("/")
-      if (!provider || !modelId) return
-      try {
-        await fetchJson(
-          buildRequestUrl("/api/model", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ provider, modelId }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update model"
-        )
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
+  const setModel = async (value: string) => {
+    if (!viewerContextId) return
+    const [provider, modelId] = value.split("/")
+    if (!provider || !modelId) return
+    try {
+      await fetchJson(
+        buildRequestUrl("/api/model", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider, modelId }),
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update model"
+      )
+    }
+  }
 
-  const setThinkingLevel = React.useCallback(
-    async (level: string) => {
-      if (!viewerContextId) return
-      try {
-        await fetchJson(
-          buildRequestUrl("/api/thinking", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ level }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update thinking level"
-        )
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
+  const setThinkingLevel = async (level: string) => {
+    if (!viewerContextId) return
+    try {
+      await fetchJson(
+        buildRequestUrl("/api/thinking", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ level }),
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update thinking level"
+      )
+    }
+  }
 
-  const cycleThinkingLevel = React.useCallback(
-    async (direction: -1 | 1) => {
-      const levels = sessionState.availableThinkingLevels.length
-        ? sessionState.availableThinkingLevels
-        : ["off"]
-      const currentIndex = levels.indexOf(sessionState.thinkingLevel || "off")
-      const safeIndex = currentIndex >= 0 ? currentIndex : 0
-      const nextLevel =
-        levels[(safeIndex + direction + levels.length) % levels.length] ||
-        levels[0]
-      await setThinkingLevel(nextLevel)
-    },
-    [sessionState.availableThinkingLevels, sessionState.thinkingLevel, setThinkingLevel]
-  )
+  const cycleThinkingLevel = async (direction: -1 | 1) => {
+    const levels = sessionState.availableThinkingLevels.length
+      ? sessionState.availableThinkingLevels
+      : ["off"]
+    const currentIndex = levels.indexOf(sessionState.thinkingLevel || "off")
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0
+    const nextLevel =
+      levels[(safeIndex + direction + levels.length) % levels.length] ||
+      levels[0]
+    await setThinkingLevel(nextLevel)
+  }
 
-  const setThinkingBlocksHidden = React.useCallback(
-    async (hidden: boolean) => {
-      if (!viewerContextId) return
-      try {
-        await fetchJson(
-          buildRequestUrl("/api/settings/hide-thinking", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ hide: hidden }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update thinking visibility"
-        )
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
+  const setThinkingBlocksHidden = async (hidden: boolean) => {
+    if (!viewerContextId) return
+    try {
+      await fetchJson(
+        buildRequestUrl("/api/settings/hide-thinking", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ hide: hidden }),
+        }
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update thinking visibility"
+      )
+    }
+  }
 
-  const toggleHideThinking = React.useCallback(async () => {
+  const toggleHideThinking = async () => {
     await setThinkingBlocksHidden(!sessionState.hideThinkingBlock)
-  }, [sessionState.hideThinkingBlock, setThinkingBlocksHidden])
+  }
 
-  const setToolBlocksHidden = React.useCallback((hidden: boolean) => {
+  const setToolBlocksHidden = (hidden: boolean) => {
     setHideToolBlocks(hidden)
-    safeLocalStorageSetItem(
-      HIDE_TOOL_BLOCKS_STORAGE_KEY,
-      hidden ? "1" : "0"
-    )
-  }, [])
+    safeLocalStorageSetItem(HIDE_TOOL_BLOCKS_STORAGE_KEY, hidden ? "1" : "0")
+  }
 
-  const toggleHideToolBlocks = React.useCallback(() => {
+  const toggleHideToolBlocks = () => {
     setToolBlocksHidden(!hideToolBlocks)
     toast.info(hideToolBlocks ? "Tools shown" : "Tools hidden")
-  }, [hideToolBlocks, setToolBlocksHidden])
+  }
 
-  const runCompact = React.useCallback(async () => {
+  const runCompact = async () => {
     if (!viewerContextId) return
     setRunningSlashCommand("compact")
     try {
@@ -2186,9 +2088,9 @@ export function PiWebAppShell({
     } finally {
       setRunningSlashCommand(null)
     }
-  }, [activeSessionId, viewerContextId])
+  }
 
-  const openTreeDialog = React.useCallback(async () => {
+  const openTreeDialog = async () => {
     if (!viewerContextId) return
     setTreeOpen(true)
     setTreeLoading(true)
@@ -2215,9 +2117,9 @@ export function PiWebAppShell({
     } finally {
       setTreeLoading(false)
     }
-  }, [activeSessionId, viewerContextId])
+  }
 
-  const saveTreeLabel = React.useCallback(async () => {
+  const saveTreeLabel = async () => {
     if (!viewerContextId || !selectedTreeNodeId) return
     setTreeSubmitting(true)
     try {
@@ -2245,61 +2147,55 @@ export function PiWebAppShell({
     } finally {
       setTreeSubmitting(false)
     }
-  }, [
-    activeSessionId,
-    selectedTreeNodeId,
-    selectedTreeNodeLabel,
-    viewerContextId,
-  ])
+  }
 
-  const navigateTreeNode = React.useCallback(
-    async (
-      targetId: string,
-      options?: { summarize?: boolean; customInstructions?: string }
-    ) => {
-      if (!viewerContextId) return
-      setTreeSubmitting(true)
-      try {
-        const response = await fetchJson<NavigateSessionTreeResponse>(
-          buildRequestUrl("/api/session/tree", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
+  const navigateTreeNode = async (
+    targetId: string,
+    options?: { summarize?: boolean; customInstructions?: string }
+  ) => {
+    if (!viewerContextId) return
+    setTreeSubmitting(true)
+    try {
+      const response = await fetchJson<NavigateSessionTreeResponse>(
+        buildRequestUrl("/api/session/tree", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            targetId,
+            summarize: Boolean(options?.summarize),
+            customInstructions: options?.customInstructions,
           }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              targetId,
-              summarize: Boolean(options?.summarize),
-              customInstructions: options?.customInstructions,
-            }),
-          }
-        )
-        if (isApiErrorResponse(response)) throw new Error(response.error)
-        if (response.aborted) {
-          toast.info("Branch summarization cancelled")
-          return
         }
-        if (response.cancelled) {
-          toast.info("Tree navigation cancelled")
-          return
-        }
-        setTreeOpen(false)
-        toast.success(
-          options?.summarize ? "Continued from summarized branch" : "Moved session tree cursor"
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to navigate tree"
-        )
-      } finally {
-        setTreeSubmitting(false)
+      )
+      if (isApiErrorResponse(response)) throw new Error(response.error)
+      if (response.aborted) {
+        toast.info("Branch summarization cancelled")
+        return
       }
-    },
-    [activeSessionId, viewerContextId]
-  )
+      if (response.cancelled) {
+        toast.info("Tree navigation cancelled")
+        return
+      }
+      setTreeOpen(false)
+      toast.success(
+        options?.summarize
+          ? "Continued from summarized branch"
+          : "Moved session tree cursor"
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to navigate tree"
+      )
+    } finally {
+      setTreeSubmitting(false)
+    }
+  }
 
-  const openForkDialog = React.useCallback(async () => {
+  const openForkDialog = async () => {
     if (!viewerContextId) return
     setForkOpen(true)
     setForkLoading(true)
@@ -2320,76 +2216,70 @@ export function PiWebAppShell({
     } finally {
       setForkLoading(false)
     }
-  }, [activeSessionId, viewerContextId])
+  }
 
-  const forkFromMessage = React.useCallback(
-    async (entryId: string) => {
-      if (!viewerContextId) return
-      try {
-        const response = await fetchJson<ForkSessionResponse>(
-          buildRequestUrl("/api/session/fork", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ entryId }),
-          }
-        )
-        if (isApiErrorResponse(response)) throw new Error(response.error)
-        setForkOpen(false)
-        toast.success("Forked session")
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to fork session"
-        )
-      }
-    },
-    [activeSessionId, viewerContextId]
-  )
-
-  const renameSessionToValue = React.useCallback(
-    async (nextName: string, closeDialog = true) => {
-      const targetPath = renameTarget?.path || sessionState.sessionFile
-      if (!viewerContextId || !targetPath) return false
-      try {
-        const response = await fetchJson<RenameSessionResponse>(
-          buildRequestUrl("/api/session/rename", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              path: targetPath,
-              name: nextName,
-            }),
-          }
-        )
-        if (isApiErrorResponse(response)) throw new Error(response.error)
-        if (closeDialog) {
-          setRenameOpen(false)
-          setRenameTarget(null)
+  const forkFromMessage = async (entryId: string) => {
+    if (!viewerContextId) return
+    try {
+      const response = await fetchJson<ForkSessionResponse>(
+        buildRequestUrl("/api/session/fork", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entryId }),
         }
-        toast.success("Renamed session")
-        return true
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to rename session"
-        )
-        return false
+      )
+      if (isApiErrorResponse(response)) throw new Error(response.error)
+      setForkOpen(false)
+      toast.success("Forked session")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to fork session"
+      )
+    }
+  }
+
+  const renameSessionToValue = async (nextName: string, closeDialog = true) => {
+    const targetPath = renameTarget?.path || sessionState.sessionFile
+    if (!viewerContextId || !targetPath) return false
+    try {
+      const response = await fetchJson<RenameSessionResponse>(
+        buildRequestUrl("/api/session/rename", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            path: targetPath,
+            name: nextName,
+          }),
+        }
+      )
+      if (isApiErrorResponse(response)) throw new Error(response.error)
+      if (closeDialog) {
+        setRenameOpen(false)
+        setRenameTarget(null)
       }
-    },
-    [activeSessionId, renameTarget?.path, sessionState.sessionFile, viewerContextId]
-  )
+      toast.success("Renamed session")
+      return true
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rename session"
+      )
+      return false
+    }
+  }
 
-  const renameSession = React.useCallback(async () => {
+  const renameSession = async () => {
     return await renameSessionToValue(renameValue)
-  }, [renameSessionToValue, renameValue])
+  }
 
-  const deleteSession = React.useCallback(async () => {
+  const deleteSession = async () => {
     if (!viewerContextId || deleteTargets.length === 0) return
 
     const orderedTargets = [
@@ -2441,228 +2331,193 @@ export function PiWebAppShell({
         error instanceof Error ? error.message : "Failed to delete session"
       )
     }
-  }, [
-    activeSessionId,
-    deleteTargets,
-    sessionState.sessionFile,
-    viewerContextId,
-  ])
+  }
 
-  const runBuiltinSlashCommand = React.useCallback(
-    async (name: string, args: string) => {
-      const trimmedArgs = args.trim()
+  const runBuiltinSlashCommand = async (name: string, args: string) => {
+    const trimmedArgs = args.trim()
 
-      switch (name) {
-        case "compact": {
-          if (composerImages.length > 0) {
-            toast.error("Built-in slash commands do not support images.")
-            return
-          }
-          replaceComposerDraft("")
-          await runCompact()
+    switch (name) {
+      case "compact": {
+        if (composerImages.length > 0) {
+          toast.error("Built-in slash commands do not support images.")
           return
         }
-        case "rename": {
-          if (!sessionState.sessionFile) {
-            toast.error("Start the session before renaming it.")
-            return
-          }
-          if (!trimmedArgs) {
-            openRenameDialog()
-            return
-          }
-          replaceComposerDraft("")
-          await renameSessionToValue(trimmedArgs, false)
-          return
-        }
-        case "delete": {
-          if (!sessionState.sessionFile) {
-            toast.error("Start the session before deleting it.")
-            return
-          }
-          replaceComposerDraft("")
-          openDeleteDialogForCurrentSession()
-          return
-        }
-        case "fork": {
-          if (trimmedArgs) {
-            toast.error("/fork does not take any arguments.")
-            return
-          }
-          replaceComposerDraft("")
-          await openForkDialog()
-          return
-        }
-        case "tree": {
-          if (trimmedArgs) {
-            toast.error("/tree does not take any arguments.")
-            return
-          }
-          replaceComposerDraft("")
-          await openTreeDialog()
-          return
-        }
-        case "hide-thinking": {
-          replaceComposerDraft("")
-          if (!sessionState.hideThinkingBlock) {
-            await toggleHideThinking()
-          }
-          return
-        }
-        case "show-thinking": {
-          replaceComposerDraft("")
-          if (sessionState.hideThinkingBlock) {
-            await toggleHideThinking()
-          }
-          return
-        }
-        case "hide-tools": {
-          replaceComposerDraft("")
-          setToolBlocksHidden(true)
-          return
-        }
-        case "show-tools": {
-          replaceComposerDraft("")
-          setToolBlocksHidden(false)
-          return
-        }
-        default:
-          toast.error(`Unsupported slash command: /${name}`)
+        replaceComposerDraft("")
+        await runCompact()
+        return
       }
-    },
-    [
-      composerImages.length,
-      openDeleteDialogForCurrentSession,
-      openForkDialog,
-      openRenameDialog,
-      openTreeDialog,
-      renameSessionToValue,
-      replaceComposerDraft,
-      runCompact,
-      sessionState.hideThinkingBlock,
-      sessionState.sessionFile,
-      setToolBlocksHidden,
-      toggleHideThinking,
-    ]
-  )
-
-  const resolveUiRequest = React.useCallback(
-    async (body: Record<string, unknown>) => {
-      if (!viewerContextId || !pendingUiRequest) return
-      try {
-        await fetchJson<UiRequestResponse>(
-          buildRequestUrl(
-            `/api/ui/${encodeURIComponent(pendingUiRequest.id)}`,
-            {
-              contextId: viewerContextId,
-              sessionId: activeSessionId,
-            }
-          ),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        )
-        setPendingUiRequest(null)
-        setPendingUiValue("")
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to resolve UI request"
-        )
+      case "rename": {
+        if (!sessionState.sessionFile) {
+          toast.error("Start the session before renaming it.")
+          return
+        }
+        if (!trimmedArgs) {
+          openRenameDialog()
+          return
+        }
+        replaceComposerDraft("")
+        await renameSessionToValue(trimmedArgs, false)
+        return
       }
-    },
-    [activeSessionId, pendingUiRequest, viewerContextId]
-  )
+      case "delete": {
+        if (!sessionState.sessionFile) {
+          toast.error("Start the session before deleting it.")
+          return
+        }
+        replaceComposerDraft("")
+        openDeleteDialogForCurrentSession()
+        return
+      }
+      case "fork": {
+        if (trimmedArgs) {
+          toast.error("/fork does not take any arguments.")
+          return
+        }
+        replaceComposerDraft("")
+        await openForkDialog()
+        return
+      }
+      case "tree": {
+        if (trimmedArgs) {
+          toast.error("/tree does not take any arguments.")
+          return
+        }
+        replaceComposerDraft("")
+        await openTreeDialog()
+        return
+      }
+      case "hide-thinking": {
+        replaceComposerDraft("")
+        if (!sessionState.hideThinkingBlock) {
+          await toggleHideThinking()
+        }
+        return
+      }
+      case "show-thinking": {
+        replaceComposerDraft("")
+        if (sessionState.hideThinkingBlock) {
+          await toggleHideThinking()
+        }
+        return
+      }
+      case "hide-tools": {
+        replaceComposerDraft("")
+        setToolBlocksHidden(true)
+        return
+      }
+      case "show-tools": {
+        replaceComposerDraft("")
+        setToolBlocksHidden(false)
+        return
+      }
+      default:
+        toast.error(`Unsupported slash command: /${name}`)
+    }
+  }
 
-  const flatTree = React.useMemo(() => {
+  const resolveUiRequest = async (body: Record<string, unknown>) => {
+    if (!viewerContextId || !pendingUiRequest) return
+    try {
+      await fetchJson<UiRequestResponse>(
+        buildRequestUrl(`/api/ui/${encodeURIComponent(pendingUiRequest.id)}`, {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      )
+      setPendingUiRequest(null)
+      setPendingUiValue("")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to resolve UI request"
+      )
+    }
+  }
+
+  const flatTree = (() => {
     return treeData && !isApiErrorResponse(treeData)
       ? flattenTree(treeData.tree)
       : []
-  }, [treeData])
+  })()
   const treeLeafId =
     treeData && !isApiErrorResponse(treeData) ? treeData.leafId : null
   const treeSummaryAvailable = sessionState.availableModels.length > 0
 
-  const handleThemeChange = React.useCallback(
-    (value: ThemeMode) => {
-      setTheme(value)
+  const handleThemeChange = (value: ThemeMode) => {
+    setTheme(value)
+  }
+
+  const slashCommands: Array<SlashCommandDescriptor> = (() => [
+    {
+      kind: "builtin",
+      name: "compact",
+      description: "Summarize the session to reduce context size",
     },
-    [setTheme]
-  )
+    {
+      kind: "builtin",
+      name: "delete",
+      description: "Delete the current session",
+    },
+    {
+      kind: "builtin",
+      name: "fork",
+      description: "Create a new session from a previous message",
+    },
+    {
+      kind: "builtin",
+      name: "tree",
+      description: "Navigate to an earlier point in the current session tree",
+    },
+    {
+      kind: "builtin",
+      name: "rename",
+      description: "Rename the current session",
+    },
+    ...(sessionState.hideThinkingBlock
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "show-thinking",
+            description: "Show assistant thinking blocks",
+          },
+        ]
+      : [
+          {
+            kind: "builtin" as const,
+            name: "hide-thinking",
+            description: "Hide assistant thinking blocks",
+          },
+        ]),
+    ...(hideToolBlocks
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "show-tools",
+            description: "Show assistant tool calls",
+          },
+        ]
+      : [
+          {
+            kind: "builtin" as const,
+            name: "hide-tools",
+            description: "Hide assistant tool calls",
+          },
+        ]),
+    ...sessionState.availableSkills.map((skill) => ({
+      kind: "skill" as const,
+      name: `skill:${skill.name}` as const,
+      skillName: skill.name,
+      description: skill.description || "Use this skill",
+      scope: skill.scope,
+      source: skill.source,
+    })),
+  ])()
 
-  const slashCommands = React.useMemo<Array<SlashCommandDescriptor>>(
-    () => [
-      {
-        kind: "builtin",
-        name: "compact",
-        description: "Summarize the session to reduce context size",
-      },
-      {
-        kind: "builtin",
-        name: "delete",
-        description: "Delete the current session",
-      },
-      {
-        kind: "builtin",
-        name: "fork",
-        description: "Create a new session from a previous message",
-      },
-      {
-        kind: "builtin",
-        name: "tree",
-        description: "Navigate to an earlier point in the current session tree",
-      },
-      {
-        kind: "builtin",
-        name: "rename",
-        description: "Rename the current session",
-      },
-      ...(sessionState.hideThinkingBlock
-        ? [
-            {
-              kind: "builtin" as const,
-              name: "show-thinking",
-              description: "Show assistant thinking blocks",
-            },
-          ]
-        : [
-            {
-              kind: "builtin" as const,
-              name: "hide-thinking",
-              description: "Hide assistant thinking blocks",
-            },
-          ]),
-      ...(hideToolBlocks
-        ? [
-            {
-              kind: "builtin" as const,
-              name: "show-tools",
-              description: "Show assistant tool calls",
-            },
-          ]
-        : [
-            {
-              kind: "builtin" as const,
-              name: "hide-tools",
-              description: "Hide assistant tool calls",
-            },
-          ]),
-      ...sessionState.availableSkills.map((skill) => ({
-        kind: "skill" as const,
-        name: `skill:${skill.name}` as const,
-        skillName: skill.name,
-        description: skill.description || "Use this skill",
-        scope: skill.scope,
-        source: skill.source,
-      })),
-    ],
-    [hideToolBlocks, sessionState.availableSkills, sessionState.hideThinkingBlock]
-  )
-
-  const workingState = React.useMemo(() => {
+  const workingState = (() => {
     if (draftSessionLoadingOwnerKey && pendingDraftPrompt) {
       return {
         label: "Waiting for new session…",
@@ -2708,20 +2563,9 @@ export function PiWebAppShell({
           done: true,
         }
       : null
-  }, [
-    awaitingFirstTurn,
-    draftSessionLoadingOwnerKey,
-    pendingDraftPrompt,
-    runningSlashCommand,
-    sessionState.hiddenThinkingPreview,
-    sessionState.hideThinkingBlock,
-    sessionState.items,
-    sessionState.streaming,
-    sessionState.uiState.hiddenThinkingLabel,
-    sessionState.uiState.workingMessage,
-  ])
+  })()
 
-  const commandPaletteCommands = React.useMemo<Array<AppCommand>>(() => {
+  const commandPaletteCommands = (() => {
     const commands: Array<AppCommand> = [
       {
         id: "new-session",
@@ -2885,33 +2729,26 @@ export function PiWebAppShell({
     }
 
     return commands
-  }, [
+  })()
+
+  const shortcutActionsRef = useLatestRef({
     createSession,
-    currentSessionTitle,
     focusModelSelector,
     focusSessionSearch,
     openAddDirectoryDialog,
+    openCommandPalette,
     openDeleteDialog,
     openDeleteDialogForCurrentSession,
     openForkDialog,
     openRenameDialog,
     openSettingsDialog,
     openShortcutsDialog,
-    openStatusDialog,
     openTreeDialog,
-    cycleThinkingLevel,
-    hideToolBlocks,
     runCompact,
-    selectedSidebarSessions,
-    setSidebarSelection,
-    sessionState.availableModels.length,
-    sessionState.hideThinkingBlock,
-    sessionState.sessionFile,
-    sessionState.thinkingLevel,
-    statusCount,
     toggleHideThinking,
     toggleHideToolBlocks,
-  ])
+    cycleThinkingLevel,
+  })
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2947,12 +2784,16 @@ export function PiWebAppShell({
         !event.metaKey &&
         (!isEditableTarget(event.target) || targetIsSessionSearch)
       ) {
-        if (key === "escape" && !event.repeat && !isEditableTarget(event.target)) {
+        if (
+          key === "escape" &&
+          !event.repeat &&
+          !isEditableTarget(event.target)
+        ) {
           const now = Date.now()
           if (now - lastEscapePressedAtRef.current <= 600) {
             event.preventDefault()
             lastEscapePressedAtRef.current = 0
-            void openTreeDialog()
+            void shortcutActionsRef.current.openTreeDialog()
             return
           }
 
@@ -2976,16 +2817,22 @@ export function PiWebAppShell({
           renderedSidebarSessionKeys.length > 0
         ) {
           const sessionButtons = Array.from(
-            document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+            document.querySelectorAll<HTMLElement>(
+              "[data-sidebar-session-item]"
+            )
           )
           const focusedSessionButton =
             activeElement instanceof HTMLElement
-              ? activeElement.closest<HTMLElement>("[data-sidebar-session-item]")
+              ? activeElement.closest<HTMLElement>(
+                  "[data-sidebar-session-item]"
+                )
               : null
 
           if (sessionButtons.length > 0) {
             const currentIndex = focusedSessionButton
-              ? sessionButtons.findIndex((button) => button === focusedSessionButton)
+              ? sessionButtons.findIndex(
+                  (button) => button === focusedSessionButton
+                )
               : -1
             const nextIndex =
               key === "home"
@@ -3000,7 +2847,9 @@ export function PiWebAppShell({
                           currentIndex + (key === "arrowdown" ? 1 : -1)
                         )
                       )
-                    : (key === "arrowup" ? sessionButtons.length - 1 : 0)
+                    : key === "arrowup"
+                      ? sessionButtons.length - 1
+                      : 0
 
             event.preventDefault()
             sessionButtons[nextIndex]?.focus()
@@ -3010,10 +2859,8 @@ export function PiWebAppShell({
 
         if (
           !event.shiftKey &&
-          (
-            key === "delete" ||
-            (key === "backspace" && selectedSidebarSessions.length > 0)
-          )
+          (key === "delete" ||
+            (key === "backspace" && selectedSidebarSessions.length > 0))
         ) {
           const targetsToDelete =
             selectedSidebarSessions.length > 0
@@ -3024,7 +2871,7 @@ export function PiWebAppShell({
 
           if (targetsToDelete.length > 0) {
             event.preventDefault()
-            openDeleteDialog(targetsToDelete)
+            shortcutActionsRef.current.openDeleteDialog(targetsToDelete)
             return
           }
         }
@@ -3035,7 +2882,7 @@ export function PiWebAppShell({
       if (key === "/" || key === "?") {
         if (treeOpen) return
         event.preventDefault()
-        openShortcutsDialog()
+        shortcutActionsRef.current.openShortcutsDialog()
         return
       }
 
@@ -3043,76 +2890,78 @@ export function PiWebAppShell({
 
       if (key === "p" && !event.shiftKey) {
         event.preventDefault()
-        openCommandPalette()
+        shortcutActionsRef.current.openCommandPalette()
         return
       }
 
       if (key === "n" && !event.shiftKey) {
         event.preventDefault()
-        void createSession()
+        void shortcutActionsRef.current.createSession()
         return
       }
 
       if (key === "s" && !event.shiftKey) {
         event.preventDefault()
-        focusSessionSearch()
+        shortcutActionsRef.current.focusSessionSearch()
         return
       }
 
       if (key === "e" && !event.shiftKey) {
         if (!sessionState.sessionFile) return
         event.preventDefault()
-        openRenameDialog()
+        shortcutActionsRef.current.openRenameDialog()
         return
       }
 
       if (key === "f" && !event.shiftKey) {
         event.preventDefault()
-        void openForkDialog()
+        void shortcutActionsRef.current.openForkDialog()
         return
       }
 
       if (key === "d" && !event.shiftKey) {
         event.preventDefault()
-        openAddDirectoryDialog()
+        shortcutActionsRef.current.openAddDirectoryDialog()
         return
       }
 
       if (key === "," && !event.shiftKey) {
         event.preventDefault()
-        openSettingsDialog()
+        shortcutActionsRef.current.openSettingsDialog()
         return
       }
 
       if (key === "m" && !event.shiftKey) {
         if (sessionState.availableModels.length === 0) return
         event.preventDefault()
-        focusModelSelector()
+        shortcutActionsRef.current.focusModelSelector()
         return
       }
 
       if (key === "t" && !event.shiftKey) {
         event.preventDefault()
-        void toggleHideThinking()
+        void shortcutActionsRef.current.toggleHideThinking()
         return
       }
 
       if (key === "r") {
         event.preventDefault()
-        void cycleThinkingLevel(event.shiftKey ? -1 : 1)
+        void shortcutActionsRef.current.cycleThinkingLevel(
+          event.shiftKey ? -1 : 1
+        )
         return
       }
 
       if (key === "o" && !event.shiftKey) {
         event.preventDefault()
-        toggleHideToolBlocks()
+        shortcutActionsRef.current.toggleHideToolBlocks()
         return
       }
 
       if (key === "c" && !event.shiftKey) {
         if (hasSelectedText(event.target)) return
         event.preventDefault()
-        void runCompact()
+        void shortcutActionsRef.current.runCompact()
         return
       }
 
@@ -3120,7 +2969,7 @@ export function PiWebAppShell({
         if (isEditableTarget(event.target)) return
         if (!sessionState.sessionFile) return
         event.preventDefault()
-        openDeleteDialogForCurrentSession()
+        shortcutActionsRef.current.openDeleteDialogForCurrentSession()
       }
     }
 
@@ -3131,35 +2980,20 @@ export function PiWebAppShell({
   }, [
     addDirectoryOpen,
     commandPaletteOpen,
-    createSession,
     deleteOpen,
-    focusModelSelector,
-    focusSessionSearch,
     forkOpen,
-    openAddDirectoryDialog,
-    openCommandPalette,
-    openDeleteDialog,
-    openDeleteDialogForCurrentSession,
-    openForkDialog,
-    openRenameDialog,
-    openSettingsDialog,
-    openShortcutsDialog,
-    openTreeDialog,
     pendingUiRequest,
     renameOpen,
-    runCompact,
     renderedSidebarSessionKeys,
     selectedSidebarSessions,
     sessionState.availableModels.length,
     sessionState.sessionFile,
     settingsOpen,
+    shortcutActionsRef,
     shortcutsOpen,
     sidebarSessionEntriesByKey,
     statusOpen,
-    toggleHideThinking,
-    toggleHideToolBlocks,
     treeOpen,
-    cycleThinkingLevel,
   ])
 
   const isSessionViewLoading = Boolean(
@@ -3190,33 +3024,39 @@ export function PiWebAppShell({
       ? gitStatus.gitStatus
       : null
 
-  const scrollConversationToTop = React.useCallback(() => {
+  const scrollConversationToTop = () => {
     const viewport = messageViewportRef.current
     if (!viewport) return
     viewport.scrollTo({ top: 0, behavior: "smooth" })
-  }, [])
+  }
 
-  const scrollConversationToBottom = React.useCallback(() => {
+  const scrollConversationToBottom = () => {
     const viewport = messageViewportRef.current
     if (!viewport) return
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
-  }, [])
+  }
 
-  const jumpToPreviousMessage = React.useCallback(() => {
+  const jumpToPreviousMessage = () => {
     const viewport = messageViewportRef.current
     if (!viewport) return
     const target = previousMessageJumpTarget(viewport)
     if (!target) return
-    viewport.scrollTo({ top: Math.max(0, target.offsetTop - 8), behavior: "smooth" })
-  }, [])
+    viewport.scrollTo({
+      top: Math.max(0, target.offsetTop - 8),
+      behavior: "smooth",
+    })
+  }
 
-  const jumpToNextMessage = React.useCallback(() => {
+  const jumpToNextMessage = () => {
     const viewport = messageViewportRef.current
     if (!viewport) return
     const target = nextMessageJumpTarget(viewport)
     if (!target) return
-    viewport.scrollTo({ top: Math.max(0, target.offsetTop - 8), behavior: "smooth" })
-  }, [])
+    viewport.scrollTo({
+      top: Math.max(0, target.offsetTop - 8),
+      behavior: "smooth",
+    })
+  }
 
   return (
     <SidebarProvider className="h-full overflow-hidden bg-background">
@@ -3325,7 +3165,7 @@ export function PiWebAppShell({
               <SidebarTrigger className="mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <h2 className="text-[15px] font-semibold leading-tight">
+                  <h2 className="text-[15px] leading-tight font-semibold">
                     {currentSessionTitle}
                   </h2>
                   {sessionState.draft && <Badge variant="outline">Draft</Badge>}
@@ -3334,7 +3174,9 @@ export function PiWebAppShell({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  {sessionState.cwd && <span>{formatDisplayPath(sessionState.cwd)}</span>}
+                  {sessionState.cwd && (
+                    <span>{formatDisplayPath(sessionState.cwd)}</span>
+                  )}
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
                   )}
@@ -3387,10 +3229,14 @@ export function PiWebAppShell({
                               <span className="text-xs text-muted-foreground">
                                 {option.label}
                               </span>
-                              <span className="truncate">{formatDisplayPath(option.path)}</span>
+                              <span className="truncate">
+                                {formatDisplayPath(option.path)}
+                              </span>
                             </div>
                             {option.path === defaultNewSessionDirectory ? (
-                              <DropdownMenuShortcut>Default</DropdownMenuShortcut>
+                              <DropdownMenuShortcut>
+                                Default
+                              </DropdownMenuShortcut>
                             ) : null}
                           </DropdownMenuItem>
                         ))}
@@ -3459,7 +3305,6 @@ export function PiWebAppShell({
               </Button>
             </div>
           </div>
-
         </div>
 
         <Tabs
@@ -3467,273 +3312,272 @@ export function PiWebAppShell({
           onValueChange={setCurrentTab}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-            <TabsList className="w-full rounded-none">
-              <TabsTrigger value="session">Session</TabsTrigger>
-              <TabsTrigger value="git">Git</TabsTrigger>
-            </TabsList>
+          <TabsList className="w-full rounded-none">
+            <TabsTrigger value="session">Session</TabsTrigger>
+            <TabsTrigger value="git">Git</TabsTrigger>
+          </TabsList>
 
-            <TabsContent
-              value="session"
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <div className="relative min-h-0 flex-1">
-                <div
-                  ref={messagesScrollAreaRef}
-                  className="h-full overflow-auto px-4"
-                >
-                      {isSessionViewLoading ? (
-                        <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
-                          <Spinner />
-                          <div>Loading...</div>
-                        </div>
-                      ) : sessionState.items.length > 0 ? (
-                        <>
-                          <div className="flex flex-col gap-4">
-                            {(() => {
-                              const counts = new Map<string, number>()
-                              return mergeAssistantTurns(sessionState.items).map((item) => {
-                                const baseKey = conversationItemSignature(item)
-                                const count = (counts.get(baseKey) ?? 0) + 1
-                                counts.set(baseKey, count)
-                                const key = `${baseKey}:${count}`
-
-                                if (item.kind === "user") {
-                                  return (
-                                    <div
-                                      key={key}
-                                      data-message-anchor="true"
-                                      className="flex justify-end"
-                                    >
-                                      <UserMessageCard item={item} />
-                                    </div>
-                                  )
-                                }
-
-                                if (
-                                  !assistantMessageHasVisibleBlocks({
-                                    item,
-                                    hideThinking: sessionState.hideThinkingBlock,
-                                    hideToolBlocks,
-                                  })
-                                ) {
-                                  return null
-                                }
-
-                                return (
-                                  <div
-                                    key={key}
-                                    data-message-anchor="true"
-                                    className="flex justify-start"
-                                  >
-                                    <AssistantMessageCard
-                                      item={item}
-                                      hideThinking={sessionState.hideThinkingBlock}
-                                      hideToolBlocks={hideToolBlocks}
-                                    />
-                                  </div>
-                                )
-                              })
-                            })()}
-                            {workingState ? (
-                              <div className="flex justify-start">
-                                <MessagesWorkingIndicator state={workingState} />
-                              </div>
-                            ) : null}
-                          </div>
-                          <div ref={bottomRef} />
-                        </>
-                      ) : (
-                        <Empty>
-                          <EmptyHeader>
-                            <EmptyTitle>
-                              {sessionState.draft
-                                ? "New session"
-                                : "Start a new conversation"}
-                            </EmptyTitle>
-                            <EmptyDescription>
-                              {sessionState.draft
-                                ? undefined
-                                : "This is the native Pi session view backed by the new TypeScript runtime."}
-                            </EmptyDescription>
-                          </EmptyHeader>
-                          {sessionState.draft ? (
-                            <EmptyContent className="flex flex-col items-center gap-3">
-                              {sessionState.cwd ? (
-                                <Badge variant="outline">{formatDisplayPath(sessionState.cwd)}</Badge>
-                              ) : null}
-                              {draftGitSummary?.label ? (
-                                <Badge variant="outline">{draftGitSummary.label}</Badge>
-                              ) : null}
-                            </EmptyContent>
-                          ) : (
-                            <EmptyContent>
-                              <Button
-                                onClick={() => {
-                                  void createSession()
-                                }}
-                              >
-                                New session
-                              </Button>
-                            </EmptyContent>
-                          )}
-                        </Empty>
-                      )}
-                </div>
-
-                    {!isSessionViewLoading ? (
-                      <div className="absolute right-4 bottom-4 z-10 flex justify-end md:right-[18px] md:bottom-[18px]">
-                        <div className="flex items-center gap-4">
-                          <Button
-                            variant="secondary"
-                            size="icon-lg"
-                            disabled={isMessagesNearTop}
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                            title="Go to top"
-                            aria-label="Go to top"
-                            onClick={scrollConversationToTop}
-                          >
-                            <ArrowUpIcon className="size-4" />
-                          </Button>
-
-                          <Button
-                            variant="secondary"
-                            size="icon-lg"
-                            disabled={!hasPreviousMessageJumpTarget}
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                            title="Jump to previous message"
-                            aria-label="Jump to previous message"
-                            onClick={jumpToPreviousMessage}
-                          >
-                            <ArrowUpToLineIcon className="size-4" />
-                          </Button>
-
-                          <Button
-                            variant="secondary"
-                            size="icon-lg"
-                            disabled={!hasNextMessageJumpTarget}
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                            title="Jump to next message"
-                            aria-label="Jump to next message"
-                            onClick={jumpToNextMessage}
-                          >
-                            <ArrowDownToLineIcon className="size-4" />
-                          </Button>
-
-                          <Button
-                            variant="secondary"
-                            size="icon-lg"
-                            disabled={
-                              sessionState.draft ||
-                              sessionState.items.length === 0 ||
-                              isMessagesNearBottom
-                            }
-                            className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-                            title="Jump to latest message"
-                            aria-label="Jump to latest message"
-                            onClick={scrollConversationToBottom}
-                          >
-                            <ArrowDownIcon className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : null}
+          <TabsContent value="session" className="flex min-h-0 flex-1 flex-col">
+            <div className="relative min-h-0 flex-1">
+              <div
+                ref={messagesScrollAreaRef}
+                className="h-full overflow-auto px-4"
+              >
+                {isSessionViewLoading ? (
+                  <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+                    <Spinner />
+                    <div>Loading...</div>
                   </div>
+                ) : sessionState.items.length > 0 ? (
+                  <>
+                    <div className="flex flex-col gap-4">
+                      {(() => {
+                        const counts = new Map<string, number>()
+                        return mergeAssistantTurns(sessionState.items).map(
+                          (item) => {
+                            const baseKey = conversationItemSignature(item)
+                            const count = (counts.get(baseKey) ?? 0) + 1
+                            counts.set(baseKey, count)
+                            const key = `${baseKey}:${count}`
 
-                  <ComposerPanel
-                    ref={composerPanelRef}
-                    currentPendingMessages={currentPendingMessages}
-                    composerImages={composerImages}
-                    composerText={composerDraftSeed.text}
-                    composerSkill={composerDraftSeed.skillName}
-                    availableModels={sessionState.availableModels}
-                    model={sessionState.model}
-                    thinkingLevel={sessionState.thinkingLevel}
-                    availableThinkingLevels={sessionState.availableThinkingLevels}
-                    isSubmitting={isSubmitting}
-                    isStreaming={sessionState.streaming}
-                    awaitingFirstTurn={awaitingFirstTurn}
-                    workingState={workingState}
-                    fileInputRef={fileInputRef}
-                    slashCommands={slashCommands}
-                    onComposerTextChange={syncComposerDraft}
-                    onPickImages={(files) => {
-                      void onPickImages(files)
-                    }}
-                    onRemoveComposerImage={(index) => {
-                      setComposerImages((current) =>
-                        current.filter((_, imageIndex) => imageIndex !== index)
-                      )
-                    }}
-                    onSubmitPrompt={(streamingBehavior) => {
-                      void submitPrompt(streamingBehavior)
-                    }}
-                    onAbort={() => {
-                      void abortSession()
-                    }}
-                    onRemovePendingMessage={(pendingId) => {
-                      void removePendingMessage(pendingId)
-                    }}
-                    onReorderPending={(pendingId, direction) => {
-                      void reorderPending(pendingId, direction)
-                    }}
-                    onRunBuiltinSlashCommand={(name, args) => {
-                      void runBuiltinSlashCommand(name, args)
-                    }}
-                    onSelectModel={(value) => {
-                      void setModel(value)
-                    }}
-                    onSelectThinkingLevel={(level) => {
-                      void setThinkingLevel(level)
-                    }}
-                    requestPathCompletions={async (prefix) => {
-                      const response = await fetchJson<PathCompletionsResponse>(
-                        buildRequestUrl("/api/path-completions", {
-                          contextId: viewerContextId,
-                          sessionId: activeSessionId,
-                        }),
-                        {
-                          method: "POST",
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ prefix }),
-                        }
-                      )
-                      return isApiErrorResponse(response)
-                        ? []
-                        : response.items
-                    }}
-                    requestFileCompletions={async (query, isQuotedPrefix) => {
-                      const response = await fetchJson<FileCompletionsResponse>(
-                        buildRequestUrl("/api/file-completions", {
-                          contextId: viewerContextId,
-                          sessionId: activeSessionId,
-                        }),
-                        {
-                          method: "POST",
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ query, isQuotedPrefix }),
-                        }
-                      )
-                      return isApiErrorResponse(response)
-                        ? []
-                        : response.items
-                    }}
-                  />
-            </TabsContent>
+                            if (item.kind === "user") {
+                              return (
+                                <div
+                                  key={key}
+                                  data-message-anchor="true"
+                                  className="flex justify-end"
+                                >
+                                  <UserMessageCard item={item} />
+                                </div>
+                              )
+                            }
 
-            <TabsContent
-              value="git"
-              className="min-h-0 flex-1 space-y-4 overflow-auto px-6 pb-6"
-            >
-              <GitPanel
-                gitLoading={gitLoading}
-                gitStatus={gitStatus}
-                gitChanges={gitChanges}
-                cwd={sessionState.cwd}
-                onRefresh={() => {
-                  void refreshGit()
-                }}
-              />
-            </TabsContent>
+                            if (
+                              !assistantMessageHasVisibleBlocks({
+                                item,
+                                hideThinking: sessionState.hideThinkingBlock,
+                                hideToolBlocks,
+                              })
+                            ) {
+                              return null
+                            }
+
+                            return (
+                              <div
+                                key={key}
+                                data-message-anchor="true"
+                                className="flex justify-start"
+                              >
+                                <AssistantMessageCard
+                                  item={item}
+                                  hideThinking={sessionState.hideThinkingBlock}
+                                  hideToolBlocks={hideToolBlocks}
+                                />
+                              </div>
+                            )
+                          }
+                        )
+                      })()}
+                      {workingState ? (
+                        <div className="flex justify-start">
+                          <MessagesWorkingIndicator state={workingState} />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div ref={bottomRef} />
+                  </>
+                ) : (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyTitle>
+                        {sessionState.draft
+                          ? "New session"
+                          : "Start a new conversation"}
+                      </EmptyTitle>
+                      <EmptyDescription>
+                        {sessionState.draft
+                          ? undefined
+                          : "This is the native Pi session view backed by the new TypeScript runtime."}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    {sessionState.draft ? (
+                      <EmptyContent className="flex flex-col items-center gap-3">
+                        {sessionState.cwd ? (
+                          <Badge variant="outline">
+                            {formatDisplayPath(sessionState.cwd)}
+                          </Badge>
+                        ) : null}
+                        {draftGitSummary?.label ? (
+                          <Badge variant="outline">
+                            {draftGitSummary.label}
+                          </Badge>
+                        ) : null}
+                      </EmptyContent>
+                    ) : (
+                      <EmptyContent>
+                        <Button
+                          onClick={() => {
+                            void createSession()
+                          }}
+                        >
+                          New session
+                        </Button>
+                      </EmptyContent>
+                    )}
+                  </Empty>
+                )}
+              </div>
+
+              {!isSessionViewLoading ? (
+                <div className="absolute right-4 bottom-4 z-10 flex justify-end md:right-[18px] md:bottom-[18px]">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      disabled={isMessagesNearTop}
+                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                      title="Go to top"
+                      aria-label="Go to top"
+                      onClick={scrollConversationToTop}
+                    >
+                      <ArrowUpIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      disabled={!hasPreviousMessageJumpTarget}
+                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                      title="Jump to previous message"
+                      aria-label="Jump to previous message"
+                      onClick={jumpToPreviousMessage}
+                    >
+                      <ArrowUpToLineIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      disabled={!hasNextMessageJumpTarget}
+                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                      title="Jump to next message"
+                      aria-label="Jump to next message"
+                      onClick={jumpToNextMessage}
+                    >
+                      <ArrowDownToLineIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="icon-lg"
+                      disabled={
+                        sessionState.draft ||
+                        sessionState.items.length === 0 ||
+                        isMessagesNearBottom
+                      }
+                      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+                      title="Jump to latest message"
+                      aria-label="Jump to latest message"
+                      onClick={scrollConversationToBottom}
+                    >
+                      <ArrowDownIcon className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <ComposerPanel
+              ref={composerPanelRef}
+              currentPendingMessages={currentPendingMessages}
+              composerImages={composerImages}
+              composerText={composerDraftSeed.text}
+              composerSkill={composerDraftSeed.skillName}
+              availableModels={sessionState.availableModels}
+              model={sessionState.model}
+              thinkingLevel={sessionState.thinkingLevel}
+              availableThinkingLevels={sessionState.availableThinkingLevels}
+              isSubmitting={isSubmitting}
+              isStreaming={sessionState.streaming}
+              awaitingFirstTurn={awaitingFirstTurn}
+              workingState={workingState}
+              fileInputRef={fileInputRef}
+              slashCommands={slashCommands}
+              onComposerTextChange={syncComposerDraft}
+              onPickImages={(files) => {
+                void onPickImages(files)
+              }}
+              onRemoveComposerImage={(index) => {
+                setComposerImages((current) =>
+                  current.filter((_, imageIndex) => imageIndex !== index)
+                )
+              }}
+              onSubmitPrompt={(streamingBehavior) => {
+                void submitPrompt(streamingBehavior)
+              }}
+              onAbort={() => {
+                void abortSession()
+              }}
+              onRemovePendingMessage={(pendingId) => {
+                void removePendingMessage(pendingId)
+              }}
+              onReorderPending={(pendingId, direction) => {
+                void reorderPending(pendingId, direction)
+              }}
+              onRunBuiltinSlashCommand={(name, args) => {
+                void runBuiltinSlashCommand(name, args)
+              }}
+              onSelectModel={(value) => {
+                void setModel(value)
+              }}
+              onSelectThinkingLevel={(level) => {
+                void setThinkingLevel(level)
+              }}
+              requestPathCompletions={async (prefix) => {
+                const response = await fetchJson<PathCompletionsResponse>(
+                  buildRequestUrl("/api/path-completions", {
+                    contextId: viewerContextId,
+                    sessionId: activeSessionId,
+                  }),
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ prefix }),
+                  }
+                )
+                return isApiErrorResponse(response) ? [] : response.items
+              }}
+              requestFileCompletions={async (query, isQuotedPrefix) => {
+                const response = await fetchJson<FileCompletionsResponse>(
+                  buildRequestUrl("/api/file-completions", {
+                    contextId: viewerContextId,
+                    sessionId: activeSessionId,
+                  }),
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ query, isQuotedPrefix }),
+                  }
+                )
+                return isApiErrorResponse(response) ? [] : response.items
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent
+            value="git"
+            className="min-h-0 flex-1 space-y-4 overflow-auto px-6 pb-6"
+          >
+            <GitPanel
+              gitLoading={gitLoading}
+              gitStatus={gitStatus}
+              gitChanges={gitChanges}
+              cwd={sessionState.cwd}
+              onRefresh={() => {
+                void refreshGit()
+              }}
+            />
+          </TabsContent>
         </Tabs>
       </SidebarInset>
 

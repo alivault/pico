@@ -2012,9 +2012,7 @@ export class PiWebRuntime {
       },
       commandContextActions: {
         waitForIdle: () => session.agent.waitForIdle(),
-        newSession: async (newSessionOptions?: {
-          parentSession?: string
-        }) => {
+        newSession: async (newSessionOptions?: { parentSession?: string }) => {
           const result = await this.createTransitionSessionEntry(
             entry,
             async (runtime) => {
@@ -2481,13 +2479,16 @@ export class PiWebRuntime {
     const nextEntry =
       nextCwd === activeEntry.cwd
         ? (
-            await this.createTransitionSessionEntry(activeEntry, async (runtime) => {
-              const next = await runtime.newSession()
-              return {
-                cancelled: next.cancelled,
-                draft: true,
+            await this.createTransitionSessionEntry(
+              activeEntry,
+              async (runtime) => {
+                const next = await runtime.newSession()
+                return {
+                  cancelled: next.cancelled,
+                  draft: true,
+                }
               }
-            })
+            )
           ).entry
         : await this.createNewSessionEntry(nextCwd, {
             draft: true,

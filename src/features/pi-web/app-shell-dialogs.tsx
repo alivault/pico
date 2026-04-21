@@ -39,7 +39,12 @@ type ForkMessage = {
   text: string
 }
 
-type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all"
+type TreeFilterMode =
+  | "default"
+  | "no-tools"
+  | "user-only"
+  | "labeled-only"
+  | "all"
 
 type TreeNavigateOptions = {
   summarize?: boolean
@@ -203,7 +208,11 @@ function treeDialogEntryText(node: FlatTreeNode) {
         return "(no content)"
       }
       case "toolResult":
-        return treeDialogNormalizeLine(message.text) || message.toolName || "Tool result"
+        return (
+          treeDialogNormalizeLine(message.text) ||
+          message.toolName ||
+          "Tool result"
+        )
       case "bashExecution":
         return treeDialogNormalizeLine(message.command) || "Shell command"
       default:
@@ -221,12 +230,18 @@ function treeDialogEntryText(node: FlatTreeNode) {
     case "model_change":
       return treeDialogNormalizeLine(entry.modelId) || "Model changed"
     case "thinking_level_change":
-      return treeDialogNormalizeLine(entry.thinkingLevel) || "Thinking level changed"
+      return (
+        treeDialogNormalizeLine(entry.thinkingLevel) || "Thinking level changed"
+      )
     case "label":
       return treeDialogNormalizeLine(entry.label) || "Label updated"
     case "custom_message":
     case "custom":
-      return treeDialogNormalizeLine(entry.text) || treeDialogNormalizeLine(entry.customType) || "Custom entry"
+      return (
+        treeDialogNormalizeLine(entry.text) ||
+        treeDialogNormalizeLine(entry.customType) ||
+        "Custom entry"
+      )
     default:
       return treeDialogNormalizeLine(node.text) || treeDialogKindLabel(node)
   }
@@ -277,10 +292,16 @@ function treeDialogPassesFilter(
   const message = entry.message || {}
   const isCurrentLeaf = node.id === currentLeafId
 
-  if (!isCurrentLeaf && entry.type === "message" && message.role === "assistant") {
+  if (
+    !isCurrentLeaf &&
+    entry.type === "message" &&
+    message.role === "assistant"
+  ) {
     const hasText = Boolean(treeDialogNormalizeLine(message.text))
-    const stopReason = typeof message.stopReason === "string" ? message.stopReason : ""
-    const isErrorOrAborted = Boolean(stopReason) && stopReason !== "stop" && stopReason !== "toolUse"
+    const stopReason =
+      typeof message.stopReason === "string" ? message.stopReason : ""
+    const isErrorOrAborted =
+      Boolean(stopReason) && stopReason !== "stop" && stopReason !== "toolUse"
     if (!hasText && !isErrorOrAborted) {
       return false
     }
@@ -292,7 +313,8 @@ function treeDialogPassesFilter(
       break
     case "no-tools":
       if (treeDialogIsSettingsEntry(node)) return false
-      if (entry.type === "message" && message.role === "toolResult") return false
+      if (entry.type === "message" && message.role === "toolResult")
+        return false
       break
     case "labeled-only":
       if (!node.label) return false
@@ -340,18 +362,16 @@ function buildTreeDialogViewModel({
     cursor = nodeById.get(cursor)?.parentId ?? null
   }
 
-  const searchTokens = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
+  const searchTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
 
   const filteredNodes = flatTree.filter((node) =>
     treeDialogPassesFilter(node, filterMode, currentLeafId, searchTokens)
   )
   const filteredIds = new Set(filteredNodes.map((node) => node.id))
   const visibleParentById = new Map<string, string | null>()
-  const visibleChildrenById = new Map<string | null, Array<string>>([[null, []]])
+  const visibleChildrenById = new Map<string | null, Array<string>>([
+    [null, []],
+  ])
 
   for (const node of filteredNodes) {
     let parentId = node.parentId ?? null
@@ -374,7 +394,8 @@ function buildTreeDialogViewModel({
       const node = nodeById.get(childId)
       if (!node) continue
 
-      const hasVisibleChildren = (visibleChildrenById.get(childId)?.length ?? 0) > 0
+      const hasVisibleChildren =
+        (visibleChildrenById.get(childId)?.length ?? 0) > 0
       const isFolded = hasVisibleChildren && foldedSet.has(childId)
 
       orderedVisibleNodes.push({
@@ -430,7 +451,8 @@ function cycleTreeFilterMode(mode: TreeFilterMode, direction: 1 | -1) {
 
 function treeFilterModeLabel(mode: TreeFilterMode) {
   return (
-    TREE_FILTER_OPTIONS.find((option) => option.mode === mode)?.label || "Default"
+    TREE_FILTER_OPTIONS.find((option) => option.mode === mode)?.label ||
+    "Default"
   )
 }
 
@@ -633,12 +655,16 @@ export function AppShellDialogs({
       : []
   const recentMatching = recentDirectories
     .filter((directoryPath) => !openedSet.has(directoryPath))
-    .filter((directoryPath) => directoryMatchesQuery(directoryPath, directoryQuery))
+    .filter((directoryPath) =>
+      directoryMatchesQuery(directoryPath, directoryQuery)
+    )
   const knownMatching = knownDirectories
     .filter((directoryPath) => !openedSet.has(directoryPath))
     .filter((directoryPath) => directoryPath !== currentDirectory)
     .filter((directoryPath) => !recentSet.has(directoryPath))
-    .filter((directoryPath) => directoryMatchesQuery(directoryPath, directoryQuery))
+    .filter((directoryPath) =>
+      directoryMatchesQuery(directoryPath, directoryQuery)
+    )
   const manualPath =
     directoryQuery &&
     !directoryDialogHasExactMatch(
@@ -656,42 +682,40 @@ export function AppShellDialogs({
   const filteredForkMessages = (forkMessages ?? []).filter((message) =>
     message.text.toLowerCase().includes(forkQuery.trim().toLowerCase())
   )
-  const [treeFilterMode, setTreeFilterMode] = React.useState<TreeFilterMode>(
-    "no-tools"
-  )
+  const [treeFilterMode, setTreeFilterMode] =
+    React.useState<TreeFilterMode>("no-tools")
   const [showTreeLabelTimestamps, setShowTreeLabelTimestamps] =
     React.useState(false)
-  const [foldedTreeNodeIds, setFoldedTreeNodeIds] = React.useState<Array<string>>(
-    []
-  )
-  const [showTreeShortcutsHelp, setShowTreeShortcutsHelp] = React.useState(false)
-  const [showCustomTreeSummary, setShowCustomTreeSummary] = React.useState(false)
+  const [foldedTreeNodeIds, setFoldedTreeNodeIds] = React.useState<
+    Array<string>
+  >([])
+  const [showTreeShortcutsHelp, setShowTreeShortcutsHelp] =
+    React.useState(false)
+  const [showCustomTreeSummary, setShowCustomTreeSummary] =
+    React.useState(false)
   const [customTreeSummaryInstructions, setCustomTreeSummaryInstructions] =
     React.useState("")
   const treeSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const treeLabelInputRef = React.useRef<HTMLInputElement | null>(null)
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
 
-  const treeViewModel = React.useMemo(
-    () =>
-      buildTreeDialogViewModel({
-        flatTree,
-        currentLeafId: treeLeafId,
-        query: treeQuery,
-        filterMode: treeFilterMode,
-        foldedTreeNodeIds,
-      }),
-    [flatTree, foldedTreeNodeIds, treeFilterMode, treeLeafId, treeQuery]
-  )
+  const treeViewModel = (() =>
+    buildTreeDialogViewModel({
+      flatTree,
+      currentLeafId: treeLeafId,
+      query: treeQuery,
+      filterMode: treeFilterMode,
+      foldedTreeNodeIds,
+    }))()
   const selectedVisibleTreeNode =
     selectedTreeNodeId != null
-      ? treeViewModel.orderedVisibleNodes.find(
+      ? (treeViewModel.orderedVisibleNodes.find(
           (node) => node.id === selectedTreeNodeId
-        ) ?? null
+        ) ?? null)
       : null
   const selectedTreeNode =
     selectedTreeNodeId != null
-      ? treeViewModel.nodeById.get(selectedTreeNodeId) ?? null
+      ? (treeViewModel.nodeById.get(selectedTreeNodeId) ?? null)
       : null
   const selectedTreeIndex = selectedVisibleTreeNode
     ? treeViewModel.orderedVisibleNodes.findIndex(
@@ -722,7 +746,9 @@ export function AppShellDialogs({
     if (nextSelectedId !== selectedTreeNodeId) {
       onSelectedTreeNodeIdChange(nextSelectedId)
       const nextSelectedNode =
-        nextSelectedId != null ? treeViewModel.nodeById.get(nextSelectedId) : null
+        nextSelectedId != null
+          ? treeViewModel.nodeById.get(nextSelectedId)
+          : null
       onSelectedTreeNodeLabelChange(nextSelectedNode?.label || "")
     }
   }, [
@@ -758,38 +784,40 @@ export function AppShellDialogs({
     }
   }, [selectedTreeNodeId, showTreeShortcutsHelp, treeLoading, treeOpen])
 
-  const selectTreeNode = React.useCallback(
-    (nodeId: string | null, options?: { focus?: boolean }) => {
-      const nextId = nodeId?.trim() || null
-      onSelectedTreeNodeIdChange(nextId)
-      const nextNode = nextId ? treeViewModel.nodeById.get(nextId) ?? null : null
-      onSelectedTreeNodeLabelChange(nextNode?.label || "")
-      setShowCustomTreeSummary(false)
+  const selectTreeNode = (
+    nodeId: string | null,
+    options?: { focus?: boolean }
+  ) => {
+    const nextId = nodeId?.trim() || null
+    onSelectedTreeNodeIdChange(nextId)
+    const nextNode = nextId
+      ? (treeViewModel.nodeById.get(nextId) ?? null)
+      : null
+    onSelectedTreeNodeLabelChange(nextNode?.label || "")
+    setShowCustomTreeSummary(false)
 
-      if (options?.focus && nextId) {
-        window.requestAnimationFrame(() => {
-          const button = document.querySelector<HTMLElement>(
-            `[data-tree-node-button][data-tree-node-id="${CSS.escape(nextId)}"]`
-          )
-          button?.focus()
-          button?.scrollIntoView({ block: "nearest" })
-        })
-      }
-    },
-    [onSelectedTreeNodeIdChange, onSelectedTreeNodeLabelChange, treeViewModel.nodeById]
-  )
+    if (options?.focus && nextId) {
+      window.requestAnimationFrame(() => {
+        const button = document.querySelector<HTMLElement>(
+          `[data-tree-node-button][data-tree-node-id="${CSS.escape(nextId)}"]`
+        )
+        button?.focus()
+        button?.scrollIntoView({ block: "nearest" })
+      })
+    }
+  }
 
-  const setTreeFilter = React.useCallback((nextMode: TreeFilterMode) => {
+  const setTreeFilter = (nextMode: TreeFilterMode) => {
     setTreeFilterMode(nextMode)
     setFoldedTreeNodeIds([])
-  }, [])
+  }
 
-  const focusTreeLabelInput = React.useCallback(() => {
+  const focusTreeLabelInput = () => {
     window.requestAnimationFrame(() => {
       treeLabelInputRef.current?.focus()
       treeLabelInputRef.current?.select()
     })
-  }, [])
+  }
 
   React.useEffect(() => {
     if (!treeOpen) return
@@ -821,7 +849,9 @@ export function AppShellDialogs({
 
         if (key === "o") {
           event.preventDefault()
-          setTreeFilter(cycleTreeFilterMode(treeFilterMode, event.shiftKey ? -1 : 1))
+          setTreeFilter(
+            cycleTreeFilterMode(treeFilterMode, event.shiftKey ? -1 : 1)
+          )
           return
         }
 
@@ -903,9 +933,12 @@ export function AppShellDialogs({
               currentIndex + delta
             )
           )
-          selectTreeNode(treeViewModel.orderedVisibleNodes[nextIndex]?.id ?? null, {
-            focus: true,
-          })
+          selectTreeNode(
+            treeViewModel.orderedVisibleNodes[nextIndex]?.id ?? null,
+            {
+              focus: true,
+            }
+          )
           return
         }
 
@@ -1013,7 +1046,8 @@ export function AppShellDialogs({
           <DialogHeader>
             <DialogTitle>Add directory</DialogTitle>
             <DialogDescription>
-              Search recent and known directories or add a new path to the sidebar.
+              Search recent and known directories or add a new path to the
+              sidebar.
             </DialogDescription>
           </DialogHeader>
           <Command shouldFilter={false} className="rounded-lg border">
@@ -1038,7 +1072,9 @@ export function AppShellDialogs({
                     onSelect={() => onAddDirectoryPath(manualPath)}
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate font-medium">Add {manualPath}</span>
+                      <span className="truncate font-medium">
+                        Add {manualPath}
+                      </span>
                       <span className="truncate text-xs text-muted-foreground">
                         Resolve and add this path to the sidebar.
                       </span>
@@ -1055,7 +1091,9 @@ export function AppShellDialogs({
                       onSelect={() => onAddDirectoryPath(directoryPath)}
                     >
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate font-medium">{directoryPath}</span>
+                        <span className="truncate font-medium">
+                          {directoryPath}
+                        </span>
                         <span className="truncate text-xs text-muted-foreground">
                           Expand and show it in the sidebar.
                         </span>
@@ -1073,7 +1111,9 @@ export function AppShellDialogs({
                       onSelect={() => onAddDirectoryPath(directoryPath)}
                     >
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate font-medium">{directoryPath}</span>
+                        <span className="truncate font-medium">
+                          {directoryPath}
+                        </span>
                         <span className="truncate text-xs text-muted-foreground">
                           Use the current Pi working directory.
                         </span>
@@ -1097,7 +1137,11 @@ export function AppShellDialogs({
               ) : null}
               {knownMatching.length > 0 ? (
                 <CommandGroup
-                  heading={directoryQuery ? "Matching directories" : "Known directories"}
+                  heading={
+                    directoryQuery
+                      ? "Matching directories"
+                      : "Known directories"
+                  }
                 >
                   {knownMatching.map((directoryPath) => (
                     <CommandItem
@@ -1200,7 +1244,7 @@ export function AppShellDialogs({
                         onSelect={() => onForkFromMessage(message.entryId)}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="line-clamp-3 whitespace-pre-wrap text-sm text-foreground">
+                          <div className="line-clamp-3 text-sm whitespace-pre-wrap text-foreground">
                             {message.text}
                           </div>
                         </div>
@@ -1249,7 +1293,9 @@ export function AppShellDialogs({
                   <Button
                     key={option.mode}
                     size="sm"
-                    variant={treeFilterMode === option.mode ? "default" : "outline"}
+                    variant={
+                      treeFilterMode === option.mode ? "default" : "outline"
+                    }
                     onClick={() => setTreeFilter(option.mode)}
                   >
                     {option.label}
@@ -1270,10 +1316,12 @@ export function AppShellDialogs({
                   <div className="space-y-4 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-semibold">Tree shortcuts</h3>
+                        <h3 className="text-sm font-semibold">
+                          Tree shortcuts
+                        </h3>
                         <p className="text-sm text-muted-foreground">
-                          Tree-specific keys match the old browser and stay scoped
-                          to this dialog.
+                          Tree-specific keys match the old browser and stay
+                          scoped to this dialog.
                         </p>
                       </div>
                       <Badge variant="secondary">Ctrl+/</Badge>
@@ -1285,7 +1333,9 @@ export function AppShellDialogs({
                           className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between"
                         >
                           <div className="space-y-1">
-                            <div className="text-sm font-medium">{item.label}</div>
+                            <div className="text-sm font-medium">
+                              {item.label}
+                            </div>
                             {item.description ? (
                               <div className="text-sm text-muted-foreground">
                                 {item.description}
@@ -1309,7 +1359,9 @@ export function AppShellDialogs({
                       ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
                         treeViewModel.orderedVisibleNodes.map((node) => {
                           const entryText = treeDialogEntryText(node)
-                          const timestamp = treeDialogFormatTimestamp(node.timestamp)
+                          const timestamp = treeDialogFormatTimestamp(
+                            node.timestamp
+                          )
                           const labelTimestamp = showTreeLabelTimestamps
                             ? treeDialogFormatTimestamp(node.labelTimestamp)
                             : ""
@@ -1322,14 +1374,16 @@ export function AppShellDialogs({
                               data-tree-node-id={node.id}
                               onClick={() => selectTreeNode(node.id)}
                               className={cn(
-                                "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                                 selectedTreeNodeId === node.id &&
                                   "bg-muted ring-1 ring-border"
                               )}
                             >
                               <span
                                 className="flex items-start gap-2 pt-0.5"
-                                style={{ paddingLeft: `${node.visibleDepth * 16}px` }}
+                                style={{
+                                  paddingLeft: `${node.visibleDepth * 16}px`,
+                                }}
                               >
                                 <span className="flex size-4 items-center justify-center text-muted-foreground">
                                   {node.hasVisibleChildren ? (
@@ -1347,7 +1401,11 @@ export function AppShellDialogs({
                               <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge
-                                    variant={node.isCurrentLeaf ? "default" : "secondary"}
+                                    variant={
+                                      node.isCurrentLeaf
+                                        ? "default"
+                                        : "secondary"
+                                    }
                                   >
                                     {treeDialogKindLabel(node)}
                                   </Badge>
@@ -1371,7 +1429,9 @@ export function AppShellDialogs({
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                   {timestamp ? <span>{timestamp}</span> : null}
                                   <span className="font-mono">
-                                    {node.id.slice(Math.max(0, node.id.length - 8))}
+                                    {node.id.slice(
+                                      Math.max(0, node.id.length - 8)
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -1408,7 +1468,9 @@ export function AppShellDialogs({
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">
-                    {selectedTreeNode ? treeDialogKindLabel(selectedTreeNode) : "No selection"}
+                    {selectedTreeNode
+                      ? treeDialogKindLabel(selectedTreeNode)
+                      : "No selection"}
                   </Badge>
                   {selectedTreeNodeId && selectedTreeNodeId === treeLeafId ? (
                     <Badge>Current</Badge>
@@ -1428,13 +1490,20 @@ export function AppShellDialogs({
                     <div>{treeDialogEntryText(selectedTreeNode)}</div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       {selectedTreeNode.timestamp ? (
-                        <span>{treeDialogFormatTimestamp(selectedTreeNode.timestamp)}</span>
+                        <span>
+                          {treeDialogFormatTimestamp(
+                            selectedTreeNode.timestamp
+                          )}
+                        </span>
                       ) : null}
                       {showTreeLabelTimestamps &&
                       selectedTreeNode.label &&
                       selectedTreeNode.labelTimestamp ? (
                         <span>
-                          Labeled {treeDialogFormatTimestamp(selectedTreeNode.labelTimestamp)}
+                          Labeled{" "}
+                          {treeDialogFormatTimestamp(
+                            selectedTreeNode.labelTimestamp
+                          )}
                         </span>
                       ) : null}
                       <span className="font-mono text-[11px]">
@@ -1444,7 +1513,8 @@ export function AppShellDialogs({
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
-                    Pick a tree entry to continue from that point or edit its label.
+                    Pick a tree entry to continue from that point or edit its
+                    label.
                   </div>
                 )}
               </div>
@@ -1460,7 +1530,8 @@ export function AppShellDialogs({
                       treeSubmitting
                     }
                     onClick={() =>
-                      selectedTreeNodeId && onNavigateTreeNode(selectedTreeNodeId)
+                      selectedTreeNodeId &&
+                      onNavigateTreeNode(selectedTreeNodeId)
                     }
                   >
                     Continue
@@ -1477,7 +1548,9 @@ export function AppShellDialogs({
                       }
                       onClick={() =>
                         selectedTreeNodeId &&
-                        onNavigateTreeNode(selectedTreeNodeId, { summarize: true })
+                        onNavigateTreeNode(selectedTreeNodeId, {
+                          summarize: true,
+                        })
                       }
                     >
                       Summarize
@@ -1554,11 +1627,15 @@ export function AppShellDialogs({
                     onSelectedTreeNodeLabelChange(event.target.value)
                   }
                   placeholder="Optional label"
-                  disabled={!selectedTreeNodeId || treeLoading || treeSubmitting}
+                  disabled={
+                    !selectedTreeNodeId || treeLoading || treeSubmitting
+                  }
                 />
                 <Button
                   variant="outline"
-                  disabled={!selectedTreeNodeId || treeLoading || treeSubmitting}
+                  disabled={
+                    !selectedTreeNodeId || treeLoading || treeSubmitting
+                  }
                   onClick={onSaveTreeLabel}
                 >
                   Save label
@@ -1696,9 +1773,12 @@ export function AppShellDialogs({
 
               <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
                 <div className="space-y-1">
-                  <div className="text-sm font-medium">Hide thinking blocks</div>
+                  <div className="text-sm font-medium">
+                    Hide thinking blocks
+                  </div>
                   <div className="text-sm text-muted-foreground">
-                    Collapse assistant reasoning into the short hidden-thinking preview.
+                    Collapse assistant reasoning into the short hidden-thinking
+                    preview.
                   </div>
                 </div>
                 <input
@@ -1715,14 +1795,17 @@ export function AppShellDialogs({
                 <div className="space-y-1">
                   <div className="text-sm font-medium">Hide tool calls</div>
                   <div className="text-sm text-muted-foreground">
-                    Hide assistant tool execution cards in the conversation view.
+                    Hide assistant tool execution cards in the conversation
+                    view.
                   </div>
                 </div>
                 <input
                   type="checkbox"
                   className="mt-1 size-4"
                   checked={hideToolBlocks}
-                  onChange={(event) => onHideToolBlocksChange(event.target.checked)}
+                  onChange={(event) =>
+                    onHideToolBlocksChange(event.target.checked)
+                  }
                 />
               </label>
             </section>
