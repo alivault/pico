@@ -3,8 +3,8 @@ import {
   ArrowDownIcon,
   ArrowUpToLineIcon,
   EllipsisIcon,
-  PlusIcon,
   SparklesIcon,
+  SquarePenIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { toast } from "sonner"
@@ -199,6 +199,15 @@ function sessionNotificationKey(sessionLike: {
   if (sessionId) return `id:${sessionId}`
 
   return ""
+}
+
+function formatDisplayPath(value: string | undefined) {
+  const path = value?.trim() || ""
+  if (!path) return ""
+
+  return path
+    .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
+    .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
 }
 
 function finishedSessionLabel(title: string) {
@@ -3182,7 +3191,7 @@ export function PiWebAppShell({
 
       <SidebarInset className="min-h-0 overflow-hidden">
         <div className="shrink-0 border-b border-border/70 px-6 py-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <SidebarTrigger className="mt-0.5 shrink-0" />
               <div className="space-y-1">
@@ -3196,7 +3205,7 @@ export function PiWebAppShell({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  {sessionState.cwd && <span>{sessionState.cwd}</span>}
+                  {sessionState.cwd && <span>{formatDisplayPath(sessionState.cwd)}</span>}
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
                   )}
@@ -3210,23 +3219,18 @@ export function PiWebAppShell({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                title={
-                  defaultNewSessionDirectory
-                    ? `Create a new session in ${defaultNewSessionDirectory}`
-                    : "Create a new session"
-                }
-                onClick={() => {
-                  void createSession()
-                }}
-              >
-                <PlusIcon /> New
-              </Button>
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
-                  <EllipsisIcon /> Session
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label="Session menu"
+                      title="Session menu"
+                    />
+                  }
+                >
+                  <EllipsisIcon />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem
@@ -3254,7 +3258,7 @@ export function PiWebAppShell({
                               <span className="text-xs text-muted-foreground">
                                 {option.label}
                               </span>
-                              <span className="truncate">{option.path}</span>
+                              <span className="truncate">{formatDisplayPath(option.path)}</span>
                             </div>
                             {option.path === defaultNewSessionDirectory ? (
                               <DropdownMenuShortcut>Default</DropdownMenuShortcut>
@@ -3309,6 +3313,21 @@ export function PiWebAppShell({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label="Create a new session"
+                title={
+                  defaultNewSessionDirectory
+                    ? `Create a new session in ${defaultNewSessionDirectory}`
+                    : "Create a new session"
+                }
+                onClick={() => {
+                  void createSession()
+                }}
+              >
+                <SquarePenIcon />
+              </Button>
             </div>
           </div>
 
@@ -3405,7 +3424,7 @@ export function PiWebAppShell({
                           {sessionState.draft ? (
                             <EmptyContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
                               {sessionState.cwd ? (
-                                <Badge variant="outline">{sessionState.cwd}</Badge>
+                                <Badge variant="outline">{formatDisplayPath(sessionState.cwd)}</Badge>
                               ) : null}
                               {draftGitSummary?.label ? (
                                 <Badge variant="outline">{draftGitSummary.label}</Badge>
