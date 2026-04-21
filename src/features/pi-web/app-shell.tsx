@@ -114,7 +114,6 @@ import {
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
-  clampSidebarDirectories,
   createContextId,
   createInitialSessionState,
   flattenTree,
@@ -649,24 +648,6 @@ export function PiWebAppShell({
     []
   )
 
-  React.useEffect(() => {
-    if (!sessionsEvent?.directories) return
-    setSidebarDirectories((current) => {
-      const next = clampSidebarDirectories(
-        current.length > 0 ? current : (sessionsEvent.directories ?? []),
-        sessionState.cwd
-      )
-      if (JSON.stringify(current) === JSON.stringify(next)) {
-        return current
-      }
-      safeLocalStorageSetItem(
-        SIDEBAR_DIRECTORIES_STORAGE_KEY,
-        JSON.stringify(next)
-      )
-      return next
-    })
-  }, [sessionsEvent?.directories, sessionState.cwd])
-
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string) => {
       pendingRouteSessionIdRef.current = nextSessionId
@@ -1102,8 +1083,8 @@ export function PiWebAppShell({
   }, [currentTab, refreshGit])
 
   const baseSidebarDirectories = React.useMemo(
-    () => clampSidebarDirectories(sidebarDirectories, sessionState.cwd),
-    [sessionState.cwd, sidebarDirectories]
+    () => normalizeStoredDirectoryList(sidebarDirectories),
+    [sidebarDirectories]
   )
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
