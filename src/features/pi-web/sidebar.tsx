@@ -148,6 +148,7 @@ type AppSidebarProps = {
   onSessionSearchChange: (value: string) => void
   sessionSearchInputRef?: React.Ref<HTMLInputElement>
   visibleDirectories: Array<string>
+  directoryCount: number
   directoryStateByPath: Map<string, DirectoryState>
   filteredDirectorySessions: Record<string, Array<SessionListEntry>>
   collapsedDirectories: Record<string, boolean>
@@ -174,6 +175,7 @@ type AppSidebarProps = {
   onDeleteSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
+  onRemoveAllDirectories?: () => void
   onReorderDirectories?: (nextDirectories: Array<string>) => void
   onLoadMoreDirectorySessions: (directory: string) => void
 }
@@ -219,6 +221,7 @@ export function AppSidebar({
   onSessionSearchChange,
   sessionSearchInputRef,
   visibleDirectories,
+  directoryCount,
   filteredDirectorySessions,
   collapsedDirectories,
   directoryIndexLoading,
@@ -240,6 +243,7 @@ export function AppSidebar({
   onDeleteSession,
   onCreateSessionInDirectory,
   onRemoveDirectory,
+  onRemoveAllDirectories,
   onReorderDirectories,
   onLoadMoreDirectorySessions,
 }: AppSidebarProps) {
@@ -657,6 +661,33 @@ export function AppSidebar({
                 <ChevronsDownUpIcon />
               )}
             </Button>
+            {onRemoveAllDirectories ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                      disabled={directoryCount === 0}
+                      aria-label="Directory actions"
+                      title="Directory actions"
+                    />
+                  }
+                >
+                  <EllipsisIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={directoryCount === 0}
+                    onClick={onRemoveAllDirectories}
+                  >
+                    Remove all
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             <Button
               variant="secondary"
               size="icon-sm"

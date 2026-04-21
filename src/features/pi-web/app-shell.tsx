@@ -3245,6 +3245,7 @@ export function PiWebAppShell({
         onSessionSearchChange={setSessionSearch}
         sessionSearchInputRef={sessionSearchInputRef}
         visibleDirectories={visibleDirectories}
+        directoryCount={baseSidebarDirectories.length}
         directoryStateByPath={directoryStateByPath}
         filteredDirectorySessions={filteredDirectorySessions}
         collapsedDirectories={collapsedDirectories}
@@ -3291,6 +3292,40 @@ export function PiWebAppShell({
             }
             const next = { ...current }
             delete next[directory]
+            safeLocalStorageSetItem(
+              COLLAPSED_DIRECTORIES_STORAGE_KEY,
+              JSON.stringify(next)
+            )
+            return next
+          })
+        }}
+        onRemoveAllDirectories={() => {
+          setSidebarDirectories((current) => {
+            if (current.length === 0) {
+              return current
+            }
+            safeLocalStorageSetItem(
+              SIDEBAR_DIRECTORIES_STORAGE_KEY,
+              JSON.stringify([])
+            )
+            return []
+          })
+          setCollapsedDirectories((current) => {
+            let changed = false
+            const next = { ...current }
+
+            for (const directory of baseSidebarDirectories) {
+              if (!Object.prototype.hasOwnProperty.call(next, directory)) {
+                continue
+              }
+              delete next[directory]
+              changed = true
+            }
+
+            if (!changed) {
+              return current
+            }
+
             safeLocalStorageSetItem(
               COLLAPSED_DIRECTORIES_STORAGE_KEY,
               JSON.stringify(next)
