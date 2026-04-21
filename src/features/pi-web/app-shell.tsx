@@ -10,6 +10,8 @@ import { toast } from "sonner"
 
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
 import type {
+  AssistantItem,
+  ConversationItem,
   PromptImage,
   SessionState,
   StreamingBehavior,
@@ -139,6 +141,41 @@ import {
   isSessionsEvent,
   isStateSyncEvent,
 } from "@/lib/pi-web-api"
+
+function mergeAssistantTurns(items: Array<ConversationItem>) {
+  const merged: Array<ConversationItem> = []
+  let pendingAssistant: AssistantItem | null = null
+
+  for (const item of items) {
+    if (item.kind === "assistant") {
+      if (!pendingAssistant) {
+        pendingAssistant = {
+          kind: "assistant",
+          blocks: [...item.blocks],
+          streaming: item.streaming,
+        }
+      } else {
+        pendingAssistant.blocks.push(...item.blocks)
+        pendingAssistant.streaming = pendingAssistant.streaming || item.streaming
+      }
+
+      continue
+    }
+
+    if (pendingAssistant) {
+      merged.push(pendingAssistant)
+      pendingAssistant = null
+    }
+
+    merged.push(item)
+  }
+
+  if (pendingAssistant) {
+    merged.push(pendingAssistant)
+  }
+
+  return merged
+}
 
 function isEditableTarget(target: EventTarget | null) {
   return (
@@ -3392,7 +3429,7 @@ export function PiWebAppShell({
                         <div className="flex flex-col gap-4">
                           {(() => {
                             const counts = new Map<string, number>()
-                            return sessionState.items.map((item) => {
+                            return mergeAssistantTurns(sessionState.items).map((item) => {
                               const baseKey = conversationItemSignature(item)
                               const count = (counts.get(baseKey) ?? 0) + 1
                               counts.set(baseKey, count)
