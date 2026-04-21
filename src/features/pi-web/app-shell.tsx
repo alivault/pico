@@ -3189,7 +3189,7 @@ export function PiWebAppShell({
       />
 
       <SidebarInset className="min-h-0 overflow-hidden">
-        <div className="shrink-0 border-b border-border/70 px-6 py-4">
+        <div className="shrink-0 border-b border-border/70 p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <SidebarTrigger className="mt-0.5 shrink-0" />
