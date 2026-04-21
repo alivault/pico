@@ -12,8 +12,6 @@ import {
   SearchIcon,
   SquarePenIcon,
   Settings2Icon,
-  Trash2Icon,
-  XIcon,
 } from "lucide-react"
 
 import type { DirectoryState } from "@/lib/pi-web"
@@ -45,7 +43,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -200,8 +197,6 @@ type AppSidebarProps = {
     position: DirectoryDropPosition
   ) => void
   onLoadMoreDirectorySessions: (directory: string) => void
-  onDeleteSelectedSessions: () => void
-  onClearSelectedSessions: () => void
 }
 
 export function AppSidebar({
@@ -233,11 +228,8 @@ export function AppSidebar({
   onRemoveDirectory,
   onReorderDirectories,
   onLoadMoreDirectorySessions,
-  onDeleteSelectedSessions,
-  onClearSelectedSessions,
 }: AppSidebarProps) {
   const searchActive = sessionSearch.trim().length > 0
-  const selectedSessionCount = selectedSessionKeys.length
   const directoryOrderingEnabled = !searchActive && visibleDirectories.length > 1
   const [draggingDirectory, setDraggingDirectory] = React.useState("")
   const [previewDirectoryOrder, setPreviewDirectoryOrder] = React.useState<
@@ -404,45 +396,6 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-3">
-        {selectedSessionCount > 0 ? (
-          <SidebarGroup className="px-2 py-0">
-            <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="text-sm font-medium text-sidebar-foreground">
-                    {selectedSessionCount} selected
-                  </div>
-                  <div className="text-xs text-sidebar-foreground/70">
-                    Ctrl-click toggles. Shift-click selects a range.
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={onClearSelectedSessions}
-                  >
-                    <XIcon data-icon="inline-start" />
-                    Clear
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={onDeleteSelectedSessions}
-                  >
-                    <Trash2Icon data-icon="inline-start" />
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </SidebarGroup>
-        ) : null}
-
-        {selectedSessionCount > 0 && visibleDirectories.length > 0 ? (
-          <SidebarSeparator />
-        ) : null}
-
         {visibleDirectories.length === 0 ? (
           <SidebarGroup className="px-2 py-2">
             <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">

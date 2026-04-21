@@ -3199,12 +3199,6 @@ export function PiWebAppShell({
         }}
         onReorderDirectories={reorderSidebarDirectories}
         onLoadMoreDirectorySessions={loadMoreDirectorySessions}
-        onDeleteSelectedSessions={() => {
-          openDeleteDialog(selectedSidebarSessions)
-        }}
-        onClearSelectedSessions={() => {
-          setSidebarSelection([])
-        }}
       />
 
       <SidebarInset className="min-h-0 overflow-hidden">
