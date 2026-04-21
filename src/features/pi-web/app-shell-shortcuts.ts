@@ -35,6 +35,11 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
         keys: "Ctrl+D",
       },
       {
+        label: "Open the session tree",
+        description: "Press Escape twice when nothing else is open.",
+        keys: "Esc, Esc",
+      },
+      {
         label: "Rename the current session",
         keys: "Ctrl+E",
       },
@@ -126,6 +131,53 @@ export const APP_SHELL_SHORTCUT_SECTIONS: Array<ShortcutSection> = [
       {
         label: "Clear the active skill pill when the prompt is empty",
         keys: "Backspace",
+      },
+    ],
+  },
+  {
+    title: "Tree dialog",
+    description:
+      "When the session tree is open, Ctrl+/ shows tree-specific help instead of this dialog.",
+    items: [
+      {
+        label: "Show tree shortcuts",
+        keys: "Ctrl+/",
+      },
+      {
+        label: "Move",
+        keys: "↑ / ↓ or Ctrl+J / Ctrl+K",
+      },
+      {
+        label: "Expand or collapse a branch",
+        keys: "← / → or Ctrl+H / Ctrl+L",
+      },
+      {
+        label: "Cycle filters",
+        keys: "Ctrl+O / Ctrl+Shift+O",
+      },
+      {
+        label: "Jump to a filter preset",
+        keys: "Ctrl+Shift+D / T / U / L / A",
+      },
+      {
+        label: "Toggle label timestamps",
+        keys: "Shift+T",
+      },
+      {
+        label: "Focus the label field",
+        keys: "Shift+L",
+      },
+      {
+        label: "Continue without summary",
+        keys: "Enter",
+      },
+      {
+        label: "Submit custom summary instructions",
+        keys: "Ctrl+Enter",
+      },
+      {
+        label: "Clear custom summary or close help/tree",
+        keys: "Esc",
       },
     ],
   },

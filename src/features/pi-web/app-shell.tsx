@@ -113,7 +113,6 @@ import {
   clampSidebarDirectories,
   createContextId,
   createInitialSessionState,
-  filterFlatTree,
   flattenTree,
   getSessionTitle,
   normalizePromptImage,
@@ -303,6 +302,7 @@ export function PiWebAppShell({
   const [forkLoading, setForkLoading] = React.useState(false)
   const [treeOpen, setTreeOpen] = React.useState(false)
   const [treeLoading, setTreeLoading] = React.useState(false)
+  const [treeSubmitting, setTreeSubmitting] = React.useState(false)
   const [treeData, setTreeData] = React.useState<SessionTreeResponse | null>(
     null
   )
@@ -346,6 +346,7 @@ export function PiWebAppShell({
   const composerSkillRef = React.useRef<string | undefined>(composerSkill)
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
+  const lastEscapePressedAtRef = React.useRef(0)
 
   const { resolvedTheme, setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -1869,6 +1870,8 @@ export function PiWebAppShell({
     if (!viewerContextId) return
     setTreeOpen(true)
     setTreeLoading(true)
+    setTreeSubmitting(false)
+    setTreeQuery("")
     try {
       const response = await fetchJson<SessionTreeResponse>(
         buildRequestUrl("/api/session/tree", {
@@ -1894,6 +1897,7 @@ export function PiWebAppShell({
 
   const saveTreeLabel = React.useCallback(async () => {
     if (!viewerContextId || !selectedTreeNodeId) return
+    setTreeSubmitting(true)
     try {
       const response = await fetchJson<SessionTreeResponse>(
         buildRequestUrl("/api/session/tree/label", {
@@ -1916,6 +1920,8 @@ export function PiWebAppShell({
       toast.error(
         error instanceof Error ? error.message : "Failed to save label"
       )
+    } finally {
+      setTreeSubmitting(false)
     }
   }, [
     activeSessionId,
@@ -1925,8 +1931,12 @@ export function PiWebAppShell({
   ])
 
   const navigateTreeNode = React.useCallback(
-    async (targetId: string) => {
+    async (
+      targetId: string,
+      options?: { summarize?: boolean; customInstructions?: string }
+    ) => {
       if (!viewerContextId) return
+      setTreeSubmitting(true)
       try {
         const response = await fetchJson<NavigateSessionTreeResponse>(
           buildRequestUrl("/api/session/tree", {
@@ -1936,18 +1946,32 @@ export function PiWebAppShell({
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ targetId }),
+            body: JSON.stringify({
+              targetId,
+              summarize: Boolean(options?.summarize),
+              customInstructions: options?.customInstructions,
+            }),
           }
         )
         if (isApiErrorResponse(response)) throw new Error(response.error)
-        if (!response.cancelled) {
-          setTreeOpen(false)
-          toast.success("Moved session tree cursor")
+        if (response.aborted) {
+          toast.info("Branch summarization cancelled")
+          return
         }
+        if (response.cancelled) {
+          toast.info("Tree navigation cancelled")
+          return
+        }
+        setTreeOpen(false)
+        toast.success(
+          options?.summarize ? "Continued from summarized branch" : "Moved session tree cursor"
+        )
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to navigate tree"
         )
+      } finally {
+        setTreeSubmitting(false)
       }
     },
     [activeSessionId, viewerContextId]
@@ -2233,9 +2257,12 @@ export function PiWebAppShell({
 
   const flatTree = React.useMemo(() => {
     return treeData && !isApiErrorResponse(treeData)
-      ? filterFlatTree(flattenTree(treeData.tree), treeQuery)
+      ? flattenTree(treeData.tree)
       : []
-  }, [treeData, treeQuery])
+  }, [treeData])
+  const treeLeafId =
+    treeData && !isApiErrorResponse(treeData) ? treeData.leafId : null
+  const treeSummaryAvailable = sessionState.availableModels.length > 0
 
   const handleThemeChange = React.useCallback(
     (value: ThemeMode) => {
@@ -2598,6 +2625,27 @@ export function PiWebAppShell({
         !event.metaKey &&
         (!isEditableTarget(event.target) || targetIsSessionSearch)
       ) {
+        if (key === "escape" && !event.repeat && !isEditableTarget(event.target)) {
+          const now = Date.now()
+          if (now - lastEscapePressedAtRef.current <= 600) {
+            event.preventDefault()
+            lastEscapePressedAtRef.current = 0
+            void openTreeDialog()
+            return
+          }
+
+          lastEscapePressedAtRef.current = now
+          return
+        }
+
+        if (
+          key !== "shift" &&
+          key !== "control" &&
+          key !== "meta" &&
+          key !== "alt"
+        ) {
+          lastEscapePressedAtRef.current = 0
+        }
         if (
           (key === "arrowdown" ||
             key === "arrowup" ||
@@ -2664,6 +2712,7 @@ export function PiWebAppShell({
       if (!ctrlOrMeta || event.altKey) return
 
       if (key === "/" || key === "?") {
+        if (treeOpen) return
         event.preventDefault()
         openShortcutsDialog()
         return
@@ -2774,6 +2823,7 @@ export function PiWebAppShell({
     openRenameDialog,
     openSettingsDialog,
     openShortcutsDialog,
+    openTreeDialog,
     pendingUiRequest,
     renameOpen,
     runCompact,
@@ -3322,6 +3372,9 @@ export function PiWebAppShell({
         treeOpen={treeOpen}
         onTreeOpenChange={setTreeOpen}
         treeLoading={treeLoading}
+        treeSubmitting={treeSubmitting}
+        treeLeafId={treeLeafId}
+        treeSummaryAvailable={treeSummaryAvailable}
         treeQuery={treeQuery}
         onTreeQueryChange={setTreeQuery}
         flatTree={flatTree}
@@ -3329,8 +3382,8 @@ export function PiWebAppShell({
         onSelectedTreeNodeIdChange={setSelectedTreeNodeId}
         selectedTreeNodeLabel={selectedTreeNodeLabel}
         onSelectedTreeNodeLabelChange={setSelectedTreeNodeLabel}
-        onNavigateTreeNode={(targetId) => {
-          void navigateTreeNode(targetId)
+        onNavigateTreeNode={(targetId, options) => {
+          void navigateTreeNode(targetId, options)
         }}
         onSaveTreeLabel={() => {
           void saveTreeLabel()

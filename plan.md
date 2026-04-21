@@ -138,14 +138,14 @@ Reference: `static/dialogs.js`
 - [x] Rebuild fork dialog parity
   - [x] filter/search fork points
   - [x] keyboard navigation
-- [ ] Upgrade the tree dialog from MVP to old-browser parity
-  - [ ] tree-specific shortcuts/help
-  - [ ] branch expand/collapse keyboard controls
-  - [ ] filter presets / filter cycling
-  - [ ] continue-with-summary options
-  - [ ] custom summary instructions
-  - [ ] label timestamp toggle
-  - [ ] richer status/footer state
+- [x] Upgrade the tree dialog from MVP to old-browser parity
+  - [x] tree-specific shortcuts/help
+  - [x] branch expand/collapse keyboard controls
+  - [x] filter presets / filter cycling
+  - [x] continue-with-summary options
+  - [x] custom summary instructions
+  - [x] label timestamp toggle
+  - [x] richer status/footer state
 
 ### 5) Header, settings, and shell controls parity
 
