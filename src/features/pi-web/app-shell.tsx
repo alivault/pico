@@ -336,8 +336,10 @@ export function PiWebAppShell({
   >({})
   const [sessionSearch, setSessionSearch] = React.useState("")
   const [currentTab, setCurrentTab] = React.useState("session")
-  const [composerText, setComposerText] = React.useState("")
-  const [composerSkill, setComposerSkill] = React.useState<string | undefined>()
+  const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
+    text: string
+    skillName?: string
+  }>({ text: "" })
   const [composerImages, setComposerImages] = React.useState<
     Array<PromptImage>
   >([])
@@ -451,8 +453,8 @@ export function PiWebAppShell({
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
-  const composerTextRef = React.useRef(composerText)
-  const composerSkillRef = React.useRef<string | undefined>(composerSkill)
+  const composerTextRef = React.useRef(composerDraftSeed.text)
+  const composerSkillRef = React.useRef<string | undefined>(composerDraftSeed.skillName)
   const loadedDirectoryRevisionRef = React.useRef<Record<string, string>>({})
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const lastEscapePressedAtRef = React.useRef(0)
@@ -491,15 +493,7 @@ export function PiWebAppShell({
     sessionStateRef.current = sessionState
   }, [sessionState])
 
-  React.useEffect(() => {
-    composerTextRef.current = composerText
-  }, [composerText])
-
-  React.useEffect(() => {
-    composerSkillRef.current = composerSkill
-  }, [composerSkill])
-
-  const updateComposerDraft = React.useCallback(
+  const syncComposerDraft = React.useCallback(
     (value: string, target = sessionStateRef.current) => {
       const parsed = parseComposerSkillMessage(value)
       const nextText = parsed.matched ? parsed.text : value
@@ -507,8 +501,23 @@ export function PiWebAppShell({
 
       composerTextRef.current = nextText
       composerSkillRef.current = nextSkill
-      setComposerText(nextText)
-      setComposerSkill(nextSkill)
+      rememberStoredPromptDraft(
+        target,
+        serializeComposerDraft({ text: nextText, skillName: nextSkill })
+      )
+    },
+    []
+  )
+
+  const replaceComposerDraft = React.useCallback(
+    (value: string, target = sessionStateRef.current) => {
+      const parsed = parseComposerSkillMessage(value)
+      const nextText = parsed.matched ? parsed.text : value
+      const nextSkill = parsed.matched ? parsed.skillName : undefined
+
+      composerTextRef.current = nextText
+      composerSkillRef.current = nextSkill
+      setComposerDraftSeed({ text: nextText, skillName: nextSkill })
       rememberStoredPromptDraft(
         target,
         serializeComposerDraft({ text: nextText, skillName: nextSkill })
@@ -734,7 +743,7 @@ export function PiWebAppShell({
           setComposerImages([])
         }
 
-        updateComposerDraft(nextPromptText, nextState)
+        replaceComposerDraft(nextPromptText, nextState)
         lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
         setPendingMessages(
           Array.isArray(payload.pendingUserMessages)
@@ -795,7 +804,7 @@ export function PiWebAppShell({
     return () => {
       source.close()
     }
-  }, [sessionId, updateComposerDraft, viewerContextId])
+  }, [replaceComposerDraft, sessionId, viewerContextId])
 
   React.useEffect(() => {
     if (sessionState.draft || !sessionState.sessionId) return
@@ -1668,13 +1677,13 @@ export function PiWebAppShell({
       message: string
       images: Array<PromptImage>
     }) => {
-      updateComposerDraft(pendingPrompt.message)
+      replaceComposerDraft(pendingPrompt.message)
       setComposerImages(
         pendingPrompt.images.map((image) => ({ ...image }))
       )
       return true
     },
-    [updateComposerDraft]
+    [replaceComposerDraft]
   )
 
   const normalizeQueuedStreamingBehavior = React.useCallback(
@@ -1747,8 +1756,8 @@ export function PiWebAppShell({
       if (!draftSessionLoadingOwnerKey) return false
 
       const message = serializeComposerDraft({
-        text: composerText,
-        skillName: composerSkill,
+        text: composerTextRef.current,
+        skillName: composerSkillRef.current,
       }).trim()
       const images = composerImages.map((image) => ({ ...image }))
       if (!message && images.length === 0) return false
@@ -1771,7 +1780,7 @@ export function PiWebAppShell({
         ])
       }
 
-      updateComposerDraft("")
+      replaceComposerDraft("")
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
 
@@ -1783,12 +1792,10 @@ export function PiWebAppShell({
     },
     [
       composerImages,
-      composerSkill,
-      composerText,
       draftSessionLoadingOwnerKey,
       normalizeQueuedStreamingBehavior,
       pendingDraftPrompt,
-      updateComposerDraft,
+      replaceComposerDraft,
     ]
   )
 
@@ -1800,8 +1807,8 @@ export function PiWebAppShell({
       }
 
       const message = serializeComposerDraft({
-        text: composerText,
-        skillName: composerSkill,
+        text: composerTextRef.current,
+        skillName: composerSkillRef.current,
       }).trim()
       if (!message && composerImages.length === 0) return false
 
@@ -1834,7 +1841,7 @@ export function PiWebAppShell({
         if (isApiErrorResponse(response)) {
           throw new Error(response.error)
         }
-        updateComposerDraft("")
+        replaceComposerDraft("")
         setComposerImages([])
         lastSyncedEditorTextRef.current = ""
         return true
@@ -1854,13 +1861,11 @@ export function PiWebAppShell({
       activeSessionId,
       awaitingFirstTurn,
       composerImages,
-      composerSkill,
-      composerText,
       draftSessionLoadingOwnerKey,
       normalizeQueuedStreamingBehavior,
       queuePendingDraftPrompt,
+      replaceComposerDraft,
       sessionState.streaming,
-      updateComposerDraft,
       viewerContextId,
     ]
   )
@@ -1897,7 +1902,7 @@ export function PiWebAppShell({
         )
       } catch (error) {
         if (!composerTextRef.current) {
-          updateComposerDraft(followUp.message)
+          replaceComposerDraft(followUp.message)
           setComposerImages(followUp.images)
         }
         toast.error(
@@ -1914,7 +1919,7 @@ export function PiWebAppShell({
     activeSessionId,
     draftSessionLoadingOwnerKey,
     pendingDraftFollowUps,
-    updateComposerDraft,
+    replaceComposerDraft,
     viewerContextId,
   ])
 
@@ -2472,7 +2477,7 @@ export function PiWebAppShell({
             toast.error("Built-in slash commands do not support images.")
             return
           }
-          updateComposerDraft("")
+          replaceComposerDraft("")
           await runCompact()
           return
         }
@@ -2485,7 +2490,7 @@ export function PiWebAppShell({
             openRenameDialog()
             return
           }
-          updateComposerDraft("")
+          replaceComposerDraft("")
           await renameSessionToValue(trimmedArgs, false)
           return
         }
@@ -2494,7 +2499,7 @@ export function PiWebAppShell({
             toast.error("Start the session before deleting it.")
             return
           }
-          updateComposerDraft("")
+          replaceComposerDraft("")
           openDeleteDialogForCurrentSession()
           return
         }
@@ -2503,7 +2508,7 @@ export function PiWebAppShell({
             toast.error("/fork does not take any arguments.")
             return
           }
-          updateComposerDraft("")
+          replaceComposerDraft("")
           await openForkDialog()
           return
         }
@@ -2512,31 +2517,31 @@ export function PiWebAppShell({
             toast.error("/tree does not take any arguments.")
             return
           }
-          updateComposerDraft("")
+          replaceComposerDraft("")
           await openTreeDialog()
           return
         }
         case "hide-thinking": {
-          updateComposerDraft("")
+          replaceComposerDraft("")
           if (!sessionState.hideThinkingBlock) {
             await toggleHideThinking()
           }
           return
         }
         case "show-thinking": {
-          updateComposerDraft("")
+          replaceComposerDraft("")
           if (sessionState.hideThinkingBlock) {
             await toggleHideThinking()
           }
           return
         }
         case "hide-tools": {
-          updateComposerDraft("")
+          replaceComposerDraft("")
           setToolBlocksHidden(true)
           return
         }
         case "show-tools": {
-          updateComposerDraft("")
+          replaceComposerDraft("")
           setToolBlocksHidden(false)
           return
         }
@@ -2551,12 +2556,12 @@ export function PiWebAppShell({
       openRenameDialog,
       openTreeDialog,
       renameSessionToValue,
+      replaceComposerDraft,
       runCompact,
       sessionState.hideThinkingBlock,
       sessionState.sessionFile,
       setToolBlocksHidden,
       toggleHideThinking,
-      updateComposerDraft,
     ]
   )
 
@@ -3622,8 +3627,8 @@ export function PiWebAppShell({
                     ref={composerPanelRef}
                     currentPendingMessages={currentPendingMessages}
                     composerImages={composerImages}
-                    composerText={composerText}
-                    composerSkill={composerSkill}
+                    composerText={composerDraftSeed.text}
+                    composerSkill={composerDraftSeed.skillName}
                     availableModels={sessionState.availableModels}
                     model={sessionState.model}
                     thinkingLevel={sessionState.thinkingLevel}
@@ -3634,8 +3639,7 @@ export function PiWebAppShell({
                     workingState={workingState}
                     fileInputRef={fileInputRef}
                     slashCommands={slashCommands}
-                    onComposerTextChange={updateComposerDraft}
-                    onSetComposerSkill={setComposerSkill}
+                    onComposerTextChange={syncComposerDraft}
                     onPickImages={(files) => {
                       void onPickImages(files)
                     }}

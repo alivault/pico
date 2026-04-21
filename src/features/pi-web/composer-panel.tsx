@@ -44,8 +44,10 @@ import {
   getFileReferenceCompletionQuery,
   getPathCompletionQuery,
   matchingSlashCommands,
+  parseComposerSkillMessage,
   parseSlashCommandInput,
   sameCompletionContext,
+  serializeComposerDraft,
 } from "@/features/pi-web/composer-utils"
 import { promptImageKey } from "@/features/pi-web/conversation-view"
 import { cn } from "@/lib/utils"
@@ -85,7 +87,6 @@ type ComposerPanelProps = {
   fileInputRef: React.RefObject<HTMLInputElement | null>
   slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
-  onSetComposerSkill: (skillName?: string) => void
   onPickImages: (files: FileList | null) => void
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
@@ -170,71 +171,133 @@ function selectionIsAtStart(textarea: HTMLTextAreaElement | null) {
   return start === 0 && end === 0
 }
 
-export const ComposerPanel = React.forwardRef<
-  ComposerPanelHandle,
-  ComposerPanelProps
->(function ComposerPanelImpl(
-  {
-    currentPendingMessages,
-    composerImages,
-    composerText,
-    composerSkill,
-    availableModels,
-    model,
-    thinkingLevel,
-    availableThinkingLevels,
-    isSubmitting,
-    isStreaming,
-    awaitingFirstTurn,
-    fileInputRef,
-    slashCommands,
-    onComposerTextChange,
-    onSetComposerSkill,
-    onPickImages,
-    onRemoveComposerImage,
-    onSubmitPrompt,
-    onAbort,
-    onRemovePendingMessage,
-    onReorderPending,
-    onRunBuiltinSlashCommand,
-    onSelectModel,
-    onSelectThinkingLevel,
-    requestPathCompletions,
-    requestFileCompletions,
-  },
-  ref
-) {
-  const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const [selection, setSelection] = React.useState({
-    start: composerText.length,
-    end: composerText.length,
-  })
-  const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
-  const [thinkingPickerOpen, setThinkingPickerOpen] = React.useState(false)
-  const [modelQuery, setModelQuery] = React.useState("")
-  const [completionState, setCompletionState] = React.useState<CompletionState | null>(null)
-  const completionRequestIdRef = React.useRef(0)
-  const [slashSelectionIndex, setSlashSelectionIndex] = React.useState(0)
+export const ComposerPanel = React.memo(
+  React.forwardRef<ComposerPanelHandle, ComposerPanelProps>(function ComposerPanelImpl(
+    {
+      currentPendingMessages,
+      composerImages,
+      composerText,
+      composerSkill,
+      availableModels,
+      model,
+      thinkingLevel,
+      availableThinkingLevels,
+      isSubmitting,
+      isStreaming,
+      awaitingFirstTurn,
+      fileInputRef,
+      slashCommands,
+      onComposerTextChange,
+      onPickImages,
+      onRemoveComposerImage,
+      onSubmitPrompt,
+      onAbort,
+      onRemovePendingMessage,
+      onReorderPending,
+      onRunBuiltinSlashCommand,
+      onSelectModel,
+      onSelectThinkingLevel,
+      requestPathCompletions,
+      requestFileCompletions,
+    },
+    ref
+  ) {
+    const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
+    const [draftText, setDraftText] = React.useState(composerText)
+    const [draftSkill, setDraftSkill] = React.useState(composerSkill)
+    const [selection, setSelection] = React.useState({
+      start: composerText.length,
+      end: composerText.length,
+    })
+    const draftSyncTimeoutRef = React.useRef<number | null>(null)
+    const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
+    const [thinkingPickerOpen, setThinkingPickerOpen] = React.useState(false)
+    const [modelQuery, setModelQuery] = React.useState("")
+    const [completionState, setCompletionState] = React.useState<CompletionState | null>(null)
+    const completionRequestIdRef = React.useRef(0)
+    const [slashSelectionIndex, setSlashSelectionIndex] = React.useState(0)
 
-  React.useImperativeHandle(
-    ref,
-    () => ({
-      focusPrompt: (options) => {
-        promptRef.current?.focus(options)
+    const syncDraftToParent = React.useCallback(
+      (text: string, skillName?: string) => {
+        onComposerTextChange(serializeComposerDraft({ text, skillName }))
       },
-      openModelPicker: () => {
-        setThinkingPickerOpen(false)
-        setModelPickerOpen(true)
-      },
-      openThinkingPicker: () => {
-        setModelPickerOpen(false)
-        setThinkingPickerOpen(true)
-      },
-    }),
-    []
-  )
+      [onComposerTextChange]
+    )
 
-  const syncSelection = React.useCallback(() => {
+    const scheduleDraftSync = React.useCallback(
+      (text: string, skillName?: string) => {
+        if (draftSyncTimeoutRef.current != null) {
+          window.clearTimeout(draftSyncTimeoutRef.current)
+        }
+
+        draftSyncTimeoutRef.current = window.setTimeout(() => {
+          draftSyncTimeoutRef.current = null
+          syncDraftToParent(text, skillName)
+        }, 120)
+      },
+      [syncDraftToParent]
+    )
+
+    const applyDraft = React.useCallback(
+      (
+        text: string,
+        skillName?: string,
+        options?: {
+          immediate?: boolean
+        }
+      ) => {
+        setDraftText(text)
+        setDraftSkill(skillName)
+
+        if (options?.immediate) {
+          if (draftSyncTimeoutRef.current != null) {
+            window.clearTimeout(draftSyncTimeoutRef.current)
+            draftSyncTimeoutRef.current = null
+          }
+          syncDraftToParent(text, skillName)
+          return
+        }
+
+        scheduleDraftSync(text, skillName)
+      },
+      [scheduleDraftSync, syncDraftToParent]
+    )
+
+    React.useEffect(() => {
+      setDraftText(composerText)
+      setDraftSkill(composerSkill)
+      setSelection({ start: composerText.length, end: composerText.length })
+      setCompletionState(null)
+      setSlashSelectionIndex(0)
+    }, [composerSkill, composerText])
+
+    React.useEffect(() => {
+      return () => {
+        if (draftSyncTimeoutRef.current != null) {
+          window.clearTimeout(draftSyncTimeoutRef.current)
+        }
+      }
+    }, [])
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        focusPrompt: (options) => {
+          promptRef.current?.focus(options)
+        },
+        openModelPicker: () => {
+          setThinkingPickerOpen(false)
+          setModelPickerOpen(true)
+        },
+        openThinkingPicker: () => {
+          setModelPickerOpen(false)
+          setThinkingPickerOpen(true)
+        },
+      }),
+      []
+    )
+
+    const syncSelection = React.useCallback(() => {
     const textarea = promptRef.current
     if (!textarea) return
     setSelection({
@@ -244,9 +307,9 @@ export const ComposerPanel = React.forwardRef<
   }, [])
 
   const slashMenuState = React.useMemo(() => {
-    if (composerSkill) return null
+    if (draftSkill) return null
 
-    const parsed = parseSlashCommandInput(composerText)
+    const parsed = parseSlashCommandInput(draftText)
     if (!parsed || parsed.hasArguments) return null
 
     const commands = matchingSlashCommands(slashCommands, parsed.name)
@@ -256,7 +319,7 @@ export const ComposerPanel = React.forwardRef<
       ...parsed,
       commands,
     }
-  }, [composerSkill, composerText, slashCommands])
+  }, [draftSkill, draftText, slashCommands])
 
   React.useEffect(() => {
     setSlashSelectionIndex((current) => {
@@ -268,17 +331,17 @@ export const ComposerPanel = React.forwardRef<
   const completionQuery = React.useMemo(() => {
     return (
       getFileReferenceCompletionQuery({
-        value: composerText,
+        value: draftText,
         selectionStart: selection.start,
         selectionEnd: selection.end,
       }) ??
       getPathCompletionQuery({
-        value: composerText,
+        value: draftText,
         selectionStart: selection.start,
         selectionEnd: selection.end,
       })
     )
-  }, [composerText, selection.end, selection.start])
+  }, [draftText, selection.end, selection.start])
 
   React.useEffect(() => {
     if (!completionQuery) {
@@ -383,7 +446,7 @@ export const ComposerPanel = React.forwardRef<
   }, [filteredModels])
 
   const hasSubmittableContent =
-    composerText.trim().length > 0 || composerImages.length > 0
+    draftText.trim().length > 0 || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
 
   const setCaret = React.useCallback((start: number, end = start) => {
@@ -397,13 +460,14 @@ export const ComposerPanel = React.forwardRef<
   const applyCompletion = React.useCallback(
     (item: CompletionItem, query = visibleCompletion?.query) => {
       if (!query) return false
-      const next = applyCompletionItem({ value: composerText, query, item })
-      onComposerTextChange(next.value)
+      const next = applyCompletionItem({ value: draftText, query, item })
+      const parsed = parseComposerSkillMessage(next.value)
+      applyDraft(parsed.matched ? parsed.text : next.value, parsed.matched ? parsed.skillName : undefined)
       setCompletionState(null)
       setCaret(next.selectionStart, next.selectionEnd)
       return true
     },
-    [composerText, onComposerTextChange, setCaret, visibleCompletion?.query]
+    [applyDraft, draftText, setCaret, visibleCompletion?.query]
   )
 
   const applySlashSuggestion = React.useCallback(
@@ -411,15 +475,14 @@ export const ComposerPanel = React.forwardRef<
       if (!command) return false
 
       if (command.kind === "skill") {
-        onSetComposerSkill(command.skillName)
-        onComposerTextChange("")
+        applyDraft("", command.skillName, { immediate: true })
         requestAnimationFrame(() => promptRef.current?.focus())
         return true
       }
 
-      const leadingWhitespace = composerText.match(/^\s*/)?.[0] || ""
+      const leadingWhitespace = draftText.match(/^\s*/)?.[0] || ""
       const nextValue = `${leadingWhitespace}/${command.name} `
-      onComposerTextChange(nextValue)
+      applyDraft(nextValue)
       requestAnimationFrame(() => {
         promptRef.current?.focus()
         const nextCaret = nextValue.length
@@ -428,12 +491,12 @@ export const ComposerPanel = React.forwardRef<
       })
       return true
     },
-    [composerText, onComposerTextChange, onSetComposerSkill]
+    [applyDraft, draftText]
   )
 
   const runPrimaryComposerAction = React.useCallback(
     (streamingBehavior?: StreamingBehavior) => {
-      const exact = exactSlashCommand(composerText, slashCommands)
+      const exact = exactSlashCommand(draftText, slashCommands)
       if (exact) {
         if (exact.command.kind === "builtin") {
           onRunBuiltinSlashCommand(exact.command.name, exact.args)
@@ -441,8 +504,7 @@ export const ComposerPanel = React.forwardRef<
         }
 
         if (!exact.args) {
-          onSetComposerSkill(exact.command.skillName)
-          onComposerTextChange("")
+          applyDraft("", exact.command.skillName, { immediate: true })
           return
         }
       }
@@ -452,22 +514,23 @@ export const ComposerPanel = React.forwardRef<
           onRunBuiltinSlashCommand(selectedSlashCommand.name, "")
           return
         }
-        onSetComposerSkill(selectedSlashCommand.skillName)
-        onComposerTextChange("")
+        applyDraft("", selectedSlashCommand.skillName, { immediate: true })
         return
       }
 
+      syncDraftToParent(draftText, draftSkill)
       onSubmitPrompt(streamingBehavior)
     },
     [
-      composerText,
-      onComposerTextChange,
+      applyDraft,
+      draftSkill,
+      draftText,
       onRunBuiltinSlashCommand,
-      onSetComposerSkill,
       onSubmitPrompt,
       selectedSlashCommand,
       slashCommands,
       slashMenuState,
+      syncDraftToParent,
     ]
   )
 
@@ -478,13 +541,17 @@ export const ComposerPanel = React.forwardRef<
 
   const handleTextChange = React.useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      onComposerTextChange(event.target.value)
+      const parsed = parseComposerSkillMessage(event.target.value)
+      applyDraft(
+        parsed.matched ? parsed.text : event.target.value,
+        parsed.matched ? parsed.skillName : undefined
+      )
       setSelection({
         start: event.target.selectionStart,
         end: event.target.selectionEnd,
       })
     },
-    [onComposerTextChange]
+    [applyDraft]
   )
 
   const handleKeyDown = React.useCallback(
@@ -493,8 +560,8 @@ export const ComposerPanel = React.forwardRef<
       const cmdSendShortcut =
         event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
 
-      if (event.key === "Backspace" && !composerText && composerSkill) {
-        onSetComposerSkill(undefined)
+      if (event.key === "Backspace" && !draftText && draftSkill) {
+        applyDraft("", undefined, { immediate: true })
         return
       }
 
@@ -594,21 +661,21 @@ export const ComposerPanel = React.forwardRef<
         event.key === "ArrowUp" &&
         !visibleCompletion &&
         !slashMenuState &&
-        !composerText &&
-        composerSkill &&
+        !draftText &&
+        draftSkill &&
         selectionIsAtStart(promptRef.current)
       ) {
-        onSetComposerSkill(undefined)
+        applyDraft("", undefined, { immediate: true })
       }
     },
     [
       acceptFollowUps,
       applyCompletion,
+      applyDraft,
       applySlashSuggestion,
-      composerSkill,
-      composerText,
       dismissMenus,
-      onSetComposerSkill,
+      draftSkill,
+      draftText,
       runPrimaryComposerAction,
       selectedCompletionItem,
       selectedSlashCommand,
@@ -789,17 +856,17 @@ export const ComposerPanel = React.forwardRef<
                 ) : null}
 
                 <div className="flex min-w-0 flex-wrap items-start gap-2">
-                  {composerSkill ? (
+                  {draftSkill ? (
                     <span className="inline-flex h-6 max-w-full items-center gap-0 overflow-hidden rounded-full bg-primary/10 pl-2 pr-0.5 text-sm font-medium text-primary">
                       <span className="truncate">
-                        Skill: {formatComposerSkillName(composerSkill)}
+                        Skill: {formatComposerSkillName(draftSkill)}
                       </span>
                       <Button
                         size="icon-xs"
                         variant="ghost"
                         className="ml-1 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-                        aria-label={`Remove skill ${formatComposerSkillName(composerSkill)}`}
-                        onClick={() => onSetComposerSkill(undefined)}
+                        aria-label={`Remove skill ${formatComposerSkillName(draftSkill)}`}
+                        onClick={() => applyDraft(draftText, undefined, { immediate: true })}
                       >
                         <XIcon className="size-3.5" />
                       </Button>
@@ -808,7 +875,7 @@ export const ComposerPanel = React.forwardRef<
 
                   <Textarea
                     ref={promptRef}
-                    value={composerText}
+                    value={draftText}
                     onChange={handleTextChange}
                     onClick={syncSelection}
                     onKeyUp={syncSelection}
@@ -817,8 +884,8 @@ export const ComposerPanel = React.forwardRef<
                     placeholder={
                       acceptFollowUps
                         ? "Write a steer or follow-up message…"
-                        : composerSkill
-                          ? `Ask with ${formatComposerSkillName(composerSkill)}…`
+                        : draftSkill
+                          ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                           : "Ask Pi anything…"
                     }
                     className="min-h-[22px] flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
@@ -1014,4 +1081,4 @@ export const ComposerPanel = React.forwardRef<
         />
     </div>
   )
-})
+}))
