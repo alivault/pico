@@ -22,7 +22,6 @@ When auditing parity, compare against these old `pi-web` modules first:
 - [x] `tsgo_diagnostics` is clean
 - [x] `pnpm build` passes
 - [x] Lint passes for touched parity files
-- [ ] `pnpm test` exits cleanly without the existing Vite/Vitest shutdown warning
 - [ ] End-to-end manual parity pass in zellij session `pi` on port `3142`
 
 ### What is already working in the new TanStack app
@@ -171,7 +170,6 @@ Reference: `static/app.js`, `static/dialogs.js`, `static/composer.js`
   - [ ] local dev / build commands
   - [ ] parity status
   - [ ] known gaps
-- [ ] Document or fix the existing Vitest shutdown warning
 - [ ] Cut commits in clean milestones once each remaining parity slice lands
 
 ## Suggested implementation order
