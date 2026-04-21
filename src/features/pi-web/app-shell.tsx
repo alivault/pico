@@ -62,7 +62,6 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import {
   SidebarInset,
@@ -173,7 +172,10 @@ function hasSelectedText(target: EventTarget | null) {
 
 function findMessageViewport(root: HTMLElement | null) {
   if (!root) return null
-  return root.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]')
+  return (
+    root.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]') ||
+    (root instanceof HTMLDivElement ? root : null)
+  )
 }
 
 function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
@@ -3344,8 +3346,11 @@ export function PiWebAppShell({
               value="session"
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div ref={messagesScrollAreaRef} className="relative min-h-0 flex-1 px-6">
-                    <ScrollArea className="h-full">
+              <div className="relative min-h-0 flex-1">
+                <div
+                  ref={messagesScrollAreaRef}
+                  className="h-full overflow-auto px-6"
+                >
                       {isSessionViewLoading ? (
                         <div className="flex min-h-full items-center justify-center py-10">
                           <div className="flex flex-col items-center gap-3 border bg-card/70 px-6 py-8 text-sm text-muted-foreground">
@@ -3434,33 +3439,40 @@ export function PiWebAppShell({
                           )}
                         </Empty>
                       )}
-                    </ScrollArea>
+                </div>
 
                     {!isSessionViewLoading &&
-                    !sessionState.draft &&
-                    sessionState.items.length > 0 &&
-                    !isMessagesNearBottom ? (
-                      <Button
-                        size="icon-lg"
-                        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)] md:bottom-[18px]"
-                        title="Jump to latest message"
-                        aria-label="Jump to latest message"
-                        onClick={scrollConversationToBottom}
-                      >
-                        <ArrowDownIcon className="size-4" />
-                      </Button>
-                    ) : null}
+                    ((!sessionState.draft &&
+                      sessionState.items.length > 0 &&
+                      !isMessagesNearBottom) ||
+                      hasPreviousMessageJumpTarget) ? (
+                      <div className="absolute right-4 bottom-4 z-10 flex items-center gap-4 md:right-[18px] md:bottom-[18px]">
+                        {!sessionState.draft &&
+                        sessionState.items.length > 0 &&
+                        !isMessagesNearBottom ? (
+                          <Button
+                            size="icon-lg"
+                            className="rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                            title="Jump to latest message"
+                            aria-label="Jump to latest message"
+                            onClick={scrollConversationToBottom}
+                          >
+                            <ArrowDownIcon className="size-4" />
+                          </Button>
+                        ) : null}
 
-                    {!isSessionViewLoading && hasPreviousMessageJumpTarget ? (
-                      <Button
-                        size="icon-lg"
-                        className="absolute right-4 bottom-4 z-10 rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)] md:right-[18px] md:bottom-[18px]"
-                        title="Jump to previous message"
-                        aria-label="Jump to previous message"
-                        onClick={jumpToPreviousMessage}
-                      >
-                        <ArrowUpToLineIcon className="size-4" />
-                      </Button>
+                        {hasPreviousMessageJumpTarget ? (
+                          <Button
+                            size="icon-lg"
+                            className="rounded-full border-0 text-primary-foreground shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                            title="Jump to previous message"
+                            aria-label="Jump to previous message"
+                            onClick={jumpToPreviousMessage}
+                          >
+                            <ArrowUpToLineIcon className="size-4" />
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
 
