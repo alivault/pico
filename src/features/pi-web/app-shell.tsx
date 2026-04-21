@@ -5,8 +5,6 @@ import {
   EllipsisIcon,
   PlusIcon,
   SparklesIcon,
-  SplitIcon,
-  WaypointsIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { toast } from "sonner"
@@ -3212,15 +3210,6 @@ export function PiWebAppShell({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={runCompact}>
-                <SparklesIcon /> Compact
-              </Button>
-              <Button size="sm" variant="outline" onClick={openTreeDialog}>
-                <WaypointsIcon /> Tree
-              </Button>
-              <Button size="sm" variant="outline" onClick={openForkDialog}>
-                <SplitIcon /> Fork
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -3275,6 +3264,17 @@ export function PiWebAppShell({
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
                   ) : null}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={runCompact}>
+                    <span>Compact session</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openTreeDialog}>
+                    <span>Tree</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openForkDialog}>
+                    <span>Fork</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
                       void toggleHideThinking()
