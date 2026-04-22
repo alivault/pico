@@ -117,6 +117,7 @@ import {
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
+  CENTER_MESSAGES_STORAGE_KEY,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
@@ -136,6 +137,7 @@ import {
   readStoredCollapsedDirectories,
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
+  readStoredCenterMessages,
   readStoredPromptDraft,
   readStoredRecentDirectories,
   readStoredSessionDoneDesktopNotificationsEnabled,
@@ -503,6 +505,7 @@ export function PiWebAppShell({
     Array<PromptImage>
   >([])
   const [hideToolBlocks, setHideToolBlocks] = React.useState(false)
+  const [centerMessages, setCenterMessages] = React.useState(false)
   const [awaitingFirstTurn, setAwaitingFirstTurn] = React.useState(false)
   const [runningSlashCommand, setRunningSlashCommand] = React.useState<
     string | null
@@ -772,6 +775,7 @@ export function PiWebAppShell({
       readStoredSessionDoneDesktopNotificationsEnabled()
     )
     setHideToolBlocks(readStoredHideToolBlocks())
+    setCenterMessages(readStoredCenterMessages())
     setRecentDirectories(readStoredRecentDirectories())
     setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
@@ -2381,6 +2385,11 @@ export function PiWebAppShell({
     toast.info(hideToolBlocks ? "Tools shown" : "Tools hidden")
   }
 
+  const setMessagesCentered = (centered: boolean) => {
+    setCenterMessages(centered)
+    safeLocalStorageSetItem(CENTER_MESSAGES_STORAGE_KEY, centered ? "1" : "0")
+  }
+
   const compactMutation = useMutation({
     mutationFn: async () => {
       if (!viewerContextId) {
@@ -2947,6 +2956,10 @@ export function PiWebAppShell({
         }
       : null
   })()
+
+  const conversationMessageColumnClassName = centerMessages
+    ? "mx-auto w-full max-w-[80ch]"
+    : "w-full"
 
   const commandPaletteCommands = (() => {
     const commands: Array<AppCommand> = [
@@ -3781,7 +3794,7 @@ export function PiWebAppShell({
                                 <div
                                   key={key}
                                   data-message-anchor="true"
-                                  className="w-full"
+                                  className={conversationMessageColumnClassName}
                                 >
                                   <UserMessageCard item={item} />
                                 </div>
@@ -3802,7 +3815,7 @@ export function PiWebAppShell({
                               <div
                                 key={key}
                                 data-message-anchor="true"
-                                className="w-full"
+                                className={conversationMessageColumnClassName}
                               >
                                 <AssistantMessageCard
                                   item={item}
@@ -3815,7 +3828,7 @@ export function PiWebAppShell({
                         )
                       })()}
                       {workingState ? (
-                        <div className="w-full">
+                        <div className={conversationMessageColumnClassName}>
                           <MessagesWorkingIndicator state={workingState} />
                         </div>
                       ) : null}
@@ -4114,6 +4127,8 @@ export function PiWebAppShell({
         }}
         hideToolBlocks={hideToolBlocks}
         onHideToolBlocksChange={setToolBlocksHidden}
+        centerMessages={centerMessages}
+        onCenterMessagesChange={setMessagesCentered}
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
         onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
         sessionDoneDesktopNotificationsEnabled={

@@ -508,6 +508,8 @@ type AppShellDialogsProps = {
   onHideThinkingBlocksChange: (hidden: boolean) => void
   hideToolBlocks: boolean
   onHideToolBlocksChange: (hidden: boolean) => void
+  centerMessages: boolean
+  onCenterMessagesChange: (centered: boolean) => void
   sessionDoneSoundEnabled: boolean
   onSessionDoneSoundEnabledChange: (enabled: boolean) => void
   sessionDoneDesktopNotificationsEnabled: boolean
@@ -606,6 +608,8 @@ export function AppShellDialogs({
   onHideThinkingBlocksChange,
   hideToolBlocks,
   onHideToolBlocksChange,
+  centerMessages,
+  onCenterMessagesChange,
   sessionDoneSoundEnabled,
   onSessionDoneSoundEnabledChange,
   sessionDoneDesktopNotificationsEnabled,
@@ -1713,6 +1717,27 @@ export function AppShellDialogs({
                   checked={hideToolBlocks}
                   onChange={(event) =>
                     onHideToolBlocksChange(event.target.checked)
+                  }
+                />
+              </label>
+
+              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">
+                    Center messages at 80ch
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Keep message text left-aligned, but constrain each message
+                    to a centered 80 character column.
+                  </div>
+                </div>
+                <input
+                  name="center-messages"
+                  type="checkbox"
+                  className="mt-1 size-4"
+                  checked={centerMessages}
+                  onChange={(event) =>
+                    onCenterMessagesChange(event.target.checked)
                   }
                 />
               </label>

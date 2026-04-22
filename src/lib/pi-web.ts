@@ -11,6 +11,7 @@ export const SESSION_DONE_SOUND_ENABLED_STORAGE_KEY =
 export const SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
   "pi-web-session-done-desktop-notifications"
 export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pi-web-hide-tools"
+export const CENTER_MESSAGES_STORAGE_KEY = "pi-web-center-messages"
 export const PROMPT_DRAFTS_STORAGE_KEY = "pi-web-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pi-web-context-id"
 export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
@@ -501,6 +502,10 @@ export function readStoredTheme() {
 
 export function readStoredHideToolBlocks() {
   return safeLocalStorageGetItem(HIDE_TOOL_BLOCKS_STORAGE_KEY) === "1"
+}
+
+export function readStoredCenterMessages() {
+  return safeLocalStorageGetItem(CENTER_MESSAGES_STORAGE_KEY) === "1"
 }
 
 export function readStoredSessionDoneSoundEnabled() {
