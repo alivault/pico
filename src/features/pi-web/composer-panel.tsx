@@ -2,7 +2,6 @@ import * as React from "react"
 import {
   ArrowUpIcon,
   CheckIcon,
-  ChevronDownIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
   XIcon,
@@ -22,23 +21,10 @@ import type {
 } from "@/features/pi-web/composer-utils"
 
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { ComposerContextUsageIndicator } from "@/features/pi-web/composer-context-usage-indicator"
 import { ComposerPendingMessages } from "@/features/pi-web/composer-pending-messages"
+import { ComposerPickers } from "@/features/pi-web/composer-pickers"
 import {
   applyCompletionItem,
   formatComposerSkillName,
@@ -109,29 +95,6 @@ type CompletionState = {
   query: ComposerCompletionQuery
   items: Array<CompletionItem>
   selectedIndex: number
-}
-
-function thinkingLabel(level: string) {
-  switch (level) {
-    case "off":
-      return "Off"
-    case "minimal":
-      return "Minimal"
-    case "low":
-      return "Low"
-    case "medium":
-      return "Medium"
-    case "high":
-      return "High"
-    case "xhigh":
-      return "Extra High"
-    default:
-      return level
-  }
-}
-
-function currentModelValue(model?: ModelOption) {
-  return model ? `${model.provider}/${model.id}` : ""
 }
 
 function exactSlashCommand(
@@ -407,34 +370,6 @@ export const ComposerPanel = React.forwardRef<
   const selectedSlashCommand = slashMenuState
     ? slashMenuState.commands[slashSelectionIndex] || slashMenuState.commands[0]
     : null
-
-  const filteredModels = (() => {
-    const normalizedQuery = modelQuery.trim().toLowerCase()
-    const nextModels = [...availableModels].sort(
-      (left, right) =>
-        (left.provider || "").localeCompare(right.provider || "") ||
-        (left.name || left.id).localeCompare(right.name || right.id)
-    )
-
-    if (!normalizedQuery) return nextModels
-
-    return nextModels.filter((entry) => {
-      const haystack =
-        `${entry.provider || ""} ${entry.name || ""} ${entry.id}`.toLowerCase()
-      return haystack.includes(normalizedQuery)
-    })
-  })()
-
-  const groupedModels = (() => {
-    const groups = new Map<string, Array<ModelOption>>()
-    for (const entry of filteredModels) {
-      const provider = entry.provider || "Models"
-      const current = groups.get(provider) ?? []
-      current.push(entry)
-      groups.set(provider, current)
-    }
-    return [...groups.entries()]
-  })()
 
   const hasSubmittableContent =
     draftText.trim().length > 0 || composerImages.length > 0
@@ -877,99 +812,21 @@ export const ComposerPanel = React.forwardRef<
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-              <PopoverTrigger
-                render={
-                  <Button variant="ghost" size="sm" className="max-w-full" />
-                }
-              >
-                <span className="truncate">
-                  {model?.name || "Select model"}
-                </span>
-                <ChevronDownIcon data-icon="inline-end" />
-              </PopoverTrigger>
-              <PopoverContent className="w-88 p-0" side="top" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    value={modelQuery}
-                    onValueChange={setModelQuery}
-                    placeholder="Search models"
-                  />
-                  <CommandList>
-                    <CommandEmpty>No models match your search.</CommandEmpty>
-                    {groupedModels.map(([provider, items]) => (
-                      <CommandGroup key={provider} heading={provider}>
-                        {items.map((entry) => {
-                          const value = `${entry.provider}/${entry.id}`
-                          const active = value === currentModelValue(model)
-                          return (
-                            <CommandItem
-                              key={value}
-                              value={`${entry.provider || ""} ${entry.name || entry.id} ${entry.id}`}
-                              onSelect={() => {
-                                onSelectModel(value)
-                                setModelPickerOpen(false)
-                              }}
-                            >
-                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                <span className="truncate font-medium">
-                                  {entry.name || entry.id}
-                                </span>
-                                <span className="truncate text-xs text-muted-foreground">
-                                  {entry.provider}/{entry.id}
-                                </span>
-                              </div>
-                              {active ? <CheckIcon /> : null}
-                            </CommandItem>
-                          )
-                        })}
-                      </CommandGroup>
-                    ))}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-
-            <Popover
-              open={thinkingPickerOpen}
-              onOpenChange={setThinkingPickerOpen}
-            >
-              <PopoverTrigger
-                render={
-                  <Button variant="ghost" size="sm" className="max-w-full" />
-                }
-              >
-                <span className="truncate">{thinkingLabel(thinkingLevel)}</span>
-                <ChevronDownIcon data-icon="inline-end" />
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" side="top" align="start">
-                <Command>
-                  <CommandList>
-                    <CommandGroup heading="Reasoning">
-                      {availableThinkingLevels.map((level) => (
-                        <CommandItem
-                          key={level}
-                          value={level}
-                          onSelect={() => {
-                            onSelectThinkingLevel(level)
-                            setThinkingPickerOpen(false)
-                          }}
-                        >
-                          <span className="flex-1">{thinkingLabel(level)}</span>
-                          {thinkingLevel === level ? <CheckIcon /> : null}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <ComposerContextUsageIndicator contextUsage={contextUsage} />
-        </div>
+        <ComposerPickers
+          modelPickerOpen={modelPickerOpen}
+          onModelPickerOpenChange={setModelPickerOpen}
+          thinkingPickerOpen={thinkingPickerOpen}
+          onThinkingPickerOpenChange={setThinkingPickerOpen}
+          modelQuery={modelQuery}
+          onModelQueryChange={setModelQuery}
+          availableModels={availableModels}
+          model={model}
+          thinkingLevel={thinkingLevel}
+          availableThinkingLevels={availableThinkingLevels}
+          contextUsage={contextUsage}
+          onSelectModel={onSelectModel}
+          onSelectThinkingLevel={onSelectThinkingLevel}
+        />
       </div>
 
       <input

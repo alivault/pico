@@ -28,7 +28,7 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
 - [ ] Break up `src/features/pi-web/composer-panel.tsx`.
   - [x] Extract context usage indicator.
   - [x] Extract pending queue UI.
-  - [ ] Extract picker UI for model/thinking.
+  - [x] Extract picker UI for model/thinking.
   - [ ] Extract completion/slash-command state into hooks/helpers.
 - [ ] Break up `src/lib/pi-web.ts`.
   - [ ] Move storage keys and storage helpers into a storage-focused module.
