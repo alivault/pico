@@ -43,6 +43,7 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   server: {
+    port: 3141,
     fs: {
       allow: fsAllow,
     },

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev --port 3000",
+    "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
     "lint": "vp lint",
