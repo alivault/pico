@@ -1647,8 +1647,7 @@ export function AppShellDialogs({
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
             <DialogDescription>
-              Theme, notifications, and session completion behavior for Pi to
-              Go.
+              Theme, notifications, and session completion behavior for Pi.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
