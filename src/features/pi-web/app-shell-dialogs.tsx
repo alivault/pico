@@ -7,23 +7,18 @@ import {
 } from "lucide-react"
 
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
+import type {
+  ForkMessage,
+  TreeNavigateOptions,
+} from "@/features/pi-web/app-shell-dialog-types"
 import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
 import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -31,12 +26,15 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { AppShellAddDirectoryDialog } from "@/features/pi-web/app-shell-add-directory-dialog"
+import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dialog"
+import {
+  DeleteSessionsDialog,
+  ForkSessionDialog,
+  RenameSessionDialog,
+} from "@/features/pi-web/app-shell-session-dialogs"
+import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 import { cn } from "@/lib/utils"
-
-type ForkMessage = {
-  entryId: string
-  text: string
-}
 
 type TreeFilterMode =
   | "default"
@@ -44,11 +42,6 @@ type TreeFilterMode =
   | "user-only"
   | "labeled-only"
   | "all"
-
-type TreeNavigateOptions = {
-  summarize?: boolean
-  customInstructions?: string
-}
 
 type TreeVisibleNode = FlatTreeNode & {
   parentVisibleId: string | null
@@ -520,43 +513,6 @@ type AppShellDialogsProps = {
   onResolveUiRequest: (body: Record<string, unknown>) => void
 }
 
-const THEME_OPTIONS: Array<ThemeMode> = ["system", "light", "dark"]
-
-function desktopNotificationPermissionLabel(
-  permission: DesktopNotificationPermission
-) {
-  if (permission === "unsupported") {
-    return "Desktop notifications are unavailable in this browser."
-  }
-
-  if (permission === "granted") {
-    return "Desktop notifications are enabled for this origin."
-  }
-
-  if (permission === "denied") {
-    return "Desktop notifications are blocked in this browser."
-  }
-
-  return "Desktop notifications will ask for browser permission when enabled."
-}
-
-function directoryMatchesQuery(directoryPath: string, query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
-  if (!normalizedQuery) return true
-
-  return directoryPath.toLowerCase().includes(normalizedQuery)
-}
-
-function directoryDialogHasExactMatch(
-  directoryPaths: Array<string>,
-  normalizedQuery: string
-) {
-  if (!normalizedQuery) return false
-  return directoryPaths.some(
-    (directoryPath) => directoryPath.trim().toLowerCase() === normalizedQuery
-  )
-}
-
 export function AppShellDialogs({
   addDirectoryOpen,
   onAddDirectoryOpenChange,
@@ -618,58 +574,6 @@ export function AppShellDialogs({
   onPendingUiValueChange,
   onResolveUiRequest,
 }: AppShellDialogsProps) {
-  const [forkQuery, setForkQuery] = React.useState("")
-
-  React.useEffect(() => {
-    if (!forkOpen && forkQuery) {
-      setForkQuery("")
-    }
-  }, [forkOpen, forkQuery])
-
-  const directoryQuery = directoryInput.trim()
-  const normalizedDirectoryQuery = directoryQuery.toLowerCase()
-  const openedSet = new Set(openedDirectories)
-  const recentSet = new Set(recentDirectories)
-  const openedMatching = directoryQuery
-    ? openedDirectories.filter((directoryPath) =>
-        directoryMatchesQuery(directoryPath, directoryQuery)
-      )
-    : []
-  const currentMatching =
-    currentDirectory &&
-    !openedSet.has(currentDirectory) &&
-    directoryMatchesQuery(currentDirectory, directoryQuery)
-      ? [currentDirectory]
-      : []
-  const recentMatching = recentDirectories
-    .filter((directoryPath) => !openedSet.has(directoryPath))
-    .filter((directoryPath) =>
-      directoryMatchesQuery(directoryPath, directoryQuery)
-    )
-  const knownMatching = knownDirectories
-    .filter((directoryPath) => !openedSet.has(directoryPath))
-    .filter((directoryPath) => directoryPath !== currentDirectory)
-    .filter((directoryPath) => !recentSet.has(directoryPath))
-    .filter((directoryPath) =>
-      directoryMatchesQuery(directoryPath, directoryQuery)
-    )
-  const manualPath =
-    directoryQuery &&
-    !directoryDialogHasExactMatch(
-      [...openedDirectories, ...recentDirectories, ...knownDirectories],
-      normalizedDirectoryQuery
-    )
-      ? directoryQuery
-      : ""
-  const hasDirectoryResults =
-    Boolean(manualPath) ||
-    openedMatching.length > 0 ||
-    currentMatching.length > 0 ||
-    recentMatching.length > 0 ||
-    knownMatching.length > 0
-  const filteredForkMessages = (forkMessages ?? []).filter((message) =>
-    message.text.toLowerCase().includes(forkQuery.trim().toLowerCase())
-  )
   const [treeFilterMode, setTreeFilterMode] =
     React.useState<TreeFilterMode>("no-tools")
   const [showTreeLabelTimestamps, setShowTreeLabelTimestamps] =
@@ -1029,222 +933,42 @@ export function AppShellDialogs({
 
   return (
     <>
-      <Dialog open={addDirectoryOpen} onOpenChange={onAddDirectoryOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add directory</DialogTitle>
-            <DialogDescription>
-              Search recent and known directories or add a new path to the
-              sidebar.
-            </DialogDescription>
-          </DialogHeader>
-          <Command shouldFilter={false} className="rounded-lg border">
-            <CommandInput
-              autoFocus
-              value={directoryInput}
-              onValueChange={onDirectoryInputChange}
-              placeholder="Search or paste a path"
-            />
-            <CommandList className="max-h-[50vh]">
-              {!hasDirectoryResults ? (
-                <CommandEmpty>
-                  {directoryQuery
-                    ? "No directories found. Press Add to use the typed path."
-                    : "No recent or discovered directories yet."}
-                </CommandEmpty>
-              ) : null}
-              {manualPath ? (
-                <CommandGroup heading="Add path">
-                  <CommandItem
-                    value={`add ${manualPath}`}
-                    onSelect={() => onAddDirectoryPath(manualPath)}
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate font-medium">
-                        Add {manualPath}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        Resolve and add this path to the sidebar.
-                      </span>
-                    </div>
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
-              {openedMatching.length > 0 ? (
-                <CommandGroup heading="Already added">
-                  {openedMatching.map((directoryPath) => (
-                    <CommandItem
-                      key={`opened:${directoryPath}`}
-                      value={`opened ${directoryPath}`}
-                      onSelect={() => onAddDirectoryPath(directoryPath)}
-                    >
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate font-medium">
-                          {directoryPath}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          Expand and show it in the sidebar.
-                        </span>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {currentMatching.length > 0 ? (
-                <CommandGroup heading="Current directory">
-                  {currentMatching.map((directoryPath) => (
-                    <CommandItem
-                      key={`current:${directoryPath}`}
-                      value={`current ${directoryPath}`}
-                      onSelect={() => onAddDirectoryPath(directoryPath)}
-                    >
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate font-medium">
-                          {directoryPath}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          Use the current Pi working directory.
-                        </span>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {recentMatching.length > 0 ? (
-                <CommandGroup heading="Recent directories">
-                  {recentMatching.map((directoryPath) => (
-                    <CommandItem
-                      key={`recent:${directoryPath}`}
-                      value={`recent ${directoryPath}`}
-                      onSelect={() => onAddDirectoryPath(directoryPath)}
-                    >
-                      <span className="truncate">{directoryPath}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {knownMatching.length > 0 ? (
-                <CommandGroup
-                  heading={
-                    directoryQuery
-                      ? "Matching directories"
-                      : "Known directories"
-                  }
-                >
-                  {knownMatching.map((directoryPath) => (
-                    <CommandItem
-                      key={`known:${directoryPath}`}
-                      value={`known ${directoryPath}`}
-                      onSelect={() => onAddDirectoryPath(directoryPath)}
-                    >
-                      <span className="truncate">{directoryPath}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-            </CommandList>
-          </Command>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => onAddDirectoryOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={onAddDirectory} disabled={!directoryQuery}>
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AppShellAddDirectoryDialog
+        open={addDirectoryOpen}
+        onOpenChange={onAddDirectoryOpenChange}
+        directoryInput={directoryInput}
+        onDirectoryInputChange={onDirectoryInputChange}
+        openedDirectories={openedDirectories}
+        currentDirectory={currentDirectory}
+        recentDirectories={recentDirectories}
+        knownDirectories={knownDirectories}
+        onAddDirectory={onAddDirectory}
+        onAddDirectoryPath={onAddDirectoryPath}
+      />
 
-      <Dialog open={renameOpen} onOpenChange={onRenameOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename session</DialogTitle>
-            <DialogDescription>
-              Update the display name shown in the sidebar.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(event) => onRenameValueChange(event.target.value)}
-            placeholder="Session name"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onRenameOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={onRenameSession}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RenameSessionDialog
+        open={renameOpen}
+        onOpenChange={onRenameOpenChange}
+        renameValue={renameValue}
+        onRenameValueChange={onRenameValueChange}
+        onRenameSession={onRenameSession}
+      />
 
-      <Dialog open={deleteOpen} onOpenChange={onDeleteOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{deleteTitle}</DialogTitle>
-            <DialogDescription>{deleteDescription}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onDeleteOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={onDeleteSession}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSessionsDialog
+        open={deleteOpen}
+        onOpenChange={onDeleteOpenChange}
+        title={deleteTitle}
+        description={deleteDescription}
+        onDeleteSession={onDeleteSession}
+      />
 
-      <Dialog open={forkOpen} onOpenChange={onForkOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Fork session</DialogTitle>
-            <DialogDescription>
-              Search earlier user prompts and branch from a specific point.
-            </DialogDescription>
-          </DialogHeader>
-          {forkLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Spinner /> Loading fork points…
-            </div>
-          ) : (
-            <Command shouldFilter={false} className="rounded-lg border">
-              <CommandInput
-                autoFocus
-                value={forkQuery}
-                onValueChange={setForkQuery}
-                placeholder="Search fork points"
-              />
-              <CommandList className="max-h-[60vh]">
-                <CommandEmpty>
-                  {forkMessages && forkMessages.length > 0
-                    ? "No fork points match your search."
-                    : "No forkable prompts found."}
-                </CommandEmpty>
-                {filteredForkMessages.length > 0 ? (
-                  <CommandGroup heading="Fork points">
-                    {filteredForkMessages.map((message) => (
-                      <CommandItem
-                        key={message.entryId}
-                        value={message.text}
-                        onSelect={() => onForkFromMessage(message.entryId)}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="line-clamp-3 text-sm whitespace-pre-wrap text-foreground">
-                            {message.text}
-                          </div>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                ) : null}
-              </CommandList>
-            </Command>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ForkSessionDialog
+        open={forkOpen}
+        onOpenChange={onForkOpenChange}
+        forkLoading={forkLoading}
+        forkMessages={forkMessages}
+        onForkFromMessage={onForkFromMessage}
+      />
 
       <Dialog open={treeOpen} onOpenChange={onTreeOpenChange}>
         <DialogContent className="max-w-5xl">
@@ -1640,221 +1364,34 @@ export function AppShellDialogs({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={settingsOpen} onOpenChange={onSettingsOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6">
-            <section className="space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">Theme</h3>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {THEME_OPTIONS.map((themeOption) => (
-                  <Button
-                    key={themeOption}
-                    variant={
-                      currentTheme === themeOption ? "default" : "outline"
-                    }
-                    onClick={() => onThemeChange(themeOption)}
-                  >
-                    {themeOption[0].toUpperCase()}
-                    {themeOption.slice(1)}
-                  </Button>
-                ))}
-              </div>
-            </section>
+      <AppShellSettingsDialog
+        open={settingsOpen}
+        onOpenChange={onSettingsOpenChange}
+        currentTheme={currentTheme}
+        onThemeChange={onThemeChange}
+        hideThinkingBlocks={hideThinkingBlocks}
+        onHideThinkingBlocksChange={onHideThinkingBlocksChange}
+        hideToolBlocks={hideToolBlocks}
+        onHideToolBlocksChange={onHideToolBlocksChange}
+        centerMessages={centerMessages}
+        onCenterMessagesChange={onCenterMessagesChange}
+        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+        onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+        sessionDoneDesktopNotificationsEnabled={
+          sessionDoneDesktopNotificationsEnabled
+        }
+        onSessionDoneDesktopNotificationsEnabledChange={
+          onSessionDoneDesktopNotificationsEnabledChange
+        }
+        desktopNotificationPermission={desktopNotificationPermission}
+      />
 
-            <section className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold">Conversation display</h3>
-              </div>
-
-              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">
-                    Hide thinking blocks
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Collapse assistant reasoning into the short hidden-thinking
-                    preview.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={hideThinkingBlocks}
-                  onChange={(event) =>
-                    onHideThinkingBlocksChange(event.target.checked)
-                  }
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">Hide tool calls</div>
-                  <div className="text-sm text-muted-foreground">
-                    Hide assistant tool execution cards in the conversation
-                    view.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={hideToolBlocks}
-                  onChange={(event) =>
-                    onHideToolBlocksChange(event.target.checked)
-                  }
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">
-                    Center messages at 80ch
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Constrain each message to a centered 80 character column.
-                  </div>
-                </div>
-                <input
-                  name="center-messages"
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={centerMessages}
-                  onChange={(event) =>
-                    onCenterMessagesChange(event.target.checked)
-                  }
-                />
-              </label>
-            </section>
-
-            <section className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold">
-                  Session completion notifications
-                </h3>
-              </div>
-
-              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">
-                    Desktop notifications
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {desktopNotificationPermissionLabel(
-                      desktopNotificationPermission
-                    )}
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={sessionDoneDesktopNotificationsEnabled}
-                  onChange={(event) =>
-                    onSessionDoneDesktopNotificationsEnabledChange(
-                      event.target.checked
-                    )
-                  }
-                />
-              </label>
-
-              <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">Completion sound</div>
-                  <div className="text-sm text-muted-foreground">
-                    Play a short confirmation sound when a session finishes.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4"
-                  checked={sessionDoneSoundEnabled}
-                  onChange={(event) =>
-                    onSessionDoneSoundEnabledChange(event.target.checked)
-                  }
-                />
-              </label>
-            </section>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(pendingUiRequest)}
-        onOpenChange={(open) => {
-          if (!open && pendingUiRequest) {
-            onResolveUiRequest({ cancelled: true })
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{pendingUiRequest?.title || "Pi request"}</DialogTitle>
-            {pendingUiRequest?.message && (
-              <DialogDescription>{pendingUiRequest.message}</DialogDescription>
-            )}
-          </DialogHeader>
-          {(pendingUiRequest?.method === "input" ||
-            pendingUiRequest?.method === "editor") &&
-            (pendingUiRequest.method === "editor" ? (
-              <Textarea
-                value={pendingUiValue}
-                onChange={(event) => onPendingUiValueChange(event.target.value)}
-                placeholder={pendingUiRequest.placeholder}
-              />
-            ) : (
-              <Input
-                value={pendingUiValue}
-                onChange={(event) => onPendingUiValueChange(event.target.value)}
-                placeholder={pendingUiRequest.placeholder}
-              />
-            ))}
-          {pendingUiRequest?.method === "select" && (
-            <div className="space-y-2">
-              {pendingUiRequest.options?.map((option) => {
-                const value = typeof option === "string" ? option : option.value
-                const label =
-                  typeof option === "string"
-                    ? option
-                    : option.label || option.value
-                return (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => onResolveUiRequest({ value })}
-                  >
-                    {label}
-                  </Button>
-                )
-              })}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => onResolveUiRequest({ cancelled: true })}
-            >
-              Cancel
-            </Button>
-            {pendingUiRequest?.method === "confirm" && (
-              <Button onClick={() => onResolveUiRequest({ confirmed: true })}>
-                Confirm
-              </Button>
-            )}
-            {(pendingUiRequest?.method === "input" ||
-              pendingUiRequest?.method === "editor") && (
-              <Button
-                onClick={() => onResolveUiRequest({ value: pendingUiValue })}
-              >
-                Submit
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AppShellUiRequestDialog
+        pendingUiRequest={pendingUiRequest}
+        pendingUiValue={pendingUiValue}
+        onPendingUiValueChange={onPendingUiValueChange}
+        onResolveUiRequest={onResolveUiRequest}
+      />
     </>
   )
 }
