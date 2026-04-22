@@ -31,7 +31,6 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { APP_SHELL_SHORTCUT_SECTIONS } from "@/features/pi-web/app-shell-shortcuts"
 import { cn } from "@/lib/utils"
 
 type ForkMessage = {
@@ -500,11 +499,6 @@ type AppShellDialogsProps = {
     options?: TreeNavigateOptions
   ) => Promise<void> | void
   onSaveTreeLabel: () => Promise<void> | void
-  statusOpen: boolean
-  onStatusOpenChange: (open: boolean) => void
-  statuses: Record<string, string>
-  shortcutsOpen: boolean
-  onShortcutsOpenChange: (open: boolean) => void
   settingsOpen: boolean
   onSettingsOpenChange: (open: boolean) => void
   currentTheme: ThemeMode
@@ -603,11 +597,6 @@ export function AppShellDialogs({
   onSelectedTreeNodeLabelChange,
   onNavigateTreeNode,
   onSaveTreeLabel,
-  statusOpen,
-  onStatusOpenChange,
-  statuses,
-  shortcutsOpen,
-  onShortcutsOpenChange,
   settingsOpen,
   onSettingsOpenChange,
   currentTheme,
@@ -635,9 +624,6 @@ export function AppShellDialogs({
     }
   }, [forkOpen, forkQuery])
 
-  const statusEntries = Object.entries(statuses).filter(
-    ([key, value]) => key.trim().length > 0 && value.trim().length > 0
-  )
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
   const openedSet = new Set(openedDirectories)
@@ -1649,84 +1635,6 @@ export function AppShellDialogs({
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={statusOpen} onOpenChange={onStatusOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Status</DialogTitle>
-            <DialogDescription>
-              Current runtime and extension status messages from the native Pi
-              to Go session.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {statusEntries.length > 0 ? (
-              statusEntries.map(([key, value]) => (
-                <div key={key} className="rounded-lg border p-3">
-                  <div className="text-sm font-medium">{key}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {value}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No active status messages.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={shortcutsOpen} onOpenChange={onShortcutsOpenChange}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Keyboard shortcuts</DialogTitle>
-            <DialogDescription>
-              Shortcut coverage is being restored feature-by-feature as the
-              native rewrite reaches parity with pi-web.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[70vh] pr-3">
-            <div className="space-y-6">
-              {APP_SHELL_SHORTCUT_SECTIONS.map((section) => (
-                <section key={section.title} className="space-y-3">
-                  <div>
-                    <h3 className="text-sm font-semibold">{section.title}</h3>
-                    {section.description ? (
-                      <p className="text-sm text-muted-foreground">
-                        {section.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="space-y-2">
-                    {section.items.map((item) => (
-                      <div
-                        key={`${section.title}:${item.label}`}
-                        className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium">
-                            {item.label}
-                          </div>
-                          {item.description ? (
-                            <div className="text-sm text-muted-foreground">
-                              {item.description}
-                            </div>
-                          ) : null}
-                        </div>
-                        <code className="rounded bg-muted px-2 py-1 text-xs font-medium">
-                          {item.keys}
-                        </code>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </ScrollArea>
         </DialogContent>
       </Dialog>
 

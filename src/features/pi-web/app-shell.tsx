@@ -536,8 +536,6 @@ export function PiWebAppShell({
     React.useState<ExtensionUiEvent | null>(null)
   const [pendingUiValue, setPendingUiValue] = React.useState("")
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
-  const [statusOpen, setStatusOpen] = React.useState(false)
-  const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [selectedSidebarSessionKeys, setSelectedSidebarSessionKeys] =
     React.useState<Array<string>>([])
@@ -692,9 +690,6 @@ export function PiWebAppShell({
   const currentPageTitle =
     sessionState.uiState.title?.trim() ||
     (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
-  const statusCount = Object.entries(sessionState.uiState.statuses).filter(
-    ([key, value]) => key.trim().length > 0 && value.trim().length > 0
-  ).length
   const deleteOpen = deleteTargets.length > 0
   const gitStatus = gitStatusQuery.data ?? null
   const gitChanges = gitChangesQuery.data ?? null
@@ -790,30 +785,12 @@ export function PiWebAppShell({
   }, [sessionDoneSoundEnabled])
 
   const openCommandPalette = () => {
-    setStatusOpen(false)
-    setShortcutsOpen(false)
     setSettingsOpen(false)
     setCommandPaletteOpen(true)
   }
 
-  const openStatusDialog = () => {
-    setCommandPaletteOpen(false)
-    setShortcutsOpen(false)
-    setSettingsOpen(false)
-    setStatusOpen(true)
-  }
-
-  const openShortcutsDialog = () => {
-    setCommandPaletteOpen(false)
-    setStatusOpen(false)
-    setSettingsOpen(false)
-    setShortcutsOpen(true)
-  }
-
   const openSettingsDialog = () => {
     setCommandPaletteOpen(false)
-    setStatusOpen(false)
-    setShortcutsOpen(false)
     setSettingsOpen(true)
   }
 
@@ -2922,6 +2899,7 @@ export function PiWebAppShell({
     const commands: Array<AppCommand> = [
       {
         id: "new-session",
+        group: "Sessions",
         title: "New session",
         description: "Create a new draft session",
         shortcut: "Ctrl+N",
@@ -2930,6 +2908,7 @@ export function PiWebAppShell({
       },
       {
         id: "search-sessions",
+        group: "Sidebar",
         title: "Search sessions",
         description: "Search and jump through sessions in the sidebar",
         shortcut: "Ctrl+S",
@@ -2938,6 +2917,7 @@ export function PiWebAppShell({
       },
       {
         id: "set-model",
+        group: "Assistant",
         title: "Set model",
         description: "Open the model picker",
         shortcut: "Ctrl+M",
@@ -2952,6 +2932,7 @@ export function PiWebAppShell({
       },
       {
         id: "add-directory",
+        group: "Sidebar",
         title: "Add Directory",
         description: "Add a directory accordion to the sidebar",
         shortcut: "Ctrl+D",
@@ -2960,13 +2941,16 @@ export function PiWebAppShell({
       },
       {
         id: "tree-session",
-        title: "Navigate tree",
+        group: "Sessions",
+        title: "Open tree",
         description: "Jump to an earlier point in the current session tree",
-        keywords: ["tree", "branch", "history"],
+        shortcut: "Ctrl+T",
+        keywords: ["tree", "branch", "history", "navigate"],
         onSelect: openTreeDialog,
       },
       {
         id: "fork-session",
+        group: "Sessions",
         title: "Fork session",
         description: "Create a new session from a previous user message",
         shortcut: "Ctrl+F",
@@ -2975,6 +2959,7 @@ export function PiWebAppShell({
       },
       {
         id: "compact-session",
+        group: "Sessions",
         title: "Compact",
         description: "Manually compact the session context",
         shortcut: "Ctrl+C",
@@ -2983,19 +2968,21 @@ export function PiWebAppShell({
       },
       {
         id: "toggle-thinking",
+        group: "Assistant",
         title: sessionState.hideThinkingBlock
           ? "Show thinking blocks"
           : "Hide thinking blocks",
         description: sessionState.hideThinkingBlock
           ? "Show assistant thinking blocks"
           : "Hide assistant thinking blocks",
-        shortcut: "Ctrl+T",
+        shortcut: "Ctrl+G",
         keywords: ["thinking", "reasoning", "visibility", "show", "hide"],
         onSelect: toggleHideThinking,
       },
       {
         id: "cycle-reasoning",
-        title: "Cycle reasoning level",
+        group: "Assistant",
+        title: "Next reasoning level",
         description: `Current level: ${sessionState.thinkingLevel}`,
         shortcut: "Ctrl+R",
         keywords: ["thinking", "reasoning", "level", "cycle", "next"],
@@ -3004,7 +2991,19 @@ export function PiWebAppShell({
         },
       },
       {
+        id: "previous-reasoning",
+        group: "Assistant",
+        title: "Previous reasoning level",
+        description: `Current level: ${sessionState.thinkingLevel}`,
+        shortcut: "Ctrl+Shift+R",
+        keywords: ["thinking", "reasoning", "level", "cycle", "previous", "back"],
+        onSelect: () => {
+          void cycleThinkingLevel(-1)
+        },
+      },
+      {
         id: "toggle-tools",
+        group: "Assistant",
         title: hideToolBlocks ? "Show tool calls" : "Hide tool calls",
         description: hideToolBlocks
           ? "Show assistant tool calls"
@@ -3015,35 +3014,19 @@ export function PiWebAppShell({
       },
       {
         id: "open-settings",
+        group: "App",
         title: "Open settings",
         description: "Open app settings",
         shortcut: "Ctrl+,",
         keywords: ["settings", "theme", "notifications", "display"],
         onSelect: openSettingsDialog,
       },
-      {
-        id: "view-shortcuts",
-        title: "View keyboard shortcuts",
-        description: "Open the keyboard shortcuts dialog",
-        shortcut: "Ctrl+/",
-        keywords: ["shortcuts", "keyboard", "help"],
-        onSelect: openShortcutsDialog,
-      },
-      {
-        id: "view-status",
-        title: "View status",
-        description:
-          statusCount > 0
-            ? `Open ${statusCount} active status ${statusCount === 1 ? "item" : "items"}`
-            : "Open current status items",
-        keywords: ["status", "runtime", "extension", "items"],
-        onSelect: openStatusDialog,
-      },
     ]
 
     if (sessionState.sessionFile) {
       commands.splice(1, 0, {
         id: "rename-session",
+        group: "Sessions",
         title: "Rename session",
         description: "Rename the current session",
         shortcut: "Ctrl+E",
@@ -3052,6 +3035,7 @@ export function PiWebAppShell({
       })
       commands.push({
         id: "delete-session",
+        group: "Sessions",
         title: "Delete session",
         description: `Delete ${currentSessionTitle}`,
         shortcut: "Ctrl+X",
@@ -3063,6 +3047,7 @@ export function PiWebAppShell({
     if (selectedSidebarSessions.length > 0) {
       commands.push({
         id: "clear-selected-sessions",
+        group: "Sidebar",
         title: "Clear selected sidebar sessions",
         description: `Clear ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
         keywords: ["clear", "selected", "sidebar", "sessions"],
@@ -3072,6 +3057,7 @@ export function PiWebAppShell({
       })
       commands.push({
         id: "delete-selected-sessions",
+        group: "Sidebar",
         title: "Delete selected sidebar sessions",
         description: `Delete ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
         keywords: ["delete", "selected", "sidebar", "sessions"],
@@ -3095,7 +3081,6 @@ export function PiWebAppShell({
     openForkDialog,
     openRenameDialog,
     openSettingsDialog,
-    openShortcutsDialog,
     openTreeDialog,
     runCompact,
     toggleHideThinking,
@@ -3112,8 +3097,6 @@ export function PiWebAppShell({
         deleteOpen ||
         forkOpen ||
         treeOpen ||
-        statusOpen ||
-        shortcutsOpen ||
         settingsOpen ||
         commandPaletteOpen ||
         Boolean(pendingUiRequest)
@@ -3232,13 +3215,6 @@ export function PiWebAppShell({
 
       if (!event.ctrlKey || event.metaKey || event.altKey) return
 
-      if (key === "/" || key === "?") {
-        if (treeOpen) return
-        event.preventDefault()
-        shortcutActionsRef.current.openShortcutsDialog()
-        return
-      }
-
       if (modalOpen) return
 
       if (key === "p" && !event.shiftKey) {
@@ -3293,6 +3269,12 @@ export function PiWebAppShell({
 
       if (key === "t" && !event.shiftKey) {
         event.preventDefault()
+        void shortcutActionsRef.current.openTreeDialog()
+        return
+      }
+
+      if (key === "g" && !event.shiftKey) {
+        event.preventDefault()
         void shortcutActionsRef.current.toggleHideThinking()
         return
       }
@@ -3343,9 +3325,7 @@ export function PiWebAppShell({
     sessionState.sessionFile,
     settingsOpen,
     shortcutActionsRef,
-    shortcutsOpen,
     sidebarSessionEntriesByKey,
-    statusOpen,
     treeOpen,
   ])
 
@@ -3433,14 +3413,11 @@ export function PiWebAppShell({
         directoryRenderCounts={directoryRenderCounts}
         selectedSessionKeys={selectedSidebarSessionKeys}
         activeSessionId={activeSessionId}
-        statusCount={statusCount}
         emptyStateText={emptySidebarStateText}
         allDirectoriesCollapsed={allDirectoriesCollapsed}
         onCreateSession={createSession}
         onOpenAddDirectoryDialog={openAddDirectoryDialog}
         onOpenCommandPalette={openCommandPalette}
-        onOpenShortcuts={openShortcutsDialog}
-        onOpenStatus={openStatusDialog}
         onOpenSettings={openSettingsDialog}
         onToggleDirectory={toggleDirectory}
         onToggleAllDirectories={toggleAllDirectories}
@@ -3608,6 +3585,7 @@ export function PiWebAppShell({
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={openTreeDialog}>
                     <span>Tree</span>
+                    <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={openForkDialog}>
                     <span>Fork</span>
@@ -3623,7 +3601,7 @@ export function PiWebAppShell({
                         ? "Show thinking"
                         : "Hide thinking"}
                     </span>
-                    <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>Ctrl+G</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={toggleHideToolBlocks}>
                     <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
@@ -4023,11 +4001,6 @@ export function PiWebAppShell({
         onSaveTreeLabel={() => {
           void saveTreeLabel()
         }}
-        statusOpen={statusOpen}
-        onStatusOpenChange={setStatusOpen}
-        statuses={sessionState.uiState.statuses}
-        shortcutsOpen={shortcutsOpen}
-        onShortcutsOpenChange={setShortcutsOpen}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
         currentTheme={currentTheme}

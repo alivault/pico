@@ -19,15 +19,14 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-  ActivityIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDown,
+  CommandIcon,
   EllipsisIcon,
   FolderIcon,
   FolderPlusIcon,
-  KeyboardIcon,
   SearchIcon,
   SquarePenIcon,
   Settings2Icon,
@@ -156,14 +155,11 @@ type AppSidebarProps = {
   directoryRenderCounts: Record<string, number>
   selectedSessionKeys: Array<string>
   activeSessionId?: string
-  statusCount: number
   emptyStateText: string
   allDirectoriesCollapsed: boolean
   onCreateSession: () => void
   onOpenAddDirectoryDialog: () => void
   onOpenCommandPalette: () => void
-  onOpenShortcuts: () => void
-  onOpenStatus: () => void
   onOpenSettings: () => void
   onToggleDirectory: (directory: string) => void
   onToggleAllDirectories: () => void
@@ -234,13 +230,10 @@ export function AppSidebar({
   directoryRenderCounts,
   selectedSessionKeys,
   activeSessionId,
-  statusCount,
   emptyStateText,
   allDirectoriesCollapsed,
   onOpenAddDirectoryDialog,
   onOpenCommandPalette,
-  onOpenShortcuts,
-  onOpenStatus,
   onOpenSettings,
   onToggleDirectory,
   onToggleAllDirectories,
@@ -763,31 +756,20 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
-              <SearchIcon />
-              <span>Palette</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton type="button" onClick={onOpenShortcuts}>
-              <KeyboardIcon />
-              <span>Shortcuts</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton type="button" onClick={onOpenStatus}>
-              <ActivityIcon />
-              <span>Status</span>
-              {statusCount > 0 ? (
-                <Badge variant="outline" className="ml-auto">
-                  {statusCount}
-                </Badge>
-              ) : null}
+              <CommandIcon />
+              <span>Commands</span>
+              <kbd className="ml-auto rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70">
+                Ctrl+P
+              </kbd>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton type="button" onClick={onOpenSettings}>
               <Settings2Icon />
               <span>Settings</span>
+              <kbd className="ml-auto rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70">
+                Ctrl+,
+              </kbd>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

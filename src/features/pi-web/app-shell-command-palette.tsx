@@ -15,6 +15,7 @@ export type AppCommand = {
   id: string
   title: string
   description: string
+  group: string
   shortcut?: string
   keywords?: Array<string>
   onSelect: () => void | Promise<void>
@@ -40,6 +41,20 @@ export function AppShellCommandPalette({
   onCommandError,
 }: AppShellCommandPaletteProps) {
   const [query, setQuery] = React.useState("")
+  const commandGroups = React.useMemo(() => {
+    const groups = new Map<string, Array<AppCommand>>()
+
+    for (const command of commands) {
+      const items = groups.get(command.group)
+      if (items) {
+        items.push(command)
+      } else {
+        groups.set(command.group, [command])
+      }
+    }
+
+    return Array.from(groups.entries())
+  }, [commands])
 
   React.useEffect(() => {
     if (!open && query) {
@@ -71,25 +86,27 @@ export function AppShellCommandPalette({
         />
         <CommandList>
           <CommandEmpty>No commands found.</CommandEmpty>
-          <CommandGroup heading="Actions">
-            {commands.map((command) => (
-              <CommandItem
-                key={command.id}
-                value={commandValue(command)}
-                onSelect={() => handleSelect(command)}
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">{command.title}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {command.description}
-                  </span>
-                </div>
-                {command.shortcut ? (
-                  <CommandShortcut>{command.shortcut}</CommandShortcut>
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {commandGroups.map(([group, groupCommands]) => (
+            <CommandGroup key={group} heading={group}>
+              {groupCommands.map((command) => (
+                <CommandItem
+                  key={command.id}
+                  value={commandValue(command)}
+                  onSelect={() => handleSelect(command)}
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate font-medium">{command.title}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {command.description}
+                    </span>
+                  </div>
+                  {command.shortcut ? (
+                    <CommandShortcut>{command.shortcut}</CommandShortcut>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ))}
         </CommandList>
       </Command>
     </CommandDialog>
