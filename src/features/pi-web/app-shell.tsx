@@ -805,6 +805,16 @@ export function PiWebAppShell({
     sessionSearchInputRef.current?.select()
   }
 
+  const focusPrompt = () => {
+    if (currentTab !== "session") {
+      setCurrentTab("session")
+    }
+
+    window.requestAnimationFrame(() => {
+      composerPanelRef.current?.focusPrompt({ preventScroll: true })
+    })
+  }
+
   const focusModelSelector = () => {
     composerPanelRef.current?.openModelPicker()
   }
@@ -2916,6 +2926,15 @@ export function PiWebAppShell({
         onSelect: focusSessionSearch,
       },
       {
+        id: "focus-prompt",
+        group: "Assistant",
+        title: "Focus prompt",
+        description: "Move focus to the prompt field",
+        shortcut: "Ctrl+Enter",
+        keywords: ["prompt", "composer", "input", "message", "reply"],
+        onSelect: focusPrompt,
+      },
+      {
         id: "set-model",
         group: "Assistant",
         title: "Set model",
@@ -3080,6 +3099,7 @@ export function PiWebAppShell({
   const shortcutActionsRef = useLatestRef({
     createSession,
     focusModelSelector,
+    focusPrompt,
     focusSessionSearch,
     openAddDirectoryDialog,
     openCommandPalette,
@@ -3222,6 +3242,20 @@ export function PiWebAppShell({
             return
           }
         }
+      }
+
+      if (
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        key === "enter"
+      ) {
+        if (modalOpen || event.defaultPrevented) return
+
+        event.preventDefault()
+        shortcutActionsRef.current.focusPrompt()
+        return
       }
 
       if (!event.ctrlKey || event.metaKey || event.altKey) return
