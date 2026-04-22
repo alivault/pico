@@ -8,7 +8,8 @@
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt",
-    "typecheck": "tsc --noEmit"
+    "check": "vp check",
+    "check:fix": "vp check --fix"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

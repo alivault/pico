@@ -75,10 +75,16 @@ pnpm build
 pnpm lint
 ```
 
-### Typecheck
+### Check
 
 ```bash
-pnpm typecheck
+pnpm check
+```
+
+### Check and fix
+
+```bash
+pnpm check:fix
 ```
 
 ## Parity status
