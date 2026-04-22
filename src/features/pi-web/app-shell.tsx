@@ -3109,6 +3109,9 @@ export function PiWebAppShell({
         Boolean(pendingUiRequest)
 
       const activeElement = document.activeElement
+      const activeElementIsConversationViewport =
+        activeElement instanceof HTMLElement &&
+        activeElement.closest('[data-conversation-viewport="true"]') !== null
       const focusedSidebarSessionKey =
         activeElement instanceof HTMLElement
           ? (activeElement.dataset.sessionKey?.trim() ?? "")
@@ -3153,6 +3156,7 @@ export function PiWebAppShell({
           lastEscapePressedAtRef.current = 0
         }
         if (
+          !activeElementIsConversationViewport &&
           (key === "arrowdown" ||
             key === "arrowup" ||
             key === "home" ||
@@ -3665,7 +3669,11 @@ export function PiWebAppShell({
             <div className="relative min-h-0 flex-1">
               <div
                 ref={messagesScrollAreaRef}
-                className="h-full overflow-auto px-4"
+                data-conversation-viewport="true"
+                tabIndex={0}
+                role="region"
+                aria-label="Conversation messages"
+                className="h-full overflow-auto px-4 outline-none"
               >
                 {isSessionViewLoading ? (
                   <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
