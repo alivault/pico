@@ -2357,6 +2357,7 @@ export function PiWebAppShell({
     if (!viewerContextId) return
     try {
       await setThinkingBlocksHiddenMutation.mutateAsync(hidden)
+      toast.info(hidden ? "Thinking hidden" : "Thinking shown")
     } catch (error) {
       toast.error(
         error instanceof Error
