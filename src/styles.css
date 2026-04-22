@@ -82,6 +82,26 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --code-fg: oklch(0.22 0.02 264);
+  --code-comment: oklch(0.58 0.02 260);
+  --code-keyword: oklch(0.53 0.19 288);
+  --code-string: oklch(0.52 0.16 150);
+  --code-number: oklch(0.62 0.17 40);
+  --code-title: oklch(0.46 0.16 256);
+  --code-meta: oklch(0.54 0.12 220);
+  --code-variable: oklch(0.58 0.18 18);
+  --code-symbol: oklch(0.61 0.14 82);
+  --code-selection: oklch(0.93 0.02 264);
+  --sh-class: var(--code-number);
+  --sh-comment: var(--code-comment);
+  --sh-entity: var(--code-title);
+  --sh-identifier: var(--code-fg);
+  --sh-jsxliterals: var(--code-string);
+  --sh-keyword: var(--code-keyword);
+  --sh-property: var(--code-variable);
+  --sh-sign: var(--code-meta);
+  --sh-space: var(--code-fg);
+  --sh-string: var(--code-string);
 }
 
 .dark {
@@ -116,6 +136,16 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --code-fg: oklch(0.9 0.02 264);
+  --code-comment: oklch(0.68 0.02 260);
+  --code-keyword: oklch(0.74 0.17 300);
+  --code-string: oklch(0.8 0.14 150);
+  --code-number: oklch(0.8 0.14 55);
+  --code-title: oklch(0.78 0.12 250);
+  --code-meta: oklch(0.78 0.09 220);
+  --code-variable: oklch(0.79 0.12 20);
+  --code-symbol: oklch(0.83 0.11 95);
+  --code-selection: oklch(0.32 0.03 264);
 }
 
 @layer base {
@@ -128,4 +158,18 @@
   html {
     @apply font-sans;
   }
+}
+
+.sh__line {
+  display: block;
+  color: var(--sh-identifier);
+}
+
+.sh__line ::selection,
+.sh__line::selection {
+  background: var(--code-selection);
+}
+
+.sh__token--comment {
+  font-style: italic;
 }

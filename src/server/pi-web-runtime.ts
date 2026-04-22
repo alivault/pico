@@ -1,6 +1,15 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stat, unlink } from "node:fs/promises"
-import { createRequire } from "node:module"
+
+import { highlight as sugarHigh } from "sugar-high"
+import {
+  c as sugarC,
+  css as sugarCss,
+  go as sugarGo,
+  java as sugarJava,
+  python as sugarPython,
+  rust as sugarRust,
+} from "sugar-high/presets"
 
 import type {
   DirectoryState,
@@ -15,11 +24,7 @@ import {
   generateSessionNameWithLlm,
   summarizePromptContent,
 } from "@/server/session-naming"
-import {
-  loadPiSdk,
-  makeSelfContainedSettingsManager,
-  resolvePiSdkDir,
-} from "@/server/pi-sdk"
+import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
@@ -141,6 +146,8 @@ type HighlightPayload =
   | {
       unavailable: true
     }
+
+type SugarHighOptions = Parameters<typeof sugarHigh>[1]
 
 function cryptoRandomId() {
   return randomUUID()
@@ -2927,17 +2934,33 @@ export class PiWebRuntime {
     if (!normalized) return ""
 
     switch (normalized) {
+      case "js":
+      case "mjs":
+      case "cjs":
+        return "javascript"
+      case "ts":
+        return "typescript"
+      case "py":
+        return "python"
+      case "rs":
+        return "rust"
+      case "golang":
+        return "go"
+      case "htm":
+      case "xhtml":
+        return "html"
+      case "yml":
+        return "yaml"
+      case "shell":
       case "shellscript":
+      case "sh":
+      case "zsh":
         return "bash"
       case "plain":
       case "text":
         return "plaintext"
-      case "c++":
-        return "cpp"
-      case "c#":
-        return "csharp"
-      case "objective-c":
-        return "objectivec"
+      case "h":
+        return "c"
       default:
         return normalized
     }
@@ -2951,14 +2974,35 @@ export class PiWebRuntime {
     return lines
   }
 
-  private getHighlightJs() {
-    const require = createRequire(import.meta.url)
-    return require(resolvePiSdkDir() + "/node_modules/highlight.js") as {
-      getLanguage?: (language: string) => unknown
-      highlight: (
-        text: string,
-        options: { language: string; ignoreIllegals: boolean }
-      ) => { language?: string; value?: string }
+  private getSugarHighOptions(
+    language: string
+  ): SugarHighOptions | null | undefined {
+    switch (language) {
+      case "javascript":
+      case "jsx":
+      case "typescript":
+      case "tsx":
+      case "json":
+      case "jsonc":
+      case "html":
+      case "xml":
+      case "svg":
+      case "mdx":
+        return null
+      case "css":
+        return sugarCss
+      case "python":
+        return sugarPython
+      case "rust":
+        return sugarRust
+      case "c":
+        return sugarC
+      case "go":
+        return sugarGo
+      case "java":
+        return sugarJava
+      default:
+        return undefined
     }
   }
 
@@ -2997,9 +3041,8 @@ export class PiWebRuntime {
     }
 
     try {
-      const hljs = this.getHighlightJs()
-      const supported = hljs.getLanguage?.(normalizedLanguage)
-      if (!supported) {
+      const options = this.getSugarHighOptions(normalizedLanguage)
+      if (options === undefined) {
         const payload = {
           unsupported: true,
           language: normalizedLanguage,
@@ -3007,13 +3050,10 @@ export class PiWebRuntime {
         this.highlightCache.set(cacheKey, payload)
         return { ok: true, ...payload }
       }
-      const result = hljs.highlight(text, {
-        language: normalizedLanguage,
-        ignoreIllegals: true,
-      })
+
       const payload = {
-        language: result.language || normalizedLanguage,
-        html: result.value || "",
+        language: normalizedLanguage,
+        html: sugarHigh(text, options ?? undefined),
       } satisfies HighlightPayload
       this.highlightCache.set(cacheKey, payload)
       return { ok: true, ...payload }

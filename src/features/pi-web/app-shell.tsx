@@ -2996,7 +2996,14 @@ export function PiWebAppShell({
         title: "Previous reasoning level",
         description: `Current level: ${sessionState.thinkingLevel}`,
         shortcut: "Ctrl+Shift+R",
-        keywords: ["thinking", "reasoning", "level", "cycle", "previous", "back"],
+        keywords: [
+          "thinking",
+          "reasoning",
+          "level",
+          "cycle",
+          "previous",
+          "back",
+        ],
         onSelect: () => {
           void cycleThinkingLevel(-1)
         },
