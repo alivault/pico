@@ -819,6 +819,40 @@ export function PiWebAppShell({
     composerPanelRef.current?.openModelPicker()
   }
 
+  const scrollConversationToTop = () => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    viewport.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const scrollConversationToBottom = () => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
+  }
+
+  const jumpToPreviousMessage = () => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    const target = previousMessageJumpTarget(viewport)
+    if (!target) return
+    viewport.scrollTo({
+      top: Math.max(0, target.offsetTop - 8),
+      behavior: "smooth",
+    })
+  }
+
+  const jumpToNextMessage = () => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    const target = nextMessageJumpTarget(viewport)
+    if (!target) return
+    viewport.scrollTo({
+      top: Math.max(0, target.offsetTop - 8),
+      behavior: "smooth",
+    })
+  }
+
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
     setSessionDoneSoundEnabled(enabled)
     safeLocalStorageSetItem(
@@ -3101,6 +3135,8 @@ export function PiWebAppShell({
     focusModelSelector,
     focusPrompt,
     focusSessionSearch,
+    jumpToNextMessage,
+    jumpToPreviousMessage,
     openAddDirectoryDialog,
     openCommandPalette,
     openDeleteDialog,
@@ -3110,6 +3146,8 @@ export function PiWebAppShell({
     openSettingsDialog,
     openTreeDialog,
     runCompact,
+    scrollConversationToBottom,
+    scrollConversationToTop,
     toggleHideThinking,
     toggleHideToolBlocks,
     cycleThinkingLevel,
@@ -3258,6 +3296,41 @@ export function PiWebAppShell({
         return
       }
 
+      if (
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        currentTab === "session" &&
+        !isEditableTarget(event.target)
+      ) {
+        if (modalOpen || event.defaultPrevented) return
+
+        if (key === "arrowleft") {
+          event.preventDefault()
+          shortcutActionsRef.current.jumpToPreviousMessage()
+          return
+        }
+
+        if (key === "arrowright") {
+          event.preventDefault()
+          shortcutActionsRef.current.jumpToNextMessage()
+          return
+        }
+
+        if (key === "arrowup") {
+          event.preventDefault()
+          shortcutActionsRef.current.scrollConversationToTop()
+          return
+        }
+
+        if (key === "arrowdown") {
+          event.preventDefault()
+          shortcutActionsRef.current.scrollConversationToBottom()
+          return
+        }
+      }
+
       if (!event.ctrlKey || event.metaKey || event.altKey) return
 
       if (modalOpen) return
@@ -3360,6 +3433,7 @@ export function PiWebAppShell({
   }, [
     addDirectoryOpen,
     commandPaletteOpen,
+    currentTab,
     deleteOpen,
     forkOpen,
     pendingUiRequest,
@@ -3407,40 +3481,6 @@ export function PiWebAppShell({
     !isApiErrorResponse(gitStatus)
       ? gitStatus.gitStatus
       : null
-
-  const scrollConversationToTop = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    viewport.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
-  const scrollConversationToBottom = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
-  }
-
-  const jumpToPreviousMessage = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    const target = previousMessageJumpTarget(viewport)
-    if (!target) return
-    viewport.scrollTo({
-      top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
-    })
-  }
-
-  const jumpToNextMessage = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    const target = nextMessageJumpTarget(viewport)
-    if (!target) return
-    viewport.scrollTo({
-      top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
-    })
-  }
 
   return (
     <SidebarProvider className="h-full overflow-hidden bg-background">
