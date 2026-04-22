@@ -266,6 +266,24 @@ function formatDisplayPath(value: string | undefined) {
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
 }
 
+function formatHeaderGitStatusText(
+  gitStatus: GitStatusData["gitStatus"] | undefined
+) {
+  if (!gitStatus) return ""
+
+  const inline =
+    typeof gitStatus.inline === "string" ? gitStatus.inline.trim() : ""
+  if (inline) return inline
+
+  if (gitStatus.detached) {
+    return typeof gitStatus.revision === "string" && gitStatus.revision.trim()
+      ? `detached ${gitStatus.revision.trim()}`
+      : "detached"
+  }
+
+  return typeof gitStatus.branch === "string" ? gitStatus.branch.trim() : ""
+}
+
 function finishedSessionLabel(title: string) {
   return title !== "New session"
     ? `Session finished: ${title}`
@@ -636,22 +654,12 @@ export function PiWebAppShell({
     return nextLoading
   })()
   const currentSessionQueryScope = sessionScrollKey(sessionState)
-  const shouldLoadDraftGitStatus = Boolean(
-    viewerContextId &&
-    sessionState.draft &&
-    sessionState.items.length === 0 &&
-    sessionState.cwd
-  )
   const gitStatusQuery = useQuery({
     ...gitStatusQueryOptions({
       viewerContextId,
       cwd: sessionState.cwd || "",
     }),
-    enabled: Boolean(
-      viewerContextId &&
-      sessionState.cwd &&
-      (currentTab === "git" || shouldLoadDraftGitStatus)
-    ),
+    enabled: Boolean(viewerContextId && sessionState.cwd),
   })
   const gitChangesQuery = useQuery({
     ...gitChangesQueryOptions({
@@ -3474,12 +3482,11 @@ export function PiWebAppShell({
     )
     setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
   }, [isSessionViewLoading, sessionState])
+  const currentGitSummary = gitStatus?.gitStatus ?? null
+  const headerGitStatusText = formatHeaderGitStatusText(currentGitSummary)
   const draftGitSummary =
-    sessionState.draft &&
-    sessionState.items.length === 0 &&
-    gitStatus &&
-    !isApiErrorResponse(gitStatus)
-      ? gitStatus.gitStatus
+    sessionState.draft && sessionState.items.length === 0
+      ? currentGitSummary
       : null
 
   return (
@@ -3598,6 +3605,13 @@ export function PiWebAppShell({
                   {sessionState.cwd && (
                     <span>{formatDisplayPath(sessionState.cwd)}</span>
                   )}
+                  {headerGitStatusText ? (
+                    <span
+                      title={currentGitSummary?.title || headerGitStatusText}
+                    >
+                      • {headerGitStatusText}
+                    </span>
+                  ) : null}
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
                   )}
