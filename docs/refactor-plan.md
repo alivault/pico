@@ -39,12 +39,12 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
   - [x] Extract prompt/session mutations into hooks.
   - [x] Extract keyboard shortcut handling into hooks.
   - [x] Extract scroll/jump behavior into hooks.
-- [ ] Break up `src/server/pi-web-runtime.ts`.
-  - [ ] Extract SSE/context coordination.
-  - [ ] Extract tree/fork behavior.
-  - [ ] Extract UI request handling.
-  - [ ] Extract highlight helpers.
-  - [ ] Extract session list/index helpers.
+- [x] Break up `src/server/pi-web-runtime.ts`.
+  - [x] Extract SSE/context coordination.
+  - [x] Extract tree/fork behavior.
+  - [x] Extract UI request handling.
+  - [x] Extract highlight helpers.
+  - [x] Extract session list/index helpers.
 
 ## Suggested order
 

@@ -1,16 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stat, unlink } from "node:fs/promises"
 
-import { highlight as sugarHigh } from "sugar-high"
-import {
-  c as sugarC,
-  css as sugarCss,
-  go as sugarGo,
-  java as sugarJava,
-  python as sugarPython,
-  rust as sugarRust,
-} from "sugar-high/presets"
-
 import type {
   DirectoryState,
   ModelOption,
@@ -24,11 +14,44 @@ import {
   generateSessionNameWithLlm,
   summarizePromptContent,
 } from "@/server/session-naming"
+import {
+  activateContextSession as activateRuntimeContextSession,
+  clearContextDraft as clearRuntimeContextDraft,
+  normalizeSessionScope,
+  resolveRequestedEntry as resolveRuntimeRequestedEntry,
+  resolveScopeCwd,
+  sendPayloadToClient as sendRuntimePayloadToClient,
+  writeRawToClient as writeRuntimeRawToClient,
+} from "@/server/pi-web-runtime-contexts"
+import {
+  buildHighlightPayload,
+  type HighlightPayload,
+} from "@/server/pi-web-runtime-highlight"
+import {
+  compareSessionListEntriesByModified,
+  createDirectorySessionRevision,
+  getSessionListTitle,
+  laterModifiedTimestamp,
+  listKnownDirectories,
+  mergeSessionListEntry,
+  normalizeModifiedTimestamp,
+  normalizeSessionListTitle,
+  serializeSessionListEntry,
+} from "@/server/pi-web-runtime-session-list"
+import {
+  createForkedInMemorySessionManager,
+  extractForkableUserMessages,
+  extractMessageText,
+  serializeSessionTreeNode,
+} from "@/server/pi-web-runtime-tree-fork"
+import {
+  createUiRequestBridge,
+  resolvePendingUiRequest,
+} from "@/server/pi-web-runtime-ui-requests"
 import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
-  MessageLike,
   ModelLike,
   PiSdkLike,
   PromptImageInputLike,
@@ -37,7 +60,6 @@ import type {
   SessionManagerLike,
   SessionServicesLike,
   SessionStartEventLike,
-  SessionTreeNodeLike,
   SettingsManagerLike,
 } from "@/server/pi-sdk-types"
 
@@ -130,25 +152,6 @@ type ResolveRequestResult = {
   activeEntry: SessionEntry
 }
 
-type HighlightPayload =
-  | {
-      language?: string
-      html: string
-    }
-  | {
-      skipped: true
-      language?: string
-    }
-  | {
-      unsupported: true
-      language?: string
-    }
-  | {
-      unavailable: true
-    }
-
-type SugarHighOptions = Parameters<typeof sugarHigh>[1]
-
 function cryptoRandomId() {
   return randomUUID()
 }
@@ -163,19 +166,6 @@ function formatError(error: unknown) {
   }
 
   return "Unknown error"
-}
-
-function normalizeWhitespace(text: string) {
-  return text.replace(/\s+/g, " ").trim()
-}
-
-function normalizeSessionScope(rawScope: string | null, defaultCwd: string) {
-  const normalized = typeof rawScope === "string" ? rawScope.trim() : ""
-  return normalized || defaultCwd
-}
-
-function resolveScopeCwd(scope: string | null | undefined, defaultCwd: string) {
-  return normalizeSessionScope(scope ?? null, defaultCwd)
 }
 
 function createInitialUiState(): SessionUiState {
@@ -227,57 +217,6 @@ function serializeModel(model: ModelLike | undefined): ModelOption | undefined {
   }
 }
 
-function normalizeModifiedTimestamp(value: unknown) {
-  if (!value) return undefined
-  const timestamp = new Date(value as string | number | Date).getTime()
-  if (Number.isNaN(timestamp)) return undefined
-  return new Date(timestamp).toISOString()
-}
-
-function modifiedTimestampValue(value: unknown) {
-  const normalized = normalizeModifiedTimestamp(value)
-  if (!normalized) return 0
-  const timestamp = new Date(normalized).getTime()
-  return Number.isNaN(timestamp) ? 0 : timestamp
-}
-
-function laterModifiedTimestamp(...values: Array<unknown>) {
-  let nextValue: string | undefined
-  let nextTime = 0
-
-  for (const value of values) {
-    const normalized = normalizeModifiedTimestamp(value)
-    const timestamp = modifiedTimestampValue(normalized)
-    if (!timestamp || timestamp < nextTime) continue
-    nextTime = timestamp
-    nextValue = normalized
-  }
-
-  return nextValue
-}
-
-function normalizeSessionListName(value: unknown) {
-  const normalized = typeof value === "string" ? normalizeWhitespace(value) : ""
-  return normalized || undefined
-}
-
-function normalizeSessionListTitle(value: unknown, maxLength = 240) {
-  const text = typeof value === "string" ? normalizeWhitespace(value) : ""
-  if (!text) return ""
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
-}
-
-function getSessionListTitle(entry: {
-  name?: unknown
-  firstMessage?: unknown
-}) {
-  const explicitName = normalizeSessionListName(entry.name)
-  if (explicitName && explicitName !== "Current session") return explicitName
-  const fallback = normalizeSessionListTitle(entry.firstMessage)
-  return fallback || "New session"
-}
-
 function clampSessionNameLength(value: string) {
   if (value.length <= SESSION_NAME_MAX_LENGTH) return value
   return `${value.slice(0, Math.max(0, SESSION_NAME_MAX_LENGTH - 1)).trimEnd()}…`
@@ -306,276 +245,6 @@ function sortPendingUserMessages(messages: Array<PendingUserMessage>) {
   ]
 }
 
-function extractMessageText(message: MessageLike | undefined) {
-  if (!message || typeof message !== "object") return ""
-
-  const content = message.content
-  if (typeof content === "string") return content.trim()
-  if (!Array.isArray(content)) return ""
-
-  return content
-    .filter((part) => part?.type === "text" && typeof part.text === "string")
-    .map((part) => part.text)
-    .join(" ")
-    .trim()
-}
-
-function extractSessionContentText(content: unknown) {
-  if (typeof content === "string") return content.trim()
-  if (!Array.isArray(content)) return ""
-
-  const text = content
-    .filter(
-      (part): part is { type: string; text: string } =>
-        Boolean(part) &&
-        typeof part === "object" &&
-        (part as { type?: unknown }).type === "text" &&
-        typeof (part as { text?: unknown }).text === "string"
-    )
-    .map((part) => part.text)
-    .join(" ")
-    .trim()
-
-  if (text) return text
-
-  const imageCount = content.filter(
-    (part) =>
-      part &&
-      typeof part === "object" &&
-      ((part as { type?: unknown }).type === "image" ||
-        (part as { type?: unknown }).type === "input_image")
-  ).length
-
-  if (imageCount > 0) {
-    return `${imageCount} image${imageCount === 1 ? "" : "s"}`
-  }
-
-  return ""
-}
-
-function truncateTreeText(value: unknown, maxLength = 200) {
-  const text = typeof value === "string" ? value.trim() : ""
-  if (!text) return ""
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength).trimEnd()}…`
-}
-
-function formatTreeToolCallPreview(
-  name: string,
-  args: Record<string, unknown>
-) {
-  const home = process.env.HOME || process.env.USERPROFILE || ""
-  const shortenPath = (value: unknown) => {
-    const text = typeof value === "string" ? value : ""
-    if (!text) return ""
-    return home && text.startsWith(home) ? `~${text.slice(home.length)}` : text
-  }
-
-  switch (name) {
-    case "read": {
-      const filePath = shortenPath(args.path || args.file_path)
-      const offset = args.offset
-      const limit = args.limit
-      let display = filePath
-      if (offset !== undefined || limit !== undefined) {
-        const start = Number(offset ?? 1)
-        const end = limit !== undefined ? start + Number(limit) - 1 : ""
-        display += `:${start}${end ? `-${end}` : ""}`
-      }
-      return `[read: ${display}]`
-    }
-    case "write":
-      return `[write: ${shortenPath(args.path || args.file_path)}]`
-    case "edit":
-      return `[edit: ${shortenPath(args.path || args.file_path)}]`
-    case "bash": {
-      const rawCommand = typeof args.command === "string" ? args.command : ""
-      const command = rawCommand
-        .replace(/[\n\t]/g, " ")
-        .trim()
-        .slice(0, 50)
-      return `[bash: ${command}${rawCommand.length > 50 ? "..." : ""}]`
-    }
-    case "grep":
-      return `[grep: /${
-        typeof args.pattern === "string" ? args.pattern : ""
-      }/ in ${shortenPath(args.path || ".")}]`
-    case "find":
-      return `[find: ${
-        typeof args.pattern === "string" ? args.pattern : ""
-      } in ${shortenPath(args.path || ".")}]`
-    case "ls":
-      return `[ls: ${shortenPath(args.path || ".")}]`
-    default: {
-      const serializedArgs = JSON.stringify(args)
-      const preview = serializedArgs.slice(0, 40)
-      return `[${name}: ${preview}${serializedArgs.length > 40 ? "..." : ""}]`
-    }
-  }
-}
-
-function serializeTreeMessageContent(content: unknown) {
-  const text = truncateTreeText(extractSessionContentText(content))
-  const toolCalls: Array<{ id?: string; name?: string; preview?: string }> = []
-
-  if (Array.isArray(content)) {
-    for (const part of content) {
-      if (!part || typeof part !== "object") continue
-      if ((part as { type?: unknown }).type !== "toolCall") continue
-      const toolName =
-        typeof (part as { name?: unknown }).name === "string"
-          ? (part as { name: string }).name
-          : "tool"
-      toolCalls.push({
-        id:
-          typeof (part as { id?: unknown }).id === "string"
-            ? (part as { id: string }).id
-            : undefined,
-        name: toolName,
-        preview: formatTreeToolCallPreview(
-          toolName,
-          typeof (part as { arguments?: unknown }).arguments === "object" &&
-            (part as { arguments?: unknown }).arguments
-            ? ((part as { arguments: Record<string, unknown> }).arguments ?? {})
-            : {}
-        ),
-      })
-    }
-  }
-
-  return {
-    text,
-    toolCalls,
-  }
-}
-
-function serializeSessionTreeNode(node: SessionTreeNodeLike): TreeNode | null {
-  if (!node?.entry || typeof node.entry !== "object") return null
-
-  const entry = node.entry
-  const serialized: TreeNode = {
-    entry: {
-      id: typeof entry.id === "string" ? entry.id : "",
-      parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-      timestamp:
-        typeof entry.timestamp === "string" ? entry.timestamp : undefined,
-      type: typeof entry.type === "string" ? entry.type : "entry",
-    },
-    label:
-      typeof node.label === "string" && node.label ? node.label : undefined,
-    labelTimestamp:
-      typeof node.labelTimestamp === "string" && node.labelTimestamp
-        ? node.labelTimestamp
-        : undefined,
-    children: [],
-  }
-
-  if (entry.type === "message") {
-    const message =
-      typeof entry.message === "object" && entry.message
-        ? (entry.message as MessageLike)
-        : undefined
-    const content = serializeTreeMessageContent(message?.content)
-
-    serialized.entry.message = {
-      role: typeof message?.role === "string" ? message.role : "message",
-      text: content.text,
-      toolCalls: content.toolCalls,
-      stopReason:
-        typeof message?.stopReason === "string"
-          ? message.stopReason
-          : undefined,
-      errorMessage: truncateTreeText(message?.errorMessage),
-      toolCallId:
-        typeof message?.toolCallId === "string"
-          ? message.toolCallId
-          : undefined,
-      toolName:
-        typeof message?.toolName === "string" ? message.toolName : undefined,
-      command: truncateTreeText(message?.command),
-    }
-  }
-
-  if (entry.type === "custom_message") {
-    serialized.entry.customType =
-      typeof entry.customType === "string" ? entry.customType : "custom"
-    serialized.entry.text = truncateTreeText(
-      typeof entry.content === "string"
-        ? entry.content
-        : extractSessionContentText(entry.content)
-    )
-  }
-
-  if (entry.type === "compaction") {
-    serialized.entry.tokensBefore = Number(entry.tokensBefore) || 0
-  }
-
-  if (entry.type === "branch_summary") {
-    serialized.entry.summary = truncateTreeText(entry.summary)
-  }
-
-  if (entry.type === "model_change") {
-    serialized.entry.modelId =
-      typeof entry.modelId === "string" ? entry.modelId : ""
-  }
-
-  if (entry.type === "thinking_level_change") {
-    serialized.entry.thinkingLevel =
-      typeof entry.thinkingLevel === "string" ? entry.thinkingLevel : ""
-  }
-
-  if (entry.type === "custom") {
-    serialized.entry.customType =
-      typeof entry.customType === "string" ? entry.customType : "custom"
-  }
-
-  if (entry.type === "label") {
-    serialized.entry.label =
-      typeof entry.label === "string" ? entry.label : undefined
-  }
-
-  if (entry.type === "session_info") {
-    serialized.entry.name = typeof entry.name === "string" ? entry.name : ""
-  }
-
-  serialized.children = (Array.isArray(node.children) ? node.children : [])
-    .map((child) => serializeSessionTreeNode(child))
-    .filter((child): child is TreeNode => Boolean(child))
-
-  return serialized
-}
-
-function extractForkableUserMessages(entry: SessionEntry) {
-  const messages = entry.session.getUserMessagesForForking?.()
-  if (Array.isArray(messages) && messages.length > 0) {
-    return messages
-      .map((message) => ({
-        entryId:
-          typeof message.entryId === "string" ? message.entryId.trim() : "",
-        text: typeof message.text === "string" ? message.text.trim() : "",
-      }))
-      .filter((message) => Boolean(message.entryId && message.text))
-  }
-
-  const manager = entry.session.sessionManager
-  const tree = manager.getTree?.() ?? []
-  const stack = [...tree]
-  const results: Array<{ entryId: string; text: string }> = []
-  while (stack.length > 0) {
-    const node = stack.pop()
-    if (!node) continue
-    const message = node.entry.message
-    if (node.entry.type === "message" && message?.role === "user") {
-      const text = extractMessageText(message)
-      if (typeof node.entry.id === "string" && text) {
-        results.push({ entryId: node.entry.id, text })
-      }
-    }
-    stack.push(...(Array.isArray(node.children) ? node.children : []))
-  }
-  return results.reverse()
-}
-
 function createPendingUserMessage(
   text: string,
   images: Array<PromptImageInput>,
@@ -588,35 +257,6 @@ function createPendingUserMessage(
     queued: true,
     streamingBehavior,
   } satisfies PendingUserMessage
-}
-
-function createDirectorySessionRevision(
-  directoryPath: string,
-  entries: Array<{
-    path?: string
-    id?: string
-    name?: string
-    title?: string
-    modified?: string
-  }>
-) {
-  const hash = createHash("sha1")
-  hash.update(directoryPath)
-
-  for (const entry of entries) {
-    hash.update("\n")
-    hash.update(String(entry.id || ""))
-    hash.update("\0")
-    hash.update(String(entry.path || ""))
-    hash.update("\0")
-    hash.update(String(entry.name || ""))
-    hash.update("\0")
-    hash.update(String(entry.title || ""))
-    hash.update("\0")
-    hash.update(String(entry.modified || ""))
-  }
-
-  return hash.digest("hex")
 }
 
 export class PiWebRuntime {
@@ -870,15 +510,7 @@ export class PiWebRuntime {
     target: SessionListInfoLike,
     fallback: SessionListInfoLike & { title?: string }
   ) {
-    target.path = fallback.path || target.path
-    target.id = fallback.id || target.id
-    target.cwd = fallback.cwd || target.cwd
-    target.name = fallback.name || target.name
-    target.modified = laterModifiedTimestamp(target.modified, fallback.modified)
-    if (fallback.firstMessage) {
-      target.firstMessage = fallback.firstMessage
-    }
-    return target
+    return mergeSessionListEntry(target, fallback)
   }
 
   private async sessionFallbackInfo(entry: SessionEntry) {
@@ -910,25 +542,19 @@ export class PiWebRuntime {
   }
 
   private listKnownDirectories(allSessions: Array<SessionListInfoLike>) {
-    return [
-      ...new Set([
-        process.cwd(),
-        ...allSessions.map((entry) => entry.cwd),
-        ...[...this.sessionEntries.values()].map((entry) => entry.cwd),
-      ]),
-    ]
-      .filter(Boolean)
-      .sort((left, right) => left.localeCompare(right))
+    return listKnownDirectories({
+      allSessions,
+      loadedDirectories: [...this.sessionEntries.values()].map(
+        (entry) => entry.cwd
+      ),
+    })
   }
 
   private compareSessionListEntriesByModified(
     left: SessionListInfoLike,
     right: SessionListInfoLike
   ) {
-    return (
-      modifiedTimestampValue(right.modified) -
-      modifiedTimestampValue(left.modified)
-    )
+    return compareSessionListEntriesByModified(left, right)
   }
 
   private serializeSessionListEntry(
@@ -936,19 +562,11 @@ export class PiWebRuntime {
     context: ContextState,
     streamingPaths: Set<string>
   ) {
-    const path =
-      typeof entry.path === "string" && entry.path ? entry.path : undefined
-    const name = normalizeSessionListName(entry.name)
-    return {
-      path,
-      id: entry.id,
-      cwd: entry.cwd,
-      name,
-      title: getSessionListTitle({ name, firstMessage: entry.firstMessage }),
-      modified: normalizeModifiedTimestamp(entry.modified),
-      streaming: path ? streamingPaths.has(path) : false,
-      unread: path ? context.unreadFinished.has(path) : false,
-    }
+    return serializeSessionListEntry({
+      entry,
+      unreadSessionPaths: context.unreadFinished,
+      streamingPaths,
+    })
   }
 
   private async listEntriesForDirectory(
@@ -1162,21 +780,19 @@ export class PiWebRuntime {
     context: ContextState,
     entry: SessionEntry
   ) {
-    const previousDraft =
-      context.draftKey && context.draftKey !== entry.key
-        ? this.sessionEntries.get(context.draftKey)
-        : undefined
-    context.activeKey = entry.key
-    if (context.draftKey && context.draftKey !== entry.key) {
-      context.draftKey = undefined
-      await this.disposeDraftIfUnused(previousDraft)
-    }
-    if (this.isDraftEntry(entry)) {
-      context.draftKey = entry.key
-    }
-    context.unreadFinished.delete(this.getSessionPath(entry))
-    this.sendStateToContext(context)
-    await this.sendSessionsToContext(context)
+    await activateRuntimeContextSession({
+      context,
+      entry,
+      getSessionEntryByKey: (key) => this.sessionEntries.get(key),
+      isDraftEntry: (sessionEntry) => this.isDraftEntry(sessionEntry),
+      disposeDraftIfUnused: async (draftEntry) =>
+        await this.disposeDraftIfUnused(draftEntry),
+      getSessionPath: (sessionEntry) => this.getSessionPath(sessionEntry),
+      sendStateToContext: (activeContext) =>
+        this.sendStateToContext(activeContext),
+      sendSessionsToContext: async (activeContext) =>
+        await this.sendSessionsToContext(activeContext),
+    })
   }
 
   private async disposeDraftIfUnused(entry: SessionEntry | undefined) {
@@ -1192,14 +808,12 @@ export class PiWebRuntime {
   }
 
   private async clearContextDraft(context: ContextState) {
-    const draftEntry = context.draftKey
-      ? this.sessionEntries.get(context.draftKey)
-      : undefined
-    if (context.activeKey === context.draftKey) {
-      context.activeKey = undefined
-    }
-    context.draftKey = undefined
-    await this.disposeDraftIfUnused(draftEntry)
+    await clearRuntimeContextDraft({
+      context,
+      getSessionEntryByKey: (key) => this.sessionEntries.get(key),
+      disposeDraftIfUnused: async (draftEntry) =>
+        await this.disposeDraftIfUnused(draftEntry),
+    })
   }
 
   private async ensureSessionEntryById(sessionId: string) {
@@ -1240,43 +854,18 @@ export class PiWebRuntime {
   }
 
   private async resolveRequestedEntry(url: URL, context: ContextState) {
-    const activateRequestedEntry = async (entry: SessionEntry) => {
-      if (context.draftKey && context.draftKey !== entry.key) {
-        await this.clearContextDraft(context)
-      }
-      context.activeKey = entry.key
-      if (this.isDraftEntry(entry)) {
-        context.draftKey = entry.key
-      } else if (context.draftKey === entry.key) {
-        context.draftKey = undefined
-      }
-      context.unreadFinished.delete(this.getSessionPath(entry))
-      return entry
-    }
-
-    const requestedSessionKey = url.searchParams.get("sessionKey")
-    if (requestedSessionKey) {
-      const requestedEntry = this.sessionEntries.get(requestedSessionKey)
-      if (requestedEntry) {
-        return await activateRequestedEntry(requestedEntry)
-      }
-    }
-
-    const requestedSessionId = url.searchParams.get("session")
-    if (requestedSessionId) {
-      const requestedEntry =
-        await this.ensureSessionEntryById(requestedSessionId)
-      if (requestedEntry) {
-        return await activateRequestedEntry(requestedEntry)
-      }
-    }
-
-    const activeEntry = this.getActiveEntry(context)
-    if (activeEntry) {
-      return await activateRequestedEntry(activeEntry)
-    }
-
-    return await this.getOrCreateDraftEntry(context)
+    return await resolveRuntimeRequestedEntry({
+      url,
+      context,
+      getSessionEntryByKey: (key) => this.sessionEntries.get(key),
+      ensureSessionEntryById: async (sessionId) =>
+        await this.ensureSessionEntryById(sessionId),
+      getActiveEntry: (activeContext) => this.getActiveEntry(activeContext),
+      getOrCreateDraftEntry: async (activeContext) =>
+        await this.getOrCreateDraftEntry(activeContext),
+      activateContextSession: async (activeContext, entry) =>
+        await this.activateContextSession(activeContext, entry),
+    })
   }
 
   async resolveRequest(request: Request): Promise<ResolveRequestResult> {
@@ -1837,48 +1426,13 @@ export class PiWebRuntime {
         (context) => context.activeKey === entry.key
       )
 
-    const createDialogPromise = <T>(
-      defaultValue: T,
-      request: {
-        signal?: AbortSignal
-        timeout?: number
-        payload: Record<string, unknown>
-      },
-      parseResponse: (response: Record<string, unknown>) => T
-    ) => {
-      if (request.signal?.aborted) return Promise.resolve(defaultValue)
-      const id = cryptoRandomId()
-      return new Promise<T>((resolve) => {
-        let timeoutId: NodeJS.Timeout | undefined
-        const cleanup = () => {
-          if (timeoutId) clearTimeout(timeoutId)
-          request.signal?.removeEventListener("abort", onAbort)
-          this.pendingUiRequests.delete(id)
-        }
-        const onAbort = () => {
-          cleanup()
-          resolve(defaultValue)
-        }
-        request.signal?.addEventListener("abort", onAbort, { once: true })
-        if (request.timeout) {
-          timeoutId = setTimeout(() => {
-            cleanup()
-            resolve(defaultValue)
-          }, request.timeout)
-        }
-        this.pendingUiRequests.set(id, {
-          resolve: (response) => {
-            cleanup()
-            resolve(parseResponse(response))
-          },
-        })
-        this.broadcastToViewers(entry.key, {
-          type: "extension_ui_request",
-          id,
-          ...request.payload,
-        })
-      })
-    }
+    const uiRequestBridge = createUiRequestBridge({
+      entryKey: entry.key,
+      pendingUiRequests: this.pendingUiRequests,
+      createRequestId: cryptoRandomId,
+      broadcastToViewers: (sessionKey, payload) =>
+        this.broadcastToViewers(sessionKey, payload),
+    })
 
     await session.bindExtensions({
       uiContext: {
@@ -1887,7 +1441,7 @@ export class PiWebRuntime {
           options: Array<unknown>,
           opts?: { signal?: AbortSignal; timeout?: number }
         ) =>
-          createDialogPromise(
+          uiRequestBridge.createDialogPromise(
             undefined,
             {
               signal: opts?.signal,
@@ -1909,7 +1463,7 @@ export class PiWebRuntime {
           message: string,
           opts?: { signal?: AbortSignal; timeout?: number }
         ) =>
-          createDialogPromise(
+          uiRequestBridge.createDialogPromise(
             false,
             {
               signal: opts?.signal,
@@ -1929,7 +1483,7 @@ export class PiWebRuntime {
           placeholder?: string,
           opts?: { signal?: AbortSignal; timeout?: number }
         ) =>
-          createDialogPromise(
+          uiRequestBridge.createDialogPromise(
             undefined,
             {
               signal: opts?.signal,
@@ -1947,7 +1501,7 @@ export class PiWebRuntime {
                 : (response.value as string | undefined)
           ),
         editor: (title: string, prefill?: string) =>
-          createDialogPromise(
+          uiRequestBridge.createDialogPromise(
             undefined,
             {
               payload: {
@@ -1962,13 +1516,7 @@ export class PiWebRuntime {
                 : (response.value as string | undefined)
           ),
         notify: (message: string, type = "info") => {
-          this.broadcastToViewers(entry.key, {
-            type: "extension_ui_request",
-            id: cryptoRandomId(),
-            method: "notify",
-            message,
-            notifyType: type,
-          })
+          uiRequestBridge.notify(message, type)
         },
         onTerminalInput: () => () => {},
         setStatus: (key: string, text: string | undefined) => {
@@ -2183,25 +1731,22 @@ export class PiWebRuntime {
     }
   }
 
-  private getSsePayloadText(payload: unknown) {
-    const json = JSON.stringify(payload)
-    const lines = json.split(/\r?\n/)
-    return `${lines.map((line) => `data: ${line}`).join("\n")}\n\n`
-  }
-
   private writeRawToClient(
     context: ContextState,
     client: SseClient,
     text: string
   ) {
-    if (client.closed) return false
-    try {
-      client.controller.enqueue(this.encoder.encode(text))
-      return true
-    } catch {
-      this.closeSseClient(context, client)
-      return false
-    }
+    return writeRuntimeRawToClient({
+      encoder: this.encoder,
+      context,
+      client,
+      text,
+      closeSseClient: (activeContext, activeClient) =>
+        this.closeSseClient(
+          activeContext as ContextState,
+          activeClient as SseClient
+        ),
+    })
   }
 
   private sendPayloadToClient(
@@ -2209,11 +1754,17 @@ export class PiWebRuntime {
     client: SseClient,
     payload: unknown
   ) {
-    return this.writeRawToClient(
+    return sendRuntimePayloadToClient({
+      encoder: this.encoder,
       context,
       client,
-      this.getSsePayloadText(payload)
-    )
+      payload,
+      closeSseClient: (activeContext, activeClient) =>
+        this.closeSseClient(
+          activeContext as ContextState,
+          activeClient as SseClient
+        ),
+    })
   }
 
   private closeSseClient(context: ContextState, client: SseClient) {
@@ -2683,34 +2234,17 @@ export class PiWebRuntime {
     leafId: string | null | undefined,
     parentSession: string | undefined
   ) {
-    return this.getSdk().then((sdk) => {
-      const nextManager = sdk.SessionManager.inMemory(sourceManager.getCwd())
-      nextManager.newSession?.({ parentSession })
-
-      if (!leafId) {
-        return nextManager
-      }
-
-      const branchEntries = sourceManager.getBranch?.(leafId)
-      if (!Array.isArray(branchEntries) || branchEntries.length === 0) {
-        throw new Error(`Entry ${leafId} not found`)
-      }
-
-      const pathWithoutLabels = branchEntries
-        .filter((branchEntry) => branchEntry?.type !== "label")
-        .map((branchEntry) => this.cloneSessionData(branchEntry))
-      const header = this.cloneSessionData(
-        sourceManager.getHeader?.() ?? nextManager.fileEntries?.[0]
-      )
-      if (!header) {
-        throw new Error("Failed to initialize forked in-memory session.")
-      }
-
-      nextManager.fileEntries = [header, ...pathWithoutLabels]
-      nextManager.flushed = false
-      nextManager._buildIndex?.()
-      return nextManager as SessionManagerLike
-    })
+    return this.getSdk().then(
+      async (sdk) =>
+        await createForkedInMemorySessionManager({
+          sourceManager,
+          leafId,
+          parentSession,
+          cloneSessionData: (value) => this.cloneSessionData(value),
+          createInMemorySessionManager: (cwd) =>
+            sdk.SessionManager.inMemory(cwd),
+        })
+    )
   }
 
   async forkSession(request: Request, body: { entryId?: unknown }) {
@@ -2915,145 +2449,45 @@ export class PiWebRuntime {
   }
 
   async resolveUiRequest(id: string, body: Record<string, unknown>) {
-    const pending = this.pendingUiRequests.get(id)
-    if (!pending) {
-      throw new Error(`Unknown UI request id: ${id}`)
-    }
-    pending.resolve(body)
-    return { ok: true }
-  }
-
-  private normalizeHighlightLanguage(language: unknown) {
-    const normalized =
-      typeof language === "string"
-        ? language
-            .trim()
-            .toLowerCase()
-            .replace(/^language-/, "")
-        : ""
-    if (!normalized) return ""
-
-    switch (normalized) {
-      case "js":
-      case "mjs":
-      case "cjs":
-        return "javascript"
-      case "ts":
-        return "typescript"
-      case "py":
-        return "python"
-      case "rs":
-        return "rust"
-      case "golang":
-        return "go"
-      case "htm":
-      case "xhtml":
-        return "html"
-      case "yml":
-        return "yaml"
-      case "shell":
-      case "shellscript":
-      case "sh":
-      case "zsh":
-        return "bash"
-      case "plain":
-      case "text":
-        return "plaintext"
-      case "h":
-        return "c"
-      default:
-        return normalized
-    }
-  }
-
-  private countTextLines(text: string) {
-    let lines = 1
-    for (let index = 0; index < text.length; index += 1) {
-      if (text.charCodeAt(index) === 10) lines += 1
-    }
-    return lines
-  }
-
-  private getSugarHighOptions(
-    language: string
-  ): SugarHighOptions | null | undefined {
-    switch (language) {
-      case "javascript":
-      case "jsx":
-      case "typescript":
-      case "tsx":
-      case "json":
-      case "jsonc":
-      case "html":
-      case "xml":
-      case "svg":
-      case "mdx":
-        return null
-      case "css":
-        return sugarCss
-      case "python":
-        return sugarPython
-      case "rust":
-        return sugarRust
-      case "c":
-        return sugarC
-      case "go":
-        return sugarGo
-      case "java":
-        return sugarJava
-      default:
-        return undefined
-    }
+    return resolvePendingUiRequest(this.pendingUiRequests, id, body)
   }
 
   async highlightCode(code: unknown, language: unknown) {
     const text = typeof code === "string" ? code : ""
-    const normalizedLanguage = this.normalizeHighlightLanguage(language)
-
-    if (!text || !normalizedLanguage) {
-      return {
-        ok: true,
-        skipped: true,
-        language: normalizedLanguage || undefined,
-      }
-    }
-
-    if (
-      normalizedLanguage === "plaintext" ||
-      text.length > 100_000 ||
-      this.countTextLines(text) > 1_500
-    ) {
-      return {
-        ok: true,
-        skipped: true,
-        language: normalizedLanguage,
-      }
-    }
-
-    const cacheKey = createHash("sha1")
-      .update(normalizedLanguage)
-      .update("\0")
-      .update(text)
-      .digest("hex")
-    const cached = this.highlightCache.get(cacheKey)
-    if (cached) {
-      return { ok: true, ...cached }
-    }
 
     try {
-      const options = this.getSugarHighOptions(normalizedLanguage)
-      if (options === undefined) {
+      const highlightInput = buildHighlightPayload({ code, language })
+
+      if ("skipped" in highlightInput) {
+        return {
+          ok: true,
+          skipped: true,
+          language: highlightInput.language,
+        }
+      }
+
+      const cacheKey = createHash("sha1")
+        .update(highlightInput.language)
+        .update("\0")
+        .update(text)
+        .digest("hex")
+      const cached = this.highlightCache.get(cacheKey)
+      if (cached) {
+        return { ok: true, ...cached }
+      }
+
+      if ("unsupported" in highlightInput) {
         const payload = {
           unsupported: true,
-          language: normalizedLanguage,
+          language: highlightInput.language,
         } satisfies HighlightPayload
         this.highlightCache.set(cacheKey, payload)
         return { ok: true, ...payload }
       }
 
       const payload = {
-        language: normalizedLanguage,
-        html: sugarHigh(text, options ?? undefined),
+        language: highlightInput.language,
+        html: highlightInput.html,
       } satisfies HighlightPayload
       this.highlightCache.set(cacheKey, payload)
       return { ok: true, ...payload }
