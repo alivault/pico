@@ -1,10 +1,5 @@
 import * as React from "react"
-import {
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowDownIcon,
   ArrowDownToLineIcon,
@@ -26,27 +21,16 @@ import type {
   ThemeMode,
 } from "@/lib/pi-web"
 import type {
-  DeleteSessionResponse,
-  DirectoryResolveResponse,
   DirectorySessionsIndexResponse,
   ExtensionUiEvent,
   FileCompletionsResponse,
-  ForkSessionResponse,
   ForkableMessagesResponse,
   GitChangesResponse,
   GitStatusResponse,
-  NavigateSessionTreeResponse,
   PathCompletionsResponse,
-  PendingMessageRemoveResponse,
-  PendingMessagesResponse,
-  PiWebServerEvent,
-  PromptResponse,
-  RenameSessionResponse,
   SessionListEntry,
   SessionTreeResponse,
   SessionsEvent,
-  SimpleOkResponse,
-  UiRequestResponse,
 } from "@/lib/pi-web-api"
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
 import type { ComposerPanelHandle } from "@/features/pi-web/composer-panel"
@@ -85,7 +69,6 @@ import {
   buildRequestUrl,
   fetchJson,
   readFileAsPromptImage,
-  updateStateFromSync,
 } from "@/features/pi-web/app-shell-utils"
 import { ComposerPanel } from "@/features/pi-web/composer-panel"
 import {
@@ -112,6 +95,10 @@ import {
   piWebSessionScopeKey,
 } from "@/features/pi-web/query-keys"
 import { AppSidebar } from "@/features/pi-web/sidebar"
+import { useAppShellMessageScroll } from "@/features/pi-web/use-app-shell-message-scroll"
+import { useAppShellPromptMutations } from "@/features/pi-web/use-app-shell-prompt-mutations"
+import { useAppShellSessionMutations } from "@/features/pi-web/use-app-shell-session-mutations"
+import { useAppShellSessionSync } from "@/features/pi-web/use-app-shell-session-sync"
 import { useAppShellShortcuts } from "@/features/pi-web/use-app-shell-shortcuts"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
@@ -130,16 +117,13 @@ import {
   createInitialSessionState,
   flattenTree,
   getSessionTitle,
-  normalizePromptImage,
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   normalizeThemeMode,
-  promptDraftKey,
   readStoredCollapsedDirectories,
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
   readStoredCenterMessages,
-  readStoredPromptDraft,
   readStoredRecentDirectories,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
@@ -149,11 +133,7 @@ import {
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pi-web"
-import {
-  isApiErrorResponse,
-  isSessionsEvent,
-  isStateSyncEvent,
-} from "@/lib/pi-web-api"
+import { isApiErrorResponse } from "@/lib/pi-web-api"
 
 function mergeAssistantTurns(items: Array<ConversationItem>) {
   const merged: Array<ConversationItem> = []
@@ -189,25 +169,6 @@ function mergeAssistantTurns(items: Array<ConversationItem>) {
   }
 
   return merged
-}
-
-function findMessageViewport(root: HTMLElement | null) {
-  if (!root) return null
-  return (
-    root.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]') ||
-    (root instanceof HTMLDivElement ? root : null)
-  )
-}
-
-function isViewportNearTop(viewport: HTMLDivElement, threshold = 48) {
-  return viewport.scrollTop < threshold
-}
-
-function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
-  return (
-    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-    threshold
-  )
 }
 
 const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
@@ -261,7 +222,6 @@ function finishedSessionLabel(title: string) {
     : "Session finished"
 }
 
-type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
 type DirectorySessionsIndexData = Extract<
   DirectorySessionsIndexResponse,
   { ok: true }
@@ -269,10 +229,6 @@ type DirectorySessionsIndexData = Extract<
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
-type NavigateSessionTreeData = Extract<
-  NavigateSessionTreeResponse,
-  { ok: true }
->
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 
 function sessionScrollKey(sessionState: {
@@ -395,47 +351,6 @@ function forkableMessagesQueryOptions({
   }
 }
 
-function messageAnchors(viewport: HTMLDivElement) {
-  return [
-    ...viewport.querySelectorAll<HTMLElement>("[data-message-anchor='true']"),
-  ]
-}
-
-function currentMessageAnchorIndex(
-  anchors: Array<HTMLElement>,
-  viewport: HTMLDivElement
-) {
-  if (anchors.length === 0) return -1
-
-  const viewportTop = viewport.scrollTop + 8
-  let currentIndex = 0
-
-  for (let index = 0; index < anchors.length; index += 1) {
-    if (anchors[index].offsetTop <= viewportTop) {
-      currentIndex = index
-      continue
-    }
-
-    break
-  }
-
-  return currentIndex
-}
-
-function previousMessageJumpTarget(viewport: HTMLDivElement) {
-  const anchors = messageAnchors(viewport)
-  const currentIndex = currentMessageAnchorIndex(anchors, viewport)
-  if (currentIndex <= 0) return null
-  return anchors[currentIndex - 1]
-}
-
-function nextMessageJumpTarget(viewport: HTMLDivElement) {
-  const anchors = messageAnchors(viewport)
-  const currentIndex = currentMessageAnchorIndex(anchors, viewport)
-  if (currentIndex < 0 || currentIndex >= anchors.length - 1) return null
-  return anchors[currentIndex + 1]
-}
-
 function useLatestRef<T>(value: T) {
   const ref = React.useRef(value)
   ref.current = value
@@ -553,15 +468,6 @@ export function PiWebAppShell({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
-  const messagesScrollAreaRef = React.useRef<HTMLDivElement | null>(null)
-  const bottomRef = React.useRef<HTMLDivElement | null>(null)
-  const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
-  const [isMessagesNearTop, setIsMessagesNearTop] = React.useState(true)
-  const [isMessagesNearBottom, setIsMessagesNearBottom] = React.useState(true)
-  const [hasPreviousMessageJumpTarget, setHasPreviousMessageJumpTarget] =
-    React.useState(false)
-  const [hasNextMessageJumpTarget, setHasNextMessageJumpTarget] =
-    React.useState(false)
   const lastStreamingRef = React.useRef(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
@@ -581,7 +487,6 @@ export function PiWebAppShell({
     new Map()
   )
   const sessionUnreadSnapshotsReadyRef = React.useRef(false)
-  const lastLoadedSessionScrollKeyRef = React.useRef("")
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -625,6 +530,24 @@ export function PiWebAppShell({
     return nextLoading
   })()
   const currentSessionQueryScope = sessionScrollKey(sessionState)
+  const isSessionViewLoading = Boolean(
+    sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
+  )
+  const {
+    bottomRef,
+    hasNextMessageJumpTarget,
+    hasPreviousMessageJumpTarget,
+    isMessagesNearBottom,
+    isMessagesNearTop,
+    jumpToNextMessage,
+    jumpToPreviousMessage,
+    messagesScrollAreaRef,
+    scrollConversationToBottom,
+    scrollConversationToTop,
+  } = useAppShellMessageScroll({
+    isSessionViewLoading,
+    sessionState,
+  })
   const gitStatusQuery = useQuery({
     ...gitStatusQueryOptions({
       viewerContextId,
@@ -799,40 +722,6 @@ export function PiWebAppShell({
     composerPanelRef.current?.openModelPicker()
   }
 
-  const scrollConversationToTop = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    viewport.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
-  const scrollConversationToBottom = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
-  }
-
-  const jumpToPreviousMessage = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    const target = previousMessageJumpTarget(viewport)
-    if (!target) return
-    viewport.scrollTo({
-      top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
-    })
-  }
-
-  const jumpToNextMessage = () => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    const target = nextMessageJumpTarget(viewport)
-    if (!target) return
-    viewport.scrollTo({
-      top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
-    })
-  }
-
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
     setSessionDoneSoundEnabled(enabled)
     safeLocalStorageSetItem(
@@ -876,157 +765,24 @@ export function PiWebAppShell({
   }
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
-  React.useEffect(() => {
-    if (!sessionId) {
-      pendingRouteSessionIdRef.current = undefined
-      return
-    }
-
-    if (sessionId === sessionState.sessionId) {
-      if (pendingRouteSessionIdRef.current === sessionId) {
-        pendingRouteSessionIdRef.current = undefined
-      }
-      return
-    }
-
-    pendingRouteSessionIdRef.current = sessionId
-  }, [sessionId, sessionState.sessionId])
-
-  React.useEffect(() => {
-    if (!viewerContextId) return
-
-    const source = new EventSource(
-      buildRequestUrl("/events", {
-        contextId: viewerContextId,
-        sessionId,
-      })
-    )
-
-    source.onopen = () => {
-      setSessionState((current) => ({ ...current, connected: true }))
-    }
-
-    source.onerror = () => {
-      setSessionState((current) => ({ ...current, connected: false }))
-    }
-
-    source.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as PiWebServerEvent
-
-      if (isStateSyncEvent(payload)) {
-        const previousState = sessionStateRef.current
-        const sessionChanged =
-          promptDraftKey(payload) !== promptDraftKey(previousState)
-        const localPromptText = composerTextRef.current
-
-        rememberStoredPromptDraft(
-          previousState,
-          serializeComposerDraft({
-            text: localPromptText,
-            skillName: composerSkillRef.current,
-          })
-        )
-
-        const previousEditorText = previousState.uiState.editorText || ""
-        const preserveLocalPrompt =
-          !sessionChanged && localPromptText !== previousEditorText
-        const nextState = updateStateFromSync(previousState, payload)
-        const nextPromptText = preserveLocalPrompt
-          ? localPromptText
-          : (readStoredPromptDraft(nextState) ??
-            nextState.uiState.editorText ??
-            "")
-
-        setSessionState(nextState)
-        sessionStateRef.current = nextState
-
-        if (sessionChanged) {
-          setComposerImages([])
-        }
-
-        replaceComposerDraftRef.current(nextPromptText, nextState)
-        lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
-        setPendingMessages(
-          Array.isArray(payload.pendingUserMessages)
-            ? payload.pendingUserMessages.map((message) => ({
-                pendingId:
-                  typeof message.pendingId === "string"
-                    ? message.pendingId
-                    : "",
-                text: typeof message.text === "string" ? message.text : "",
-                images: Array.isArray(message.images)
-                  ? message.images
-                      .map((image: unknown) => normalizePromptImage(image))
-                      .filter(
-                        (image: PromptImage | null): image is PromptImage =>
-                          Boolean(image)
-                      )
-                  : [],
-                streamingBehavior:
-                  message.streamingBehavior === "steer" ? "steer" : "followUp",
-              }))
-            : []
-        )
-        return
-      }
-
-      if (isSessionsEvent(payload)) {
-        setSessionsEvent(payload)
-        return
-      }
-
-      if (payload.type === "request_error") {
-        toast.error(payload.error || "Request failed")
-        return
-      }
-
-      if (payload.type === "extension_error") {
-        toast.error(payload.error || "Extension error")
-        return
-      }
-
-      if (payload.type === "extension_ui_request") {
-        if (payload.method === "notify") {
-          const notifyMessage = payload.message || "Notification"
-          if (payload.notifyType === "success") toast.success(notifyMessage)
-          else if (payload.notifyType === "warning")
-            toast.warning(notifyMessage)
-          else if (payload.notifyType === "error") toast.error(notifyMessage)
-          else toast.info(notifyMessage)
-          return
-        }
-
-        setPendingUiRequest(payload)
-        setPendingUiValue(payload.prefill || "")
-        return
-      }
-    }
-
-    return () => {
-      source.close()
-    }
-  }, [replaceComposerDraftRef, sessionId, viewerContextId])
-
-  React.useEffect(() => {
-    if (sessionState.draft || !sessionState.sessionId) return
-
-    const pendingRouteSessionId = pendingRouteSessionIdRef.current
-    if (pendingRouteSessionId) {
-      if (sessionState.sessionId === pendingRouteSessionId) {
-        pendingRouteSessionIdRef.current = undefined
-      }
-      return
-    }
-
-    if (sessionState.sessionId !== sessionId) {
-      handleSelectSessionRef.current(sessionState.sessionId)
-    }
-  }, [
-    handleSelectSessionRef,
+  useAppShellSessionSync({
+    viewerContextId,
     sessionId,
-    sessionState.draft,
-    sessionState.sessionId,
-  ])
+    sessionState,
+    sessionStateRef,
+    composerTextRef,
+    composerSkillRef,
+    replaceComposerDraftRef,
+    handleSelectSessionRef,
+    pendingRouteSessionIdRef,
+    setSessionState,
+    setSessionsEvent,
+    setComposerImages,
+    setPendingMessages,
+    setPendingUiRequest,
+    setPendingUiValue,
+    lastSyncedEditorTextRef,
+  })
 
   const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
 
@@ -1124,35 +880,6 @@ export function PiWebAppShell({
     sessionState.sessionId,
     sessionState.streaming,
   ])
-
-  React.useEffect(() => {
-    const viewport = findMessageViewport(messagesScrollAreaRef.current)
-    messageViewportRef.current = viewport
-    if (!viewport) return
-
-    const syncScrollState = () => {
-      setIsMessagesNearTop(isViewportNearTop(viewport))
-      setIsMessagesNearBottom(isViewportNearBottom(viewport))
-      setHasPreviousMessageJumpTarget(
-        Boolean(previousMessageJumpTarget(viewport))
-      )
-      setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
-    }
-
-    syncScrollState()
-    viewport.addEventListener("scroll", syncScrollState, { passive: true })
-    return () => {
-      viewport.removeEventListener("scroll", syncScrollState)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    if (!isMessagesNearBottom && !sessionState.streaming) return
-
-    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
-  }, [isMessagesNearBottom, sessionState.streaming])
 
   React.useEffect(() => {
     if (!viewerContextId || !sessionsEvent) return
@@ -1742,60 +1469,58 @@ export function PiWebAppShell({
     })
   }
 
-  const addDirectoryMutation = useMutation({
-    mutationFn: async (requestedPath: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
+  const prefetchDirectorySessionsIndex = React.useCallback(
+    (directory: string) => {
+      if (!viewerContextId) return
 
-      return await fetchJson<DirectoryResolveData>(
-        buildRequestUrl("/api/directory/resolve", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: requestedPath }),
-        }
-      )
-    },
-  })
-
-  const addDirectoryPath = async (path: string) => {
-    if (!viewerContextId) return
-    const requestedPath = path.trim()
-    if (!requestedPath) return
-
-    try {
-      const response = await addDirectoryMutation.mutateAsync(requestedPath)
-      setSidebarDirectories((current) => {
-        const next = normalizeStoredDirectoryList([...current, response.path])
-        safeLocalStorageSetItem(
-          SIDEBAR_DIRECTORIES_STORAGE_KEY,
-          JSON.stringify(next)
-        )
-        return next
-      })
-      rememberRecentDirectory(response.path)
-      setDirectoryInput("")
-      setAddDirectoryOpen(false)
       void queryClient.prefetchQuery(
         directorySessionsIndexQueryOptions({
           viewerContextId,
-          directory: response.path,
+          directory,
         })
       )
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to add directory"
-      )
-    }
-  }
+    },
+    [queryClient, viewerContextId]
+  )
 
-  const addDirectory = async () => {
-    await addDirectoryPath(directoryInput)
-  }
+  const {
+    abortSession,
+    addDirectory,
+    addDirectoryPath,
+    createSession,
+    removePendingMessage,
+    reorderPending,
+    submitPrompt,
+  } = useAppShellPromptMutations({
+    viewerContextId,
+    activeSessionId,
+    directoryInput,
+    defaultNewSessionDirectory,
+    sessionState,
+    draftSessionLoadingOwnerKey,
+    pendingDraftPrompt,
+    pendingDraftFollowUps,
+    awaitingFirstTurn,
+    pendingMessages,
+    composerImages,
+    composerTextRef,
+    composerSkillRef,
+    replaceComposerDraft,
+    lastSyncedEditorTextRef,
+    rememberRecentDirectory,
+    prefetchDirectorySessionsIndex,
+    handleSelectSession,
+    setSidebarDirectories,
+    setDirectoryInput,
+    setAddDirectoryOpen,
+    setStoredDraftDirectory,
+    setDraftSessionLoadingOwnerKey,
+    setPendingDraftPrompt,
+    setPendingDraftFollowUps,
+    setAwaitingFirstTurn,
+    setIsSubmitting,
+    setComposerImages,
+  })
 
   const toggleDirectory = (directory: string) => {
     setCollapsedDirectories((current) => {
@@ -1811,326 +1536,6 @@ export function PiWebAppShell({
     })
   }
 
-  const applyPendingDraftPromptToComposer = (pendingPrompt: {
-    message: string
-    images: Array<PromptImage>
-  }) => {
-    replaceComposerDraft(pendingPrompt.message)
-    setComposerImages(pendingPrompt.images.map((image) => ({ ...image })))
-    return true
-  }
-
-  const normalizeQueuedStreamingBehavior = (
-    streamingBehavior?: StreamingBehavior
-  ) => (streamingBehavior === "followUp" ? "followUp" : "steer")
-
-  const restorePendingDraftPrompt = (ownerKey: string) => {
-    if (!pendingDraftPrompt || pendingDraftPrompt.ownerKey !== ownerKey) {
-      return false
-    }
-    const nextPrompt = pendingDraftPrompt
-    setPendingDraftPrompt(null)
-    setPendingDraftFollowUps([])
-    setAwaitingFirstTurn(false)
-    return applyPendingDraftPromptToComposer(nextPrompt)
-  }
-
-  const createSessionMutation = useMutation({
-    mutationFn: async ({ cwd }: { cwd?: string }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<SimpleOkResponse>(
-        buildRequestUrl("/api/session/new", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd }),
-        }
-      )
-    },
-  })
-
-  const createSession = async (cwdOverride?: string) => {
-    if (!viewerContextId) return
-
-    const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
-    if (nextCwd) {
-      rememberRecentDirectory(nextCwd)
-      safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextCwd)
-      setStoredDraftDirectory(nextCwd)
-    }
-    const ownerKey = promptDraftKey({ cwd: nextCwd })
-    setDraftSessionLoadingOwnerKey(ownerKey)
-
-    try {
-      await createSessionMutation.mutateAsync({ cwd: nextCwd })
-      handleSelectSession(undefined)
-    } catch (error) {
-      setDraftSessionLoadingOwnerKey((current) =>
-        current === ownerKey ? null : current
-      )
-      restorePendingDraftPrompt(ownerKey)
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create session"
-      )
-    }
-  }
-
-  const queuePendingDraftPrompt = (streamingBehavior?: StreamingBehavior) => {
-    if (!draftSessionLoadingOwnerKey) return false
-
-    const message = serializeComposerDraft({
-      text: composerTextRef.current,
-      skillName: composerSkillRef.current,
-    }).trim()
-    const images = composerImages.map((image) => ({ ...image }))
-    if (!message && images.length === 0) return false
-
-    if (!pendingDraftPrompt) {
-      setPendingDraftPrompt({
-        ownerKey: draftSessionLoadingOwnerKey,
-        message,
-        images,
-        streamingBehavior,
-      })
-    } else {
-      setPendingDraftFollowUps((current) => [
-        ...current,
-        {
-          message,
-          images,
-          streamingBehavior:
-            normalizeQueuedStreamingBehavior(streamingBehavior),
-        },
-      ])
-    }
-
-    replaceComposerDraft("")
-    setComposerImages([])
-    lastSyncedEditorTextRef.current = ""
-
-    if (!pendingDraftPrompt) {
-      toast.info("Prompt will send when the new session is ready.")
-    }
-
-    return true
-  }
-
-  const promptMutation = useMutation({
-    mutationFn: async ({
-      message,
-      images,
-      streamingBehavior,
-    }: {
-      message: string
-      images: Array<PromptImage>
-      streamingBehavior?: StreamingBehavior
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<PromptResponse>(
-        buildRequestUrl("/api/prompt", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            message,
-            images,
-            streamingBehavior,
-          }),
-        }
-      )
-    },
-  })
-
-  const submitPrompt = async (streamingBehavior?: StreamingBehavior) => {
-    if (!viewerContextId) return false
-    if (draftSessionLoadingOwnerKey) {
-      return queuePendingDraftPrompt(streamingBehavior)
-    }
-
-    const message = serializeComposerDraft({
-      text: composerTextRef.current,
-      skillName: composerSkillRef.current,
-    }).trim()
-    if (!message && composerImages.length === 0) return false
-
-    const treatAsQueuedPrompt = Boolean(
-      sessionState.streaming || awaitingFirstTurn
-    )
-    const normalizedStreamingBehavior = treatAsQueuedPrompt
-      ? normalizeQueuedStreamingBehavior(streamingBehavior)
-      : streamingBehavior
-
-    setIsSubmitting(true)
-    if (!treatAsQueuedPrompt) {
-      setAwaitingFirstTurn(true)
-    }
-
-    try {
-      await promptMutation.mutateAsync({
-        message,
-        images: composerImages,
-        streamingBehavior: normalizedStreamingBehavior,
-      })
-      replaceComposerDraft("")
-      setComposerImages([])
-      lastSyncedEditorTextRef.current = ""
-      return true
-    } catch (error) {
-      if (!treatAsQueuedPrompt) {
-        setAwaitingFirstTurn(false)
-      }
-      toast.error(
-        error instanceof Error ? error.message : "Failed to submit prompt"
-      )
-      return false
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const flushPendingDraftFollowUps = async () => {
-    if (draftSessionLoadingOwnerKey || pendingDraftFollowUps.length === 0) {
-      return false
-    }
-
-    const followUps = pendingDraftFollowUps.map((entry) => ({
-      message: entry.message,
-      images: entry.images.map((image) => ({ ...image })),
-      streamingBehavior: entry.streamingBehavior,
-    }))
-
-    setPendingDraftFollowUps([])
-
-    for (const followUp of followUps) {
-      try {
-        await promptMutation.mutateAsync({
-          message: followUp.message,
-          images: followUp.images,
-          streamingBehavior: followUp.streamingBehavior,
-        })
-      } catch (error) {
-        if (!composerTextRef.current) {
-          replaceComposerDraft(followUp.message)
-          setComposerImages(followUp.images)
-        }
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to submit queued follow-up"
-        )
-        return false
-      }
-    }
-
-    return true
-  }
-
-  const flushPendingDraftPrompt = async (ownerKey: string) => {
-    if (
-      !pendingDraftPrompt ||
-      pendingDraftPrompt.ownerKey !== ownerKey ||
-      draftSessionLoadingOwnerKey
-    ) {
-      return false
-    }
-
-    const nextPrompt = pendingDraftPrompt
-    setPendingDraftPrompt(null)
-    applyPendingDraftPromptToComposer(nextPrompt)
-    const sent = await submitPrompt(nextPrompt.streamingBehavior)
-    if (!sent) {
-      setPendingDraftFollowUps([])
-      return false
-    }
-    await flushPendingDraftFollowUps()
-    return true
-  }
-  const flushPendingDraftPromptRef = useLatestRef(flushPendingDraftPrompt)
-
-  React.useEffect(() => {
-    if (!draftSessionLoadingOwnerKey) return
-    const currentOwnerKey = promptDraftKey(sessionState)
-    if (
-      !sessionState.draft ||
-      currentOwnerKey !== draftSessionLoadingOwnerKey
-    ) {
-      return
-    }
-
-    setDraftSessionLoadingOwnerKey(null)
-    if (pendingDraftPrompt?.ownerKey === draftSessionLoadingOwnerKey) {
-      void flushPendingDraftPromptRef.current(draftSessionLoadingOwnerKey)
-    }
-  }, [
-    draftSessionLoadingOwnerKey,
-    flushPendingDraftPromptRef,
-    pendingDraftPrompt?.ownerKey,
-    sessionState,
-  ])
-
-  React.useEffect(() => {
-    if (!awaitingFirstTurn) return
-    const hasAssistantOutput = sessionState.items.some(
-      (item) =>
-        item.kind === "assistant" &&
-        item.blocks.some((block) => block.type === "text" && block.text.trim())
-    )
-
-    if (
-      sessionState.streaming ||
-      hasAssistantOutput ||
-      pendingMessages.length > 0
-    ) {
-      setAwaitingFirstTurn(false)
-    }
-  }, [
-    awaitingFirstTurn,
-    pendingMessages.length,
-    sessionState.items,
-    sessionState.streaming,
-  ])
-
-  const abortSessionMutation = useMutation({
-    mutationFn: async () => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<SimpleOkResponse>(
-        buildRequestUrl("/api/abort", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-        }
-      )
-    },
-  })
-
-  const abortSession = async () => {
-    if (!viewerContextId) return
-    try {
-      await abortSessionMutation.mutateAsync()
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to abort session"
-      )
-    }
-  }
-
   const onPickImages = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const nextImages = await Promise.all(
@@ -2139,209 +1544,50 @@ export function PiWebAppShell({
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
-  const removePendingMessageMutation = useMutation({
-    mutationFn: async (pendingId: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<PendingMessageRemoveResponse>(
-        buildRequestUrl("/api/pending-message/remove", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingId }),
-        }
-      )
-    },
-  })
-
-  const removePendingMessage = async (pendingId: string) => {
-    if (!viewerContextId) return
-    try {
-      await removePendingMessageMutation.mutateAsync(pendingId)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove pending prompt"
-      )
-    }
-  }
-
   const currentPendingMessages = pendingMessages
 
-  const reorderPendingMessagesMutation = useMutation({
-    mutationFn: async (
-      nextPendingMessages: Array<{
-        pendingId: string
-        text: string
-        images: Array<PromptImage>
-        streamingBehavior: "steer" | "followUp"
-      }>
-    ) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<PendingMessagesResponse>(
-        buildRequestUrl("/api/pending-messages/reorder", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingMessages: nextPendingMessages }),
-        }
-      )
-    },
+  const {
+    cycleThinkingLevel,
+    deleteSession,
+    forkFromMessage,
+    isForkingFromMessage,
+    navigateTreeNode,
+    openForkDialog,
+    openTreeDialog,
+    renameSession,
+    renameSessionToValue,
+    resolveUiRequest,
+    runCompact,
+    saveTreeLabel,
+    setModel,
+    setThinkingBlocksHidden,
+    setThinkingLevel,
+    toggleHideThinking,
+    treeSubmitting,
+  } = useAppShellSessionMutations({
+    viewerContextId,
+    activeSessionId,
+    currentSessionQueryScope,
+    sessionState,
+    selectedTreeNodeId,
+    selectedTreeNodeLabel,
+    renameTarget,
+    renameValue,
+    deleteTargets,
+    pendingUiRequest,
+    queryClient,
+    setTreeOpen,
+    setTreeQuery,
+    setForkOpen,
+    setRenameOpen,
+    setRenameTarget,
+    setDeleteTargets,
+    setSelectedSidebarSessionKeys,
+    setSidebarSessionSelectionAnchor,
+    setRunningSlashCommand,
+    setPendingUiRequest,
+    setPendingUiValue,
   })
-
-  const reorderPending = async (pendingId: string, direction: -1 | 1) => {
-    if (!viewerContextId) return
-    const next = [...pendingMessages]
-    const index = next.findIndex((entry) => entry.pendingId === pendingId)
-    if (index === -1) return
-    const targetIndex = index + direction
-    if (targetIndex < 0 || targetIndex >= next.length) return
-    const [item] = next.splice(index, 1)
-    next.splice(targetIndex, 0, item)
-    try {
-      await reorderPendingMessagesMutation.mutateAsync(next)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to reorder pending prompts"
-      )
-    }
-  }
-
-  const setModelMutation = useMutation({
-    mutationFn: async ({
-      provider,
-      modelId,
-    }: {
-      provider: string
-      modelId: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/model", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ provider, modelId }),
-        }
-      )
-    },
-  })
-
-  const setModel = async (value: string) => {
-    if (!viewerContextId) return
-    const [provider, modelId] = value.split("/")
-    if (!provider || !modelId) return
-    try {
-      await setModelMutation.mutateAsync({ provider, modelId })
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update model"
-      )
-    }
-  }
-
-  const setThinkingLevelMutation = useMutation({
-    mutationFn: async (level: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/thinking", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ level }),
-        }
-      )
-    },
-  })
-
-  const setThinkingLevel = async (level: string) => {
-    if (!viewerContextId) return
-    try {
-      await setThinkingLevelMutation.mutateAsync(level)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update thinking level"
-      )
-    }
-  }
-
-  const cycleThinkingLevel = async (direction: -1 | 1) => {
-    const levels = sessionState.availableThinkingLevels.length
-      ? sessionState.availableThinkingLevels
-      : ["off"]
-    const currentIndex = levels.indexOf(sessionState.thinkingLevel || "off")
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0
-    const nextLevel =
-      levels[(safeIndex + direction + levels.length) % levels.length] ||
-      levels[0]
-    await setThinkingLevel(nextLevel)
-  }
-
-  const setThinkingBlocksHiddenMutation = useMutation({
-    mutationFn: async (hidden: boolean) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/settings/hide-thinking", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ hide: hidden }),
-        }
-      )
-    },
-  })
-
-  const setThinkingBlocksHidden = async (hidden: boolean) => {
-    if (!viewerContextId) return
-    try {
-      await setThinkingBlocksHiddenMutation.mutateAsync(hidden)
-      toast.info(hidden ? "Thinking hidden" : "Thinking shown")
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update thinking visibility"
-      )
-    }
-  }
-
-  const toggleHideThinking = async () => {
-    await setThinkingBlocksHidden(!sessionState.hideThinkingBlock)
-  }
 
   const setToolBlocksHidden = (hidden: boolean) => {
     setHideToolBlocks(hidden)
@@ -2356,321 +1602,6 @@ export function PiWebAppShell({
   const setMessagesCentered = (centered: boolean) => {
     setCenterMessages(centered)
     safeLocalStorageSetItem(CENTER_MESSAGES_STORAGE_KEY, centered ? "1" : "0")
-  }
-
-  const compactMutation = useMutation({
-    mutationFn: async () => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/slash-command", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: "compact", args: "" }),
-        }
-      )
-    },
-  })
-
-  const runCompact = async () => {
-    if (!viewerContextId) return
-    setRunningSlashCommand("compact")
-    try {
-      await compactMutation.mutateAsync()
-      toast.success("Started compaction")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to compact session"
-      )
-    } finally {
-      setRunningSlashCommand(null)
-    }
-  }
-
-  const openTreeDialog = async () => {
-    if (!viewerContextId) return
-    setTreeOpen(true)
-    setTreeQuery("")
-    await queryClient.invalidateQueries({
-      queryKey: piWebQueryKeys.sessionTree(
-        viewerContextId,
-        currentSessionQueryScope
-      ),
-      exact: true,
-      refetchType: "active",
-    })
-  }
-
-  const saveTreeLabelMutation = useMutation({
-    mutationFn: async ({
-      entryId,
-      label,
-    }: {
-      entryId: string
-      label: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<SessionTreeData>(
-        buildRequestUrl("/api/session/tree/label", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entryId, label }),
-        }
-      )
-    },
-    onSuccess: (response) => {
-      queryClient.setQueryData(
-        piWebQueryKeys.sessionTree(viewerContextId, currentSessionQueryScope),
-        response
-      )
-    },
-  })
-
-  const saveTreeLabel = async () => {
-    if (!viewerContextId || !selectedTreeNodeId) return
-    try {
-      await saveTreeLabelMutation.mutateAsync({
-        entryId: selectedTreeNodeId,
-        label: selectedTreeNodeLabel,
-      })
-      toast.success("Saved tree label")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save label"
-      )
-    }
-  }
-
-  const navigateTreeNodeMutation = useMutation({
-    mutationFn: async ({
-      targetId,
-      summarize,
-      customInstructions,
-    }: {
-      targetId: string
-      summarize?: boolean
-      customInstructions?: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<NavigateSessionTreeData>(
-        buildRequestUrl("/api/session/tree", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            targetId,
-            summarize: Boolean(summarize),
-            customInstructions,
-          }),
-        }
-      )
-    },
-  })
-
-  const navigateTreeNode = async (
-    targetId: string,
-    options?: { summarize?: boolean; customInstructions?: string }
-  ) => {
-    if (!viewerContextId) return
-    try {
-      const response = await navigateTreeNodeMutation.mutateAsync({
-        targetId,
-        summarize: options?.summarize,
-        customInstructions: options?.customInstructions,
-      })
-      if (response.aborted) {
-        toast.info("Branch summarization cancelled")
-        return
-      }
-      if (response.cancelled) {
-        toast.info("Tree navigation cancelled")
-        return
-      }
-      setTreeOpen(false)
-      toast.success(
-        options?.summarize
-          ? "Continued from summarized branch"
-          : "Moved session tree cursor"
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to navigate tree"
-      )
-    }
-  }
-
-  const openForkDialog = async () => {
-    if (!viewerContextId) return
-    setForkOpen(true)
-    await queryClient.invalidateQueries({
-      queryKey: piWebQueryKeys.forkableMessages(
-        viewerContextId,
-        currentSessionQueryScope
-      ),
-      exact: true,
-      refetchType: "active",
-    })
-  }
-
-  const forkFromMessageMutation = useMutation({
-    mutationFn: async (entryId: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<ForkSessionResponse>(
-        buildRequestUrl("/api/session/fork", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entryId }),
-        }
-      )
-    },
-  })
-
-  const forkFromMessage = async (entryId: string) => {
-    if (!viewerContextId) return
-    try {
-      await forkFromMessageMutation.mutateAsync(entryId)
-      setForkOpen(false)
-      toast.success("Forked session")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to fork session"
-      )
-    }
-  }
-
-  const renameSessionMutation = useMutation({
-    mutationFn: async ({ path, name }: { path: string; name: string }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<RenameSessionResponse>(
-        buildRequestUrl("/api/session/rename", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path, name }),
-        }
-      )
-    },
-  })
-
-  const renameSessionToValue = async (nextName: string, closeDialog = true) => {
-    const targetPath = renameTarget?.path || sessionState.sessionFile
-    if (!viewerContextId || !targetPath) return false
-    try {
-      await renameSessionMutation.mutateAsync({
-        path: targetPath,
-        name: nextName,
-      })
-      if (closeDialog) {
-        setRenameOpen(false)
-        setRenameTarget(null)
-      }
-      toast.success("Renamed session")
-      return true
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to rename session"
-      )
-      return false
-    }
-  }
-
-  const renameSession = async () => {
-    return await renameSessionToValue(renameValue)
-  }
-
-  const deleteSessionMutation = useMutation({
-    mutationFn: async (paths: Array<string>) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      for (const path of paths) {
-        await fetchJson<DeleteSessionResponse>(
-          buildRequestUrl("/api/session/delete", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ path }),
-          }
-        )
-      }
-    },
-  })
-
-  const deleteSession = async () => {
-    if (!viewerContextId || deleteTargets.length === 0) return
-
-    const orderedTargets = [
-      ...deleteTargets.filter(
-        (target) => target.path && target.path !== sessionState.sessionFile
-      ),
-      ...deleteTargets.filter(
-        (target) => target.path && target.path === sessionState.sessionFile
-      ),
-    ]
-
-    try {
-      await deleteSessionMutation.mutateAsync(
-        orderedTargets.flatMap((target) => (target.path ? [target.path] : []))
-      )
-
-      const deletedKeys = new Set(
-        orderedTargets
-          .map((target) => sessionListEntryKey(target))
-          .filter(Boolean)
-      )
-      setSelectedSidebarSessionKeys((current) =>
-        current.filter((key) => !deletedKeys.has(key))
-      )
-      setSidebarSessionSelectionAnchor((current) =>
-        current && deletedKeys.has(current) ? "" : current
-      )
-      setDeleteTargets([])
-      toast.success(
-        orderedTargets.length === 1
-          ? "Deleted session"
-          : `Deleted ${orderedTargets.length} sessions`
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete session"
-      )
-    }
   }
 
   const runBuiltinSlashCommand = async (name: string, args: string) => {
@@ -2755,54 +1686,7 @@ export function PiWebAppShell({
     }
   }
 
-  const resolveUiRequestMutation = useMutation({
-    mutationFn: async ({
-      requestId,
-      body,
-    }: {
-      requestId: string
-      body: Record<string, unknown>
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<UiRequestResponse>(
-        buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      )
-    },
-  })
-
-  const resolveUiRequest = async (body: Record<string, unknown>) => {
-    if (!viewerContextId || !pendingUiRequest) return
-    try {
-      await resolveUiRequestMutation.mutateAsync({
-        requestId: pendingUiRequest.id,
-        body,
-      })
-      setPendingUiRequest(null)
-      setPendingUiValue("")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to resolve UI request"
-      )
-    }
-  }
-
-  const forkDialogLoading = Boolean(
-    forkLoading || forkFromMessageMutation.isPending
-  )
-  const treeSubmitting = Boolean(
-    saveTreeLabelMutation.isPending || navigateTreeNodeMutation.isPending
-  )
+  const forkDialogLoading = Boolean(forkLoading || isForkingFromMessage)
   const flatTree = treeData ? flattenTree(treeData.tree) : []
   const treeLeafId = treeData?.leafId ?? null
   const treeSummaryAvailable = sessionState.availableModels.length > 0
@@ -3163,32 +2047,6 @@ export function PiWebAppShell({
     treeOpen,
   })
 
-  const isSessionViewLoading = Boolean(
-    sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
-  )
-
-  React.useLayoutEffect(() => {
-    if (isSessionViewLoading) return
-
-    const nextSessionScrollKey = sessionScrollKey(sessionState)
-    if (!nextSessionScrollKey) return
-    if (lastLoadedSessionScrollKeyRef.current === nextSessionScrollKey) return
-
-    const viewport =
-      messageViewportRef.current ||
-      findMessageViewport(messagesScrollAreaRef.current)
-    if (!viewport) return
-
-    messageViewportRef.current = viewport
-    lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
-    viewport.scrollTop = viewport.scrollHeight
-    setIsMessagesNearTop(isViewportNearTop(viewport))
-    setIsMessagesNearBottom(isViewportNearBottom(viewport))
-    setHasPreviousMessageJumpTarget(
-      Boolean(previousMessageJumpTarget(viewport))
-    )
-    setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
-  }, [isSessionViewLoading, sessionState])
   const currentGitSummary = gitStatus?.gitStatus ?? null
   const headerGitStatusText = formatHeaderGitStatusText(currentGitSummary)
   const draftGitSummary =

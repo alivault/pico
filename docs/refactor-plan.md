@@ -34,11 +34,11 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
   - [x] Move storage keys and storage helpers into a storage-focused module.
   - [x] Move tree flatten/filter helpers into a tree-focused module.
   - [x] Move sync/message normalization helpers into a sync-focused module.
-- [ ] Break up `src/features/pi-web/app-shell.tsx`.
-  - [ ] Extract SSE/session sync behavior into hooks.
-  - [ ] Extract prompt/session mutations into hooks.
+- [x] Break up `src/features/pi-web/app-shell.tsx`.
+  - [x] Extract SSE/session sync behavior into hooks.
+  - [x] Extract prompt/session mutations into hooks.
   - [x] Extract keyboard shortcut handling into hooks.
-  - [ ] Extract scroll/jump behavior into hooks.
+  - [x] Extract scroll/jump behavior into hooks.
 - [ ] Break up `src/server/pi-web-runtime.ts`.
   - [ ] Extract SSE/context coordination.
   - [ ] Extract tree/fork behavior.
