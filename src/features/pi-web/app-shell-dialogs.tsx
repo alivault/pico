@@ -502,7 +502,6 @@ type AppShellDialogsProps = {
   settingsOpen: boolean
   onSettingsOpenChange: (open: boolean) => void
   currentTheme: ThemeMode
-  currentThemeLabel: string
   onThemeChange: (value: ThemeMode) => void
   hideThinkingBlocks: boolean
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -602,7 +601,6 @@ export function AppShellDialogs({
   settingsOpen,
   onSettingsOpenChange,
   currentTheme,
-  currentThemeLabel,
   onThemeChange,
   hideThinkingBlocks,
   onHideThinkingBlocksChange,
@@ -1646,17 +1644,11 @@ export function AppShellDialogs({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
-            <DialogDescription>
-              Theme, notifications, and session completion behavior for Pi.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
             <section className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">Theme</h3>
-                <p className="text-sm text-muted-foreground">
-                  Current theme: {currentThemeLabel}
-                </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 {THEME_OPTIONS.map((themeOption) => (
@@ -1677,9 +1669,6 @@ export function AppShellDialogs({
             <section className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold">Conversation display</h3>
-                <p className="text-sm text-muted-foreground">
-                  Match the old shell controls for hiding assistant internals.
-                </p>
               </div>
 
               <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
@@ -1726,8 +1715,7 @@ export function AppShellDialogs({
                     Center messages at 80ch
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Keep message text left-aligned, but constrain each message
-                    to a centered 80 character column.
+                    Constrain each message to a centered 80 character column.
                   </div>
                 </div>
                 <input
@@ -1747,9 +1735,6 @@ export function AppShellDialogs({
                 <h3 className="text-sm font-semibold">
                   Session completion notifications
                 </h3>
-                <p className="text-sm text-muted-foreground">
-                  These settings mirror the old pi-web notification controls.
-                </p>
               </div>
 
               <label className="flex items-start justify-between gap-4 rounded-lg border p-3">

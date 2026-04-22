@@ -147,7 +147,6 @@ import {
   rememberStoredPromptDraft,
   safeLocalStorageSetItem,
   sessionListEntryKey,
-  themeModeLabel,
 } from "@/lib/pi-web"
 import {
   isApiErrorResponse,
@@ -614,9 +613,8 @@ export function PiWebAppShell({
   const sessionUnreadSnapshotsReadyRef = React.useRef(false)
   const lastLoadedSessionScrollKeyRef = React.useRef("")
 
-  const { resolvedTheme, setTheme, theme } = useTheme()
+  const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
-  const currentThemeLabel = themeModeLabel(currentTheme, resolvedTheme)
 
   const activeSessionId = sessionState.sessionId || sessionId
   const queryClient = useQueryClient()
@@ -4119,7 +4117,6 @@ export function PiWebAppShell({
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
         currentTheme={currentTheme}
-        currentThemeLabel={currentThemeLabel}
         onThemeChange={handleThemeChange}
         hideThinkingBlocks={sessionState.hideThinkingBlock}
         onHideThinkingBlocksChange={(hidden) => {
