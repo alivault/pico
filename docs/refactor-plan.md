@@ -37,7 +37,7 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
 - [ ] Break up `src/features/pi-web/app-shell.tsx`.
   - [ ] Extract SSE/session sync behavior into hooks.
   - [ ] Extract prompt/session mutations into hooks.
-  - [ ] Extract keyboard shortcut handling into hooks.
+  - [x] Extract keyboard shortcut handling into hooks.
   - [ ] Extract scroll/jump behavior into hooks.
 - [ ] Break up `src/server/pi-web-runtime.ts`.
   - [ ] Extract SSE/context coordination.
