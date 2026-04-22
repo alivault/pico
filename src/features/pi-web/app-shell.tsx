@@ -3780,7 +3780,7 @@ export function PiWebAppShell({
                                 <div
                                   key={key}
                                   data-message-anchor="true"
-                                  className="flex justify-end"
+                                  className="w-full"
                                 >
                                   <UserMessageCard item={item} />
                                 </div>
@@ -3801,7 +3801,7 @@ export function PiWebAppShell({
                               <div
                                 key={key}
                                 data-message-anchor="true"
-                                className="flex justify-start"
+                                className="w-full"
                               >
                                 <AssistantMessageCard
                                   item={item}
@@ -3814,7 +3814,7 @@ export function PiWebAppShell({
                         )
                       })()}
                       {workingState ? (
-                        <div className="flex justify-start">
+                        <div className="w-full">
                           <MessagesWorkingIndicator state={workingState} />
                         </div>
                       ) : null}

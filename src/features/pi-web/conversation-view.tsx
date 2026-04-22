@@ -593,7 +593,7 @@ export function MessagesWorkingIndicator({
       role="status"
       aria-live="polite"
       className={cn(
-        "flex w-full max-w-3xl items-start gap-3 rounded-xl px-1 py-1 text-sm",
+        "flex w-full items-start gap-3 rounded-xl px-1 py-1 text-sm",
         state.done ? "text-muted-foreground" : "text-muted-foreground"
       )}
     >
@@ -622,7 +622,7 @@ export function UserMessageCard({
   const labelText = userMessageLabel(item)
 
   return (
-    <div className="ml-auto w-full max-w-3xl rounded-xl border bg-primary/6 px-4 py-3">
+    <div className="w-full rounded-xl border bg-primary/6 px-4 py-3">
       {labelText ? (
         <div className="mb-2 flex items-center gap-2">
           <Badge variant="outline">{labelText}</Badge>
@@ -729,7 +729,7 @@ export function AssistantMessageCard({
   }
 
   return (
-    <div className="w-full max-w-3xl rounded-2xl border bg-card px-4 py-4">
+    <div className="w-full rounded-2xl border bg-card px-4 py-4">
       <div className="flex flex-col gap-4">{renderedBlocks}</div>
     </div>
   )
