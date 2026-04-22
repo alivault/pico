@@ -3934,7 +3934,9 @@ export function PiWebAppShell({
               model={sessionState.model}
               thinkingLevel={sessionState.thinkingLevel}
               availableThinkingLevels={sessionState.availableThinkingLevels}
-              contextUsage={sessionState.contextUsage}
+              contextUsage={
+                isSessionViewLoading ? undefined : sessionState.contextUsage
+              }
               isSubmitting={isSubmitting}
               isStreaming={sessionState.streaming}
               awaitingFirstTurn={awaitingFirstTurn}
