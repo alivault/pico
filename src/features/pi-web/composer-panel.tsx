@@ -887,103 +887,113 @@ export const ComposerPanel = React.forwardRef<
       ) : null}
 
       <div className="overflow-visible rounded-[18px] border bg-card">
-        <div className="relative flex overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3 pb-14">
-          <div className="min-w-0 flex-1">
-            <div className="relative flex flex-col gap-3">
-              {visibleCompletion || slashMenuState ? (
-                <div className="absolute inset-x-0 bottom-full z-20 mb-2 rounded-lg border bg-popover p-1 shadow-lg ring-1 ring-foreground/10">
-                  <div className="max-h-64 overflow-y-auto">
-                    {visibleCompletion ? (
-                      <div className="flex flex-col gap-1">
-                        {visibleCompletion.items.map((item, index) => {
-                          const selected =
-                            index === visibleCompletion.selectedIndex
-                          return (
-                            <button
-                              key={`${item.value}:${item.description || item.label}`}
-                              type="button"
-                              className={cn(
-                                "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                                selected ? "bg-muted" : "hover:bg-muted/70"
-                              )}
-                              onMouseEnter={() => {
-                                setCompletionState((current) =>
-                                  current
-                                    ? { ...current, selectedIndex: index }
-                                    : current
-                                )
-                              }}
-                              onClick={() => {
-                                applyCompletion(item)
-                              }}
-                            >
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">
-                                  {visibleCompletionLabel(item)}
-                                </span>
-                                {item.description ? (
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {item.description}
-                                  </span>
-                                ) : null}
+        <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
+          <div className="relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2">
+            {visibleCompletion || slashMenuState ? (
+              <div className="absolute inset-x-0 bottom-full z-20 mb-2 rounded-lg border bg-popover p-1 shadow-lg ring-1 ring-foreground/10">
+                <div className="max-h-64 overflow-y-auto">
+                  {visibleCompletion ? (
+                    <div className="flex flex-col gap-1">
+                      {visibleCompletion.items.map((item, index) => {
+                        const selected =
+                          index === visibleCompletion.selectedIndex
+                        return (
+                          <button
+                            key={`${item.value}:${item.description || item.label}`}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                              selected ? "bg-muted" : "hover:bg-muted/70"
+                            )}
+                            onMouseEnter={() => {
+                              setCompletionState((current) =>
+                                current
+                                  ? { ...current, selectedIndex: index }
+                                  : current
+                              )
+                            }}
+                            onClick={() => {
+                              applyCompletion(item)
+                            }}
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">
+                                {visibleCompletionLabel(item)}
                               </span>
-                              {selected ? (
-                                <CheckIcon className="mt-0.5 shrink-0" />
-                              ) : null}
-                            </button>
-                          )
-                        })}
-                        <Separator />
-                        <div className="px-2 py-1 text-xs text-muted-foreground">
-                          {visibleCompletion.query.kind === "file-reference"
-                            ? "@ file references"
-                            : "Path suggestions"}
-                        </div>
-                      </div>
-                    ) : slashMenuState ? (
-                      <div className="flex flex-col gap-1">
-                        {slashMenuState.commands.map((command, index) => {
-                          const selected = index === slashSelectionIndex
-                          return (
-                            <button
-                              key={command.name}
-                              type="button"
-                              className={cn(
-                                "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                                selected ? "bg-muted" : "hover:bg-muted/70"
-                              )}
-                              onMouseEnter={() => {
-                                setSlashSelectionIndex(index)
-                              }}
-                              onClick={() => {
-                                applySlashSuggestion(command)
-                              }}
-                            >
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">
-                                  /{command.name}
+                              {item.description ? (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {item.description}
                                 </span>
-                                {command.description ? (
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {command.description}
-                                  </span>
-                                ) : null}
-                              </span>
-                              {selected ? (
-                                <CheckIcon className="mt-0.5 shrink-0" />
                               ) : null}
-                            </button>
-                          )
-                        })}
+                            </span>
+                            {selected ? (
+                              <CheckIcon className="mt-0.5 shrink-0" />
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                      <Separator />
+                      <div className="px-2 py-1 text-xs text-muted-foreground">
+                        {visibleCompletion.query.kind === "file-reference"
+                          ? "@ file references"
+                          : "Path suggestions"}
                       </div>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : slashMenuState ? (
+                    <div className="flex flex-col gap-1">
+                      {slashMenuState.commands.map((command, index) => {
+                        const selected = index === slashSelectionIndex
+                        return (
+                          <button
+                            key={command.name}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                              selected ? "bg-muted" : "hover:bg-muted/70"
+                            )}
+                            onMouseEnter={() => {
+                              setSlashSelectionIndex(index)
+                            }}
+                            onClick={() => {
+                              applySlashSuggestion(command)
+                            }}
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">
+                                /{command.name}
+                              </span>
+                              {command.description ? (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {command.description}
+                                </span>
+                              ) : null}
+                            </span>
+                            {selected ? (
+                              <CheckIcon className="mt-0.5 shrink-0" />
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
 
-              <div className="flex min-w-0 flex-wrap items-start gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="Add images"
+              aria-label="Add images"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImagePlusIcon />
+            </Button>
+
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
                 {draftSkill ? (
-                  <span className="inline-flex h-6 max-w-full items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
+                  <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
                     <span className="truncate">
                       Skill: {formatComposerSkillName(draftSkill)}
                     </span>
@@ -1003,6 +1013,8 @@ export const ComposerPanel = React.forwardRef<
 
                 <Textarea
                   ref={promptRef}
+                  name="prompt"
+                  rows={1}
                   value={draftText}
                   onChange={handleTextChange}
                   onClick={syncSelection}
@@ -1014,73 +1026,13 @@ export const ComposerPanel = React.forwardRef<
                       ? "Write a steer or follow-up message…"
                       : draftSkill
                         ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                        : "Ask Pi anything…"
+                        : "Ask anything…"
                   }
-                  className="min-h-[22px] flex-1 resize-none border-0 bg-transparent px-0 py-0 text-sm shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+                  className="min-h-[22px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
                 />
               </div>
-
-              {composerImages.length > 0 ? (
-                <div className="flex flex-wrap gap-3">
-                  {composerImages.map((image, index) => (
-                    <div key={promptImageKey(image)} className="relative">
-                      <img
-                        src={image.previewUrl}
-                        alt="Attachment preview"
-                        className="h-20 w-20 rounded-lg border object-cover"
-                      />
-                      <button
-                        type="button"
-                        className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm"
-                        onClick={() => onRemoveComposerImage(index)}
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </div>
-          </div>
 
-          <div className="absolute bottom-3 left-3 flex items-center">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Add images"
-              aria-label="Add images"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlusIcon />
-            </Button>
-          </div>
-
-          <div className="absolute right-3 bottom-3 flex flex-wrap items-center justify-end gap-2">
-            {acceptFollowUps ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isSubmitting || !hasSubmittableContent}
-                  onClick={() => onSubmitPrompt("followUp")}
-                >
-                  Queue
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isSubmitting || !hasSubmittableContent}
-                  onClick={() => onSubmitPrompt("steer")}
-                >
-                  Steer
-                </Button>
-              </>
-            ) : null}
-            {isStreaming ? (
-              <Button variant="outline" size="sm" onClick={onAbort}>
-                Abort
-              </Button>
-            ) : null}
             <Button
               size="icon-sm"
               disabled={
@@ -1104,6 +1056,53 @@ export const ComposerPanel = React.forwardRef<
               )}
             </Button>
           </div>
+
+          {composerImages.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {composerImages.map((image, index) => (
+                <div key={promptImageKey(image)} className="relative">
+                  <img
+                    src={image.previewUrl}
+                    alt="Attachment preview"
+                    className="h-20 w-20 rounded-lg border object-cover"
+                  />
+                  <button
+                    type="button"
+                    className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm"
+                    onClick={() => onRemoveComposerImage(index)}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {acceptFollowUps ? (
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isSubmitting || !hasSubmittableContent}
+                onClick={() => onSubmitPrompt("followUp")}
+              >
+                Queue
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isSubmitting || !hasSubmittableContent}
+                onClick={() => onSubmitPrompt("steer")}
+              >
+                Steer
+              </Button>
+              {isStreaming ? (
+                <Button variant="outline" size="sm" onClick={onAbort}>
+                  Abort
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
@@ -1203,6 +1202,7 @@ export const ComposerPanel = React.forwardRef<
 
       <input
         ref={fileInputRef}
+        name="images"
         type="file"
         accept="image/*"
         multiple
