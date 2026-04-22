@@ -19,12 +19,12 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
 ## To-do
 
 - [x] Audit the largest files and identify split points.
-- [ ] Break up `src/features/pi-web/app-shell-dialogs.tsx`.
+- [x] Break up `src/features/pi-web/app-shell-dialogs.tsx`.
   - [x] Extract add-directory dialog.
   - [x] Extract rename/delete/fork dialogs.
   - [x] Extract settings dialog.
   - [x] Extract generic UI request dialog.
-  - [ ] Extract tree dialog and its helpers.
+  - [x] Extract tree dialog and its helpers.
 - [ ] Break up `src/features/pi-web/composer-panel.tsx`.
   - [ ] Extract context usage indicator.
   - [ ] Extract pending queue UI.
