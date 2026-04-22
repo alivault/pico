@@ -30,10 +30,10 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
   - [x] Extract pending queue UI.
   - [x] Extract picker UI for model/thinking.
   - [x] Extract completion/slash-command state into hooks/helpers.
-- [ ] Break up `src/lib/pi-web.ts`.
-  - [ ] Move storage keys and storage helpers into a storage-focused module.
-  - [ ] Move tree flatten/filter helpers into a tree-focused module.
-  - [ ] Move sync/message normalization helpers into a sync-focused module.
+- [x] Break up `src/lib/pi-web.ts`.
+  - [x] Move storage keys and storage helpers into a storage-focused module.
+  - [x] Move tree flatten/filter helpers into a tree-focused module.
+  - [x] Move sync/message normalization helpers into a sync-focused module.
 - [ ] Break up `src/features/pi-web/app-shell.tsx`.
   - [ ] Extract SSE/session sync behavior into hooks.
   - [ ] Extract prompt/session mutations into hooks.
