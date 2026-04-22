@@ -3,7 +3,6 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChevronDownIcon,
-  FolderSearchIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
   XIcon,
@@ -22,7 +21,6 @@ import type {
   SlashCommandDescriptor,
 } from "@/features/pi-web/composer-utils"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -39,11 +37,8 @@ import {
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { ComposerContextUsageIndicator } from "@/features/pi-web/composer-context-usage-indicator"
+import { ComposerPendingMessages } from "@/features/pi-web/composer-pending-messages"
 import {
   applyCompletionItem,
   formatComposerSkillName,
@@ -133,151 +128,6 @@ function thinkingLabel(level: string) {
     default:
       return level
   }
-}
-
-function groupPendingMessages(messages: Array<PendingComposerMessage>) {
-  return [
-    {
-      title: "Steer",
-      items: messages.filter(
-        (message) => message.streamingBehavior === "steer"
-      ),
-      emptyLabel: "Steer prompts will interrupt the current response.",
-    },
-    {
-      title: "Queue",
-      items: messages.filter(
-        (message) => message.streamingBehavior !== "steer"
-      ),
-      emptyLabel: "Queued prompts will run after the current response.",
-    },
-  ]
-}
-
-const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
-const CONTEXT_USAGE_OVAL_PATH = [
-  "M 32 1.5",
-  "H 50",
-  "A 12.5 12.5 0 0 1 62.5 14",
-  "A 12.5 12.5 0 0 1 50 26.5",
-  "H 14",
-  "A 12.5 12.5 0 0 1 1.5 14",
-  "A 12.5 12.5 0 0 1 14 1.5",
-  "H 32",
-].join(" ")
-
-function formatContextUsageNumber(value: number) {
-  return contextUsageNumberFormatter.format(value)
-}
-
-function formatContextUsageCompactNumber(value: number) {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1).replace(/\.0$/, "")}k`
-  }
-  return formatContextUsageNumber(value)
-}
-
-function formatContextUsagePercent(value: number) {
-  return String(Math.round(value))
-}
-
-function contextUsageStroke(percent: number) {
-  if (percent >= 80) return "var(--destructive)"
-  if (percent >= 70) return "var(--warning)"
-  return "var(--primary)"
-}
-
-function ContextUsageIndicator({
-  contextUsage,
-}: {
-  contextUsage?: SessionState["contextUsage"]
-}) {
-  if (!contextUsage?.contextWindow) return null
-
-  const tokens =
-    typeof contextUsage.tokens === "number" ? contextUsage.tokens : null
-  const rawPercent =
-    typeof contextUsage.percent === "number"
-      ? contextUsage.percent
-      : tokens != null && contextUsage.contextWindow > 0
-        ? (tokens / contextUsage.contextWindow) * 100
-        : null
-
-  if (rawPercent == null) return null
-
-  const percent = Math.max(0, Math.min(100, rawPercent))
-  const roundedPercent = Math.max(0, Math.min(100, Math.round(percent)))
-  const displayPercent = `${formatContextUsagePercent(roundedPercent)}%`
-  const compactContextWindow = formatContextUsageCompactNumber(
-    contextUsage.contextWindow
-  )
-  const compactTokens =
-    tokens == null ? null : formatContextUsageCompactNumber(tokens)
-  const tooltipAriaLabel =
-    tokens == null
-      ? `Context window. ${compactContextWindow} tokens available.`
-      : `Context window. ${compactTokens} / ${compactContextWindow} tokens used.`
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            className="relative ml-auto inline-flex h-7 min-w-[56px] shrink-0 cursor-default items-center justify-center px-2.5 text-[11px] font-semibold tabular-nums"
-            aria-label={tooltipAriaLabel}
-            role="img"
-          />
-        }
-      >
-        <svg
-          className="pointer-events-none absolute inset-0 size-full"
-          viewBox="0 0 64 28"
-          preserveAspectRatio="none"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d={CONTEXT_USAGE_OVAL_PATH}
-            stroke="var(--border)"
-            strokeWidth="3"
-            strokeOpacity="0.9"
-            vectorEffect="non-scaling-stroke"
-          />
-          <path
-            d={CONTEXT_USAGE_OVAL_PATH}
-            pathLength={100}
-            stroke={contextUsageStroke(percent)}
-            strokeWidth="3"
-            strokeDasharray={`${percent.toFixed(1)} 100`}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-
-        <span className="relative">{displayPercent}</span>
-      </TooltipTrigger>
-
-      <TooltipContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        className="max-w-none flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-sm"
-      >
-        <div className="text-xs font-medium text-background/70">
-          Context window:
-        </div>
-        <div>
-          {compactTokens == null
-            ? `${compactContextWindow} token window`
-            : `${compactTokens} / ${compactContextWindow} tokens used`}
-        </div>
-      </TooltipContent>
-    </Tooltip>
-  )
 }
 
 function currentModelValue(model?: ModelOption) {
@@ -802,89 +652,11 @@ export const ComposerPanel = React.forwardRef<
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      {currentPendingMessages.length > 0 ? (
-        <div className="flex flex-col gap-3 rounded-lg border bg-muted/15 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <FolderSearchIcon className="text-muted-foreground" />
-              Pending prompts
-            </div>
-            <Badge variant="outline">{currentPendingMessages.length}</Badge>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {groupPendingMessages(currentPendingMessages).map((section) => (
-              <div
-                key={section.title}
-                className="flex flex-col gap-2 rounded-lg border bg-background p-3"
-              >
-                <div className="flex items-center justify-between gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  <span>{section.title}</span>
-                  <span>{section.items.length}</span>
-                </div>
-                {section.items.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {section.items.map((message, index) => (
-                      <div
-                        key={message.pendingId}
-                        className="rounded-md border bg-muted/25 p-2.5"
-                      >
-                        <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Badge variant="outline">
-                            {message.streamingBehavior === "steer"
-                              ? "Steer"
-                              : "Follow-up"}
-                          </Badge>
-                          <span className="min-w-0 flex-1 truncate">
-                            {message.pendingId}
-                          </span>
-                        </div>
-                        <div className="line-clamp-3 text-sm">
-                          {message.text || "Queued image prompt"}
-                        </div>
-                        <div className="mt-2 flex items-center gap-1">
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            disabled={index === 0}
-                            onClick={() =>
-                              onReorderPending(message.pendingId, -1)
-                            }
-                          >
-                            ↑
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            disabled={index === section.items.length - 1}
-                            onClick={() =>
-                              onReorderPending(message.pendingId, 1)
-                            }
-                          >
-                            ↓
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() =>
-                              onRemovePendingMessage(message.pendingId)
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-                    {section.emptyLabel}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <ComposerPendingMessages
+        currentPendingMessages={currentPendingMessages}
+        onRemovePendingMessage={onRemovePendingMessage}
+        onReorderPending={onReorderPending}
+      />
 
       <div className="overflow-visible rounded-[18px] border bg-card">
         <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
@@ -1196,7 +968,7 @@ export const ComposerPanel = React.forwardRef<
             </Popover>
           </div>
 
-          <ContextUsageIndicator contextUsage={contextUsage} />
+          <ComposerContextUsageIndicator contextUsage={contextUsage} />
         </div>
       </div>
 

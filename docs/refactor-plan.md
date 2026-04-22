@@ -26,8 +26,8 @@ This is the working plan for breaking up the biggest modules in `pi-web` without
   - [x] Extract generic UI request dialog.
   - [x] Extract tree dialog and its helpers.
 - [ ] Break up `src/features/pi-web/composer-panel.tsx`.
-  - [ ] Extract context usage indicator.
-  - [ ] Extract pending queue UI.
+  - [x] Extract context usage indicator.
+  - [x] Extract pending queue UI.
   - [ ] Extract picker UI for model/thinking.
   - [ ] Extract completion/slash-command state into hooks/helpers.
 - [ ] Break up `src/lib/pi-web.ts`.
