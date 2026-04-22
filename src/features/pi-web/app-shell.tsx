@@ -3601,11 +3601,6 @@ export function PiWebAppShell({
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
                   )}
-                  {sessionState.contextUsage?.percent != null && (
-                    <span>
-                      • Context {Math.round(sessionState.contextUsage.percent)}%
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
@@ -3925,6 +3920,7 @@ export function PiWebAppShell({
               model={sessionState.model}
               thinkingLevel={sessionState.thinkingLevel}
               availableThinkingLevels={sessionState.availableThinkingLevels}
+              contextUsage={sessionState.contextUsage}
               isSubmitting={isSubmitting}
               isStreaming={sessionState.streaming}
               awaitingFirstTurn={awaitingFirstTurn}

@@ -9,7 +9,12 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type { ModelOption, PromptImage, StreamingBehavior } from "@/lib/pi-web"
+import type {
+  ModelOption,
+  PromptImage,
+  SessionState,
+  StreamingBehavior,
+} from "@/lib/pi-web"
 import type { CompletionItem } from "@/lib/pi-web-api"
 
 import type {
@@ -76,6 +81,7 @@ type ComposerPanelProps = {
   model?: ModelOption
   thinkingLevel: string
   availableThinkingLevels: Array<string>
+  contextUsage?: SessionState["contextUsage"]
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
@@ -143,6 +149,99 @@ function groupPendingMessages(messages: Array<PendingComposerMessage>) {
   ]
 }
 
+const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
+const CONTEXT_USAGE_OVAL_PATH = [
+  "M 32 1.5",
+  "H 50",
+  "A 12.5 12.5 0 0 1 62.5 14",
+  "A 12.5 12.5 0 0 1 50 26.5",
+  "H 14",
+  "A 12.5 12.5 0 0 1 1.5 14",
+  "A 12.5 12.5 0 0 1 14 1.5",
+  "H 32",
+].join(" ")
+
+function formatContextUsageNumber(value: number) {
+  return contextUsageNumberFormatter.format(value)
+}
+
+function contextUsageStroke(percent: number) {
+  if (percent >= 80) return "var(--destructive)"
+  if (percent >= 70) return "var(--warning)"
+  return "var(--primary)"
+}
+
+function ContextUsageIndicator({
+  contextUsage,
+}: {
+  contextUsage?: SessionState["contextUsage"]
+}) {
+  if (!contextUsage?.contextWindow) return null
+
+  const tokens =
+    typeof contextUsage.tokens === "number" ? contextUsage.tokens : null
+  const rawPercent =
+    typeof contextUsage.percent === "number"
+      ? contextUsage.percent
+      : tokens != null && contextUsage.contextWindow > 0
+        ? (tokens / contextUsage.contextWindow) * 100
+        : null
+
+  if (rawPercent == null) return null
+
+  const percent = Math.max(0, Math.min(100, rawPercent))
+  const remaining =
+    tokens == null ? null : Math.max(0, contextUsage.contextWindow - tokens)
+  const displayPercent = `${percent.toFixed(1)}%`
+  const titleParts = [
+    `Context used: ${displayPercent}`,
+    tokens == null
+      ? "Used: unknown"
+      : `Used: ${formatContextUsageNumber(tokens)} tokens`,
+    `Window: ${formatContextUsageNumber(contextUsage.contextWindow)} tokens`,
+    remaining == null
+      ? "Left: unknown"
+      : `Left: ${formatContextUsageNumber(remaining)} tokens`,
+  ]
+
+  return (
+    <div
+      className="relative ml-auto inline-flex h-7 min-w-[64px] shrink-0 items-center justify-center px-3 text-[11px] font-semibold tabular-nums"
+      title={titleParts.join("\n")}
+      aria-label={titleParts.join(", ")}
+      role="img"
+    >
+      <svg
+        className="pointer-events-none absolute inset-0 size-full"
+        viewBox="0 0 64 28"
+        preserveAspectRatio="none"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d={CONTEXT_USAGE_OVAL_PATH}
+          stroke="var(--border)"
+          strokeWidth="3"
+          strokeOpacity="0.9"
+          vectorEffect="non-scaling-stroke"
+        />
+        <path
+          d={CONTEXT_USAGE_OVAL_PATH}
+          pathLength={100}
+          stroke={contextUsageStroke(percent)}
+          strokeWidth="3"
+          strokeDasharray={`${percent.toFixed(1)} 100`}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      <span className="relative">{displayPercent}</span>
+    </div>
+  )
+}
+
 function currentModelValue(model?: ModelOption) {
   return model ? `${model.provider}/${model.id}` : ""
 }
@@ -184,6 +283,7 @@ export const ComposerPanel = React.forwardRef<
     model,
     thinkingLevel,
     availableThinkingLevels,
+    contextUsage,
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
@@ -1058,6 +1158,8 @@ export const ComposerPanel = React.forwardRef<
               </PopoverContent>
             </Popover>
           </div>
+
+          <ContextUsageIndicator contextUsage={contextUsage} />
         </div>
       </div>
 
