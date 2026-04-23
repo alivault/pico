@@ -1,15 +1,16 @@
 import * as React from "react"
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  FolderTreeIcon,
-  KeyboardIcon,
-} from "lucide-react"
 
 import type { TreeNavigateOptions } from "@/features/pi-web/app-shell-dialog-types"
-import type { FlatTreeNode } from "@/lib/pi-web"
+import type { FlatTreeNode, TreeNode } from "@/lib/pi-web"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -30,11 +30,24 @@ type TreeFilterMode =
   | "labeled-only"
   | "all"
 
-type TreeVisibleNode = FlatTreeNode & {
-  parentVisibleId: string | null
-  visibleDepth: number
+type TreeStage = "browse" | "actions" | "custom"
+
+type TreeGutter = {
+  position: number
+  show: boolean
+}
+
+type TreeLinearNode = FlatTreeNode & {
+  indent: number
+  showConnector: boolean
+  isLast: boolean
+  gutters: Array<TreeGutter>
+  isVirtualRootChild: boolean
+  multipleRoots: boolean
+}
+
+type TreeVisibleNode = TreeLinearNode & {
   hasVisibleChildren: boolean
-  isFolded: boolean
   isCurrentLeaf: boolean
   isActivePath: boolean
 }
@@ -46,61 +59,54 @@ type TreeDialogViewModel = {
   orderedVisibleNodes: Array<TreeVisibleNode>
 }
 
-type TreeShortcutItem = {
-  label: string
-  description?: string
-  keys: string
-}
-
 const TREE_FILTER_OPTIONS: Array<{
   mode: TreeFilterMode
   label: string
-  shortcut: string
+  shortcut: Array<string>
 }> = [
-  { mode: "default", label: "Default", shortcut: "Ctrl+Shift+D" },
-  { mode: "no-tools", label: "No tools", shortcut: "Ctrl+Shift+T" },
-  { mode: "user-only", label: "User only", shortcut: "Ctrl+Shift+U" },
-  { mode: "labeled-only", label: "Labeled", shortcut: "Ctrl+Shift+L" },
-  { mode: "all", label: "All", shortcut: "Ctrl+Shift+A" },
+  { mode: "default", label: "Default", shortcut: ["Ctrl", "D"] },
+  { mode: "no-tools", label: "No tools", shortcut: ["Ctrl", "T"] },
+  { mode: "user-only", label: "User only", shortcut: ["Ctrl", "U"] },
+  { mode: "labeled-only", label: "Labeled", shortcut: ["Ctrl", "L"] },
+  { mode: "all", label: "All", shortcut: ["Ctrl", "A"] },
 ]
 
-const TREE_SHORTCUT_ITEMS: Array<TreeShortcutItem> = [
-  { label: "Show tree shortcuts", keys: "Ctrl+/" },
-  { label: "Move", keys: "↑ / ↓ or Ctrl+J / Ctrl+K" },
-  {
-    label: "Expand or collapse a branch",
-    keys: "← / → or Ctrl+H / Ctrl+L",
-  },
-  { label: "Jump to first or last result", keys: "Home / End" },
-  {
-    label: "Cycle filters",
-    keys: "Ctrl+O / Ctrl+Shift+O",
-  },
-  {
-    label: "Jump to a filter preset",
-    keys: "Ctrl+Shift+D / T / U / L / A",
-  },
-  {
-    label: "Toggle label timestamps",
-    keys: "Shift+T",
-  },
-  {
-    label: "Focus the label editor",
-    keys: "Shift+L",
-  },
-  {
-    label: "Continue without summary",
-    keys: "Enter",
-  },
-  {
-    label: "Submit custom summary instructions",
-    keys: "Ctrl+Enter",
-  },
-  {
-    label: "Clear custom summary or close help/tree",
-    keys: "Esc",
-  },
-]
+const TREE_FILTER_CYCLE_SHORTCUTS = {
+  next: ["Ctrl", "O"],
+  previous: ["Ctrl", "Shift", "O"],
+} as const
+
+function cycleTreeFilterMode(
+  mode: TreeFilterMode,
+  direction: 1 | -1
+): TreeFilterMode {
+  const modes = TREE_FILTER_OPTIONS.map((option) => option.mode)
+  const currentIndex = Math.max(0, modes.indexOf(mode))
+  return modes[(currentIndex + direction + modes.length) % modes.length] ?? mode
+}
+
+function toggleTreeFilterMode(
+  currentMode: TreeFilterMode,
+  requestedMode: TreeFilterMode
+): TreeFilterMode {
+  if (requestedMode === "default") return "default"
+  return currentMode === requestedMode ? "default" : requestedMode
+}
+
+function TreeShortcutKeys({ keys }: { keys: Array<string> }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {keys.map((key) => (
+        <kbd
+          key={`${keys.join("-")}-${key}`}
+          className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        >
+          {key}
+        </kbd>
+      ))}
+    </span>
+  )
+}
 
 function treeDialogNormalizeLine(value: string | undefined) {
   return typeof value === "string" ? value.replace(/[\n\t]/g, " ").trim() : ""
@@ -316,91 +322,312 @@ function treeDialogPassesFilter(
   return true
 }
 
-function buildTreeDialogViewModel({
+function treeDialogRootNodes(flatTree: Array<FlatTreeNode>) {
+  const nodeById = new Map(flatTree.map((node) => [node.id, node]))
+
+  return flatTree
+    .filter((node) => {
+      const parentId = node.parentId ?? null
+      return parentId === null || !nodeById.has(parentId)
+    })
+    .map((node) => node.node)
+}
+
+function treeDialogActivePathIds(
+  nodeById: Map<string, FlatTreeNode>,
+  currentLeafId: string | null
+) {
+  const activeIds = new Set<string>()
+  let currentId = currentLeafId
+
+  while (currentId) {
+    activeIds.add(currentId)
+    currentId = nodeById.get(currentId)?.parentId ?? null
+  }
+
+  return activeIds
+}
+
+function treeDialogFlattenTree({
   flatTree,
   currentLeafId,
-  query,
-  filterMode,
-  foldedTreeNodeIds,
 }: {
   flatTree: Array<FlatTreeNode>
   currentLeafId: string | null
-  query: string
-  filterMode: TreeFilterMode
-  foldedTreeNodeIds: Array<string>
-}): TreeDialogViewModel {
-  const nodeById = new Map<string, FlatTreeNode>()
+}) {
+  const originalById = new Map(flatTree.map((node) => [node.id, node]))
+  const roots = treeDialogRootNodes(flatTree)
+  const flattened: Array<TreeLinearNode> = []
+  const multipleRoots = roots.length > 1
+  const containsActive = new Map<TreeNode, boolean>()
+  const allNodes: Array<TreeNode> = []
+  const preOrderStack = [...roots]
 
-  for (const node of flatTree) {
-    nodeById.set(node.id, node)
+  while (preOrderStack.length > 0) {
+    const node = preOrderStack.pop()
+    if (!node?.entry?.id) continue
+
+    allNodes.push(node)
+    for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      preOrderStack.push(node.children[index])
+    }
   }
 
-  const activePathIds = new Set<string>()
-  let cursor = currentLeafId
-  while (cursor) {
-    activePathIds.add(cursor)
-    cursor = nodeById.get(cursor)?.parentId ?? null
+  for (let index = allNodes.length - 1; index >= 0; index -= 1) {
+    const node = allNodes[index]
+    let hasActive = currentLeafId !== null && node.entry.id === currentLeafId
+
+    for (const child of node.children) {
+      if (containsActive.get(child)) {
+        hasActive = true
+        break
+      }
+    }
+
+    containsActive.set(node, hasActive)
   }
 
-  const searchTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-
-  const filteredNodes = flatTree.filter((node) =>
-    treeDialogPassesFilter(node, filterMode, currentLeafId, searchTokens)
+  const orderedRoots = [...roots].sort(
+    (a, b) =>
+      Number(Boolean(containsActive.get(b))) -
+      Number(Boolean(containsActive.get(a)))
   )
-  const filteredIds = new Set(filteredNodes.map((node) => node.id))
+  const stack: Array<
+    [TreeNode, number, boolean, boolean, boolean, Array<TreeGutter>, boolean]
+  > = []
+
+  for (let index = orderedRoots.length - 1; index >= 0; index -= 1) {
+    const isLast = index === orderedRoots.length - 1
+    stack.push([
+      orderedRoots[index],
+      multipleRoots ? 1 : 0,
+      multipleRoots,
+      multipleRoots,
+      isLast,
+      [],
+      multipleRoots,
+    ])
+  }
+
+  while (stack.length > 0) {
+    const [
+      node,
+      indent,
+      justBranched,
+      showConnector,
+      isLast,
+      gutters,
+      isVirtualRootChild,
+    ] = stack.pop()!
+    const original = originalById.get(node.entry.id)
+    if (!original) continue
+
+    flattened.push({
+      ...original,
+      indent,
+      showConnector,
+      isLast,
+      gutters,
+      isVirtualRootChild,
+      multipleRoots,
+    })
+
+    const children = node.children
+    const multipleChildren = children.length > 1
+    const prioritized: Array<TreeNode> = []
+    const rest: Array<TreeNode> = []
+
+    for (const child of children) {
+      if (containsActive.get(child)) {
+        prioritized.push(child)
+      } else {
+        rest.push(child)
+      }
+    }
+
+    const orderedChildren = [...prioritized, ...rest]
+
+    let childIndent: number
+    if (multipleChildren) {
+      childIndent = indent + 1
+    } else if (justBranched && indent > 0) {
+      childIndent = indent + 1
+    } else {
+      childIndent = indent
+    }
+
+    const connectorDisplayed = showConnector && !isVirtualRootChild
+    const currentDisplayIndent = multipleRoots
+      ? Math.max(0, indent - 1)
+      : indent
+    const connectorPosition = Math.max(0, currentDisplayIndent - 1)
+    const childGutters = connectorDisplayed
+      ? [...gutters, { position: connectorPosition, show: !isLast }]
+      : gutters
+
+    for (let index = orderedChildren.length - 1; index >= 0; index -= 1) {
+      const childIsLast = index === orderedChildren.length - 1
+      stack.push([
+        orderedChildren[index],
+        childIndent,
+        multipleChildren,
+        multipleChildren,
+        childIsLast,
+        childGutters,
+        false,
+      ])
+    }
+  }
+
+  return flattened
+}
+
+function treeDialogRecalculateVisualStructure(
+  visibleNodes: Array<TreeLinearNode>,
+  allNodes: Array<TreeLinearNode>
+) {
   const visibleParentById = new Map<string, string | null>()
   const visibleChildrenById = new Map<string | null, Array<string>>([
     [null, []],
   ])
 
-  for (const node of filteredNodes) {
-    let parentId = node.parentId ?? null
-    while (parentId !== null && !filteredIds.has(parentId)) {
-      parentId = nodeById.get(parentId)?.parentId ?? null
+  if (visibleNodes.length === 0) {
+    return { visibleParentById, visibleChildrenById }
+  }
+
+  const visibleIds = new Set(visibleNodes.map((node) => node.id))
+  const allNodeById = new Map(allNodes.map((node) => [node.id, node]))
+
+  const findVisibleAncestor = (nodeId: string) => {
+    let currentId = allNodeById.get(nodeId)?.parentId ?? null
+
+    while (currentId !== null) {
+      if (visibleIds.has(currentId)) {
+        return currentId
+      }
+      currentId = allNodeById.get(currentId)?.parentId ?? null
     }
+
+    return null
+  }
+
+  for (const node of visibleNodes) {
+    const parentId = findVisibleAncestor(node.id)
     visibleParentById.set(node.id, parentId)
     const siblings = visibleChildrenById.get(parentId) ?? []
     siblings.push(node.id)
     visibleChildrenById.set(parentId, siblings)
   }
 
-  const foldedSet = new Set(foldedTreeNodeIds)
-  const orderedVisibleNodes: Array<TreeVisibleNode> = []
+  const visibleRootIds = visibleChildrenById.get(null) ?? []
+  const multipleRoots = visibleRootIds.length > 1
+  const visibleNodeById = new Map(visibleNodes.map((node) => [node.id, node]))
+  const stack: Array<
+    [string, number, boolean, boolean, boolean, Array<TreeGutter>, boolean]
+  > = []
 
-  const visit = (parentId: string | null, visibleDepth: number) => {
-    const childIds = visibleChildrenById.get(parentId) ?? []
+  for (let index = visibleRootIds.length - 1; index >= 0; index -= 1) {
+    const isLast = index === visibleRootIds.length - 1
+    stack.push([
+      visibleRootIds[index],
+      multipleRoots ? 1 : 0,
+      multipleRoots,
+      multipleRoots,
+      isLast,
+      [],
+      multipleRoots,
+    ])
+  }
 
-    for (const childId of childIds) {
-      const node = nodeById.get(childId)
-      if (!node) continue
+  while (stack.length > 0) {
+    const [
+      nodeId,
+      indent,
+      justBranched,
+      showConnector,
+      isLast,
+      gutters,
+      isVirtualRootChild,
+    ] = stack.pop()!
+    const node = visibleNodeById.get(nodeId)
+    if (!node) continue
 
-      const hasVisibleChildren =
-        (visibleChildrenById.get(childId)?.length ?? 0) > 0
-      const isFolded = hasVisibleChildren && foldedSet.has(childId)
+    node.indent = indent
+    node.showConnector = showConnector
+    node.isLast = isLast
+    node.gutters = gutters
+    node.isVirtualRootChild = isVirtualRootChild
+    node.multipleRoots = multipleRoots
 
-      orderedVisibleNodes.push({
-        ...node,
-        parentVisibleId: parentId,
-        visibleDepth,
-        hasVisibleChildren,
-        isFolded,
-        isCurrentLeaf: childId === currentLeafId,
-        isActivePath: activePathIds.has(childId),
-      })
+    const children = visibleChildrenById.get(nodeId) ?? []
+    const multipleChildren = children.length > 1
 
-      if (!isFolded) {
-        visit(childId, visibleDepth + 1)
-      }
+    let childIndent: number
+    if (multipleChildren) {
+      childIndent = indent + 1
+    } else if (justBranched && indent > 0) {
+      childIndent = indent + 1
+    } else {
+      childIndent = indent
+    }
+
+    const connectorDisplayed = showConnector && !isVirtualRootChild
+    const currentDisplayIndent = multipleRoots
+      ? Math.max(0, indent - 1)
+      : indent
+    const connectorPosition = Math.max(0, currentDisplayIndent - 1)
+    const childGutters = connectorDisplayed
+      ? [...gutters, { position: connectorPosition, show: !isLast }]
+      : gutters
+
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const childIsLast = index === children.length - 1
+      stack.push([
+        children[index],
+        childIndent,
+        multipleChildren,
+        multipleChildren,
+        childIsLast,
+        childGutters,
+        false,
+      ])
     }
   }
 
-  visit(null, 0)
+  return { visibleParentById, visibleChildrenById }
+}
+
+function buildTreeDialogViewModel({
+  flatTree,
+  currentLeafId,
+  query,
+  filterMode,
+}: {
+  flatTree: Array<FlatTreeNode>
+  currentLeafId: string | null
+  query: string
+  filterMode: TreeFilterMode
+}): TreeDialogViewModel {
+  const nodeById = new Map(flatTree.map((node) => [node.id, node]))
+  const activePathIds = treeDialogActivePathIds(nodeById, currentLeafId)
+  const flattenedNodes = treeDialogFlattenTree({ flatTree, currentLeafId })
+  const searchTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const visibleNodes = flattenedNodes.filter((node) =>
+    treeDialogPassesFilter(node, filterMode, currentLeafId, searchTokens)
+  )
+  const { visibleParentById, visibleChildrenById } =
+    treeDialogRecalculateVisualStructure(visibleNodes, flattenedNodes)
 
   return {
     nodeById,
     visibleParentById,
     visibleChildrenById,
-    orderedVisibleNodes,
+    orderedVisibleNodes: visibleNodes.map((node) => ({
+      ...node,
+      hasVisibleChildren: (visibleChildrenById.get(node.id)?.length ?? 0) > 0,
+      isCurrentLeaf: node.id === currentLeafId,
+      isActivePath: activePathIds.has(node.id),
+    })),
   }
 }
 
@@ -414,6 +641,7 @@ function findNearestVisibleTreeNodeId(
 
   const visibleIds = new Set(orderedVisibleNodes.map((node) => node.id))
   let currentId: string | null = preferredId
+
   while (currentId) {
     if (visibleIds.has(currentId)) return currentId
     currentId = nodeById.get(currentId)?.parentId ?? null
@@ -422,17 +650,365 @@ function findNearestVisibleTreeNodeId(
   return orderedVisibleNodes[0]?.id ?? null
 }
 
-function cycleTreeFilterMode(mode: TreeFilterMode, direction: 1 | -1) {
-  const modes = TREE_FILTER_OPTIONS.map((option) => option.mode)
-  const currentIndex = Math.max(0, modes.indexOf(mode))
-  const nextIndex = (currentIndex + direction + modes.length) % modes.length
-  return modes[nextIndex] ?? mode
+function treeDialogIsBranchStart(
+  viewModel: TreeDialogViewModel,
+  entryId: string
+) {
+  const children = viewModel.visibleChildrenById.get(entryId)
+  if (!children || children.length === 0) return false
+
+  const parentId = viewModel.visibleParentById.get(entryId)
+  if (parentId == null) return true
+
+  const siblings = viewModel.visibleChildrenById.get(parentId)
+  return Array.isArray(siblings) && siblings.length > 1
 }
 
-function treeFilterModeLabel(mode: TreeFilterMode) {
+function treeDialogLegacyIconSvg(
+  name:
+    | "gutter"
+    | "connector-tee"
+    | "connector-elbow"
+    | "leaf-line"
+    | "fold-open"
+    | "active-path"
+) {
+  const wrap = (body: string, viewBox = "0 0 10 24") =>
+    `<svg class="size-full block" viewBox="${viewBox}" fill="none" aria-hidden="true">${body}</svg>`
+
+  switch (name) {
+    case "gutter":
+      return wrap('<path d="M5 0V24" stroke="currentColor" stroke-width="1"/>')
+    case "connector-tee":
+      return wrap(
+        '<path d="M5 0V24M5 12H10" stroke="currentColor" stroke-width="1"/>'
+      )
+    case "connector-elbow":
+      return wrap(
+        '<path d="M5 0V12M5 12H10" stroke="currentColor" stroke-width="1"/>'
+      )
+    case "leaf-line":
+      return wrap('<path d="M0 12H10" stroke="currentColor" stroke-width="1"/>')
+    case "fold-open":
+      return wrap(
+        '<rect x="0.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1"/><path d="M2.5 12H7.5" stroke="currentColor" stroke-width="1"/>'
+      )
+    case "active-path":
+      return wrap('<circle cx="5" cy="12" r="2.25" fill="currentColor"/>')
+  }
+}
+
+function TreeHierarchyIcon({
+  name,
+  className,
+}: {
+  name:
+    | "gutter"
+    | "connector-tee"
+    | "connector-elbow"
+    | "leaf-line"
+    | "fold-open"
+    | "active-path"
+  className?: string
+}) {
   return (
-    TREE_FILTER_OPTIONS.find((option) => option.mode === mode)?.label ||
-    "Default"
+    <span
+      aria-hidden="true"
+      className={cn(
+        "block h-6 w-2.5 [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
+        className
+      )}
+      dangerouslySetInnerHTML={{ __html: treeDialogLegacyIconSvg(name) }}
+    />
+  )
+}
+
+function TreeCommandPrefix({
+  node,
+  viewModel,
+}: {
+  node: TreeVisibleNode
+  viewModel: TreeDialogViewModel
+}) {
+  const displayIndent = node.multipleRoots
+    ? Math.max(0, node.indent - 1)
+    : node.indent
+  const connector = node.showConnector && !node.isVirtualRootChild
+  const connectorPosition = connector ? displayIndent - 1 : -1
+  const branchStart = treeDialogIsBranchStart(viewModel, node.id)
+  const totalCells = displayIndent * 3
+
+  if (totalCells <= 0) {
+    return <span className="block h-6 w-0 shrink-0" aria-hidden="true" />
+  }
+
+  return (
+    <span className="inline-flex h-6 shrink-0 items-stretch text-muted-foreground">
+      {Array.from({ length: totalCells }, (_, index) => {
+        const level = Math.floor(index / 3)
+        const positionInLevel = index % 3
+        const gutter = node.gutters.find(
+          (candidate) => candidate.position === level
+        )
+
+        if (gutter) {
+          return (
+            <span
+              key={`${node.id}-gutter-${index}`}
+              className="flex h-6 w-2.5 items-center justify-center"
+            >
+              {positionInLevel === 0 && gutter.show ? (
+                <TreeHierarchyIcon name="gutter" />
+              ) : null}
+            </span>
+          )
+        }
+
+        if (connector && level === connectorPosition) {
+          if (positionInLevel === 0) {
+            return (
+              <span
+                key={`${node.id}-connector-${index}`}
+                className="flex h-6 w-2.5 items-center justify-center"
+              >
+                <TreeHierarchyIcon
+                  name={node.isLast ? "connector-elbow" : "connector-tee"}
+                />
+              </span>
+            )
+          }
+
+          if (positionInLevel === 1) {
+            return (
+              <span
+                key={`${node.id}-marker-${index}`}
+                className="flex h-6 w-2.5 items-center justify-center"
+              >
+                <TreeHierarchyIcon
+                  name={branchStart ? "fold-open" : "leaf-line"}
+                />
+              </span>
+            )
+          }
+        }
+
+        return (
+          <span
+            key={`${node.id}-empty-${index}`}
+            className="block h-6 w-2.5 shrink-0"
+          />
+        )
+      })}
+    </span>
+  )
+}
+
+function treeDialogPlainText(node: FlatTreeNode) {
+  const entry = node.node.entry
+  const message = entry.message || {}
+
+  if (entry.type === "message") {
+    switch (message.role) {
+      case "user":
+        return `user: ${treeDialogNormalizeLine(message.text) || "(no content)"}`
+      case "assistant": {
+        const text = treeDialogNormalizeLine(message.text)
+        if (text) return `assistant: ${text}`
+        if (message.stopReason === "aborted") return "assistant: (aborted)"
+        if (message.errorMessage) {
+          return `assistant: ${treeDialogNormalizeLine(message.errorMessage)}`
+        }
+        return "assistant: (no content)"
+      }
+      case "toolResult":
+        return treeDialogEntryText(node)
+      case "bashExecution":
+        return `[bash]: ${treeDialogNormalizeLine(message.command)}`
+      default:
+        return treeDialogEntryText(node)
+    }
+  }
+
+  switch (entry.type) {
+    case "compaction": {
+      const tokens = Math.round((Number(entry.tokensBefore) || 0) / 1000)
+      return `[compaction: ${tokens}k tokens]`
+    }
+    case "branch_summary":
+      return `[branch summary]: ${treeDialogNormalizeLine(entry.summary) || "Branch summary"}`
+    case "custom_message":
+      return `[${entry.customType || "custom"}]: ${treeDialogNormalizeLine(entry.text) || "Custom message"}`
+    case "model_change":
+      return `[model: ${entry.modelId || ""}]`
+    case "thinking_level_change":
+      return `[thinking: ${entry.thinkingLevel || ""}]`
+    case "session_info":
+      return entry.name ? `[title: ${entry.name}]` : "[title: empty]"
+    case "label":
+      return `[label: ${entry.label ?? "(cleared)"}]`
+    case "custom":
+      return `[custom: ${entry.customType || "custom"}]`
+    default:
+      return `[${entry.type || "entry"}]`
+  }
+}
+
+function TreeEntryLine({ node }: { node: FlatTreeNode }) {
+  const entry = node.node.entry
+  const message = entry.message || {}
+
+  if (entry.type === "message") {
+    switch (message.role) {
+      case "user":
+        return (
+          <div className="min-w-0 truncate text-sm leading-6 text-foreground">
+            <span className="font-semibold text-primary">user:</span>{" "}
+            {treeDialogNormalizeLine(message.text) || "(no content)"}
+          </div>
+        )
+      case "assistant": {
+        const text = treeDialogNormalizeLine(message.text)
+        return (
+          <div className="min-w-0 truncate text-sm leading-6 text-foreground">
+            <span className="font-semibold text-[var(--success)]">
+              assistant:
+            </span>{" "}
+            {text ? (
+              text
+            ) : message.stopReason === "aborted" ? (
+              <span className="text-muted-foreground">(aborted)</span>
+            ) : message.errorMessage ? (
+              <span className="text-[var(--danger)]">
+                {treeDialogNormalizeLine(message.errorMessage)}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">(no content)</span>
+            )}
+          </div>
+        )
+      }
+      case "toolResult":
+        return (
+          <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+            {treeDialogEntryText(node)}
+          </div>
+        )
+      case "bashExecution":
+        return (
+          <div className="min-w-0 truncate text-sm leading-6 text-foreground">
+            <span className="text-muted-foreground">[bash]:</span>{" "}
+            {treeDialogNormalizeLine(message.command) || "Shell command"}
+          </div>
+        )
+      default:
+        return (
+          <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+            {treeDialogEntryText(node)}
+          </div>
+        )
+    }
+  }
+
+  switch (entry.type) {
+    case "compaction": {
+      const tokens = Math.round((Number(entry.tokensBefore) || 0) / 1000)
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-[var(--warning)]">
+          [compaction: {tokens}k tokens]
+        </div>
+      )
+    }
+    case "branch_summary":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-[var(--warning)]">
+          <span className="font-semibold">[branch summary]:</span>{" "}
+          {treeDialogNormalizeLine(entry.summary) || "Branch summary"}
+        </div>
+      )
+    case "custom_message":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-[var(--warning)]">
+          [{entry.customType || "custom"}]:{" "}
+          {treeDialogNormalizeLine(entry.text) || "Custom message"}
+        </div>
+      )
+    case "model_change":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          [model: {entry.modelId || ""}]
+        </div>
+      )
+    case "thinking_level_change":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          [thinking: {entry.thinkingLevel || ""}]
+        </div>
+      )
+    case "session_info":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          {entry.name ? `[title: ${entry.name}]` : "[title: empty]"}
+        </div>
+      )
+    case "label":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          [label: {entry.label ?? "(cleared)"}]
+        </div>
+      )
+    case "custom":
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          [custom: {entry.customType || "custom"}]
+        </div>
+      )
+    default:
+      return (
+        <div className="min-w-0 truncate text-sm leading-6 text-muted-foreground">
+          [{entry.type || "entry"}]
+        </div>
+      )
+  }
+}
+
+function TreeSelectedNodeCard({
+  node,
+  visibleNode,
+}: {
+  node: FlatTreeNode
+  visibleNode: TreeVisibleNode | null
+}) {
+  const timestamp = treeDialogFormatTimestamp(node.timestamp)
+  const labelTimestamp =
+    node.label && node.labelTimestamp
+      ? treeDialogFormatTimestamp(node.labelTimestamp)
+      : ""
+
+  return (
+    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">{treeDialogKindLabel(node)}</Badge>
+        {visibleNode?.isCurrentLeaf ? <Badge>Current</Badge> : null}
+        {visibleNode?.isActivePath ? (
+          <Badge variant="outline">Active path</Badge>
+        ) : null}
+        {node.label ? (
+          <span className="text-sm font-medium text-foreground">
+            [{node.label}]
+          </span>
+        ) : null}
+      </div>
+      <div className="text-sm font-medium text-foreground">
+        {treeDialogEntryText(node)}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        {timestamp ? <span>{timestamp}</span> : null}
+        {labelTimestamp ? <span>Labeled {labelTimestamp}</span> : null}
+        <span className="font-mono">
+          {node.id.slice(Math.max(0, node.id.length - 8))}
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -476,42 +1052,44 @@ export function AppShellTreeDialog({
 }: AppShellTreeDialogProps) {
   const [treeFilterMode, setTreeFilterMode] =
     React.useState<TreeFilterMode>("no-tools")
-  const [showTreeLabelTimestamps, setShowTreeLabelTimestamps] =
-    React.useState(false)
-  const [foldedTreeNodeIds, setFoldedTreeNodeIds] = React.useState<
-    Array<string>
-  >([])
-  const [showTreeShortcutsHelp, setShowTreeShortcutsHelp] =
-    React.useState(false)
-  const [showCustomTreeSummary, setShowCustomTreeSummary] =
-    React.useState(false)
+  const [treeStage, setTreeStage] = React.useState<TreeStage>("browse")
+  const [treeCursorNodeId, setTreeCursorNodeId] = React.useState<string | null>(
+    selectedTreeNodeId || treeLeafId || null
+  )
   const [customTreeSummaryInstructions, setCustomTreeSummaryInstructions] =
     React.useState("")
-  const treeSearchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const treeLabelInputRef = React.useRef<HTMLInputElement | null>(null)
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
 
-  const treeViewModel = (() =>
-    buildTreeDialogViewModel({
-      flatTree,
-      currentLeafId: treeLeafId,
-      query: treeQuery,
-      filterMode: treeFilterMode,
-      foldedTreeNodeIds,
-    }))()
+  const treeViewModel = React.useMemo(
+    () =>
+      buildTreeDialogViewModel({
+        flatTree,
+        currentLeafId: treeLeafId,
+        query: treeQuery,
+        filterMode: treeFilterMode,
+      }),
+    [flatTree, treeFilterMode, treeLeafId, treeQuery]
+  )
+
+  const selectedTreeNode =
+    selectedTreeNodeId != null
+      ? (treeViewModel.nodeById.get(selectedTreeNodeId) ?? null)
+      : null
   const selectedVisibleTreeNode =
     selectedTreeNodeId != null
       ? (treeViewModel.orderedVisibleNodes.find(
           (node) => node.id === selectedTreeNodeId
         ) ?? null)
       : null
-  const selectedTreeNode =
-    selectedTreeNodeId != null
-      ? (treeViewModel.nodeById.get(selectedTreeNodeId) ?? null)
+  const cursorVisibleTreeNode =
+    treeCursorNodeId != null
+      ? (treeViewModel.orderedVisibleNodes.find(
+          (node) => node.id === treeCursorNodeId
+        ) ?? null)
       : null
-  const selectedTreeIndex = selectedVisibleTreeNode
+  const cursorTreeIndex = treeCursorNodeId
     ? treeViewModel.orderedVisibleNodes.findIndex(
-        (node) => node.id === selectedVisibleTreeNode.id
+        (node) => node.id === treeCursorNodeId
       )
     : -1
 
@@ -519,135 +1097,60 @@ export function AppShellTreeDialog({
     if (!open) return
 
     setTreeFilterMode("no-tools")
-    setShowTreeLabelTimestamps(false)
-    setFoldedTreeNodeIds([])
-    setShowTreeShortcutsHelp(false)
-    setShowCustomTreeSummary(false)
+    setTreeStage("browse")
+    setTreeCursorNodeId(selectedTreeNodeId || treeLeafId || null)
     setCustomTreeSummaryInstructions("")
-  }, [open])
+  }, [open, selectedTreeNodeId, treeLeafId])
 
   React.useEffect(() => {
     if (!open) return
 
-    const nextSelectedId = findNearestVisibleTreeNodeId(
-      selectedTreeNodeId,
+    const fallbackId = findNearestVisibleTreeNodeId(
+      treeCursorNodeId || selectedTreeNodeId || treeLeafId,
       treeViewModel.orderedVisibleNodes,
       treeViewModel.nodeById
     )
 
-    if (nextSelectedId !== selectedTreeNodeId) {
-      onSelectedTreeNodeIdChange(nextSelectedId)
-      const nextSelectedNode =
-        nextSelectedId != null
-          ? treeViewModel.nodeById.get(nextSelectedId)
-          : null
-      onSelectedTreeNodeLabelChange(nextSelectedNode?.label || "")
+    if (fallbackId !== treeCursorNodeId) {
+      setTreeCursorNodeId(fallbackId)
+    }
+
+    if (treeStage !== "browse" && !selectedTreeNode) {
+      setTreeStage("browse")
     }
   }, [
-    onSelectedTreeNodeIdChange,
-    onSelectedTreeNodeLabelChange,
     open,
+    selectedTreeNode,
     selectedTreeNodeId,
+    treeCursorNodeId,
+    treeLeafId,
+    treeStage,
     treeViewModel.nodeById,
     treeViewModel.orderedVisibleNodes,
   ])
 
   React.useEffect(() => {
-    if (!open || treeLoading || showTreeShortcutsHelp) return
-
-    const frame = window.requestAnimationFrame(() => {
-      const selectedButton = selectedTreeNodeId
-        ? document.querySelector<HTMLElement>(
-            `[data-tree-node-button][data-tree-node-id="${CSS.escape(selectedTreeNodeId)}"]`
-          )
-        : null
-
-      if (selectedButton) {
-        selectedButton.focus()
-        selectedButton.scrollIntoView({ block: "nearest" })
-        return
-      }
-
-      treeSearchInputRef.current?.focus()
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [open, selectedTreeNodeId, showTreeShortcutsHelp, treeLoading])
-
-  const selectTreeNode = (
-    nodeId: string | null,
-    options?: { focus?: boolean }
-  ) => {
-    const nextId = nodeId?.trim() || null
-    onSelectedTreeNodeIdChange(nextId)
-    const nextNode = nextId
-      ? (treeViewModel.nodeById.get(nextId) ?? null)
-      : null
-    onSelectedTreeNodeLabelChange(nextNode?.label || "")
-    setShowCustomTreeSummary(false)
-
-    if (options?.focus && nextId) {
-      window.requestAnimationFrame(() => {
-        const button = document.querySelector<HTMLElement>(
-          `[data-tree-node-button][data-tree-node-id="${CSS.escape(nextId)}"]`
-        )
-        button?.focus()
-        button?.scrollIntoView({ block: "nearest" })
-      })
-    }
-  }
-
-  const setTreeFilter = (nextMode: TreeFilterMode) => {
-    setTreeFilterMode(nextMode)
-    setFoldedTreeNodeIds([])
-  }
-
-  const focusTreeLabelInput = () => {
-    window.requestAnimationFrame(() => {
-      treeLabelInputRef.current?.focus()
-      treeLabelInputRef.current?.select()
-    })
-  }
-
-  React.useEffect(() => {
     if (!open) return
 
-    const handleTreeKeyDown = (event: KeyboardEvent) => {
-      if (!event.defaultPrevented && event.ctrlKey && !event.metaKey) {
-        const key = event.key.toLowerCase()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
 
-        if (key === "/" || key === "?") {
-          event.preventDefault()
-          setShowTreeShortcutsHelp((current) => !current)
-          return
-        }
-
-        if (showTreeShortcutsHelp) return
-
-        if (key === "enter") {
-          if (document.activeElement === treeCustomSummaryRef.current) {
-            event.preventDefault()
-            if (selectedTreeNodeId) {
-              void onNavigateTreeNode(selectedTreeNodeId, {
-                summarize: true,
-                customInstructions: customTreeSummaryInstructions,
-              })
-            }
-          }
-          return
-        }
-
+      if (
+        treeStage === "browse" &&
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
         if (key === "o") {
           event.preventDefault()
-          setTreeFilter(
+          event.stopPropagation()
+          setTreeFilterMode(
             cycleTreeFilterMode(treeFilterMode, event.shiftKey ? -1 : 1)
           )
           return
         }
 
-        if (event.shiftKey) {
+        if (!event.shiftKey) {
           const presetMap: Partial<Record<string, TreeFilterMode>> = {
             d: "default",
             t: "no-tools",
@@ -658,208 +1161,121 @@ export function AppShellTreeDialog({
           const nextMode = presetMap[key]
           if (nextMode) {
             event.preventDefault()
-            setTreeFilter(nextMode)
-            return
-          }
-        }
-
-        if (key === "h" || key === "l") {
-          event.preventDefault()
-          const selectedNode = selectedVisibleTreeNode
-          if (!selectedNode) return
-
-          if (key === "h") {
-            if (selectedNode.hasVisibleChildren && !selectedNode.isFolded) {
-              setFoldedTreeNodeIds((current) => [...current, selectedNode.id])
-              return
-            }
-
-            if (selectedNode.parentVisibleId) {
-              selectTreeNode(selectedNode.parentVisibleId, { focus: true })
-            }
-            return
-          }
-
-          if (selectedNode.hasVisibleChildren && selectedNode.isFolded) {
-            setFoldedTreeNodeIds((current) =>
-              current.filter((entryId) => entryId !== selectedNode.id)
+            event.stopPropagation()
+            setTreeFilterMode((currentMode) =>
+              toggleTreeFilterMode(currentMode, nextMode)
             )
             return
-          }
-
-          const firstChildId =
-            treeViewModel.visibleChildrenById.get(selectedNode.id)?.[0] ?? null
-          if (firstChildId) {
-            selectTreeNode(firstChildId, { focus: true })
           }
         }
       }
 
-      if (showTreeShortcutsHelp) {
-        if (event.key === "Escape") {
+      if (event.key !== "Escape") {
+        if (
+          treeStage === "custom" &&
+          (event.ctrlKey || event.metaKey) &&
+          event.key === "Enter" &&
+          selectedTreeNodeId &&
+          selectedTreeNodeId !== treeLeafId &&
+          !treeSubmitting
+        ) {
           event.preventDefault()
-          setShowTreeShortcutsHelp(false)
+          event.stopPropagation()
+          void onNavigateTreeNode(selectedTreeNodeId, {
+            summarize: true,
+            customInstructions: customTreeSummaryInstructions,
+          })
         }
         return
       }
 
-      const key = event.key.toLowerCase()
-      const targetIsTextField =
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
-
-      if (!targetIsTextField || event.target === treeSearchInputRef.current) {
-        if (
-          key === "arrowdown" ||
-          key === "arrowup" ||
-          (event.ctrlKey && !event.metaKey && (key === "j" || key === "k"))
-        ) {
-          if (treeViewModel.orderedVisibleNodes.length === 0) return
-          event.preventDefault()
-          const delta = key === "arrowup" || key === "k" ? -1 : 1
-          const currentIndex = Math.max(selectedTreeIndex, 0)
-          const nextIndex = Math.max(
-            0,
-            Math.min(
-              treeViewModel.orderedVisibleNodes.length - 1,
-              currentIndex + delta
-            )
-          )
-          selectTreeNode(
-            treeViewModel.orderedVisibleNodes[nextIndex]?.id ?? null,
-            {
-              focus: true,
-            }
-          )
-          return
-        }
-
-        if (key === "home" || key === "end") {
-          if (treeViewModel.orderedVisibleNodes.length === 0) return
-          event.preventDefault()
-          selectTreeNode(
-            treeViewModel.orderedVisibleNodes[
-              key === "home" ? 0 : treeViewModel.orderedVisibleNodes.length - 1
-            ]?.id ?? null,
-            { focus: true }
-          )
-          return
-        }
-
-        if (key === "arrowleft" || key === "arrowright") {
-          const selectedNode = selectedVisibleTreeNode
-          if (!selectedNode) return
-          event.preventDefault()
-
-          if (key === "arrowleft") {
-            if (selectedNode.hasVisibleChildren && !selectedNode.isFolded) {
-              setFoldedTreeNodeIds((current) => [...current, selectedNode.id])
-              return
-            }
-
-            if (selectedNode.parentVisibleId) {
-              selectTreeNode(selectedNode.parentVisibleId, { focus: true })
-            }
-            return
-          }
-
-          if (selectedNode.hasVisibleChildren && selectedNode.isFolded) {
-            setFoldedTreeNodeIds((current) =>
-              current.filter((entryId) => entryId !== selectedNode.id)
-            )
-            return
-          }
-
-          const firstChildId =
-            treeViewModel.visibleChildrenById.get(selectedNode.id)?.[0] ?? null
-          if (firstChildId) {
-            selectTreeNode(firstChildId, { focus: true })
-          }
-          return
-        }
+      if (treeStage === "custom") {
+        event.preventDefault()
+        event.stopPropagation()
+        setTreeStage("actions")
+        return
       }
 
-      if (!targetIsTextField) {
-        if (event.shiftKey && key === "t") {
-          event.preventDefault()
-          setShowTreeLabelTimestamps((current) => !current)
-          return
-        }
-
-        if (event.shiftKey && key === "l") {
-          event.preventDefault()
-          focusTreeLabelInput()
-          return
-        }
-
-        if (key === "enter") {
-          if (!selectedTreeNodeId || selectedTreeNodeId === treeLeafId) return
-          event.preventDefault()
-          void onNavigateTreeNode(selectedTreeNodeId)
-          return
-        }
-      }
-
-      if (event.key === "Escape") {
-        if (showCustomTreeSummary) {
-          event.preventDefault()
-          setShowCustomTreeSummary(false)
-          return
-        }
+      if (treeStage === "actions") {
+        event.preventDefault()
+        event.stopPropagation()
+        setTreeStage("browse")
       }
     }
 
-    window.addEventListener("keydown", handleTreeKeyDown)
+    window.addEventListener("keydown", handleKeyDown, true)
     return () => {
-      window.removeEventListener("keydown", handleTreeKeyDown)
+      window.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [
     customTreeSummaryInstructions,
-    focusTreeLabelInput,
     onNavigateTreeNode,
     open,
-    selectTreeNode,
-    selectedTreeIndex,
     selectedTreeNodeId,
-    selectedVisibleTreeNode,
-    setTreeFilter,
-    showCustomTreeSummary,
-    showTreeShortcutsHelp,
     treeFilterMode,
     treeLeafId,
-    treeViewModel.orderedVisibleNodes,
-    treeViewModel.visibleChildrenById,
+    treeStage,
+    treeSubmitting,
   ])
+
+  React.useEffect(() => {
+    if (!open || treeStage !== "custom") return
+
+    const frame = window.requestAnimationFrame(() => {
+      treeCustomSummaryRef.current?.focus()
+      treeCustomSummaryRef.current?.select()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [open, treeStage])
+
+  const selectTreeNode = (nodeId: string) => {
+    const node = treeViewModel.nodeById.get(nodeId)
+    if (!node) return
+
+    setTreeCursorNodeId(nodeId)
+    onSelectedTreeNodeIdChange(nodeId)
+    onSelectedTreeNodeLabelChange(node.label || "")
+    setTreeStage("actions")
+  }
+
+  const canNavigateSelectedNode = Boolean(
+    selectedTreeNodeId && selectedTreeNodeId !== treeLeafId && selectedTreeNode
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl">
+      <DialogContent className="flex min-h-0 flex-col overflow-hidden sm:h-[90vh] sm:max-h-[90vh] sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Session tree</DialogTitle>
           <DialogDescription>
-            Browse branches, filter the tree, continue from an older point, and
-            manage labels without leaving the native shell.
+            Browse branches, search the tree, and continue from an older point.
           </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.9fr)]">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                ref={treeSearchInputRef}
-                value={treeQuery}
-                onChange={(event) => onTreeQueryChange(event.target.value)}
-                placeholder="Filter tree"
-                className="min-w-[220px] flex-1"
-              />
-              <Button
-                size="sm"
-                variant={showTreeShortcutsHelp ? "default" : "outline"}
-                onClick={() => setShowTreeShortcutsHelp((current) => !current)}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {TREE_FILTER_OPTIONS.map((option) => (
+              <span
+                key={option.mode}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1"
               >
-                <KeyboardIcon data-icon="inline-start" />
-                Help
-              </Button>
-            </div>
+                <span>{option.label}</span>
+                <TreeShortcutKeys keys={option.shortcut} />
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
+              <span>Cycle</span>
+              <TreeShortcutKeys keys={[...TREE_FILTER_CYCLE_SHORTCUTS.next]} />
+              <span className="text-muted-foreground/70">/</span>
+              <TreeShortcutKeys
+                keys={[...TREE_FILTER_CYCLE_SHORTCUTS.previous]}
+              />
+            </span>
+          </div>
+        </DialogHeader>
+
+        {treeStage === "browse" ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2">
               {TREE_FILTER_OPTIONS.map((option) => (
                 <Button
@@ -868,348 +1284,261 @@ export function AppShellTreeDialog({
                   variant={
                     treeFilterMode === option.mode ? "default" : "outline"
                   }
-                  onClick={() => setTreeFilter(option.mode)}
+                  onClick={() => setTreeFilterMode(option.mode)}
                 >
                   {option.label}
                 </Button>
               ))}
-              <Button
-                size="sm"
-                variant={showTreeLabelTimestamps ? "default" : "outline"}
-                onClick={() =>
-                  setShowTreeLabelTimestamps((current) => !current)
-                }
-              >
-                Label time
-              </Button>
             </div>
-            <div className="rounded-lg border bg-background/80">
-              {showTreeShortcutsHelp ? (
-                <div className="space-y-4 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold">Tree shortcuts</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Tree-specific keys match the old browser and stay scoped
-                        to this dialog.
-                      </p>
-                    </div>
-                    <Badge variant="secondary">Ctrl+/</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {TREE_SHORTCUT_ITEMS.map((item) => (
-                      <div
-                        key={item.label}
-                        className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium">
-                            {item.label}
-                          </div>
-                          {item.description ? (
-                            <div className="text-sm text-muted-foreground">
-                              {item.description}
-                            </div>
-                          ) : null}
-                        </div>
-                        <code className="rounded bg-muted px-2 py-1 text-xs font-medium">
-                          {item.keys}
-                        </code>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <ScrollArea className="h-[55vh]">
-                  <div className="space-y-1 p-3">
-                    {treeLoading ? (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Spinner /> Loading tree…
-                      </div>
-                    ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
-                      treeViewModel.orderedVisibleNodes.map((node) => {
-                        const entryText = treeDialogEntryText(node)
-                        const timestamp = treeDialogFormatTimestamp(
-                          node.timestamp
-                        )
-                        const labelTimestamp = showTreeLabelTimestamps
-                          ? treeDialogFormatTimestamp(node.labelTimestamp)
-                          : ""
 
-                        return (
-                          <button
-                            key={node.id}
-                            type="button"
-                            data-tree-node-button
-                            data-tree-node-id={node.id}
-                            onClick={() => selectTreeNode(node.id)}
-                            className={cn(
-                              "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                              selectedTreeNodeId === node.id &&
-                                "bg-muted ring-1 ring-border"
-                            )}
-                          >
-                            <span
-                              className="flex items-start gap-2 pt-0.5"
-                              style={{
-                                paddingLeft: `${node.visibleDepth * 16}px`,
-                              }}
-                            >
-                              <span className="flex size-4 items-center justify-center text-muted-foreground">
-                                {node.hasVisibleChildren ? (
-                                  node.isFolded ? (
-                                    <ChevronRightIcon className="size-4" />
-                                  ) : (
-                                    <ChevronDownIcon className="size-4" />
-                                  )
-                                ) : (
-                                  <span className="block size-1.5 rounded-full bg-current/60" />
-                                )}
-                              </span>
-                              <FolderTreeIcon className="size-4 shrink-0 text-muted-foreground" />
-                            </span>
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant={
-                                    node.isCurrentLeaf ? "default" : "secondary"
-                                  }
-                                >
-                                  {treeDialogKindLabel(node)}
-                                </Badge>
-                                {node.label ? (
-                                  <span className="text-sm font-medium text-foreground">
-                                    [{node.label}]
-                                  </span>
-                                ) : null}
-                                {labelTimestamp ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    {labelTimestamp}
-                                  </span>
-                                ) : null}
-                                {!node.isCurrentLeaf && node.isActivePath ? (
-                                  <Badge variant="outline">Active path</Badge>
-                                ) : null}
-                              </div>
-                              <div className="line-clamp-2 text-sm text-foreground">
-                                {entryText}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {timestamp ? <span>{timestamp}</span> : null}
-                                <span className="font-mono">
-                                  {node.id.slice(
-                                    Math.max(0, node.id.length - 8)
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        )
-                      })
-                    ) : (
-                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                        No tree entries match the current filter.
-                      </div>
-                    )}
+            <Command
+              shouldFilter={false}
+              loop
+              value={cursorVisibleTreeNode?.id ?? undefined}
+              onValueChange={(value) => {
+                if (!value || value === treeCursorNodeId) return
+                if (!treeViewModel.nodeById.has(value)) return
+                setTreeCursorNodeId(value)
+              }}
+              className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
+            >
+              <CommandInput
+                autoFocus
+                value={treeQuery}
+                onValueChange={onTreeQueryChange}
+                placeholder="Search tree"
+              />
+              <CommandList className="max-h-none min-h-0 flex-1">
+                {treeLoading ? (
+                  <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                    <Spinner /> Loading tree…
                   </div>
-                </ScrollArea>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                {treeLoading
-                  ? "Loading tree…"
-                  : treeViewModel.orderedVisibleNodes.length > 0
-                    ? `(${selectedTreeIndex >= 0 ? selectedTreeIndex + 1 : 0}/${treeViewModel.orderedVisibleNodes.length}) [${treeFilterModeLabel(treeFilterMode).toLowerCase()}]${showTreeLabelTimestamps ? " [+label time]" : ""}`
-                    : "No tree entries found."}
-              </span>
-              <span>
-                {treeSubmitting
-                  ? "Navigating…"
-                  : treeLeafId
-                    ? `Current leaf ${treeLeafId.slice(Math.max(0, treeLeafId.length - 8))}`
-                    : "No active leaf"}
-              </span>
+                ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
+                  treeViewModel.orderedVisibleNodes.map((node) => (
+                    <CommandItem
+                      key={node.id}
+                      value={node.id}
+                      disabled={treeSubmitting || node.id === treeLeafId}
+                      onMouseEnter={() => {
+                        if (treeCursorNodeId !== node.id) {
+                          setTreeCursorNodeId(node.id)
+                        }
+                      }}
+                      onClick={() => selectTreeNode(node.id)}
+                      onSelect={() => selectTreeNode(node.id)}
+                      title={treeDialogPlainText(node)}
+                      className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
+                    >
+                      <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
+                        <TreeCommandPrefix
+                          node={node}
+                          viewModel={treeViewModel}
+                        />
+                        <span className="flex h-6 w-2.5 items-center justify-center">
+                          {node.isActivePath ? (
+                            <TreeHierarchyIcon
+                              name="active-path"
+                              className={cn(
+                                node.isActivePath
+                                  ? "text-[var(--success)]"
+                                  : "text-muted-foreground"
+                              )}
+                            />
+                          ) : null}
+                        </span>
+                      </div>
+
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                        {node.label ? (
+                          <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
+                            [{node.label}]
+                          </span>
+                        ) : null}
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <TreeEntryLine node={node} />
+                        </div>
+                      </div>
+                    </CommandItem>
+                  ))
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    {treeQuery.trim()
+                      ? "No tree entries match the current search."
+                      : "No tree entries match the current filter."}
+                  </div>
+                )}
+              </CommandList>
+            </Command>
+
+            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+              {treeLoading
+                ? "Loading tree…"
+                : `${Math.max(0, cursorTreeIndex + 1)}/${treeViewModel.orderedVisibleNodes.length}`}
             </div>
           </div>
-          <div className="space-y-4 rounded-lg border p-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">
-                  {selectedTreeNode
-                    ? treeDialogKindLabel(selectedTreeNode)
-                    : "No selection"}
-                </Badge>
-                {selectedTreeNodeId && selectedTreeNodeId === treeLeafId ? (
-                  <Badge>Current</Badge>
-                ) : null}
-                {selectedVisibleTreeNode?.isActivePath ? (
-                  <Badge variant="outline">Active path</Badge>
-                ) : null}
+        ) : selectedTreeNode ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium text-muted-foreground">
+                {treeStage === "custom"
+                  ? "Summarize with custom prompt"
+                  : "Continue from selected node"}
               </div>
-              <div className="text-sm font-semibold text-foreground">
-                {selectedTreeNode?.label ||
-                  (selectedTreeNode
-                    ? treeDialogEntryText(selectedTreeNode)
-                    : "Nothing selected")}
-              </div>
-              {selectedTreeNode ? (
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div>{treeDialogEntryText(selectedTreeNode)}</div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {selectedTreeNode.timestamp ? (
-                      <span>
-                        {treeDialogFormatTimestamp(selectedTreeNode.timestamp)}
-                      </span>
-                    ) : null}
-                    {showTreeLabelTimestamps &&
-                    selectedTreeNode.label &&
-                    selectedTreeNode.labelTimestamp ? (
-                      <span>
-                        Labeled{" "}
-                        {treeDialogFormatTimestamp(
-                          selectedTreeNode.labelTimestamp
-                        )}
-                      </span>
-                    ) : null}
-                    <span className="font-mono text-[11px]">
-                      {selectedTreeNode.id}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Pick a tree entry to continue from that point or edit its
-                  label.
-                </div>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setTreeStage(treeStage === "custom" ? "actions" : "browse")
+                }
+                disabled={treeSubmitting}
+              >
+                Back to tree
+              </Button>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Continue from here</div>
-              <div className="flex flex-col gap-2">
-                <Button
-                  disabled={
-                    !selectedTreeNodeId ||
-                    selectedTreeNodeId === treeLeafId ||
-                    treeLoading ||
-                    treeSubmitting
-                  }
-                  onClick={() =>
-                    selectedTreeNodeId && onNavigateTreeNode(selectedTreeNodeId)
-                  }
-                >
-                  Continue
-                </Button>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button
-                    variant="outline"
-                    disabled={
-                      !selectedTreeNodeId ||
-                      selectedTreeNodeId === treeLeafId ||
-                      !treeSummaryAvailable ||
-                      treeLoading ||
-                      treeSubmitting
-                    }
-                    onClick={() =>
-                      selectedTreeNodeId &&
-                      onNavigateTreeNode(selectedTreeNodeId, {
-                        summarize: true,
-                      })
-                    }
-                  >
-                    Summarize
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={
-                      !selectedTreeNodeId ||
-                      selectedTreeNodeId === treeLeafId ||
-                      !treeSummaryAvailable ||
-                      treeLoading ||
-                      treeSubmitting
-                    }
-                    onClick={() => {
-                      setShowCustomTreeSummary((current) => !current)
-                      window.requestAnimationFrame(() => {
-                        treeCustomSummaryRef.current?.focus()
-                      })
-                    }}
-                  >
-                    Custom prompt
-                  </Button>
+            <TreeSelectedNodeCard
+              node={selectedTreeNode}
+              visibleNode={selectedVisibleTreeNode}
+            />
+
+            {treeStage === "actions" ? (
+              <>
+                <Command loop className="rounded-lg border">
+                  <CommandInput autoFocus placeholder="Choose action" />
+                  <CommandList>
+                    <CommandGroup heading="Continue">
+                      <CommandItem
+                        value="No summary"
+                        disabled={!canNavigateSelectedNode || treeSubmitting}
+                        onSelect={() => {
+                          if (!selectedTreeNodeId) return
+                          void onNavigateTreeNode(selectedTreeNodeId)
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="font-medium">No summary</span>
+                          <span className="text-xs text-muted-foreground">
+                            Continue from this point immediately.
+                          </span>
+                        </div>
+                      </CommandItem>
+                      <CommandItem
+                        value="Summarize"
+                        disabled={
+                          !canNavigateSelectedNode ||
+                          !treeSummaryAvailable ||
+                          treeSubmitting
+                        }
+                        onSelect={() => {
+                          if (!selectedTreeNodeId) return
+                          void onNavigateTreeNode(selectedTreeNodeId, {
+                            summarize: true,
+                          })
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="font-medium">Summarize</span>
+                          <span className="text-xs text-muted-foreground">
+                            Summarize the branch you are leaving first.
+                          </span>
+                        </div>
+                      </CommandItem>
+                      <CommandItem
+                        value="Summarize with custom prompt"
+                        disabled={
+                          !canNavigateSelectedNode ||
+                          !treeSummaryAvailable ||
+                          treeSubmitting
+                        }
+                        onSelect={() => {
+                          setTreeStage("custom")
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="font-medium">
+                            Summarize with custom prompt
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Add extra instructions before continuing.
+                          </span>
+                        </div>
+                      </CommandItem>
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+
+                {!treeSummaryAvailable ? (
+                  <p className="text-xs text-muted-foreground">
+                    Summary actions are only available when a model is selected.
+                  </p>
+                ) : null}
+
+                <div className="space-y-2 rounded-lg border border-dashed p-3">
+                  <div className="text-sm font-medium">Label</div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={selectedTreeNodeLabel}
+                      onChange={(event) =>
+                        onSelectedTreeNodeLabelChange(event.target.value)
+                      }
+                      placeholder="Optional label"
+                      disabled={!selectedTreeNodeId || treeSubmitting}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={!selectedTreeNodeId || treeSubmitting}
+                      onClick={onSaveTreeLabel}
+                    >
+                      Save label
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              {!treeSummaryAvailable ? (
-                <p className="text-xs text-muted-foreground">
-                  Summary actions are only available when a model is selected.
-                </p>
-              ) : null}
-              {showCustomTreeSummary ? (
-                <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+              </>
+            ) : (
+              <div className="space-y-3 rounded-lg border p-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Custom prompt</div>
                   <Textarea
                     ref={treeCustomSummaryRef}
                     value={customTreeSummaryInstructions}
                     onChange={(event) =>
                       setCustomTreeSummaryInstructions(event.target.value)
                     }
-                    placeholder="Add summary instructions before navigating"
-                    className="min-h-28"
+                    placeholder="Add summary instructions before continuing"
+                    className="min-h-32"
+                    disabled={!canNavigateSelectedNode || treeSubmitting}
                   />
+                </div>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Button
-                    size="sm"
-                    disabled={
-                      !selectedTreeNodeId ||
-                      selectedTreeNodeId === treeLeafId ||
-                      treeLoading ||
-                      treeSubmitting
-                    }
-                    onClick={() =>
-                      selectedTreeNodeId &&
-                      onNavigateTreeNode(selectedTreeNodeId, {
+                    variant="outline"
+                    onClick={() => setTreeStage("actions")}
+                    disabled={treeSubmitting}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    disabled={!canNavigateSelectedNode || treeSubmitting}
+                    onClick={() => {
+                      if (!selectedTreeNodeId) return
+                      void onNavigateTreeNode(selectedTreeNodeId, {
                         summarize: true,
                         customInstructions: customTreeSummaryInstructions,
                       })
-                    }
+                    }}
                   >
                     Summarize & continue
                   </Button>
                 </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-medium">Label</div>
-                <code className="rounded bg-muted px-2 py-1 text-[11px] font-medium">
-                  Shift+L
-                </code>
               </div>
-              <Input
-                ref={treeLabelInputRef}
-                value={selectedTreeNodeLabel}
-                onChange={(event) =>
-                  onSelectedTreeNodeLabelChange(event.target.value)
-                }
-                placeholder="Optional label"
-                disabled={!selectedTreeNodeId || treeLoading || treeSubmitting}
-              />
-              <Button
-                variant="outline"
-                disabled={!selectedTreeNodeId || treeLoading || treeSubmitting}
-                onClick={onSaveTreeLabel}
-              >
-                Save label
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-              Enter continues without summary. Ctrl+Enter submits the custom
-              summary prompt. Esc closes help, custom summary mode, or the tree
-              dialog.
-            </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Select a tree node first.
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
