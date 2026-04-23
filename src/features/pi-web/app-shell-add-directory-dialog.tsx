@@ -15,6 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 function directoryMatchesQuery(directoryPath: string, query: string) {
   const normalizedQuery = query.trim().toLowerCase()
@@ -58,6 +67,7 @@ export function AppShellAddDirectoryDialog({
   onAddDirectory,
   onAddDirectoryPath,
 }: AppShellAddDirectoryDialogProps) {
+  const isMobile = useIsMobile()
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
   const openedSet = new Set(openedDirectories)
@@ -100,6 +110,135 @@ export function AppShellAddDirectoryDialog({
     recentMatching.length > 0 ||
     knownMatching.length > 0
 
+  const directoryPicker = (
+    <Command shouldFilter={false} className="rounded-lg border">
+      <CommandInput
+        autoFocus={!isMobile}
+        value={directoryInput}
+        onValueChange={onDirectoryInputChange}
+        placeholder="Search or paste a path"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-[50vh]">
+        {!hasDirectoryResults ? (
+          <CommandEmpty>
+            {directoryQuery
+              ? "No directories found. Press Add to use the typed path."
+              : "No recent or discovered directories yet."}
+          </CommandEmpty>
+        ) : null}
+        {manualPath ? (
+          <CommandGroup heading="Add path">
+            <CommandItem
+              value={`add ${manualPath}`}
+              onSelect={() => onAddDirectoryPath(manualPath)}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate font-medium">Add {manualPath}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Resolve and add this path to the sidebar.
+                </span>
+              </div>
+            </CommandItem>
+          </CommandGroup>
+        ) : null}
+        {openedMatching.length > 0 ? (
+          <CommandGroup heading="Already added">
+            {openedMatching.map((directoryPath) => (
+              <CommandItem
+                key={`opened:${directoryPath}`}
+                value={`opened ${directoryPath}`}
+                onSelect={() => onAddDirectoryPath(directoryPath)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{directoryPath}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    Expand and show it in the sidebar.
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+        {currentMatching.length > 0 ? (
+          <CommandGroup heading="Current directory">
+            {currentMatching.map((directoryPath) => (
+              <CommandItem
+                key={`current:${directoryPath}`}
+                value={`current ${directoryPath}`}
+                onSelect={() => onAddDirectoryPath(directoryPath)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{directoryPath}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    Use the current Pi working directory.
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+        {recentMatching.length > 0 ? (
+          <CommandGroup heading="Recent directories">
+            {recentMatching.map((directoryPath) => (
+              <CommandItem
+                key={`recent:${directoryPath}`}
+                value={`recent ${directoryPath}`}
+                onSelect={() => onAddDirectoryPath(directoryPath)}
+              >
+                <span className="truncate">{directoryPath}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+        {knownMatching.length > 0 ? (
+          <CommandGroup
+            heading={
+              directoryQuery ? "Matching directories" : "Known directories"
+            }
+          >
+            {knownMatching.map((directoryPath) => (
+              <CommandItem
+                key={`known:${directoryPath}`}
+                value={`known ${directoryPath}`}
+                onSelect={() => onAddDirectoryPath(directoryPath)}
+              >
+                <span className="truncate">{directoryPath}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+      </CommandList>
+    </Command>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>Add directory</DrawerTitle>
+            <DrawerDescription>
+              Search recent and known directories or add a new path to the
+              sidebar.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+            {directoryPicker}
+          </div>
+          <DrawerFooter className="border-t border-border/70">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={onAddDirectory} disabled={!directoryQuery}>
+              Add
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -110,110 +249,7 @@ export function AppShellAddDirectoryDialog({
             sidebar.
           </DialogDescription>
         </DialogHeader>
-        <Command shouldFilter={false} className="rounded-lg border">
-          <CommandInput
-            autoFocus
-            value={directoryInput}
-            onValueChange={onDirectoryInputChange}
-            placeholder="Search or paste a path"
-          />
-          <CommandList className="max-h-[50vh]">
-            {!hasDirectoryResults ? (
-              <CommandEmpty>
-                {directoryQuery
-                  ? "No directories found. Press Add to use the typed path."
-                  : "No recent or discovered directories yet."}
-              </CommandEmpty>
-            ) : null}
-            {manualPath ? (
-              <CommandGroup heading="Add path">
-                <CommandItem
-                  value={`add ${manualPath}`}
-                  onSelect={() => onAddDirectoryPath(manualPath)}
-                >
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-medium">
-                      Add {manualPath}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      Resolve and add this path to the sidebar.
-                    </span>
-                  </div>
-                </CommandItem>
-              </CommandGroup>
-            ) : null}
-            {openedMatching.length > 0 ? (
-              <CommandGroup heading="Already added">
-                {openedMatching.map((directoryPath) => (
-                  <CommandItem
-                    key={`opened:${directoryPath}`}
-                    value={`opened ${directoryPath}`}
-                    onSelect={() => onAddDirectoryPath(directoryPath)}
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate font-medium">
-                        {directoryPath}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        Expand and show it in the sidebar.
-                      </span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-            {currentMatching.length > 0 ? (
-              <CommandGroup heading="Current directory">
-                {currentMatching.map((directoryPath) => (
-                  <CommandItem
-                    key={`current:${directoryPath}`}
-                    value={`current ${directoryPath}`}
-                    onSelect={() => onAddDirectoryPath(directoryPath)}
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate font-medium">
-                        {directoryPath}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        Use the current Pi working directory.
-                      </span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-            {recentMatching.length > 0 ? (
-              <CommandGroup heading="Recent directories">
-                {recentMatching.map((directoryPath) => (
-                  <CommandItem
-                    key={`recent:${directoryPath}`}
-                    value={`recent ${directoryPath}`}
-                    onSelect={() => onAddDirectoryPath(directoryPath)}
-                  >
-                    <span className="truncate">{directoryPath}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-            {knownMatching.length > 0 ? (
-              <CommandGroup
-                heading={
-                  directoryQuery ? "Matching directories" : "Known directories"
-                }
-              >
-                {knownMatching.map((directoryPath) => (
-                  <CommandItem
-                    key={`known:${directoryPath}`}
-                    value={`known ${directoryPath}`}
-                    onSelect={() => onAddDirectoryPath(directoryPath)}
-                  >
-                    <span className="truncate">{directoryPath}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-          </CommandList>
-        </Command>
+        {directoryPicker}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel

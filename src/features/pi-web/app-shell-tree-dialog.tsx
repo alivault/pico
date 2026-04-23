@@ -18,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -1221,7 +1228,7 @@ export function AppShellTreeDialog({
   ])
 
   React.useEffect(() => {
-    if (!open || treeStage !== "custom") return
+    if (!open || treeStage !== "custom" || isMobile) return
 
     const frame = window.requestAnimationFrame(() => {
       treeCustomSummaryRef.current?.focus()
@@ -1231,7 +1238,7 @@ export function AppShellTreeDialog({
     return () => {
       window.cancelAnimationFrame(frame)
     }
-  }, [open, treeStage])
+  }, [isMobile, open, treeStage])
 
   const selectTreeNode = (nodeId: string) => {
     const node = treeViewModel.nodeById.get(nodeId)
@@ -1246,6 +1253,292 @@ export function AppShellTreeDialog({
   const canNavigateSelectedNode = Boolean(
     selectedTreeNodeId && selectedTreeNodeId !== treeLeafId && selectedTreeNode
   )
+
+  const treeDialogBody =
+    treeStage === "browse" ? (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          {TREE_FILTER_OPTIONS.map((option) => (
+            <Button
+              key={option.mode}
+              size="sm"
+              variant={treeFilterMode === option.mode ? "default" : "outline"}
+              onClick={() => setTreeFilterMode(option.mode)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+
+        <Command
+          shouldFilter={false}
+          loop
+          value={cursorVisibleTreeNode?.id ?? undefined}
+          onValueChange={(value) => {
+            if (!value || value === treeCursorNodeId) return
+            if (!treeViewModel.nodeById.has(value)) return
+            setTreeCursorNodeId(value)
+          }}
+          className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
+        >
+          <CommandInput
+            autoFocus={!isMobile}
+            value={treeQuery}
+            onValueChange={onTreeQueryChange}
+            placeholder="Search tree"
+            className="text-base md:text-sm"
+          />
+          <CommandList className="max-h-none min-h-0 flex-1">
+            {treeLoading ? (
+              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <Spinner /> Loading tree…
+              </div>
+            ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
+              treeViewModel.orderedVisibleNodes.map((node) => (
+                <CommandItem
+                  key={node.id}
+                  value={node.id}
+                  disabled={treeSubmitting || node.id === treeLeafId}
+                  onMouseEnter={() => {
+                    if (treeCursorNodeId !== node.id) {
+                      setTreeCursorNodeId(node.id)
+                    }
+                  }}
+                  onClick={() => selectTreeNode(node.id)}
+                  onSelect={() => selectTreeNode(node.id)}
+                  title={treeDialogPlainText(node)}
+                  className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
+                >
+                  <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
+                    <TreeCommandPrefix node={node} viewModel={treeViewModel} />
+                    <span className="flex h-6 w-2.5 items-center justify-center">
+                      {node.isActivePath ? (
+                        <TreeHierarchyIcon
+                          name="active-path"
+                          className={cn(
+                            node.isActivePath
+                              ? "text-[var(--success)]"
+                              : "text-muted-foreground"
+                          )}
+                        />
+                      ) : null}
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                    {node.label ? (
+                      <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
+                        [{node.label}]
+                      </span>
+                    ) : null}
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <TreeEntryLine node={node} />
+                    </div>
+                  </div>
+                </CommandItem>
+              ))
+            ) : (
+              <div className="p-4 text-sm text-muted-foreground">
+                {treeQuery.trim()
+                  ? "No tree entries match the current search."
+                  : "No tree entries match the current filter."}
+              </div>
+            )}
+          </CommandList>
+        </Command>
+
+        <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          {treeLoading
+            ? "Loading tree…"
+            : `${Math.max(0, cursorTreeIndex + 1)}/${treeViewModel.orderedVisibleNodes.length}`}
+        </div>
+      </div>
+    ) : selectedTreeNode ? (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-medium text-muted-foreground">
+            {treeStage === "custom"
+              ? "Summarize with custom prompt"
+              : "Continue from selected node"}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              setTreeStage(treeStage === "custom" ? "actions" : "browse")
+            }
+            disabled={treeSubmitting}
+          >
+            Back to tree
+          </Button>
+        </div>
+
+        <TreeSelectedNodeCard
+          node={selectedTreeNode}
+          visibleNode={selectedVisibleTreeNode}
+        />
+
+        {treeStage === "actions" ? (
+          <>
+            <Command loop className="rounded-lg border">
+              <CommandInput
+                autoFocus={!isMobile}
+                placeholder="Choose action"
+                className="text-base md:text-sm"
+              />
+              <CommandList>
+                <CommandGroup heading="Continue">
+                  <CommandItem
+                    value="No summary"
+                    disabled={!canNavigateSelectedNode || treeSubmitting}
+                    onSelect={() => {
+                      if (!selectedTreeNodeId) return
+                      void onNavigateTreeNode(selectedTreeNodeId)
+                    }}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="font-medium">No summary</span>
+                      <span className="text-xs text-muted-foreground">
+                        Continue from this point immediately.
+                      </span>
+                    </div>
+                  </CommandItem>
+                  <CommandItem
+                    value="Summarize"
+                    disabled={
+                      !canNavigateSelectedNode ||
+                      !treeSummaryAvailable ||
+                      treeSubmitting
+                    }
+                    onSelect={() => {
+                      if (!selectedTreeNodeId) return
+                      void onNavigateTreeNode(selectedTreeNodeId, {
+                        summarize: true,
+                      })
+                    }}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="font-medium">Summarize</span>
+                      <span className="text-xs text-muted-foreground">
+                        Summarize the branch you are leaving first.
+                      </span>
+                    </div>
+                  </CommandItem>
+                  <CommandItem
+                    value="Summarize with custom prompt"
+                    disabled={
+                      !canNavigateSelectedNode ||
+                      !treeSummaryAvailable ||
+                      treeSubmitting
+                    }
+                    onSelect={() => {
+                      setTreeStage("custom")
+                    }}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="font-medium">
+                        Summarize with custom prompt
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Add extra instructions before continuing.
+                      </span>
+                    </div>
+                  </CommandItem>
+                </CommandGroup>
+              </CommandList>
+            </Command>
+
+            {!treeSummaryAvailable ? (
+              <p className="text-xs text-muted-foreground">
+                Summary actions are only available when a model is selected.
+              </p>
+            ) : null}
+
+            <div className="space-y-2 rounded-lg border border-dashed p-3">
+              <div className="text-sm font-medium">Label</div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={selectedTreeNodeLabel}
+                  onChange={(event) =>
+                    onSelectedTreeNodeLabelChange(event.target.value)
+                  }
+                  placeholder="Optional label"
+                  disabled={!selectedTreeNodeId || treeSubmitting}
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  disabled={!selectedTreeNodeId || treeSubmitting}
+                  onClick={onSaveTreeLabel}
+                >
+                  Save label
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Custom prompt</div>
+              <Textarea
+                ref={treeCustomSummaryRef}
+                value={customTreeSummaryInstructions}
+                onChange={(event) =>
+                  setCustomTreeSummaryInstructions(event.target.value)
+                }
+                placeholder="Add summary instructions before continuing"
+                className="min-h-32"
+                disabled={!canNavigateSelectedNode || treeSubmitting}
+              />
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setTreeStage("actions")}
+                disabled={treeSubmitting}
+              >
+                Back
+              </Button>
+              <Button
+                disabled={!canNavigateSelectedNode || treeSubmitting}
+                onClick={() => {
+                  if (!selectedTreeNodeId) return
+                  void onNavigateTreeNode(selectedTreeNodeId, {
+                    summarize: true,
+                    customInstructions: customTreeSummaryInstructions,
+                  })
+                }}
+              >
+                Summarize & continue
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+        Select a tree node first.
+      </div>
+    )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>Session tree</DrawerTitle>
+            <DrawerDescription>
+              Browse branches, search the tree, and continue from an older
+              point.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {treeDialogBody}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1275,277 +1568,7 @@ export function AppShellTreeDialog({
             </span>
           </div>
         </DialogHeader>
-
-        {treeStage === "browse" ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              {TREE_FILTER_OPTIONS.map((option) => (
-                <Button
-                  key={option.mode}
-                  size="sm"
-                  variant={
-                    treeFilterMode === option.mode ? "default" : "outline"
-                  }
-                  onClick={() => setTreeFilterMode(option.mode)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-
-            <Command
-              shouldFilter={false}
-              loop
-              value={cursorVisibleTreeNode?.id ?? undefined}
-              onValueChange={(value) => {
-                if (!value || value === treeCursorNodeId) return
-                if (!treeViewModel.nodeById.has(value)) return
-                setTreeCursorNodeId(value)
-              }}
-              className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
-            >
-              <CommandInput
-                autoFocus={!isMobile}
-                value={treeQuery}
-                onValueChange={onTreeQueryChange}
-                placeholder="Search tree"
-                className="text-base md:text-sm"
-              />
-              <CommandList className="max-h-none min-h-0 flex-1">
-                {treeLoading ? (
-                  <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                    <Spinner /> Loading tree…
-                  </div>
-                ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
-                  treeViewModel.orderedVisibleNodes.map((node) => (
-                    <CommandItem
-                      key={node.id}
-                      value={node.id}
-                      disabled={treeSubmitting || node.id === treeLeafId}
-                      onMouseEnter={() => {
-                        if (treeCursorNodeId !== node.id) {
-                          setTreeCursorNodeId(node.id)
-                        }
-                      }}
-                      onClick={() => selectTreeNode(node.id)}
-                      onSelect={() => selectTreeNode(node.id)}
-                      title={treeDialogPlainText(node)}
-                      className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
-                    >
-                      <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
-                        <TreeCommandPrefix
-                          node={node}
-                          viewModel={treeViewModel}
-                        />
-                        <span className="flex h-6 w-2.5 items-center justify-center">
-                          {node.isActivePath ? (
-                            <TreeHierarchyIcon
-                              name="active-path"
-                              className={cn(
-                                node.isActivePath
-                                  ? "text-[var(--success)]"
-                                  : "text-muted-foreground"
-                              )}
-                            />
-                          ) : null}
-                        </span>
-                      </div>
-
-                      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                        {node.label ? (
-                          <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
-                            [{node.label}]
-                          </span>
-                        ) : null}
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                          <TreeEntryLine node={node} />
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))
-                ) : (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    {treeQuery.trim()
-                      ? "No tree entries match the current search."
-                      : "No tree entries match the current filter."}
-                  </div>
-                )}
-              </CommandList>
-            </Command>
-
-            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-              {treeLoading
-                ? "Loading tree…"
-                : `${Math.max(0, cursorTreeIndex + 1)}/${treeViewModel.orderedVisibleNodes.length}`}
-            </div>
-          </div>
-        ) : selectedTreeNode ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium text-muted-foreground">
-                {treeStage === "custom"
-                  ? "Summarize with custom prompt"
-                  : "Continue from selected node"}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  setTreeStage(treeStage === "custom" ? "actions" : "browse")
-                }
-                disabled={treeSubmitting}
-              >
-                Back to tree
-              </Button>
-            </div>
-
-            <TreeSelectedNodeCard
-              node={selectedTreeNode}
-              visibleNode={selectedVisibleTreeNode}
-            />
-
-            {treeStage === "actions" ? (
-              <>
-                <Command loop className="rounded-lg border">
-                  <CommandInput
-                    autoFocus
-                    placeholder="Choose action"
-                    className="text-base md:text-sm"
-                  />
-                  <CommandList>
-                    <CommandGroup heading="Continue">
-                      <CommandItem
-                        value="No summary"
-                        disabled={!canNavigateSelectedNode || treeSubmitting}
-                        onSelect={() => {
-                          if (!selectedTreeNodeId) return
-                          void onNavigateTreeNode(selectedTreeNodeId)
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="font-medium">No summary</span>
-                          <span className="text-xs text-muted-foreground">
-                            Continue from this point immediately.
-                          </span>
-                        </div>
-                      </CommandItem>
-                      <CommandItem
-                        value="Summarize"
-                        disabled={
-                          !canNavigateSelectedNode ||
-                          !treeSummaryAvailable ||
-                          treeSubmitting
-                        }
-                        onSelect={() => {
-                          if (!selectedTreeNodeId) return
-                          void onNavigateTreeNode(selectedTreeNodeId, {
-                            summarize: true,
-                          })
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="font-medium">Summarize</span>
-                          <span className="text-xs text-muted-foreground">
-                            Summarize the branch you are leaving first.
-                          </span>
-                        </div>
-                      </CommandItem>
-                      <CommandItem
-                        value="Summarize with custom prompt"
-                        disabled={
-                          !canNavigateSelectedNode ||
-                          !treeSummaryAvailable ||
-                          treeSubmitting
-                        }
-                        onSelect={() => {
-                          setTreeStage("custom")
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="font-medium">
-                            Summarize with custom prompt
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Add extra instructions before continuing.
-                          </span>
-                        </div>
-                      </CommandItem>
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-
-                {!treeSummaryAvailable ? (
-                  <p className="text-xs text-muted-foreground">
-                    Summary actions are only available when a model is selected.
-                  </p>
-                ) : null}
-
-                <div className="space-y-2 rounded-lg border border-dashed p-3">
-                  <div className="text-sm font-medium">Label</div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      value={selectedTreeNodeLabel}
-                      onChange={(event) =>
-                        onSelectedTreeNodeLabelChange(event.target.value)
-                      }
-                      placeholder="Optional label"
-                      disabled={!selectedTreeNodeId || treeSubmitting}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      disabled={!selectedTreeNodeId || treeSubmitting}
-                      onClick={onSaveTreeLabel}
-                    >
-                      Save label
-                    </Button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3 rounded-lg border p-4">
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Custom prompt</div>
-                  <Textarea
-                    ref={treeCustomSummaryRef}
-                    value={customTreeSummaryInstructions}
-                    onChange={(event) =>
-                      setCustomTreeSummaryInstructions(event.target.value)
-                    }
-                    placeholder="Add summary instructions before continuing"
-                    className="min-h-32"
-                    disabled={!canNavigateSelectedNode || treeSubmitting}
-                  />
-                </div>
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setTreeStage("actions")}
-                    disabled={treeSubmitting}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    disabled={!canNavigateSelectedNode || treeSubmitting}
-                    onClick={() => {
-                      if (!selectedTreeNodeId) return
-                      void onNavigateTreeNode(selectedTreeNodeId, {
-                        summarize: true,
-                        customInstructions: customTreeSummaryInstructions,
-                      })
-                    }}
-                  >
-                    Summarize & continue
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            Select a tree node first.
-          </div>
-        )}
+        {treeDialogBody}
       </DialogContent>
     </Dialog>
   )

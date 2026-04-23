@@ -10,6 +10,13 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 export type AppCommand = {
@@ -71,6 +78,60 @@ export function AppShellCommandPalette({
     })
   }
 
+  const commandPaletteBody = (
+    <Command shouldFilter loop className="min-h-0 flex-1 rounded-lg border">
+      <CommandInput
+        autoFocus={!isMobile}
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search commands"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-none min-h-0 flex-1">
+        <CommandEmpty>No commands found.</CommandEmpty>
+        {commandGroups.map(([group, groupCommands]) => (
+          <CommandGroup key={group} heading={group}>
+            {groupCommands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={commandValue(command)}
+                onSelect={() => handleSelect(command)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{command.title}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {command.description}
+                  </span>
+                </div>
+                {command.shortcut ? (
+                  <CommandShortcut>{command.shortcut}</CommandShortcut>
+                ) : null}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
+      </CommandList>
+    </Command>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>Command palette</DrawerTitle>
+            <DrawerDescription>
+              Search for commands and session actions.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {commandPaletteBody}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
   return (
     <CommandDialog
       open={open}
@@ -78,43 +139,9 @@ export function AppShellCommandPalette({
       title="Command palette"
       description="Search for commands and session actions."
       className="sm:max-w-2xl"
-      initialFocus={isMobile ? false : true}
+      initialFocus
     >
-      <Command shouldFilter loop>
-        <CommandInput
-          autoFocus={!isMobile}
-          value={query}
-          onValueChange={setQuery}
-          placeholder="Search commands"
-          className="text-base md:text-sm"
-        />
-        <CommandList>
-          <CommandEmpty>No commands found.</CommandEmpty>
-          {commandGroups.map(([group, groupCommands]) => (
-            <CommandGroup key={group} heading={group}>
-              {groupCommands.map((command) => (
-                <CommandItem
-                  key={command.id}
-                  value={commandValue(command)}
-                  onSelect={() => handleSelect(command)}
-                >
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-medium">
-                      {command.title}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {command.description}
-                    </span>
-                  </div>
-                  {command.shortcut ? (
-                    <CommandShortcut>{command.shortcut}</CommandShortcut>
-                  ) : null}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ))}
-        </CommandList>
-      </Command>
+      {commandPaletteBody}
     </CommandDialog>
   )
 }
