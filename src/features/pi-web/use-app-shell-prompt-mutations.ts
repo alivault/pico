@@ -61,7 +61,6 @@ type UseAppShellPromptMutationsOptions = {
   lastSyncedEditorTextRef: React.MutableRefObject<string>
   rememberRecentDirectory: (directory: string) => void
   prefetchDirectorySessionsIndex: (directory: string) => void
-  handleSelectSession: (nextSessionId?: string) => void
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setDirectoryInput: React.Dispatch<React.SetStateAction<string>>
   setAddDirectoryOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -104,7 +103,6 @@ export function useAppShellPromptMutations({
   lastSyncedEditorTextRef,
   rememberRecentDirectory,
   prefetchDirectorySessionsIndex,
-  handleSelectSession,
   setSidebarDirectories,
   setDirectoryInput,
   setAddDirectoryOpen,
@@ -241,7 +239,6 @@ export function useAppShellPromptMutations({
 
       try {
         await createSessionMutation.mutateAsync({ cwd: nextCwd })
-        handleSelectSession(undefined)
       } catch (error) {
         setDraftSessionLoadingOwnerKey((current) =>
           current === ownerKey ? null : current
@@ -255,7 +252,6 @@ export function useAppShellPromptMutations({
     [
       createSessionMutation,
       defaultNewSessionDirectory,
-      handleSelectSession,
       rememberRecentDirectory,
       restorePendingDraftPrompt,
       setDraftSessionLoadingOwnerKey,

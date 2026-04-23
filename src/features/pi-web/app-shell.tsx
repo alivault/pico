@@ -137,6 +137,7 @@ import {
   readStoredSidebarDirectories,
   relativeTime,
   rememberStoredPromptDraft,
+  promptDraftKey,
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pi-web"
@@ -1005,7 +1006,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
   const queryClient = useQueryClient()
-  const activeSessionId = sessionState.sessionId || sessionId
+  const activeSessionId =
+    sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionKey = sessionState.sessionKey || ""
   const currentSessionQueryScope = sessionScrollKey(sessionState)
   const olderHistoryMessages =
@@ -1579,7 +1581,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     abortSession,
     addDirectory,
     addDirectoryPath,
-    createSession,
+    createSession: requestCreateSession,
     removePendingMessage,
     reorderPending,
     submitPrompt,
@@ -1601,7 +1603,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     lastSyncedEditorTextRef,
     rememberRecentDirectory,
     prefetchDirectorySessionsIndex,
-    handleSelectSession,
     setSidebarDirectories,
     setDirectoryInput,
     setAddDirectoryOpen,
@@ -1613,6 +1614,31 @@ const AppShellSessionWorkspace = React.forwardRef<
     setIsSubmitting,
     setComposerImages,
   })
+
+  const createSession = React.useCallback(
+    async (cwdOverride?: string) => {
+      focusPrompt()
+      await requestCreateSession(cwdOverride)
+    },
+    [focusPrompt, requestCreateSession]
+  )
+
+  React.useEffect(() => {
+    if (!sessionId || !draftSessionLoadingOwnerKey || !sessionState.draft) {
+      return
+    }
+
+    if (promptDraftKey(sessionState) !== draftSessionLoadingOwnerKey) {
+      return
+    }
+
+    handleSelectSession(undefined)
+  }, [
+    draftSessionLoadingOwnerKey,
+    handleSelectSession,
+    sessionId,
+    sessionState,
+  ])
 
   const onPickImages = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -2691,6 +2717,10 @@ export function PiWebAppShell({
   const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const sessionWorkspaceRef =
     React.useRef<AppShellSessionWorkspaceHandle | null>(null)
+  const directoryIndexRequestIdRef = React.useRef(0)
+  const directoryIndexRequestIdsByPathRef = React.useRef<
+    Record<string, number>
+  >({})
   const sidebarDirectorySessionsSnapshotRef = React.useRef<{
     activeSessionId: string
     activeSessionKey: string
@@ -2713,6 +2743,26 @@ export function PiWebAppShell({
 
     return nextIndexes
   })()
+
+  const startDirectoryIndexRequest = (directories: Array<string>) => {
+    const requestId = directoryIndexRequestIdRef.current + 1
+    directoryIndexRequestIdRef.current = requestId
+
+    for (const directory of directories) {
+      directoryIndexRequestIdsByPathRef.current[directory] = requestId
+    }
+
+    return requestId
+  }
+
+  const getActiveDirectoryIndexRequestDirectories = (
+    directories: Array<string>,
+    requestId: number
+  ) =>
+    directories.filter(
+      (directory) =>
+        directoryIndexRequestIdsByPathRef.current[directory] === requestId
+    )
 
   React.useEffect(() => {
     const storedContext = window.localStorage.getItem(
@@ -2773,6 +2823,15 @@ export function PiWebAppShell({
 
       return JSON.stringify(next) === JSON.stringify(current) ? current : next
     })
+
+    const nextRequestIdsByPath: Record<string, number> = {}
+    for (const [directory, requestId] of Object.entries(
+      directoryIndexRequestIdsByPathRef.current
+    )) {
+      if (!sidebarDirectorySet.has(directory)) continue
+      nextRequestIdsByPath[directory] = requestId
+    }
+    directoryIndexRequestIdsByPathRef.current = nextRequestIdsByPath
   }, [baseSidebarDirectories])
 
   React.useEffect(() => {
@@ -2791,14 +2850,13 @@ export function PiWebAppShell({
     }
 
     const previousSnapshot = sidebarDirectorySessionsSnapshotRef.current
-    const activeSessionChanged =
+    const activePersistedSessionChanged =
       Boolean(previousSnapshot) &&
       (previousSnapshot?.activeSessionId !==
         (sessionsEvent.activeSessionId || "") ||
-        previousSnapshot?.activeSessionKey !==
-          (sessionsEvent.activeSessionKey || "") ||
         previousSnapshot?.activeSessionPath !==
-          (sessionsEvent.activeSessionPath || ""))
+          (sessionsEvent.activeSessionPath || "")) &&
+      Boolean(sessionsEvent.activeSessionId || sessionsEvent.activeSessionPath)
     const nextRevisions: Record<string, string> = {}
     const directoriesToRefresh: Array<string> = []
 
@@ -2824,7 +2882,7 @@ export function PiWebAppShell({
         continue
       }
 
-      if (!activeSessionChanged && previousRevision === nextRevision) {
+      if (!activePersistedSessionChanged && previousRevision === nextRevision) {
         continue
       }
 
@@ -2842,7 +2900,7 @@ export function PiWebAppShell({
       return
     }
 
-    let cancelled = false
+    const requestId = startDirectoryIndexRequest(directoriesToRefresh)
     setDirectoryIndexLoading((current) =>
       updateDirectoryIndexLoadingState(current, directoriesToRefresh, true)
     )
@@ -2852,18 +2910,39 @@ export function PiWebAppShell({
       directories: directoriesToRefresh,
     })
       .then((response) => {
-        if (cancelled) return
-        setDirectoryIndexDataByPath((current) =>
-          mergeDirectoryIndexData(current, response.directoryIndexes)
+        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
+          directoriesToRefresh,
+          requestId
         )
+        if (activeDirectories.length === 0) return
+
+        const activeDirectoryIndexes = Object.fromEntries(
+          activeDirectories
+            .map((directory) => [
+              directory,
+              response.directoryIndexes[directory],
+            ])
+            .filter((entry) => Boolean(entry[1]))
+        )
+
+        if (Object.keys(activeDirectoryIndexes).length > 0) {
+          setDirectoryIndexDataByPath((current) =>
+            mergeDirectoryIndexData(current, activeDirectoryIndexes)
+          )
+        }
         setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, directoriesToRefresh, false)
+          updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
       })
       .catch((error) => {
-        if (cancelled) return
+        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
+          directoriesToRefresh,
+          requestId
+        )
+        if (activeDirectories.length === 0) return
+
         setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, directoriesToRefresh, false)
+          updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
         toast.error(
           error instanceof Error
@@ -2871,14 +2950,9 @@ export function PiWebAppShell({
             : "Failed to load sidebar sessions"
         )
       })
-
-    return () => {
-      cancelled = true
-    }
   }, [
     baseSidebarDirectories,
     directoryIndexDataByPath,
-    directoryIndexLoading,
     directoryStateByPath,
     sessionsEvent,
     viewerContextId,
@@ -2899,7 +2973,7 @@ export function PiWebAppShell({
       return
     }
 
-    let cancelled = false
+    const requestId = startDirectoryIndexRequest(missingDirectories)
     setDirectoryIndexLoading((current) =>
       updateDirectoryIndexLoadingState(current, missingDirectories, true)
     )
@@ -2909,18 +2983,39 @@ export function PiWebAppShell({
       directories: missingDirectories,
     })
       .then((response) => {
-        if (cancelled) return
-        setDirectoryIndexDataByPath((current) =>
-          mergeDirectoryIndexData(current, response.directoryIndexes)
+        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
+          missingDirectories,
+          requestId
         )
+        if (activeDirectories.length === 0) return
+
+        const activeDirectoryIndexes = Object.fromEntries(
+          activeDirectories
+            .map((directory) => [
+              directory,
+              response.directoryIndexes[directory],
+            ])
+            .filter((entry) => Boolean(entry[1]))
+        )
+
+        if (Object.keys(activeDirectoryIndexes).length > 0) {
+          setDirectoryIndexDataByPath((current) =>
+            mergeDirectoryIndexData(current, activeDirectoryIndexes)
+          )
+        }
         setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, missingDirectories, false)
+          updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
       })
       .catch((error) => {
-        if (cancelled) return
+        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
+          missingDirectories,
+          requestId
+        )
+        if (activeDirectories.length === 0) return
+
         setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, missingDirectories, false)
+          updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
         toast.error(
           error instanceof Error
@@ -2928,14 +3023,9 @@ export function PiWebAppShell({
             : "Failed to load sidebar sessions"
         )
       })
-
-    return () => {
-      cancelled = true
-    }
   }, [
     baseSidebarDirectories,
     directoryIndexDataByPath,
-    directoryIndexLoading,
     sidebarDeferredDirectoryLoadingReady,
     viewerContextId,
   ])
