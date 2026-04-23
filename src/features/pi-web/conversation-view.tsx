@@ -70,7 +70,13 @@ async function getHighlightedCode(code: string, language?: string) {
   return payload
 }
 
-function CodeBlock({ code, language }: { code: string; language?: string }) {
+const CodeBlock = React.memo(function CodeBlock({
+  code,
+  language,
+}: {
+  code: string
+  language?: string
+}) {
   const [highlighted, setHighlighted] =
     React.useState<HighlightResponse | null>(null)
   const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
@@ -157,7 +163,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
       </pre>
     </div>
   )
-}
+})
 
 function isHighlightSkipped(payload: HighlightResponse) {
   return (
@@ -202,7 +208,11 @@ function getCodeBlockChild(children: React.ReactNode) {
   return child
 }
 
-function MarkdownBlock({ text }: { text: string }) {
+const MarkdownBlock = React.memo(function MarkdownBlock({
+  text,
+}: {
+  text: string
+}) {
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
       <ReactMarkdown
@@ -242,7 +252,7 @@ function MarkdownBlock({ text }: { text: string }) {
       </ReactMarkdown>
     </div>
   )
-}
+})
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -453,7 +463,11 @@ function compactionTriggerText(
     : "Compaction"
 }
 
-function ToolDiffPreview({ lines }: { lines: Array<ToolDiffLine> }) {
+const ToolDiffPreview = React.memo(function ToolDiffPreview({
+  lines,
+}: {
+  lines: Array<ToolDiffLine>
+}) {
   const counts = new Map<string, number>()
 
   return (
@@ -480,9 +494,9 @@ function ToolDiffPreview({ lines }: { lines: Array<ToolDiffLine> }) {
       })}
     </pre>
   )
-}
+})
 
-function ToolBlockCard({
+const ToolBlockCard = React.memo(function ToolBlockCard({
   block,
 }: {
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
@@ -549,9 +563,9 @@ function ToolBlockCard({
       </div>
     </details>
   )
-}
+})
 
-function CompactionBlockCard({
+const CompactionBlockCard = React.memo(function CompactionBlockCard({
   block,
 }: {
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
@@ -575,7 +589,7 @@ function CompactionBlockCard({
       </div>
     </details>
   )
-}
+})
 
 export function MessagesWorkingIndicator({
   state,
@@ -614,7 +628,7 @@ export function MessagesWorkingIndicator({
   )
 }
 
-export function UserMessageCard({
+export const UserMessageCard = React.memo(function UserMessageCard({
   item,
 }: {
   item: Extract<ConversationItem, { kind: "user" }>
@@ -649,7 +663,7 @@ export function UserMessageCard({
       ) : null}
     </div>
   )
-}
+})
 
 export function assistantMessageHasVisibleBlocks({
   item,
@@ -675,7 +689,7 @@ export function assistantMessageHasVisibleBlocks({
   })
 }
 
-export function AssistantMessageCard({
+export const AssistantMessageCard = React.memo(function AssistantMessageCard({
   item,
   hideThinking,
   hideToolBlocks,
@@ -687,10 +701,10 @@ export function AssistantMessageCard({
   const renderedBlocks = (() => {
     const counts = new Map<string, number>()
     return item.blocks.flatMap((block) => {
-      const baseKey = assistantBlockKey(block)
-      const count = (counts.get(baseKey) ?? 0) + 1
-      counts.set(baseKey, count)
-      const key = `${baseKey}:${count}`
+      const fallbackKey = assistantBlockKey(block)
+      const count = (counts.get(fallbackKey) ?? 0) + 1
+      counts.set(fallbackKey, count)
+      const key = block.blockKey || `${fallbackKey}:${count}`
 
       switch (block.type) {
         case "text":
@@ -733,4 +747,4 @@ export function AssistantMessageCard({
       <div className="flex flex-col gap-4">{renderedBlocks}</div>
     </div>
   )
-}
+})

@@ -45,10 +45,17 @@ function RootNotFound() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const reactScanScriptSrc = import.meta.env.DEV
+    ? "/src/react-scan-dev.ts"
+    : undefined
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {reactScanScriptSrc ? (
+          <script type="module" src={reactScanScriptSrc} />
+        ) : null}
       </head>
       <body className="h-svh overflow-hidden bg-background text-foreground antialiased">
         <AppProviders>

@@ -13,8 +13,6 @@ import { toast } from "sonner"
 
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
 import type {
-  AssistantItem,
-  ConversationItem,
   PromptImage,
   SessionState,
   StreamingBehavior,
@@ -83,7 +81,6 @@ import {
   MessagesWorkingIndicator,
   UserMessageCard,
   assistantMessageHasVisibleBlocks,
-  conversationItemSignature,
 } from "@/features/pi-web/conversation-view"
 import {
   parseComposerSkillMessage,
@@ -134,42 +131,6 @@ import {
   sessionListEntryKey,
 } from "@/lib/pi-web"
 import { isApiErrorResponse } from "@/lib/pi-web-api"
-
-function mergeAssistantTurns(items: Array<ConversationItem>) {
-  const merged: Array<ConversationItem> = []
-  let pendingAssistant: AssistantItem | null = null
-
-  for (const item of items) {
-    if (item.kind === "assistant") {
-      if (!pendingAssistant) {
-        pendingAssistant = {
-          kind: "assistant",
-          blocks: [...item.blocks],
-          streaming: item.streaming,
-        }
-      } else {
-        pendingAssistant.blocks.push(...item.blocks)
-        pendingAssistant.streaming =
-          pendingAssistant.streaming || item.streaming
-      }
-
-      continue
-    }
-
-    if (pendingAssistant) {
-      merged.push(pendingAssistant)
-      pendingAssistant = null
-    }
-
-    merged.push(item)
-  }
-
-  if (pendingAssistant) {
-    merged.push(pendingAssistant)
-  }
-
-  return merged
-}
 
 const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_STREAMING_INTERVAL_MS = 500
@@ -2331,53 +2292,45 @@ export function PiWebAppShell({
                 ) : sessionState.items.length > 0 ? (
                   <>
                     <div className="flex flex-col gap-4">
-                      {(() => {
-                        const counts = new Map<string, number>()
-                        return mergeAssistantTurns(sessionState.items).map(
-                          (item) => {
-                            const baseKey = conversationItemSignature(item)
-                            const count = (counts.get(baseKey) ?? 0) + 1
-                            counts.set(baseKey, count)
-                            const key = `${baseKey}:${count}`
+                      {sessionState.items.map((item, index) => {
+                        const key = item.itemKey || `message-row:${index}`
 
-                            if (item.kind === "user") {
-                              return (
-                                <div
-                                  key={key}
-                                  data-message-anchor="true"
-                                  className={conversationMessageColumnClassName}
-                                >
-                                  <UserMessageCard item={item} />
-                                </div>
-                              )
-                            }
+                        if (item.kind === "user") {
+                          return (
+                            <div
+                              key={key}
+                              data-message-anchor="true"
+                              className={conversationMessageColumnClassName}
+                            >
+                              <UserMessageCard item={item} />
+                            </div>
+                          )
+                        }
 
-                            if (
-                              !assistantMessageHasVisibleBlocks({
-                                item,
-                                hideThinking: sessionState.hideThinkingBlock,
-                                hideToolBlocks,
-                              })
-                            ) {
-                              return null
-                            }
+                        if (
+                          !assistantMessageHasVisibleBlocks({
+                            item,
+                            hideThinking: sessionState.hideThinkingBlock,
+                            hideToolBlocks,
+                          })
+                        ) {
+                          return null
+                        }
 
-                            return (
-                              <div
-                                key={key}
-                                data-message-anchor="true"
-                                className={conversationMessageColumnClassName}
-                              >
-                                <AssistantMessageCard
-                                  item={item}
-                                  hideThinking={sessionState.hideThinkingBlock}
-                                  hideToolBlocks={hideToolBlocks}
-                                />
-                              </div>
-                            )
-                          }
+                        return (
+                          <div
+                            key={key}
+                            data-message-anchor="true"
+                            className={conversationMessageColumnClassName}
+                          >
+                            <AssistantMessageCard
+                              item={item}
+                              hideThinking={sessionState.hideThinkingBlock}
+                              hideToolBlocks={hideToolBlocks}
+                            />
+                          </div>
                         )
-                      })()}
+                      })}
                       {workingState ? (
                         <div className={conversationMessageColumnClassName}>
                           <MessagesWorkingIndicator state={workingState} />
