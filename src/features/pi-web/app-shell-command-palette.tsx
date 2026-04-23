@@ -10,6 +10,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 export type AppCommand = {
   id: string
@@ -41,6 +42,7 @@ export function AppShellCommandPalette({
   onCommandError,
 }: AppShellCommandPaletteProps) {
   const [query, setQuery] = React.useState("")
+  const isMobile = useIsMobile()
   const commandGroups = React.useMemo(() => {
     const groups = new Map<string, Array<AppCommand>>()
 
@@ -76,13 +78,15 @@ export function AppShellCommandPalette({
       title="Command palette"
       description="Search for commands and session actions."
       className="sm:max-w-2xl"
+      initialFocus={isMobile ? false : true}
     >
       <Command shouldFilter loop>
         <CommandInput
-          autoFocus
+          autoFocus={!isMobile}
           value={query}
           onValueChange={setQuery}
           placeholder="Search commands"
+          className="text-base md:text-sm"
         />
         <CommandList>
           <CommandEmpty>No commands found.</CommandEmpty>

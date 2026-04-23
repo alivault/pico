@@ -61,6 +61,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -246,6 +247,7 @@ export function AppSidebar({
   onReorderDirectories,
   onLoadMoreDirectorySessions,
 }: AppSidebarProps) {
+  const { isMobile, setOpenMobile } = useSidebar()
   const searchActive = sessionSearch.trim().length > 0
   const directoryOrderingEnabled =
     !searchActive && visibleDirectories.length > 1
@@ -504,12 +506,15 @@ export function AppSidebar({
                               (isActive || isSelected) &&
                                 "bg-sidebar-accent text-sidebar-accent-foreground"
                             )}
-                            onClick={(event) =>
+                            onClick={(event) => {
                               onSessionClick?.(entry, {
                                 ctrlKey: event.ctrlKey,
                                 shiftKey: event.shiftKey,
                               })
-                            }
+                              if (isMobile) {
+                                setOpenMobile(false)
+                              }
+                            }}
                           >
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center justify-between gap-3">

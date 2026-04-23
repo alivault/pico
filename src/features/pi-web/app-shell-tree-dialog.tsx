@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
 type TreeFilterMode =
@@ -1059,6 +1060,7 @@ export function AppShellTreeDialog({
   const [customTreeSummaryInstructions, setCustomTreeSummaryInstructions] =
     React.useState("")
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const isMobile = useIsMobile()
 
   const treeViewModel = React.useMemo(
     () =>
@@ -1303,7 +1305,7 @@ export function AppShellTreeDialog({
               className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
             >
               <CommandInput
-                autoFocus
+                autoFocus={!isMobile}
                 value={treeQuery}
                 onValueChange={onTreeQueryChange}
                 placeholder="Search tree"
