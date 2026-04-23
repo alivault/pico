@@ -457,14 +457,78 @@ function findStreamingAssistantItem(items: Array<ConversationItem>) {
   return null
 }
 
+function isPendingConversationItem(item: ConversationItem) {
+  return (
+    item.kind === "user" &&
+    (Boolean(item.pendingId) || item.itemKey?.startsWith("pending:"))
+  )
+}
+
+function committedItemsFromPrevious(previousItems: Array<ConversationItem>) {
+  return previousItems.filter((item) => {
+    if (isPendingConversationItem(item)) {
+      return false
+    }
+
+    return !(item.kind === "assistant" && item.streaming)
+  })
+}
+
+function pendingItemsFromPrevious(previousItems: Array<ConversationItem>) {
+  return previousItems.filter((item) => isPendingConversationItem(item))
+}
+
+function committedItemsFromSync(sync: StateSyncPayload) {
+  if (Array.isArray(sync.items)) {
+    return sync.items.filter(
+      (item): item is ConversationItem =>
+        !isPendingConversationItem(item) &&
+        !(item.kind === "assistant" && item.streaming)
+    )
+  }
+
+  return null
+}
+
 export function buildItemsFromSync(
   sync: StateSyncPayload,
   previousItems: Array<ConversationItem> = []
 ) {
-  const items: Array<ConversationItem> = []
+  const nextCommittedItems = committedItemsFromSync(sync)
+  const hasCommittedItems = Array.isArray(nextCommittedItems)
+  const hasMessages = Array.isArray(sync.messages)
+  const hasPendingUserMessages = Array.isArray(sync.pendingUserMessages)
+  const hasStreamingUpdate =
+    typeof sync.streaming === "boolean" ||
+    Object.prototype.hasOwnProperty.call(sync, "streamingMessage")
+
+  if (
+    !hasCommittedItems &&
+    !hasMessages &&
+    !hasPendingUserMessages &&
+    !hasStreamingUpdate
+  ) {
+    return {
+      items: previousItems,
+      currentAssistantItem: findStreamingAssistantItem(previousItems),
+    }
+  }
+
+  const items: Array<ConversationItem> =
+    hasCommittedItems || hasMessages
+      ? []
+      : committedItemsFromPrevious(previousItems)
+
+  if (nextCommittedItems) {
+    items.push(...nextCommittedItems)
+  }
 
   const messages = Array.isArray(sync.messages) ? sync.messages : []
-  for (let index = 0; index < messages.length; index += 1) {
+  for (
+    let index = 0;
+    index < messages.length && !nextCommittedItems;
+    index += 1
+  ) {
     const message = messages[index]
     const itemKey = `message:${index}`
 
@@ -520,39 +584,58 @@ export function buildItemsFromSync(
     }
   }
 
-  const pendingUserMessages = Array.isArray(sync.pendingUserMessages)
-    ? sync.pendingUserMessages
-    : []
-  for (let index = 0; index < pendingUserMessages.length; index += 1) {
-    const message = pendingUserMessages[index]
-    const pendingId =
-      typeof message?.pendingId === "string" ? message.pendingId : undefined
+  if (hasPendingUserMessages) {
+    const pendingItems = sync.pendingUserMessages ?? []
 
-    items.push({
-      kind: "user",
-      itemKey: pendingId ? `pending:${pendingId}` : `pending:${index}`,
-      pendingId,
-      text: typeof message?.text === "string" ? message.text : "",
-      images: promptImagesFromPendingMessage(message),
-      queued: Boolean(message?.queued ?? true),
-      streamingBehavior: normalizeStreamingBehavior(message?.streamingBehavior),
-    })
+    for (let index = 0; index < pendingItems.length; index += 1) {
+      const message = pendingItems[index]
+      const pendingId =
+        typeof message?.pendingId === "string" ? message.pendingId : undefined
+
+      items.push({
+        kind: "user",
+        itemKey: pendingId ? `pending:${pendingId}` : `pending:${index}`,
+        pendingId,
+        text: typeof message?.text === "string" ? message.text : "",
+        images: promptImagesFromPendingMessage(message),
+        queued: Boolean(message?.queued ?? true),
+        streamingBehavior: normalizeStreamingBehavior(
+          message?.streamingBehavior
+        ),
+      })
+    }
+  } else {
+    for (const item of pendingItemsFromPrevious(previousItems)) {
+      items.push(item)
+    }
   }
 
-  if (sync.streaming && sync.streamingMessage?.role === "assistant") {
-    appendAssistantItem(items, {
-      kind: "assistant",
-      itemKey: "streaming",
-      blocks: assistantBlocksFromMessage(sync.streamingMessage, "streaming"),
-      streaming: true,
-    })
-  } else if (sync.streaming) {
-    appendAssistantItem(items, {
-      kind: "assistant",
-      itemKey: "streaming",
-      blocks: [],
-      streaming: true,
-    })
+  const previousStreamingItem = findStreamingAssistantItem(previousItems)
+  const shouldRenderStreaming =
+    typeof sync.streaming === "boolean"
+      ? sync.streaming
+      : sync.streamingMessage != null
+        ? true
+        : Boolean(previousStreamingItem)
+
+  if (shouldRenderStreaming) {
+    if (sync.streamingMessage?.role === "assistant") {
+      items.push({
+        kind: "assistant",
+        itemKey: "streaming",
+        blocks: assistantBlocksFromMessage(sync.streamingMessage, "streaming"),
+        streaming: true,
+      })
+    } else if (!hasStreamingUpdate && previousStreamingItem) {
+      items.push(previousStreamingItem)
+    } else {
+      items.push({
+        kind: "assistant",
+        itemKey: "streaming",
+        blocks: [],
+        streaming: true,
+      })
+    }
   }
 
   const reconciledItems = reconcileConversationItems(previousItems, items)
@@ -580,7 +663,10 @@ export function createInitialSessionState(): SessionState {
     replaying: false,
     streaming: false,
     draft: true,
+    messages: [],
     items: [],
+    historyOffset: 0,
+    historyTotalCount: 0,
     firstMessage: "",
     thinkingLevel: "off",
     availableThinkingLevels: ["off"],

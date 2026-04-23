@@ -1,5 +1,6 @@
 import {
   buildItemsFromSync,
+  createInitialSessionState,
   previewUrlForImage,
   sameContextUsage,
   type PromptImage,
@@ -131,9 +132,14 @@ export function buildRequestUrl(
   {
     contextId,
     sessionId,
+    searchParams,
   }: {
     contextId: string
     sessionId?: string
+    searchParams?: Record<
+      string,
+      string | number | boolean | Array<string | number | boolean> | undefined
+    >
   }
 ) {
   const url = new URL(path, window.location.origin)
@@ -141,6 +147,19 @@ export function buildRequestUrl(
   if (sessionId) {
     url.searchParams.set("session", sessionId)
   }
+
+  for (const [key, rawValue] of Object.entries(searchParams ?? {})) {
+    if (Array.isArray(rawValue)) {
+      for (const value of rawValue) {
+        url.searchParams.append(key, String(value))
+      }
+      continue
+    }
+
+    if (rawValue == null) continue
+    url.searchParams.set(key, String(rawValue))
+  }
+
   return url.toString()
 }
 
@@ -189,57 +208,110 @@ export function updateStateFromSync(
   previous: SessionState,
   sync: Parameters<typeof buildItemsFromSync>[0]
 ) {
-  const { items } = buildItemsFromSync(sync, previous.items)
-  const streaming = Boolean(sync.streaming)
-  const draft = Boolean(sync.draft)
-  const firstMessage = sync.firstMessage || ""
-  const model = sameModel(previous.model, sync.model)
-    ? previous.model
-    : sync.model
-  const thinkingLevel = sync.thinkingLevel || previous.thinkingLevel
+  const replacingSession =
+    typeof sync.sessionKey === "string" &&
+    sync.sessionKey !== (previous.sessionKey || "")
+  const base = replacingSession
+    ? {
+        ...createInitialSessionState(),
+        connected: previous.connected,
+      }
+    : previous
+  const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
+  const { items } = buildItemsFromSync(sync, base.items)
+  const streaming =
+    typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
+  const draft = typeof sync.draft === "boolean" ? sync.draft : base.draft
+  const historyOffset =
+    typeof sync.historyOffset === "number"
+      ? sync.historyOffset
+      : base.historyOffset
+  const historyTotalCount =
+    typeof sync.historyTotalCount === "number"
+      ? sync.historyTotalCount
+      : base.historyTotalCount
+  const sessionKey =
+    typeof sync.sessionKey === "string" ? sync.sessionKey : base.sessionKey
+  const sessionId = Object.prototype.hasOwnProperty.call(sync, "sessionId")
+    ? sync.sessionId
+    : base.sessionId
+  const sessionName = Object.prototype.hasOwnProperty.call(sync, "sessionName")
+    ? sync.sessionName
+    : base.sessionName
+  const firstMessage = Object.prototype.hasOwnProperty.call(
+    sync,
+    "firstMessage"
+  )
+    ? sync.firstMessage || ""
+    : base.firstMessage
+  const sessionFile = Object.prototype.hasOwnProperty.call(sync, "sessionFile")
+    ? sync.sessionFile
+    : base.sessionFile
+  const cwd = Object.prototype.hasOwnProperty.call(sync, "cwd")
+    ? sync.cwd
+    : base.cwd
+  const modified = Object.prototype.hasOwnProperty.call(sync, "modified")
+    ? sync.modified
+    : base.modified
+  const model = Object.prototype.hasOwnProperty.call(sync, "model")
+    ? sameModel(base.model, sync.model)
+      ? base.model
+      : sync.model
+    : base.model
+  const thinkingLevel = Object.prototype.hasOwnProperty.call(
+    sync,
+    "thinkingLevel"
+  )
+    ? sync.thinkingLevel || base.thinkingLevel
+    : base.thinkingLevel
   const availableThinkingLevels = sync.availableThinkingLevels
     ? sameStringArray(
-        previous.availableThinkingLevels,
+        base.availableThinkingLevels,
         sync.availableThinkingLevels
       )
-      ? previous.availableThinkingLevels
+      ? base.availableThinkingLevels
       : sync.availableThinkingLevels
-    : previous.availableThinkingLevels
+    : base.availableThinkingLevels
   const availableModels = sync.availableModels
-    ? sameModelArray(previous.availableModels, sync.availableModels)
-      ? previous.availableModels
+    ? sameModelArray(base.availableModels, sync.availableModels)
+      ? base.availableModels
       : sync.availableModels
-    : previous.availableModels
+    : base.availableModels
   const availableSkills = sync.availableSkills
-    ? sameSkillArray(previous.availableSkills, sync.availableSkills)
-      ? previous.availableSkills
+    ? sameSkillArray(base.availableSkills, sync.availableSkills)
+      ? base.availableSkills
       : sync.availableSkills
-    : previous.availableSkills
+    : base.availableSkills
   const hideThinkingBlock =
     typeof sync.hideThinkingBlock === "boolean"
       ? sync.hideThinkingBlock
-      : previous.hideThinkingBlock
-  const contextUsage = sameContextUsage(
-    previous.contextUsage,
-    sync.contextUsage
+      : base.hideThinkingBlock
+  const contextUsage = Object.prototype.hasOwnProperty.call(
+    sync,
+    "contextUsage"
   )
-    ? previous.contextUsage
-    : sync.contextUsage
-  const uiState = shareUiState(previous.uiState, sync.uiState)
+    ? sameContextUsage(base.contextUsage, sync.contextUsage)
+      ? base.contextUsage
+      : sync.contextUsage
+    : base.contextUsage
+  const uiState = shareUiState(base.uiState, sync.uiState)
 
   if (
     previous.connected &&
     !previous.replaying &&
     previous.streaming === streaming &&
     previous.draft === draft &&
+    previous.messages === messages &&
     previous.items === items &&
-    previous.sessionId === sync.sessionId &&
-    previous.sessionKey === sync.sessionKey &&
-    previous.sessionName === sync.sessionName &&
+    previous.historyOffset === historyOffset &&
+    previous.historyTotalCount === historyTotalCount &&
+    previous.sessionId === sessionId &&
+    previous.sessionKey === sessionKey &&
+    previous.sessionName === sessionName &&
     previous.firstMessage === firstMessage &&
-    previous.sessionFile === sync.sessionFile &&
-    previous.cwd === sync.cwd &&
-    previous.modified === sync.modified &&
+    previous.sessionFile === sessionFile &&
+    previous.cwd === cwd &&
+    previous.modified === modified &&
     previous.model === model &&
     previous.thinkingLevel === thinkingLevel &&
     previous.availableThinkingLevels === availableThinkingLevels &&
@@ -253,19 +325,22 @@ export function updateStateFromSync(
   }
 
   return {
-    ...previous,
+    ...base,
     connected: true,
     replaying: false,
     streaming,
     draft,
+    messages,
     items,
-    sessionId: sync.sessionId,
-    sessionKey: sync.sessionKey,
-    sessionName: sync.sessionName,
+    historyOffset,
+    historyTotalCount,
+    sessionId,
+    sessionKey,
+    sessionName,
     firstMessage,
-    sessionFile: sync.sessionFile,
-    cwd: sync.cwd,
-    modified: sync.modified,
+    sessionFile,
+    cwd,
+    modified,
     model,
     thinkingLevel,
     availableThinkingLevels,

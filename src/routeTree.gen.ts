@@ -20,6 +20,7 @@ import { Route as ApiHighlightRouteImport } from './routes/api.highlight'
 import { Route as ApiGitStatusRouteImport } from './routes/api.git-status'
 import { Route as ApiGitChangesRouteImport } from './routes/api.git-changes'
 import { Route as ApiFileCompletionsRouteImport } from './routes/api.file-completions'
+import { Route as ApiDirectorySessionsIndexesRouteImport } from './routes/api.directory-sessions-indexes'
 import { Route as ApiDirectorySessionsIndexRouteImport } from './routes/api.directory-sessions-index'
 import { Route as ApiDirectorySessionsRouteImport } from './routes/api.directory-sessions'
 import { Route as ApiAbortRouteImport } from './routes/api.abort'
@@ -28,6 +29,7 @@ import { Route as ApiSettingsHideThinkingRouteImport } from './routes/api.settin
 import { Route as ApiSessionTreeRouteImport } from './routes/api.session.tree'
 import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
 import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
+import { Route as ApiSessionHistoryRouteImport } from './routes/api.session.history'
 import { Route as ApiSessionForkRouteImport } from './routes/api.session.fork'
 import { Route as ApiSessionDeleteRouteImport } from './routes/api.session.delete'
 import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pending-messages.reorder'
@@ -90,6 +92,12 @@ const ApiFileCompletionsRoute = ApiFileCompletionsRouteImport.update({
   path: '/api/file-completions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDirectorySessionsIndexesRoute =
+  ApiDirectorySessionsIndexesRouteImport.update({
+    id: '/api/directory-sessions-indexes',
+    path: '/api/directory-sessions-indexes',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiDirectorySessionsIndexRoute =
   ApiDirectorySessionsIndexRouteImport.update({
     id: '/api/directory-sessions-index',
@@ -131,6 +139,11 @@ const ApiSessionNewRoute = ApiSessionNewRouteImport.update({
   path: '/api/session/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionHistoryRoute = ApiSessionHistoryRouteImport.update({
+  id: '/api/session/history',
+  path: '/api/session/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionForkRoute = ApiSessionForkRouteImport.update({
   id: '/api/session/fork',
   path: '/api/session/fork',
@@ -169,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/api/abort': typeof ApiAbortRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRoute
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-status': typeof ApiGitStatusRoute
@@ -183,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -196,6 +211,7 @@ export interface FileRoutesByTo {
   '/api/abort': typeof ApiAbortRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRoute
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-status': typeof ApiGitStatusRoute
@@ -210,6 +226,7 @@ export interface FileRoutesByTo {
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -224,6 +241,7 @@ export interface FileRoutesById {
   '/api/abort': typeof ApiAbortRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRoute
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
+  '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-status': typeof ApiGitStatusRoute
@@ -238,6 +256,7 @@ export interface FileRoutesById {
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
+  '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -253,6 +272,7 @@ export interface FileRouteTypes {
     | '/api/abort'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
+    | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
     | '/api/git-status'
@@ -267,6 +287,7 @@ export interface FileRouteTypes {
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
     | '/api/session/fork'
+    | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
     | '/api/session/tree'
@@ -280,6 +301,7 @@ export interface FileRouteTypes {
     | '/api/abort'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
+    | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
     | '/api/git-status'
@@ -294,6 +316,7 @@ export interface FileRouteTypes {
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
     | '/api/session/fork'
+    | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
     | '/api/session/tree'
@@ -307,6 +330,7 @@ export interface FileRouteTypes {
     | '/api/abort'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
+    | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
     | '/api/git-status'
@@ -321,6 +345,7 @@ export interface FileRouteTypes {
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
     | '/api/session/fork'
+    | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
     | '/api/session/tree'
@@ -335,6 +360,7 @@ export interface RootRouteChildren {
   ApiAbortRoute: typeof ApiAbortRoute
   ApiDirectorySessionsRoute: typeof ApiDirectorySessionsRoute
   ApiDirectorySessionsIndexRoute: typeof ApiDirectorySessionsIndexRoute
+  ApiDirectorySessionsIndexesRoute: typeof ApiDirectorySessionsIndexesRoute
   ApiFileCompletionsRoute: typeof ApiFileCompletionsRoute
   ApiGitChangesRoute: typeof ApiGitChangesRoute
   ApiGitStatusRoute: typeof ApiGitStatusRoute
@@ -349,6 +375,7 @@ export interface RootRouteChildren {
   ApiPendingMessagesReorderRoute: typeof ApiPendingMessagesReorderRoute
   ApiSessionDeleteRoute: typeof ApiSessionDeleteRoute
   ApiSessionForkRoute: typeof ApiSessionForkRoute
+  ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
   ApiSessionNewRoute: typeof ApiSessionNewRoute
   ApiSessionRenameRoute: typeof ApiSessionRenameRoute
   ApiSessionTreeRoute: typeof ApiSessionTreeRouteWithChildren
@@ -435,6 +462,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiFileCompletionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/directory-sessions-indexes': {
+      id: '/api/directory-sessions-indexes'
+      path: '/api/directory-sessions-indexes'
+      fullPath: '/api/directory-sessions-indexes'
+      preLoaderRoute: typeof ApiDirectorySessionsIndexesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/directory-sessions-index': {
       id: '/api/directory-sessions-index'
       path: '/api/directory-sessions-index'
@@ -489,6 +523,13 @@ declare module '@tanstack/react-router' {
       path: '/api/session/new'
       fullPath: '/api/session/new'
       preLoaderRoute: typeof ApiSessionNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/history': {
+      id: '/api/session/history'
+      path: '/api/session/history'
+      fullPath: '/api/session/history'
+      preLoaderRoute: typeof ApiSessionHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/session/fork': {
@@ -554,6 +595,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAbortRoute: ApiAbortRoute,
   ApiDirectorySessionsRoute: ApiDirectorySessionsRoute,
   ApiDirectorySessionsIndexRoute: ApiDirectorySessionsIndexRoute,
+  ApiDirectorySessionsIndexesRoute: ApiDirectorySessionsIndexesRoute,
   ApiFileCompletionsRoute: ApiFileCompletionsRoute,
   ApiGitChangesRoute: ApiGitChangesRoute,
   ApiGitStatusRoute: ApiGitStatusRoute,
@@ -568,6 +610,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPendingMessagesReorderRoute: ApiPendingMessagesReorderRoute,
   ApiSessionDeleteRoute: ApiSessionDeleteRoute,
   ApiSessionForkRoute: ApiSessionForkRoute,
+  ApiSessionHistoryRoute: ApiSessionHistoryRoute,
   ApiSessionNewRoute: ApiSessionNewRoute,
   ApiSessionRenameRoute: ApiSessionRenameRoute,
   ApiSessionTreeRoute: ApiSessionTreeRouteWithChildren,

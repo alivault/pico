@@ -15,6 +15,68 @@ type UseAppShellMessageScrollOptions = {
   sessionState: ScrollSessionState
 }
 
+export type MessageScrollStateSnapshot = {
+  isMessagesNearTop: boolean
+  isMessagesNearBottom: boolean
+  hasPreviousMessageJumpTarget: boolean
+  hasNextMessageJumpTarget: boolean
+}
+
+export type MessageScrollStateStore = {
+  getSnapshot: () => MessageScrollStateSnapshot
+  subscribe: (listener: () => void) => () => void
+}
+
+function createMessageScrollStateStore(
+  initialSnapshot: MessageScrollStateSnapshot = {
+    isMessagesNearTop: true,
+    isMessagesNearBottom: true,
+    hasPreviousMessageJumpTarget: false,
+    hasNextMessageJumpTarget: false,
+  }
+) {
+  let snapshot = initialSnapshot
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => snapshot,
+    setSnapshot: (nextSnapshot: MessageScrollStateSnapshot) => {
+      if (
+        snapshot.isMessagesNearTop === nextSnapshot.isMessagesNearTop &&
+        snapshot.isMessagesNearBottom === nextSnapshot.isMessagesNearBottom &&
+        snapshot.hasPreviousMessageJumpTarget ===
+          nextSnapshot.hasPreviousMessageJumpTarget &&
+        snapshot.hasNextMessageJumpTarget ===
+          nextSnapshot.hasNextMessageJumpTarget
+      ) {
+        return
+      }
+
+      snapshot = nextSnapshot
+      for (const listener of listeners) {
+        listener()
+      }
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+export function useMessageScrollValue<T>(
+  store: MessageScrollStateStore,
+  selector: (snapshot: MessageScrollStateSnapshot) => T
+) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => selector(store.getSnapshot()),
+    () => selector(store.getSnapshot())
+  )
+}
+
 function findMessageViewport(root: HTMLElement | null) {
   if (!root) return null
   return (
@@ -75,25 +137,15 @@ function nextMessageJumpTarget(viewport: HTMLDivElement) {
   return anchors[currentIndex + 1]
 }
 
-function syncViewportState(options: {
+function viewportStateSnapshot(
   viewport: HTMLDivElement
-  setIsMessagesNearTop: React.Dispatch<React.SetStateAction<boolean>>
-  setIsMessagesNearBottom: React.Dispatch<React.SetStateAction<boolean>>
-  setHasPreviousMessageJumpTarget: React.Dispatch<React.SetStateAction<boolean>>
-  setHasNextMessageJumpTarget: React.Dispatch<React.SetStateAction<boolean>>
-}) {
-  const {
-    viewport,
-    setHasNextMessageJumpTarget,
-    setHasPreviousMessageJumpTarget,
-    setIsMessagesNearBottom,
-    setIsMessagesNearTop,
-  } = options
-
-  setIsMessagesNearTop(isViewportNearTop(viewport))
-  setIsMessagesNearBottom(isViewportNearBottom(viewport))
-  setHasPreviousMessageJumpTarget(Boolean(previousMessageJumpTarget(viewport)))
-  setHasNextMessageJumpTarget(Boolean(nextMessageJumpTarget(viewport)))
+): MessageScrollStateSnapshot {
+  return {
+    isMessagesNearTop: isViewportNearTop(viewport),
+    isMessagesNearBottom: isViewportNearBottom(viewport),
+    hasPreviousMessageJumpTarget: Boolean(previousMessageJumpTarget(viewport)),
+    hasNextMessageJumpTarget: Boolean(nextMessageJumpTarget(viewport)),
+  }
 }
 
 export function useAppShellMessageScroll({
@@ -104,12 +156,11 @@ export function useAppShellMessageScroll({
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
   const lastLoadedSessionScrollKeyRef = React.useRef("")
-  const [isMessagesNearTop, setIsMessagesNearTop] = React.useState(true)
-  const [isMessagesNearBottom, setIsMessagesNearBottom] = React.useState(true)
-  const [hasPreviousMessageJumpTarget, setHasPreviousMessageJumpTarget] =
-    React.useState(false)
-  const [hasNextMessageJumpTarget, setHasNextMessageJumpTarget] =
-    React.useState(false)
+  const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
+
+  const syncViewportState = React.useCallback((viewport: HTMLDivElement) => {
+    scrollStateStoreRef.current.setSnapshot(viewportStateSnapshot(viewport))
+  }, [])
 
   const scrollConversationToTop = React.useCallback(() => {
     const viewport = messageViewportRef.current
@@ -151,13 +202,7 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     const handleScroll = () => {
-      syncViewportState({
-        viewport,
-        setHasNextMessageJumpTarget,
-        setHasPreviousMessageJumpTarget,
-        setIsMessagesNearBottom,
-        setIsMessagesNearTop,
-      })
+      syncViewportState(viewport)
     }
 
     handleScroll()
@@ -165,15 +210,25 @@ export function useAppShellMessageScroll({
     return () => {
       viewport.removeEventListener("scroll", handleScroll)
     }
-  }, [])
+  }, [syncViewportState])
 
   React.useEffect(() => {
-    const viewport = messageViewportRef.current
-    if (!viewport) return
-    if (!isMessagesNearBottom && !sessionState.streaming) return
+    if (sessionState.streaming) {
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+      return
+    }
 
-    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
-  }, [isMessagesNearBottom, sessionState.streaming])
+    const maybeScrollToBottom = () => {
+      if (!scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom) {
+        return
+      }
+
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+    }
+
+    maybeScrollToBottom()
+    return scrollStateStoreRef.current.subscribe(maybeScrollToBottom)
+  }, [sessionState.streaming])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -190,25 +245,16 @@ export function useAppShellMessageScroll({
     messageViewportRef.current = viewport
     lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
     viewport.scrollTop = viewport.scrollHeight
-    syncViewportState({
-      viewport,
-      setHasNextMessageJumpTarget,
-      setHasPreviousMessageJumpTarget,
-      setIsMessagesNearBottom,
-      setIsMessagesNearTop,
-    })
-  }, [isSessionViewLoading, sessionState])
+    syncViewportState(viewport)
+  }, [isSessionViewLoading, sessionState, syncViewportState])
 
   return {
     bottomRef,
-    hasNextMessageJumpTarget,
-    hasPreviousMessageJumpTarget,
-    isMessagesNearBottom,
-    isMessagesNearTop,
     jumpToNextMessage,
     jumpToPreviousMessage,
     messagesScrollAreaRef,
     scrollConversationToBottom,
     scrollConversationToTop,
+    scrollStateStore: scrollStateStoreRef.current,
   }
 }

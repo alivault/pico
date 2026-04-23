@@ -31,8 +31,10 @@ type PendingComposerMessage = {
 type UseAppShellSessionSyncOptions = {
   viewerContextId: string
   sessionId?: string
+  bootstrapSidebarDirectories: Array<string>
   sessionState: SessionState
   sessionStateRef: React.MutableRefObject<SessionState>
+  setConnected?: React.Dispatch<React.SetStateAction<boolean>>
   composerTextRef: React.MutableRefObject<string>
   composerSkillRef: React.MutableRefObject<string | undefined>
   replaceComposerDraftRef: React.MutableRefObject<
@@ -57,12 +59,13 @@ type UseAppShellSessionSyncOptions = {
 
 function normalizePendingMessages(
   payload: PiWebServerEvent
-): Array<PendingComposerMessage> {
-  if (
-    !isStateSyncEvent(payload) ||
-    !Array.isArray(payload.pendingUserMessages)
-  ) {
-    return []
+): Array<PendingComposerMessage> | undefined {
+  if (!isStateSyncEvent(payload)) {
+    return undefined
+  }
+
+  if (!Array.isArray(payload.pendingUserMessages)) {
+    return undefined
   }
 
   return payload.pendingUserMessages.map((message) => ({
@@ -83,8 +86,10 @@ function normalizePendingMessages(
 export function useAppShellSessionSync({
   viewerContextId,
   sessionId,
+  bootstrapSidebarDirectories,
   sessionState,
   sessionStateRef,
+  setConnected,
   composerTextRef,
   composerSkillRef,
   replaceComposerDraftRef,
@@ -121,15 +126,24 @@ export function useAppShellSessionSync({
       buildRequestUrl("/events", {
         contextId: viewerContextId,
         sessionId,
+        searchParams: {
+          sidebarDirectory: bootstrapSidebarDirectories,
+        },
       })
     )
 
     source.onopen = () => {
-      setSessionState((current) => ({ ...current, connected: true }))
+      setConnected?.(true)
+      setSessionState((current) =>
+        current.connected ? current : { ...current, connected: true }
+      )
     }
 
     source.onerror = () => {
-      setSessionState((current) => ({ ...current, connected: false }))
+      setConnected?.(false)
+      setSessionState((current) =>
+        !current.connected ? current : { ...current, connected: false }
+      )
     }
 
     source.onmessage = (event) => {
@@ -137,8 +151,6 @@ export function useAppShellSessionSync({
 
       if (isStateSyncEvent(payload)) {
         const previousState = sessionStateRef.current
-        const sessionChanged =
-          promptDraftKey(payload) !== promptDraftKey(previousState)
         const localPromptText = composerTextRef.current
 
         rememberStoredPromptDraft(
@@ -150,9 +162,11 @@ export function useAppShellSessionSync({
         )
 
         const previousEditorText = previousState.uiState.editorText || ""
+        const nextState = updateStateFromSync(previousState, payload)
+        const sessionChanged =
+          promptDraftKey(nextState) !== promptDraftKey(previousState)
         const preserveLocalPrompt =
           !sessionChanged && localPromptText !== previousEditorText
-        const nextState = updateStateFromSync(previousState, payload)
         const nextPromptText = preserveLocalPrompt
           ? localPromptText
           : (readStoredPromptDraft(nextState) ??
@@ -168,7 +182,10 @@ export function useAppShellSessionSync({
 
         replaceComposerDraftRef.current(nextPromptText, nextState)
         lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
-        setPendingMessages(normalizePendingMessages(payload))
+        const nextPendingMessages = normalizePendingMessages(payload)
+        if (nextPendingMessages) {
+          setPendingMessages(nextPendingMessages)
+        }
         return
       }
 
@@ -210,12 +227,14 @@ export function useAppShellSessionSync({
       source.close()
     }
   }, [
+    bootstrapSidebarDirectories,
     composerSkillRef,
     composerTextRef,
     lastSyncedEditorTextRef,
     replaceComposerDraftRef,
     sessionId,
     sessionStateRef,
+    setConnected,
     setComposerImages,
     setPendingMessages,
     setPendingUiRequest,

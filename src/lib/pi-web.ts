@@ -194,7 +194,10 @@ export type SessionState = {
   replaying: boolean
   streaming: boolean
   draft: boolean
+  messages: Array<MessagePayload>
   items: Array<ConversationItem>
+  historyOffset: number
+  historyTotalCount: number
   sessionId?: string
   sessionKey?: string
   sessionName?: string
@@ -220,7 +223,7 @@ export type SessionState = {
 
 type UnknownRecord = Record<string, unknown>
 
-type MessagePayload = UnknownRecord & {
+export type MessagePayload = UnknownRecord & {
   role?: unknown
   content?: unknown
   queued?: unknown
@@ -245,11 +248,14 @@ type PendingUserMessagePayload = UnknownRecord & {
 export type StateSyncPayload = {
   type: "state_sync"
   sessionKey?: string
+  items?: Array<ConversationItem>
   messages?: Array<MessagePayload>
   pendingUserMessages?: Array<PendingUserMessagePayload>
   draft?: boolean
   streaming?: boolean
   streamingMessage?: MessagePayload
+  historyOffset?: number
+  historyTotalCount?: number
   contextUsage?: SessionState["contextUsage"]
   hideThinkingBlock?: boolean
   model?: ModelOption

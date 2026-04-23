@@ -176,6 +176,14 @@ The `/events` endpoint streams:
 
 `app-shell.tsx` and its session-sync hook listen to SSE and update session state from streamed payloads. Do not duplicate this logic with ad hoc polling unless there is a very specific reason.
 
+Important current behavior:
+
+- `state_sync` is patch-friendly; follow-up events may omit unchanged fields
+- initial session bootstrap sends only the recent message window plus history metadata, not always the full conversation history
+- older conversation history is fetched separately from `/api/session/history` when the user scrolls upward
+
+If you change sync payload semantics, update the shared sync helpers instead of assuming every SSE event contains a complete session snapshot.
+
 ### 4) Runtime singleton owns server-side app behavior
 
 Most server routes are intentionally thin. They delegate to `getPiWebRuntime()`.
@@ -214,6 +222,7 @@ Existing notable endpoints:
 - `/api/session/fork`
 - `/api/session/tree`
 - `/api/session/tree/label`
+- `/api/session/history`
 - `/api/model`
 - `/api/thinking`
 - `/api/settings/hide-thinking`
@@ -223,6 +232,7 @@ Existing notable endpoints:
 - `/api/directory/resolve`
 - `/api/directory-sessions`
 - `/api/directory-sessions-index`
+- `/api/directory-sessions-indexes`
 - `/api/git-status`
 - `/api/git-changes`
 - `/api/pending-message/remove`
@@ -269,6 +279,25 @@ If you touch composer parsing or submission, inspect both:
 
 - `src/features/pi-web/composer-panel.tsx`
 - `src/features/pi-web/composer-utils.ts`
+
+### Conversation history loading
+
+The main conversation view now uses a recent-history bootstrap plus lazy loading for older history.
+
+If you touch conversation/session sync behavior, inspect all of:
+
+- `src/features/pi-web/app-shell.tsx`
+- `src/features/pi-web/use-app-shell-session-sync.ts`
+- `src/features/pi-web/app-shell-utils.ts`
+- `src/lib/pi-web-sync.ts`
+- `src/server/pi-web-runtime.ts`
+- `src/routes/api.session.history.ts`
+
+Be careful not to break the distinction between:
+
+- recent session messages delivered over `state_sync`
+- separately fetched older history pages
+- pending user messages and the current streaming assistant message
 
 ### Draft persistence
 
@@ -461,6 +490,7 @@ Be especially careful around these:
 - forgetting `context` / `session` request params
 - changing shared payload shapes without updating client contracts
 - breaking draft-session behavior
+- assuming `state_sync` always contains the full conversation history instead of a recent window / patch
 - invalidating the wrong TanStack Query keys
 - changing storage keys unnecessarily
 - bypassing the runtime singleton with ad hoc server state

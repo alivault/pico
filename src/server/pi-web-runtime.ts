@@ -6,6 +6,7 @@ import type {
   ModelOption,
   SessionUiState,
   SkillOption,
+  StateSyncPayload,
   TreeNode,
 } from "@/lib/pi-web"
 import {
@@ -52,6 +53,8 @@ import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
+  MessageContentPartLike,
+  MessageLike,
   ModelLike,
   PiSdkLike,
   PromptImageInputLike,
@@ -73,6 +76,9 @@ const VALID_THINKING_LEVELS = new Set([
 ])
 const SESSION_LIST_LIMIT_DEFAULT = 5
 const SESSION_LIST_LIMIT_MAX = 100
+const SESSION_HISTORY_INITIAL_ITEM_LIMIT = 60
+const SESSION_HISTORY_PAGE_LIMIT_DEFAULT = 50
+const SESSION_HISTORY_PAGE_LIMIT_MAX = 200
 const SESSION_NAME_MAX_LENGTH = 48
 const HEARTBEAT_INTERVAL_MS = 20_000
 
@@ -134,12 +140,46 @@ type ContextState = {
   draftKey?: string
   sessionScope: string
   unreadFinished: Set<string>
+  sidebarBootstrapDirectories: Array<string>
+}
+
+type StateSyncScalarField =
+  | "sessionKey"
+  | "draft"
+  | "streaming"
+  | "hideThinkingBlock"
+  | "thinkingLevel"
+  | "historyOffset"
+  | "historyTotalCount"
+  | "sessionId"
+  | "sessionFile"
+  | "sessionName"
+  | "firstMessage"
+  | "cwd"
+  | "modified"
+
+type StateSyncJsonField =
+  | "messages"
+  | "items"
+  | "pendingUserMessages"
+  | "streamingMessage"
+  | "contextUsage"
+  | "model"
+  | "availableThinkingLevels"
+  | "availableModels"
+  | "availableSkills"
+  | "uiState"
+
+type StateSyncSnapshot = {
+  scalarValues: Partial<Record<StateSyncScalarField, unknown>>
+  jsonValues: Partial<Record<StateSyncJsonField, string>>
 }
 
 type SseClient = {
   id: string
   closed: boolean
   controller: ReadableStreamDefaultController<Uint8Array>
+  lastStateSyncSnapshot?: StateSyncSnapshot
 }
 
 type PendingUiRequest = {
@@ -151,6 +191,35 @@ type ResolveRequestResult = {
   context: ContextState
   activeEntry: SessionEntry
 }
+
+const STATE_SYNC_SCALAR_FIELDS = [
+  "sessionKey",
+  "draft",
+  "streaming",
+  "hideThinkingBlock",
+  "thinkingLevel",
+  "historyOffset",
+  "historyTotalCount",
+  "sessionId",
+  "sessionFile",
+  "sessionName",
+  "firstMessage",
+  "cwd",
+  "modified",
+] satisfies Array<StateSyncScalarField>
+
+const STATE_SYNC_JSON_FIELDS = [
+  "messages",
+  "items",
+  "pendingUserMessages",
+  "streamingMessage",
+  "contextUsage",
+  "model",
+  "availableThinkingLevels",
+  "availableModels",
+  "availableSkills",
+  "uiState",
+] satisfies Array<StateSyncJsonField>
 
 function cryptoRandomId() {
   return randomUUID()
@@ -166,6 +235,168 @@ function formatError(error: unknown) {
   }
 
   return "Unknown error"
+}
+
+function normalizeRequestedDirectories(values: Array<string>) {
+  const nextDirectories: Array<string> = []
+  const seen = new Set<string>()
+
+  for (const value of values) {
+    const normalizedValue = value.trim()
+    if (!normalizedValue || seen.has(normalizedValue)) continue
+    seen.add(normalizedValue)
+    nextDirectories.push(normalizedValue)
+  }
+
+  return nextDirectories
+}
+
+function sanitizeMessageContentPart(part: MessageContentPartLike) {
+  const type = typeof part?.type === "string" ? part.type : ""
+
+  if (type === "text") {
+    return {
+      type: "text",
+      text: typeof part.text === "string" ? part.text : "",
+    }
+  }
+
+  if (type === "thinking") {
+    return {
+      type: "thinking",
+      thinking: typeof part.thinking === "string" ? part.thinking : "",
+      ...(typeof part.summaryLabel === "string"
+        ? { summaryLabel: part.summaryLabel }
+        : {}),
+    }
+  }
+
+  if (type === "toolCall") {
+    return {
+      type: "toolCall",
+      ...(typeof part.id === "string" ? { id: part.id } : {}),
+      ...(typeof part.name === "string" ? { name: part.name } : {}),
+      ...(Object.prototype.hasOwnProperty.call(part, "arguments")
+        ? { arguments: part.arguments }
+        : {}),
+    }
+  }
+
+  if (type === "image") {
+    return {
+      type: "image",
+      ...(typeof part.mimeType === "string" ? { mimeType: part.mimeType } : {}),
+      ...(typeof part.data === "string" ? { data: part.data } : {}),
+    }
+  }
+
+  return null
+}
+
+function sanitizeSessionMessage(message: MessageLike) {
+  const role = typeof message?.role === "string" ? message.role : ""
+  const metadata =
+    message?.metadata && typeof message.metadata === "object"
+      ? (message.metadata as Record<string, unknown>)
+      : undefined
+  const sanitizedContent = Array.isArray(message?.content)
+    ? message.content
+        .map((part) =>
+          sanitizeMessageContentPart(part as MessageContentPartLike)
+        )
+        .filter((part): part is NonNullable<typeof part> => Boolean(part))
+    : typeof message?.content === "string"
+      ? message.content
+      : undefined
+
+  return {
+    ...(role ? { role } : {}),
+    ...(sanitizedContent !== undefined ? { content: sanitizedContent } : {}),
+    ...(message?.queued || metadata?.queued ? { queued: true } : {}),
+    ...(message?.streamingBehavior === "steer" ||
+    message?.streamingBehavior === "followUp"
+      ? { streamingBehavior: message.streamingBehavior }
+      : message?.deliverAs === "steer" || message?.deliverAs === "followUp"
+        ? { streamingBehavior: message.deliverAs }
+        : metadata?.streamingBehavior === "steer" ||
+            metadata?.streamingBehavior === "followUp"
+          ? { streamingBehavior: metadata.streamingBehavior }
+          : metadata?.deliverAs === "steer" ||
+              metadata?.deliverAs === "followUp"
+            ? { streamingBehavior: metadata.deliverAs }
+            : {}),
+    ...(typeof message?.summary === "string"
+      ? { summary: message.summary }
+      : {}),
+    ...(Number.isFinite(Number(message?.tokensBefore))
+      ? { tokensBefore: Number(message.tokensBefore) }
+      : {}),
+    ...(typeof message?.toolCallId === "string"
+      ? { toolCallId: message.toolCallId }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(message, "details")
+      ? { details: message.details }
+      : {}),
+    ...(message?.isError ? { isError: true } : {}),
+  }
+}
+
+function stringifyStateSyncValue(value: unknown) {
+  return value === undefined ? "__pi_undefined__" : JSON.stringify(value)
+}
+
+function createStateSyncSnapshot(payload: StateSyncPayload): StateSyncSnapshot {
+  const scalarValues: Partial<Record<StateSyncScalarField, unknown>> = {}
+  for (const field of STATE_SYNC_SCALAR_FIELDS) {
+    scalarValues[field] = payload[field]
+  }
+
+  const jsonValues: Partial<Record<StateSyncJsonField, string>> = {}
+  for (const field of STATE_SYNC_JSON_FIELDS) {
+    jsonValues[field] = stringifyStateSyncValue(payload[field])
+  }
+
+  return {
+    scalarValues,
+    jsonValues,
+  }
+}
+
+function createStateSyncPatch(
+  previous: StateSyncSnapshot | undefined,
+  next: StateSyncPayload
+) {
+  if (!previous || previous.scalarValues.sessionKey !== next.sessionKey) {
+    return next
+  }
+
+  let changed = false
+  const patch: StateSyncPayload = {
+    type: "state_sync",
+    sessionKey: next.sessionKey,
+  }
+
+  for (const field of STATE_SYNC_SCALAR_FIELDS) {
+    if (field === "sessionKey") continue
+    const nextValue = next[field]
+    if (Object.is(previous.scalarValues[field], nextValue)) {
+      continue
+    }
+    patch[field] = nextValue as never
+    changed = true
+  }
+
+  for (const field of STATE_SYNC_JSON_FIELDS) {
+    const nextValue = next[field]
+    const nextJson = stringifyStateSyncValue(nextValue)
+    if (previous.jsonValues[field] === nextJson) {
+      continue
+    }
+    patch[field] = nextValue as never
+    changed = true
+  }
+
+  return changed ? patch : null
 }
 
 function createInitialUiState(): SessionUiState {
@@ -403,6 +634,7 @@ export class PiWebRuntime {
       draftKey: undefined,
       sessionScope: process.cwd(),
       unreadFinished: new Set(),
+      sidebarBootstrapDirectories: [],
     }
     this.contexts.set(id, next)
     return next
@@ -474,22 +706,33 @@ export class PiWebRuntime {
     return entry.firstMessageHint.trim()
   }
 
-  private currentStatePayload(entry: SessionEntry) {
+  private currentStatePayload(entry: SessionEntry): StateSyncPayload {
     const draft = this.isDraftEntry(entry)
+    const sanitizedMessages = entry.session.messages.map((message) =>
+      sanitizeSessionMessage(message)
+    )
+    const historyTotalCount = sanitizedMessages.length
+    const historyOffset = Math.max(
+      0,
+      historyTotalCount - SESSION_HISTORY_INITIAL_ITEM_LIMIT
+    )
 
     return {
       type: "state_sync",
       sessionKey: entry.key,
-      messages: entry.session.messages,
+      messages: sanitizedMessages.slice(historyOffset),
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)
       ),
       draft,
       streaming: this.getEntryStreamingState(entry),
       streamingMessage: this.getEntryStreamingState(entry)
-        ? entry.session.state.streamingMessage
+        ? sanitizeSessionMessage(entry.session.state.streamingMessage || {})
         : undefined,
-      contextUsage: entry.session.getContextUsage(),
+      historyOffset,
+      historyTotalCount,
+      contextUsage:
+        entry.session.getContextUsage() as StateSyncPayload["contextUsage"],
       hideThinkingBlock: entry.services.settingsManager.getHideThinkingBlock(),
       model: serializeModel(entry.session.model),
       thinkingLevel: entry.session.thinkingLevel,
@@ -620,45 +863,122 @@ export class PiWebRuntime {
     )
   }
 
-  private async listDirectoryStates(allSessions: Array<SessionListInfoLike>) {
-    const directories = this.listKnownDirectories(allSessions)
-    return await Promise.all(
-      directories.map(async (directoryPath) => {
-        const entries = await this.listEntriesForDirectory(
-          allSessions,
-          directoryPath
-        )
-        const serializedEntries = entries.map((entry) => ({
-          path: entry.path,
-          id: entry.id,
-          name: entry.name,
-          title: getSessionListTitle({
-            name: entry.name,
-            firstMessage: entry.firstMessage,
-          }),
-          modified: normalizeModifiedTimestamp(entry.modified),
-        }))
-
-        return {
-          path: directoryPath,
-          totalCount: entries.length,
-          revision: createDirectorySessionRevision(
-            directoryPath,
-            serializedEntries
-          ),
-        } satisfies DirectoryState
-      })
+  private buildStreamingPaths() {
+    return new Set(
+      [...this.sessionEntries.values()]
+        .filter((entry) => this.getEntryStreamingState(entry))
+        .map((entry) => this.getSessionPath(entry))
     )
   }
 
-  private async listSessionsPayload(context: ContextState) {
+  private async collectDirectoryEntries(
+    allSessions: Array<SessionListInfoLike>,
+    directories: Array<string>
+  ) {
+    const entriesByDirectory = new Map<string, Array<SessionListInfoLike>>()
+
+    await Promise.all(
+      directories.map(async (directoryPath) => {
+        entriesByDirectory.set(
+          directoryPath,
+          await this.listEntriesForDirectory(allSessions, directoryPath)
+        )
+      })
+    )
+
+    return entriesByDirectory
+  }
+
+  private createDirectoryStatePayload(
+    directoryPath: string,
+    entries: Array<SessionListInfoLike>
+  ) {
+    const serializedEntries = entries.map((entry) => ({
+      path: entry.path,
+      id: entry.id,
+      name: entry.name,
+      title: getSessionListTitle({
+        name: entry.name,
+        firstMessage: entry.firstMessage,
+      }),
+      modified: normalizeModifiedTimestamp(entry.modified),
+    }))
+
+    return {
+      path: directoryPath,
+      totalCount: entries.length,
+      revision: createDirectorySessionRevision(
+        directoryPath,
+        serializedEntries
+      ),
+    } satisfies DirectoryState
+  }
+
+  private createDirectoryIndexPayload(
+    directoryPath: string,
+    entries: Array<SessionListInfoLike>,
+    context: ContextState,
+    streamingPaths: Set<string>
+  ) {
+    const serializedSessions = entries.map((entry) =>
+      this.serializeSessionListEntry(entry, context, streamingPaths)
+    )
+
+    return {
+      directory: directoryPath,
+      totalCount: entries.length,
+      revision: createDirectorySessionRevision(
+        directoryPath,
+        serializedSessions
+      ),
+      sessions: serializedSessions,
+    }
+  }
+
+  private async listSessionsPayload(
+    context: ContextState,
+    options?: { includeBootstrapIndexes?: boolean }
+  ) {
     const allSessions = await this.listSessionIndexEntries()
     const activeEntry = this.getActiveEntry(context)
+    const directories = this.listKnownDirectories(allSessions)
+    const bootstrapDirectories = options?.includeBootstrapIndexes
+      ? normalizeRequestedDirectories(context.sidebarBootstrapDirectories)
+      : []
+    const allDirectories = normalizeRequestedDirectories([
+      ...directories,
+      ...bootstrapDirectories,
+    ])
+    const entriesByDirectory = await this.collectDirectoryEntries(
+      allSessions,
+      allDirectories
+    )
+    const streamingPaths = this.buildStreamingPaths()
+    const directoryIndexes =
+      bootstrapDirectories.length > 0
+        ? Object.fromEntries(
+            bootstrapDirectories.map((directoryPath) => [
+              directoryPath,
+              this.createDirectoryIndexPayload(
+                directoryPath,
+                entriesByDirectory.get(directoryPath) ?? [],
+                context,
+                streamingPaths
+              ),
+            ])
+          )
+        : undefined
 
     return {
       type: "sessions",
-      directories: this.listKnownDirectories(allSessions),
-      directoryStates: await this.listDirectoryStates(allSessions),
+      directories,
+      directoryStates: directories.map((directoryPath) =>
+        this.createDirectoryStatePayload(
+          directoryPath,
+          entriesByDirectory.get(directoryPath) ?? []
+        )
+      ),
+      ...(directoryIndexes ? { directoryIndexes } : {}),
       activeSessionPath: activeEntry?.session.sessionFile,
       activeSessionId: activeEntry?.session.sessionId,
       activeSessionKey: activeEntry?.key,
@@ -686,11 +1006,7 @@ export class PiWebRuntime {
       allSessions,
       normalizedDirectoryPath
     )
-    const streamingPaths = new Set(
-      [...this.sessionEntries.values()]
-        .filter((entry) => this.getEntryStreamingState(entry))
-        .map((entry) => this.getSessionPath(entry))
-    )
+    const streamingPaths = this.buildStreamingPaths()
 
     return {
       ok: true,
@@ -706,32 +1022,89 @@ export class PiWebRuntime {
     }
   }
 
-  async listDirectorySessionIndex(request: Request, directoryPath: string) {
+  async listDirectorySessionIndexes(
+    request: Request,
+    directoryPaths: Array<string>
+  ) {
     const { context } = await this.resolveRequest(request)
-    const normalizedDirectoryPath = directoryPath.trim()
+    const normalizedDirectories = normalizeRequestedDirectories(directoryPaths)
+
+    if (normalizedDirectories.length === 0) {
+      return {
+        ok: true,
+        directories: [],
+        directoryIndexes: {},
+      }
+    }
+
     const allSessions = await this.listSessionIndexEntries()
-    const directorySessions = await this.listEntriesForDirectory(
+    const entriesByDirectory = await this.collectDirectoryEntries(
       allSessions,
-      normalizedDirectoryPath
+      normalizedDirectories
     )
-    const streamingPaths = new Set(
-      [...this.sessionEntries.values()]
-        .filter((entry) => this.getEntryStreamingState(entry))
-        .map((entry) => this.getSessionPath(entry))
-    )
-    const serializedSessions = directorySessions.map((entry) =>
-      this.serializeSessionListEntry(entry, context, streamingPaths)
-    )
+    const streamingPaths = this.buildStreamingPaths()
 
     return {
       ok: true,
-      directory: normalizedDirectoryPath,
-      totalCount: directorySessions.length,
-      revision: createDirectorySessionRevision(
-        normalizedDirectoryPath,
-        serializedSessions
+      directories: normalizedDirectories,
+      directoryIndexes: Object.fromEntries(
+        normalizedDirectories.map((directoryPath) => [
+          directoryPath,
+          this.createDirectoryIndexPayload(
+            directoryPath,
+            entriesByDirectory.get(directoryPath) ?? [],
+            context,
+            streamingPaths
+          ),
+        ])
       ),
-      sessions: serializedSessions,
+    }
+  }
+
+  async listDirectorySessionIndex(request: Request, directoryPath: string) {
+    const response = await this.listDirectorySessionIndexes(request, [
+      directoryPath,
+    ])
+    const normalizedDirectoryPath = directoryPath.trim()
+    const snapshot = response.directoryIndexes[normalizedDirectoryPath]
+
+    return {
+      ok: true,
+      ...(snapshot || {
+        directory: normalizedDirectoryPath,
+        totalCount: 0,
+        revision: createDirectorySessionRevision(normalizedDirectoryPath, []),
+        sessions: [],
+      }),
+    }
+  }
+
+  async getSessionHistory(
+    request: Request,
+    options?: { before?: number; limit?: number }
+  ) {
+    const { activeEntry } = await this.resolveRequest(request)
+    const sanitizedMessages = activeEntry.session.messages.map((message) =>
+      sanitizeSessionMessage(message)
+    )
+    const totalCount = sanitizedMessages.length
+    const safeLimit =
+      Number.isInteger(options?.limit) && (options?.limit ?? 0) > 0
+        ? Math.min(Number(options?.limit), SESSION_HISTORY_PAGE_LIMIT_MAX)
+        : SESSION_HISTORY_PAGE_LIMIT_DEFAULT
+    const safeBefore =
+      Number.isInteger(options?.before) && (options?.before ?? 0) >= 0
+        ? Math.min(Number(options?.before), totalCount)
+        : totalCount
+    const offset = Math.max(0, safeBefore - safeLimit)
+
+    return {
+      ok: true,
+      offset,
+      limit: safeLimit,
+      totalCount,
+      hasMoreBefore: offset > 0,
+      messages: sanitizedMessages.slice(offset, safeBefore),
     }
   }
 
@@ -739,6 +1112,24 @@ export class PiWebRuntime {
     for (const client of context.clients) {
       this.sendPayloadToClient(context, client, payload)
     }
+  }
+
+  private sendStatePayloadToClient(
+    context: ContextState,
+    client: SseClient,
+    payload: StateSyncPayload,
+    options?: { forceFull?: boolean }
+  ) {
+    const nextPayload = options?.forceFull
+      ? payload
+      : createStateSyncPatch(client.lastStateSyncSnapshot, payload)
+    if (!nextPayload) return false
+
+    const sent = this.sendPayloadToClient(context, client, nextPayload)
+    if (sent) {
+      client.lastStateSyncSnapshot = createStateSyncSnapshot(payload)
+    }
+    return sent
   }
 
   private broadcastToViewers(sessionKey: string, payload: unknown) {
@@ -749,10 +1140,17 @@ export class PiWebRuntime {
     }
   }
 
-  private sendStateToContext(context: ContextState) {
+  private sendStateToContext(
+    context: ContextState,
+    options?: { forceFull?: boolean }
+  ) {
     const entry = this.getActiveEntry(context)
     if (!entry) return
-    this.sendToContext(context, this.currentStatePayload(entry))
+
+    const payload = this.currentStatePayload(entry)
+    for (const client of context.clients) {
+      this.sendStatePayloadToClient(context, client, payload, options)
+    }
   }
 
   private async sendSessionsToContext(context: ContextState) {
@@ -1680,7 +2078,11 @@ export class PiWebRuntime {
   }
 
   private async broadcastEntryState(entry: SessionEntry) {
-    this.broadcastToViewers(entry.key, this.currentStatePayload(entry))
+    for (const context of this.contexts.values()) {
+      if (context.activeKey === entry.key) {
+        this.sendStateToContext(context)
+      }
+    }
   }
 
   private async handleSessionEvent(
@@ -1779,7 +2181,10 @@ export class PiWebRuntime {
   }
 
   async createEventsResponse(request: Request) {
-    const { context, activeEntry } = await this.resolveRequest(request)
+    const { url, context, activeEntry } = await this.resolveRequest(request)
+    context.sidebarBootstrapDirectories = normalizeRequestedDirectories(
+      url.searchParams.getAll("sidebarDirectory")
+    )
     let cleanup: (() => void) | undefined
 
     const stream = new ReadableStream<Uint8Array>({
@@ -1788,20 +2193,26 @@ export class PiWebRuntime {
           id: `client:${cryptoRandomId()}`,
           closed: false,
           controller,
+          lastStateSyncSnapshot: undefined,
         }
         context.clients.add(client)
         this.writeRawToClient(context, client, ": connected\n\n")
 
         void (async () => {
-          this.sendPayloadToClient(
+          this.sendStatePayloadToClient(
             context,
             client,
-            this.currentStatePayload(activeEntry)
+            this.currentStatePayload(activeEntry),
+            {
+              forceFull: true,
+            }
           )
           this.sendPayloadToClient(
             context,
             client,
-            await this.listSessionsPayload(context)
+            await this.listSessionsPayload(context, {
+              includeBootstrapIndexes: true,
+            })
           )
         })()
 

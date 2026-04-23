@@ -20,6 +20,38 @@ const highlightCache = new Map<
   Promise<HighlightResponse> | HighlightResponse
 >()
 
+const MemoizedReactMarkdown = React.memo(ReactMarkdown)
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
+const MARKDOWN_COMPONENTS = {
+  code({ className, children, ...props }) {
+    return (
+      <code
+        className={cn(
+          "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </code>
+    )
+  },
+  pre({ children }) {
+    const codeElement = getCodeBlockChild(children)
+
+    if (!codeElement) {
+      return <pre>{children}</pre>
+    }
+
+    const code = markdownNodeText(codeElement.props.children).replace(/\n$/, "")
+    const language = parseCodeLanguage(codeElement.props.className)
+
+    return <CodeBlock code={code} language={language} />
+  },
+} satisfies NonNullable<
+  React.ComponentProps<typeof ReactMarkdown>["components"]
+>
+
 function parseCodeLanguage(className?: string) {
   const match = className?.match(/language-([A-Za-z0-9_+#.-]+)/)
   return match?.[1]
@@ -215,41 +247,12 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
 }) {
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({ className, children, ...props }) {
-            return (
-              <code
-                className={cn(
-                  "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
-                  className
-                )}
-                {...props}
-              >
-                {children}
-              </code>
-            )
-          },
-          pre({ children }) {
-            const codeElement = getCodeBlockChild(children)
-
-            if (!codeElement) {
-              return <pre>{children}</pre>
-            }
-
-            const code = markdownNodeText(codeElement.props.children).replace(
-              /\n$/,
-              ""
-            )
-            const language = parseCodeLanguage(codeElement.props.className)
-
-            return <CodeBlock code={code} language={language} />
-          },
-        }}
+      <MemoizedReactMarkdown
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
       >
         {text}
-      </ReactMarkdown>
+      </MemoizedReactMarkdown>
     </div>
   )
 })

@@ -1,5 +1,6 @@
 import type {
   DirectoryState,
+  MessagePayload,
   SessionsPayload,
   StateSyncPayload,
   TreeNode,
@@ -114,13 +115,24 @@ export type DirectorySessionsResponse =
     }
   | ApiErrorResponse
 
+export type DirectorySessionsIndexSnapshot = {
+  directory: string
+  totalCount: number
+  revision: string
+  sessions: Array<SessionListEntry>
+}
+
 export type DirectorySessionsIndexResponse =
+  | ({
+      ok: true
+    } & DirectorySessionsIndexSnapshot)
+  | ApiErrorResponse
+
+export type DirectorySessionsIndexesResponse =
   | {
       ok: true
-      directory: string
-      totalCount: number
-      revision: string
-      sessions: Array<SessionListEntry>
+      directories: Array<string>
+      directoryIndexes: Record<string, DirectorySessionsIndexSnapshot>
     }
   | ApiErrorResponse
 
@@ -141,6 +153,7 @@ export type SessionsEvent = SessionsPayload & {
   activeSessionKey?: string
   directories?: Array<string>
   directoryStates?: Array<DirectoryState>
+  directoryIndexes?: Record<string, DirectorySessionsIndexSnapshot>
 }
 
 export type PromptResponse =
@@ -219,6 +232,17 @@ export type HighlightResponse =
           unavailable: true
         }
     ))
+  | ApiErrorResponse
+
+export type SessionHistoryResponse =
+  | {
+      ok: true
+      offset: number
+      limit: number
+      totalCount: number
+      hasMoreBefore: boolean
+      messages: Array<MessagePayload>
+    }
   | ApiErrorResponse
 
 export type SessionTreeResponse =
