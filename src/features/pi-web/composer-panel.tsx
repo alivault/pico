@@ -450,7 +450,7 @@ export const ComposerPanel = React.forwardRef<
                         ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                         : "Ask anything…"
                   }
-                  className="min-h-[22px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-sm shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+                  className="min-h-[22px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
                 />
               </div>
             </div>

@@ -143,6 +143,7 @@ export function ForkSessionDialog({
               value={forkQuery}
               onValueChange={setForkQuery}
               placeholder="Search fork points"
+              className="text-base md:text-sm"
             />
             <CommandList className="max-h-[60vh]">
               <CommandEmpty>

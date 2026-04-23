@@ -1253,7 +1253,7 @@ export function AppShellTreeDialog({
           <DialogDescription>
             Browse branches, search the tree, and continue from an older point.
           </DialogDescription>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div className="hidden flex-wrap items-center gap-2 text-xs text-muted-foreground sm:flex">
             {TREE_FILTER_OPTIONS.map((option) => (
               <span
                 key={option.mode}
@@ -1307,6 +1307,7 @@ export function AppShellTreeDialog({
                 value={treeQuery}
                 onValueChange={onTreeQueryChange}
                 placeholder="Search tree"
+                className="text-base md:text-sm"
               />
               <CommandList className="max-h-none min-h-0 flex-1">
                 {treeLoading ? (
@@ -1404,7 +1405,11 @@ export function AppShellTreeDialog({
             {treeStage === "actions" ? (
               <>
                 <Command loop className="rounded-lg border">
-                  <CommandInput autoFocus placeholder="Choose action" />
+                  <CommandInput
+                    autoFocus
+                    placeholder="Choose action"
+                    className="text-base md:text-sm"
+                  />
                   <CommandList>
                     <CommandGroup heading="Continue">
                       <CommandItem
