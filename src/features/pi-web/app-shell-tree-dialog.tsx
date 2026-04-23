@@ -833,7 +833,7 @@ export function AppShellTreeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Session tree</DialogTitle>
           <DialogDescription>

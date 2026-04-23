@@ -75,7 +75,7 @@ export function AppShellCommandPalette({
       onOpenChange={onOpenChange}
       title="Command palette"
       description="Search for commands and session actions."
-      className="max-w-2xl"
+      className="sm:max-w-2xl"
     >
       <Command shouldFilter loop>
         <CommandInput
