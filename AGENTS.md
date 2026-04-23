@@ -62,8 +62,18 @@ Notes:
 ### Main app code
 
 - `src/features/pi-web/app-shell.tsx`
-  - main application shell
-  - owns most UI orchestration, mutations, shortcuts, command palette actions, SSE wiring, tabs, and dialogs
+  - main application shell coordinator
+  - composes most UI orchestration, tabs, command palette actions, and focused hooks/dialog coordinators
+- `src/features/pi-web/use-app-shell-session-sync.ts`
+  - SSE wiring and session/state sync behavior for the shell
+- `src/features/pi-web/use-app-shell-prompt-mutations.ts`
+  - prompt submission / abort / queue-related mutations
+- `src/features/pi-web/use-app-shell-session-mutations.ts`
+  - session creation, selection-adjacent mutations, and session action flows
+- `src/features/pi-web/use-app-shell-message-scroll.ts`
+  - scroll/jump behavior for the conversation pane
+- `src/features/pi-web/use-app-shell-shortcuts.ts`
+  - keyboard shortcut handling for the shell
 - `src/features/pi-web/sidebar.tsx`
   - directory/session sidebar UI
 - `src/features/pi-web/composer-panel.tsx`
@@ -71,7 +81,7 @@ Notes:
 - `src/features/pi-web/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
 - `src/features/pi-web/app-shell-dialogs.tsx`
-  - add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
+  - thin dialog coordinator for add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
 - `src/features/pi-web/git-panel.tsx`
   - git status and changes tab
 - `src/features/pi-web/query-keys.ts`
@@ -85,10 +95,13 @@ Notes:
 
 - `src/lib/pi-web.ts`
   - domain types
-  - storage keys and helpers
-  - prompt draft helpers
-  - session/tree utilities
-  - state-sync item construction
+  - thin barrel that re-exports shared storage/sync/tree helpers
+- `src/lib/pi-web-storage.ts`
+  - storage keys, prompt draft persistence, and settings storage helpers
+- `src/lib/pi-web-sync.ts`
+  - state-sync item construction and sync/message normalization helpers
+- `src/lib/pi-web-tree.ts`
+  - session/tree flattening and filtering helpers
 - `src/lib/pi-web-api.ts`
   - API response types
   - SSE event types
@@ -107,8 +120,18 @@ Notes:
 ### Server/runtime
 
 - `src/server/pi-web-runtime.ts`
-  - the core server-side state machine and bridge to the Pi SDK
-  - manages contexts, active sessions, drafts, SSE clients, tree/fork flows, slash commands, UI requests, auto naming, unread tracking, etc.
+  - the core server-side runtime coordinator and bridge to the Pi SDK
+  - owns the main state machine while delegating focused logic to runtime helper modules
+- `src/server/pi-web-runtime-contexts.ts`
+  - SSE payload/client utilities and context/session activation helpers
+- `src/server/pi-web-runtime-session-list.ts`
+  - session list/index merging, sorting, serialization, and directory revision helpers
+- `src/server/pi-web-runtime-tree-fork.ts`
+  - session tree serialization and fork helper logic
+- `src/server/pi-web-runtime-ui-requests.ts`
+  - pending UI request bridge helpers
+- `src/server/pi-web-runtime-highlight.ts`
+  - syntax highlight payload helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
 - `src/server/git.ts`
@@ -151,13 +174,13 @@ The `/events` endpoint streams:
 - extension UI request events
 - other runtime events
 
-`app-shell.tsx` listens to SSE and updates the session state from streamed payloads. Do not duplicate this logic with ad hoc polling unless there is a very specific reason.
+`app-shell.tsx` and its session-sync hook listen to SSE and update session state from streamed payloads. Do not duplicate this logic with ad hoc polling unless there is a very specific reason.
 
 ### 4) Runtime singleton owns server-side app behavior
 
 Most server routes are intentionally thin. They delegate to `getPiWebRuntime()`.
 
-If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/pi-web-runtime.ts`.
+If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/pi-web-runtime.ts` or one of its focused helper modules.
 
 ### 5) Shared contracts are important
 
@@ -251,11 +274,11 @@ If you touch composer parsing or submission, inspect both:
 
 Prompt drafts are stored in session storage and keyed by session/file/draft target.
 
-If you change draft behavior, update helper logic in `src/lib/pi-web.ts` instead of adding duplicate storage code.
+If you change draft behavior, update helper logic in `src/lib/pi-web-storage.ts` (re-exported via `src/lib/pi-web.ts`) instead of adding duplicate storage code.
 
 ### Settings/state persistence
 
-Storage keys live in `src/lib/pi-web.ts`.
+Storage keys live in `src/lib/pi-web-storage.ts` and are re-exported via `src/lib/pi-web.ts`.
 
 Preserve existing key names when possible for backward compatibility, especially:
 
@@ -296,8 +319,9 @@ If changing tree or fork behavior, review:
 - `navigateSessionTree`
 - `getForkableMessages`
 - `forkSession`
+- helpers in `src/server/pi-web-runtime-tree-fork.ts`
 
-in `src/server/pi-web-runtime.ts`.
+with `src/server/pi-web-runtime.ts` remaining the coordinator.
 
 ### Slash commands
 
@@ -311,7 +335,7 @@ If you add or change a slash command, update both sides:
 
 ### Generic UI requests
 
-Server-driven UI prompts are handled through `/api/ui/$id` and the pending UI request dialog in `app-shell-dialogs.tsx`.
+Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/pi-web-runtime-ui-requests.ts`, and the pending UI request dialog in `app-shell-dialogs.tsx`.
 
 If you touch extension/UI request flows, update both runtime and dialog handling.
 
@@ -392,7 +416,7 @@ If you extend git UI, update:
 
 ### Add a new persistent setting
 
-1. define storage key + read helper in `src/lib/pi-web.ts`
+1. define storage key + read helper in `src/lib/pi-web-storage.ts`
 2. wire state in `app-shell.tsx`
 3. expose controls in `app-shell-dialogs.tsx` if user-facing
 4. preserve existing keys when changing behavior rather than renaming casually
