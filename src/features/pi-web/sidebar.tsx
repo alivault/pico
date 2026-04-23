@@ -500,7 +500,6 @@ export function AppSidebar({
                             data-sidebar-session-item
                             data-session-key={entryKey}
                             isActive={isActive}
-                            tooltip={entry.title}
                             className={cn(
                               "h-auto items-start gap-2 py-2 pr-10",
                               (isActive || isSelected) &&
