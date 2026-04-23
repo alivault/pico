@@ -56,6 +56,7 @@ Notes:
 - Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check` is the baseline validation command.
 - For runtime, route, or session-state changes, also run `pnpm build`.
+- If you need to start, restart, or test a dev server / preview build, use the `zellij` `pi` session instead of creating an ad hoc long-lived server process.
 
 ## Repo layout
 
