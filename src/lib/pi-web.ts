@@ -1,5 +1,3 @@
-import { formatDistanceToNowStrict } from "date-fns"
-
 import { normalizeStoredDirectoryList } from "@/lib/pi-web-storage"
 
 export {
@@ -335,15 +333,40 @@ export type FlatTreeNode = {
   node: TreeNode
 }
 
+function shortRelativeTime(value: number, unit: string, past: boolean) {
+  return past ? `${value}${unit} ago` : `in ${value}${unit}`
+}
+
 export function relativeTime(value?: string) {
   if (!value) return ""
 
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
+  const timestamp = date.getTime()
+  if (Number.isNaN(timestamp)) {
     return ""
   }
 
-  return `${formatDistanceToNowStrict(date, { addSuffix: true })}`
+  const diffMs = Date.now() - timestamp
+  const past = diffMs >= 0
+  const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
+
+  if (seconds < 60) return shortRelativeTime(seconds, "s", past)
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return shortRelativeTime(minutes, "m", past)
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return shortRelativeTime(hours, "h", past)
+
+  const days = Math.floor(hours / 24)
+  if (days < 30) return shortRelativeTime(days, "d", past)
+
+  if (days < 365) {
+    return shortRelativeTime(Math.floor(days / 30), "mo", past)
+  }
+
+  const years = Math.floor(days / 365)
+  return shortRelativeTime(Math.max(1, years), "y", past)
 }
 
 export function getSessionTitle(

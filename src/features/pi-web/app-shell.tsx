@@ -1176,6 +1176,53 @@ type AppShellSessionWorkspaceProps = {
   setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
 }
 
+const SESSION_MODIFIED_FIRST_MINUTE_MS = 60 * 1000
+const SESSION_MODIFIED_FIRST_MINUTE_REFRESH_MS = 1000
+const SESSION_MODIFIED_DEFAULT_REFRESH_MS = 2000
+
+function sessionModifiedRefreshDelay(timestamp: number) {
+  const ageMs = Math.abs(Date.now() - timestamp)
+  return ageMs < SESSION_MODIFIED_FIRST_MINUTE_MS
+    ? SESSION_MODIFIED_FIRST_MINUTE_REFRESH_MS
+    : SESSION_MODIFIED_DEFAULT_REFRESH_MS
+}
+
+function useSessionModifiedRelativeTimeTicker(value: string) {
+  const [, refresh] = React.useReducer((tick: number) => tick + 1, 0)
+
+  React.useEffect(() => {
+    const timestamp = new Date(value).getTime()
+    if (Number.isNaN(timestamp)) return
+
+    let timeoutId: number | undefined
+    let cancelled = false
+
+    const schedule = () => {
+      timeoutId = window.setTimeout(() => {
+        if (cancelled) return
+
+        refresh()
+        schedule()
+      }, sessionModifiedRefreshDelay(timestamp))
+    }
+
+    schedule()
+
+    return () => {
+      cancelled = true
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [refresh, value])
+}
+
+function SessionModifiedRelativeTime({ value }: { value: string }) {
+  useSessionModifiedRelativeTimeTicker(value)
+
+  return <span>• {relativeTime(value)}</span>
+}
+
 const AppShellSessionWorkspace = React.forwardRef<
   AppShellSessionWorkspaceHandle,
   AppShellSessionWorkspaceProps
@@ -2550,7 +2597,9 @@ const AppShellSessionWorkspace = React.forwardRef<
                     cwd={displaySessionCwd}
                   />
                   {displaySessionModified && (
-                    <span>• {relativeTime(displaySessionModified)}</span>
+                    <SessionModifiedRelativeTime
+                      value={displaySessionModified}
+                    />
                   )}
                 </div>
               </div>
