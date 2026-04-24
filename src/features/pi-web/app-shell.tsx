@@ -1081,6 +1081,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerDraftSeed.skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
+  const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
   const lastEscapePressedAtRef = React.useRef(0)
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
 
@@ -1428,6 +1429,34 @@ const AppShellSessionWorkspace = React.forwardRef<
     safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
     setStoredDraftDirectory(nextDirectory)
   }, [sessionState.cwd])
+
+  React.useEffect(() => {
+    const nextDirectory = sessionState.cwd?.trim()
+    const nextSessionId = sessionState.sessionId?.trim()
+    if (!sessionId || !nextSessionId || sessionState.draft || !nextDirectory) {
+      return
+    }
+    if (nextSessionId !== sessionId) return
+
+    const autoAddKey = `${nextSessionId}\n${nextDirectory}`
+    if (autoAddedSessionDirectoryKeysRef.current.has(autoAddKey)) return
+    autoAddedSessionDirectoryKeysRef.current.add(autoAddKey)
+
+    setSidebarDirectories((current) => {
+      const normalizedCurrent = normalizeStoredDirectoryList(current)
+      if (normalizedCurrent.includes(nextDirectory)) return current
+
+      const nextDirectories = normalizeStoredDirectoryList([
+        nextDirectory,
+        ...normalizedCurrent,
+      ])
+      safeLocalStorageSetItem(
+        SIDEBAR_DIRECTORIES_STORAGE_KEY,
+        JSON.stringify(nextDirectories)
+      )
+      return nextDirectories
+    })
+  }, [sessionId, sessionState.cwd, sessionState.draft, sessionState.sessionId])
 
   React.useEffect(() => {
     if (currentTab !== "git") return
