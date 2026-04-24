@@ -216,6 +216,29 @@ function sessionScrollKey(sessionState: {
   return piWebSessionScopeKey(sessionState)
 }
 
+function createOptimisticDraftSessionState(options: {
+  previous: SessionState
+  cwd?: string
+  ownerKey: string
+}): SessionState {
+  const nextCwd = options.cwd?.trim() || options.previous.cwd?.trim() || ""
+  const base = createInitialSessionState()
+
+  return {
+    ...base,
+    connected: options.previous.connected,
+    draft: true,
+    sessionKey: `optimistic:${options.ownerKey}`,
+    cwd: nextCwd || undefined,
+    model: options.previous.model,
+    thinkingLevel: options.previous.thinkingLevel,
+    availableThinkingLevels: options.previous.availableThinkingLevels,
+    availableModels: options.previous.availableModels,
+    availableSkills: options.previous.availableSkills,
+    hideThinkingBlock: options.previous.hideThinkingBlock,
+  }
+}
+
 async function fetchDirectorySessionsIndexes(options: {
   viewerContextId: string
   directories: Array<string>
@@ -926,6 +949,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   >(null)
   const [draftSessionLoadingOwnerKey, setDraftSessionLoadingOwnerKey] =
     React.useState<string | null>(null)
+  const [loadingSessionId, setLoadingSessionId] = React.useState<string | null>(
+    null
+  )
   const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<{
     ownerKey: string
     message: string
@@ -1044,7 +1070,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     currentSessionKey.length > 0 &&
     sessionState.historyOffset > olderHistoryMessages.length
   const isSessionViewLoading = Boolean(
-    sessionId && !sessionState.draft && sessionId !== sessionState.sessionId
+    loadingSessionId && loadingSessionId !== sessionState.sessionId
   )
   const gitStatusQuery = useQuery({
     ...gitStatusQueryOptions({
@@ -1355,9 +1381,21 @@ const AppShellSessionWorkspace = React.forwardRef<
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string) => {
       pendingRouteSessionIdRef.current = nextSessionId
+      setLoadingSessionId((current) => {
+        if (!nextSessionId) {
+          return null
+        }
+        if (
+          !sessionStateRef.current.draft &&
+          sessionStateRef.current.sessionId === nextSessionId
+        ) {
+          return current
+        }
+        return nextSessionId
+      })
       onSelectSession?.(nextSessionId)
     },
-    [onSelectSession]
+    [onSelectSession, sessionStateRef]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
@@ -1381,6 +1419,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     setPendingUiValue,
     lastSyncedEditorTextRef,
   })
+
+  React.useEffect(() => {
+    if (!loadingSessionId) return
+    if (sessionState.sessionId === loadingSessionId) {
+      setLoadingSessionId(null)
+    }
+  }, [loadingSessionId, sessionState.sessionId])
 
   React.useEffect(() => {
     const nextDirectory = sessionState.cwd?.trim()
@@ -1617,14 +1662,57 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const createSession = React.useCallback(
     async (cwdOverride?: string) => {
+      const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
+      const ownerKey = promptDraftKey({ cwd: nextCwd })
+      const optimisticSessionKey = `optimistic:${ownerKey}`
+      const previousState = sessionStateRef.current
+
+      clearSelectedSidebarSelection()
       focusPrompt()
-      await requestCreateSession(cwdOverride)
+      setAwaitingFirstTurn(false)
+      setPendingMessages([])
+      setSessionState((current) => {
+        const nextState = createOptimisticDraftSessionState({
+          previous: current,
+          cwd: nextCwd,
+          ownerKey,
+        })
+        sessionStateRef.current = nextState
+        return nextState
+      })
+
+      const created = await requestCreateSession(cwdOverride)
+      if (created) {
+        return
+      }
+
+      setSessionState((current) => {
+        if (current.sessionKey !== optimisticSessionKey) {
+          return current
+        }
+
+        sessionStateRef.current = previousState
+        return previousState
+      })
     },
-    [focusPrompt, requestCreateSession]
+    [
+      clearSelectedSidebarSelection,
+      defaultNewSessionDirectory,
+      focusPrompt,
+      requestCreateSession,
+      sessionStateRef,
+      setAwaitingFirstTurn,
+      setPendingMessages,
+      setSessionState,
+    ]
   )
 
   React.useEffect(() => {
     if (!sessionId || !draftSessionLoadingOwnerKey || !sessionState.draft) {
+      return
+    }
+
+    if (sessionState.sessionKey?.startsWith("optimistic:")) {
       return
     }
 
@@ -2179,6 +2267,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     ]
   )
 
+  const showConversationLoadingState = Boolean(
+    isSessionViewLoading ||
+    (!sessionState.draft &&
+      displayedConversationItems.length === 0 &&
+      (isSubmitting ||
+        awaitingFirstTurn ||
+        sessionState.streaming ||
+        Boolean(workingState)))
+  )
+
   const currentGitSummary = gitStatus?.gitStatus ?? null
   const headerGitStatusText = formatHeaderGitStatusText(currentGitSummary)
   const draftGitSummary =
@@ -2374,10 +2472,10 @@ const AppShellSessionWorkspace = React.forwardRef<
               onLoadOlderHistory={loadOlderHistory}
               sessionState={sessionState}
             >
-              {isSessionViewLoading ? (
+              {showConversationLoadingState ? (
                 <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
                   <Spinner />
-                  <div>Loading...</div>
+                  <div>{workingState?.label || "Loading..."}</div>
                 </div>
               ) : displayedConversationItems.length > 0 ? (
                 <div className="flex flex-col gap-4">
@@ -3337,7 +3435,8 @@ export function PiWebAppShell({
         directoryIndexLoading={directoryIndexLoading}
         directoryRenderCounts={directoryRenderCounts}
         selectedSessionKeys={selectedSidebarSessionKeys}
-        activeSessionId={sessionsEvent?.activeSessionId || sessionId}
+        activeSessionId={sessionsEvent?.activeSessionId}
+        activeSessionKey={sessionsEvent?.activeSessionKey}
         emptyStateText={emptySidebarStateText}
         allDirectoriesCollapsed={allDirectoriesCollapsed}
         onCreateSession={() => {

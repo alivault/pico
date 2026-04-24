@@ -156,6 +156,7 @@ type AppSidebarProps = {
   directoryRenderCounts: Record<string, number>
   selectedSessionKeys: Array<string>
   activeSessionId?: string
+  activeSessionKey?: string
   emptyStateText: string
   allDirectoriesCollapsed: boolean
   onCreateSession: () => void
@@ -231,6 +232,7 @@ export function AppSidebar({
   directoryRenderCounts,
   selectedSessionKeys,
   activeSessionId,
+  activeSessionKey,
   emptyStateText,
   allDirectoriesCollapsed,
   onOpenAddDirectoryDialog,
@@ -481,8 +483,9 @@ export function AppSidebar({
                 <SidebarMenu>
                   {visibleSessions.map((entry) => {
                     const entryKey = sessionListEntryKey(entry)
-                    const isActive =
-                      Boolean(activeSessionId) && entry.id === activeSessionId
+                    const isActive = activeSessionKey
+                      ? entryKey === activeSessionKey
+                      : Boolean(activeSessionId) && entry.id === activeSessionId
                     const isSelected =
                       entryKey.length > 0 &&
                       selectedSessionKeys.includes(entryKey)

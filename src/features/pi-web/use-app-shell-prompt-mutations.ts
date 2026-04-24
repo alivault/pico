@@ -226,7 +226,7 @@ export function useAppShellPromptMutations({
 
   const createSession = React.useCallback(
     async (cwdOverride?: string) => {
-      if (!viewerContextId) return
+      if (!viewerContextId) return false
 
       const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
       if (nextCwd) {
@@ -239,6 +239,7 @@ export function useAppShellPromptMutations({
 
       try {
         await createSessionMutation.mutateAsync({ cwd: nextCwd })
+        return true
       } catch (error) {
         setDraftSessionLoadingOwnerKey((current) =>
           current === ownerKey ? null : current
@@ -247,6 +248,7 @@ export function useAppShellPromptMutations({
         toast.error(
           error instanceof Error ? error.message : "Failed to create session"
         )
+        return false
       }
     },
     [
@@ -490,6 +492,10 @@ export function useAppShellPromptMutations({
 
   React.useEffect(() => {
     if (!draftSessionLoadingOwnerKey) return
+    if (sessionState.sessionKey?.startsWith("optimistic:")) {
+      return
+    }
+
     const currentOwnerKey = promptDraftKey(sessionState)
     if (
       !sessionState.draft ||
