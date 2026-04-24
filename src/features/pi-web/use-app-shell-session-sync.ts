@@ -55,6 +55,7 @@ type UseAppShellSessionSyncOptions = {
   >
   pendingRouteSessionIdRef: React.MutableRefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
+  setConversationItems: (items: SessionState["items"]) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   setPendingMessages: React.Dispatch<
@@ -234,6 +235,46 @@ function sameSessionsEvent(
   )
 }
 
+function sameSessionStateExceptConversation(
+  left: SessionState,
+  right: SessionState
+) {
+  return (
+    left.connected === right.connected &&
+    left.replaying === right.replaying &&
+    left.streaming === right.streaming &&
+    left.draft === right.draft &&
+    left.historyOffset === right.historyOffset &&
+    left.historyTotalCount === right.historyTotalCount &&
+    left.sessionId === right.sessionId &&
+    left.sessionKey === right.sessionKey &&
+    left.sessionName === right.sessionName &&
+    left.firstMessage === right.firstMessage &&
+    left.sessionFile === right.sessionFile &&
+    left.cwd === right.cwd &&
+    left.modified === right.modified &&
+    left.model === right.model &&
+    left.thinkingLevel === right.thinkingLevel &&
+    left.availableThinkingLevels === right.availableThinkingLevels &&
+    left.availableModels === right.availableModels &&
+    left.availableSkills === right.availableSkills &&
+    left.hideThinkingBlock === right.hideThinkingBlock &&
+    left.hiddenThinkingPreview === right.hiddenThinkingPreview &&
+    left.contextUsage === right.contextUsage &&
+    left.uiState === right.uiState &&
+    left.uiRequest === right.uiRequest
+  )
+}
+
+function shouldPublishSessionState(previous: SessionState, next: SessionState) {
+  if (previous === next) return false
+
+  return (
+    !sameSessionStateExceptConversation(previous, next) ||
+    (previous.items.length === 0) !== (next.items.length === 0)
+  )
+}
+
 export function useAppShellSessionSync({
   viewerContextId,
   sessionId,
@@ -248,6 +289,7 @@ export function useAppShellSessionSync({
   handleSelectSessionRef,
   pendingRouteSessionIdRef,
   setSessionState,
+  setConversationItems,
   setSessionsEvent,
   setComposerImages,
   setPendingMessages,
@@ -298,17 +340,23 @@ export function useAppShellSessionSync({
     source.onopen = () => {
       if (currentSourceRef.current !== source) return
       setConnected?.(true)
-      setSessionState((current) =>
-        current.connected ? current : { ...current, connected: true }
-      )
+      const currentState = sessionStateRef.current
+      if (currentState.connected) return
+      const nextState = { ...currentState, connected: true }
+      sessionStateRef.current = nextState
+      setConversationItems(nextState.items)
+      setSessionState(nextState)
     }
 
     source.onerror = () => {
       if (currentSourceRef.current !== source) return
       setConnected?.(false)
-      setSessionState((current) =>
-        !current.connected ? current : { ...current, connected: false }
-      )
+      const currentState = sessionStateRef.current
+      if (!currentState.connected) return
+      const nextState = { ...currentState, connected: false }
+      sessionStateRef.current = nextState
+      setConversationItems(nextState.items)
+      setSessionState(nextState)
     }
 
     source.onmessage = (event) => {
@@ -340,8 +388,11 @@ export function useAppShellSessionSync({
             nextState.uiState.editorText ??
             "")
 
-        setSessionState(nextState)
         sessionStateRef.current = nextState
+        setConversationItems(nextState.items)
+        if (shouldPublishSessionState(previousState, nextState)) {
+          setSessionState(nextState)
+        }
 
         if (sessionChanged) {
           setComposerImages((current) => (current.length === 0 ? current : []))
@@ -411,6 +462,7 @@ export function useAppShellSessionSync({
     sessionStateRef,
     setConnected,
     setComposerImages,
+    setConversationItems,
     setPendingMessages,
     setPendingUiRequest,
     setPendingUiValue,

@@ -26,8 +26,6 @@ import type {
   ExtensionUiEvent,
   FileCompletionsResponse,
   ForkableMessagesResponse,
-  GitChangesResponse,
-  GitStatusResponse,
   PathCompletionsResponse,
   SessionListEntry,
   SessionTreeResponse,
@@ -90,7 +88,11 @@ import {
   parseComposerSkillMessage,
   serializeComposerDraft,
 } from "@/features/pi-web/composer-utils"
-import { GitPanel } from "@/features/pi-web/git-panel"
+import {
+  DraftGitStatusBadge,
+  GitPanel,
+  HeaderGitStatusText,
+} from "@/features/pi-web/git-panel"
 import {
   piWebQueryKeys,
   piWebSessionScopeKey,
@@ -169,24 +171,6 @@ function formatDisplayPath(value: string | undefined) {
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
 }
 
-function formatHeaderGitStatusText(
-  gitStatus: GitStatusData["gitStatus"] | undefined
-) {
-  if (!gitStatus) return ""
-
-  const inline =
-    typeof gitStatus.inline === "string" ? gitStatus.inline.trim() : ""
-  if (inline) return inline
-
-  if (gitStatus.detached) {
-    return typeof gitStatus.revision === "string" && gitStatus.revision.trim()
-      ? `detached ${gitStatus.revision.trim()}`
-      : "detached"
-  }
-
-  return typeof gitStatus.branch === "string" ? gitStatus.branch.trim() : ""
-}
-
 function finishedSessionLabel(title: string) {
   return title !== "New session"
     ? `Session finished: ${title}`
@@ -198,8 +182,6 @@ type DirectorySessionsIndexesData = Extract<
   DirectorySessionsIndexesResponse,
   { ok: true }
 >
-type GitStatusData = Extract<GitStatusResponse, { ok: true }>
-type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 
@@ -349,46 +331,6 @@ function clearUnreadForActiveSidebarSession(
   return changed ? next : current
 }
 
-function gitStatusQueryOptions({
-  viewerContextId,
-  cwd,
-}: {
-  viewerContextId: string
-  cwd: string
-}) {
-  return {
-    queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
-    queryFn: () =>
-      fetchJson<GitStatusData>(
-        buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
-          contextId: viewerContextId,
-        })
-      ),
-    staleTime: 1000 * 30,
-    gcTime: 1000 * 60 * 10,
-  }
-}
-
-function gitChangesQueryOptions({
-  viewerContextId,
-  cwd,
-}: {
-  viewerContextId: string
-  cwd: string
-}) {
-  return {
-    queryKey: piWebQueryKeys.gitChanges(viewerContextId, cwd),
-    queryFn: () =>
-      fetchJson<GitChangesData>(
-        buildRequestUrl(`/api/git-changes?cwd=${encodeURIComponent(cwd)}`, {
-          contextId: viewerContextId,
-        })
-      ),
-    staleTime: 1000 * 30,
-    gcTime: 1000 * 60 * 10,
-  }
-}
-
 function sessionTreeQueryOptions({
   viewerContextId,
   sessionScopeKey,
@@ -519,6 +461,146 @@ function groupConversationItemsForRender(options: {
   return groups
 }
 
+type ConversationItemsSnapshot = {
+  items: Array<ConversationItem>
+  revision: number
+}
+
+type ConversationItemsStore = {
+  getSnapshot: () => ConversationItemsSnapshot
+  setItems: (items: Array<ConversationItem>) => void
+  subscribe: (listener: () => void) => () => void
+}
+
+function createConversationItemsStore(
+  initialItems: Array<ConversationItem>
+): ConversationItemsStore {
+  let snapshot: ConversationItemsSnapshot = {
+    items: initialItems,
+    revision: 0,
+  }
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => snapshot,
+    setItems: (items) => {
+      if (snapshot.items === items) return
+
+      snapshot = {
+        items,
+        revision: snapshot.revision + 1,
+      }
+      for (const listener of listeners) {
+        listener()
+      }
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+function useConversationItemsSnapshot(store: ConversationItemsStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  )
+}
+
+function sameRenderConversationGroup(
+  left: RenderConversationGroup,
+  right: RenderConversationGroup
+) {
+  if (left.kind !== right.kind || left.key !== right.key) return false
+
+  if (left.kind === "user" && right.kind === "user") {
+    return left.item === right.item
+  }
+
+  if (left.kind !== "assistant" || right.kind !== "assistant") {
+    return false
+  }
+
+  if (left.items.length !== right.items.length) return false
+
+  for (let index = 0; index < left.items.length; index += 1) {
+    if (left.items[index] !== right.items[index]) return false
+  }
+
+  return true
+}
+
+function reconcileRenderConversationGroups(
+  previousGroups: Array<RenderConversationGroup>,
+  nextGroups: Array<RenderConversationGroup>
+) {
+  if (previousGroups.length === 0) return nextGroups
+
+  let changed = previousGroups.length !== nextGroups.length
+  const groups: Array<RenderConversationGroup> = []
+
+  for (let index = 0; index < nextGroups.length; index += 1) {
+    const nextGroup = nextGroups[index]
+    const previousGroup = previousGroups[index]
+
+    if (
+      previousGroup &&
+      sameRenderConversationGroup(previousGroup, nextGroup)
+    ) {
+      groups.push(previousGroup)
+      continue
+    }
+
+    changed = true
+    groups.push(nextGroup)
+  }
+
+  return changed ? groups : previousGroups
+}
+
+function useRenderConversationGroups({
+  hideThinking,
+  hideToolBlocks,
+  items,
+}: {
+  items: Array<ConversationItem>
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  const previousGroupsRef = React.useRef<Array<RenderConversationGroup>>([])
+  const previousVisibilityRef = React.useRef({
+    hideThinking,
+    hideToolBlocks,
+  })
+
+  return React.useMemo(() => {
+    const nextGroups = groupConversationItemsForRender({
+      items,
+      hideThinking,
+      hideToolBlocks,
+    })
+    const previousVisibility = previousVisibilityRef.current
+    const canReusePreviousGroups =
+      previousVisibility.hideThinking === hideThinking &&
+      previousVisibility.hideToolBlocks === hideToolBlocks
+    const groups = canReusePreviousGroups
+      ? reconcileRenderConversationGroups(previousGroupsRef.current, nextGroups)
+      : nextGroups
+
+    previousGroupsRef.current = groups
+    previousVisibilityRef.current = {
+      hideThinking,
+      hideToolBlocks,
+    }
+
+    return groups
+  }, [hideThinking, hideToolBlocks, items])
+}
+
 type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
@@ -639,15 +721,28 @@ function ConversationTopButton({
   )
 }
 
+type AppShellConversationSessionState = Pick<
+  SessionState,
+  "cwd" | "draft" | "sessionFile" | "sessionId" | "streaming"
+>
+
 const AppShellConversationFrame = React.forwardRef<
   AppShellConversationFrameHandle,
   {
     children: React.ReactNode
+    conversationRevision: number
+    hasMessages: boolean
     isSessionViewLoading: boolean
-    sessionState: SessionState
+    sessionState: AppShellConversationSessionState
   }
 >(function AppShellConversationFrameImpl(
-  { children, isSessionViewLoading, sessionState },
+  {
+    children,
+    conversationRevision,
+    hasMessages,
+    isSessionViewLoading,
+    sessionState,
+  },
   ref
 ) {
   const {
@@ -659,6 +754,7 @@ const AppShellConversationFrame = React.forwardRef<
     scrollConversationToTop,
     scrollStateStore,
   } = useAppShellMessageScroll({
+    conversationRevision,
     isSessionViewLoading,
     sessionState,
   })
@@ -698,7 +794,7 @@ const AppShellConversationFrame = React.forwardRef<
           <div className="flex items-center gap-4">
             <ConversationLatestMessageButton
               draft={sessionState.draft}
-              hasMessages={sessionState.items.length > 0}
+              hasMessages={hasMessages}
               onClick={scrollConversationToBottom}
               scrollStateStore={scrollStateStore}
             />
@@ -720,6 +816,179 @@ const AppShellConversationFrame = React.forwardRef<
     </div>
   )
 })
+
+type AppShellWorkingState = {
+  label: string
+  summary?: string
+  done?: boolean
+}
+
+function AppShellTabsList() {
+  return (
+    <TabsList className="w-full rounded-none">
+      <TabsTrigger value="session">Session</TabsTrigger>
+      <TabsTrigger value="git">Git</TabsTrigger>
+    </TabsList>
+  )
+}
+
+function ConversationGroupView({
+  className,
+  group,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  className: string
+  group: RenderConversationGroup
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  if (group.kind === "user") {
+    return (
+      <div data-message-anchor="true" className={className}>
+        <UserMessageCard item={group.item} />
+      </div>
+    )
+  }
+
+  return (
+    <div data-message-anchor="true" className={className}>
+      <div className="flex flex-col gap-4">
+        {group.items.map((item, index) => {
+          const itemKey = item.itemKey || `${group.key}:assistant:${index}`
+
+          return (
+            <AssistantMessageCard
+              key={itemKey}
+              item={item}
+              hideThinking={hideThinking}
+              hideToolBlocks={hideToolBlocks}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AppShellSessionConversation({
+  awaitingFirstTurn,
+  centerMessages,
+  conversationFrameRef,
+  conversationItemsStore,
+  hideThinking,
+  hideToolBlocks,
+  isSessionViewLoading,
+  isSubmitting,
+  onCreateSession,
+  sessionState,
+  viewerContextId,
+  workingState,
+}: {
+  awaitingFirstTurn: boolean
+  centerMessages: boolean
+  conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
+  conversationItemsStore: ConversationItemsStore
+  hideThinking: boolean
+  hideToolBlocks: boolean
+  isSessionViewLoading: boolean
+  isSubmitting: boolean
+  onCreateSession: () => void
+  sessionState: AppShellConversationSessionState
+  viewerContextId: string
+  workingState: AppShellWorkingState | null
+}) {
+  const conversationSnapshot = useConversationItemsSnapshot(
+    conversationItemsStore
+  )
+  const displayedConversationItems = conversationSnapshot.items
+  const conversationMessageColumnClassName = centerMessages
+    ? "mx-auto w-full max-w-[80ch]"
+    : "w-full"
+  const renderedConversationGroups = useRenderConversationGroups({
+    items: displayedConversationItems,
+    hideThinking,
+    hideToolBlocks,
+  })
+  const showConversationLoadingState = Boolean(
+    isSessionViewLoading ||
+    (!sessionState.draft &&
+      displayedConversationItems.length === 0 &&
+      (isSubmitting ||
+        awaitingFirstTurn ||
+        sessionState.streaming ||
+        Boolean(workingState)))
+  )
+  const conversationLoadingLabel = isSessionViewLoading
+    ? "Loading session…"
+    : workingState && !workingState.done
+      ? workingState.label
+      : "Loading…"
+
+  return (
+    <AppShellConversationFrame
+      ref={conversationFrameRef}
+      conversationRevision={conversationSnapshot.revision}
+      hasMessages={displayedConversationItems.length > 0}
+      isSessionViewLoading={isSessionViewLoading}
+      sessionState={sessionState}
+    >
+      {showConversationLoadingState ? (
+        <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+          <Spinner />
+          <div>{conversationLoadingLabel}</div>
+        </div>
+      ) : renderedConversationGroups.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          {renderedConversationGroups.map((group) => (
+            <ConversationGroupView
+              key={group.key}
+              className={conversationMessageColumnClassName}
+              group={group}
+              hideThinking={hideThinking}
+              hideToolBlocks={hideToolBlocks}
+            />
+          ))}
+          {workingState ? (
+            <div className={conversationMessageColumnClassName}>
+              <MessagesWorkingIndicator state={workingState} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>
+              {sessionState.draft ? "New session" : "Start a new conversation"}
+            </EmptyTitle>
+            <EmptyDescription>
+              {sessionState.draft
+                ? undefined
+                : "This is the native Pi session view backed by the new TypeScript runtime."}
+            </EmptyDescription>
+          </EmptyHeader>
+          {sessionState.draft ? (
+            <EmptyContent className="flex flex-col items-center gap-3">
+              {sessionState.cwd ? (
+                <Badge variant="outline">
+                  {formatDisplayPath(sessionState.cwd)}
+                </Badge>
+              ) : null}
+              <DraftGitStatusBadge
+                viewerContextId={viewerContextId}
+                cwd={sessionState.cwd}
+              />
+            </EmptyContent>
+          ) : (
+            <EmptyContent>
+              <Button onClick={onCreateSession}>New session</Button>
+            </EmptyContent>
+          )}
+        </Empty>
+      )}
+    </AppShellConversationFrame>
+  )
+}
 
 function AppShellWindowEffects({
   activeSessionNotificationKey,
@@ -1084,6 +1353,21 @@ const AppShellSessionWorkspace = React.forwardRef<
   const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
   const lastEscapePressedAtRef = React.useRef(0)
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
+  const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
+    null
+  )
+  if (!conversationItemsStoreRef.current) {
+    conversationItemsStoreRef.current = createConversationItemsStore(
+      sessionState.items
+    )
+  }
+  const conversationItemsStore = conversationItemsStoreRef.current
+  const setConversationItems = React.useCallback(
+    (items: Array<ConversationItem>) => {
+      conversationItemsStore.setItems(items)
+    },
+    [conversationItemsStore]
+  )
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -1091,26 +1375,11 @@ const AppShellSessionWorkspace = React.forwardRef<
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionQueryScope = sessionScrollKey(sessionState)
-  const displayedConversationItems = sessionState.items
+  const conversationItemsSnapshot = conversationItemsStore.getSnapshot()
+  const displayedConversationItems = conversationItemsSnapshot.items
   const isSessionViewLoading = Boolean(
     loadingSessionId && loadingSessionId !== sessionState.sessionId
   )
-  const gitStatusQuery = useQuery({
-    ...gitStatusQueryOptions({
-      viewerContextId,
-      cwd: sessionState.cwd || "",
-    }),
-    enabled: Boolean(viewerContextId && sessionState.cwd),
-  })
-  const gitChangesQuery = useQuery({
-    ...gitChangesQueryOptions({
-      viewerContextId,
-      cwd: sessionState.cwd || "",
-    }),
-    enabled: Boolean(
-      viewerContextId && sessionState.cwd && currentTab === "git"
-    ),
-  })
   const treeQueryResult = useQuery({
     ...sessionTreeQueryOptions({
       viewerContextId,
@@ -1140,13 +1409,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionState.uiState.title?.trim() ||
     (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
   const deleteOpen = deleteTargets.length > 0
-  const gitStatus = gitStatusQuery.data ?? null
-  const gitChanges = gitChangesQuery.data ?? null
-  const gitLoading = Boolean(
-    currentTab === "git" &&
-    ((gitStatusQuery.isPending && !gitStatusQuery.data) ||
-      (gitChangesQuery.isPending && !gitChangesQuery.data))
-  )
   const treeData = treeQueryResult.data ?? null
   const treeLoading = Boolean(
     treeQueryResult.isPending && !treeQueryResult.data
@@ -1159,6 +1421,10 @@ const AppShellSessionWorkspace = React.forwardRef<
   React.useEffect(() => {
     sessionStateRef.current = sessionState
   }, [sessionState])
+
+  React.useLayoutEffect(() => {
+    conversationItemsStore.setItems(sessionState.items)
+  }, [conversationItemsStore, sessionState.items])
 
   const syncComposerDraft = (
     value: string,
@@ -1408,6 +1674,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     handleSelectSessionRef,
     pendingRouteSessionIdRef,
     setSessionState,
+    setConversationItems,
     setSessionsEvent,
     setComposerImages,
     setPendingMessages,
@@ -1459,23 +1726,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   }, [sessionId, sessionState.cwd, sessionState.draft, sessionState.sessionId])
 
   React.useEffect(() => {
-    if (currentTab !== "git") return
-
-    const error = gitChangesQuery.error || gitStatusQuery.error
-    if (!error) return
-
-    toast.error(
-      error instanceof Error ? error.message : "Failed to load git view"
-    )
-  }, [
-    currentTab,
-    gitChangesQuery.error,
-    gitChangesQuery.errorUpdatedAt,
-    gitStatusQuery.error,
-    gitStatusQuery.errorUpdatedAt,
-  ])
-
-  React.useEffect(() => {
     if (!treeOpen || !treeQueryResult.error) return
 
     toast.error(
@@ -1517,32 +1767,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     const selected = flat.find((entry) => entry.id === fallbackId)
     setSelectedTreeNodeLabel(selected?.label || "")
   }, [selectedTreeNodeId, treeData])
-
-  const refreshGit = async () => {
-    if (!viewerContextId || !sessionState.cwd) return
-
-    try {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitStatus(viewerContextId, sessionState.cwd),
-          exact: true,
-          refetchType: "all",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitChanges(
-            viewerContextId,
-            sessionState.cwd
-          ),
-          exact: true,
-          refetchType: "all",
-        }),
-      ])
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load git view"
-      )
-    }
-  }
 
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
@@ -1661,13 +1885,14 @@ const AppShellSessionWorkspace = React.forwardRef<
       }
       setAwaitingFirstTurn(false)
       setPendingMessages((current) => (current.length === 0 ? current : []))
-      setSessionState((current) => {
+      setSessionState(() => {
         const nextState = createOptimisticDraftSessionState({
-          previous: current,
+          previous: previousState,
           cwd: nextCwd,
           ownerKey,
         })
         sessionStateRef.current = nextState
+        conversationItemsStore.setItems(nextState.items)
         return nextState
       })
 
@@ -1682,11 +1907,13 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
 
         sessionStateRef.current = previousState
+        conversationItemsStore.setItems(previousState.items)
         return previousState
       })
     },
     [
       clearSelectedSidebarSelection,
+      conversationItemsStore,
       defaultNewSessionDirectory,
       focusPrompt,
       handleSelectSession,
@@ -1967,13 +2194,19 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     if (sessionState.streaming) {
-      return {
-        label: sessionState.uiState.workingMessage || "Working…",
-        summary: sessionState.hideThinkingBlock
-          ? sessionState.uiState.hiddenThinkingLabel ||
-            sessionState.hiddenThinkingPreview
-          : undefined,
-      }
+      const summary = sessionState.hideThinkingBlock
+        ? sessionState.uiState.hiddenThinkingLabel ||
+          sessionState.hiddenThinkingPreview
+        : undefined
+
+      return summary
+        ? {
+            label: sessionState.uiState.workingMessage || "Working…",
+            summary,
+          }
+        : {
+            label: sessionState.uiState.workingMessage || "Working…",
+          }
     }
 
     const hasAssistantOutput = displayedConversationItems.some(
@@ -1994,19 +2227,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
       : null
   })()
-
-  const conversationMessageColumnClassName = centerMessages
-    ? "mx-auto w-full max-w-[80ch]"
-    : "w-full"
-  const renderedConversationGroups = React.useMemo(
-    () =>
-      groupConversationItemsForRender({
-        items: displayedConversationItems,
-        hideThinking: sessionState.hideThinkingBlock,
-        hideToolBlocks,
-      }),
-    [displayedConversationItems, hideToolBlocks, sessionState.hideThinkingBlock]
-  )
 
   const commandPaletteCommands = (() => {
     const commands: Array<AppCommand> = [
@@ -2270,28 +2490,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     ]
   )
 
-  const showConversationLoadingState = Boolean(
-    isSessionViewLoading ||
-    (!sessionState.draft &&
-      displayedConversationItems.length === 0 &&
-      (isSubmitting ||
-        awaitingFirstTurn ||
-        sessionState.streaming ||
-        Boolean(workingState)))
-  )
-  const conversationLoadingLabel = isSessionViewLoading
-    ? "Loading session…"
-    : workingState && !workingState.done
-      ? workingState.label
-      : "Loading…"
-
-  const currentGitSummary = gitStatus?.gitStatus ?? null
-  const headerGitStatusText = formatHeaderGitStatusText(currentGitSummary)
-  const draftGitSummary =
-    sessionState.draft && displayedConversationItems.length === 0
-      ? currentGitSummary
-      : null
-
   return (
     <>
       <AppShellWindowEffects
@@ -2328,13 +2526,10 @@ const AppShellSessionWorkspace = React.forwardRef<
                   {sessionState.cwd && (
                     <span>{formatDisplayPath(sessionState.cwd)}</span>
                   )}
-                  {headerGitStatusText ? (
-                    <span
-                      title={currentGitSummary?.title || headerGitStatusText}
-                    >
-                      • {headerGitStatusText}
-                    </span>
-                  ) : null}
+                  <HeaderGitStatusText
+                    viewerContextId={viewerContextId}
+                    cwd={sessionState.cwd}
+                  />
                   {sessionState.modified && (
                     <span>• {relativeTime(sessionState.modified)}</span>
                   )}
@@ -2466,106 +2661,25 @@ const AppShellSessionWorkspace = React.forwardRef<
           onValueChange={setCurrentTab}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <TabsList className="w-full rounded-none">
-            <TabsTrigger value="session">Session</TabsTrigger>
-            <TabsTrigger value="git">Git</TabsTrigger>
-          </TabsList>
+          <AppShellTabsList />
 
           <TabsContent value="session" className="flex min-h-0 flex-1 flex-col">
-            <AppShellConversationFrame
-              ref={conversationFrameRef}
+            <AppShellSessionConversation
+              awaitingFirstTurn={awaitingFirstTurn}
+              centerMessages={centerMessages}
+              conversationFrameRef={conversationFrameRef}
+              conversationItemsStore={conversationItemsStore}
+              hideThinking={sessionState.hideThinkingBlock}
+              hideToolBlocks={hideToolBlocks}
               isSessionViewLoading={isSessionViewLoading}
+              isSubmitting={isSubmitting}
+              onCreateSession={() => {
+                void createSession()
+              }}
               sessionState={sessionState}
-            >
-              {showConversationLoadingState ? (
-                <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
-                  <Spinner />
-                  <div>{conversationLoadingLabel}</div>
-                </div>
-              ) : renderedConversationGroups.length > 0 ? (
-                <div className="flex flex-col gap-4">
-                  {renderedConversationGroups.map((group) => {
-                    if (group.kind === "user") {
-                      return (
-                        <div
-                          key={group.key}
-                          data-message-anchor="true"
-                          className={conversationMessageColumnClassName}
-                        >
-                          <UserMessageCard item={group.item} />
-                        </div>
-                      )
-                    }
-
-                    return (
-                      <div
-                        key={group.key}
-                        data-message-anchor="true"
-                        className={conversationMessageColumnClassName}
-                      >
-                        <div className="flex flex-col gap-4">
-                          {group.items.map((item, index) => {
-                            const itemKey =
-                              item.itemKey || `${group.key}:assistant:${index}`
-
-                            return (
-                              <AssistantMessageCard
-                                key={itemKey}
-                                item={item}
-                                hideThinking={sessionState.hideThinkingBlock}
-                                hideToolBlocks={hideToolBlocks}
-                              />
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {workingState ? (
-                    <div className={conversationMessageColumnClassName}>
-                      <MessagesWorkingIndicator state={workingState} />
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>
-                      {sessionState.draft
-                        ? "New session"
-                        : "Start a new conversation"}
-                    </EmptyTitle>
-                    <EmptyDescription>
-                      {sessionState.draft
-                        ? undefined
-                        : "This is the native Pi session view backed by the new TypeScript runtime."}
-                    </EmptyDescription>
-                  </EmptyHeader>
-                  {sessionState.draft ? (
-                    <EmptyContent className="flex flex-col items-center gap-3">
-                      {sessionState.cwd ? (
-                        <Badge variant="outline">
-                          {formatDisplayPath(sessionState.cwd)}
-                        </Badge>
-                      ) : null}
-                      {draftGitSummary?.label ? (
-                        <Badge variant="outline">{draftGitSummary.label}</Badge>
-                      ) : null}
-                    </EmptyContent>
-                  ) : (
-                    <EmptyContent>
-                      <Button
-                        onClick={() => {
-                          void createSession()
-                        }}
-                      >
-                        New session
-                      </Button>
-                    </EmptyContent>
-                  )}
-                </Empty>
-              )}
-            </AppShellConversationFrame>
+              viewerContextId={viewerContextId}
+              workingState={workingState}
+            />
 
             <ComposerPanel
               ref={composerPanelRef}
@@ -2653,13 +2767,9 @@ const AppShellSessionWorkspace = React.forwardRef<
             className="min-h-0 flex-1 space-y-4 overflow-auto px-6 pb-6"
           >
             <GitPanel
-              gitLoading={gitLoading}
-              gitStatus={gitStatus}
-              gitChanges={gitChanges}
+              viewerContextId={viewerContextId}
               cwd={sessionState.cwd}
-              onRefresh={() => {
-                void refreshGit()
-              }}
+              active={currentTab === "git"}
             />
           </TabsContent>
         </Tabs>

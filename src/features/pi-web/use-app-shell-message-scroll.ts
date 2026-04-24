@@ -11,6 +11,7 @@ type ScrollSessionState = {
 }
 
 type UseAppShellMessageScrollOptions = {
+  conversationRevision: number
   isSessionViewLoading: boolean
   sessionState: ScrollSessionState
 }
@@ -164,6 +165,7 @@ function scrollViewportToBottom(
 }
 
 export function useAppShellMessageScroll({
+  conversationRevision,
   isSessionViewLoading,
   sessionState,
 }: UseAppShellMessageScrollOptions) {
@@ -247,7 +249,12 @@ export function useAppShellMessageScroll({
 
     scrollViewportToBottom(viewport, "auto")
     syncViewportState(viewport)
-  }, [isSessionViewLoading, sessionState, syncViewportState])
+  }, [
+    conversationRevision,
+    isSessionViewLoading,
+    sessionState.streaming,
+    syncViewportState,
+  ])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -265,7 +272,14 @@ export function useAppShellMessageScroll({
     lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
     viewport.scrollTop = viewport.scrollHeight
     syncViewportState(viewport)
-  }, [isSessionViewLoading, sessionState, syncViewportState])
+  }, [
+    isSessionViewLoading,
+    sessionState.cwd,
+    sessionState.draft,
+    sessionState.sessionFile,
+    sessionState.sessionId,
+    syncViewportState,
+  ])
 
   return {
     bottomRef,
