@@ -1478,6 +1478,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   useAppShellSessionSync({
     viewerContextId,
     sessionId,
+    draftSessionLoadingOwnerKey,
     bootstrapSidebarDirectories,
     sessionState,
     sessionStateRef,
@@ -1745,6 +1746,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
+      handleSelectSession(undefined)
       clearSelectedSidebarSelection()
       if (shouldCloseMobileSidebar) {
         pendingMobileSidebarPromptFocusRef.current = true
@@ -1782,6 +1784,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       clearSelectedSidebarSelection,
       defaultNewSessionDirectory,
       focusPrompt,
+      handleSelectSession,
       isMobile,
       openMobile,
       requestCreateSession,

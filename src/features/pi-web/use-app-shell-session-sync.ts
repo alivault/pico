@@ -33,6 +33,7 @@ type PendingComposerMessage = {
 type UseAppShellSessionSyncOptions = {
   viewerContextId: string
   sessionId?: string
+  draftSessionLoadingOwnerKey: string | null
   bootstrapSidebarDirectories: Array<string>
   sessionState: SessionState
   sessionStateRef: React.MutableRefObject<SessionState>
@@ -88,6 +89,7 @@ function normalizePendingMessages(
 export function useAppShellSessionSync({
   viewerContextId,
   sessionId,
+  draftSessionLoadingOwnerKey,
   bootstrapSidebarDirectories,
   sessionState,
   sessionStateRef,
@@ -265,6 +267,7 @@ export function useAppShellSessionSync({
 
   React.useEffect(() => {
     if (!viewerContextId || !sessionId) return
+    if (draftSessionLoadingOwnerKey) return
     if (!hasReceivedStateSyncRef.current) return
     if (sessionId === sessionState.sessionId) return
 
@@ -289,7 +292,12 @@ export function useAppShellSessionSync({
     return () => {
       abortController.abort()
     }
-  }, [viewerContextId, sessionId, sessionState.sessionId])
+  }, [
+    draftSessionLoadingOwnerKey,
+    viewerContextId,
+    sessionId,
+    sessionState.sessionId,
+  ])
 
   React.useEffect(() => {
     if (sessionState.draft || !sessionState.sessionId) return
