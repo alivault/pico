@@ -1564,6 +1564,14 @@ const AppShellSessionWorkspace = React.forwardRef<
       setCurrentTab("session")
     }
 
+    if (isMobile && (openMobile || openMobileSettled)) {
+      pendingMobileSidebarPromptFocusRef.current = true
+      if (openMobile) {
+        setOpenMobile(false)
+      }
+      return
+    }
+
     window.requestAnimationFrame(() => {
       composerPanelRef.current?.focusPrompt({ preventScroll: true })
     })
