@@ -15,7 +15,6 @@ import type { DesktopNotificationPermission } from "@/features/pi-web/session-do
 import type {
   ConversationItem,
   DirectoryState,
-  MessagePayload,
   PromptImage,
   SessionState,
   StreamingBehavior,
@@ -30,7 +29,6 @@ import type {
   GitChangesResponse,
   GitStatusResponse,
   PathCompletionsResponse,
-  SessionHistoryResponse,
   SessionListEntry,
   SessionTreeResponse,
   SessionsEvent,
@@ -120,7 +118,6 @@ import {
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
-  buildItemsFromSync,
   createContextId,
   createInitialSessionState,
   flattenTree,
@@ -147,7 +144,6 @@ import { isApiErrorResponse } from "@/lib/pi-web-api"
 const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_STREAMING_INTERVAL_MS = 500
 const INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT = 6
-const SESSION_HISTORY_PAGE_SIZE = 50
 
 function sessionNotificationKey(sessionLike: {
   sessionFile?: string
@@ -202,7 +198,6 @@ type DirectorySessionsIndexesData = Extract<
   DirectorySessionsIndexesResponse,
   { ok: true }
 >
-type SessionHistoryData = Extract<SessionHistoryResponse, { ok: true }>
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
@@ -297,6 +292,16 @@ function updateDirectoryIndexLoadingState(
   }
 
   return changed ? next : current
+}
+
+function sameStringArray(left: Array<string>, right: Array<string>) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+
+  return true
 }
 
 function clearUnreadForActiveSidebarSession(
@@ -434,13 +439,6 @@ function useLatestRef<T>(value: T) {
   const ref = React.useRef(value)
   ref.current = value
   return ref
-}
-
-function isPendingConversationItem(item: ConversationItem) {
-  return (
-    item.kind === "user" &&
-    (Boolean(item.pendingId) || item.itemKey?.startsWith("pending:"))
-  )
 }
 
 type UserConversationItem = Extract<ConversationItem, { kind: "user" }>
@@ -645,21 +643,11 @@ const AppShellConversationFrame = React.forwardRef<
   AppShellConversationFrameHandle,
   {
     children: React.ReactNode
-    hasOlderHistory: boolean
-    isLoadingOlderHistory: boolean
     isSessionViewLoading: boolean
-    onLoadOlderHistory: () => Promise<void>
     sessionState: SessionState
   }
 >(function AppShellConversationFrameImpl(
-  {
-    children,
-    hasOlderHistory,
-    isLoadingOlderHistory,
-    isSessionViewLoading,
-    onLoadOlderHistory,
-    sessionState,
-  },
+  { children, isSessionViewLoading, sessionState },
   ref
 ) {
   const {
@@ -674,48 +662,6 @@ const AppShellConversationFrame = React.forwardRef<
     isSessionViewLoading,
     sessionState,
   })
-  const historyLoadInFlightRef = React.useRef(false)
-  const hasOlderHistoryRef = useLatestRef(hasOlderHistory)
-  const loadOlderHistoryRef = useLatestRef(onLoadOlderHistory)
-
-  React.useEffect(() => {
-    historyLoadInFlightRef.current = isLoadingOlderHistory
-  }, [isLoadingOlderHistory])
-
-  React.useEffect(() => {
-    const viewport = messagesScrollAreaRef.current
-    if (!viewport) return
-
-    const maybeLoadOlderHistory = () => {
-      if (historyLoadInFlightRef.current || !hasOlderHistoryRef.current) {
-        return
-      }
-      if (viewport.scrollTop > 64) {
-        return
-      }
-
-      historyLoadInFlightRef.current = true
-      const previousScrollHeight = viewport.scrollHeight
-      const previousScrollTop = viewport.scrollTop
-
-      void loadOlderHistoryRef.current().finally(() => {
-        window.requestAnimationFrame(() => {
-          const nextScrollHeight = viewport.scrollHeight
-          viewport.scrollTop =
-            nextScrollHeight - previousScrollHeight + previousScrollTop
-          historyLoadInFlightRef.current = false
-        })
-      })
-    }
-
-    viewport.addEventListener("scroll", maybeLoadOlderHistory, {
-      passive: true,
-    })
-
-    return () => {
-      viewport.removeEventListener("scroll", maybeLoadOlderHistory)
-    }
-  }, [hasOlderHistoryRef, loadOlderHistoryRef, messagesScrollAreaRef])
 
   React.useImperativeHandle(
     ref,
@@ -743,17 +689,6 @@ const AppShellConversationFrame = React.forwardRef<
         aria-label="Conversation messages"
         className="h-full overflow-auto px-4 outline-none"
       >
-        {hasOlderHistory || isLoadingOlderHistory ? (
-          <div className="flex min-h-12 items-center justify-center py-3 text-xs text-muted-foreground">
-            {isLoadingOlderHistory ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner /> Loading earlier messages…
-              </span>
-            ) : (
-              <span>Scroll up to load earlier messages</span>
-            )}
-          </div>
-        ) : null}
         {children}
         <div ref={bottomRef} />
       </div>
@@ -1058,12 +993,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [sessionState, setSessionState] = React.useState<SessionState>(
     createInitialSessionState()
   )
-  const [loadedOlderHistory, setLoadedOlderHistory] = React.useState<{
-    sessionKey: string
-    messages: Array<MessagePayload>
-  }>({ sessionKey: "", messages: [] })
-  const [isLoadingOlderHistory, setIsLoadingOlderHistory] =
-    React.useState(false)
   const [currentTab, setCurrentTab] = React.useState("session")
   const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
     text: string
@@ -1152,15 +1081,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerDraftSeed.skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
-  const previousConversationWindowRef = React.useRef<{
-    sessionKey: string
-    historyOffset: number
-    messages: Array<MessagePayload>
-  }>({
-    sessionKey: "",
-    historyOffset: 0,
-    messages: [],
-  })
   const lastEscapePressedAtRef = React.useRef(0)
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
 
@@ -1169,41 +1089,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const queryClient = useQueryClient()
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
-  const currentSessionKey = sessionState.sessionKey || ""
   const currentSessionQueryScope = sessionScrollKey(sessionState)
-  const olderHistoryMessages =
-    loadedOlderHistory.sessionKey === currentSessionKey
-      ? loadedOlderHistory.messages
-      : []
-  const pendingConversationItems = sessionState.items.filter((item) =>
-    isPendingConversationItem(item)
-  )
-  const streamingConversationItem =
-    sessionState.items.find(
-      (item) => item.kind === "assistant" && item.streaming
-    ) || null
-  const displayedConversationItems = (() => {
-    if (olderHistoryMessages.length === 0) {
-      return sessionState.items
-    }
-
-    const { items } = buildItemsFromSync(
-      {
-        type: "state_sync",
-        messages: [...olderHistoryMessages, ...sessionState.messages],
-      },
-      []
-    )
-
-    return [
-      ...items,
-      ...pendingConversationItems,
-      ...(streamingConversationItem ? [streamingConversationItem] : []),
-    ]
-  })()
-  const hasOlderHistory =
-    currentSessionKey.length > 0 &&
-    sessionState.historyOffset > olderHistoryMessages.length
+  const displayedConversationItems = sessionState.items
   const isSessionViewLoading = Boolean(
     loadingSessionId && loadingSessionId !== sessionState.sessionId
   )
@@ -1272,70 +1159,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionStateRef.current = sessionState
   }, [sessionState])
 
-  React.useEffect(() => {
-    const previous = previousConversationWindowRef.current
-
-    if (previous.sessionKey !== currentSessionKey) {
-      previousConversationWindowRef.current = {
-        sessionKey: currentSessionKey,
-        historyOffset: sessionState.historyOffset,
-        messages: sessionState.messages,
-      }
-      setLoadedOlderHistory((current) =>
-        current.sessionKey === currentSessionKey &&
-        current.messages.length === 0
-          ? current
-          : { sessionKey: currentSessionKey, messages: [] }
-      )
-      setIsLoadingOlderHistory(false)
-      return
-    }
-
-    if (sessionState.historyOffset > previous.historyOffset) {
-      const droppedCount = Math.min(
-        sessionState.historyOffset - previous.historyOffset,
-        previous.messages.length
-      )
-      const droppedMessages = previous.messages.slice(0, droppedCount)
-
-      if (droppedMessages.length > 0) {
-        setLoadedOlderHistory((current) => {
-          const currentMessages =
-            current.sessionKey === currentSessionKey ? current.messages : []
-          return {
-            sessionKey: currentSessionKey,
-            messages: [...currentMessages, ...droppedMessages],
-          }
-        })
-      }
-    }
-
-    if (sessionState.historyOffset < previous.historyOffset) {
-      const overlapCount = previous.historyOffset - sessionState.historyOffset
-      if (overlapCount > 0) {
-        setLoadedOlderHistory((current) => {
-          if (current.sessionKey !== currentSessionKey) {
-            return current
-          }
-
-          return {
-            sessionKey: currentSessionKey,
-            messages: current.messages.slice(
-              0,
-              Math.max(0, current.messages.length - overlapCount)
-            ),
-          }
-        })
-      }
-    }
-
-    previousConversationWindowRef.current = {
-      sessionKey: currentSessionKey,
-      historyOffset: sessionState.historyOffset,
-      messages: sessionState.messages,
-    }
-  }, [currentSessionKey, sessionState.historyOffset, sessionState.messages])
-
   const syncComposerDraft = (
     value: string,
     target = sessionStateRef.current
@@ -1365,16 +1188,20 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     composerTextRef.current = nextText
     composerSkillRef.current = nextSkill
-    setComposerDraftSeed((current) => ({
-      text: nextText,
-      skillName: nextSkill,
-      syncNonce:
-        options?.forceSync &&
-        current.text === nextText &&
-        current.skillName === nextSkill
-          ? current.syncNonce + 1
-          : current.syncNonce,
-    }))
+    setComposerDraftSeed((current) => {
+      const draftUnchanged =
+        current.text === nextText && current.skillName === nextSkill
+
+      if (draftUnchanged && !options?.forceSync) {
+        return current
+      }
+
+      return {
+        text: nextText,
+        skillName: nextSkill,
+        syncNonce: draftUnchanged ? current.syncNonce + 1 : current.syncNonce,
+      }
+    })
     rememberStoredPromptDraft(
       target,
       serializeComposerDraft({ text: nextText, skillName: nextSkill })
@@ -1688,48 +1515,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
-  const loadOlderHistory = async () => {
-    if (!viewerContextId || !activeSessionId || !currentSessionKey) return
-    if (isLoadingOlderHistory) return
-
-    const before = sessionState.historyOffset - olderHistoryMessages.length
-    if (before <= 0) return
-
-    setIsLoadingOlderHistory(true)
-    try {
-      const response = await fetchJson<SessionHistoryData>(
-        buildRequestUrl("/api/session/history", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-          searchParams: {
-            before,
-            limit: SESSION_HISTORY_PAGE_SIZE,
-          },
-        })
-      )
-
-      if (response.messages.length === 0) {
-        return
-      }
-
-      setLoadedOlderHistory((current) => ({
-        sessionKey: currentSessionKey,
-        messages:
-          current.sessionKey === currentSessionKey
-            ? [...response.messages, ...current.messages]
-            : response.messages,
-      }))
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to load earlier messages"
-      )
-    } finally {
-      setIsLoadingOlderHistory(false)
-    }
-  }
-
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
     baseSidebarDirectories[0] ||
@@ -1846,7 +1631,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         focusPrompt()
       }
       setAwaitingFirstTurn(false)
-      setPendingMessages([])
+      setPendingMessages((current) => (current.length === 0 ? current : []))
       setSessionState((current) => {
         const nextState = createOptimisticDraftSessionState({
           previous: current,
@@ -2660,10 +2445,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           <TabsContent value="session" className="flex min-h-0 flex-1 flex-col">
             <AppShellConversationFrame
               ref={conversationFrameRef}
-              hasOlderHistory={hasOlderHistory}
-              isLoadingOlderHistory={isLoadingOlderHistory}
               isSessionViewLoading={isSessionViewLoading}
-              onLoadOlderHistory={loadOlderHistory}
               sessionState={sessionState}
             >
               {showConversationLoadingState ? (
@@ -3515,13 +3297,18 @@ export function PiWebAppShell({
 
   const setSidebarSelection = (nextKeys: Array<string>, anchorKey = "") => {
     const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
-    setSelectedSidebarSessionKeys(normalizedKeys)
-    setSidebarSessionSelectionAnchor(
+    const nextAnchor =
       normalizedKeys.length === 0
         ? ""
         : anchorKey && normalizedKeys.includes(anchorKey)
           ? anchorKey
           : (normalizedKeys[normalizedKeys.length - 1] ?? "")
+
+    setSelectedSidebarSessionKeys((current) =>
+      sameStringArray(current, normalizedKeys) ? current : normalizedKeys
+    )
+    setSidebarSessionSelectionAnchor((current) =>
+      current === nextAnchor ? current : nextAnchor
     )
   }
 

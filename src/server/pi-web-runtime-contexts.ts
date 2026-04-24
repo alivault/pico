@@ -89,6 +89,7 @@ export async function activateContextSession<
   getSessionPath: (entry: E) => string
   sendStateToContext: (context: C) => void
   sendSessionsToContext: (context: C) => Promise<void>
+  notify?: boolean
 }) {
   const {
     context,
@@ -99,6 +100,7 @@ export async function activateContextSession<
     getSessionPath,
     sendStateToContext,
     sendSessionsToContext,
+    notify = true,
   } = options
 
   const previousDraft =
@@ -114,6 +116,10 @@ export async function activateContextSession<
     context.draftKey = entry.key
   }
   context.unreadFinished.delete(getSessionPath(entry))
+  if (!notify) {
+    return
+  }
+
   sendStateToContext(context)
   await sendSessionsToContext(context)
 }
@@ -147,7 +153,12 @@ export async function resolveRequestedEntry<
   ensureSessionEntryById: (sessionId: string) => Promise<E | undefined>
   getActiveEntry: (context: C) => E | undefined
   getOrCreateDraftEntry: (context: C) => Promise<E>
-  activateContextSession: (context: C, entry: E) => Promise<void>
+  activateContextSession: (
+    context: C,
+    entry: E,
+    options?: { notify?: boolean }
+  ) => Promise<void>
+  notifyOnActivate?: boolean
 }) {
   const {
     url,
@@ -157,10 +168,13 @@ export async function resolveRequestedEntry<
     getActiveEntry,
     getOrCreateDraftEntry,
     activateContextSession,
+    notifyOnActivate = true,
   } = options
 
   const activateRequestedEntry = async (entry: E) => {
-    await activateContextSession(context, entry)
+    await activateContextSession(context, entry, {
+      notify: notifyOnActivate,
+    })
     return entry
   }
 

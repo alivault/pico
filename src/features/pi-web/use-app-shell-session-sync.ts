@@ -5,6 +5,7 @@ import type { PromptImage, SessionState } from "@/lib/pi-web"
 import type {
   ExtensionUiEvent,
   PiWebServerEvent,
+  SessionListEntry,
   SessionsEvent,
   SimpleOkResponse,
 } from "@/lib/pi-web-api"
@@ -90,6 +91,147 @@ function normalizePendingMessages(
     streamingBehavior:
       message.streamingBehavior === "steer" ? "steer" : "followUp",
   }))
+}
+
+function sameStringArray(left: Array<string> = [], right: Array<string> = []) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+
+  return true
+}
+
+function samePromptImages(
+  left: Array<PromptImage> = [],
+  right: Array<PromptImage> = []
+) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftImage = left[index]
+    const rightImage = right[index]
+    if (!leftImage || !rightImage) return false
+    if (leftImage.mimeType !== rightImage.mimeType) return false
+    if (leftImage.data !== rightImage.data) return false
+    if (leftImage.previewUrl !== rightImage.previewUrl) return false
+  }
+
+  return true
+}
+
+function samePendingMessages(
+  left: Array<PendingComposerMessage> = [],
+  right: Array<PendingComposerMessage> = []
+) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index]
+    const rightMessage = right[index]
+    if (!leftMessage || !rightMessage) return false
+    if (leftMessage.pendingId !== rightMessage.pendingId) return false
+    if (leftMessage.text !== rightMessage.text) return false
+    if (leftMessage.streamingBehavior !== rightMessage.streamingBehavior) {
+      return false
+    }
+    if (!samePromptImages(leftMessage.images, rightMessage.images)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function sameDirectoryStates(
+  left: NonNullable<SessionsEvent["directoryStates"]> = [],
+  right: NonNullable<SessionsEvent["directoryStates"]> = []
+) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftState = left[index]
+    const rightState = right[index]
+    if (!leftState || !rightState) return false
+    if (leftState.path !== rightState.path) return false
+    if (leftState.totalCount !== rightState.totalCount) return false
+    if (leftState.revision !== rightState.revision) return false
+  }
+
+  return true
+}
+
+function sameSessionListEntries(
+  left: Array<SessionListEntry> = [],
+  right: Array<SessionListEntry> = []
+) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEntry = left[index]
+    const rightEntry = right[index]
+    if (!leftEntry || !rightEntry) return false
+    if (leftEntry.path !== rightEntry.path) return false
+    if (leftEntry.id !== rightEntry.id) return false
+    if (leftEntry.cwd !== rightEntry.cwd) return false
+    if (leftEntry.name !== rightEntry.name) return false
+    if (leftEntry.title !== rightEntry.title) return false
+    if (leftEntry.modified !== rightEntry.modified) return false
+    if (Boolean(leftEntry.streaming) !== Boolean(rightEntry.streaming)) {
+      return false
+    }
+    if (Boolean(leftEntry.unread) !== Boolean(rightEntry.unread)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function sameDirectoryIndexes(
+  left: SessionsEvent["directoryIndexes"],
+  right: SessionsEvent["directoryIndexes"]
+) {
+  const leftEntries = Object.entries(left || {})
+  const rightEntries = Object.entries(right || {})
+
+  if (leftEntries.length !== rightEntries.length) return false
+
+  for (const [directory, leftSnapshot] of leftEntries) {
+    const rightSnapshot = right?.[directory]
+    if (!leftSnapshot || !rightSnapshot) return false
+    if (leftSnapshot.directory !== rightSnapshot.directory) return false
+    if (leftSnapshot.totalCount !== rightSnapshot.totalCount) return false
+    if (leftSnapshot.revision !== rightSnapshot.revision) return false
+    if (
+      !sameSessionListEntries(leftSnapshot.sessions, rightSnapshot.sessions)
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function sameSessionsEvent(
+  left: SessionsEvent | null,
+  right: SessionsEvent | null
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+
+  return (
+    left.activeSessionId === right.activeSessionId &&
+    left.activeSessionKey === right.activeSessionKey &&
+    left.activeSessionPath === right.activeSessionPath &&
+    sameStringArray(left.directories || [], right.directories || []) &&
+    sameDirectoryStates(
+      left.directoryStates || [],
+      right.directoryStates || []
+    ) &&
+    sameDirectoryIndexes(left.directoryIndexes, right.directoryIndexes)
+  )
 }
 
 export function useAppShellSessionSync({
@@ -202,20 +344,26 @@ export function useAppShellSessionSync({
         sessionStateRef.current = nextState
 
         if (sessionChanged) {
-          setComposerImages([])
+          setComposerImages((current) => (current.length === 0 ? current : []))
         }
 
         replaceComposerDraftRef.current(nextPromptText, nextState)
         lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
         const nextPendingMessages = normalizePendingMessages(payload)
         if (nextPendingMessages) {
-          setPendingMessages(nextPendingMessages)
+          setPendingMessages((current) =>
+            samePendingMessages(current, nextPendingMessages)
+              ? current
+              : nextPendingMessages
+          )
         }
         return
       }
 
       if (isSessionsEvent(payload)) {
-        setSessionsEvent(payload)
+        setSessionsEvent((current) =>
+          sameSessionsEvent(current, payload) ? current : payload
+        )
         return
       }
 

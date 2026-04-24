@@ -76,7 +76,6 @@ const VALID_THINKING_LEVELS = new Set([
 ])
 const SESSION_LIST_LIMIT_DEFAULT = 5
 const SESSION_LIST_LIMIT_MAX = 100
-const SESSION_HISTORY_INITIAL_ITEM_LIMIT = 60
 const SESSION_HISTORY_PAGE_LIMIT_DEFAULT = 50
 const SESSION_HISTORY_PAGE_LIMIT_MAX = 200
 const SESSION_NAME_MAX_LENGTH = 48
@@ -712,15 +711,11 @@ export class PiWebRuntime {
       sanitizeSessionMessage(message)
     )
     const historyTotalCount = sanitizedMessages.length
-    const historyOffset = Math.max(
-      0,
-      historyTotalCount - SESSION_HISTORY_INITIAL_ITEM_LIMIT
-    )
 
     return {
       type: "state_sync",
       sessionKey: entry.key,
-      messages: sanitizedMessages.slice(historyOffset),
+      messages: sanitizedMessages,
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)
       ),
@@ -729,7 +724,7 @@ export class PiWebRuntime {
       streamingMessage: this.getEntryStreamingState(entry)
         ? sanitizeSessionMessage(entry.session.state.streamingMessage || {})
         : undefined,
-      historyOffset,
+      historyOffset: 0,
       historyTotalCount,
       contextUsage:
         entry.session.getContextUsage() as StateSyncPayload["contextUsage"],
@@ -1176,7 +1171,8 @@ export class PiWebRuntime {
 
   private async activateContextSession(
     context: ContextState,
-    entry: SessionEntry
+    entry: SessionEntry,
+    options?: { notify?: boolean }
   ) {
     await activateRuntimeContextSession({
       context,
@@ -1190,6 +1186,7 @@ export class PiWebRuntime {
         this.sendStateToContext(activeContext),
       sendSessionsToContext: async (activeContext) =>
         await this.sendSessionsToContext(activeContext),
+      notify: options?.notify,
     })
   }
 
@@ -1251,7 +1248,11 @@ export class PiWebRuntime {
     return draftEntry
   }
 
-  private async resolveRequestedEntry(url: URL, context: ContextState) {
+  private async resolveRequestedEntry(
+    url: URL,
+    context: ContextState,
+    options?: { notifyOnActivate?: boolean }
+  ) {
     return await resolveRuntimeRequestedEntry({
       url,
       context,
@@ -1261,12 +1262,20 @@ export class PiWebRuntime {
       getActiveEntry: (activeContext) => this.getActiveEntry(activeContext),
       getOrCreateDraftEntry: async (activeContext) =>
         await this.getOrCreateDraftEntry(activeContext),
-      activateContextSession: async (activeContext, entry) =>
-        await this.activateContextSession(activeContext, entry),
+      activateContextSession: async (activeContext, entry, activateOptions) =>
+        await this.activateContextSession(
+          activeContext,
+          entry,
+          activateOptions
+        ),
+      notifyOnActivate: options?.notifyOnActivate,
     })
   }
 
-  async resolveRequest(request: Request): Promise<ResolveRequestResult> {
+  async resolveRequest(
+    request: Request,
+    options?: { notifyOnActivate?: boolean }
+  ): Promise<ResolveRequestResult> {
     const url = new URL(request.url)
     const context = this.ensureContext(
       url.searchParams.get("context") || "default"
@@ -1275,7 +1284,9 @@ export class PiWebRuntime {
       url.searchParams.get("scope"),
       process.cwd()
     )
-    const activeEntry = await this.resolveRequestedEntry(url, context)
+    const activeEntry = await this.resolveRequestedEntry(url, context, {
+      notifyOnActivate: options?.notifyOnActivate ?? false,
+    })
     return { url, context, activeEntry }
   }
 
@@ -2474,7 +2485,6 @@ export class PiWebRuntime {
 
     context.draftKey = nextEntry.key
     await this.activateContextSession(context, nextEntry)
-    await this.broadcastSessionsAll()
     return { ok: true, draft: true }
   }
 
