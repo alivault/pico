@@ -87,7 +87,7 @@ export function AppShellCommandPalette({
         placeholder="Search commands"
         className="text-base md:text-sm"
       />
-      <CommandList className="max-h-none min-h-0 flex-1">
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
         <CommandEmpty>No commands found.</CommandEmpty>
         {commandGroups.map(([group, groupCommands]) => (
           <CommandGroup key={group} heading={group}>
