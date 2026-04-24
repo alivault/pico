@@ -396,6 +396,8 @@ export function AppSidebar({
         )
     const visibleSessions = sessions.slice(0, visibleCount)
     const hasMoreSessions = visibleCount < sessions.length
+    const isLoadingSessions = Boolean(directoryIndexLoading[directory])
+    const showLoadingState = isLoadingSessions && sessions.length === 0
 
     return (
       <SidebarGroup
@@ -439,6 +441,9 @@ export function AppSidebar({
             <span className="min-w-0 flex-1">
               <DirectoryPathLabel path={directory} />
             </span>
+            {isLoadingSessions && !showLoadingState ? (
+              <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />
+            ) : null}
           </button>
 
           <div className="flex shrink-0 items-center gap-1">
@@ -473,7 +478,7 @@ export function AppSidebar({
 
         {!collapsed ? (
           <SidebarGroupContent className="pt-1">
-            {directoryIndexLoading[directory] ? (
+            {showLoadingState ? (
               <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
                 <Spinner />
                 Loading sessions…
