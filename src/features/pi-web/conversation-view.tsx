@@ -5,11 +5,17 @@
 import * as React from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { CheckIcon, ChevronRightIcon, CopyIcon, WrenchIcon } from "lucide-react"
+import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 
 import type { ConversationItem, PromptImage } from "@/lib/pi-web"
 import type { HighlightResponse } from "@/lib/pi-web-api"
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -396,65 +402,94 @@ function toolReadLocation(
   return filePath
 }
 
+function collapseToolPreview(text: string) {
+  return text.replace(/\s+/g, " ").trim()
+}
+
 function toolSummary(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   if (block.type !== "tool") return ""
   const preview =
     block.name === "read" ? toolReadLocation(block) : toolCommandPreview(block)
-  if (preview) return preview
+  if (preview) return collapseToolPreview(preview)
   if (block.running) return "Running"
   if (block.isError) return "Failed"
   return "Done"
 }
 
-type ToolDiffLine = {
-  type: "add" | "remove" | "context"
-  lineNumber?: string
-  text: string
-}
+function formatToolArgString(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ""
 
-function parseToolDiffLine(line: string): ToolDiffLine | null {
-  if (!line) return null
-  const match = line.match(/^([+\- ])(\s*\d*)\s(.*)$/)
-  if (!match) {
-    return { type: "context", text: line }
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (parsed && typeof parsed === "object") {
+      return JSON.stringify(parsed, null, 2)
+    }
+  } catch {
+    // fall through to the raw string below
   }
 
-  return {
-    type: match[1] === "+" ? "add" : match[1] === "-" ? "remove" : "context",
-    lineNumber: match[2] || undefined,
-    text: match[3],
-  }
+  return trimmed
 }
 
-function toolDiffPreview(
+function toolCallText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
-  if (block.type !== "tool" || block.name !== "edit" || block.isError) return []
-  const diff =
-    block.details &&
+  if (block.type !== "tool") return ""
+
+  if (typeof block.args === "string") {
+    const text = formatToolArgString(block.args)
+    return block.name === "bash" && text ? `$ ${text}` : text
+  }
+
+  if (block.args == null) return ""
+
+  try {
+    return JSON.stringify(block.args, null, 2) || ""
+  } catch {
+    return ""
+  }
+}
+
+function toolDiffText(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool" || block.name !== "edit") return ""
+
+  return block.details &&
     typeof block.details === "object" &&
     "diff" in block.details &&
     typeof block.details.diff === "string"
-      ? block.details.diff
-      : ""
-
-  return diff
-    .split("\n")
-    .map(parseToolDiffLine)
-    .filter((line): line is ToolDiffLine => Boolean(line))
+    ? block.details.diff.trimEnd()
+    : ""
 }
 
-function hideSuccessfulToolOutput(
+function toolOutputText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
-  return (
-    block.type === "tool" &&
-    !block.isError &&
-    !block.running &&
-    ["edit", "bash", "grep", "find", "ls"].includes(block.name || "")
-  )
+  if (block.type !== "tool") return ""
+
+  const parts: Array<string> = []
+  const diff = toolDiffText(block)
+  const output = block.output.trimEnd()
+
+  if (diff) {
+    parts.push(diff)
+  }
+
+  if (output && (!diff || output !== diff)) {
+    parts.push(output)
+  }
+
+  if (parts.length > 0) {
+    return parts.join("\n\n")
+  }
+
+  if (block.running) return "Running…"
+  if (block.isError) return "Tool failed with no output."
+  return "No output available."
 }
 
 function compactionTriggerText(
@@ -466,36 +501,22 @@ function compactionTriggerText(
     : "Compaction"
 }
 
-const ToolDiffPreview = React.memo(function ToolDiffPreview({
-  lines,
+const ToolBlockSection = React.memo(function ToolBlockSection({
+  label,
+  text,
 }: {
-  lines: Array<ToolDiffLine>
+  label: string
+  text: string
 }) {
-  const counts = new Map<string, number>()
-
   return (
-    <pre className="overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5">
-      {lines.map((line) => {
-        const baseKey = `${line.type}:${line.lineNumber || ""}:${line.text}`
-        const count = (counts.get(baseKey) ?? 0) + 1
-        counts.set(baseKey, count)
-
-        return (
-          <div
-            key={`${baseKey}:${count}`}
-            className={cn(
-              "font-mono whitespace-pre-wrap",
-              line.type === "add" && "text-emerald-700 dark:text-emerald-400",
-              line.type === "remove" && "text-red-700 dark:text-red-400",
-              line.type === "context" && "text-muted-foreground"
-            )}
-          >
-            {line.lineNumber ? `${line.lineNumber} ` : ""}
-            {line.text}
-          </div>
-        )
-      })}
-    </pre>
+    <section className="space-y-1.5">
+      <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </div>
+      <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+        {text}
+      </pre>
+    </section>
   )
 })
 
@@ -506,65 +527,47 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
     type: "tool"
   }
 }) {
-  const diffLines = toolDiffPreview(block)
-  const output = hideSuccessfulToolOutput(block) ? "" : block.output
-  const hasContent = diffLines.length > 0 || Boolean(output)
+  const callText = toolCallText(block)
+  const outputText = toolOutputText(block)
 
   return (
-    <details
+    <Accordion
       className={cn(
-        "group rounded-xl border text-sm",
+        "rounded-xl border text-sm",
         block.running && "border-amber-500/30 bg-amber-500/5",
         block.isError && "border-destructive/30 bg-destructive/5",
         !block.running && !block.isError && "bg-muted/20"
       )}
     >
-      <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 px-3 py-2.5 select-none [&::-webkit-details-marker]:hidden">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-          <WrenchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium text-foreground">
+      <AccordionItem value="tool" className="border-0">
+        <AccordionTrigger className="min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 hover:no-underline">
+          <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+            <span className="truncate font-medium whitespace-nowrap text-foreground">
               {toolDisplayName(block.name)}
-            </div>
-            {toolSummary(block) ? (
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                {toolSummary(block)}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {block.running ? (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Spinner /> Running
+            </span>
+            <span className="truncate text-muted-foreground">
+              {toolSummary(block)}
+            </span>
           </span>
-        ) : block.isError ? (
-          <Badge variant="destructive">Error</Badge>
-        ) : (
-          <Badge variant="outline">Done</Badge>
-        )}
-      </summary>
+        </AccordionTrigger>
 
-      <div className="border-t px-3 py-3">
-        {diffLines.length > 0 ? (
-          <div className={cn(output && "mb-3")}>
-            <ToolDiffPreview lines={diffLines} />
+        <AccordionContent className="px-3 pb-3">
+          <div className="border-t pt-3">
+            <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
+              <div className="space-y-4">
+                {callText ? (
+                  <ToolBlockSection label="Call" text={callText} />
+                ) : null}
+                <ToolBlockSection
+                  label={block.running ? "Output (streaming)" : "Output"}
+                  text={outputText}
+                />
+              </div>
+            </div>
           </div>
-        ) : null}
-
-        {output ? (
-          <pre className="overflow-x-auto rounded-lg border bg-background/80 p-3 text-xs leading-5 whitespace-pre-wrap">
-            {output}
-          </pre>
-        ) : null}
-
-        {!hasContent ? (
-          <div className="text-xs text-muted-foreground">
-            No output available.
-          </div>
-        ) : null}
-      </div>
-    </details>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 })
 
