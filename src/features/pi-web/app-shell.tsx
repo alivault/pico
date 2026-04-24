@@ -1283,6 +1283,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [loadingSessionId, setLoadingSessionId] = React.useState<string | null>(
     null
   )
+  const [initialLoadingSessionId, setInitialLoadingSessionId] = React.useState<
+    string | null
+  >(() => sessionId || null)
   const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<{
     ownerKey: string
     message: string
@@ -1378,9 +1381,21 @@ const AppShellSessionWorkspace = React.forwardRef<
   const currentSessionQueryScope = sessionScrollKey(sessionState)
   const conversationItemsSnapshot = conversationItemsStore.getSnapshot()
   const displayedConversationItems = conversationItemsSnapshot.items
-  const isSessionViewLoading = Boolean(
+  const initialRouteLoadingSessionId =
+    initialLoadingSessionId && !sessionState.sessionKey
+      ? initialLoadingSessionId
+      : null
+  const activeLoadingSessionId =
     loadingSessionId && loadingSessionId !== sessionState.sessionId
-  )
+      ? loadingSessionId
+      : initialRouteLoadingSessionId &&
+          initialRouteLoadingSessionId !== sessionState.sessionId
+        ? initialRouteLoadingSessionId
+        : null
+  const isSessionViewLoading = Boolean(activeLoadingSessionId)
+  const loadingSessionSummary = activeLoadingSessionId
+    ? sidebarSessions.find((session) => session.id === activeLoadingSessionId)
+    : undefined
   const treeQueryResult = useQuery({
     ...sessionTreeQueryOptions({
       viewerContextId,
@@ -1402,13 +1417,26 @@ const AppShellSessionWorkspace = React.forwardRef<
       sessionState.sessionName || sessionState.firstMessage || "New session",
     name: sessionState.sessionName,
   })
+  const loadingSessionTitle = getSessionTitle(loadingSessionSummary)
+  const displaySessionTitle = isSessionViewLoading
+    ? loadingSessionTitle !== "New session"
+      ? loadingSessionTitle
+      : "Loading session…"
+    : currentSessionTitle
+  const displaySessionCwd = isSessionViewLoading
+    ? loadingSessionSummary?.cwd
+    : sessionState.cwd
+  const displaySessionModified = isSessionViewLoading
+    ? loadingSessionSummary?.modified
+    : sessionState.modified
   const activeSessionNotificationKey = sessionNotificationKey({
     sessionId: sessionState.sessionId,
     sessionFile: sessionState.sessionFile,
   })
-  const currentPageTitle =
-    sessionState.uiState.title?.trim() ||
-    (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
+  const currentPageTitle = isSessionViewLoading
+    ? displaySessionTitle
+    : sessionState.uiState.title?.trim() ||
+      (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
   const deleteOpen = deleteTargets.length > 0
   const treeData = treeQueryResult.data ?? null
   const treeLoading = Boolean(
@@ -1426,6 +1454,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     if (previousSessionId === sessionId) return
 
     setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+
+    if (!sessionId) {
+      setInitialLoadingSessionId(null)
+      setLoadingSessionId(null)
+      return
+    }
+
+    if (sessionStateRef.current.sessionId !== sessionId) {
+      setLoadingSessionId(sessionId)
+    }
   }, [sessionId])
 
   React.useEffect(() => {
@@ -1701,6 +1739,16 @@ const AppShellSessionWorkspace = React.forwardRef<
       setLoadingSessionId(null)
     }
   }, [loadingSessionId, sessionState.sessionId])
+
+  React.useEffect(() => {
+    if (!initialLoadingSessionId) return
+    if (
+      sessionState.sessionKey ||
+      sessionState.sessionId === initialLoadingSessionId
+    ) {
+      setInitialLoadingSessionId(null)
+    }
+  }, [initialLoadingSessionId, sessionState.sessionId, sessionState.sessionKey])
 
   React.useEffect(() => {
     const nextDirectory = sessionState.cwd?.trim()
@@ -2527,23 +2575,31 @@ const AppShellSessionWorkspace = React.forwardRef<
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <h2 className="text-[15px] leading-tight font-semibold">
-                    {currentSessionTitle}
+                    {displaySessionTitle}
                   </h2>
-                  {sessionState.draft && <Badge variant="outline">Draft</Badge>}
-                  {sessionState.streaming && (
-                    <Badge variant="outline">Streaming</Badge>
+                  {isSessionViewLoading ? (
+                    <Badge variant="outline">Loading</Badge>
+                  ) : (
+                    <>
+                      {sessionState.draft && (
+                        <Badge variant="outline">Draft</Badge>
+                      )}
+                      {sessionState.streaming && (
+                        <Badge variant="outline">Streaming</Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  {sessionState.cwd && (
-                    <span>{formatDisplayPath(sessionState.cwd)}</span>
+                  {displaySessionCwd && (
+                    <span>{formatDisplayPath(displaySessionCwd)}</span>
                   )}
                   <HeaderGitStatusText
                     viewerContextId={viewerContextId}
-                    cwd={sessionState.cwd}
+                    cwd={displaySessionCwd}
                   />
-                  {sessionState.modified && (
-                    <span>• {relativeTime(sessionState.modified)}</span>
+                  {displaySessionModified && (
+                    <span>• {relativeTime(displaySessionModified)}</span>
                   )}
                 </div>
               </div>
