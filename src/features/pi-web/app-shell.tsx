@@ -1263,6 +1263,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     createInitialSessionState()
   )
   const [currentTab, setCurrentTab] = React.useState("session")
+  const previousRouteSessionIdRef = React.useRef(sessionId)
   const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
     text: string
     skillName?: string
@@ -1417,6 +1418,15 @@ const AppShellSessionWorkspace = React.forwardRef<
   const forkLoading = Boolean(
     forkMessagesQuery.isPending && !forkMessagesQuery.data
   )
+
+  React.useEffect(() => {
+    const previousSessionId = previousRouteSessionIdRef.current
+    previousRouteSessionIdRef.current = sessionId
+
+    if (previousSessionId === sessionId) return
+
+    setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+  }, [sessionId])
 
   React.useEffect(() => {
     sessionStateRef.current = sessionState
@@ -1641,6 +1651,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string) => {
+      if (nextSessionId !== sessionId) {
+        setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+      }
+
       pendingRouteSessionIdRef.current = nextSessionId
       setLoadingSessionId((current) => {
         if (!nextSessionId) {
@@ -1656,7 +1670,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       })
       onSelectSession?.(nextSessionId)
     },
-    [onSelectSession, sessionStateRef]
+    [onSelectSession, sessionId, sessionStateRef]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
