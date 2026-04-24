@@ -434,14 +434,6 @@ function appendAssistantItem(
   items: Array<ConversationItem>,
   item: AssistantItem
 ): AssistantItem {
-  const lastItem = items.at(-1)
-
-  if (lastItem?.kind === "assistant") {
-    lastItem.blocks.push(...item.blocks)
-    lastItem.streaming = Boolean(lastItem.streaming || item.streaming)
-    return lastItem
-  }
-
   items.push(item)
   return item
 }

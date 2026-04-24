@@ -745,9 +745,5 @@ export const AssistantMessageCard = React.memo(function AssistantMessageCard({
     return null
   }
 
-  return (
-    <div className="w-full rounded-2xl border bg-card px-4 py-4">
-      <div className="flex flex-col gap-4">{renderedBlocks}</div>
-    </div>
-  )
+  return <div className="flex flex-col gap-4">{renderedBlocks}</div>
 })

@@ -443,6 +443,84 @@ function isPendingConversationItem(item: ConversationItem) {
   )
 }
 
+type UserConversationItem = Extract<ConversationItem, { kind: "user" }>
+type AssistantConversationItem = Extract<
+  ConversationItem,
+  { kind: "assistant" }
+>
+
+type RenderConversationGroup =
+  | {
+      kind: "user"
+      key: string
+      item: UserConversationItem
+    }
+  | {
+      kind: "assistant"
+      key: string
+      items: Array<AssistantConversationItem>
+    }
+
+function groupConversationItemsForRender(options: {
+  items: Array<ConversationItem>
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  const groups: Array<RenderConversationGroup> = []
+  let pendingAssistantGroup: RenderConversationGroup | null = null
+
+  const flushAssistantGroup = () => {
+    if (!pendingAssistantGroup || pendingAssistantGroup.kind !== "assistant") {
+      pendingAssistantGroup = null
+      return
+    }
+
+    if (
+      pendingAssistantGroup.items.some((item) =>
+        assistantMessageHasVisibleBlocks({
+          item,
+          hideThinking: options.hideThinking,
+          hideToolBlocks: options.hideToolBlocks,
+        })
+      )
+    ) {
+      groups.push(pendingAssistantGroup)
+    }
+
+    pendingAssistantGroup = null
+  }
+
+  options.items.forEach((item, index) => {
+    const key = item.itemKey || `message-row:${index}`
+
+    if (item.kind === "assistant") {
+      if (
+        !pendingAssistantGroup ||
+        pendingAssistantGroup.kind !== "assistant"
+      ) {
+        pendingAssistantGroup = {
+          kind: "assistant",
+          key,
+          items: [],
+        }
+      }
+
+      pendingAssistantGroup.items.push(item)
+      return
+    }
+
+    flushAssistantGroup()
+    groups.push({
+      kind: "user",
+      key,
+      item,
+    })
+  })
+
+  flushAssistantGroup()
+  return groups
+}
+
 type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
@@ -2093,6 +2171,15 @@ const AppShellSessionWorkspace = React.forwardRef<
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
     : "w-full"
+  const renderedConversationGroups = React.useMemo(
+    () =>
+      groupConversationItemsForRender({
+        items: displayedConversationItems,
+        hideThinking: sessionState.hideThinkingBlock,
+        hideToolBlocks,
+      }),
+    [displayedConversationItems, hideToolBlocks, sessionState.hideThinkingBlock]
+  )
 
   const commandPaletteCommands = (() => {
     const commands: Array<AppCommand> = [
@@ -2571,44 +2658,42 @@ const AppShellSessionWorkspace = React.forwardRef<
                   <Spinner />
                   <div>{conversationLoadingLabel}</div>
                 </div>
-              ) : displayedConversationItems.length > 0 ? (
+              ) : renderedConversationGroups.length > 0 ? (
                 <div className="flex flex-col gap-4">
-                  {displayedConversationItems.map((item, index) => {
-                    const key = item.itemKey || `message-row:${index}`
-
-                    if (item.kind === "user") {
+                  {renderedConversationGroups.map((group) => {
+                    if (group.kind === "user") {
                       return (
                         <div
-                          key={key}
+                          key={group.key}
                           data-message-anchor="true"
                           className={conversationMessageColumnClassName}
                         >
-                          <UserMessageCard item={item} />
+                          <UserMessageCard item={group.item} />
                         </div>
                       )
                     }
 
-                    if (
-                      !assistantMessageHasVisibleBlocks({
-                        item,
-                        hideThinking: sessionState.hideThinkingBlock,
-                        hideToolBlocks,
-                      })
-                    ) {
-                      return null
-                    }
-
                     return (
                       <div
-                        key={key}
+                        key={group.key}
                         data-message-anchor="true"
                         className={conversationMessageColumnClassName}
                       >
-                        <AssistantMessageCard
-                          item={item}
-                          hideThinking={sessionState.hideThinkingBlock}
-                          hideToolBlocks={hideToolBlocks}
-                        />
+                        <div className="flex flex-col gap-4">
+                          {group.items.map((item, index) => {
+                            const itemKey =
+                              item.itemKey || `${group.key}:assistant:${index}`
+
+                            return (
+                              <AssistantMessageCard
+                                key={itemKey}
+                                item={item}
+                                hideThinking={sessionState.hideThinkingBlock}
+                                hideToolBlocks={hideToolBlocks}
+                              />
+                            )
+                          })}
+                        </div>
                       </div>
                     )
                   })}
