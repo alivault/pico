@@ -1651,9 +1651,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string) => {
-      if (nextSessionId !== sessionId) {
-        setCurrentTab((tab) => (tab === "git" ? "session" : tab))
-      }
+      setCurrentTab((tab) => (tab === "git" ? "session" : tab))
 
       pendingRouteSessionIdRef.current = nextSessionId
       setLoadingSessionId((current) => {
@@ -1670,7 +1668,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       })
       onSelectSession?.(nextSessionId)
     },
-    [onSelectSession, sessionId, sessionStateRef]
+    [onSelectSession, sessionStateRef]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
