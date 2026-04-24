@@ -22,19 +22,20 @@ Important parity/reference note:
 - Vite+ + Nitro
 - Tailwind CSS v4
 - Base UI / shadcn-style component patterns
-- Pi SDK loaded from the local machine, not from this repo
+- Pi SDK loaded from the repo-local `@mariozechner/pi-coding-agent` dependency by default
 
-## External dependency: local Pi SDK
+## Pi SDK dependency
 
-This app depends on an installed Pi SDK outside the repo.
+This app is intended to be self-contained and uses the repo-local `@mariozechner/pi-coding-agent` dependency by default.
 
 Resolution happens in `src/server/pi-sdk-path.ts` and tries, in order:
 
-1. `PI_REMOTE_PI_SDK_DIR`
-2. the resolved `pi` binary from `PATH` / `PI_REAL_PI_BIN`
-3. the newest compatible install under `~/.vite-plus/js_runtime/node/...`
+1. `PI_REMOTE_PI_SDK_DIR` for explicit SDK override/testing
+2. the bundled `@mariozechner/pi-coding-agent` dependency from `node_modules`
 
-If the app fails with a Pi SDK resolution error, do **not** assume the repo is broken first; check the local SDK environment.
+Use `pnpm update:pi` to refresh the bundled SDK to the current npm `latest` release.
+
+If the app fails with a Pi SDK resolution error, check that dependencies are installed before checking the local/global Pi environment.
 
 ## Quick commands
 

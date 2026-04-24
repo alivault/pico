@@ -11,7 +11,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Vite+ + Nitro
 - Tailwind CSS v4
 - shadcn-style UI components built on Base UI
-- Native Pi SDK-backed runtime loaded from the local SDK install
+- Native Pi SDK-backed runtime loaded from the bundled `@mariozechner/pi-coding-agent` dependency
 - Server-sent events for live session sync
 
 ## Current feature snapshot
@@ -133,6 +133,14 @@ pnpm install
 
 ```bash
 pnpm dev
+```
+
+The server prefers the repo-local `@mariozechner/pi-coding-agent` dependency, so a separate global `pi` install is not required. Set `PI_REMOTE_PI_SDK_DIR` only when you intentionally want to test against a different SDK checkout/install.
+
+To refresh the bundled Pi SDK to the current npm `latest` release:
+
+```bash
+pnpm update:pi
 ```
 
 Default dev port from `vite.config.ts`:

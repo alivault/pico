@@ -1,81 +1,86 @@
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-function resolveFromPathEnvironment() {
-  const explicitPiBin = process.env.PI_REAL_PI_BIN
-  if (explicitPiBin) {
-    return path.dirname(path.dirname(fs.realpathSync(explicitPiBin)))
-  }
+const PI_CODING_AGENT_PACKAGE = "@mariozechner/pi-coding-agent"
 
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue
-
-    const candidate = path.join(dir, "pi")
-    if (!fs.existsSync(candidate)) continue
-
-    try {
-      const resolved = fs.realpathSync(candidate)
-      if (
-        resolved.endsWith(
-          path.join("@mariozechner", "pi-coding-agent", "dist", "cli.js")
-        )
-      ) {
-        return path.dirname(path.dirname(resolved))
-      }
-    } catch {
-      // ignore and keep scanning
-    }
-  }
-
-  return undefined
-}
-
-function resolveFromJsRuntime(homeDir: string) {
-  const jsRuntimeRoot = path.join(homeDir, ".vite-plus", "js_runtime", "node")
-  const versions = fs.readdirSync(jsRuntimeRoot).sort((left, right) =>
-    left.localeCompare(right, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    })
-  )
-
-  for (const version of versions.reverse()) {
-    const sdkDir = path.join(
-      jsRuntimeRoot,
-      version,
-      "lib",
-      "node_modules",
-      "@mariozechner",
-      "pi-coding-agent"
-    )
-    if (fs.existsSync(path.join(sdkDir, "dist", "index.js"))) {
-      return sdkDir
-    }
-  }
-
-  return undefined
-}
-
-export function tryResolvePiSdkDir() {
-  if (process.env.PI_REMOTE_PI_SDK_DIR) {
-    return process.env.PI_REMOTE_PI_SDK_DIR
-  }
-
-  const fromPathEnvironment = resolveFromPathEnvironment()
-  if (fromPathEnvironment) {
-    return fromPathEnvironment
-  }
-
-  const homeDir = process.env.HOME ?? process.env.USERPROFILE
-  if (!homeDir) {
-    return undefined
-  }
+function normalizeSdkDir(candidate: string | undefined) {
+  if (!candidate) return undefined
 
   try {
-    return resolveFromJsRuntime(homeDir)
+    const sdkDir = candidate.startsWith("file:")
+      ? fileURLToPath(candidate)
+      : candidate
+    return fs.existsSync(path.join(sdkDir, "dist", "index.js"))
+      ? sdkDir
+      : undefined
   } catch {
     return undefined
   }
+}
+
+function findNodeModulePackageDir(startDir: string | undefined) {
+  if (!startDir) return undefined
+
+  let current = path.resolve(startDir)
+  while (true) {
+    const candidate = normalizeSdkDir(
+      path.join(current, "node_modules", "@mariozechner", "pi-coding-agent")
+    )
+    if (candidate) return candidate
+
+    const parent = path.dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+function resolveFromBundledDependency() {
+  try {
+    const entryUrl = (
+      import.meta as ImportMeta & {
+        resolve?: (specifier: string) => string
+      }
+    ).resolve?.(PI_CODING_AGENT_PACKAGE)
+    if (entryUrl) {
+      const entry = entryUrl.startsWith("file:")
+        ? fileURLToPath(entryUrl)
+        : entryUrl
+      const sdkDir = normalizeSdkDir(path.dirname(path.dirname(entry)))
+      if (sdkDir) return sdkDir
+    }
+  } catch {
+    // Fall back to walking node_modules below. Some runners do not expose
+    // import.meta.resolve even though Node can run the resolved dependency.
+  }
+
+  const sourceDir = (() => {
+    try {
+      return path.dirname(fileURLToPath(import.meta.url))
+    } catch {
+      return undefined
+    }
+  })()
+
+  return (
+    findNodeModulePackageDir(sourceDir) ??
+    findNodeModulePackageDir(process.cwd()) ??
+    findNodeModulePackageDir(process.env.INIT_CWD)
+  )
+}
+
+export function tryResolvePiSdkDir() {
+  const explicitSdkDir = normalizeSdkDir(process.env.PI_REMOTE_PI_SDK_DIR)
+  if (explicitSdkDir) {
+    return explicitSdkDir
+  }
+
+  const fromBundledDependency = resolveFromBundledDependency()
+  if (fromBundledDependency) {
+    return fromBundledDependency
+  }
+
+  return undefined
 }
 
 export function resolvePiSdkDir() {
@@ -85,6 +90,6 @@ export function resolvePiSdkDir() {
   }
 
   throw new Error(
-    "Could not locate the installed pi SDK package. Set PI_REMOTE_PI_SDK_DIR."
+    "Could not locate the Pi SDK package. Run pnpm install or set PI_REMOTE_PI_SDK_DIR."
   )
 }

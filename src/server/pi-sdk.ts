@@ -1,3 +1,4 @@
+import fs from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { isMainThread } from "node:worker_threads"
@@ -110,16 +111,45 @@ export async function loadPiSdk(): Promise<PiSdkLike> {
   return patchSdkForWorkerThreads(sdk)
 }
 
+function resolvePiAiEntry(sdkDir: string) {
+  const candidates = [
+    path.join(
+      sdkDir,
+      "node_modules",
+      "@mariozechner",
+      "pi-ai",
+      "dist",
+      "index.js"
+    ),
+  ]
+
+  try {
+    const realSdkDir = fs.realpathSync(sdkDir)
+    candidates.push(
+      path.join(
+        realSdkDir,
+        "node_modules",
+        "@mariozechner",
+        "pi-ai",
+        "dist",
+        "index.js"
+      ),
+      path.join(path.dirname(realSdkDir), "pi-ai", "dist", "index.js")
+    )
+  } catch {
+    // Fall back to the direct nested dependency path above.
+  }
+
+  candidates.push(path.join(path.dirname(sdkDir), "pi-ai", "dist", "index.js"))
+
+  return (
+    candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+  )
+}
+
 export async function loadPiAi(): Promise<PiAiModuleLike> {
   const sdkDir = resolvePiSdkDir()
-  const entry = path.join(
-    sdkDir,
-    "node_modules",
-    "@mariozechner",
-    "pi-ai",
-    "dist",
-    "index.js"
-  )
+  const entry = resolvePiAiEntry(sdkDir)
   return await importExternalModule<PiAiModuleLike>(entry)
 }
 
