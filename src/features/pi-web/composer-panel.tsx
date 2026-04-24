@@ -85,6 +85,29 @@ type ComposerPanelProps = {
   ) => Promise<Array<CompletionItem>>
 }
 
+type ComposerPromptEditorProps = {
+  composerImages: Array<PromptImage>
+  composerText: string
+  composerSkill?: string
+  composerSyncNonce: number
+  isSubmitting: boolean
+  isStreaming: boolean
+  awaitingFirstTurn: boolean
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  promptRef: React.RefObject<HTMLTextAreaElement | null>
+  slashCommands: Array<SlashCommandDescriptor>
+  onComposerTextChange: (value: string) => void
+  onRemoveComposerImage: (index: number) => void
+  onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
+  onAbort: () => void
+  onRunBuiltinSlashCommand: (name: string, args: string) => void
+  requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
+  requestFileCompletions: (
+    query: string,
+    isQuotedPrefix: boolean
+  ) => Promise<Array<CompletionItem>>
+}
+
 function selectionIsAtStart(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return false
   const start = textarea.selectionStart
@@ -128,16 +151,125 @@ export const ComposerPanel = React.forwardRef<
   ref
 ) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const [draftText, setDraftText] = React.useState(composerText)
-  const [draftSkill, setDraftSkill] = React.useState(composerSkill)
-  const [selection, setSelection] = React.useState({
-    start: composerText.length,
-    end: composerText.length,
-  })
-  const draftSyncTimeoutRef = React.useRef<number | null>(null)
   const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
   const [thinkingPickerOpen, setThinkingPickerOpen] = React.useState(false)
   const [modelQuery, setModelQuery] = React.useState("")
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      focusPrompt: (options) => {
+        promptRef.current?.focus(options)
+      },
+      openModelPicker: () => {
+        setThinkingPickerOpen(false)
+        setModelPickerOpen(true)
+      },
+      openThinkingPicker: () => {
+        setModelPickerOpen(false)
+        setThinkingPickerOpen(true)
+      },
+    }),
+    []
+  )
+
+  React.useEffect(() => {
+    if (!modelPickerOpen) {
+      setModelQuery("")
+    }
+  }, [modelPickerOpen])
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <ComposerPendingMessages
+        currentPendingMessages={currentPendingMessages}
+        onRemovePendingMessage={onRemovePendingMessage}
+        onReorderPending={onReorderPending}
+      />
+
+      <div className="overflow-visible rounded-[18px] border bg-card">
+        <ComposerPromptEditor
+          composerImages={composerImages}
+          composerText={composerText}
+          composerSkill={composerSkill}
+          composerSyncNonce={composerSyncNonce}
+          isSubmitting={isSubmitting}
+          isStreaming={isStreaming}
+          awaitingFirstTurn={awaitingFirstTurn}
+          fileInputRef={fileInputRef}
+          promptRef={promptRef}
+          slashCommands={slashCommands}
+          onComposerTextChange={onComposerTextChange}
+          onRemoveComposerImage={onRemoveComposerImage}
+          onSubmitPrompt={onSubmitPrompt}
+          onAbort={onAbort}
+          onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
+          requestPathCompletions={requestPathCompletions}
+          requestFileCompletions={requestFileCompletions}
+        />
+
+        <ComposerPickers
+          modelPickerOpen={modelPickerOpen}
+          onModelPickerOpenChange={setModelPickerOpen}
+          thinkingPickerOpen={thinkingPickerOpen}
+          onThinkingPickerOpenChange={setThinkingPickerOpen}
+          modelQuery={modelQuery}
+          onModelQueryChange={setModelQuery}
+          availableModels={availableModels}
+          model={model}
+          thinkingLevel={thinkingLevel}
+          availableThinkingLevels={availableThinkingLevels}
+          contextUsage={contextUsage}
+          onSelectModel={onSelectModel}
+          onSelectThinkingLevel={onSelectThinkingLevel}
+        />
+      </div>
+
+      <input
+        ref={fileInputRef}
+        name="images"
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(event) => onPickImages(event.target.files)}
+      />
+    </div>
+  )
+})
+
+function ComposerPromptEditor({
+  composerImages,
+  composerText,
+  composerSkill,
+  composerSyncNonce,
+  isSubmitting,
+  isStreaming,
+  awaitingFirstTurn,
+  fileInputRef,
+  promptRef,
+  slashCommands,
+  onComposerTextChange,
+  onRemoveComposerImage,
+  onSubmitPrompt,
+  onAbort,
+  onRunBuiltinSlashCommand,
+  requestPathCompletions,
+  requestFileCompletions,
+}: ComposerPromptEditorProps) {
+  const draftTextRef = React.useRef(composerText)
+  const draftSkillRef = React.useRef<string | undefined>(composerSkill)
+  const selectionRef = React.useRef({
+    start: composerText.length,
+    end: composerText.length,
+  })
+  const hasDraftTextRef = React.useRef(composerText.trim().length > 0)
+  const [draftSkill, setDraftSkill] = React.useState(composerSkill)
+  const [hasDraftText, setHasDraftText] = React.useState(
+    hasDraftTextRef.current
+  )
+  const draftSyncTimeoutRef = React.useRef<number | null>(null)
+  const refreshAssistStateRef = React.useRef<() => void>(() => {})
 
   const syncDraftToParent = (text: string, skillName?: string) => {
     onComposerTextChange(serializeComposerDraft({ text, skillName }))
@@ -159,10 +291,33 @@ export const ComposerPanel = React.forwardRef<
     skillName?: string,
     options?: {
       immediate?: boolean
+      selection?: {
+        start: number
+        end: number
+      }
     }
   ) => {
-    setDraftText(text)
-    setDraftSkill(skillName)
+    const previousSkillName = draftSkillRef.current
+    const nextHasDraftText = text.trim().length > 0
+
+    draftTextRef.current = text
+    draftSkillRef.current = skillName
+    if (options?.selection) {
+      selectionRef.current = options.selection
+    }
+
+    if (previousSkillName !== skillName) {
+      setDraftSkill(skillName)
+    }
+    if (hasDraftTextRef.current !== nextHasDraftText) {
+      hasDraftTextRef.current = nextHasDraftText
+      setHasDraftText(nextHasDraftText)
+    }
+    if (promptRef.current && promptRef.current.value !== text) {
+      promptRef.current.value = text
+    }
+
+    refreshAssistStateRef.current()
 
     if (options?.immediate) {
       if (draftSyncTimeoutRef.current != null) {
@@ -190,24 +345,40 @@ export const ComposerPanel = React.forwardRef<
     selectSlashIndex,
     moveSlashSelection,
     dismissMenus,
+    refreshAssistState,
   } = useComposerAssist({
-    draftText,
-    draftSkill,
-    selection,
+    draftTextRef,
+    draftSkillRef,
+    selectionRef,
     promptRef,
     slashCommands,
     requestPathCompletions,
     requestFileCompletions,
     applyDraft,
-    setSelection,
   })
 
   React.useEffect(() => {
-    setDraftText(composerText)
+    refreshAssistStateRef.current = refreshAssistState
+  }, [refreshAssistState])
+
+  React.useEffect(() => {
+    const nextHasDraftText = composerText.trim().length > 0
+
+    draftTextRef.current = composerText
+    draftSkillRef.current = composerSkill
+    selectionRef.current = {
+      start: composerText.length,
+      end: composerText.length,
+    }
+    hasDraftTextRef.current = nextHasDraftText
     setDraftSkill(composerSkill)
-    setSelection({ start: composerText.length, end: composerText.length })
+    setHasDraftText(nextHasDraftText)
+    if (promptRef.current && promptRef.current.value !== composerText) {
+      promptRef.current.value = composerText
+    }
     dismissMenus()
-  }, [composerSkill, composerSyncNonce, composerText, dismissMenus])
+    refreshAssistStateRef.current()
+  }, [composerSkill, composerSyncNonce, composerText, dismissMenus, promptRef])
 
   React.useEffect(() => {
     return () => {
@@ -217,35 +388,12 @@ export const ComposerPanel = React.forwardRef<
     }
   }, [])
 
-  React.useImperativeHandle(
-    ref,
-    () => ({
-      focusPrompt: (options) => {
-        promptRef.current?.focus(options)
-      },
-      openModelPicker: () => {
-        setThinkingPickerOpen(false)
-        setModelPickerOpen(true)
-      },
-      openThinkingPicker: () => {
-        setModelPickerOpen(false)
-        setThinkingPickerOpen(true)
-      },
-    }),
-    []
-  )
-
-  React.useEffect(() => {
-    if (!modelPickerOpen) {
-      setModelQuery("")
-    }
-  }, [modelPickerOpen])
-
-  const hasSubmittableContent =
-    draftText.trim().length > 0 || composerImages.length > 0
+  const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
+    const draftText = draftTextRef.current
+    const draftSkill = draftSkillRef.current
     const exact = findExactSlashCommand(draftText, slashCommands)
     if (exact) {
       if (exact.command.kind === "builtin") {
@@ -274,22 +422,30 @@ export const ComposerPanel = React.forwardRef<
 
   const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const parsed = parseComposerSkillMessage(event.target.value)
-    applyDraft(
-      parsed.matched ? parsed.text : event.target.value,
-      parsed.matched ? parsed.skillName : undefined
-    )
-    setSelection({
-      start: event.target.selectionStart,
-      end: event.target.selectionEnd,
+    const nextText = parsed.matched ? parsed.text : event.target.value
+    const nextSelection = parsed.matched
+      ? {
+          start: nextText.length,
+          end: nextText.length,
+        }
+      : {
+          start: event.target.selectionStart,
+          end: event.target.selectionEnd,
+        }
+
+    applyDraft(nextText, parsed.matched ? parsed.skillName : undefined, {
+      selection: nextSelection,
     })
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const draftText = draftTextRef.current
+    const currentDraftSkill = draftSkillRef.current
     const ctrlShortcut = event.ctrlKey && !event.metaKey
     const cmdSendShortcut =
       event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
 
-    if (event.key === "Backspace" && !draftText && draftSkill) {
+    if (event.key === "Backspace" && !draftText && currentDraftSkill) {
       applyDraft("", undefined, { immediate: true })
       return
     }
@@ -376,7 +532,7 @@ export const ComposerPanel = React.forwardRef<
       !visibleCompletion &&
       !slashMenuState &&
       !draftText &&
-      draftSkill &&
+      currentDraftSkill &&
       selectionIsAtStart(promptRef.current)
     ) {
       applyDraft("", undefined, { immediate: true })
@@ -384,183 +540,147 @@ export const ComposerPanel = React.forwardRef<
   }
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <ComposerPendingMessages
-        currentPendingMessages={currentPendingMessages}
-        onRemovePendingMessage={onRemovePendingMessage}
-        onReorderPending={onReorderPending}
-      />
+    <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
+      <div
+        className={`relative grid min-w-0 items-end gap-2 ${
+          isStreaming
+            ? "grid-cols-[auto_minmax(0,1fr)]"
+            : "grid-cols-[auto_minmax(0,1fr)_auto]"
+        }`}
+      >
+        <ComposerAssistMenu
+          visibleCompletion={visibleCompletion}
+          slashMenuState={slashMenuState}
+          slashSelectionIndex={slashSelectionIndex}
+          onHoverCompletion={selectCompletionIndex}
+          onApplyCompletion={applyCompletion}
+          onHoverSlashCommand={selectSlashIndex}
+          onApplySlashSuggestion={applySlashSuggestion}
+        />
 
-      <div className="overflow-visible rounded-[18px] border bg-card">
-        <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
-          <div
-            className={`relative grid min-w-0 items-end gap-2 ${
-              isStreaming
-                ? "grid-cols-[auto_minmax(0,1fr)]"
-                : "grid-cols-[auto_minmax(0,1fr)_auto]"
-            }`}
-          >
-            <ComposerAssistMenu
-              visibleCompletion={visibleCompletion}
-              slashMenuState={slashMenuState}
-              slashSelectionIndex={slashSelectionIndex}
-              onHoverCompletion={selectCompletionIndex}
-              onApplyCompletion={applyCompletion}
-              onHoverSlashCommand={selectSlashIndex}
-              onApplySlashSuggestion={applySlashSuggestion}
-            />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Add images"
+          aria-label="Add images"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImagePlusIcon />
+        </Button>
 
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Add images"
-              aria-label="Add images"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlusIcon />
-            </Button>
-
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
-                {draftSkill ? (
-                  <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
-                    <span className="truncate">
-                      Skill: {formatComposerSkillName(draftSkill)}
-                    </span>
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      className="ml-1 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-                      aria-label={`Remove skill ${formatComposerSkillName(draftSkill)}`}
-                      onClick={() =>
-                        applyDraft(draftText, undefined, { immediate: true })
-                      }
-                    >
-                      <XIcon className="size-3.5" />
-                    </Button>
-                  </span>
-                ) : null}
-
-                <Textarea
-                  ref={promptRef}
-                  name="prompt"
-                  rows={1}
-                  value={draftText}
-                  onChange={handleTextChange}
-                  onClick={syncSelection}
-                  onKeyUp={syncSelection}
-                  onSelect={syncSelection}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    acceptFollowUps
-                      ? "Write a steer or follow-up message…"
-                      : draftSkill
-                        ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                        : "Ask anything…"
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            {draftSkill ? (
+              <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
+                <span className="truncate">
+                  Skill: {formatComposerSkillName(draftSkill)}
+                </span>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  className="ml-1 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
+                  aria-label={`Remove skill ${formatComposerSkillName(draftSkill)}`}
+                  onClick={() =>
+                    applyDraft(draftTextRef.current, undefined, {
+                      immediate: true,
+                    })
                   }
-                  className="min-h-[22px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
-                />
-              </div>
-            </div>
-
-            {!isStreaming ? (
-              <Button
-                size="icon-sm"
-                disabled={
-                  isSubmitting ||
-                  (!hasSubmittableContent && !isStreaming && !slashMenuState)
-                }
-                title="Send"
-                aria-label="Send"
-                onClick={() => {
-                  runPrimaryComposerAction(
-                    acceptFollowUps ? "steer" : undefined
-                  )
-                }}
-              >
-                {isSubmitting ? (
-                  <LoaderCircleIcon className="animate-spin" />
-                ) : (
-                  <ArrowUpIcon />
-                )}
-              </Button>
-            ) : null}
-          </div>
-
-          {composerImages.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-3">
-              {composerImages.map((image, index) => (
-                <div key={promptImageKey(image)} className="relative">
-                  <img
-                    src={image.previewUrl}
-                    alt="Attachment preview"
-                    className="h-20 w-20 rounded-lg border object-cover"
-                  />
-                  <button
-                    type="button"
-                    className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm"
-                    onClick={() => onRemoveComposerImage(index)}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {acceptFollowUps ? (
-            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isSubmitting || !hasSubmittableContent}
-                onClick={() => onSubmitPrompt("followUp")}
-              >
-                Queue
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isSubmitting || !hasSubmittableContent}
-                onClick={() => onSubmitPrompt("steer")}
-              >
-                Steer
-              </Button>
-              {isStreaming ? (
-                <Button variant="outline" size="sm" onClick={onAbort}>
-                  Abort
+                >
+                  <XIcon className="size-3.5" />
                 </Button>
-              ) : null}
-            </div>
-          ) : null}
+              </span>
+            ) : null}
+
+            <Textarea
+              ref={promptRef}
+              name="prompt"
+              rows={1}
+              defaultValue={composerText}
+              onChange={handleTextChange}
+              onClick={syncSelection}
+              onKeyUp={syncSelection}
+              onSelect={syncSelection}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                acceptFollowUps
+                  ? "Write a steer or follow-up message…"
+                  : draftSkill
+                    ? `Ask with ${formatComposerSkillName(draftSkill)}…`
+                    : "Ask anything…"
+              }
+              className="min-h-[22px] flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
+            />
+          </div>
         </div>
 
-        <ComposerPickers
-          modelPickerOpen={modelPickerOpen}
-          onModelPickerOpenChange={setModelPickerOpen}
-          thinkingPickerOpen={thinkingPickerOpen}
-          onThinkingPickerOpenChange={setThinkingPickerOpen}
-          modelQuery={modelQuery}
-          onModelQueryChange={setModelQuery}
-          availableModels={availableModels}
-          model={model}
-          thinkingLevel={thinkingLevel}
-          availableThinkingLevels={availableThinkingLevels}
-          contextUsage={contextUsage}
-          onSelectModel={onSelectModel}
-          onSelectThinkingLevel={onSelectThinkingLevel}
-        />
+        {!isStreaming ? (
+          <Button
+            size="icon-sm"
+            disabled={
+              isSubmitting ||
+              (!hasSubmittableContent && !isStreaming && !slashMenuState)
+            }
+            title="Send"
+            aria-label="Send"
+            onClick={() => {
+              runPrimaryComposerAction(acceptFollowUps ? "steer" : undefined)
+            }}
+          >
+            {isSubmitting ? (
+              <LoaderCircleIcon className="animate-spin" />
+            ) : (
+              <ArrowUpIcon />
+            )}
+          </Button>
+        ) : null}
       </div>
 
-      <input
-        ref={fileInputRef}
-        name="images"
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(event) => onPickImages(event.target.files)}
-      />
+      {composerImages.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-3">
+          {composerImages.map((image, index) => (
+            <div key={promptImageKey(image)} className="relative">
+              <img
+                src={image.previewUrl}
+                alt="Attachment preview"
+                className="h-20 w-20 rounded-lg border object-cover"
+              />
+              <button
+                type="button"
+                className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm"
+                onClick={() => onRemoveComposerImage(index)}
+              >
+                <XIcon className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {acceptFollowUps ? (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isSubmitting || !hasSubmittableContent}
+            onClick={() => runPrimaryComposerAction("followUp")}
+          >
+            Queue
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isSubmitting || !hasSubmittableContent}
+            onClick={() => runPrimaryComposerAction("steer")}
+          >
+            Steer
+          </Button>
+          {isStreaming ? (
+            <Button variant="outline" size="sm" onClick={onAbort}>
+              Abort
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
-})
+}
