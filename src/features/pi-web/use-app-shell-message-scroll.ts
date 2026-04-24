@@ -126,7 +126,15 @@ function currentMessageAnchorIndex(
 function previousMessageJumpTarget(viewport: HTMLDivElement) {
   const anchors = messageAnchors(viewport)
   const currentIndex = currentMessageAnchorIndex(anchors, viewport)
-  if (currentIndex <= 0) return null
+  if (currentIndex < 0) return null
+
+  const currentAnchor = anchors[currentIndex]
+  const viewportTop = viewport.scrollTop + 8
+  if (currentAnchor && currentAnchor.offsetTop < viewportTop - 1) {
+    return currentAnchor
+  }
+
+  if (currentIndex === 0) return null
   return anchors[currentIndex - 1]
 }
 
