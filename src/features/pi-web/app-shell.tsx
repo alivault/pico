@@ -64,6 +64,7 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AppShellCommandPalette } from "@/features/pi-web/app-shell-command-palette"
@@ -865,8 +866,15 @@ function AppShellWindowEffects({
   return null
 }
 
+type CreateSessionOptions = {
+  closeMobileSidebar?: boolean
+}
+
 type AppShellSessionWorkspaceHandle = {
-  createSession: (cwdOverride?: string) => Promise<void>
+  createSession: (
+    cwdOverride?: string,
+    options?: CreateSessionOptions
+  ) => Promise<void>
   openAddDirectoryDialog: () => void
   openCommandPalette: () => void
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
@@ -1007,6 +1015,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [desktopNotificationPermission, setDesktopNotificationPermission] =
     React.useState<DesktopNotificationPermission>("unsupported")
   const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
+  const { isMobile, openMobile, openMobileSettled, setOpenMobile } =
+    useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
   const conversationFrameRef =
@@ -1028,6 +1038,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     messages: [],
   })
   const lastEscapePressedAtRef = React.useRef(0)
+  const pendingMobileSidebarPromptFocusRef = React.useRef(false)
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
@@ -1340,6 +1351,26 @@ const AppShellSessionWorkspace = React.forwardRef<
   const focusModelSelector = () => {
     composerPanelRef.current?.openModelPicker()
   }
+  const focusPromptRef = useLatestRef(focusPrompt)
+
+  React.useEffect(() => {
+    if (
+      !pendingMobileSidebarPromptFocusRef.current ||
+      openMobile ||
+      openMobileSettled
+    ) {
+      return
+    }
+
+    pendingMobileSidebarPromptFocusRef.current = false
+    const timeoutId = window.setTimeout(() => {
+      focusPromptRef.current()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [focusPromptRef, openMobile, openMobileSettled])
 
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
     setSessionDoneSoundEnabled(enabled)
@@ -1661,14 +1692,21 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const createSession = React.useCallback(
-    async (cwdOverride?: string) => {
+    async (cwdOverride?: string, options?: CreateSessionOptions) => {
       const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
       const ownerKey = promptDraftKey({ cwd: nextCwd })
       const optimisticSessionKey = `optimistic:${ownerKey}`
       const previousState = sessionStateRef.current
+      const shouldCloseMobileSidebar =
+        Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
       clearSelectedSidebarSelection()
-      focusPrompt()
+      if (shouldCloseMobileSidebar) {
+        pendingMobileSidebarPromptFocusRef.current = true
+        setOpenMobile(false)
+      } else {
+        focusPrompt()
+      }
       setAwaitingFirstTurn(false)
       setPendingMessages([])
       setSessionState((current) => {
@@ -1699,9 +1737,12 @@ const AppShellSessionWorkspace = React.forwardRef<
       clearSelectedSidebarSelection,
       defaultNewSessionDirectory,
       focusPrompt,
+      isMobile,
+      openMobile,
       requestCreateSession,
       sessionStateRef,
       setAwaitingFirstTurn,
+      setOpenMobile,
       setPendingMessages,
       setSessionState,
     ]
@@ -2276,6 +2317,11 @@ const AppShellSessionWorkspace = React.forwardRef<
         sessionState.streaming ||
         Boolean(workingState)))
   )
+  const conversationLoadingLabel = isSessionViewLoading
+    ? "Loading session…"
+    : workingState && !workingState.done
+      ? workingState.label
+      : "Loading…"
 
   const currentGitSummary = gitStatus?.gitStatus ?? null
   const headerGitStatusText = formatHeaderGitStatusText(currentGitSummary)
@@ -2475,7 +2521,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               {showConversationLoadingState ? (
                 <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
                   <Spinner />
-                  <div>{workingState?.label || "Loading..."}</div>
+                  <div>{conversationLoadingLabel}</div>
                 </div>
               ) : displayedConversationItems.length > 0 ? (
                 <div className="flex flex-col gap-4">
@@ -3440,7 +3486,9 @@ export function PiWebAppShell({
         emptyStateText={emptySidebarStateText}
         allDirectoriesCollapsed={allDirectoriesCollapsed}
         onCreateSession={() => {
-          void sessionWorkspaceRef.current?.createSession()
+          void sessionWorkspaceRef.current?.createSession(undefined, {
+            closeMobileSidebar: true,
+          })
         }}
         onOpenAddDirectoryDialog={() => {
           sessionWorkspaceRef.current?.openAddDirectoryDialog()
@@ -3461,7 +3509,9 @@ export function PiWebAppShell({
           sessionWorkspaceRef.current?.openDeleteDialog([entry])
         }}
         onCreateSessionInDirectory={(directory) => {
-          void sessionWorkspaceRef.current?.createSession(directory)
+          void sessionWorkspaceRef.current?.createSession(directory, {
+            closeMobileSidebar: true,
+          })
         }}
         onRemoveDirectory={(directory) => {
           setSidebarDirectories((current) => {
