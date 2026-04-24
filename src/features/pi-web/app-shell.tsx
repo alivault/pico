@@ -299,6 +299,51 @@ function updateDirectoryIndexLoadingState(
   return changed ? next : current
 }
 
+function clearUnreadForActiveSidebarSession(
+  current: Record<string, DirectorySessionsIndexData>,
+  activeSession: {
+    sessionId?: string
+    sessionPath?: string
+  }
+) {
+  const activeSessionId = activeSession.sessionId?.trim() || ""
+  const activeSessionPath = activeSession.sessionPath?.trim() || ""
+  if (!activeSessionId && !activeSessionPath) {
+    return current
+  }
+
+  let changed = false
+  const next: Record<string, DirectorySessionsIndexData> = { ...current }
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    let sessionsChanged = false
+    const sessions = snapshot.sessions.map((entry) => {
+      const matchesActiveSession =
+        (activeSessionId && entry.id === activeSessionId) ||
+        (activeSessionPath && entry.path === activeSessionPath)
+      if (!matchesActiveSession || !entry.unread) {
+        return entry
+      }
+
+      sessionsChanged = true
+      changed = true
+      return {
+        ...entry,
+        unread: false,
+      }
+    })
+
+    if (sessionsChanged) {
+      next[directory] = {
+        ...snapshot,
+        sessions,
+      }
+    }
+  }
+
+  return changed ? next : current
+}
+
 function gitStatusQueryOptions({
   viewerContextId,
   cwd,
@@ -2984,23 +3029,24 @@ export function PiWebAppShell({
     const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
 
+    setDirectoryIndexDataByPath((current) => {
+      const merged = payloadDirectories.length
+        ? mergeDirectoryIndexData(current, payloadDirectoryIndexes)
+        : current
+
+      return clearUnreadForActiveSidebarSession(merged, {
+        sessionId: sessionsEvent.activeSessionId,
+        sessionPath: sessionsEvent.activeSessionPath,
+      })
+    })
+
     if (payloadDirectories.length > 0) {
-      setDirectoryIndexDataByPath((current) =>
-        mergeDirectoryIndexData(current, payloadDirectoryIndexes)
-      )
       setDirectoryIndexLoading((current) =>
         updateDirectoryIndexLoadingState(current, payloadDirectories, false)
       )
     }
 
     const previousSnapshot = sidebarDirectorySessionsSnapshotRef.current
-    const activePersistedSessionChanged =
-      Boolean(previousSnapshot) &&
-      (previousSnapshot?.activeSessionId !==
-        (sessionsEvent.activeSessionId || "") ||
-        previousSnapshot?.activeSessionPath !==
-          (sessionsEvent.activeSessionPath || "")) &&
-      Boolean(sessionsEvent.activeSessionId || sessionsEvent.activeSessionPath)
     const nextRevisions: Record<string, string> = {}
     const directoriesToRefresh: Array<string> = []
 
@@ -3026,7 +3072,7 @@ export function PiWebAppShell({
         continue
       }
 
-      if (!activePersistedSessionChanged && previousRevision === nextRevision) {
+      if (previousRevision === nextRevision) {
         continue
       }
 

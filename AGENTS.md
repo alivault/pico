@@ -218,6 +218,7 @@ Existing notable endpoints:
 - `/api/prompt`
 - `/api/abort`
 - `/api/session/new`
+- `/api/session/select`
 - `/api/session/rename`
 - `/api/session/delete`
 - `/api/session/fork`

@@ -27,6 +27,7 @@ import { Route as ApiAbortRouteImport } from './routes/api.abort'
 import { Route as ApiUiIdRouteImport } from './routes/api.ui.$id'
 import { Route as ApiSettingsHideThinkingRouteImport } from './routes/api.settings.hide-thinking'
 import { Route as ApiSessionTreeRouteImport } from './routes/api.session.tree'
+import { Route as ApiSessionSelectRouteImport } from './routes/api.session.select'
 import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
 import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api.session.history'
@@ -129,6 +130,11 @@ const ApiSessionTreeRoute = ApiSessionTreeRouteImport.update({
   path: '/api/session/tree',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionSelectRoute = ApiSessionSelectRouteImport.update({
+  id: '/api/session/select',
+  path: '/api/session/select',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionRenameRoute = ApiSessionRenameRouteImport.update({
   id: '/api/session/rename',
   path: '/api/session/rename',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByTo {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
@@ -259,6 +267,7 @@ export interface FileRoutesById {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
+  '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
+    | '/api/session/select'
     | '/api/session/tree'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
@@ -319,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
+    | '/api/session/select'
     | '/api/session/tree'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/new'
     | '/api/session/rename'
+    | '/api/session/select'
     | '/api/session/tree'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
@@ -378,6 +390,7 @@ export interface RootRouteChildren {
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
   ApiSessionNewRoute: typeof ApiSessionNewRoute
   ApiSessionRenameRoute: typeof ApiSessionRenameRoute
+  ApiSessionSelectRoute: typeof ApiSessionSelectRoute
   ApiSessionTreeRoute: typeof ApiSessionTreeRouteWithChildren
   ApiSettingsHideThinkingRoute: typeof ApiSettingsHideThinkingRoute
   ApiUiIdRoute: typeof ApiUiIdRoute
@@ -511,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionTreeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/select': {
+      id: '/api/session/select'
+      path: '/api/session/select'
+      fullPath: '/api/session/select'
+      preLoaderRoute: typeof ApiSessionSelectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/rename': {
       id: '/api/session/rename'
       path: '/api/session/rename'
@@ -613,6 +633,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
   ApiSessionNewRoute: ApiSessionNewRoute,
   ApiSessionRenameRoute: ApiSessionRenameRoute,
+  ApiSessionSelectRoute: ApiSessionSelectRoute,
   ApiSessionTreeRoute: ApiSessionTreeRouteWithChildren,
   ApiSettingsHideThinkingRoute: ApiSettingsHideThinkingRoute,
   ApiUiIdRoute: ApiUiIdRoute,

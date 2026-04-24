@@ -2478,6 +2478,23 @@ export class PiWebRuntime {
     return { ok: true, draft: true }
   }
 
+  async selectSession(request: Request) {
+    const { url, context } = await this.resolveRequest(request)
+    const requestedSessionId = url.searchParams.get("session")?.trim() || ""
+
+    if (!requestedSessionId) {
+      throw new Error("session is required")
+    }
+
+    const nextEntry = await this.ensureSessionEntryById(requestedSessionId)
+    if (!nextEntry) {
+      throw new Error(`Unknown session: ${requestedSessionId}`)
+    }
+
+    await this.activateContextSession(context, nextEntry)
+    return { ok: true }
+  }
+
   async setModel(
     request: Request,
     body: { provider?: unknown; modelId?: unknown }

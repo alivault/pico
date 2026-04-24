@@ -38,7 +38,9 @@ type SidebarContextProps = {
   open: boolean
   setOpen: (open: boolean) => void
   openMobile: boolean
+  openMobileSettled: boolean
   setOpenMobile: (open: boolean) => void
+  setOpenMobileSettled: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
 }
@@ -75,6 +77,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [openMobileSettled, setOpenMobileSettled] = React.useState(false)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -129,7 +132,9 @@ function SidebarProvider({
     setOpen,
     isMobile,
     openMobile,
+    openMobileSettled,
     setOpenMobile,
+    setOpenMobileSettled,
     toggleSidebar,
   }
 
@@ -169,7 +174,8 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, setOpenMobileSettled } =
+    useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -188,7 +194,12 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet
+        open={openMobile}
+        onOpenChange={setOpenMobile}
+        onOpenChangeComplete={setOpenMobileSettled}
+        {...props}
+      >
         <SheetContent
           dir={dir}
           data-sidebar="sidebar"

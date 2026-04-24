@@ -6,10 +6,12 @@ import type {
   ExtensionUiEvent,
   PiWebServerEvent,
   SessionsEvent,
+  SimpleOkResponse,
 } from "@/lib/pi-web-api"
 
 import {
   buildRequestUrl,
+  fetchJson,
   updateStateFromSync,
 } from "@/features/pi-web/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pi-web/composer-utils"
@@ -103,6 +105,15 @@ export function useAppShellSessionSync({
   setPendingUiValue,
   lastSyncedEditorTextRef,
 }: UseAppShellSessionSyncOptions) {
+  const initialEventsSessionIdRef = React.useRef(sessionId)
+  const currentSourceRef = React.useRef<EventSource | null>(null)
+  const hasReceivedStateSyncRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (currentSourceRef.current) return
+    initialEventsSessionIdRef.current = sessionId
+  }, [sessionId])
+
   React.useEffect(() => {
     if (!sessionId) {
       pendingRouteSessionIdRef.current = undefined
@@ -122,17 +133,20 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     if (!viewerContextId) return
 
+    hasReceivedStateSyncRef.current = false
     const source = new EventSource(
       buildRequestUrl("/events", {
         contextId: viewerContextId,
-        sessionId,
+        sessionId: initialEventsSessionIdRef.current,
         searchParams: {
           sidebarDirectory: bootstrapSidebarDirectories,
         },
       })
     )
+    currentSourceRef.current = source
 
     source.onopen = () => {
+      if (currentSourceRef.current !== source) return
       setConnected?.(true)
       setSessionState((current) =>
         current.connected ? current : { ...current, connected: true }
@@ -140,6 +154,7 @@ export function useAppShellSessionSync({
     }
 
     source.onerror = () => {
+      if (currentSourceRef.current !== source) return
       setConnected?.(false)
       setSessionState((current) =>
         !current.connected ? current : { ...current, connected: false }
@@ -147,9 +162,11 @@ export function useAppShellSessionSync({
     }
 
     source.onmessage = (event) => {
+      if (currentSourceRef.current !== source) return
       const payload = JSON.parse(event.data) as PiWebServerEvent
 
       if (isStateSyncEvent(payload)) {
+        hasReceivedStateSyncRef.current = true
         const previousState = sessionStateRef.current
         const localPromptText = composerTextRef.current
 
@@ -224,6 +241,9 @@ export function useAppShellSessionSync({
     }
 
     return () => {
+      if (currentSourceRef.current === source) {
+        currentSourceRef.current = null
+      }
       source.close()
     }
   }, [
@@ -232,7 +252,6 @@ export function useAppShellSessionSync({
     composerTextRef,
     lastSyncedEditorTextRef,
     replaceComposerDraftRef,
-    sessionId,
     sessionStateRef,
     setConnected,
     setComposerImages,
@@ -243,6 +262,34 @@ export function useAppShellSessionSync({
     setSessionsEvent,
     viewerContextId,
   ])
+
+  React.useEffect(() => {
+    if (!viewerContextId || !sessionId) return
+    if (!hasReceivedStateSyncRef.current) return
+    if (sessionId === sessionState.sessionId) return
+
+    const abortController = new AbortController()
+
+    void fetchJson<SimpleOkResponse>(
+      buildRequestUrl("/api/session/select", {
+        contextId: viewerContextId,
+        sessionId,
+      }),
+      {
+        method: "POST",
+        signal: abortController.signal,
+      }
+    ).catch((error) => {
+      if (abortController.signal.aborted) return
+      toast.error(
+        error instanceof Error ? error.message : "Failed to select session"
+      )
+    })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [viewerContextId, sessionId, sessionState.sessionId])
 
   React.useEffect(() => {
     if (sessionState.draft || !sessionState.sessionId) return
