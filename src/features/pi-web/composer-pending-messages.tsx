@@ -77,9 +77,6 @@ export function ComposerPendingMessages({
                           ? "Steer"
                           : "Follow-up"}
                       </Badge>
-                      <span className="min-w-0 flex-1 truncate">
-                        {message.pendingId}
-                      </span>
                     </div>
                     <div className="line-clamp-3 text-sm">
                       {message.text || "Queued image prompt"}
