@@ -50,6 +50,7 @@ export type GitStatusSummary = {
   detached: boolean
   revision?: string
   dirty: boolean
+  changedFileCount: number
   ahead: number
   behind: number
   inline: string

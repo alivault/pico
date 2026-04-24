@@ -5,6 +5,7 @@ export type GitStatusSummary = {
   detached: boolean
   revision?: string
   dirty: boolean
+  changedFileCount: number
   ahead: number
   behind: number
   inline: string
@@ -137,12 +138,18 @@ function formatDirectoryGitStatus(value: {
   detached?: boolean
   revision?: string
   dirty?: boolean
+  changedFileCount?: number
   ahead?: number
   behind?: number
 }) {
   if (!value) return null
 
   const dirty = Boolean(value.dirty)
+  const changedFileCount =
+    Number.isInteger(value.changedFileCount) &&
+    (value.changedFileCount ?? 0) > 0
+      ? (value.changedFileCount ?? 0)
+      : 0
   const ahead =
     Number.isInteger(value.ahead) && (value.ahead ?? 0) > 0
       ? (value.ahead ?? 0)
@@ -166,6 +173,7 @@ function formatDirectoryGitStatus(value: {
       detached: true,
       revision: revision || undefined,
       dirty,
+      changedFileCount,
       ahead,
       behind,
       inline,
@@ -195,12 +203,20 @@ function formatDirectoryGitStatus(value: {
         ? value.revision.trim()
         : undefined,
     dirty,
+    changedFileCount,
     ahead,
     behind,
     inline: inlineParts.join(" "),
     label,
     title: titleParts.join(" · "),
   } satisfies GitStatusSummary
+}
+
+function countGitPorcelainStatusEntries(output: string) {
+  return output
+    .split(/\r?\n/)
+    .filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+    .length
 }
 
 function parseCommandNullList(output: string) {
@@ -481,11 +497,13 @@ export async function readDirectoryGitStatus(
       ? Number.parseInt(upstreamCounts[1] || "0", 10) || 0
       : 0
 
+  const dirtyOutput = dirtyResult.code === 0 ? dirtyResult.stdout : ""
   const value = formatDirectoryGitStatus({
     branch: branchResult.code === 0 ? branchResult.stdout : "",
     detached: branchResult.code !== 0,
     revision: revisionResult.code === 0 ? revisionResult.stdout : "",
-    dirty: dirtyResult.code === 0 && Boolean(dirtyResult.stdout.trim()),
+    dirty: Boolean(dirtyOutput.trim()),
+    changedFileCount: countGitPorcelainStatusEntries(dirtyOutput),
     ahead,
     behind,
   })

@@ -140,6 +140,26 @@ function formatHeaderGitStatusText(gitStatus: GitStatusValue | undefined) {
   return typeof gitStatus.branch === "string" ? gitStatus.branch.trim() : ""
 }
 
+function formatGitWorkingTreeSummary(gitStatus: GitStatusValue | undefined) {
+  if (!gitStatus) return ""
+
+  const changedFileCount =
+    Number.isInteger(gitStatus.changedFileCount) &&
+    gitStatus.changedFileCount > 0
+      ? gitStatus.changedFileCount
+      : gitStatus.dirty
+        ? 1
+        : 0
+
+  if (changedFileCount === 0) return "Working tree clean"
+
+  return `${changedFileCount} file${changedFileCount === 1 ? "" : "s"} changed`
+}
+
+function selectGitWorkingTreeSummary(data: GitStatusData) {
+  return formatGitWorkingTreeSummary(data.gitStatus)
+}
+
 function gitFileStatusCharacters(status: string | undefined) {
   const normalized =
     typeof status === "string" ? status.slice(0, 2).padEnd(2, " ") : "  "
@@ -224,6 +244,40 @@ function gitLocalBranchTrackClass(branch: GitLocalBranch, trackText: string) {
   if (branch.upstreamGone) return "text-red-500"
   if (trackText === "synced") return "text-emerald-500"
   return "text-amber-500"
+}
+
+function gitShortRelativeDate(value: string | undefined) {
+  const label = value?.trim()
+  if (!label) return ""
+  if (/^(just now|now)$/i.test(label)) return "now"
+
+  const match = label.match(
+    /^(\d+|an?|one)\s+(second|minute|hour|day|week|month|year)s?(?:,\s+.*)?\s+ago$/i
+  )
+  if (!match) return label
+
+  const amount = match[1]?.toLowerCase() || ""
+  const unit = match[2]?.toLowerCase()
+  const count =
+    amount === "a" || amount === "an" || amount === "one" ? "1" : amount
+  const unitLabel =
+    unit === "second"
+      ? "s"
+      : unit === "minute"
+        ? "m"
+        : unit === "hour"
+          ? "h"
+          : unit === "day"
+            ? "d"
+            : unit === "week"
+              ? "w"
+              : unit === "month"
+                ? "mo"
+                : unit === "year"
+                  ? "y"
+                  : ""
+
+  return unitLabel ? `${count}${unitLabel} ago` : label
 }
 
 function gitLocalBranchesForRender(
@@ -696,6 +750,7 @@ function GitBranchesControls({
 
 function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
   const trackText = gitLocalBranchTrackText(branch)
+  const relativeDate = gitShortRelativeDate(branch.relativeDate)
   const title =
     [branch.name, branch.upstream, branch.subject]
       .filter(Boolean)
@@ -726,10 +781,8 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
             {trackText}
           </span>
         ) : null}
-        {branch.relativeDate ? (
-          <span className="text-muted-foreground/70">
-            {branch.relativeDate}
-          </span>
+        {relativeDate ? (
+          <span className="text-muted-foreground/70">{relativeDate}</span>
         ) : null}
       </span>
     </li>
@@ -738,6 +791,7 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
 
 function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
   const parts = gitRemoteBranchParts(branch.name)
+  const relativeDate = gitShortRelativeDate(branch.relativeDate)
   const title =
     [branch.name, branch.subject].filter(Boolean).join(" · ") || branch.name
 
@@ -756,10 +810,8 @@ function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
         {branch.hash ? (
           <span className="text-sky-500">{branch.hash}</span>
         ) : null}
-        {branch.relativeDate ? (
-          <span className="text-muted-foreground/70">
-            {branch.relativeDate}
-          </span>
+        {relativeDate ? (
+          <span className="text-muted-foreground/70">{relativeDate}</span>
         ) : null}
       </span>
     </li>
@@ -957,6 +1009,31 @@ function GitCommitsSection({ viewerContextId, cwd, active }: GitScopedProps) {
         <GitSectionNote>No commits on this branch yet.</GitSectionNote>
       )}
     </GitSection>
+  )
+}
+
+export function GitTabStatusText({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd?: string
+}) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const statusQuery = useQuery({
+    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    enabled: Boolean(viewerContextId && normalizedCwd),
+    select: selectGitWorkingTreeSummary,
+    notifyOnChangeProps: ["data"],
+  })
+  const text = statusQuery.data
+
+  if (!text) return null
+
+  return (
+    <span className="max-w-48 truncate text-xs font-normal text-muted-foreground/80">
+      {text}
+    </span>
   )
 }
 

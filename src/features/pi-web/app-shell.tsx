@@ -91,6 +91,7 @@ import {
 import {
   DraftGitStatusBadge,
   GitPanel,
+  GitTabStatusText,
   HeaderGitStatusText,
 } from "@/features/pi-web/git-panel"
 import {
@@ -823,11 +824,20 @@ type AppShellWorkingState = {
   done?: boolean
 }
 
-function AppShellTabsList() {
+function AppShellTabsList({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd?: string
+}) {
   return (
-    <TabsList className="w-full rounded-none">
+    <TabsList className="w-full rounded-none border-b border-border/70">
       <TabsTrigger value="session">Session</TabsTrigger>
-      <TabsTrigger value="git">Git</TabsTrigger>
+      <TabsTrigger value="git">
+        <span>Git</span>
+        <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
+      </TabsTrigger>
     </TabsList>
   )
 }
@@ -2727,9 +2737,12 @@ const AppShellSessionWorkspace = React.forwardRef<
         <Tabs
           value={currentTab}
           onValueChange={setCurrentTab}
-          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
         >
-          <AppShellTabsList />
+          <AppShellTabsList
+            viewerContextId={viewerContextId}
+            cwd={sessionState.cwd}
+          />
 
           <TabsContent value="session" className="flex min-h-0 flex-1 flex-col">
             <AppShellSessionConversation
@@ -2832,7 +2845,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
           <TabsContent
             value="git"
-            className="min-h-0 flex-1 space-y-4 overflow-auto px-6 pb-6"
+            className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
           >
             <GitPanel
               viewerContextId={viewerContextId}
