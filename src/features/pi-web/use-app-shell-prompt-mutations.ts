@@ -367,25 +367,49 @@ export function useAppShellPromptMutations({
       const normalizedStreamingBehavior = treatAsQueuedPrompt
         ? normalizeQueuedStreamingBehavior(streamingBehavior)
         : streamingBehavior
+      const submittedImages = composerImages.map((image) => ({ ...image }))
+      const shouldOptimisticallyClearComposer = true
 
       setIsSubmitting(true)
       if (!treatAsQueuedPrompt) {
         setAwaitingFirstTurn(true)
       }
+      if (shouldOptimisticallyClearComposer) {
+        replaceComposerDraft("")
+        setComposerImages([])
+        lastSyncedEditorTextRef.current = ""
+      }
 
       try {
         await promptMutation.mutateAsync({
           message,
-          images: composerImages,
+          images: submittedImages,
           streamingBehavior: normalizedStreamingBehavior,
         })
-        replaceComposerDraft("")
-        setComposerImages([])
-        lastSyncedEditorTextRef.current = ""
+        if (!shouldOptimisticallyClearComposer) {
+          replaceComposerDraft("")
+          setComposerImages([])
+          lastSyncedEditorTextRef.current = ""
+        }
         return true
       } catch (error) {
         if (!treatAsQueuedPrompt) {
           setAwaitingFirstTurn(false)
+        }
+        if (shouldOptimisticallyClearComposer) {
+          const currentDraft = serializeComposerDraft({
+            text: composerTextRef.current,
+            skillName: composerSkillRef.current,
+          }).trim()
+
+          if (!currentDraft) {
+            replaceComposerDraft(message)
+            setComposerImages((current) =>
+              current.length === 0
+                ? submittedImages.map((image) => ({ ...image }))
+                : current
+            )
+          }
         }
         toast.error(
           error instanceof Error ? error.message : "Failed to submit prompt"

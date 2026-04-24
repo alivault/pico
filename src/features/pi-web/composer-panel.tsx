@@ -391,7 +391,13 @@ export const ComposerPanel = React.forwardRef<
 
       <div className="overflow-visible rounded-[18px] border bg-card">
         <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
-          <div className="relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2">
+          <div
+            className={`relative grid min-w-0 items-end gap-2 ${
+              isStreaming
+                ? "grid-cols-[auto_minmax(0,1fr)]"
+                : "grid-cols-[auto_minmax(0,1fr)_auto]"
+            }`}
+          >
             <ComposerAssistMenu
               visibleCompletion={visibleCompletion}
               slashMenuState={slashMenuState}
@@ -455,28 +461,28 @@ export const ComposerPanel = React.forwardRef<
               </div>
             </div>
 
-            <Button
-              size="icon-sm"
-              disabled={
-                isSubmitting ||
-                (!hasSubmittableContent && !isStreaming && !slashMenuState)
-              }
-              title="Send"
-              aria-label="Send"
-              onClick={() => {
-                if (isStreaming && !hasSubmittableContent) {
-                  onAbort()
-                  return
+            {!isStreaming ? (
+              <Button
+                size="icon-sm"
+                disabled={
+                  isSubmitting ||
+                  (!hasSubmittableContent && !isStreaming && !slashMenuState)
                 }
-                runPrimaryComposerAction(acceptFollowUps ? "steer" : undefined)
-              }}
-            >
-              {isSubmitting ? (
-                <LoaderCircleIcon className="animate-spin" />
-              ) : (
-                <ArrowUpIcon />
-              )}
-            </Button>
+                title="Send"
+                aria-label="Send"
+                onClick={() => {
+                  runPrimaryComposerAction(
+                    acceptFollowUps ? "steer" : undefined
+                  )
+                }}
+              >
+                {isSubmitting ? (
+                  <LoaderCircleIcon className="animate-spin" />
+                ) : (
+                  <ArrowUpIcon />
+                )}
+              </Button>
+            ) : null}
           </div>
 
           {composerImages.length > 0 ? (
