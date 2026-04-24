@@ -156,6 +156,13 @@ function viewportStateSnapshot(
   }
 }
 
+function scrollViewportToBottom(
+  viewport: HTMLDivElement,
+  behavior: ScrollBehavior
+) {
+  viewport.scrollTo({ top: viewport.scrollHeight, behavior })
+}
+
 export function useAppShellMessageScroll({
   isSessionViewLoading,
   sessionState,
@@ -179,7 +186,7 @@ export function useAppShellMessageScroll({
   const scrollConversationToBottom = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })
+    scrollViewportToBottom(viewport, "smooth")
   }, [])
 
   const jumpToPreviousMessage = React.useCallback(() => {
@@ -220,23 +227,27 @@ export function useAppShellMessageScroll({
     }
   }, [syncViewportState])
 
-  React.useEffect(() => {
-    if (sessionState.streaming) {
-      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
+  React.useLayoutEffect(() => {
+    if (isSessionViewLoading) return
+
+    const viewport =
+      messageViewportRef.current ||
+      findMessageViewport(messagesScrollAreaRef.current)
+    if (!viewport) return
+
+    messageViewportRef.current = viewport
+
+    const wasNearBottom =
+      scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom
+    syncViewportState(viewport)
+
+    if (!wasNearBottom) {
       return
     }
 
-    const maybeScrollToBottom = () => {
-      if (!scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom) {
-        return
-      }
-
-      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })
-    }
-
-    maybeScrollToBottom()
-    return scrollStateStoreRef.current.subscribe(maybeScrollToBottom)
-  }, [sessionState.streaming])
+    scrollViewportToBottom(viewport, "auto")
+    syncViewportState(viewport)
+  }, [isSessionViewLoading, sessionState, syncViewportState])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
