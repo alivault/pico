@@ -2568,11 +2568,14 @@ const AppShellSessionWorkspace = React.forwardRef<
       <SidebarInset className="min-h-0 overflow-hidden">
         <div className="shrink-0 border-b border-border/70 p-4">
           <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
               <SidebarTrigger className="mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <h2 className="text-[15px] leading-tight font-semibold">
+              <div className="min-w-0 space-y-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <h2
+                    className="min-w-0 truncate text-[15px] leading-tight font-semibold"
+                    title={displaySessionTitle}
+                  >
                     {displaySessionTitle}
                   </h2>
                   {isSessionViewLoading ? (
