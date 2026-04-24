@@ -434,14 +434,44 @@ function formatToolArgString(value: string) {
   return trimmed
 }
 
+function rawShellCommandText(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool" || block.name !== "bash") return ""
+
+  if (typeof block.args === "string") {
+    const trimmed = block.args.trim()
+    if (!trimmed) return ""
+
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed && typeof parsed === "object" && "command" in parsed) {
+        const command = (parsed as Record<string, unknown>).command
+        return typeof command === "string" ? command.trim() : trimmed
+      }
+    } catch {
+      return trimmed
+    }
+
+    return trimmed
+  }
+
+  const args = normalizeToolArgs(block.args)
+  return getToolArgText(args, "command") || toolCommandPreview(block)
+}
+
 function toolCallText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   if (block.type !== "tool") return ""
 
+  if (block.name === "bash") {
+    const command = rawShellCommandText(block)
+    return command ? `$ ${command}` : ""
+  }
+
   if (typeof block.args === "string") {
-    const text = formatToolArgString(block.args)
-    return block.name === "bash" && text ? `$ ${text}` : text
+    return formatToolArgString(block.args)
   }
 
   if (block.args == null) return ""
@@ -492,6 +522,253 @@ function toolOutputText(
   return "No output available."
 }
 
+const EXPLORE_TOOL_NAMES = new Set(["read", "grep", "glob", "find", "ls"])
+
+type AssistantBlockGroup =
+  | {
+      type: "block"
+      key: string
+      block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+    }
+  | {
+      type: "explore"
+      key: string
+      blocks: Array<
+        Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+          type: "tool"
+        }
+      >
+    }
+
+function isExploreToolBlock(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+): block is Extract<
+  ConversationItem,
+  { kind: "assistant" }
+>["blocks"][number] & {
+  type: "tool"
+} {
+  return block.type === "tool" && EXPLORE_TOOL_NAMES.has(block.name || "")
+}
+
+function getToolArgNumber(
+  args: Record<string, unknown> | undefined,
+  key: string
+) {
+  const value = args?.[key]
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN
+
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function pathBaseName(path: string) {
+  const normalized = path.replace(/\\/g, "/").trim()
+  if (!normalized) return ""
+
+  const parts = normalized.split("/")
+  return parts[parts.length - 1] || normalized
+}
+
+function formatExploreArg(
+  key: string,
+  value: string | number | undefined
+): string {
+  if (value == null) return ""
+
+  const text =
+    typeof value === "number" ? String(value) : collapseToolPreview(value)
+
+  return text ? `${key}=${text}` : ""
+}
+
+function formatExploreCount(
+  count: number,
+  singular: string,
+  plural = `${singular}s`
+) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+function exploreGroupSummary(
+  blocks: Array<
+    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+      type: "tool"
+    }
+  >
+) {
+  let readCount = 0
+  let searchCount = 0
+  let listCount = 0
+
+  for (const block of blocks) {
+    if (block.name === "read") {
+      readCount += 1
+      continue
+    }
+    if (block.name === "ls") {
+      listCount += 1
+      continue
+    }
+    searchCount += 1
+  }
+
+  return [
+    readCount > 0 ? formatExploreCount(readCount, "read") : "",
+    searchCount > 0 ? formatExploreCount(searchCount, "search") : "",
+    listCount > 0 ? formatExploreCount(listCount, "list") : "",
+  ]
+    .filter(Boolean)
+    .join(", ")
+}
+
+function exploreGroupStatusLabel(
+  blocks: Array<
+    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+      type: "tool"
+    }
+  >
+) {
+  return blocks.some((block) => block.running) ? "Exploring" : "Explored"
+}
+
+function exploreToolLine(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+    type: "tool"
+  }
+) {
+  const args = normalizeToolArgs(block.args)
+  const path =
+    getToolArgText(args, "path") || getToolArgText(args, "filePath") || "/"
+  const status = block.running ? "Running" : block.isError ? "Failed" : ""
+
+  switch (block.name) {
+    case "read":
+      return {
+        label: "Read",
+        details: [
+          pathBaseName(path) || path,
+          formatExploreArg("offset", getToolArgNumber(args, "offset")),
+          formatExploreArg("limit", getToolArgNumber(args, "limit")),
+          status,
+        ]
+          .filter(Boolean)
+          .join("  "),
+      }
+    case "grep":
+      return {
+        label: "Grep",
+        details: [
+          path,
+          formatExploreArg("pattern", getToolArgText(args, "pattern")),
+          formatExploreArg("include", getToolArgText(args, "include")),
+          status,
+        ]
+          .filter(Boolean)
+          .join("  "),
+      }
+    case "glob":
+      return {
+        label: "Glob",
+        details: [
+          path,
+          formatExploreArg("pattern", getToolArgText(args, "pattern")),
+          status,
+        ]
+          .filter(Boolean)
+          .join("  "),
+      }
+    case "find":
+      return {
+        label: "Find",
+        details: [
+          path,
+          formatExploreArg(
+            "pattern",
+            getToolArgText(args, "pattern") ||
+              getToolArgText(args, "query") ||
+              getToolArgText(args, "name")
+          ),
+          formatExploreArg("limit", getToolArgNumber(args, "limit")),
+          status,
+        ]
+          .filter(Boolean)
+          .join("  "),
+      }
+    case "ls":
+      return {
+        label: "List",
+        details: [
+          path,
+          formatExploreArg("limit", getToolArgNumber(args, "limit")),
+          status,
+        ]
+          .filter(Boolean)
+          .join("  "),
+      }
+    default:
+      return {
+        label: toolDisplayName(block.name),
+        details: toolSummary(block),
+      }
+  }
+}
+
+function groupAssistantBlocks(
+  blocks: Array<
+    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+  >
+) {
+  const result: Array<AssistantBlockGroup> = []
+  let start = -1
+
+  const flushExploreGroup = (end: number) => {
+    if (start < 0 || end < start) return
+
+    const groupedBlocks = blocks
+      .slice(start, end + 1)
+      .filter(isExploreToolBlock)
+    const first = groupedBlocks[0]
+    const last = groupedBlocks[groupedBlocks.length - 1]
+
+    if (!first || !last) {
+      start = -1
+      return
+    }
+
+    result.push({
+      type: "explore",
+      key: `explore:${first.blockKey || assistantBlockKey(first)}:${last.blockKey || assistantBlockKey(last)}:${start}:${end}`,
+      blocks: groupedBlocks,
+    })
+
+    start = -1
+  }
+
+  blocks.forEach((block, index) => {
+    if (isExploreToolBlock(block)) {
+      if (start < 0) {
+        start = index
+      }
+      return
+    }
+
+    flushExploreGroup(index - 1)
+    result.push({
+      type: "block",
+      key: block.blockKey || `${assistantBlockKey(block)}:${index}`,
+      block,
+    })
+  })
+
+  flushExploreGroup(blocks.length - 1)
+  return result
+}
+
 function compactionTriggerText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
@@ -529,6 +806,12 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
 }) {
   const callText = toolCallText(block)
   const outputText = toolOutputText(block)
+  const shellBodyText =
+    block.name === "bash"
+      ? [callText, block.output.trimEnd()].filter(Boolean).join("\n\n") ||
+        callText ||
+        outputText
+      : ""
 
   return (
     <Accordion
@@ -554,14 +837,94 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
         <AccordionContent className="px-3 pb-3">
           <div className="border-t pt-3">
             <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
-              <div className="space-y-4">
-                {callText ? (
-                  <ToolBlockSection label="Call" text={callText} />
-                ) : null}
-                <ToolBlockSection
-                  label={block.running ? "Output (streaming)" : "Output"}
-                  text={outputText}
-                />
+              {block.name === "bash" ? (
+                <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+                  {shellBodyText}
+                </pre>
+              ) : (
+                <div className="space-y-4">
+                  {callText ? (
+                    <ToolBlockSection label="Call" text={callText} />
+                  ) : null}
+                  <ToolBlockSection
+                    label={block.running ? "Output (streaming)" : "Output"}
+                    text={outputText}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  )
+})
+
+const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
+  blocks,
+}: {
+  blocks: Array<
+    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+      type: "tool"
+    }
+  >
+}) {
+  const summary = exploreGroupSummary(blocks)
+  const statusLabel = exploreGroupStatusLabel(blocks)
+  const hasRunning = blocks.some((block) => block.running)
+  const hasError = blocks.some((block) => block.isError)
+
+  return (
+    <Accordion
+      className={cn(
+        "rounded-xl border text-sm",
+        hasRunning && "border-amber-500/30 bg-amber-500/5",
+        !hasRunning && hasError && "border-destructive/30 bg-destructive/5",
+        !hasRunning && !hasError && "bg-muted/20"
+      )}
+    >
+      <AccordionItem value="explore" className="border-0">
+        <AccordionTrigger className="min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 hover:no-underline">
+          <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+            <span className="truncate font-medium whitespace-nowrap text-foreground">
+              {statusLabel}
+            </span>
+            <span className="truncate text-muted-foreground">{summary}</span>
+          </span>
+        </AccordionTrigger>
+
+        <AccordionContent className="px-3 pb-3">
+          <div className="border-t pt-3">
+            <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
+              <div className="space-y-3">
+                {blocks.map((block, index) => {
+                  const line = exploreToolLine(block)
+                  const lineText = line.details || toolSummary(block)
+
+                  return (
+                    <div
+                      key={
+                        block.blockKey ||
+                        block.callId ||
+                        `${block.name || "tool"}:${index}`
+                      }
+                      className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3 text-sm"
+                    >
+                      <span className="truncate font-medium whitespace-nowrap text-foreground">
+                        {line.label}
+                      </span>
+                      <span
+                        className={cn(
+                          "truncate text-muted-foreground",
+                          block.isError && "text-destructive"
+                        )}
+                        title={lineText}
+                      >
+                        {lineText}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -704,43 +1067,46 @@ export const AssistantMessageCard = React.memo(function AssistantMessageCard({
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  const renderedBlocks = (() => {
-    const counts = new Map<string, number>()
-    return item.blocks.flatMap((block) => {
-      const fallbackKey = assistantBlockKey(block)
-      const count = (counts.get(fallbackKey) ?? 0) + 1
-      counts.set(fallbackKey, count)
-      const key = block.blockKey || `${fallbackKey}:${count}`
-
-      switch (block.type) {
-        case "text":
-          return <MarkdownBlock key={key} text={block.text} />
-        case "thinking":
-          if (hideThinking) {
-            return []
-          }
-
-          return (
-            <section
-              key={key}
-              className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
-            >
-              <MarkdownBlock text={block.text} />
-            </section>
-          )
-        case "tool":
-          if (hideToolBlocks) {
-            return []
-          }
-
-          return <ToolBlockCard key={key} block={block} />
-        case "compaction":
-          return <CompactionBlockCard key={key} block={block} />
-        default:
-          return []
+  const renderedBlocks = groupAssistantBlocks(item.blocks).flatMap((group) => {
+    if (group.type === "explore") {
+      if (hideToolBlocks) {
+        return []
       }
-    })
-  })()
+
+      return <ExploreToolGroupCard key={group.key} blocks={group.blocks} />
+    }
+
+    const block = group.block
+    const key = group.key
+
+    switch (block.type) {
+      case "text":
+        return <MarkdownBlock key={key} text={block.text} />
+      case "thinking":
+        if (hideThinking) {
+          return []
+        }
+
+        return (
+          <section
+            key={key}
+            className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
+          >
+            <MarkdownBlock text={block.text} />
+          </section>
+        )
+      case "tool":
+        if (hideToolBlocks) {
+          return []
+        }
+
+        return <ToolBlockCard key={key} block={block} />
+      case "compaction":
+        return <CompactionBlockCard key={key} block={block} />
+      default:
+        return []
+    }
+  })
 
   if (
     !assistantMessageHasVisibleBlocks({ item, hideThinking, hideToolBlocks })
