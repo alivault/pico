@@ -2,8 +2,6 @@ import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowDownIcon,
-  ArrowDownToLineIcon,
-  ArrowUpIcon,
   ArrowUpToLineIcon,
   EllipsisIcon,
   SquarePenIcon,
@@ -630,40 +628,12 @@ function ConversationLatestMessageButton({
       variant="secondary"
       size="icon-lg"
       disabled={isDisabled}
-      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+      className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
       title="Jump to latest message"
       aria-label="Jump to latest message"
       onClick={onClick}
     >
       <ArrowDownIcon className="size-4" />
-    </Button>
-  )
-}
-
-function ConversationNextMessageButton({
-  onClick,
-  scrollStateStore,
-}: {
-  onClick: () => void
-  scrollStateStore: MessageScrollStateStore
-}) {
-  const isDisabled = useMessageScrollValue(
-    scrollStateStore,
-    (snapshot) =>
-      !snapshot.hasNextMessageJumpTarget || snapshot.isMessagesNearBottom
-  )
-
-  return (
-    <Button
-      variant="secondary"
-      size="icon-lg"
-      disabled={isDisabled}
-      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-      title="Jump to next message"
-      aria-label="Jump to next message"
-      onClick={onClick}
-    >
-      <ArrowDownToLineIcon className="size-4" />
     </Button>
   )
 }
@@ -685,39 +655,12 @@ function ConversationPreviousMessageButton({
       variant="secondary"
       size="icon-lg"
       disabled={isDisabled}
-      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
+      className="absolute right-4 bottom-4 z-10 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:right-[18px] md:bottom-[18px]"
       title="Jump to previous message"
       aria-label="Jump to previous message"
       onClick={onClick}
     >
       <ArrowUpToLineIcon className="size-4" />
-    </Button>
-  )
-}
-
-function ConversationTopButton({
-  onClick,
-  scrollStateStore,
-}: {
-  onClick: () => void
-  scrollStateStore: MessageScrollStateStore
-}) {
-  const isDisabled = useMessageScrollValue(
-    scrollStateStore,
-    (snapshot) => snapshot.isMessagesNearTop
-  )
-
-  return (
-    <Button
-      variant="secondary"
-      size="icon-lg"
-      disabled={isDisabled}
-      className="rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0"
-      title="Go to top"
-      aria-label="Go to top"
-      onClick={onClick}
-    >
-      <ArrowUpIcon className="size-4" />
     </Button>
   )
 }
@@ -791,28 +734,18 @@ const AppShellConversationFrame = React.forwardRef<
       </div>
 
       {!isSessionViewLoading ? (
-        <div className="absolute right-4 bottom-4 z-10 flex justify-end md:right-[18px] md:bottom-[18px]">
-          <div className="flex items-center gap-4">
-            <ConversationLatestMessageButton
-              draft={sessionState.draft}
-              hasMessages={hasMessages}
-              onClick={scrollConversationToBottom}
-              scrollStateStore={scrollStateStore}
-            />
-            <ConversationNextMessageButton
-              onClick={jumpToNextMessage}
-              scrollStateStore={scrollStateStore}
-            />
-            <ConversationPreviousMessageButton
-              onClick={jumpToPreviousMessage}
-              scrollStateStore={scrollStateStore}
-            />
-            <ConversationTopButton
-              onClick={scrollConversationToTop}
-              scrollStateStore={scrollStateStore}
-            />
-          </div>
-        </div>
+        <>
+          <ConversationLatestMessageButton
+            draft={sessionState.draft}
+            hasMessages={hasMessages}
+            onClick={scrollConversationToBottom}
+            scrollStateStore={scrollStateStore}
+          />
+          <ConversationPreviousMessageButton
+            onClick={jumpToPreviousMessage}
+            scrollStateStore={scrollStateStore}
+          />
+        </>
       ) : null}
     </div>
   )
