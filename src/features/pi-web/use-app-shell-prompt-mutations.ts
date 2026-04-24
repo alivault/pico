@@ -57,7 +57,13 @@ type UseAppShellPromptMutationsOptions = {
   composerImages: Array<PromptImage>
   composerTextRef: React.MutableRefObject<string>
   composerSkillRef: React.MutableRefObject<string | undefined>
-  replaceComposerDraft: (value: string, target?: SessionState) => void
+  replaceComposerDraft: (
+    value: string,
+    target?: SessionState,
+    options?: {
+      forceSync?: boolean
+    }
+  ) => void
   lastSyncedEditorTextRef: React.MutableRefObject<string>
   rememberRecentDirectory: (directory: string) => void
   prefetchDirectorySessionsIndex: (directory: string) => void
@@ -292,7 +298,7 @@ export function useAppShellPromptMutations({
         ])
       }
 
-      replaceComposerDraft("")
+      replaceComposerDraft("", undefined, { forceSync: true })
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
 
@@ -375,7 +381,7 @@ export function useAppShellPromptMutations({
         setAwaitingFirstTurn(true)
       }
       if (shouldOptimisticallyClearComposer) {
-        replaceComposerDraft("")
+        replaceComposerDraft("", undefined, { forceSync: true })
         setComposerImages([])
         lastSyncedEditorTextRef.current = ""
       }

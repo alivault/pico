@@ -1068,7 +1068,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
     text: string
     skillName?: string
-  }>({ text: "" })
+    syncNonce: number
+  }>({ text: "", syncNonce: 0 })
   const [composerImages, setComposerImages] = React.useState<
     Array<PromptImage>
   >([])
@@ -1353,7 +1354,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const replaceComposerDraft = (
     value: string,
-    target = sessionStateRef.current
+    target = sessionStateRef.current,
+    options?: {
+      forceSync?: boolean
+    }
   ) => {
     const parsed = parseComposerSkillMessage(value)
     const nextText = parsed.matched ? parsed.text : value
@@ -1361,7 +1365,16 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     composerTextRef.current = nextText
     composerSkillRef.current = nextSkill
-    setComposerDraftSeed({ text: nextText, skillName: nextSkill })
+    setComposerDraftSeed((current) => ({
+      text: nextText,
+      skillName: nextSkill,
+      syncNonce:
+        options?.forceSync &&
+        current.text === nextText &&
+        current.skillName === nextSkill
+          ? current.syncNonce + 1
+          : current.syncNonce,
+    }))
     rememberStoredPromptDraft(
       target,
       serializeComposerDraft({ text: nextText, skillName: nextSkill })
@@ -2749,6 +2762,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               composerImages={composerImages}
               composerText={composerDraftSeed.text}
               composerSkill={composerDraftSeed.skillName}
+              composerSyncNonce={composerDraftSeed.syncNonce}
               availableModels={sessionState.availableModels}
               model={sessionState.model}
               thinkingLevel={sessionState.thinkingLevel}

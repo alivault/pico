@@ -56,6 +56,7 @@ type ComposerPanelProps = {
   composerImages: Array<PromptImage>
   composerText: string
   composerSkill?: string
+  composerSyncNonce: number
   availableModels: Array<ModelOption>
   model?: ModelOption
   thinkingLevel: string
@@ -100,6 +101,7 @@ export const ComposerPanel = React.forwardRef<
     composerImages,
     composerText,
     composerSkill,
+    composerSyncNonce,
     availableModels,
     model,
     thinkingLevel,
@@ -205,7 +207,7 @@ export const ComposerPanel = React.forwardRef<
     setDraftSkill(composerSkill)
     setSelection({ start: composerText.length, end: composerText.length })
     dismissMenus()
-  }, [composerSkill, composerText, dismissMenus])
+  }, [composerSkill, composerSyncNonce, composerText, dismissMenus])
 
   React.useEffect(() => {
     return () => {

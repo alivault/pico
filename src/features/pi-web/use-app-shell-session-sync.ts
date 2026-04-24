@@ -41,7 +41,13 @@ type UseAppShellSessionSyncOptions = {
   composerTextRef: React.MutableRefObject<string>
   composerSkillRef: React.MutableRefObject<string | undefined>
   replaceComposerDraftRef: React.MutableRefObject<
-    (value: string, target?: SessionState) => void
+    (
+      value: string,
+      target?: SessionState,
+      options?: {
+        forceSync?: boolean
+      }
+    ) => void
   >
   handleSelectSessionRef: React.MutableRefObject<
     (nextSessionId?: string) => void
