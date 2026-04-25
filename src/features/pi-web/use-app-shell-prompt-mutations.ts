@@ -86,6 +86,9 @@ type UseAppShellPromptMutationsOptions = {
   setPendingDraftFollowUps: React.Dispatch<
     React.SetStateAction<Array<PendingDraftFollowUp>>
   >
+  setPendingMessages: React.Dispatch<
+    React.SetStateAction<Array<PendingComposerMessage>>
+  >
   setAwaitingFirstTurn: React.Dispatch<React.SetStateAction<boolean>>
   setIsSubmitting: React.Dispatch<React.SetStateAction<boolean>>
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
@@ -108,6 +111,13 @@ function createLocalPendingId() {
   return `optimistic:${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 10)}`
+}
+
+function isPendingPromptNotFoundError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("pending prompt not found")
+  )
 }
 
 export function useAppShellPromptMutations({
@@ -134,6 +144,7 @@ export function useAppShellPromptMutations({
   setDraftSessionLoadingOwnerKey,
   setPendingDraftPrompt,
   setPendingDraftFollowUps,
+  setPendingMessages,
   setAwaitingFirstTurn,
   setIsSubmitting,
   setComposerImages,
@@ -143,6 +154,7 @@ export function useAppShellPromptMutations({
   )
   const pendingDraftPromptRef = React.useRef(pendingDraftPrompt)
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
+  const pendingMessagesRef = React.useRef(pendingMessages)
   const awaitingFirstTurnRef = React.useRef(awaitingFirstTurn)
   const sessionStreamingRef = React.useRef(sessionState.streaming)
 
@@ -159,12 +171,68 @@ export function useAppShellPromptMutations({
   }, [pendingDraftFollowUps])
 
   React.useEffect(() => {
+    pendingMessagesRef.current = pendingMessages
+  }, [pendingMessages])
+
+  React.useEffect(() => {
     awaitingFirstTurnRef.current = awaitingFirstTurn
   }, [awaitingFirstTurn])
 
   React.useEffect(() => {
     sessionStreamingRef.current = sessionState.streaming
   }, [sessionState.streaming])
+
+  const updatePendingMessages = React.useCallback(
+    (
+      updater: (
+        current: Array<PendingComposerMessage>
+      ) => Array<PendingComposerMessage>
+    ) => {
+      setPendingMessages((current) => {
+        const next = updater(current)
+        pendingMessagesRef.current = next
+        return next
+      })
+    },
+    [setPendingMessages]
+  )
+
+  const addOptimisticPendingMessage = React.useCallback(
+    (message: PendingComposerMessage) => {
+      updatePendingMessages((current) => {
+        if (current.some((entry) => entry.pendingId === message.pendingId)) {
+          return current
+        }
+
+        return [...current, message]
+      })
+    },
+    [updatePendingMessages]
+  )
+
+  const removeOptimisticPendingMessage = React.useCallback(
+    (pendingId: string) => {
+      updatePendingMessages((current) =>
+        current.filter((entry) => entry.pendingId !== pendingId)
+      )
+    },
+    [updatePendingMessages]
+  )
+
+  const restoreOptimisticPendingMessage = React.useCallback(
+    (message: PendingComposerMessage, index: number) => {
+      updatePendingMessages((current) => {
+        if (current.some((entry) => entry.pendingId === message.pendingId)) {
+          return current
+        }
+
+        const next = [...current]
+        next.splice(Math.max(0, Math.min(index, next.length)), 0, message)
+        return next
+      })
+    },
+    [updatePendingMessages]
+  )
 
   const addDirectoryMutation = useMutation({
     mutationFn: async (requestedPath: string) => {
@@ -397,10 +465,12 @@ export function useAppShellPromptMutations({
       message,
       images,
       streamingBehavior,
+      pendingId,
     }: {
       message: string
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
+      pendingId?: string
     }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -418,6 +488,7 @@ export function useAppShellPromptMutations({
             message,
             images,
             streamingBehavior,
+            pendingId,
           }),
         }
       )
@@ -451,6 +522,9 @@ export function useAppShellPromptMutations({
         : undefined
       const submittedImages = composerImages.map((image) => ({ ...image }))
       const shouldOptimisticallyClearComposer = true
+      const queuedPendingId = treatAsQueuedPrompt
+        ? createLocalPendingId()
+        : undefined
       const optimisticId =
         options?.optimisticId ??
         (treatAsQueuedPrompt
@@ -460,6 +534,15 @@ export function useAppShellPromptMutations({
               images: submittedImages,
               queued: false,
             }))
+
+      if (queuedPendingId && normalizedStreamingBehavior) {
+        addOptimisticPendingMessage({
+          pendingId: queuedPendingId,
+          text: message,
+          images: submittedImages.map((image) => ({ ...image })),
+          streamingBehavior: normalizedStreamingBehavior,
+        })
+      }
 
       setIsSubmitting(true)
       if (!treatAsQueuedPrompt) {
@@ -473,11 +556,19 @@ export function useAppShellPromptMutations({
       }
 
       try {
-        await promptMutation.mutateAsync({
+        const response = await promptMutation.mutateAsync({
           message,
           images: submittedImages,
           streamingBehavior: normalizedStreamingBehavior,
+          pendingId: queuedPendingId,
         })
+        if (
+          queuedPendingId &&
+          "queued" in response &&
+          (!response.queued || response.canceled)
+        ) {
+          removeOptimisticPendingMessage(queuedPendingId)
+        }
         if (!shouldOptimisticallyClearComposer) {
           replaceComposerDraft("")
           setComposerImages([])
@@ -485,6 +576,9 @@ export function useAppShellPromptMutations({
         }
         return true
       } catch (error) {
+        if (queuedPendingId) {
+          removeOptimisticPendingMessage(queuedPendingId)
+        }
         removeOptimisticUserMessage(optimisticId)
         if (!treatAsQueuedPrompt) {
           awaitingFirstTurnRef.current = false
@@ -514,6 +608,7 @@ export function useAppShellPromptMutations({
       }
     },
     [
+      addOptimisticPendingMessage,
       addOptimisticUserMessage,
       composerImages,
       composerSkillRef,
@@ -521,6 +616,7 @@ export function useAppShellPromptMutations({
       lastSyncedEditorTextRef,
       promptMutation,
       queuePendingDraftPrompt,
+      removeOptimisticPendingMessage,
       removeOptimisticUserMessage,
       replaceComposerDraft,
       setAwaitingFirstTurn,
@@ -559,6 +655,7 @@ export function useAppShellPromptMutations({
           message: followUp.message,
           images: followUp.images,
           streamingBehavior: followUp.streamingBehavior,
+          pendingId: followUp.optimisticId,
         })
       } catch (error) {
         for (const unsentFollowUp of followUps.slice(index)) {
@@ -730,9 +827,23 @@ export function useAppShellPromptMutations({
   const removePendingMessage = React.useCallback(
     async (pendingId: string) => {
       if (!viewerContextId) return
+
+      const previousIndex = pendingMessagesRef.current.findIndex(
+        (entry) => entry.pendingId === pendingId
+      )
+      const previousMessage = pendingMessagesRef.current[previousIndex]
+      removeOptimisticPendingMessage(pendingId)
+
       try {
         await removePendingMessageMutation.mutateAsync(pendingId)
       } catch (error) {
+        if (isPendingPromptNotFoundError(error)) {
+          return
+        }
+
+        if (previousMessage) {
+          restoreOptimisticPendingMessage(previousMessage, previousIndex)
+        }
         toast.error(
           error instanceof Error
             ? error.message
@@ -740,7 +851,12 @@ export function useAppShellPromptMutations({
         )
       }
     },
-    [removePendingMessageMutation, viewerContextId]
+    [
+      removeOptimisticPendingMessage,
+      removePendingMessageMutation,
+      restoreOptimisticPendingMessage,
+      viewerContextId,
+    ]
   )
 
   const reorderPendingMessagesMutation = useMutation({

@@ -173,6 +173,8 @@ export type PromptResponse =
   | {
       ok: true
       queued: boolean
+      pendingId?: string
+      canceled?: boolean
     }
   | ApiErrorResponse
 

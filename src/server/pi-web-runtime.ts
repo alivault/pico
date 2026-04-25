@@ -136,6 +136,7 @@ type SessionEntry = {
   streamingState: boolean
   pendingUserMessages: Array<PendingUserMessage>
   pendingQueueMutation: boolean
+  canceledPendingUserMessageIds: Set<string>
   firstMessageHint: string
   modifiedAt?: string
   lastUserMessageAt?: string
@@ -497,15 +498,26 @@ function sortPendingUserMessages(messages: Array<PendingUserMessage>) {
 function createPendingUserMessage(
   text: string,
   images: Array<PromptImageInput>,
-  streamingBehavior: "steer" | "followUp"
+  streamingBehavior: "steer" | "followUp",
+  pendingId?: string
 ) {
   return {
-    pendingId: `pending:${cryptoRandomId()}`,
+    pendingId: pendingId || `pending:${cryptoRandomId()}`,
     text,
     images,
     queued: true,
     streamingBehavior,
   } satisfies PendingUserMessage
+}
+
+function normalizeClientPendingId(value: unknown) {
+  if (typeof value !== "string") return undefined
+
+  const pendingId = value.trim()
+  if (!pendingId.startsWith("optimistic:")) return undefined
+  if (pendingId.length > 128) return undefined
+
+  return pendingId
 }
 
 export class PiWebRuntime {
@@ -1532,6 +1544,7 @@ export class PiWebRuntime {
       streamingState: Boolean(session.isStreaming),
       pendingUserMessages: [],
       pendingQueueMutation: false,
+      canceledPendingUserMessageIds: new Set(),
       firstMessageHint: "",
       modifiedAt: undefined,
       lastUserMessageAt: undefined,
@@ -2504,6 +2517,7 @@ export class PiWebRuntime {
       message?: unknown
       images?: unknown
       streamingBehavior?: unknown
+      pendingId?: unknown
     }
   ) {
     const { context, activeEntry } = await this.resolveRequest(request)
@@ -2519,11 +2533,25 @@ export class PiWebRuntime {
         : body.streamingBehavior === "followUp"
           ? "followUp"
           : undefined
+    const clientPendingId = normalizeClientPendingId(body.pendingId)
 
     return await this.runSerializedPromptRequest(activeEntry, async () => {
       const promptOptions = images.length > 0 ? { images } : undefined
       const promotedDraft = this.isDraftEntry(activeEntry)
       const isAlreadyStreaming = this.getEntryStreamingState(activeEntry)
+      if (
+        clientPendingId &&
+        activeEntry.canceledPendingUserMessageIds.delete(clientPendingId)
+      ) {
+        await this.broadcastEntryState(activeEntry)
+        return {
+          ok: true,
+          queued: isAlreadyStreaming,
+          pendingId: clientPendingId,
+          canceled: true,
+        }
+      }
+
       const firstPromptMissing = !this.getSessionFirstMessage(activeEntry)
       if (firstPromptMissing) {
         activeEntry.firstMessageHint = message.trim()
@@ -2535,9 +2563,13 @@ export class PiWebRuntime {
         const pendingMessage = createPendingUserMessage(
           message,
           images,
-          queuedStreamingBehavior
+          queuedStreamingBehavior,
+          clientPendingId
         )
         this.markSessionUserMessage(activeEntry)
+        activeEntry.canceledPendingUserMessageIds.delete(
+          pendingMessage.pendingId
+        )
         activeEntry.pendingUserMessages.push(pendingMessage)
         await this.broadcastEntryState(activeEntry)
 
@@ -2559,7 +2591,7 @@ export class PiWebRuntime {
         this.reconcilePendingUserMessages(activeEntry)
         await this.broadcastEntryState(activeEntry)
         await this.broadcastSessionsAll()
-        return { ok: true, queued: true }
+        return { ok: true, queued: true, pendingId: pendingMessage.pendingId }
       }
 
       activeEntry.streamingState = true
@@ -2687,9 +2719,15 @@ export class PiWebRuntime {
       (message) => message.pendingId === pendingId
     )
     if (pendingIndex === -1) {
+      if (normalizeClientPendingId(pendingId)) {
+        activeEntry.canceledPendingUserMessageIds.add(pendingId)
+        return { ok: true, pendingId }
+      }
+
       throw new Error("Pending prompt not found")
     }
 
+    activeEntry.canceledPendingUserMessageIds.delete(pendingId)
     pendingMessages.splice(pendingIndex, 1)
     if (!activeEntry.session.isStreaming && pendingMessages.length > 0) {
       throw new Error(

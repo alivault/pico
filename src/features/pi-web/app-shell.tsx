@@ -2062,6 +2062,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setDraftSessionLoadingOwnerKey,
     setPendingDraftPrompt,
     setPendingDraftFollowUps,
+    setPendingMessages,
     setAwaitingFirstTurn,
     setIsSubmitting,
     setComposerImages,
