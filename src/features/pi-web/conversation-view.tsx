@@ -327,9 +327,14 @@ function toolDisplayName(name?: string) {
       return "Edit"
     case "grep":
       return "Search"
+    case "glob":
+      return "Glob"
     case "find":
       return "Find"
+    case "rg":
+      return "Ripgrep"
     case "ls":
+    case "list":
       return "List"
     default:
       return name || "Tool"
@@ -522,7 +527,24 @@ function toolOutputText(
   return "No output available."
 }
 
-const EXPLORE_TOOL_NAMES = new Set(["read", "grep", "glob", "find", "ls"])
+const EXPLORE_TOOL_NAMES = new Set([
+  "read",
+  "grep",
+  "glob",
+  "find",
+  "ls",
+  "list",
+  "rg",
+])
+const EXPLORE_SHELL_COMMAND_NAMES = new Set(["find", "grep", "rg"])
+const SKIPPABLE_SHELL_COMMAND_NAMES = new Set(["cd", "export", "pwd", "set"])
+const SHELL_COMMAND_WRAPPER_NAMES = new Set([
+  "command",
+  "env",
+  "noglob",
+  "sudo",
+  "time",
+])
 
 type AssistantBlockGroup =
   | {
@@ -540,6 +562,52 @@ type AssistantBlockGroup =
       >
     }
 
+function shellCommandNameFromSegment(segment: string) {
+  let text = segment.trim()
+
+  while (text) {
+    const assignmentMatch = text.match(/^[A-Za-z_][A-Za-z0-9_]*=\S+\s+/)
+    if (assignmentMatch) {
+      text = text.slice(assignmentMatch[0].length).trimStart()
+      continue
+    }
+
+    const commandMatch = text.match(/^([./A-Za-z0-9_-]+)\b/)
+    if (!commandMatch) return ""
+
+    const commandPath = commandMatch[1] || ""
+    const commandName = pathBaseName(commandPath)
+
+    if (!SHELL_COMMAND_WRAPPER_NAMES.has(commandName)) {
+      return commandName
+    }
+
+    text = text.slice(commandPath.length).trimStart()
+  }
+
+  return ""
+}
+
+function exploreShellCommandName(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool" || block.name !== "bash") return ""
+
+  const command = rawShellCommandText(block)
+  const segments = command.split(/(?:&&|\|\||;)/)
+
+  for (const segment of segments) {
+    const commandName = shellCommandNameFromSegment(segment)
+    if (!commandName || SKIPPABLE_SHELL_COMMAND_NAMES.has(commandName)) {
+      continue
+    }
+
+    return EXPLORE_SHELL_COMMAND_NAMES.has(commandName) ? commandName : ""
+  }
+
+  return ""
+}
+
 function isExploreToolBlock(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ): block is Extract<
@@ -548,7 +616,11 @@ function isExploreToolBlock(
 >["blocks"][number] & {
   type: "tool"
 } {
-  return block.type === "tool" && EXPLORE_TOOL_NAMES.has(block.name || "")
+  if (block.type !== "tool") return false
+  return (
+    EXPLORE_TOOL_NAMES.has(block.name || "") ||
+    Boolean(exploreShellCommandName(block))
+  )
 }
 
 function getToolArgNumber(
@@ -610,7 +682,7 @@ function exploreGroupSummary(
       readCount += 1
       continue
     }
-    if (block.name === "ls") {
+    if (block.name === "ls" || block.name === "list") {
       listCount += 1
       continue
     }
@@ -660,11 +732,15 @@ function exploreToolLine(
           .join("  "),
       }
     case "grep":
+    case "rg":
       return {
-        label: "Grep",
+        label: block.name === "rg" ? "Ripgrep" : "Grep",
         details: [
           path,
-          formatExploreArg("pattern", getToolArgText(args, "pattern")),
+          formatExploreArg(
+            "pattern",
+            getToolArgText(args, "pattern") || getToolArgText(args, "query")
+          ),
           formatExploreArg("include", getToolArgText(args, "include")),
           status,
         ]
@@ -700,6 +776,7 @@ function exploreToolLine(
           .join("  "),
       }
     case "ls":
+    case "list":
       return {
         label: "List",
         details: [
@@ -710,6 +787,22 @@ function exploreToolLine(
           .filter(Boolean)
           .join("  "),
       }
+    case "bash": {
+      const shellCommandName = exploreShellCommandName(block)
+      const label =
+        shellCommandName === "rg"
+          ? "Ripgrep"
+          : shellCommandName
+            ? `${shellCommandName[0]?.toUpperCase()}${shellCommandName.slice(1)}`
+            : "Shell"
+
+      return {
+        label,
+        details: [collapseToolPreview(rawShellCommandText(block)), status]
+          .filter(Boolean)
+          .join("  "),
+      }
+    }
     default:
       return {
         label: toolDisplayName(block.name),
@@ -1034,6 +1127,29 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   )
 })
 
+function assistantBlockIsVisible({
+  block,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  switch (block.type) {
+    case "text":
+      return Boolean(block.text.trim())
+    case "compaction":
+      return true
+    case "thinking":
+      return !hideThinking
+    case "tool":
+      return !hideToolBlocks
+    default:
+      return false
+  }
+}
+
 export function assistantMessageHasVisibleBlocks({
   item,
   hideThinking,
@@ -1043,36 +1159,32 @@ export function assistantMessageHasVisibleBlocks({
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  return item.blocks.some((block) => {
-    switch (block.type) {
-      case "text":
-      case "compaction":
-        return true
-      case "thinking":
-        return !hideThinking
-      case "tool":
-        return !hideToolBlocks
-      default:
-        return false
-    }
-  })
+  return item.blocks.some((block) =>
+    assistantBlockIsVisible({ block, hideThinking, hideToolBlocks })
+  )
 }
 
-export const AssistantMessageCard = React.memo(function AssistantMessageCard({
-  item,
+export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
+  items,
   hideThinking,
   hideToolBlocks,
 }: {
-  item: Extract<ConversationItem, { kind: "assistant" }>
+  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  const renderedBlocks = groupAssistantBlocks(item.blocks).flatMap((group) => {
-    if (group.type === "explore") {
-      if (hideToolBlocks) {
-        return []
-      }
+  const blocks = items.flatMap((item) =>
+    item.blocks.filter((block) =>
+      assistantBlockIsVisible({ block, hideThinking, hideToolBlocks })
+    )
+  )
 
+  if (blocks.length === 0) {
+    return null
+  }
+
+  const renderedBlocks = groupAssistantBlocks(blocks).flatMap((group) => {
+    if (group.type === "explore") {
       return <ExploreToolGroupCard key={group.key} blocks={group.blocks} />
     }
 
@@ -1083,10 +1195,6 @@ export const AssistantMessageCard = React.memo(function AssistantMessageCard({
       case "text":
         return <MarkdownBlock key={key} text={block.text} />
       case "thinking":
-        if (hideThinking) {
-          return []
-        }
-
         return (
           <section
             key={key}
@@ -1096,10 +1204,6 @@ export const AssistantMessageCard = React.memo(function AssistantMessageCard({
           </section>
         )
       case "tool":
-        if (hideToolBlocks) {
-          return []
-        }
-
         return <ToolBlockCard key={key} block={block} />
       case "compaction":
         return <CompactionBlockCard key={key} block={block} />
@@ -1108,11 +1212,23 @@ export const AssistantMessageCard = React.memo(function AssistantMessageCard({
     }
   })
 
-  if (
-    !assistantMessageHasVisibleBlocks({ item, hideThinking, hideToolBlocks })
-  ) {
-    return null
-  }
-
   return <div className="flex flex-col gap-4">{renderedBlocks}</div>
+})
+
+export const AssistantMessageCard = React.memo(function AssistantMessageCard({
+  item,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  item: Extract<ConversationItem, { kind: "assistant" }>
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  return (
+    <AssistantMessagesCard
+      items={[item]}
+      hideThinking={hideThinking}
+      hideToolBlocks={hideToolBlocks}
+    />
+  )
 })

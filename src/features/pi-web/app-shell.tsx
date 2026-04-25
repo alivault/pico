@@ -100,7 +100,7 @@ import {
   showSessionDoneDesktopNotification,
 } from "@/features/pi-web/session-done-notifications"
 import {
-  AssistantMessageCard,
+  AssistantMessagesCard,
   MessagesWorkingIndicator,
   UserMessageCard,
   assistantMessageHasVisibleBlocks,
@@ -825,20 +825,11 @@ function ConversationGroupView({
 
   return (
     <div data-message-anchor="true" className={className}>
-      <div className="flex flex-col gap-4">
-        {group.items.map((item, index) => {
-          const itemKey = item.itemKey || `${group.key}:assistant:${index}`
-
-          return (
-            <AssistantMessageCard
-              key={itemKey}
-              item={item}
-              hideThinking={hideThinking}
-              hideToolBlocks={hideToolBlocks}
-            />
-          )
-        })}
-      </div>
+      <AssistantMessagesCard
+        items={group.items}
+        hideThinking={hideThinking}
+        hideToolBlocks={hideToolBlocks}
+      />
     </div>
   )
 }
