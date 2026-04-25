@@ -1238,8 +1238,6 @@ export function AppShellTreeDialog({
   const [treeFilterMode, setTreeFilterMode] =
     React.useState<TreeFilterMode>("no-tools")
   const [treeStage, setTreeStage] = React.useState<TreeStage>("browse")
-  const [customTreeSummaryInstructions, setCustomTreeSummaryInstructions] =
-    React.useState("")
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
   const treeWasOpenRef = React.useRef(false)
   const isMobile = useIsMobile()
@@ -1274,7 +1272,6 @@ export function AppShellTreeDialog({
 
     setTreeFilterMode("no-tools")
     setTreeStage("browse")
-    setCustomTreeSummaryInstructions("")
   }, [open, selectedTreeNodeId, treeLeafId])
 
   React.useEffect(() => {
@@ -1339,7 +1336,7 @@ export function AppShellTreeDialog({
           event.stopPropagation()
           void onNavigateTreeNode(selectedTreeNodeId, {
             summarize: true,
-            customInstructions: customTreeSummaryInstructions,
+            customInstructions: treeCustomSummaryRef.current?.value ?? "",
           })
         }
         return
@@ -1364,7 +1361,6 @@ export function AppShellTreeDialog({
       window.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [
-    customTreeSummaryInstructions,
     onNavigateTreeNode,
     open,
     selectedTreeNodeId,
@@ -1375,17 +1371,16 @@ export function AppShellTreeDialog({
   ])
 
   React.useEffect(() => {
-    if (!open || treeStage !== "custom" || isMobile) return
+    if (!open || treeStage !== "custom") return
 
     const frame = window.requestAnimationFrame(() => {
       treeCustomSummaryRef.current?.focus()
-      treeCustomSummaryRef.current?.select()
     })
 
     return () => {
       window.cancelAnimationFrame(frame)
     }
-  }, [isMobile, open, treeStage])
+  }, [open, treeStage])
 
   const selectTreeNode = (nodeId: string) => {
     const node = treeViewModel.nodeById.get(nodeId)
@@ -1544,13 +1539,10 @@ export function AppShellTreeDialog({
               <div className="text-sm font-medium">Custom prompt</div>
               <Textarea
                 ref={treeCustomSummaryRef}
-                value={customTreeSummaryInstructions}
-                onChange={(event) =>
-                  setCustomTreeSummaryInstructions(event.target.value)
-                }
                 placeholder="Add summary instructions before continuing"
                 className="min-h-32"
                 disabled={!canNavigateSelectedNode || treeSubmitting}
+                autoFocus
               />
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1567,7 +1559,8 @@ export function AppShellTreeDialog({
                   if (!selectedTreeNodeId) return
                   void onNavigateTreeNode(selectedTreeNodeId, {
                     summarize: true,
-                    customInstructions: customTreeSummaryInstructions,
+                    customInstructions:
+                      treeCustomSummaryRef.current?.value ?? "",
                   })
                 }}
               >
