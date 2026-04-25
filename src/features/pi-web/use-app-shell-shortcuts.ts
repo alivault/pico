@@ -33,7 +33,7 @@ type UseAppShellShortcutsOptions = {
   forkOpen: boolean
   hasPendingUiRequest: boolean
   lastEscapePressedAtRef: React.MutableRefObject<number>
-  renameOpen: boolean
+  renameOpenRef: React.MutableRefObject<boolean>
   selectedSidebarSessions: Array<SessionListEntry>
   sessionHasAvailableModels: boolean
   sessionHasFile: boolean
@@ -79,7 +79,7 @@ export function useAppShellShortcuts({
   forkOpen,
   hasPendingUiRequest,
   lastEscapePressedAtRef,
-  renameOpen,
+  renameOpenRef,
   selectedSidebarSessions,
   sessionHasAvailableModels,
   sessionHasFile,
@@ -94,7 +94,7 @@ export function useAppShellShortcuts({
       const key = event.key.toLowerCase()
       const modalOpen =
         addDirectoryOpenRef.current ||
-        renameOpen ||
+        renameOpenRef.current ||
         deleteOpen ||
         forkOpen ||
         treeOpen ||
@@ -373,7 +373,7 @@ export function useAppShellShortcuts({
     forkOpen,
     hasPendingUiRequest,
     lastEscapePressedAtRef,
-    renameOpen,
+    renameOpenRef,
     selectedSidebarSessions,
     sessionHasAvailableModels,
     sessionHasFile,

@@ -68,6 +68,10 @@ import {
 } from "@/features/pi-web/app-shell-add-directory-dialog"
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
+  RenameSessionDialogController,
+  type RenameSessionDialogHandle,
+} from "@/features/pi-web/app-shell-session-dialogs"
+import {
   buildRequestUrl,
   fetchJson,
   readFileAsPromptImage,
@@ -1314,10 +1318,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [renameOpen, setRenameOpen] = React.useState(false)
-  const [renameTarget, setRenameTarget] =
-    React.useState<SessionListEntry | null>(null)
-  const [renameValue, setRenameValue] = React.useState("")
   const [deleteTargets, setDeleteTargets] = React.useState<
     Array<SessionListEntry>
   >([])
@@ -1349,6 +1349,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const addDirectoryDialogRef =
     React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
   const addDirectoryOpenRef = React.useRef(false)
+  const renameDialogRef = React.useRef<RenameSessionDialogHandle | null>(null)
+  const renameOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1634,16 +1636,15 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const openRenameDialog = () => {
-    setRenameTarget(null)
-    setRenameValue(sessionState.sessionName || currentSessionTitle)
-    setRenameOpen(true)
+    if (!sessionState.sessionFile) return
+    renameDialogRef.current?.open({
+      path: sessionState.sessionFile,
+      title: sessionState.sessionName || currentSessionTitle,
+    })
   }
 
   const openRenameDialogForEntry = (entry: SessionListEntry) => {
-    if (!entry.path) return
-    setRenameTarget(entry)
-    setRenameValue(entry.title || "")
-    setRenameOpen(true)
+    renameDialogRef.current?.openForEntry(entry)
   }
 
   const openDeleteDialog = (targets: Array<SessionListEntry>) => {
@@ -2103,8 +2104,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     navigateTreeNode,
     openForkDialog,
     openTreeDialog,
-    renameSession,
-    renameSessionToValue,
+    renameSessionPath,
     resolveUiRequest,
     runCompact,
     saveTreeLabel,
@@ -2120,16 +2120,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionState,
     selectedTreeNodeId,
     selectedTreeNodeLabel,
-    renameTarget,
-    renameValue,
     deleteTargets,
     pendingUiRequest,
     queryClient,
     setTreeOpen,
     setTreeQuery,
     setForkOpen,
-    setRenameOpen,
-    setRenameTarget,
     setDeleteTargets,
     setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor,
@@ -2176,7 +2172,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           return
         }
         replaceComposerDraft("")
-        await renameSessionToValue(trimmedArgs, false)
+        await renameSessionPath(sessionState.sessionFile, trimmedArgs)
         return
       }
       case "delete": {
@@ -2592,7 +2588,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     forkOpen,
     hasPendingUiRequest: Boolean(pendingUiRequest),
     lastEscapePressedAtRef,
-    renameOpen,
+    renameOpenRef,
     selectedSidebarSessions,
     sessionHasAvailableModels: sessionState.availableModels.length > 0,
     sessionHasFile: Boolean(sessionState.sessionFile),
@@ -2945,19 +2941,13 @@ const AppShellSessionWorkspace = React.forwardRef<
         onAddDirectoryPath={addDirectoryPath}
       />
 
+      <RenameSessionDialogController
+        ref={renameDialogRef}
+        openStateRef={renameOpenRef}
+        onRenameSession={renameSessionPath}
+      />
+
       <AppShellDialogs
-        renameOpen={renameOpen}
-        onRenameOpenChange={(open) => {
-          if (!open) {
-            setRenameTarget(null)
-          }
-          setRenameOpen(open)
-        }}
-        renameValue={renameValue}
-        onRenameValueChange={setRenameValue}
-        onRenameSession={() => {
-          void renameSession()
-        }}
         deleteOpen={deleteOpen}
         onDeleteOpenChange={(open) => {
           if (!open) {

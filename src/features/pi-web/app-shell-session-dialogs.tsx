@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import type { ForkMessage } from "@/features/pi-web/app-shell-dialog-types"
+import type { SessionListEntry } from "@/lib/pi-web-api"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -94,6 +95,87 @@ export function RenameSessionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+export type RenameSessionDialogHandle = {
+  open: (target: { path: string; title: string }) => void
+  openForEntry: (entry: SessionListEntry) => void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type RenameSessionDialogControllerProps = {
+  ref?: React.Ref<RenameSessionDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  onRenameSession: (
+    path: string,
+    name: string
+  ) => Promise<boolean> | boolean | void
+}
+
+export function RenameSessionDialogController({
+  ref,
+  openStateRef,
+  onRenameSession,
+}: RenameSessionDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const [renameValue, setRenameValue] = React.useState("")
+  const targetPathRef = React.useRef("")
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  const openTarget = (target: { path: string; title: string }) => {
+    const nextPath = target.path.trim()
+    if (!nextPath) return
+
+    targetPathRef.current = nextPath
+    setRenameValue(target.title)
+    setOpenState(true)
+  }
+
+  const submitRename = async () => {
+    const success = await onRenameSession(targetPathRef.current, renameValue)
+    if (success === false) return
+
+    setOpenState(false)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: openTarget,
+      openForEntry: (entry) => {
+        if (!entry.path) return
+        openTarget({ path: entry.path, title: entry.title || "" })
+      },
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    [renameValue]
+  )
+
+  return (
+    <RenameSessionDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpenState(nextOpen)
+      }}
+      renameValue={renameValue}
+      onRenameValueChange={setRenameValue}
+      onRenameSession={() => {
+        void submitRename()
+      }}
+    />
   )
 }
 

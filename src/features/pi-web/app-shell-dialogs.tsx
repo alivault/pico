@@ -10,17 +10,11 @@ import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dia
 import {
   DeleteSessionsDialog,
   ForkSessionDialog,
-  RenameSessionDialog,
 } from "@/features/pi-web/app-shell-session-dialogs"
 import { AppShellTreeDialog } from "@/features/pi-web/app-shell-tree-dialog"
 import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 
 type AppShellDialogsProps = {
-  renameOpen: boolean
-  onRenameOpenChange: (open: boolean) => void
-  renameValue: string
-  onRenameValueChange: (value: string) => void
-  onRenameSession: () => void
   deleteOpen: boolean
   onDeleteOpenChange: (open: boolean) => void
   deleteTitle: string
@@ -71,11 +65,6 @@ type AppShellDialogsProps = {
 }
 
 export function AppShellDialogs({
-  renameOpen,
-  onRenameOpenChange,
-  renameValue,
-  onRenameValueChange,
-  onRenameSession,
   deleteOpen,
   onDeleteOpenChange,
   deleteTitle,
@@ -123,14 +112,6 @@ export function AppShellDialogs({
 }: AppShellDialogsProps) {
   return (
     <>
-      <RenameSessionDialog
-        open={renameOpen}
-        onOpenChange={onRenameOpenChange}
-        renameValue={renameValue}
-        onRenameValueChange={onRenameValueChange}
-        onRenameSession={onRenameSession}
-      />
-
       <DeleteSessionsDialog
         open={deleteOpen}
         onOpenChange={onDeleteOpenChange}

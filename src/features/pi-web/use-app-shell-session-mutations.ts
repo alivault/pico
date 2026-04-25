@@ -31,16 +31,12 @@ type UseAppShellSessionMutationsOptions = {
   sessionState: SessionState
   selectedTreeNodeId: string | null
   selectedTreeNodeLabel: string
-  renameTarget: SessionListEntry | null
-  renameValue: string
   deleteTargets: Array<SessionListEntry>
   pendingUiRequest: ExtensionUiEvent | null
   queryClient: QueryClient
   setTreeOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTreeQuery: React.Dispatch<React.SetStateAction<string>>
   setForkOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setRenameOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setRenameTarget: React.Dispatch<React.SetStateAction<SessionListEntry | null>>
   setDeleteTargets: React.Dispatch<
     React.SetStateAction<Array<SessionListEntry>>
   >
@@ -62,16 +58,12 @@ export function useAppShellSessionMutations({
   sessionState,
   selectedTreeNodeId,
   selectedTreeNodeLabel,
-  renameTarget,
-  renameValue,
   deleteTargets,
   pendingUiRequest,
   queryClient,
   setTreeOpen,
   setTreeQuery,
   setForkOpen,
-  setRenameOpen,
-  setRenameTarget,
   setDeleteTargets,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
@@ -460,19 +452,14 @@ export function useAppShellSessionMutations({
     },
   })
 
-  const renameSessionToValue = React.useCallback(
-    async (nextName: string, closeDialog = true) => {
-      const targetPath = renameTarget?.path || sessionState.sessionFile
+  const renameSessionPath = React.useCallback(
+    async (targetPath: string | undefined, nextName: string) => {
       if (!viewerContextId || !targetPath) return false
       try {
         await renameSessionMutation.mutateAsync({
           path: targetPath,
           name: nextName,
         })
-        if (closeDialog) {
-          setRenameOpen(false)
-          setRenameTarget(null)
-        }
         toast.success("Renamed session")
         return true
       } catch (error) {
@@ -482,19 +469,8 @@ export function useAppShellSessionMutations({
         return false
       }
     },
-    [
-      renameSessionMutation,
-      renameTarget?.path,
-      sessionState.sessionFile,
-      setRenameOpen,
-      setRenameTarget,
-      viewerContextId,
-    ]
+    [renameSessionMutation, viewerContextId]
   )
-
-  const renameSession = React.useCallback(async () => {
-    return await renameSessionToValue(renameValue)
-  }, [renameSessionToValue, renameValue])
 
   const deleteSessionMutation = useMutation({
     mutationFn: async (paths: Array<string>) => {
@@ -628,8 +604,7 @@ export function useAppShellSessionMutations({
     navigateTreeNode,
     openForkDialog,
     openTreeDialog,
-    renameSession,
-    renameSessionToValue,
+    renameSessionPath,
     resolveUiRequest,
     runCompact,
     saveTreeLabel,
