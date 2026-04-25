@@ -57,7 +57,11 @@ import {
   readDirectoryGitFingerprint,
   type GitRepositoryFingerprint,
 } from "@/server/git"
-import type { GitChangedEvent, GitChangedScope } from "@/lib/pi-web-api"
+import type {
+  GitChangedEvent,
+  GitChangedScope,
+  SessionStatusEvent,
+} from "@/lib/pi-web-api"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
@@ -1178,6 +1182,35 @@ export class PiWebRuntime {
     this.sendToContext(context, await this.listSessionsPayload(context))
   }
 
+  private sessionStatusPayload(
+    context: ContextState,
+    entry: SessionEntry
+  ): SessionStatusEvent {
+    const sessionPath = this.getSessionPath(entry)
+
+    return {
+      type: "session_status",
+      sessionKey: entry.key,
+      sessionId: entry.session.sessionId,
+      sessionPath: entry.session.sessionFile,
+      streaming: this.getEntryStreamingState(entry),
+      unread: context.unreadFinished.has(sessionPath),
+    }
+  }
+
+  private sendSessionStatusToContext(
+    context: ContextState,
+    entry: SessionEntry
+  ) {
+    this.sendToContext(context, this.sessionStatusPayload(context, entry))
+  }
+
+  private broadcastSessionStatusAll(entry: SessionEntry) {
+    for (const context of this.contexts.values()) {
+      this.sendSessionStatusToContext(context, entry)
+    }
+  }
+
   private async broadcastSessionsAll() {
     await Promise.all(
       [...this.contexts.values()].map((context) =>
@@ -1317,6 +1350,9 @@ export class PiWebRuntime {
         await this.sendSessionsToContext(activeContext),
       notify: options?.notify,
     })
+    if (options?.notify !== false) {
+      this.sendSessionStatusToContext(context, entry)
+    }
     this.syncGitWatchDirectories()
   }
 
@@ -2234,8 +2270,11 @@ export class PiWebRuntime {
   ) {
     const type = typeof event.type === "string" ? event.type : ""
 
+    let statusChanged = false
+
     if (type === "agent_start") {
       entry.streamingState = true
+      statusChanged = true
     }
 
     if (type === "queue_update") {
@@ -2261,6 +2300,11 @@ export class PiWebRuntime {
       this.touchSessionEntry(entry)
       this.reconcilePendingUserMessages(entry)
       this.markUnreadFinished(entry)
+      statusChanged = true
+    }
+
+    if (statusChanged) {
+      this.broadcastSessionStatusAll(entry)
     }
 
     await this.broadcastEntryState(entry)

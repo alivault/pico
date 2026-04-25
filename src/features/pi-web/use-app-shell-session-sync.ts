@@ -8,6 +8,7 @@ import type {
   ExtensionUiEvent,
   PiWebServerEvent,
   SessionListEntry,
+  SessionStatusEvent,
   SessionsEvent,
   SimpleOkResponse,
 } from "@/lib/pi-web-api"
@@ -27,6 +28,7 @@ import {
 } from "@/lib/pi-web"
 import {
   isGitChangedEvent,
+  isSessionStatusEvent,
   isSessionsEvent,
   isStateSyncEvent,
 } from "@/lib/pi-web-api"
@@ -66,6 +68,9 @@ type UseAppShellSessionSyncOptions = {
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
+  applySidebarSessionStatusRef: React.MutableRefObject<
+    (status: SessionStatusEvent) => void
+  >
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   setPendingMessages: React.Dispatch<
     React.SetStateAction<Array<PendingComposerMessage>>
@@ -299,6 +304,7 @@ export function useAppShellSessionSync({
   setSessionState,
   setConversationItems,
   setSessionsEvent,
+  applySidebarSessionStatusRef,
   setComposerImages,
   setPendingMessages,
   pendingUiRequestHandlerRef,
@@ -476,6 +482,22 @@ export function useAppShellSessionSync({
           setSessionState(nextState)
         }
 
+        if (
+          previousState.sessionKey !== nextState.sessionKey ||
+          previousState.sessionId !== nextState.sessionId ||
+          previousState.sessionFile !== nextState.sessionFile ||
+          previousState.streaming !== nextState.streaming
+        ) {
+          applySidebarSessionStatusRef.current({
+            type: "session_status",
+            sessionKey: nextState.sessionKey,
+            sessionId: nextState.sessionId,
+            sessionPath: nextState.sessionFile,
+            streaming: nextState.streaming,
+            unread: false,
+          })
+        }
+
         if (sessionChanged) {
           setComposerImages((current) => (current.length === 0 ? current : []))
         }
@@ -499,6 +521,11 @@ export function useAppShellSessionSync({
         setSessionsEvent((current) =>
           sameSessionsEvent(current, payload) ? current : payload
         )
+        return
+      }
+
+      if (isSessionStatusEvent(payload)) {
+        applySidebarSessionStatusRef.current(payload)
         return
       }
 
@@ -583,6 +610,7 @@ export function useAppShellSessionSync({
     composerSkillRef,
     composerTextRef,
     lastSyncedEditorTextRef,
+    applySidebarSessionStatusRef,
     queryClient,
     replaceComposerDraftRef,
     sessionStateRef,

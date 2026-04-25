@@ -24,6 +24,7 @@ import type {
   FileCompletionsResponse,
   PathCompletionsResponse,
   SessionListEntry,
+  SessionStatusEvent,
   SessionsEvent,
 } from "@/lib/pi-web-api"
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
@@ -349,6 +350,133 @@ function clearUnreadForActiveSidebarSession(
   }
 
   return changed ? next : current
+}
+
+type SidebarSessionStatus = Omit<SessionStatusEvent, "type">
+type SidebarSessionStatusMap = Record<string, SidebarSessionStatus>
+
+function sidebarSessionStatusKeys(status: SidebarSessionStatus) {
+  const keys: Array<string> = []
+  const sessionPath = status.sessionPath?.trim() || ""
+  const sessionId = status.sessionId?.trim() || ""
+  const sessionKey = status.sessionKey?.trim() || ""
+
+  if (sessionPath) keys.push(`path:${sessionPath}`)
+  if (sessionId) keys.push(`id:${sessionId}`)
+  if (sessionKey) keys.push(`key:${sessionKey}`)
+
+  return keys
+}
+
+function sameSidebarSessionStatus(
+  left: SidebarSessionStatus | undefined,
+  right: SidebarSessionStatus
+) {
+  return (
+    left?.sessionKey === right.sessionKey &&
+    left?.sessionId === right.sessionId &&
+    left?.sessionPath === right.sessionPath &&
+    left?.streaming === right.streaming &&
+    left?.unread === right.unread
+  )
+}
+
+function mergeSidebarSessionStatusMap(
+  current: SidebarSessionStatusMap,
+  event: SessionStatusEvent
+) {
+  const keys = sidebarSessionStatusKeys(event)
+  if (keys.length === 0) return current
+
+  let changed = false
+  const next: SidebarSessionStatusMap = { ...current }
+
+  for (const key of keys) {
+    const previous = current[key]
+    const status: SidebarSessionStatus = {
+      sessionKey: event.sessionKey ?? previous?.sessionKey,
+      sessionId: event.sessionId ?? previous?.sessionId,
+      sessionPath: event.sessionPath ?? previous?.sessionPath,
+      streaming:
+        typeof event.streaming === "boolean"
+          ? event.streaming
+          : previous?.streaming,
+      unread:
+        typeof event.unread === "boolean" ? event.unread : previous?.unread,
+    }
+
+    if (sameSidebarSessionStatus(previous, status)) continue
+    next[key] = status
+    changed = true
+  }
+
+  return changed ? next : current
+}
+
+function sidebarStatusForEntry(
+  entry: SessionListEntry,
+  statuses: SidebarSessionStatusMap
+) {
+  const pathKey = entry.path ? `path:${entry.path}` : ""
+  const idKey = entry.id ? `id:${entry.id}` : ""
+  return (
+    (pathKey ? statuses[pathKey] : undefined) ||
+    (idKey ? statuses[idKey] : undefined)
+  )
+}
+
+function applySidebarSessionStatus(
+  entry: SessionListEntry,
+  status: SidebarSessionStatus | undefined
+) {
+  if (!status) return entry
+
+  const nextStreaming =
+    typeof status.streaming === "boolean" ? status.streaming : entry.streaming
+  const nextUnread =
+    typeof status.unread === "boolean" ? status.unread : entry.unread
+
+  if (
+    Boolean(entry.streaming) === Boolean(nextStreaming) &&
+    Boolean(entry.unread) === Boolean(nextUnread)
+  ) {
+    return entry
+  }
+
+  return {
+    ...entry,
+    streaming: nextStreaming,
+    unread: nextUnread,
+  }
+}
+
+function applySidebarSessionStatusOverlay(
+  indexes: Record<string, Array<SessionListEntry>>,
+  statuses: SidebarSessionStatusMap
+) {
+  if (Object.keys(statuses).length === 0) return indexes
+
+  let changed = false
+  const nextIndexes: Record<string, Array<SessionListEntry>> = {}
+
+  for (const [directory, sessions] of Object.entries(indexes)) {
+    let sessionsChanged = false
+    const nextSessions = sessions.map((entry) => {
+      const nextEntry = applySidebarSessionStatus(
+        entry,
+        sidebarStatusForEntry(entry, statuses)
+      )
+      if (nextEntry !== entry) {
+        sessionsChanged = true
+        changed = true
+      }
+      return nextEntry
+    })
+
+    nextIndexes[directory] = sessionsChanged ? nextSessions : sessions
+  }
+
+  return changed ? nextIndexes : indexes
 }
 
 function useLatestRef<T>(value: T) {
@@ -1224,6 +1352,9 @@ type AppShellSessionWorkspaceProps = {
   ) => void
   setConnected: React.Dispatch<React.SetStateAction<boolean>>
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
+  applySidebarSessionStatusRef: React.MutableRefObject<
+    (status: SessionStatusEvent) => void
+  >
   bootstrapSidebarDirectories: Array<string>
   baseSidebarDirectories: Array<string>
   directoryStateByPath: Map<string, DirectoryState>
@@ -1250,6 +1381,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     onSelectSession,
     setConnected,
     setSessionsEvent,
+    applySidebarSessionStatusRef,
     bootstrapSidebarDirectories,
     baseSidebarDirectories,
     directoryStateByPath,
@@ -1781,6 +1913,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSessionState,
     setConversationItems,
     setSessionsEvent,
+    applySidebarSessionStatusRef,
     setComposerImages,
     setPendingMessages,
     pendingUiRequestHandlerRef,
@@ -2990,6 +3123,8 @@ export function PiWebAppShell({
   const [directoryIndexLoading, setDirectoryIndexLoading] = React.useState<
     Record<string, boolean>
   >({})
+  const [sidebarSessionStatusByKey, setSidebarSessionStatusByKey] =
+    React.useState<SidebarSessionStatusMap>({})
   const [
     sidebarDeferredDirectoryLoadingReady,
     setSidebarDeferredDirectoryLoadingReady,
@@ -3028,6 +3163,18 @@ export function PiWebAppShell({
 
     return nextIndexes
   })()
+  const sidebarDirectoryIndexes = applySidebarSessionStatusOverlay(
+    directoryIndexes,
+    sidebarSessionStatusByKey
+  )
+  const applySidebarSessionStatusEvent = (status: SessionStatusEvent) => {
+    setSidebarSessionStatusByKey((current) =>
+      mergeSidebarSessionStatusMap(current, status)
+    )
+  }
+  const applySidebarSessionStatusRef = useLatestRef(
+    applySidebarSessionStatusEvent
+  )
 
   const startDirectoryIndexRequest = (directories: Array<string>) => {
     const requestId = directoryIndexRequestIdRef.current + 1
@@ -3244,6 +3391,24 @@ export function PiWebAppShell({
   ])
 
   React.useEffect(() => {
+    if (!sessionsEvent) return
+
+    setSidebarSessionStatusByKey((current) =>
+      mergeSidebarSessionStatusMap(current, {
+        type: "session_status",
+        sessionKey: sessionsEvent.activeSessionKey,
+        sessionId: sessionsEvent.activeSessionId,
+        sessionPath: sessionsEvent.activeSessionPath,
+        unread: false,
+      })
+    )
+  }, [
+    sessionsEvent?.activeSessionId,
+    sessionsEvent?.activeSessionKey,
+    sessionsEvent?.activeSessionPath,
+  ])
+
+  React.useEffect(() => {
     if (!viewerContextId || !sidebarDeferredDirectoryLoadingReady) return
 
     const missingDirectories = baseSidebarDirectories.filter(
@@ -3343,10 +3508,10 @@ export function PiWebAppShell({
 
     for (const directory of baseSidebarDirectories) {
       const sessions = Object.prototype.hasOwnProperty.call(
-        directoryIndexes,
+        sidebarDirectoryIndexes,
         directory
       )
-        ? directoryIndexes[directory]
+        ? sidebarDirectoryIndexes[directory]
         : []
 
       if (!query) {
@@ -3408,10 +3573,10 @@ export function PiWebAppShell({
 
     for (const directory of baseSidebarDirectories) {
       const entries = Object.prototype.hasOwnProperty.call(
-        directoryIndexes,
+        sidebarDirectoryIndexes,
         directory
       )
-        ? directoryIndexes[directory]
+        ? sidebarDirectoryIndexes[directory]
         : []
 
       for (const entry of entries) {
@@ -3598,10 +3763,11 @@ export function PiWebAppShell({
         onSelectSession={onSelectSession}
         setConnected={setConnected}
         setSessionsEvent={setSessionsEvent}
+        applySidebarSessionStatusRef={applySidebarSessionStatusRef}
         bootstrapSidebarDirectories={initialSidebarBootstrapDirectories}
         baseSidebarDirectories={baseSidebarDirectories}
         directoryStateByPath={directoryStateByPath}
-        directoryIndexes={directoryIndexes}
+        directoryIndexes={sidebarDirectoryIndexes}
         sidebarSessions={sidebarSessions}
         selectedSidebarSessions={selectedSidebarSessions}
         sessionSearchInputRef={sessionSearchInputRef}

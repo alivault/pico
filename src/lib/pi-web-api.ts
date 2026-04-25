@@ -159,6 +159,15 @@ export type SessionsEvent = SessionsPayload & {
   directoryIndexes?: Record<string, DirectorySessionsIndexSnapshot>
 }
 
+export type SessionStatusEvent = {
+  type: "session_status"
+  sessionKey?: string
+  sessionId?: string
+  sessionPath?: string
+  streaming?: boolean
+  unread?: boolean
+}
+
 export type PromptResponse =
   | {
       ok: true
@@ -353,6 +362,7 @@ export type GitChangedEvent = {
 export type PiWebServerEvent =
   | StateSyncPayload
   | SessionsEvent
+  | SessionStatusEvent
   | RequestErrorEvent
   | ExtensionErrorEvent
   | ExtensionUiEvent
@@ -382,6 +392,16 @@ export function isSessionsEvent(value: unknown): value is SessionsEvent {
     value &&
     typeof value === "object" &&
     (value as { type?: unknown }).type === "sessions"
+  )
+}
+
+export function isSessionStatusEvent(
+  value: unknown
+): value is SessionStatusEvent {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "session_status"
   )
 }
 
