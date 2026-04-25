@@ -52,7 +52,12 @@ import {
 } from "@/server/pi-web-runtime-ui-requests"
 import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import { GitWatchManager, type GitWatchChange } from "@/server/git-watch"
-import type { GitChangedEvent } from "@/lib/pi-web-api"
+import {
+  invalidateDirectoryGitCaches,
+  readDirectoryGitFingerprint,
+  type GitRepositoryFingerprint,
+} from "@/server/git"
+import type { GitChangedEvent, GitChangedScope } from "@/lib/pi-web-api"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
@@ -504,8 +509,13 @@ export class PiWebRuntime {
   private readonly servicesByCwd = new Map<string, SessionServicesLike>()
   private readonly pendingUiRequests = new Map<string, PendingUiRequest>()
   private readonly highlightCache = new Map<string, HighlightPayload>()
+  private readonly gitFingerprints = new Map<
+    string,
+    GitRepositoryFingerprint | null
+  >()
+  private readonly primingGitFingerprints = new Set<string>()
   private readonly gitWatchManager = new GitWatchManager((change) => {
-    this.handleGitWatchChange(change)
+    void this.handleGitWatchChange(change)
   })
   private sdkPromise?: Promise<PiSdkLike>
   private heartbeat: NodeJS.Timeout
@@ -1190,10 +1200,77 @@ export class PiWebRuntime {
       }
     }
 
+    for (const cwd of this.gitFingerprints.keys()) {
+      if (!cwds.has(cwd)) {
+        this.gitFingerprints.delete(cwd)
+      }
+    }
+
     this.gitWatchManager.setWatchedDirectories(cwds)
+    this.primeGitFingerprints(cwds)
   }
 
-  private handleGitWatchChange(change: GitWatchChange) {
+  private primeGitFingerprints(cwds: Iterable<string>) {
+    for (const cwd of cwds) {
+      if (this.gitFingerprints.has(cwd)) continue
+      if (this.primingGitFingerprints.has(cwd)) continue
+
+      this.primingGitFingerprints.add(cwd)
+      void readDirectoryGitFingerprint(cwd)
+        .then((fingerprint) => {
+          this.gitFingerprints.set(cwd, fingerprint)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.primingGitFingerprints.delete(cwd)
+        })
+    }
+  }
+
+  private gitChangedScopes(
+    previous: GitRepositoryFingerprint | null,
+    next: GitRepositoryFingerprint | null
+  ) {
+    if (!previous || !next) {
+      return ["status", "files", "refs"] satisfies Array<GitChangedScope>
+    }
+
+    const scopes: Array<GitChangedScope> = []
+    if (previous.statusKey !== next.statusKey) scopes.push("status")
+    if (previous.filesKey !== next.filesKey) scopes.push("files")
+    if (previous.refsKey !== next.refsKey) scopes.push("refs")
+    return scopes
+  }
+
+  private sameGitFingerprint(
+    previous: GitRepositoryFingerprint | null,
+    next: GitRepositoryFingerprint | null
+  ) {
+    if (!previous || !next) return previous === next
+    return (
+      previous.statusKey === next.statusKey &&
+      previous.filesKey === next.filesKey &&
+      previous.refsKey === next.refsKey
+    )
+  }
+
+  private async handleGitWatchChange(change: GitWatchChange) {
+    const previous = this.gitFingerprints.get(change.cwd)
+    const next = await readDirectoryGitFingerprint(change.cwd).catch(() => null)
+    this.gitFingerprints.set(change.cwd, next)
+
+    if (previous !== undefined && this.sameGitFingerprint(previous, next)) {
+      return
+    }
+
+    const scopes =
+      previous === undefined
+        ? (["status", "files", "refs"] satisfies Array<GitChangedScope>)
+        : this.gitChangedScopes(previous, next)
+    if (scopes.length === 0) return
+
+    invalidateDirectoryGitCaches(change.cwd)
+
     for (const context of this.contexts.values()) {
       if (context.clients.size === 0) continue
 
@@ -1206,6 +1283,7 @@ export class PiWebRuntime {
         cwd,
         repositoryRoot: change.repositoryRoot,
         changedAt: Date.now(),
+        scopes,
       } satisfies GitChangedEvent
       this.sendToContext(context, payload)
     }

@@ -3,7 +3,6 @@ import { stat } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import {
-  invalidateAllDirectoryGitCaches,
   resolveDirectoryGitRepository,
   type GitRepositoryInfo,
 } from "@/server/git"
@@ -215,8 +214,6 @@ export class GitWatchManager {
 
   private emitRepositoryChange(state: RepositoryWatchState) {
     if (state.disposed || state.subscribers.size === 0) return
-
-    invalidateAllDirectoryGitCaches()
 
     for (const cwd of state.subscribers) {
       this.onChange({

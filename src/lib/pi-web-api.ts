@@ -340,11 +340,14 @@ export type AutoSessionNamingErrorEvent = {
   refinementReason?: string
 }
 
+export type GitChangedScope = "status" | "files" | "refs"
+
 export type GitChangedEvent = {
   type: "git_changed"
   cwd: string
   repositoryRoot?: string
   changedAt: number
+  scopes?: Array<GitChangedScope>
 }
 
 export type PiWebServerEvent =

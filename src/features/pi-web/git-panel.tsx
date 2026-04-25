@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
 import { piWebQueryKeys } from "@/features/pi-web/query-keys"
-import { useRelativeTimeTicker } from "@/features/pi-web/relative-time"
 import type {
   GitChangeFile,
   GitChangesResponse,
@@ -84,17 +83,29 @@ function gitStatusQueryOptions({
 function gitChangesQueryOptions({
   viewerContextId,
   cwd,
+  scope,
 }: {
   viewerContextId: string
   cwd: string
+  scope: "files" | "branches" | "commits"
 }) {
+  const queryKey =
+    scope === "files"
+      ? piWebQueryKeys.gitFiles(viewerContextId, cwd)
+      : scope === "branches"
+        ? piWebQueryKeys.gitBranches(viewerContextId, cwd)
+        : piWebQueryKeys.gitCommits(viewerContextId, cwd)
+
   return {
-    queryKey: piWebQueryKeys.gitChanges(viewerContextId, cwd),
+    queryKey,
     queryFn: () =>
       fetchJson<GitChangesData>(
-        buildRequestUrl(`/api/git-changes?cwd=${encodeURIComponent(cwd)}`, {
-          contextId: viewerContextId,
-        })
+        buildRequestUrl(
+          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=${scope}`,
+          {
+            contextId: viewerContextId,
+          }
+        )
       ),
     staleTime: GIT_QUERY_STALE_TIME_MS,
     gcTime: GIT_QUERY_GC_TIME_MS,
@@ -247,92 +258,6 @@ function gitLocalBranchTrackClass(branch: GitLocalBranch, trackText: string) {
   return "text-amber-500"
 }
 
-function gitShortRelativeDate(value: string | undefined) {
-  const label = value?.trim()
-  if (!label) return ""
-  if (/^(just now|now)$/i.test(label)) return "now"
-
-  const match = label.match(
-    /^(\d+|an?|one)\s+(second|minute|hour|day|week|month|year)s?(?:,\s+.*)?\s+ago$/i
-  )
-  if (!match) return label
-
-  const amount = match[1]?.toLowerCase() || ""
-  const unit = match[2]?.toLowerCase()
-  const count =
-    amount === "a" || amount === "an" || amount === "one" ? "1" : amount
-  const unitLabel =
-    unit === "second"
-      ? "s"
-      : unit === "minute"
-        ? "m"
-        : unit === "hour"
-          ? "h"
-          : unit === "day"
-            ? "d"
-            : unit === "week"
-              ? "w"
-              : unit === "month"
-                ? "mo"
-                : unit === "year"
-                  ? "y"
-                  : ""
-
-  return unitLabel ? `${count}${unitLabel} ago` : label
-}
-
-function gitTimestamp(value: string | undefined) {
-  const timestamp = new Date(value || "").getTime()
-  return Number.isNaN(timestamp) ? undefined : timestamp
-}
-
-function gitShortRelativeTimeFromTimestamp(timestamp: number) {
-  const diffMs = Date.now() - timestamp
-  const past = diffMs >= 0
-  const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
-  const format = (value: number, unit: string) =>
-    past ? `${value}${unit} ago` : `in ${value}${unit}`
-
-  if (seconds < 90) return format(seconds, "s")
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 90) return format(minutes, "m")
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 36) return format(hours, "h")
-
-  const days = Math.floor(hours / 24)
-  if (days < 14) return format(days, "d")
-
-  const weeks = Math.floor(days / 7)
-  if (weeks < 10) return format(weeks, "w")
-
-  if (days < 365) return format(Math.max(1, Math.floor(days / 30)), "mo")
-
-  return format(Math.max(1, Math.floor(days / 365)), "y")
-}
-
-function GitBranchRelativeDate({
-  className,
-  committerDate,
-  relativeDate,
-}: {
-  committerDate?: string
-  relativeDate?: string
-  className?: string
-}) {
-  const timestamp = gitTimestamp(committerDate)
-  useRelativeTimeTicker(timestamp)
-
-  const label =
-    timestamp === undefined
-      ? gitShortRelativeDate(relativeDate)
-      : gitShortRelativeTimeFromTimestamp(timestamp)
-  if (!label) return null
-
-  return <span className={className}>{label}</span>
-}
-
 function gitLocalBranchesForRender(
   branches: Array<GitLocalBranch> | null | undefined,
   gitStatus: GitStatusValue | undefined
@@ -475,7 +400,11 @@ function GitPanelErrorToasts({ viewerContextId, cwd, active }: GitScopedProps) {
     notifyOnChangeProps: ["error", "errorUpdatedAt"],
   })
   const changesErrorQuery = useQuery({
-    ...gitChangesQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
     enabled,
     notifyOnChangeProps: ["error", "errorUpdatedAt"],
   })
@@ -580,11 +509,24 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
     queryKey: piWebQueryKeys.gitStatus(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const changesFetchCount = useIsFetching({
-    queryKey: piWebQueryKeys.gitChanges(viewerContextId, normalizedCwd),
+  const filesFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const refreshing = statusFetchCount + changesFetchCount > 0
+  const branchesFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd),
+    exact: true,
+  })
+  const commitsFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
+    exact: true,
+  })
+  const refreshing =
+    statusFetchCount +
+      filesFetchCount +
+      branchesFetchCount +
+      commitsFetchCount >
+    0
 
   const refreshGit = async () => {
     if (!viewerContextId || !normalizedCwd) return
@@ -597,7 +539,17 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
           refetchType: "active",
         }),
         queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitChanges(viewerContextId, normalizedCwd),
+          queryKey: piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd),
+          exact: true,
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd),
+          exact: true,
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
           exact: true,
           refetchType: "active",
         }),
@@ -717,7 +669,11 @@ function GitFileRow({ file }: { file: GitChangeFile }) {
 function GitFilesSection({ viewerContextId, cwd, active }: GitScopedProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const filesQuery = useQuery({
-    ...gitChangesQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     select: selectGitFiles,
     notifyOnChangeProps: ["data", "isPending", "error"],
@@ -833,11 +789,6 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
             {trackText}
           </span>
         ) : null}
-        <GitBranchRelativeDate
-          className="text-muted-foreground/70"
-          committerDate={branch.committerDate}
-          relativeDate={branch.relativeDate}
-        />
       </span>
     </li>
   )
@@ -863,11 +814,6 @@ function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
         {branch.hash ? (
           <span className="text-sky-500">{branch.hash}</span>
         ) : null}
-        <GitBranchRelativeDate
-          className="text-muted-foreground/70"
-          committerDate={branch.committerDate}
-          relativeDate={branch.relativeDate}
-        />
       </span>
     </li>
   )
@@ -877,7 +823,11 @@ function GitBranchesSection({ viewerContextId, cwd, active }: GitScopedProps) {
   const [branchScope, setBranchScope] = React.useState<BranchScope>("local")
   const normalizedCwd = normalizeCwd(cwd)
   const branchesQuery = useQuery({
-    ...gitChangesQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "branches",
+    }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     select:
       branchScope === "remote"
@@ -1006,13 +956,21 @@ function GitCommitRow({
 function GitCommitsSection({ viewerContextId, cwd, active }: GitScopedProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const commitsQuery = useQuery({
-    ...gitChangesQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "commits",
+    }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     select: selectGitCommits,
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
   const unpushedQuery = useQuery({
-    ...gitChangesQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "commits",
+    }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     select: selectGitUnpushedCommitShortHashes,
     notifyOnChangeProps: ["data"],

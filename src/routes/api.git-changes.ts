@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
-import { readDirectoryGitChanges } from "@/server/git"
+import {
+  readDirectoryGitBranches,
+  readDirectoryGitChanges,
+  readDirectoryGitCommits,
+  readDirectoryGitFiles,
+} from "@/server/git"
 import { getPiWebRuntime } from "@/server/pi-web-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { routeErrorResponse } from "@/server/route-helpers"
@@ -12,6 +17,7 @@ export const Route = createFileRoute("/api/git-changes")({
       GET: async ({ request }) => {
         const url = new URL(request.url)
         const requestedCwd = url.searchParams.get("cwd") || ""
+        const scope = url.searchParams.get("scope") || "all"
         if (!requestedCwd.trim()) {
           return errorResponse("cwd is required")
         }
@@ -21,6 +27,63 @@ export const Route = createFileRoute("/api/git-changes")({
             await getPiWebRuntime().resolveRequest(request)
           const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
+          if (scope === "files") {
+            const files = await readDirectoryGitFiles(cwd)
+            return jsonResponse({
+              ok: true,
+              cwd,
+              files: Array.isArray(files) ? files : files === null ? null : [],
+              localBranches: [],
+              remoteBranches: [],
+              commits: [],
+              unpushedCommitShortHashes: [],
+            })
+          }
+
+          if (scope === "branches") {
+            const branches = await readDirectoryGitBranches(cwd)
+            return jsonResponse({
+              ok: true,
+              cwd,
+              files: [],
+              localBranches: Array.isArray(branches?.localBranches)
+                ? branches.localBranches
+                : branches === null
+                  ? null
+                  : [],
+              remoteBranches: Array.isArray(branches?.remoteBranches)
+                ? branches.remoteBranches
+                : branches === null
+                  ? null
+                  : [],
+              commits: [],
+              unpushedCommitShortHashes: [],
+            })
+          }
+
+          if (scope === "commits") {
+            const commits = await readDirectoryGitCommits(cwd)
+            return jsonResponse({
+              ok: true,
+              cwd,
+              files: [],
+              localBranches: [],
+              remoteBranches: [],
+              commits: Array.isArray(commits?.commits)
+                ? commits.commits
+                : commits === null
+                  ? null
+                  : [],
+              unpushedCommitShortHashes: Array.isArray(
+                commits?.unpushedCommitShortHashes
+              )
+                ? commits.unpushedCommitShortHashes
+                : commits === null
+                  ? null
+                  : [],
+            })
+          }
+
           const gitChanges = await readDirectoryGitChanges(cwd)
           return jsonResponse({
             ok: true,

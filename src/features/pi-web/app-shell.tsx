@@ -116,7 +116,6 @@ import {
   HeaderGitStatusText,
 } from "@/features/pi-web/git-panel"
 import { piWebSessionScopeKey } from "@/features/pi-web/query-keys"
-import { RelativeTime } from "@/features/pi-web/relative-time"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
   useAppShellMessageScroll,
@@ -1483,9 +1482,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const displaySessionCwd = isSessionViewLoading
     ? loadingSessionSummary?.cwd
     : sessionState.cwd
-  const displaySessionModified = isSessionViewLoading
-    ? loadingSessionSummary?.modified
-    : sessionState.modified
   const activeSessionNotificationKey = sessionNotificationKey({
     sessionId: sessionState.sessionId,
     sessionFile: sessionState.sessionFile,
@@ -2628,9 +2624,6 @@ const AppShellSessionWorkspace = React.forwardRef<
                     viewerContextId={viewerContextId}
                     cwd={displaySessionCwd}
                   />
-                  {displaySessionModified && (
-                    <RelativeTime value={displaySessionModified} prefix="• " />
-                  )}
                 </div>
               </div>
             </div>

@@ -43,12 +43,28 @@ export type GitRemoteBranch = {
   committerDate?: string
 }
 
+export type GitBranchSummary = {
+  localBranches: Array<GitLocalBranch>
+  remoteBranches: Array<GitRemoteBranch>
+}
+
+export type GitCommitSummary = {
+  commits: Array<string>
+  unpushedCommitShortHashes: Array<string>
+}
+
 export type GitChangesSummary = {
   files: Array<GitChangeFile>
   localBranches: Array<GitLocalBranch>
   remoteBranches: Array<GitRemoteBranch>
   commits: Array<string>
   unpushedCommitShortHashes: Array<string>
+}
+
+export type GitRepositoryFingerprint = {
+  statusKey: string
+  filesKey: string
+  refsKey: string
 }
 
 export type GitRepositoryInfo = {
@@ -70,6 +86,18 @@ const gitChangesCache = new Map<
   string,
   { value: GitChangesSummary | null; expiresAt: number }
 >()
+const gitFilesCache = new Map<
+  string,
+  { value: Array<GitChangeFile> | null; expiresAt: number }
+>()
+const gitBranchesCache = new Map<
+  string,
+  { value: GitBranchSummary | null; expiresAt: number }
+>()
+const gitCommitsCache = new Map<
+  string,
+  { value: GitCommitSummary | null; expiresAt: number }
+>()
 
 function normalizeGitCwd(cwd: string) {
   return typeof cwd === "string" ? cwd.trim() : ""
@@ -88,11 +116,17 @@ export function invalidateDirectoryGitCaches(cwd: string) {
 
   gitStatusCache.delete(normalizedCwd)
   gitChangesCache.delete(normalizedCwd)
+  gitFilesCache.delete(normalizedCwd)
+  gitBranchesCache.delete(normalizedCwd)
+  gitCommitsCache.delete(normalizedCwd)
 }
 
 export function invalidateAllDirectoryGitCaches() {
   gitStatusCache.clear()
   gitChangesCache.clear()
+  gitFilesCache.clear()
+  gitBranchesCache.clear()
+  gitCommitsCache.clear()
 }
 
 async function runCommand(
@@ -613,7 +647,7 @@ export async function readDirectoryGitStatus(
   return value
 }
 
-export async function readDirectoryGitChanges(
+export async function readDirectoryGitFiles(
   cwd: string,
   { force = false }: { force?: boolean } = {}
 ) {
@@ -621,30 +655,23 @@ export async function readDirectoryGitChanges(
   if (!normalizedCwd) return null
 
   if (force) {
-    gitChangesCache.delete(normalizedCwd)
+    gitFilesCache.delete(normalizedCwd)
   }
 
-  const cached = gitChangesCache.get(normalizedCwd)
+  const cached = gitFilesCache.get(normalizedCwd)
   if (!force && cached && cached.expiresAt > Date.now()) {
     return cached.value
   }
 
   if (!(await isInsideWorkTree(normalizedCwd))) {
-    gitChangesCache.set(normalizedCwd, {
+    gitFilesCache.set(normalizedCwd, {
       value: null,
       expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
     })
     return null
   }
 
-  const [
-    statusResult,
-    numstatResult,
-    localBranchesResult,
-    remoteBranchesResult,
-    commitsResult,
-    unpushedResult,
-  ] = await Promise.all([
+  const [statusResult, numstatResult] = await Promise.all([
     runCommand(
       "git",
       [
@@ -663,6 +690,61 @@ export async function readDirectoryGitChanges(
       cwd: normalizedCwd,
       timeoutMs: 1_500,
     }),
+  ])
+
+  const numstatByPath =
+    numstatResult.code === 0
+      ? parseGitNumstatEntries(numstatResult.stdout)
+      : new Map()
+  const value =
+    statusResult.code === 0
+      ? parseGitStatusEntries(statusResult.stdout).map((file) => {
+          const diff = numstatByPath.get(file.path)
+          if (!diff) {
+            return file
+          }
+
+          return {
+            ...file,
+            linesAdded: diff.linesAdded,
+            linesDeleted: diff.linesDeleted,
+          }
+        })
+      : []
+
+  gitFilesCache.set(normalizedCwd, {
+    value,
+    expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+  })
+
+  return value
+}
+
+export async function readDirectoryGitBranches(
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
+) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (force) {
+    gitBranchesCache.delete(normalizedCwd)
+  }
+
+  const cached = gitBranchesCache.get(normalizedCwd)
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    gitBranchesCache.set(normalizedCwd, {
+      value: null,
+      expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+    })
+    return null
+  }
+
+  const [localBranchesResult, remoteBranchesResult] = await Promise.all([
     runCommand(
       "git",
       [
@@ -689,6 +771,52 @@ export async function readDirectoryGitChanges(
         timeoutMs: 1_500,
       }
     ),
+  ])
+
+  const value = {
+    localBranches:
+      localBranchesResult.code === 0
+        ? parseGitLocalBranches(localBranchesResult.stdout)
+        : [],
+    remoteBranches:
+      remoteBranchesResult.code === 0
+        ? parseGitRemoteBranches(remoteBranchesResult.stdout)
+        : [],
+  } satisfies GitBranchSummary
+
+  gitBranchesCache.set(normalizedCwd, {
+    value,
+    expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+  })
+
+  return value
+}
+
+export async function readDirectoryGitCommits(
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
+) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (force) {
+    gitCommitsCache.delete(normalizedCwd)
+  }
+
+  const cached = gitCommitsCache.get(normalizedCwd)
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    gitCommitsCache.set(normalizedCwd, {
+      value: null,
+      expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+    })
+    return null
+  }
+
+  const [commitsResult, unpushedResult] = await Promise.all([
     runCommand(
       "git",
       [
@@ -717,43 +845,55 @@ export async function readDirectoryGitChanges(
     ),
   ])
 
-  const numstatByPath =
-    numstatResult.code === 0
-      ? parseGitNumstatEntries(numstatResult.stdout)
-      : new Map()
-  const files =
-    statusResult.code === 0
-      ? parseGitStatusEntries(statusResult.stdout).map((file) => {
-          const diff = numstatByPath.get(file.path)
-          if (!diff) {
-            return file
-          }
-
-          return {
-            ...file,
-            linesAdded: diff.linesAdded,
-            linesDeleted: diff.linesDeleted,
-          }
-        })
-      : []
-
-  const value: GitChangesSummary = {
-    files,
-    localBranches:
-      localBranchesResult.code === 0
-        ? parseGitLocalBranches(localBranchesResult.stdout)
-        : [],
-    remoteBranches:
-      remoteBranchesResult.code === 0
-        ? parseGitRemoteBranches(remoteBranchesResult.stdout)
-        : [],
+  const value = {
     commits:
       commitsResult.code === 0 ? parseCommandLines(commitsResult.stdout) : [],
     unpushedCommitShortHashes:
       unpushedResult.code === 0
         ? parseCommandLines(unpushedResult.stdout, { trim: true })
         : [],
+  } satisfies GitCommitSummary
+
+  gitCommitsCache.set(normalizedCwd, {
+    value,
+    expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
+  })
+
+  return value
+}
+
+export async function readDirectoryGitChanges(
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
+) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (force) {
+    gitChangesCache.delete(normalizedCwd)
   }
+
+  const cached = gitChangesCache.get(normalizedCwd)
+  if (!force && cached && cached.expiresAt > Date.now()) {
+    return cached.value
+  }
+
+  const [files, branches, commits] = await Promise.all([
+    readDirectoryGitFiles(normalizedCwd, { force }),
+    readDirectoryGitBranches(normalizedCwd, { force }),
+    readDirectoryGitCommits(normalizedCwd, { force }),
+  ])
+
+  const value =
+    files === null || branches === null || commits === null
+      ? null
+      : {
+          files,
+          localBranches: branches.localBranches,
+          remoteBranches: branches.remoteBranches,
+          commits: commits.commits,
+          unpushedCommitShortHashes: commits.unpushedCommitShortHashes,
+        }
 
   gitChangesCache.set(normalizedCwd, {
     value,
@@ -761,4 +901,91 @@ export async function readDirectoryGitChanges(
   })
 
   return value
+}
+
+export async function readDirectoryGitFingerprint(cwd: string) {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  if (!normalizedCwd) return null
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    return null
+  }
+
+  const [
+    branchResult,
+    revisionResult,
+    upstreamResult,
+    statusResult,
+    numstatResult,
+    refsResult,
+  ] = await Promise.all([
+    runCommand("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand(
+      "git",
+      ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand(
+      "git",
+      [
+        "status",
+        "--porcelain",
+        "-z",
+        "--find-renames=50%",
+        "--untracked-files=all",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand("git", ["diff", "--numstat", "-z", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand(
+      "git",
+      [
+        "for-each-ref",
+        "--sort=refname",
+        "--format=%(refname)%00%(objectname)%00%(upstream)%00%(upstream:track)",
+        "refs/heads",
+        "refs/remotes",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+  ])
+
+  return {
+    statusKey: [
+      branchResult.code,
+      branchResult.stdout,
+      revisionResult.code,
+      revisionResult.stdout,
+      upstreamResult.code,
+      upstreamResult.stdout,
+      statusResult.code,
+      statusResult.stdout,
+    ].join("\u0000"),
+    filesKey: [
+      statusResult.code,
+      statusResult.stdout,
+      numstatResult.code,
+      numstatResult.stdout,
+    ].join("\u0000"),
+    refsKey: [refsResult.code, refsResult.stdout].join("\u0000"),
+  } satisfies GitRepositoryFingerprint
 }

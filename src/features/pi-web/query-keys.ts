@@ -18,6 +18,12 @@ export const piWebQueryKeys = {
     ["pi-web", "git-status", viewerContextId, cwd] as const,
   gitChanges: (viewerContextId: string, cwd: string) =>
     ["pi-web", "git-changes", viewerContextId, cwd] as const,
+  gitFiles: (viewerContextId: string, cwd: string) =>
+    ["pi-web", "git-files", viewerContextId, cwd] as const,
+  gitBranches: (viewerContextId: string, cwd: string) =>
+    ["pi-web", "git-branches", viewerContextId, cwd] as const,
+  gitCommits: (viewerContextId: string, cwd: string) =>
+    ["pi-web", "git-commits", viewerContextId, cwd] as const,
   sessionTree: (viewerContextId: string, sessionScopeKey: string) =>
     ["pi-web", "session-tree", viewerContextId, sessionScopeKey] as const,
   forkableMessages: (viewerContextId: string, sessionScopeKey: string) =>

@@ -504,18 +504,41 @@ export function useAppShellSessionSync({
       if (isGitChangedEvent(payload)) {
         const cwd = payload.cwd.trim()
         if (cwd) {
-          void Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
-              exact: true,
-              refetchType: "active",
-            }),
-            queryClient.invalidateQueries({
-              queryKey: piWebQueryKeys.gitChanges(viewerContextId, cwd),
-              exact: true,
-              refetchType: "active",
-            }),
-          ]).catch(() => undefined)
+          const scopes = new Set(payload.scopes ?? ["status", "files", "refs"])
+          const invalidations = []
+          if (scopes.has("status")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("files")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: piWebQueryKeys.gitFiles(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("refs")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: piWebQueryKeys.gitBranches(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: piWebQueryKeys.gitCommits(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          void Promise.all(invalidations).catch(() => undefined)
         }
         return
       }
