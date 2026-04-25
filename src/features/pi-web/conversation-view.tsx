@@ -1339,6 +1339,19 @@ function parseEditDiff(diff: string) {
   return { lines, lineNumberWidth }
 }
 
+function getEditDiffStats(diff: string) {
+  const stats = { additions: 0, removals: 0 }
+
+  if (!diff) return stats
+
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+")) stats.additions += 1
+    if (line.startsWith("-")) stats.removals += 1
+  }
+
+  return stats
+}
+
 function editDiffLineClassName(kind: EditDiffLine["kind"]) {
   switch (kind) {
     case "added":
@@ -1359,6 +1372,22 @@ function editDiffMarkerClassName(kind: EditDiffLine["kind"]) {
     default:
       return "text-muted-foreground"
   }
+}
+
+function EditDiffStats({ diff }: { diff: string }) {
+  const stats = getEditDiffStats(diff)
+
+  if (!stats.additions && !stats.removals) return null
+
+  return (
+    <span
+      className="flex shrink-0 items-center gap-2 font-mono text-sm"
+      aria-label={`${stats.additions} lines added, ${stats.removals} lines removed`}
+    >
+      <span className="text-success">+{stats.additions}</span>
+      <span className="text-destructive">−{stats.removals}</span>
+    </span>
+  )
 }
 
 function EditDiffBlock({
@@ -1535,6 +1564,7 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
 }) {
   const callText = toolCallText(block)
   const outputText = toolOutputText(block)
+  const editDiff = block.name === "edit" ? toolDiffText(block) : ""
   const shellBodyText =
     block.name === "bash"
       ? [callText, block.output.trimEnd()].filter(Boolean).join("\n\n") ||
@@ -1564,6 +1594,7 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
               {toolSummary(block)}
             </span>
           </span>
+          {block.name === "edit" ? <EditDiffStats diff={editDiff} /> : null}
         </AccordionTrigger>
 
         <AccordionContent className="px-3 pb-3">
