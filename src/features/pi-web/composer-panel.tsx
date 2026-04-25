@@ -443,8 +443,6 @@ function ComposerPromptEditor({
     const draftText = draftTextRef.current
     const currentDraftSkill = draftSkillRef.current
     const ctrlShortcut = event.ctrlKey && !event.metaKey
-    const cmdSendShortcut =
-      event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
 
     if (event.key === "Backspace" && !draftText && currentDraftSkill) {
       applyDraft("", undefined, { immediate: true })
@@ -501,24 +499,26 @@ function ComposerPromptEditor({
       }
     }
 
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
       if (visibleCompletion && selectedCompletionItem) {
         event.preventDefault()
         applyCompletion(selectedCompletionItem)
         return
       }
 
-      if (ctrlShortcut || cmdSendShortcut) {
-        event.preventDefault()
-        runPrimaryComposerAction(
-          ctrlShortcut && event.altKey
-            ? "followUp"
-            : acceptFollowUps
-              ? "steer"
-              : undefined
-        )
-        return
-      }
+      event.preventDefault()
+      runPrimaryComposerAction(
+        ctrlShortcut && event.altKey
+          ? "followUp"
+          : acceptFollowUps
+            ? "steer"
+            : undefined
+      )
+      return
     }
 
     if (event.key === "Escape") {
