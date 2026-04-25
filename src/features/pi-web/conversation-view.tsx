@@ -1440,7 +1440,7 @@ function EditDiffBlock({
               </span>
               <span
                 className={cn(
-                  "pr-4",
+                  "pr-4 pl-3",
                   line.kind === "omitted" && "text-muted-foreground"
                 )}
               >
@@ -1489,6 +1489,16 @@ const ToolBlockSection = React.memo(function ToolBlockSection({
   )
 })
 
+function editToolOutputWithoutSuccessMessage(output: string) {
+  return output
+    .split("\n")
+    .filter(
+      (line) => !/^Successfully replaced \d+ block\(s\) in .+\.$/.test(line)
+    )
+    .join("\n")
+    .trimEnd()
+}
+
 function EditToolOutput({
   block,
 }: {
@@ -1497,13 +1507,15 @@ function EditToolOutput({
   }
 }) {
   const diff = toolDiffText(block)
-  const output = block.output.trimEnd()
+  const output = editToolOutputWithoutSuccessMessage(block.output.trimEnd())
   const extraOutput = output && output !== diff ? output : ""
-  const fallbackOutput = toolOutputText(block)
+  const fallbackOutput = editToolOutputWithoutSuccessMessage(
+    toolOutputText(block)
+  )
   const language = codeLanguageFromPath(toolFilePath(block))
 
   if (!diff) {
-    return <PlainToolOutput text={fallbackOutput} />
+    return <PlainToolOutput text={fallbackOutput || "No output available."} />
   }
 
   return (
