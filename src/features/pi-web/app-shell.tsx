@@ -719,6 +719,7 @@ const AppShellConversationFrame = React.forwardRef<
     bottomRef,
     jumpToNextMessage,
     jumpToPreviousMessage,
+    messagesContentRef,
     messagesScrollAreaRef,
     scrollConversationToBottom,
     scrollConversationToTop,
@@ -755,8 +756,10 @@ const AppShellConversationFrame = React.forwardRef<
         aria-label="Conversation messages"
         className="h-full overflow-auto px-4 outline-none"
       >
-        {children}
-        <div ref={bottomRef} />
+        <div ref={messagesContentRef} className="min-h-full">
+          {children}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {!isSessionViewLoading ? (

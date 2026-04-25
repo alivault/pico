@@ -170,6 +170,7 @@ export function useAppShellMessageScroll({
   sessionState,
 }: UseAppShellMessageScrollOptions) {
   const messagesScrollAreaRef = React.useRef<HTMLDivElement | null>(null)
+  const messagesContentRef = React.useRef<HTMLDivElement | null>(null)
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
   const lastLoadedSessionScrollKeyRef = React.useRef("")
@@ -178,6 +179,22 @@ export function useAppShellMessageScroll({
   const syncViewportState = React.useCallback((viewport: HTMLDivElement) => {
     scrollStateStoreRef.current.setSnapshot(viewportStateSnapshot(viewport))
   }, [])
+
+  const scrollViewportToBottomIfPinned = React.useCallback(
+    (viewport: HTMLDivElement) => {
+      const wasNearBottom =
+        scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom
+      syncViewportState(viewport)
+
+      if (!wasNearBottom) {
+        return
+      }
+
+      scrollViewportToBottom(viewport, "auto")
+      syncViewportState(viewport)
+    },
+    [syncViewportState]
+  )
 
   const scrollConversationToTop = React.useCallback(() => {
     const viewport = messageViewportRef.current
@@ -238,23 +255,41 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     messageViewportRef.current = viewport
-
-    const wasNearBottom =
-      scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom
-    syncViewportState(viewport)
-
-    if (!wasNearBottom) {
-      return
-    }
-
-    scrollViewportToBottom(viewport, "auto")
-    syncViewportState(viewport)
+    scrollViewportToBottomIfPinned(viewport)
   }, [
     conversationRevision,
     isSessionViewLoading,
+    scrollViewportToBottomIfPinned,
     sessionState.streaming,
-    syncViewportState,
   ])
+
+  React.useLayoutEffect(() => {
+    if (typeof ResizeObserver === "undefined") return
+
+    const viewport =
+      messageViewportRef.current ||
+      findMessageViewport(messagesScrollAreaRef.current)
+    const content = messagesContentRef.current
+    if (!viewport || !content) return
+
+    messageViewportRef.current = viewport
+
+    let animationFrame = 0
+    const handleResize = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(() => {
+        if (!viewport.isConnected) return
+        scrollViewportToBottomIfPinned(viewport)
+      })
+    }
+    const resizeObserver = new ResizeObserver(handleResize)
+    resizeObserver.observe(content)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+    }
+  }, [scrollViewportToBottomIfPinned])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -285,6 +320,7 @@ export function useAppShellMessageScroll({
     bottomRef,
     jumpToNextMessage,
     jumpToPreviousMessage,
+    messagesContentRef,
     messagesScrollAreaRef,
     scrollConversationToBottom,
     scrollConversationToTop,
