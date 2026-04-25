@@ -61,6 +61,7 @@ import {
 import type {
   GitChangedEvent,
   GitChangedScope,
+  SessionDoneEvent,
   SessionStatusEvent,
 } from "@/lib/pi-web-api"
 import type {
@@ -126,6 +127,9 @@ type SessionNamingState = {
   disposed: boolean
 }
 
+type SessionDoneReason = SessionDoneEvent["reason"]
+type SessionDoneOutcome = NonNullable<SessionDoneEvent["outcome"]>
+
 type SessionEntry = {
   key: string
   cwd: string
@@ -145,6 +149,11 @@ type SessionEntry = {
   restoreSessionMetadataSync?: (() => void) | undefined
   sessionNaming: SessionNamingState
   promptRequestChain: Promise<void>
+  doneCheckTimeout?: ReturnType<typeof setTimeout>
+  pendingDoneReason?: SessionDoneReason
+  pendingDoneOutcome?: SessionDoneOutcome
+  doneNotificationSuppressed: boolean
+  lastDoneSignalSignature?: string
 }
 
 type ContextState = {
@@ -424,7 +433,6 @@ function createInitialUiState(): SessionUiState {
     title: undefined,
     editorText: "",
     workingMessage: undefined,
-    hiddenThinkingLabel: undefined,
   }
 }
 
@@ -1383,6 +1391,145 @@ export class PiWebRuntime {
     }
   }
 
+  private pendingSdkMessageCount(entry: SessionEntry) {
+    const steeringCount = entry.session.getSteeringMessages?.().length ?? 0
+    const followUpCount = entry.session.getFollowUpMessages?.().length ?? 0
+    return steeringCount + followUpCount
+  }
+
+  private isSessionBusyForDone(entry: SessionEntry) {
+    return (
+      this.getEntryStreamingState(entry) ||
+      Boolean(entry.session.isStreaming) ||
+      Boolean(entry.session.isRetrying) ||
+      Boolean(entry.session.isCompacting) ||
+      this.pendingSdkMessageCount(entry) > 0 ||
+      entry.pendingUserMessages.length > 0
+    )
+  }
+
+  private clearSessionDoneTimeout(entry: SessionEntry) {
+    if (!entry.doneCheckTimeout) return
+    clearTimeout(entry.doneCheckTimeout)
+    entry.doneCheckTimeout = undefined
+  }
+
+  private clearPendingSessionDone(entry: SessionEntry) {
+    this.clearSessionDoneTimeout(entry)
+    entry.pendingDoneReason = undefined
+    entry.pendingDoneOutcome = undefined
+  }
+
+  private scheduleSessionDoneCheck(
+    entry: SessionEntry,
+    reason: SessionDoneReason,
+    outcome: SessionDoneOutcome = "success"
+  ) {
+    entry.pendingDoneReason = reason
+    entry.pendingDoneOutcome = outcome
+    this.clearSessionDoneTimeout(entry)
+    entry.doneCheckTimeout = setTimeout(() => {
+      entry.doneCheckTimeout = undefined
+      void this.maybeSignalSessionDone(entry)
+    }, 0)
+  }
+
+  private agentEndOutcome(event: SessionEventLike) {
+    const messages = Array.isArray(event.messages) ? event.messages : []
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index] as MessageLike | undefined
+      if (message?.role !== "assistant") continue
+
+      const stopReason =
+        typeof message.stopReason === "string" ? message.stopReason : ""
+      if (stopReason === "aborted") return "aborted" as const
+      if (stopReason === "error" || message.errorMessage) {
+        return "error" as const
+      }
+      return "success" as const
+    }
+
+    return "success" as const
+  }
+
+  private sessionDoneSignalSignature(
+    entry: SessionEntry,
+    reason: SessionDoneReason,
+    outcome: SessionDoneOutcome
+  ) {
+    return [
+      reason,
+      outcome,
+      this.getSessionPath(entry),
+      entry.modifiedAt || "",
+      entry.session.messages.length,
+    ].join(":")
+  }
+
+  private sessionDonePayload(
+    entry: SessionEntry,
+    reason: SessionDoneReason,
+    outcome: SessionDoneOutcome
+  ): SessionDoneEvent {
+    const firstMessage = this.getSessionFirstMessage(entry)
+    const name = entry.session.sessionName
+    return {
+      type: "session_done",
+      id: `done:${cryptoRandomId()}`,
+      sessionKey: entry.key,
+      sessionId: entry.session.sessionId,
+      sessionPath: entry.session.sessionFile,
+      cwd: entry.cwd,
+      title: getSessionListTitle({ name, firstMessage }),
+      reason,
+      outcome,
+      completedAt: new Date().toISOString(),
+    }
+  }
+
+  private async signalSessionDone(
+    entry: SessionEntry,
+    reason: SessionDoneReason,
+    outcome: SessionDoneOutcome
+  ) {
+    const signature = this.sessionDoneSignalSignature(entry, reason, outcome)
+    if (entry.lastDoneSignalSignature === signature) return
+    entry.lastDoneSignalSignature = signature
+
+    const payload = this.sessionDonePayload(entry, reason, outcome)
+    this.markUnreadFinished(entry)
+
+    for (const context of this.contexts.values()) {
+      this.sendToContext(context, payload)
+      this.sendSessionStatusToContext(context, entry)
+    }
+
+    await this.broadcastSessionsAll()
+  }
+
+  private async maybeSignalSessionDone(entry: SessionEntry) {
+    if (this.sessionEntries.get(entry.key) !== entry) return
+
+    const reason = entry.pendingDoneReason
+    const outcome = entry.pendingDoneOutcome ?? "success"
+    if (!reason) return
+
+    this.reconcilePendingUserMessages(entry)
+
+    if (this.isSessionBusyForDone(entry)) return
+
+    entry.pendingDoneReason = undefined
+    entry.pendingDoneOutcome = undefined
+
+    if (entry.doneNotificationSuppressed) {
+      entry.doneNotificationSuppressed = false
+      return
+    }
+
+    await this.signalSessionDone(entry, reason, outcome)
+  }
+
   private async activateContextSession(
     context: ContextState,
     entry: SessionEntry,
@@ -1558,6 +1705,7 @@ export class PiWebRuntime {
         disposed: false,
       },
       promptRequestChain: Promise.resolve(),
+      doneNotificationSuppressed: false,
     }
 
     this.sessionEntries.set(key, entry)
@@ -1691,6 +1839,7 @@ export class PiWebRuntime {
   }
 
   private async disposeSessionEntry(entry: SessionEntry) {
+    this.clearPendingSessionDone(entry)
     entry.unsubscribe?.()
     entry.restoreSessionMetadataSync?.()
     entry.sessionNaming.disposed = true
@@ -2162,10 +2311,6 @@ export class PiWebRuntime {
           entry.uiState.workingMessage = message
           void this.broadcastEntryState(entry)
         },
-        setHiddenThinkingLabel: (label: string | undefined) => {
-          entry.uiState.hiddenThinkingLabel = label
-          void this.broadcastEntryState(entry)
-        },
         setWidget: () => {},
         setFooter: () => {},
         setHeader: () => {},
@@ -2327,8 +2472,14 @@ export class PiWebRuntime {
     let statusChanged = false
 
     if (type === "agent_start") {
+      this.clearPendingSessionDone(entry)
+      entry.doneNotificationSuppressed = false
       entry.streamingState = true
       statusChanged = true
+    }
+
+    if (type === "compaction_start" || type === "auto_retry_start") {
+      this.clearSessionDoneTimeout(entry)
     }
 
     if (type === "queue_update") {
@@ -2347,13 +2498,41 @@ export class PiWebRuntime {
 
     if (type === "compaction_end") {
       this.touchSessionEntry(entry)
+
+      const compactionReason =
+        typeof event.reason === "string" ? event.reason : ""
+      const compactionSucceeded = Boolean(event.result) && !event.aborted
+      const willRetry = Boolean(event.willRetry)
+
+      if (compactionReason === "manual" && compactionSucceeded) {
+        this.scheduleSessionDoneCheck(entry, "manual_compaction")
+      } else if (entry.pendingDoneReason === "agent" && !willRetry) {
+        this.scheduleSessionDoneCheck(
+          entry,
+          "agent",
+          entry.pendingDoneOutcome ?? "success"
+        )
+      }
+    }
+
+    if (type === "auto_retry_end") {
+      if (entry.pendingDoneReason === "agent" && event.success === false) {
+        this.scheduleSessionDoneCheck(entry, "agent", "error")
+      }
     }
 
     if (type === "agent_end") {
       entry.streamingState = false
       this.touchSessionEntry(entry)
       this.reconcilePendingUserMessages(entry)
-      this.markUnreadFinished(entry)
+
+      const outcome = this.agentEndOutcome(event)
+      if (outcome === "aborted") {
+        this.clearPendingSessionDone(entry)
+        entry.doneNotificationSuppressed = false
+      } else {
+        this.scheduleSessionDoneCheck(entry, "agent", outcome)
+      }
       statusChanged = true
     }
 
@@ -2741,6 +2920,8 @@ export class PiWebRuntime {
 
   async abort(request: Request) {
     const { activeEntry } = await this.resolveRequest(request)
+    activeEntry.doneNotificationSuppressed = true
+    this.clearPendingSessionDone(activeEntry)
     activeEntry.session.abortCompaction?.()
     activeEntry.session.abortBranchSummary?.()
     await activeEntry.session.abort()

@@ -194,7 +194,6 @@ export function useAppShellSessionMutations({
     setRunningSlashCommand("compact")
     try {
       await compactMutation.mutateAsync()
-      toast.success("Started compaction")
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to compact session"

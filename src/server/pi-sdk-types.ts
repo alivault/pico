@@ -158,6 +158,8 @@ export type AgentSessionLike = {
   sessionId: string
   sessionName?: string
   isStreaming: boolean
+  isRetrying?: boolean
+  isCompacting?: boolean
   prompt(
     text: string,
     options?: {

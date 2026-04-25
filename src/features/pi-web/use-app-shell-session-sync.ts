@@ -7,6 +7,7 @@ import type { PromptImage, SessionState } from "@/lib/pi-web"
 import type {
   ExtensionUiEvent,
   PiWebServerEvent,
+  SessionDoneEvent,
   SessionListEntry,
   SessionStatusEvent,
   SessionsEvent,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/pi-web"
 import {
   isGitChangedEvent,
+  isSessionDoneEvent,
   isSessionStatusEvent,
   isSessionsEvent,
   isStateSyncEvent,
@@ -68,6 +70,9 @@ type UseAppShellSessionSyncOptions = {
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
+  setSessionDoneEvents: React.Dispatch<
+    React.SetStateAction<Array<SessionDoneEvent>>
+  >
   applySidebarSessionStatusRef: React.MutableRefObject<
     (status: SessionStatusEvent) => void
   >
@@ -307,6 +312,7 @@ export function useAppShellSessionSync({
   setSessionState,
   setConversationItems,
   setSessionsEvent,
+  setSessionDoneEvents,
   applySidebarSessionStatusRef,
   setComposerImages,
   setPendingMessages,
@@ -532,6 +538,15 @@ export function useAppShellSessionSync({
         return
       }
 
+      if (isSessionDoneEvent(payload)) {
+        setSessionDoneEvents((current) =>
+          current.some((entry) => entry.id === payload.id)
+            ? current
+            : [...current, payload]
+        )
+        return
+      }
+
       if (isGitChangedEvent(payload)) {
         const cwd = payload.cwd.trim()
         if (cwd) {
@@ -622,6 +637,7 @@ export function useAppShellSessionSync({
     setConversationItems,
     setPendingMessages,
     pendingUiRequestHandlerRef,
+    setSessionDoneEvents,
     setSessionState,
     setSessionsEvent,
     viewerContextId,

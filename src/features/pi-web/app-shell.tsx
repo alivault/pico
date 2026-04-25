@@ -23,6 +23,7 @@ import type {
   ExtensionUiEvent,
   FileCompletionsResponse,
   PathCompletionsResponse,
+  SessionDoneEvent,
   SessionListEntry,
   SessionStatusEvent,
   SessionsEvent,
@@ -163,11 +164,17 @@ const INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT = 6
 
 function sessionNotificationKey(sessionLike: {
   sessionFile?: string
+  sessionPath?: string
   path?: string
   sessionId?: string
   id?: string
 }) {
-  const sessionFile = (sessionLike.sessionFile || sessionLike.path || "").trim()
+  const sessionFile = (
+    sessionLike.sessionFile ||
+    sessionLike.sessionPath ||
+    sessionLike.path ||
+    ""
+  ).trim()
   if (sessionFile) return `path:${sessionFile}`
 
   const sessionId = (sessionLike.sessionId || sessionLike.id || "").trim()
@@ -189,6 +196,23 @@ function finishedSessionLabel(title: string) {
   return title !== "New session"
     ? `Session finished: ${title}`
     : "Session finished"
+}
+
+function doneEventLabel(event: SessionDoneEvent) {
+  const title = event.title?.trim() || "New session"
+  if (event.reason === "manual_compaction") {
+    return title !== "New session"
+      ? `Compaction complete: ${title}`
+      : "Compaction complete"
+  }
+
+  if (event.outcome === "error") {
+    return title !== "New session"
+      ? `Session stopped: ${title}`
+      : "Session stopped"
+  }
+
+  return finishedSessionLabel(title)
 }
 
 type DirectorySessionsIndexData = DirectorySessionsIndexSnapshot
@@ -1080,28 +1104,28 @@ function AppShellSessionConversation({
 }
 
 function AppShellWindowEffects({
+  activeSessionKey,
   activeSessionNotificationKey,
   currentPageTitle,
-  currentSessionTitle,
   sessionCwd,
   sessionDoneDesktopNotificationsEnabled,
   sessionDoneSoundEnabled,
-  sessionFile,
-  sessionId,
   sessionStreaming,
+  sessionDoneEvents,
   sidebarSessions,
+  onConsumeSessionDoneEvents,
   onSelectSession,
 }: {
+  activeSessionKey?: string
   activeSessionNotificationKey: string
   currentPageTitle: string
-  currentSessionTitle: string
   sessionCwd?: string
   sessionDoneDesktopNotificationsEnabled: boolean
   sessionDoneSoundEnabled: boolean
-  sessionFile?: string
-  sessionId?: string
   sessionStreaming: boolean
+  sessionDoneEvents: Array<SessionDoneEvent>
   sidebarSessions: Array<SessionListEntry>
+  onConsumeSessionDoneEvents: (ids: Array<string>) => void
   onSelectSession: (nextSessionId?: string) => void
 }) {
   const [isPageForeground, setIsPageForeground] = React.useState(() =>
@@ -1115,14 +1139,7 @@ function AppShellWindowEffects({
     backgroundCurrentSessionUnreadKey,
     setBackgroundCurrentSessionUnreadKey,
   ] = React.useState("")
-  const lastStreamingSnapshotRef = React.useRef({
-    key: "",
-    streaming: false,
-  })
-  const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(
-    new Map()
-  )
-  const sessionUnreadSnapshotsReadyRef = React.useRef(false)
+  const processedSessionDoneEventIdsRef = React.useRef<Set<string>>(new Set())
 
   React.useEffect(() => {
     const syncPageForeground = () => {
@@ -1172,58 +1189,88 @@ function AppShellWindowEffects({
   }, [sessionStreaming])
 
   React.useEffect(() => {
-    const lastStreamingSnapshot = lastStreamingSnapshotRef.current
-    const finishedActiveSession =
-      lastStreamingSnapshot.streaming &&
-      lastStreamingSnapshot.key &&
-      lastStreamingSnapshot.key === activeSessionNotificationKey &&
-      !sessionStreaming
+    if (sessionDoneEvents.length === 0) return
 
-    if (finishedActiveSession) {
-      const finishedLabel = finishedSessionLabel(currentSessionTitle)
-      if (sessionId) {
-        toast.success(finishedLabel, {
+    const consumedIds: Array<string> = []
+    let playedSound = false
+
+    for (const event of sessionDoneEvents) {
+      consumedIds.push(event.id)
+      if (processedSessionDoneEventIdsRef.current.has(event.id)) continue
+      processedSessionDoneEventIdsRef.current.add(event.id)
+
+      const key = sessionNotificationKey({
+        sessionId: event.sessionId,
+        sessionPath: event.sessionPath,
+      })
+      const matchesCurrentSession = Boolean(
+        (key &&
+          activeSessionNotificationKey &&
+          key === activeSessionNotificationKey) ||
+        (event.sessionKey &&
+          activeSessionKey &&
+          event.sessionKey === activeSessionKey)
+      )
+      const label = doneEventLabel(event)
+      const body = event.cwd || sessionCwd || "Open Pi to continue"
+      const tag = event.sessionPath || event.sessionId || event.id
+
+      if (matchesCurrentSession) {
+        if (!isPageForeground && key) {
+          setBackgroundCurrentSessionUnreadKey(key)
+        }
+
+        if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
+          showSessionDoneDesktopNotification({
+            title: label,
+            body,
+            tag,
+          })
+        }
+
+        if (sessionDoneSoundEnabled && !isPageForeground && !playedSound) {
+          playedSound = true
+          void playSessionDoneSound()
+        }
+        continue
+      }
+
+      if (event.sessionId) {
+        toast.success(label, {
           action: {
             label: "Open",
-            onClick: () => onSelectSession(sessionId),
+            onClick: () => onSelectSession(event.sessionId),
           },
         })
       } else {
-        toast.success(finishedLabel)
-      }
-
-      if (!isPageForeground && activeSessionNotificationKey) {
-        setBackgroundCurrentSessionUnreadKey(activeSessionNotificationKey)
+        toast.success(label)
       }
 
       if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
         showSessionDoneDesktopNotification({
-          title: finishedLabel,
-          body: sessionCwd || "Open Pi to continue",
-          tag: sessionFile || sessionId || currentSessionTitle,
+          title: label,
+          body,
+          tag,
         })
       }
 
-      if (sessionDoneSoundEnabled) {
+      if (sessionDoneSoundEnabled && !playedSound) {
+        playedSound = true
         void playSessionDoneSound()
       }
     }
 
-    lastStreamingSnapshotRef.current = {
-      key: activeSessionNotificationKey,
-      streaming: sessionStreaming,
-    }
+    onConsumeSessionDoneEvents(consumedIds)
   }, [
+    activeSessionKey,
     activeSessionNotificationKey,
-    currentSessionTitle,
     isPageForeground,
+    onConsumeSessionDoneEvents,
     onSelectSession,
     sessionCwd,
     sessionDoneDesktopNotificationsEnabled,
+    sessionDoneEvents,
     sessionDoneSoundEnabled,
-    sessionFile,
-    sessionId,
-    sessionStreaming,
   ])
 
   const unreadSessionCount = (() => {
@@ -1259,60 +1306,6 @@ function AppShellWindowEffects({
     sessionStreaming,
     titleStreamingFrameIndex,
     unreadSessionCount,
-  ])
-
-  React.useEffect(() => {
-    const nextSnapshots = new Map<string, boolean>()
-    const finishedSessions: Array<SessionListEntry> = []
-
-    for (const session of sidebarSessions) {
-      const key = sessionNotificationKey(session)
-      if (!key) continue
-
-      const unread = Boolean(session.unread)
-      const previous = sessionUnreadSnapshotsRef.current.get(key)
-      if (sessionUnreadSnapshotsReadyRef.current && unread && !previous) {
-        finishedSessions.push(session)
-      }
-      nextSnapshots.set(key, unread)
-    }
-
-    const ready = sessionUnreadSnapshotsReadyRef.current
-    sessionUnreadSnapshotsRef.current = nextSnapshots
-    sessionUnreadSnapshotsReadyRef.current = true
-    if (!ready) return
-
-    for (const [index, session] of finishedSessions.entries()) {
-      const finishedLabel = finishedSessionLabel(session.title || "New session")
-      if (session.id) {
-        toast.success(finishedLabel, {
-          action: {
-            label: "Open",
-            onClick: () => onSelectSession(session.id),
-          },
-        })
-      } else {
-        toast.success(finishedLabel)
-      }
-
-      if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
-        showSessionDoneDesktopNotification({
-          title: finishedLabel,
-          body: session.cwd || "Open Pi to continue",
-          tag: session.path || session.id || session.title,
-        })
-      }
-
-      if (sessionDoneSoundEnabled && index === 0) {
-        void playSessionDoneSound()
-      }
-    }
-  }, [
-    isPageForeground,
-    sessionDoneDesktopNotificationsEnabled,
-    onSelectSession,
-    sessionDoneSoundEnabled,
-    sidebarSessions,
   ])
 
   return null
@@ -1446,6 +1439,9 @@ const AppShellSessionWorkspace = React.forwardRef<
       images: Array<PromptImage>
       streamingBehavior: "steer" | "followUp"
     }>
+  >([])
+  const [sessionDoneEvents, setSessionDoneEvents] = React.useState<
+    Array<SessionDoneEvent>
   >([])
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
@@ -1912,6 +1908,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSessionState,
     setConversationItems,
     setSessionsEvent,
+    setSessionDoneEvents,
     applySidebarSessionStatusRef,
     setComposerImages,
     setPendingMessages,
@@ -2721,18 +2718,23 @@ const AppShellSessionWorkspace = React.forwardRef<
   return (
     <>
       <AppShellWindowEffects
+        activeSessionKey={sessionState.sessionKey}
         activeSessionNotificationKey={activeSessionNotificationKey}
         currentPageTitle={currentPageTitle}
-        currentSessionTitle={currentSessionTitle}
         sessionCwd={sessionState.cwd}
         sessionDoneDesktopNotificationsEnabled={
           sessionDoneDesktopNotificationsEnabled
         }
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-        sessionFile={sessionState.sessionFile}
-        sessionId={sessionState.sessionId}
         sessionStreaming={sessionState.streaming}
+        sessionDoneEvents={sessionDoneEvents}
         sidebarSessions={sidebarSessions}
+        onConsumeSessionDoneEvents={(ids) => {
+          const consumedIds = new Set(ids)
+          setSessionDoneEvents((current) =>
+            current.filter((event) => !consumedIds.has(event.id))
+          )
+        }}
         onSelectSession={handleSelectSession}
       />
 

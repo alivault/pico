@@ -169,6 +169,19 @@ export type SessionStatusEvent = {
   unread?: boolean
 }
 
+export type SessionDoneEvent = {
+  type: "session_done"
+  id: string
+  sessionKey?: string
+  sessionId?: string
+  sessionPath?: string
+  cwd?: string
+  title?: string
+  reason: "agent" | "manual_compaction"
+  outcome?: "success" | "error"
+  completedAt: string
+}
+
 export type PromptResponse =
   | {
       ok: true
@@ -366,6 +379,7 @@ export type PiWebServerEvent =
   | StateSyncPayload
   | SessionsEvent
   | SessionStatusEvent
+  | SessionDoneEvent
   | RequestErrorEvent
   | ExtensionErrorEvent
   | ExtensionUiEvent
@@ -405,6 +419,15 @@ export function isSessionStatusEvent(
     value &&
     typeof value === "object" &&
     (value as { type?: unknown }).type === "session_status"
+  )
+}
+
+export function isSessionDoneEvent(value: unknown): value is SessionDoneEvent {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "session_done" &&
+    typeof (value as { id?: unknown }).id === "string"
   )
 }
 
