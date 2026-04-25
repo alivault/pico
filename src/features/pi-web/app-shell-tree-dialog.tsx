@@ -1369,7 +1369,7 @@ export function AppShellTreeDialog({
         </div>
       </div>
     ) : selectedTreeNode ? (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-medium text-muted-foreground">
             {treeStage === "custom"
@@ -1557,7 +1557,12 @@ export function AppShellTreeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex min-h-0 flex-col overflow-hidden sm:h-[90vh] sm:max-h-[90vh] sm:max-w-5xl">
+      <DialogContent
+        className={cn(
+          "flex min-h-0 flex-col overflow-hidden sm:max-h-[90vh] sm:max-w-5xl",
+          treeStage === "browse" && "sm:h-[90vh]"
+        )}
+      >
         <DialogHeader>
           <DialogTitle>Session tree</DialogTitle>
           <DialogDescription>
