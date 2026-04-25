@@ -1,10 +1,10 @@
 import {
   buildItemsFromSync,
   createInitialSessionState,
-  latestThinkingSummaryText,
   previewUrlForImage,
   promptDraftKey,
   sameContextUsage,
+  thinkingSummaryText,
   type PromptImage,
   type SessionState,
 } from "@/lib/pi-web"
@@ -94,6 +94,31 @@ function normalizeStatuses(
   }
 
   return normalized
+}
+
+function latestStreamingThinkingSummaryText(items: SessionState["items"]) {
+  // Scope the hidden-thinking working label to the current assistant turn.
+  // Older thinking summaries should not flash before fresh reasoning arrives.
+  for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+    const item = items[itemIndex]
+    if (item?.kind !== "assistant" || !item.streaming) continue
+
+    for (
+      let blockIndex = item.blocks.length - 1;
+      blockIndex >= 0;
+      blockIndex -= 1
+    ) {
+      const block = item.blocks[blockIndex]
+      if (block?.type !== "thinking") continue
+
+      const summary = thinkingSummaryText(block)
+      if (summary) return summary
+    }
+
+    return undefined
+  }
+
+  return undefined
 }
 
 function shareUiState(
@@ -306,9 +331,7 @@ export function updateStateFromSync(
   const uiState = shareUiState(base.uiState, sync.uiState)
   const hiddenThinkingPreview =
     streaming && hideThinkingBlock
-      ? latestThinkingSummaryText(items, {
-          hiddenThinkingLabel: uiState.hiddenThinkingLabel,
-        }) || undefined
+      ? latestStreamingThinkingSummaryText(items)
       : undefined
 
   if (
