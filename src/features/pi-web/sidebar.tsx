@@ -30,6 +30,7 @@ import {
   SearchIcon,
   SquarePenIcon,
   Settings2Icon,
+  XIcon,
 } from "lucide-react"
 
 import type { SessionListEntry } from "@/lib/pi-web-api"
@@ -145,6 +146,7 @@ type SessionClickModifiers = {
 }
 
 const EMPTY_DIRECTORY_SESSIONS: Array<SessionListEntry> = []
+const SIDEBAR_SEARCH_COMMIT_DELAY_MS = 150
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
@@ -703,6 +705,12 @@ function DirectoryCollapseAllButton({
   )
 }
 
+type SidebarSearchInputProps = {
+  value: string
+  onValueChange: (value: string) => void
+  inputRef?: React.Ref<HTMLInputElement>
+}
+
 type AppSidebarHeaderProps = {
   connected: boolean
   sessionSearch: string
@@ -714,6 +722,74 @@ type AppSidebarHeaderProps = {
   collapsedDirectoryStore: CollapsedDirectoryStore
   onOpenAddDirectoryDialog: () => void
   onRemoveAllDirectories?: () => void
+}
+
+function SidebarSearchInput({
+  inputRef,
+  onValueChange,
+  value,
+}: SidebarSearchInputProps) {
+  const [draftValue, setDraftValue] = React.useState(value)
+  const hasSearchValue = draftValue.length > 0
+
+  React.useEffect(() => {
+    setDraftValue((current) => (current === value ? current : value))
+  }, [value])
+
+  React.useEffect(() => {
+    if (draftValue === value) return
+
+    const timeoutId = window.setTimeout(() => {
+      React.startTransition(() => {
+        onValueChange(draftValue)
+      })
+    }, SIDEBAR_SEARCH_COMMIT_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [draftValue, onValueChange, value])
+
+  return (
+    <div className="relative">
+      <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
+      <Input
+        ref={inputRef}
+        value={draftValue}
+        onChange={(event) => {
+          const nextValue = event.target.value
+          setDraftValue(nextValue)
+          if (!nextValue) {
+            React.startTransition(() => {
+              onValueChange("")
+            })
+          }
+        }}
+        placeholder="Search sessions..."
+        className="border-sidebar-border/70 bg-sidebar-accent/20 pr-9 pl-9"
+      />
+      {hasSearchValue ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            setDraftValue("")
+            React.startTransition(() => {
+              onValueChange("")
+            })
+            event.currentTarget.parentElement?.querySelector("input")?.focus()
+          }}
+          aria-label="Clear session search"
+          title="Clear session search"
+        >
+          <XIcon />
+        </Button>
+      ) : null}
+    </div>
+  )
 }
 
 function AppSidebarHeader({
@@ -741,16 +817,11 @@ function AppSidebarHeader({
         <ConnectionBadge connected={connected} />
       </div>
 
-      <div className="relative">
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
-        <Input
-          ref={sessionSearchInputRef}
-          value={sessionSearch}
-          onChange={(event) => onSessionSearchChange(event.target.value)}
-          placeholder="Search sessions..."
-          className="border-sidebar-border/70 bg-sidebar-accent/20 pl-9"
-        />
-      </div>
+      <SidebarSearchInput
+        value={sessionSearch}
+        onValueChange={onSessionSearchChange}
+        inputRef={sessionSearchInputRef}
+      />
 
       <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/70">
         <span>
