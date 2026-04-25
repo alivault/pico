@@ -1,6 +1,7 @@
 import {
   buildItemsFromSync,
   createInitialSessionState,
+  latestThinkingSummaryText,
   previewUrlForImage,
   promptDraftKey,
   sameContextUsage,
@@ -303,6 +304,12 @@ export function updateStateFromSync(
       : sync.contextUsage
     : base.contextUsage
   const uiState = shareUiState(base.uiState, sync.uiState)
+  const hiddenThinkingPreview =
+    streaming && hideThinkingBlock
+      ? latestThinkingSummaryText(items, {
+          hiddenThinkingLabel: uiState.hiddenThinkingLabel,
+        }) || undefined
+      : undefined
 
   if (
     previous.connected &&
@@ -326,6 +333,7 @@ export function updateStateFromSync(
     previous.availableModels === availableModels &&
     previous.availableSkills === availableSkills &&
     previous.hideThinkingBlock === hideThinkingBlock &&
+    previous.hiddenThinkingPreview === hiddenThinkingPreview &&
     previous.contextUsage === contextUsage &&
     previous.uiState === uiState
   ) {
@@ -355,6 +363,7 @@ export function updateStateFromSync(
     availableModels,
     availableSkills,
     hideThinkingBlock,
+    hiddenThinkingPreview,
     contextUsage,
     uiState,
   } satisfies SessionState

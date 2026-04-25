@@ -13,6 +13,7 @@ type MessageContentPart = {
   type?: unknown
   text?: unknown
   thinking?: unknown
+  summaryLabel?: unknown
   id?: unknown
   name?: unknown
   arguments?: unknown
@@ -347,6 +348,9 @@ export function assistantBlocksFromMessage(
           type: "thinking",
           blockKey: `${partKey}:thinking`,
           text: thinkingText,
+          ...(typeof part.summaryLabel === "string"
+            ? { summaryLabel: part.summaryLabel }
+            : {}),
         })
       }
     }
@@ -684,8 +688,56 @@ export function buildItemsFromSync(
   }
 }
 
+export function sanitizeThinkingSummaryText(value: unknown) {
+  if (typeof value !== "string") return ""
+
+  let text = value.replace(/\r\n?/g, "\n")
+
+  text = text.replace(
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
+    (_match, altText: string) => altText || "image"
+  )
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, "$1")
+  text = text.replace(/```([\s\S]*?)```/g, "$1")
+  text = text.replace(/`([^`]+)`/g, "$1")
+  text = text.replace(/\*\*([^*]+)\*\*/g, "$1")
+  text = text.replace(/__([^_]+)__/g, "$1")
+  text = text.replace(/\*([^*\n]+)\*/g, "$1")
+  text = text.replace(/_([^_\n]+)_/g, "$1")
+  text = text.replace(/^\s{0,3}#{1,6}\s+/gm, "")
+  text = text.replace(/^\s*>\s?/gm, "")
+  text = text.replace(/^\s*[-*+]\s+/gm, "")
+  text = text.replace(/^\s*\d+\.\s+/gm, "")
+  text = text.replace(
+    /\/var\/folders\/[^\s)]*\/pi-clipboard-[A-Za-z0-9-]+\.(?:png|jpe?g|gif|webp)\b/gi,
+    "pasted image"
+  )
+  text = text.replace(/\s+/g, " ").trim()
+
+  return text
+}
+
+export function primaryThinkingSummaryText(value: unknown) {
+  if (typeof value !== "string") return ""
+
+  const normalized = value.replace(/\r\n?/g, "\n")
+  const paragraphs = normalized
+    .split(/\n\s*\n+/)
+    .map((part) => sanitizeThinkingSummaryText(part))
+    .filter(Boolean)
+
+  if (paragraphs.length) {
+    return paragraphs[0] || ""
+  }
+
+  return sanitizeThinkingSummaryText(normalized)
+}
+
 export function meaningfulHiddenThinkingLabel(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
+  const label = sanitizeThinkingSummaryText(value)
+  return label && label !== "Thinking..." && label !== "Thinking"
+    ? label
+    : undefined
 }
 
 export function truncateThinkingSummary(text: string, maxLength = 140) {
@@ -693,6 +745,55 @@ export function truncateThinkingSummary(text: string, maxLength = 140) {
   if (!normalized) return ""
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
+}
+
+export function thinkingSummaryText(
+  block:
+    | Pick<
+        Extract<AssistantBlock, { type: "thinking" }>,
+        "text" | "summaryLabel"
+      >
+    | undefined,
+  options: { hiddenThinkingLabel?: unknown; allowPlaceholder?: boolean } = {}
+) {
+  const blockLabel = meaningfulHiddenThinkingLabel(block?.summaryLabel)
+  if (blockLabel) return truncateThinkingSummary(blockLabel)
+
+  const hiddenLabel = meaningfulHiddenThinkingLabel(options.hiddenThinkingLabel)
+  if (hiddenLabel) return truncateThinkingSummary(hiddenLabel)
+
+  const text = primaryThinkingSummaryText(block?.text)
+  if (!text) return options.allowPlaceholder ? "Thinking…" : ""
+  return truncateThinkingSummary(text)
+}
+
+export function latestThinkingSummaryText(
+  items: Array<ConversationItem>,
+  options: { hiddenThinkingLabel?: unknown; allowPlaceholder?: boolean } = {}
+) {
+  const hiddenLabel = meaningfulHiddenThinkingLabel(options.hiddenThinkingLabel)
+  if (hiddenLabel) return truncateThinkingSummary(hiddenLabel)
+
+  for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+    const item = items[itemIndex]
+    if (item?.kind !== "assistant") continue
+
+    for (
+      let blockIndex = item.blocks.length - 1;
+      blockIndex >= 0;
+      blockIndex -= 1
+    ) {
+      const block = item.blocks[blockIndex]
+      if (block?.type !== "thinking") continue
+
+      const summary = thinkingSummaryText(block, {
+        allowPlaceholder: options.allowPlaceholder,
+      })
+      if (summary) return summary
+    }
+  }
+
+  return options.allowPlaceholder ? "Thinking…" : ""
 }
 
 export function createInitialSessionState(): SessionState {

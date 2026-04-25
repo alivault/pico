@@ -46,10 +46,14 @@ export {
   extractMessageImages,
   extractMessageText,
   extractToolText,
+  latestThinkingSummaryText,
   meaningfulHiddenThinkingLabel,
   normalizePromptImage,
   previewUrlForImage,
+  primaryThinkingSummaryText,
   sameContextUsage,
+  sanitizeThinkingSummaryText,
+  thinkingSummaryText,
   truncateThinkingSummary,
 } from "@/lib/pi-web-sync"
 export { filterFlatTree, flattenTree } from "@/lib/pi-web-tree"

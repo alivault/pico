@@ -2284,19 +2284,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     if (sessionState.streaming) {
-      const summary = sessionState.hideThinkingBlock
-        ? sessionState.uiState.hiddenThinkingLabel ||
-          sessionState.hiddenThinkingPreview
+      const thinkingSummary = sessionState.hideThinkingBlock
+        ? sessionState.hiddenThinkingPreview
         : undefined
 
-      return summary
-        ? {
-            label: sessionState.uiState.workingMessage || "Working…",
-            summary,
-          }
-        : {
-            label: sessionState.uiState.workingMessage || "Working…",
-          }
+      return {
+        label:
+          thinkingSummary || sessionState.uiState.workingMessage || "Working…",
+      }
     }
 
     const hasAssistantOutput = displayedConversationItems.some(
