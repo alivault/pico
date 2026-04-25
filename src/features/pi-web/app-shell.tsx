@@ -2020,7 +2020,62 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
-  const currentPendingMessages = pendingMessages
+  const pendingDraftFollowUpMessages = pendingDraftFollowUps.map(
+    (message, index) => ({
+      pendingId: message.optimisticId || `pending-draft:${index}`,
+      text: message.message,
+      images: message.images,
+      streamingBehavior: message.streamingBehavior,
+    })
+  )
+  const currentPendingMessages = [
+    ...pendingDraftFollowUpMessages,
+    ...pendingMessages,
+  ]
+
+  const removePendingDraftFollowUp = (pendingId: string) => {
+    if (
+      !pendingDraftFollowUps.some(
+        (message, index) =>
+          (message.optimisticId || `pending-draft:${index}`) === pendingId
+      )
+    ) {
+      return false
+    }
+
+    setPendingDraftFollowUps((current) =>
+      current.filter(
+        (message, index) =>
+          (message.optimisticId || `pending-draft:${index}`) !== pendingId
+      )
+    )
+    return true
+  }
+
+  const reorderPendingDraftFollowUp = (
+    pendingId: string,
+    direction: -1 | 1
+  ) => {
+    const index = pendingDraftFollowUps.findIndex(
+      (message, messageIndex) =>
+        (message.optimisticId || `pending-draft:${messageIndex}`) === pendingId
+    )
+    if (index === -1) return false
+
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= pendingDraftFollowUps.length) {
+      return false
+    }
+
+    setPendingDraftFollowUps((current) => {
+      const next = [...current]
+      const [item] = next.splice(index, 1)
+      if (!item) return current
+      next.splice(targetIndex, 0, item)
+      return next
+    })
+    return true
+  }
 
   const {
     cycleThinkingLevel,
@@ -2766,9 +2821,11 @@ const AppShellSessionWorkspace = React.forwardRef<
                 void abortSession()
               }}
               onRemovePendingMessage={(pendingId) => {
+                if (removePendingDraftFollowUp(pendingId)) return
                 void removePendingMessage(pendingId)
               }}
               onReorderPending={(pendingId, direction) => {
+                if (reorderPendingDraftFollowUp(pendingId, direction)) return
                 void reorderPending(pendingId, direction)
               }}
               onRunBuiltinSlashCommand={(name, args) => {

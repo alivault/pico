@@ -97,6 +97,19 @@ function normalizeQueuedStreamingBehavior(
   return streamingBehavior === "followUp" ? "followUp" : "steer"
 }
 
+function createLocalPendingId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `optimistic:${crypto.randomUUID()}`
+  }
+
+  return `optimistic:${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
 export function useAppShellPromptMutations({
   viewerContextId,
   activeSessionId,
@@ -343,12 +356,7 @@ export function useAppShellPromptMutations({
       } else {
         const queuedStreamingBehavior =
           normalizeQueuedStreamingBehavior(streamingBehavior)
-        const optimisticId = addOptimisticUserMessage({
-          message,
-          images,
-          queued: true,
-          streamingBehavior: queuedStreamingBehavior,
-        })
+        const optimisticId = createLocalPendingId()
         const nextFollowUps = [
           ...pendingDraftFollowUpsRef.current,
           {
@@ -442,12 +450,13 @@ export function useAppShellPromptMutations({
       const shouldOptimisticallyClearComposer = true
       const optimisticId =
         options?.optimisticId ??
-        addOptimisticUserMessage({
-          message,
-          images: submittedImages,
-          queued: treatAsQueuedPrompt,
-          streamingBehavior: normalizedStreamingBehavior,
-        })
+        (treatAsQueuedPrompt
+          ? undefined
+          : addOptimisticUserMessage({
+              message,
+              images: submittedImages,
+              queued: false,
+            }))
 
       setIsSubmitting(true)
       if (!treatAsQueuedPrompt) {

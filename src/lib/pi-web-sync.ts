@@ -20,10 +20,6 @@ type MessageContentPart = {
 
 type SyncMessage = NonNullable<StateSyncPayload["messages"]>[number]
 
-type PendingSyncMessage = NonNullable<
-  StateSyncPayload["pendingUserMessages"]
->[number]
-
 export function previewUrlForImage(
   image: Pick<PromptImage, "mimeType" | "data">
 ) {
@@ -420,16 +416,6 @@ function mutateToolBlockInItems(
   }
 }
 
-function promptImagesFromPendingMessage(message: PendingSyncMessage) {
-  return Array.isArray(message?.images)
-    ? message.images
-        .map((image: unknown) => normalizePromptImage(image))
-        .filter((image: PromptImage | null): image is PromptImage =>
-          Boolean(image)
-        )
-    : []
-}
-
 function appendAssistantItem(
   items: Array<ConversationItem>,
   item: AssistantItem
@@ -457,7 +443,9 @@ function isPendingConversationItem(item: ConversationItem) {
 }
 
 function isOptimisticPendingConversationItem(item: ConversationItem) {
-  return item.kind === "user" && item.pendingId?.startsWith("optimistic:")
+  return (
+    item.kind === "user" && Boolean(item.pendingId?.startsWith("optimistic:"))
+  )
 }
 
 function sameUserPromptBody(
@@ -465,36 +453,6 @@ function sameUserPromptBody(
   right: Extract<ConversationItem, { kind: "user" }>
 ) {
   return left.text === right.text && samePromptImages(left.images, right.images)
-}
-
-function sameUserPromptContent(
-  left: Extract<ConversationItem, { kind: "user" }>,
-  right: Extract<ConversationItem, { kind: "user" }>
-) {
-  return (
-    sameUserPromptBody(left, right) &&
-    Boolean(left.queued) === Boolean(right.queued) &&
-    left.streamingBehavior === right.streamingBehavior
-  )
-}
-
-function findMatchingPendingItemIndex(
-  candidate: Extract<ConversationItem, { kind: "user" }>,
-  items: Array<Extract<ConversationItem, { kind: "user" }>>,
-  consumedIndexes: Set<number>
-) {
-  if (candidate.pendingId) {
-    const identityIndex = items.findIndex(
-      (item, index) =>
-        !consumedIndexes.has(index) && item.pendingId === candidate.pendingId
-    )
-    if (identityIndex !== -1) return identityIndex
-  }
-
-  return items.findIndex(
-    (item, index) =>
-      !consumedIndexes.has(index) && sameUserPromptContent(candidate, item)
-  )
 }
 
 function hasMatchingCommittedUserItem(
@@ -516,70 +474,27 @@ function hasMatchingCommittedUserItem(
 function mergePendingItemsForSync(options: {
   previousItems: Array<ConversationItem>
   committedItems: Array<ConversationItem>
-  serverPendingItems: Array<Extract<ConversationItem, { kind: "user" }>>
-  hasPendingUserMessages: boolean
   preserveOptimisticItems: boolean
 }) {
-  const previousPendingItems = pendingItemsFromPrevious(options.previousItems)
-  const consumedServerPendingIndexes = new Set<number>()
+  if (!options.preserveOptimisticItems) return []
+
   const mergedPendingItems: Array<Extract<ConversationItem, { kind: "user" }>> =
     []
 
-  for (const previousItem of previousPendingItems) {
-    if (previousItem.kind !== "user") continue
-
+  for (const previousItem of pendingItemsFromPrevious(options.previousItems)) {
     const previousIndex = options.previousItems.indexOf(previousItem)
 
-    if (isOptimisticPendingConversationItem(previousItem)) {
-      if (
-        hasMatchingCommittedUserItem(
-          previousItem,
-          options.committedItems,
-          previousIndex
-        )
-      ) {
-        continue
-      }
-
-      const serverIndex = findMatchingPendingItemIndex(
+    if (
+      hasMatchingCommittedUserItem(
         previousItem,
-        options.serverPendingItems,
-        consumedServerPendingIndexes
+        options.committedItems,
+        previousIndex
       )
-      if (serverIndex !== -1) {
-        consumedServerPendingIndexes.add(serverIndex)
-        const serverItem = options.serverPendingItems[serverIndex]
-        if (serverItem) mergedPendingItems.push(serverItem)
-        continue
-      }
-
-      if (options.preserveOptimisticItems) {
-        mergedPendingItems.push(previousItem)
-      }
+    ) {
       continue
     }
 
-    if (!options.hasPendingUserMessages) {
-      mergedPendingItems.push(previousItem)
-      continue
-    }
-
-    const serverIndex = findMatchingPendingItemIndex(
-      previousItem,
-      options.serverPendingItems,
-      consumedServerPendingIndexes
-    )
-    if (serverIndex === -1) continue
-
-    consumedServerPendingIndexes.add(serverIndex)
-    const serverItem = options.serverPendingItems[serverIndex]
-    if (serverItem) mergedPendingItems.push(serverItem)
-  }
-
-  for (let index = 0; index < options.serverPendingItems.length; index += 1) {
-    if (consumedServerPendingIndexes.has(index)) continue
-    const serverItem = options.serverPendingItems[index]
-    if (serverItem) mergedPendingItems.push(serverItem)
+    mergedPendingItems.push(previousItem)
   }
 
   return mergedPendingItems
@@ -587,7 +502,7 @@ function mergePendingItemsForSync(options: {
 
 function committedItemsFromPrevious(previousItems: Array<ConversationItem>) {
   return previousItems.filter((item) => {
-    if (isPendingConversationItem(item)) {
+    if (isPendingConversationItem(item) || isQueuedConversationItem(item)) {
       return false
     }
 
@@ -596,7 +511,25 @@ function committedItemsFromPrevious(previousItems: Array<ConversationItem>) {
 }
 
 function pendingItemsFromPrevious(previousItems: Array<ConversationItem>) {
-  return previousItems.filter((item) => isPendingConversationItem(item))
+  return previousItems.filter(
+    (item): item is Extract<ConversationItem, { kind: "user" }> =>
+      item.kind === "user" &&
+      isOptimisticPendingConversationItem(item) &&
+      !item.queued
+  )
+}
+
+function isQueuedConversationItem(item: ConversationItem) {
+  return item.kind === "user" && Boolean(item.queued)
+}
+
+function messageIsQueued(message: SyncMessage) {
+  const metadata =
+    message?.metadata && typeof message.metadata === "object"
+      ? message.metadata
+      : undefined
+
+  return Boolean(message.queued || metadata?.queued)
 }
 
 function committedItemsFromSync(sync: StateSyncPayload) {
@@ -604,6 +537,7 @@ function committedItemsFromSync(sync: StateSyncPayload) {
     return sync.items.filter(
       (item): item is ConversationItem =>
         !isPendingConversationItem(item) &&
+        !isQueuedConversationItem(item) &&
         !(item.kind === "assistant" && item.streaming)
     )
   }
@@ -654,12 +588,13 @@ export function buildItemsFromSync(
     const itemKey = `message:${index}`
 
     if (message.role === "user") {
+      if (messageIsQueued(message)) continue
+
       items.push({
         kind: "user",
         itemKey,
         text: extractMessageText(message),
         images: extractMessageImages(message),
-        queued: Boolean(message.queued ?? message?.metadata?.queued),
         streamingBehavior: normalizeStreamingBehavior(
           message.streamingBehavior ??
             message.deliverAs ??
@@ -713,36 +648,10 @@ export function buildItemsFromSync(
         ? true
         : Boolean(previousStreamingItem)
 
-  const serverPendingItems: Array<Extract<ConversationItem, { kind: "user" }>> =
-    []
-  if (hasPendingUserMessages) {
-    const pendingItems = sync.pendingUserMessages ?? []
-
-    for (let index = 0; index < pendingItems.length; index += 1) {
-      const message = pendingItems[index]
-      const pendingId =
-        typeof message?.pendingId === "string" ? message.pendingId : undefined
-
-      serverPendingItems.push({
-        kind: "user",
-        itemKey: pendingId ? `pending:${pendingId}` : `pending:${index}`,
-        pendingId,
-        text: typeof message?.text === "string" ? message.text : "",
-        images: promptImagesFromPendingMessage(message),
-        queued: Boolean(message?.queued ?? true),
-        streamingBehavior: normalizeStreamingBehavior(
-          message?.streamingBehavior
-        ),
-      })
-    }
-  }
-
   items.push(
     ...mergePendingItemsForSync({
       previousItems,
       committedItems: items,
-      serverPendingItems,
-      hasPendingUserMessages,
       preserveOptimisticItems: Boolean(sync.draft) || shouldRenderStreaming,
     })
   )

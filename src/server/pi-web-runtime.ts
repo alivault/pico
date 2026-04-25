@@ -2369,14 +2369,30 @@ export class PiWebRuntime {
 
       if (isAlreadyStreaming) {
         const queuedStreamingBehavior = streamingBehavior ?? "steer"
-        this.touchSessionEntry(activeEntry)
-        await activeEntry.session.prompt(message, {
-          ...promptOptions,
-          streamingBehavior: queuedStreamingBehavior,
-        })
-        activeEntry.pendingUserMessages.push(
-          createPendingUserMessage(message, images, queuedStreamingBehavior)
+        const pendingMessage = createPendingUserMessage(
+          message,
+          images,
+          queuedStreamingBehavior
         )
+        this.touchSessionEntry(activeEntry)
+        activeEntry.pendingUserMessages.push(pendingMessage)
+        await this.broadcastEntryState(activeEntry)
+
+        try {
+          await activeEntry.session.prompt(message, {
+            ...promptOptions,
+            streamingBehavior: queuedStreamingBehavior,
+          })
+        } catch (error) {
+          activeEntry.pendingUserMessages =
+            activeEntry.pendingUserMessages.filter(
+              (entry) => entry.pendingId !== pendingMessage.pendingId
+            )
+          this.reconcilePendingUserMessages(activeEntry)
+          await this.broadcastEntryState(activeEntry)
+          throw error
+        }
+
         this.reconcilePendingUserMessages(activeEntry)
         await this.broadcastEntryState(activeEntry)
         await this.broadcastSessionsAll()
