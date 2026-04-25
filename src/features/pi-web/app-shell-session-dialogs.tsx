@@ -1,7 +1,13 @@
 import * as React from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
 import type { ForkMessage } from "@/features/pi-web/app-shell-dialog-types"
-import type { SessionListEntry } from "@/lib/pi-web-api"
+import type {
+  ForkSessionResponse,
+  ForkableMessagesResponse,
+  SessionListEntry,
+} from "@/lib/pi-web-api"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -29,7 +35,11 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
+import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
+
+type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 
 type RenameSessionDialogProps = {
   open: boolean
@@ -430,5 +440,141 @@ export function ForkSessionDialog({
         {forkDialogBody}
       </DialogContent>
     </Dialog>
+  )
+}
+export type ForkSessionDialogHandle = {
+  open: () => Promise<void> | void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type ForkSessionDialogControllerProps = {
+  ref?: React.Ref<ForkSessionDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  viewerContextId: string
+  sessionScopeKey: string
+  sessionId?: string
+}
+
+export function ForkSessionDialogController({
+  ref,
+  openStateRef,
+  viewerContextId,
+  sessionScopeKey,
+  sessionId,
+}: ForkSessionDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const openRef = React.useRef(open)
+  const queryClient = useQueryClient()
+  const queryKey = piWebQueryKeys.forkableMessages(
+    viewerContextId,
+    sessionScopeKey
+  )
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  const forkMessagesQuery = useQuery({
+    queryKey,
+    queryFn: () =>
+      fetchJson<ForkableMessagesData>(
+        buildRequestUrl("/api/session/fork", {
+          contextId: viewerContextId,
+          sessionId,
+        })
+      ),
+    staleTime: 0,
+    gcTime: 1000 * 60 * 10,
+    enabled: Boolean(viewerContextId && open && sessionScopeKey),
+  })
+
+  const forkFromMessageMutation = useMutation({
+    mutationFn: async (entryId: string) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<ForkSessionResponse>(
+        buildRequestUrl("/api/session/fork", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entryId }),
+        }
+      )
+    },
+  })
+
+  const openDialog = async () => {
+    if (!viewerContextId) return
+
+    setOpenState(true)
+    await queryClient.invalidateQueries({
+      queryKey,
+      exact: true,
+      refetchType: "active",
+    })
+  }
+
+  const forkFromMessage = async (entryId: string) => {
+    if (!viewerContextId) return
+
+    try {
+      await forkFromMessageMutation.mutateAsync(entryId)
+      setOpenState(false)
+      toast.success("Forked session")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to fork session"
+      )
+    }
+  }
+
+  React.useEffect(() => {
+    if (!open || !forkMessagesQuery.error) return
+
+    toast.error(
+      forkMessagesQuery.error instanceof Error
+        ? forkMessagesQuery.error.message
+        : "Failed to load fork points"
+    )
+    setOpenState(false)
+  }, [forkMessagesQuery.error, forkMessagesQuery.errorUpdatedAt, open])
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: openDialog,
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    [queryKey, viewerContextId]
+  )
+
+  const forkLoading = Boolean(
+    (forkMessagesQuery.isPending && !forkMessagesQuery.data) ||
+    forkFromMessageMutation.isPending
+  )
+
+  return (
+    <ForkSessionDialog
+      open={open}
+      onOpenChange={setOpenState}
+      forkLoading={forkLoading}
+      forkMessages={forkMessagesQuery.data?.messages ?? null}
+      onForkFromMessage={(entryId) => {
+        void forkFromMessage(entryId)
+      }}
+    />
   )
 }

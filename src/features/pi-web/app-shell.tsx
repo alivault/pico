@@ -23,7 +23,6 @@ import type {
   DirectorySessionsIndexesResponse,
   ExtensionUiEvent,
   FileCompletionsResponse,
-  ForkableMessagesResponse,
   PathCompletionsResponse,
   SessionListEntry,
   SessionTreeResponse,
@@ -69,8 +68,10 @@ import {
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
   DeleteSessionsDialogController,
+  ForkSessionDialogController,
   RenameSessionDialogController,
   type DeleteSessionsDialogHandle,
+  type ForkSessionDialogHandle,
   type RenameSessionDialogHandle,
 } from "@/features/pi-web/app-shell-session-dialogs"
 import {
@@ -188,7 +189,6 @@ type DirectorySessionsIndexesData = Extract<
   { ok: true }
 >
 type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
-type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 
 function sessionScrollKey(sessionState: {
   draft: boolean
@@ -346,43 +346,22 @@ function clearUnreadForActiveSidebarSession(
   return changed ? next : current
 }
 
+type SessionTreeQueryOptions = {
+  viewerContextId: string
+  sessionScopeKey: string
+  sessionId?: string
+}
+
 function sessionTreeQueryOptions({
   viewerContextId,
   sessionScopeKey,
   sessionId,
-}: {
-  viewerContextId: string
-  sessionScopeKey: string
-  sessionId?: string
-}) {
+}: SessionTreeQueryOptions) {
   return {
     queryKey: piWebQueryKeys.sessionTree(viewerContextId, sessionScopeKey),
     queryFn: () =>
       fetchJson<SessionTreeData>(
         buildRequestUrl("/api/session/tree", {
-          contextId: viewerContextId,
-          sessionId,
-        })
-      ),
-    staleTime: 0,
-    gcTime: 1000 * 60 * 10,
-  }
-}
-
-function forkableMessagesQueryOptions({
-  viewerContextId,
-  sessionScopeKey,
-  sessionId,
-}: {
-  viewerContextId: string
-  sessionScopeKey: string
-  sessionId?: string
-}) {
-  return {
-    queryKey: piWebQueryKeys.forkableMessages(viewerContextId, sessionScopeKey),
-    queryFn: () =>
-      fetchJson<ForkableMessagesData>(
-        buildRequestUrl("/api/session/fork", {
           contextId: viewerContextId,
           sessionId,
         })
@@ -1320,7 +1299,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [forkOpen, setForkOpen] = React.useState(false)
   const [treeOpen, setTreeOpen] = React.useState(false)
   const [treeQuery, setTreeQuery] = React.useState("")
   const [selectedTreeNodeId, setSelectedTreeNodeId] = React.useState<
@@ -1352,6 +1330,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const renameOpenRef = React.useRef(false)
   const deleteDialogRef = React.useRef<DeleteSessionsDialogHandle | null>(null)
   const deleteOpenRef = React.useRef(false)
+  const forkDialogRef = React.useRef<ForkSessionDialogHandle | null>(null)
+  const forkOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1478,14 +1458,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     }),
     enabled: Boolean(viewerContextId && treeOpen && currentSessionQueryScope),
   })
-  const forkMessagesQuery = useQuery({
-    ...forkableMessagesQueryOptions({
-      viewerContextId,
-      sessionScopeKey: currentSessionQueryScope,
-      sessionId: activeSessionId,
-    }),
-    enabled: Boolean(viewerContextId && forkOpen && currentSessionQueryScope),
-  })
   const currentSessionTitle = getSessionTitle({
     title:
       sessionState.sessionName || sessionState.firstMessage || "New session",
@@ -1514,10 +1486,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const treeData = treeQueryResult.data ?? null
   const treeLoading = Boolean(
     treeQueryResult.isPending && !treeQueryResult.data
-  )
-  const forkMessages = forkMessagesQuery.data?.messages ?? null
-  const forkLoading = Boolean(
-    forkMessagesQuery.isPending && !forkMessagesQuery.data
   )
 
   React.useEffect(() => {
@@ -1667,6 +1635,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const openAddDirectoryDialog = () => {
     addDirectoryDialogRef.current?.open()
+  }
+
+  const openForkDialog = async () => {
+    await forkDialogRef.current?.open()
   }
 
   const focusSessionSearch = () => {
@@ -1861,17 +1833,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
     setTreeOpen(false)
   }, [treeOpen, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
-
-  React.useEffect(() => {
-    if (!forkOpen || !forkMessagesQuery.error) return
-
-    toast.error(
-      forkMessagesQuery.error instanceof Error
-        ? forkMessagesQuery.error.message
-        : "Failed to load forks"
-    )
-    setForkOpen(false)
-  }, [forkMessagesQuery.error, forkMessagesQuery.errorUpdatedAt, forkOpen])
 
   React.useEffect(() => {
     if (!treeOpen || !treeData) return
@@ -2086,10 +2047,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const {
     cycleThinkingLevel,
     deleteSessions,
-    forkFromMessage,
-    isForkingFromMessage,
     navigateTreeNode,
-    openForkDialog,
     openTreeDialog,
     renameSessionPath,
     resolveUiRequest,
@@ -2111,7 +2069,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     queryClient,
     setTreeOpen,
     setTreeQuery,
-    setForkOpen,
     setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor,
     setRunningSlashCommand,
@@ -2216,7 +2173,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
-  const forkDialogLoading = Boolean(forkLoading || isForkingFromMessage)
   const flatTree = treeData ? flattenTree(treeData.tree) : []
   const treeLeafId = treeData?.leafId ?? null
   const treeSummaryAvailable = sessionState.availableModels.length > 0
@@ -2570,7 +2526,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     commandPaletteOpen,
     currentTab,
     deleteOpenRef,
-    forkOpen,
+    forkOpenRef,
     hasPendingUiRequest: Boolean(pendingUiRequest),
     lastEscapePressedAtRef,
     renameOpenRef,
@@ -2938,14 +2894,15 @@ const AppShellSessionWorkspace = React.forwardRef<
         onDeleteSession={deleteSessions}
       />
 
+      <ForkSessionDialogController
+        ref={forkDialogRef}
+        openStateRef={forkOpenRef}
+        viewerContextId={viewerContextId}
+        sessionScopeKey={currentSessionQueryScope}
+        sessionId={activeSessionId}
+      />
+
       <AppShellDialogs
-        forkOpen={forkOpen}
-        onForkOpenChange={setForkOpen}
-        forkLoading={forkDialogLoading}
-        forkMessages={forkMessages}
-        onForkFromMessage={(entryId) => {
-          void forkFromMessage(entryId)
-        }}
         treeOpen={treeOpen}
         onTreeOpenChange={setTreeOpen}
         treeLoading={treeLoading}

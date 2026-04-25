@@ -6,7 +6,6 @@ import type { SessionState } from "@/lib/pi-web"
 import type {
   DeleteSessionResponse,
   ExtensionUiEvent,
-  ForkSessionResponse,
   NavigateSessionTreeResponse,
   RenameSessionResponse,
   SessionListEntry,
@@ -35,7 +34,6 @@ type UseAppShellSessionMutationsOptions = {
   queryClient: QueryClient
   setTreeOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTreeQuery: React.Dispatch<React.SetStateAction<string>>
-  setForkOpen: React.Dispatch<React.SetStateAction<boolean>>
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -58,7 +56,6 @@ export function useAppShellSessionMutations({
   queryClient,
   setTreeOpen,
   setTreeQuery,
-  setForkOpen,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
@@ -377,55 +374,6 @@ export function useAppShellSessionMutations({
     [navigateTreeNodeMutation, setTreeOpen, viewerContextId]
   )
 
-  const openForkDialog = React.useCallback(async () => {
-    if (!viewerContextId) return
-    setForkOpen(true)
-    await queryClient.invalidateQueries({
-      queryKey: piWebQueryKeys.forkableMessages(
-        viewerContextId,
-        currentSessionQueryScope
-      ),
-      exact: true,
-      refetchType: "active",
-    })
-  }, [currentSessionQueryScope, queryClient, setForkOpen, viewerContextId])
-
-  const forkFromMessageMutation = useMutation({
-    mutationFn: async (entryId: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<ForkSessionResponse>(
-        buildRequestUrl("/api/session/fork", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entryId }),
-        }
-      )
-    },
-  })
-
-  const forkFromMessage = React.useCallback(
-    async (entryId: string) => {
-      if (!viewerContextId) return
-      try {
-        await forkFromMessageMutation.mutateAsync(entryId)
-        setForkOpen(false)
-        toast.success("Forked session")
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to fork session"
-        )
-      }
-    },
-    [forkFromMessageMutation, setForkOpen, viewerContextId]
-  )
-
   const renameSessionMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
       if (!viewerContextId) {
@@ -595,10 +543,7 @@ export function useAppShellSessionMutations({
   return {
     cycleThinkingLevel,
     deleteSessions,
-    forkFromMessage,
-    isForkingFromMessage: forkFromMessageMutation.isPending,
     navigateTreeNode,
-    openForkDialog,
     openTreeDialog,
     renameSessionPath,
     resolveUiRequest,

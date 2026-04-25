@@ -1,22 +1,13 @@
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
-import type {
-  ForkMessage,
-  TreeNavigateOptions,
-} from "@/features/pi-web/app-shell-dialog-types"
+import type { TreeNavigateOptions } from "@/features/pi-web/app-shell-dialog-types"
 import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
 import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 
 import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dialog"
-import { ForkSessionDialog } from "@/features/pi-web/app-shell-session-dialogs"
 import { AppShellTreeDialog } from "@/features/pi-web/app-shell-tree-dialog"
 import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 
 type AppShellDialogsProps = {
-  forkOpen: boolean
-  onForkOpenChange: (open: boolean) => void
-  forkLoading: boolean
-  forkMessages: Array<ForkMessage> | null
-  onForkFromMessage: (entryId: string) => void
   treeOpen: boolean
   onTreeOpenChange: (open: boolean) => void
   treeLoading: boolean
@@ -57,11 +48,6 @@ type AppShellDialogsProps = {
 }
 
 export function AppShellDialogs({
-  forkOpen,
-  onForkOpenChange,
-  forkLoading,
-  forkMessages,
-  onForkFromMessage,
   treeOpen,
   onTreeOpenChange,
   treeLoading,
@@ -99,14 +85,6 @@ export function AppShellDialogs({
 }: AppShellDialogsProps) {
   return (
     <>
-      <ForkSessionDialog
-        open={forkOpen}
-        onOpenChange={onForkOpenChange}
-        forkLoading={forkLoading}
-        forkMessages={forkMessages}
-        onForkFromMessage={onForkFromMessage}
-      />
-
       <AppShellTreeDialog
         open={treeOpen}
         onOpenChange={onTreeOpenChange}

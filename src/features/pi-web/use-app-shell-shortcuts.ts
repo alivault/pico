@@ -30,7 +30,7 @@ type UseAppShellShortcutsOptions = {
   commandPaletteOpen: boolean
   currentTab: string
   deleteOpenRef: React.MutableRefObject<boolean>
-  forkOpen: boolean
+  forkOpenRef: React.MutableRefObject<boolean>
   hasPendingUiRequest: boolean
   lastEscapePressedAtRef: React.MutableRefObject<number>
   renameOpenRef: React.MutableRefObject<boolean>
@@ -76,7 +76,7 @@ export function useAppShellShortcuts({
   commandPaletteOpen,
   currentTab,
   deleteOpenRef,
-  forkOpen,
+  forkOpenRef,
   hasPendingUiRequest,
   lastEscapePressedAtRef,
   renameOpenRef,
@@ -96,7 +96,7 @@ export function useAppShellShortcuts({
         addDirectoryOpenRef.current ||
         renameOpenRef.current ||
         deleteOpenRef.current ||
-        forkOpen ||
+        forkOpenRef.current ||
         treeOpen ||
         settingsOpen ||
         commandPaletteOpen ||
@@ -370,7 +370,7 @@ export function useAppShellShortcuts({
     commandPaletteOpen,
     currentTab,
     deleteOpenRef,
-    forkOpen,
+    forkOpenRef,
     hasPendingUiRequest,
     lastEscapePressedAtRef,
     renameOpenRef,
