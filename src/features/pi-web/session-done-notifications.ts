@@ -3,6 +3,8 @@ export type DesktopNotificationPermission =
   | "unsupported"
 
 const SESSION_DONE_NOTIFICATION_DURATION_MS = 4_000
+const SESSION_DONE_SOUND_URL = "/sounds/session-done.mp3"
+const SESSION_DONE_SOUND_GAIN = 0.85
 
 type AudioContextConstructor = typeof AudioContext
 
@@ -11,6 +13,8 @@ type WindowWithWebkitAudioContext = Window & {
 }
 
 let sharedAudioContext: AudioContext | null = null
+let sessionDoneSoundBuffer: AudioBuffer | null = null
+let sessionDoneSoundBufferPromise: Promise<AudioBuffer | null> | null = null
 
 function audioContextConstructor() {
   if (typeof window === "undefined") return null
@@ -34,10 +38,7 @@ function getSharedAudioContext() {
   return sharedAudioContext
 }
 
-export async function primeSessionDoneSound() {
-  const audioContext = getSharedAudioContext()
-  if (!audioContext) return false
-
+async function ensureAudioContextRunning(audioContext: AudioContext) {
   if (audioContext.state === "suspended") {
     await audioContext.resume()
   }
@@ -45,18 +46,31 @@ export async function primeSessionDoneSound() {
   return audioContext.state === "running"
 }
 
-export async function playSessionDoneSound() {
-  const audioContext = getSharedAudioContext()
-  if (!audioContext) return false
+async function loadSessionDoneSound(audioContext: AudioContext) {
+  if (sessionDoneSoundBuffer) return sessionDoneSoundBuffer
 
-  if (audioContext.state === "suspended") {
-    await audioContext.resume()
-  }
+  sessionDoneSoundBufferPromise ??= fetch(SESSION_DONE_SOUND_URL)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load ${SESSION_DONE_SOUND_URL}`)
+      }
 
-  if (audioContext.state !== "running") {
-    return false
-  }
+      return response.arrayBuffer()
+    })
+    .then((arrayBuffer) => audioContext.decodeAudioData(arrayBuffer))
+    .then((buffer) => {
+      sessionDoneSoundBuffer = buffer
+      return buffer
+    })
+    .catch(() => {
+      sessionDoneSoundBufferPromise = null
+      return null
+    })
 
+  return sessionDoneSoundBufferPromise
+}
+
+function playGeneratedSessionDoneSound(audioContext: AudioContext) {
   const oscillator = audioContext.createOscillator()
   const gainNode = audioContext.createGain()
 
@@ -82,6 +96,41 @@ export async function playSessionDoneSound() {
 
   oscillator.start(audioContext.currentTime)
   oscillator.stop(audioContext.currentTime + 0.3)
+}
+
+export async function primeSessionDoneSound() {
+  const audioContext = getSharedAudioContext()
+  if (!audioContext) return false
+
+  const running = await ensureAudioContextRunning(audioContext)
+  if (!running) return false
+
+  const soundBuffer = await loadSessionDoneSound(audioContext)
+  return Boolean(soundBuffer)
+}
+
+export async function playSessionDoneSound() {
+  const audioContext = getSharedAudioContext()
+  if (!audioContext) return false
+
+  const running = await ensureAudioContextRunning(audioContext)
+  if (!running) return false
+
+  const soundBuffer = await loadSessionDoneSound(audioContext)
+  if (!soundBuffer) {
+    playGeneratedSessionDoneSound(audioContext)
+    return true
+  }
+
+  const source = audioContext.createBufferSource()
+  const gainNode = audioContext.createGain()
+
+  source.buffer = soundBuffer
+  gainNode.gain.value = SESSION_DONE_SOUND_GAIN
+
+  source.connect(gainNode)
+  gainNode.connect(audioContext.destination)
+  source.start()
 
   return true
 }
