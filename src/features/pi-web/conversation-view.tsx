@@ -536,7 +536,7 @@ const EXPLORE_TOOL_NAMES = new Set([
   "list",
   "rg",
 ])
-const EXPLORE_SHELL_COMMAND_NAMES = new Set(["find", "grep", "rg"])
+const EXPLORE_SHELL_COMMAND_NAMES = new Set(["find", "grep", "ls", "rg"])
 const SKIPPABLE_SHELL_COMMAND_NAMES = new Set(["cd", "export", "pwd", "set"])
 const SHELL_COMMAND_WRAPPER_NAMES = new Set([
   "command",
@@ -682,7 +682,12 @@ function exploreGroupSummary(
       readCount += 1
       continue
     }
-    if (block.name === "ls" || block.name === "list") {
+    const shellCommandName = exploreShellCommandName(block)
+    if (
+      block.name === "ls" ||
+      block.name === "list" ||
+      shellCommandName === "ls"
+    ) {
       listCount += 1
       continue
     }
@@ -786,9 +791,11 @@ function exploreToolLine(
       const label =
         shellCommandName === "rg"
           ? "Ripgrep"
-          : shellCommandName
-            ? `${shellCommandName[0]?.toUpperCase()}${shellCommandName.slice(1)}`
-            : "Shell"
+          : shellCommandName === "ls"
+            ? "List"
+            : shellCommandName
+              ? `${shellCommandName[0]?.toUpperCase()}${shellCommandName.slice(1)}`
+              : "Shell"
 
       return {
         label,
