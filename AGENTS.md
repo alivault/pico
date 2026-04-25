@@ -56,8 +56,7 @@ pnpm check:fix
 Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
-- `pnpm check` is the baseline validation command.
-- For runtime, route, or session-state changes, also run `pnpm build`.
+- `pnpm check:fix` is the baseline validation command.
 - If you need to start, restart, or test a dev server / preview build, use the `zellij` `pi` session instead of creating an ad hoc long-lived server process.
 
 ## Repo layout
@@ -432,7 +431,7 @@ If you extend git UI, update:
 3. add/update response types in `src/lib/pi-web-api.ts`
 4. call it from the client with `buildRequestUrl()` + `fetchJson()`
 5. invalidate/query-refresh as needed
-6. run `pnpm check` and usually `pnpm build`
+6. run `pnpm check:fix`
 
 ### Add a new cached query
 
@@ -467,13 +466,7 @@ If you extend git UI, update:
 At minimum after non-trivial changes:
 
 ```bash
-pnpm check
-```
-
-Also run this for changes affecting routes, runtime behavior, bundling, or app wiring:
-
-```bash
-pnpm build
+pnpm check:fix
 ```
 
 Manual smoke tests are recommended for the touched area. Useful flows:
