@@ -237,6 +237,101 @@ export function DeleteSessionsDialog({
   )
 }
 
+export type DeleteSessionsDialogHandle = {
+  open: (targets: Array<SessionListEntry>) => void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type DeleteSessionsDialogControllerProps = {
+  ref?: React.Ref<DeleteSessionsDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  onDeleteSession: (
+    targets: Array<SessionListEntry>
+  ) => Promise<boolean> | boolean | void
+}
+
+function normalizeDeleteTargets(targets: Array<SessionListEntry>) {
+  const nextTargets: Array<SessionListEntry> = []
+  const seenKeys = new Set<string>()
+
+  for (const target of targets) {
+    if (!target.path) continue
+    const key = `${target.path}:${target.id || ""}`
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+    nextTargets.push(target)
+  }
+
+  return nextTargets
+}
+
+export function DeleteSessionsDialogController({
+  ref,
+  openStateRef,
+  onDeleteSession,
+}: DeleteSessionsDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const [targets, setTargets] = React.useState<Array<SessionListEntry>>([])
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      setTargets([])
+    }
+  }
+
+  const openTargets = (nextTargets: Array<SessionListEntry>) => {
+    const normalizedTargets = normalizeDeleteTargets(nextTargets)
+    if (normalizedTargets.length === 0) return
+
+    setTargets(normalizedTargets)
+    setOpenState(true)
+  }
+
+  const submitDelete = async () => {
+    const success = await onDeleteSession(targets)
+    if (success === false) return
+
+    setOpenState(false)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: openTargets,
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    [targets]
+  )
+
+  const title = targets.length === 1 ? "Delete session" : "Delete sessions"
+  const description =
+    targets.length === 1
+      ? `Delete "${targets[0]?.title || "New session"}" from disk?`
+      : `Delete ${targets.length} selected sessions from disk?`
+
+  return (
+    <DeleteSessionsDialog
+      open={open}
+      onOpenChange={setOpenState}
+      title={title}
+      description={description}
+      onDeleteSession={() => {
+        void submitDelete()
+      }}
+    />
+  )
+}
+
 type ForkSessionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void

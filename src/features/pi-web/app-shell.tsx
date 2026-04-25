@@ -68,7 +68,9 @@ import {
 } from "@/features/pi-web/app-shell-add-directory-dialog"
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
+  DeleteSessionsDialogController,
   RenameSessionDialogController,
+  type DeleteSessionsDialogHandle,
   type RenameSessionDialogHandle,
 } from "@/features/pi-web/app-shell-session-dialogs"
 import {
@@ -1318,9 +1320,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [deleteTargets, setDeleteTargets] = React.useState<
-    Array<SessionListEntry>
-  >([])
   const [forkOpen, setForkOpen] = React.useState(false)
   const [treeOpen, setTreeOpen] = React.useState(false)
   const [treeQuery, setTreeQuery] = React.useState("")
@@ -1351,6 +1350,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const addDirectoryOpenRef = React.useRef(false)
   const renameDialogRef = React.useRef<RenameSessionDialogHandle | null>(null)
   const renameOpenRef = React.useRef(false)
+  const deleteDialogRef = React.useRef<DeleteSessionsDialogHandle | null>(null)
+  const deleteOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1510,7 +1511,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     ? displaySessionTitle
     : sessionState.uiState.title?.trim() ||
       (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
-  const deleteOpen = deleteTargets.length > 0
   const treeData = treeQueryResult.data ?? null
   const treeLoading = Boolean(
     treeQueryResult.isPending && !treeQueryResult.data
@@ -1648,20 +1648,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const openDeleteDialog = (targets: Array<SessionListEntry>) => {
-    const nextTargets: Array<SessionListEntry> = []
-    const seenKeys = new Set<string>()
-
-    for (const target of targets) {
-      if (!target.path) continue
-      const key = sessionListEntryKey(target)
-      if (!key || seenKeys.has(key)) continue
-      seenKeys.add(key)
-      nextTargets.push(target)
-    }
-
-    if (nextTargets.length > 0) {
-      setDeleteTargets(nextTargets)
-    }
+    deleteDialogRef.current?.open(targets)
   }
 
   const openDeleteDialogForCurrentSession = () => {
@@ -2098,7 +2085,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const {
     cycleThinkingLevel,
-    deleteSession,
+    deleteSessions,
     forkFromMessage,
     isForkingFromMessage,
     navigateTreeNode,
@@ -2120,13 +2107,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionState,
     selectedTreeNodeId,
     selectedTreeNodeLabel,
-    deleteTargets,
     pendingUiRequest,
     queryClient,
     setTreeOpen,
     setTreeQuery,
     setForkOpen,
-    setDeleteTargets,
     setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor,
     setRunningSlashCommand,
@@ -2584,7 +2569,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     addDirectoryOpenRef,
     commandPaletteOpen,
     currentTab,
-    deleteOpen,
+    deleteOpenRef,
     forkOpen,
     hasPendingUiRequest: Boolean(pendingUiRequest),
     lastEscapePressedAtRef,
@@ -2947,24 +2932,13 @@ const AppShellSessionWorkspace = React.forwardRef<
         onRenameSession={renameSessionPath}
       />
 
+      <DeleteSessionsDialogController
+        ref={deleteDialogRef}
+        openStateRef={deleteOpenRef}
+        onDeleteSession={deleteSessions}
+      />
+
       <AppShellDialogs
-        deleteOpen={deleteOpen}
-        onDeleteOpenChange={(open) => {
-          if (!open) {
-            setDeleteTargets([])
-          }
-        }}
-        deleteTitle={
-          deleteTargets.length === 1 ? "Delete session" : "Delete sessions"
-        }
-        deleteDescription={
-          deleteTargets.length === 1
-            ? `Delete "${deleteTargets[0]?.title || currentSessionTitle}" from disk?`
-            : `Delete ${deleteTargets.length} selected sessions from disk?`
-        }
-        onDeleteSession={() => {
-          void deleteSession()
-        }}
         forkOpen={forkOpen}
         onForkOpenChange={setForkOpen}
         forkLoading={forkDialogLoading}

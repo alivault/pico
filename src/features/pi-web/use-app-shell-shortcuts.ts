@@ -29,7 +29,7 @@ type UseAppShellShortcutsOptions = {
   addDirectoryOpenRef: React.MutableRefObject<boolean>
   commandPaletteOpen: boolean
   currentTab: string
-  deleteOpen: boolean
+  deleteOpenRef: React.MutableRefObject<boolean>
   forkOpen: boolean
   hasPendingUiRequest: boolean
   lastEscapePressedAtRef: React.MutableRefObject<number>
@@ -75,7 +75,7 @@ export function useAppShellShortcuts({
   addDirectoryOpenRef,
   commandPaletteOpen,
   currentTab,
-  deleteOpen,
+  deleteOpenRef,
   forkOpen,
   hasPendingUiRequest,
   lastEscapePressedAtRef,
@@ -95,7 +95,7 @@ export function useAppShellShortcuts({
       const modalOpen =
         addDirectoryOpenRef.current ||
         renameOpenRef.current ||
-        deleteOpen ||
+        deleteOpenRef.current ||
         forkOpen ||
         treeOpen ||
         settingsOpen ||
@@ -369,7 +369,7 @@ export function useAppShellShortcuts({
     addDirectoryOpenRef,
     commandPaletteOpen,
     currentTab,
-    deleteOpen,
+    deleteOpenRef,
     forkOpen,
     hasPendingUiRequest,
     lastEscapePressedAtRef,

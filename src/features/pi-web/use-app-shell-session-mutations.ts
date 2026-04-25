@@ -31,15 +31,11 @@ type UseAppShellSessionMutationsOptions = {
   sessionState: SessionState
   selectedTreeNodeId: string | null
   selectedTreeNodeLabel: string
-  deleteTargets: Array<SessionListEntry>
   pendingUiRequest: ExtensionUiEvent | null
   queryClient: QueryClient
   setTreeOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTreeQuery: React.Dispatch<React.SetStateAction<string>>
   setForkOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setDeleteTargets: React.Dispatch<
-    React.SetStateAction<Array<SessionListEntry>>
-  >
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -58,13 +54,11 @@ export function useAppShellSessionMutations({
   sessionState,
   selectedTreeNodeId,
   selectedTreeNodeLabel,
-  deleteTargets,
   pendingUiRequest,
   queryClient,
   setTreeOpen,
   setTreeQuery,
   setForkOpen,
-  setDeleteTargets,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
@@ -494,54 +488,56 @@ export function useAppShellSessionMutations({
     },
   })
 
-  const deleteSession = React.useCallback(async () => {
-    if (!viewerContextId || deleteTargets.length === 0) return
+  const deleteSessions = React.useCallback(
+    async (targets: Array<SessionListEntry>) => {
+      if (!viewerContextId || targets.length === 0) return false
 
-    const orderedTargets = [
-      ...deleteTargets.filter(
-        (target) => target.path && target.path !== sessionState.sessionFile
-      ),
-      ...deleteTargets.filter(
-        (target) => target.path && target.path === sessionState.sessionFile
-      ),
+      const orderedTargets = [
+        ...targets.filter(
+          (target) => target.path && target.path !== sessionState.sessionFile
+        ),
+        ...targets.filter(
+          (target) => target.path && target.path === sessionState.sessionFile
+        ),
+      ]
+
+      try {
+        await deleteSessionMutation.mutateAsync(
+          orderedTargets.flatMap((target) => (target.path ? [target.path] : []))
+        )
+
+        const deletedKeys = new Set(
+          orderedTargets
+            .map((target) => sessionListEntryKey(target))
+            .filter(Boolean)
+        )
+        setSelectedSidebarSessionKeys((current) =>
+          current.filter((key) => !deletedKeys.has(key))
+        )
+        setSidebarSessionSelectionAnchor((current) =>
+          current && deletedKeys.has(current) ? "" : current
+        )
+        toast.success(
+          orderedTargets.length === 1
+            ? "Deleted session"
+            : `Deleted ${orderedTargets.length} sessions`
+        )
+        return true
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to delete session"
+        )
+        return false
+      }
+    },
+    [
+      deleteSessionMutation,
+      sessionState.sessionFile,
+      setSelectedSidebarSessionKeys,
+      setSidebarSessionSelectionAnchor,
+      viewerContextId,
     ]
-
-    try {
-      await deleteSessionMutation.mutateAsync(
-        orderedTargets.flatMap((target) => (target.path ? [target.path] : []))
-      )
-
-      const deletedKeys = new Set(
-        orderedTargets
-          .map((target) => sessionListEntryKey(target))
-          .filter(Boolean)
-      )
-      setSelectedSidebarSessionKeys((current) =>
-        current.filter((key) => !deletedKeys.has(key))
-      )
-      setSidebarSessionSelectionAnchor((current) =>
-        current && deletedKeys.has(current) ? "" : current
-      )
-      setDeleteTargets([])
-      toast.success(
-        orderedTargets.length === 1
-          ? "Deleted session"
-          : `Deleted ${orderedTargets.length} sessions`
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete session"
-      )
-    }
-  }, [
-    deleteSessionMutation,
-    deleteTargets,
-    sessionState.sessionFile,
-    setDeleteTargets,
-    setSelectedSidebarSessionKeys,
-    setSidebarSessionSelectionAnchor,
-    viewerContextId,
-  ])
+  )
 
   const resolveUiRequestMutation = useMutation({
     mutationFn: async ({
@@ -598,7 +594,7 @@ export function useAppShellSessionMutations({
 
   return {
     cycleThinkingLevel,
-    deleteSession,
+    deleteSessions,
     forkFromMessage,
     isForkingFromMessage: forkFromMessageMutation.isPending,
     navigateTreeNode,

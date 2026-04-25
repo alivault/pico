@@ -7,19 +7,11 @@ import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
 import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 
 import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dialog"
-import {
-  DeleteSessionsDialog,
-  ForkSessionDialog,
-} from "@/features/pi-web/app-shell-session-dialogs"
+import { ForkSessionDialog } from "@/features/pi-web/app-shell-session-dialogs"
 import { AppShellTreeDialog } from "@/features/pi-web/app-shell-tree-dialog"
 import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 
 type AppShellDialogsProps = {
-  deleteOpen: boolean
-  onDeleteOpenChange: (open: boolean) => void
-  deleteTitle: string
-  deleteDescription: string
-  onDeleteSession: () => void
   forkOpen: boolean
   onForkOpenChange: (open: boolean) => void
   forkLoading: boolean
@@ -65,11 +57,6 @@ type AppShellDialogsProps = {
 }
 
 export function AppShellDialogs({
-  deleteOpen,
-  onDeleteOpenChange,
-  deleteTitle,
-  deleteDescription,
-  onDeleteSession,
   forkOpen,
   onForkOpenChange,
   forkLoading,
@@ -112,14 +99,6 @@ export function AppShellDialogs({
 }: AppShellDialogsProps) {
   return (
     <>
-      <DeleteSessionsDialog
-        open={deleteOpen}
-        onOpenChange={onDeleteOpenChange}
-        title={deleteTitle}
-        description={deleteDescription}
-        onDeleteSession={onDeleteSession}
-      />
-
       <ForkSessionDialog
         open={forkOpen}
         onOpenChange={onForkOpenChange}
