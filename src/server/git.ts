@@ -31,6 +31,7 @@ export type GitLocalBranch = {
   hash?: string
   subject?: string
   relativeDate?: string
+  committerDate?: string
 }
 
 export type GitRemoteBranch = {
@@ -38,6 +39,7 @@ export type GitRemoteBranch = {
   hash?: string
   subject?: string
   relativeDate?: string
+  committerDate?: string
 }
 
 export type GitChangesSummary = {
@@ -358,6 +360,7 @@ function parseGitLocalBranches(output: string) {
       hash = "",
       subject = "",
       relativeDate = "",
+      committerDate = "",
     ] = fields
     const branchName = typeof name === "string" ? name.trim() : ""
     if (!branchName) continue
@@ -382,6 +385,10 @@ function parseGitLocalBranches(output: string) {
         typeof relativeDate === "string" && relativeDate.trim()
           ? relativeDate.trim()
           : undefined,
+      committerDate:
+        typeof committerDate === "string" && committerDate.trim()
+          ? committerDate.trim()
+          : undefined,
     })
   }
 
@@ -399,7 +406,13 @@ function parseGitRemoteBranches(output: string) {
   const branches: Array<GitRemoteBranch> = []
 
   for (const fields of parseGitRefRows(output)) {
-    const [name = "", hash = "", subject = "", relativeDate = ""] = fields
+    const [
+      name = "",
+      hash = "",
+      subject = "",
+      relativeDate = "",
+      committerDate = "",
+    ] = fields
     const branchName = typeof name === "string" ? name.trim() : ""
     if (
       !branchName ||
@@ -419,6 +432,10 @@ function parseGitRemoteBranches(output: string) {
       relativeDate:
         typeof relativeDate === "string" && relativeDate.trim()
           ? relativeDate.trim()
+          : undefined,
+      committerDate:
+        typeof committerDate === "string" && committerDate.trim()
+          ? committerDate.trim()
           : undefined,
     })
   }
@@ -571,7 +588,7 @@ export async function readDirectoryGitChanges(
       [
         "for-each-ref",
         "--sort=-committerdate",
-        "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)",
+        "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)%00%(committerdate:iso-strict)",
         "refs/heads",
       ],
       {
@@ -584,7 +601,7 @@ export async function readDirectoryGitChanges(
       [
         "for-each-ref",
         "--sort=-committerdate",
-        "--format=%(refname:short)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)",
+        "--format=%(refname:short)%00%(objectname:short)%00%(subject)%00%(committerdate:relative)%00%(committerdate:iso-strict)",
         "refs/remotes",
       ],
       {

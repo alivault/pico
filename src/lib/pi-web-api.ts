@@ -84,6 +84,7 @@ export type GitLocalBranch = {
   hash?: string
   subject?: string
   relativeDate?: string
+  committerDate?: string
 }
 
 export type GitRemoteBranch = {
@@ -91,6 +92,7 @@ export type GitRemoteBranch = {
   hash?: string
   subject?: string
   relativeDate?: string
+  committerDate?: string
 }
 
 export type GitChangesResponse =

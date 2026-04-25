@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
 import { piWebQueryKeys } from "@/features/pi-web/query-keys"
+import { useRelativeTimeTicker } from "@/features/pi-web/relative-time"
 import type {
   GitChangeFile,
   GitChangesResponse,
@@ -278,6 +279,58 @@ function gitShortRelativeDate(value: string | undefined) {
                   : ""
 
   return unitLabel ? `${count}${unitLabel} ago` : label
+}
+
+function gitTimestamp(value: string | undefined) {
+  const timestamp = new Date(value || "").getTime()
+  return Number.isNaN(timestamp) ? undefined : timestamp
+}
+
+function gitShortRelativeTimeFromTimestamp(timestamp: number) {
+  const diffMs = Date.now() - timestamp
+  const past = diffMs >= 0
+  const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
+  const format = (value: number, unit: string) =>
+    past ? `${value}${unit} ago` : `in ${value}${unit}`
+
+  if (seconds < 90) return format(seconds, "s")
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 90) return format(minutes, "m")
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 36) return format(hours, "h")
+
+  const days = Math.floor(hours / 24)
+  if (days < 14) return format(days, "d")
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 10) return format(weeks, "w")
+
+  if (days < 365) return format(Math.max(1, Math.floor(days / 30)), "mo")
+
+  return format(Math.max(1, Math.floor(days / 365)), "y")
+}
+
+function GitBranchRelativeDate({
+  className,
+  committerDate,
+  relativeDate,
+}: {
+  committerDate?: string
+  relativeDate?: string
+  className?: string
+}) {
+  const timestamp = gitTimestamp(committerDate)
+  useRelativeTimeTicker(timestamp)
+
+  const label =
+    timestamp === undefined
+      ? gitShortRelativeDate(relativeDate)
+      : gitShortRelativeTimeFromTimestamp(timestamp)
+  if (!label) return null
+
+  return <span className={className}>{label}</span>
 }
 
 function gitLocalBranchesForRender(
@@ -750,7 +803,6 @@ function GitBranchesControls({
 
 function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
   const trackText = gitLocalBranchTrackText(branch)
-  const relativeDate = gitShortRelativeDate(branch.relativeDate)
   const title =
     [branch.name, branch.upstream, branch.subject]
       .filter(Boolean)
@@ -781,9 +833,11 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
             {trackText}
           </span>
         ) : null}
-        {relativeDate ? (
-          <span className="text-muted-foreground/70">{relativeDate}</span>
-        ) : null}
+        <GitBranchRelativeDate
+          className="text-muted-foreground/70"
+          committerDate={branch.committerDate}
+          relativeDate={branch.relativeDate}
+        />
       </span>
     </li>
   )
@@ -791,7 +845,6 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
 
 function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
   const parts = gitRemoteBranchParts(branch.name)
-  const relativeDate = gitShortRelativeDate(branch.relativeDate)
   const title =
     [branch.name, branch.subject].filter(Boolean).join(" · ") || branch.name
 
@@ -810,9 +863,11 @@ function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
         {branch.hash ? (
           <span className="text-sky-500">{branch.hash}</span>
         ) : null}
-        {relativeDate ? (
-          <span className="text-muted-foreground/70">{relativeDate}</span>
-        ) : null}
+        <GitBranchRelativeDate
+          className="text-muted-foreground/70"
+          committerDate={branch.committerDate}
+          relativeDate={branch.relativeDate}
+        />
       </span>
     </li>
   )

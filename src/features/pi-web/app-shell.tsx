@@ -96,6 +96,7 @@ import {
   piWebQueryKeys,
   piWebSessionScopeKey,
 } from "@/features/pi-web/query-keys"
+import { RelativeTime } from "@/features/pi-web/relative-time"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
   useAppShellMessageScroll,
@@ -134,7 +135,6 @@ import {
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
-  relativeTime,
   rememberStoredPromptDraft,
   promptDraftKey,
   safeLocalStorageSetItem,
@@ -1174,53 +1174,6 @@ type AppShellSessionWorkspaceProps = {
     React.SetStateAction<Array<string>>
   >
   setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
-}
-
-const SESSION_MODIFIED_FIRST_MINUTE_MS = 60 * 1000
-const SESSION_MODIFIED_FIRST_MINUTE_REFRESH_MS = 1000
-const SESSION_MODIFIED_DEFAULT_REFRESH_MS = 2000
-
-function sessionModifiedRefreshDelay(timestamp: number) {
-  const ageMs = Math.abs(Date.now() - timestamp)
-  return ageMs < SESSION_MODIFIED_FIRST_MINUTE_MS
-    ? SESSION_MODIFIED_FIRST_MINUTE_REFRESH_MS
-    : SESSION_MODIFIED_DEFAULT_REFRESH_MS
-}
-
-function useSessionModifiedRelativeTimeTicker(value: string) {
-  const [, refresh] = React.useReducer((tick: number) => tick + 1, 0)
-
-  React.useEffect(() => {
-    const timestamp = new Date(value).getTime()
-    if (Number.isNaN(timestamp)) return
-
-    let timeoutId: number | undefined
-    let cancelled = false
-
-    const schedule = () => {
-      timeoutId = window.setTimeout(() => {
-        if (cancelled) return
-
-        refresh()
-        schedule()
-      }, sessionModifiedRefreshDelay(timestamp))
-    }
-
-    schedule()
-
-    return () => {
-      cancelled = true
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId)
-      }
-    }
-  }, [refresh, value])
-}
-
-function SessionModifiedRelativeTime({ value }: { value: string }) {
-  useSessionModifiedRelativeTimeTicker(value)
-
-  return <span>• {relativeTime(value)}</span>
 }
 
 const AppShellSessionWorkspace = React.forwardRef<
@@ -2600,9 +2553,7 @@ const AppShellSessionWorkspace = React.forwardRef<
                     cwd={displaySessionCwd}
                   />
                   {displaySessionModified && (
-                    <SessionModifiedRelativeTime
-                      value={displaySessionModified}
-                    />
+                    <RelativeTime value={displaySessionModified} prefix="• " />
                   )}
                 </div>
               </div>
