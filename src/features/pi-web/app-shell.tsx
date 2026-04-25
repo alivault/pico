@@ -2616,9 +2616,7 @@ const AppShellSessionWorkspace = React.forwardRef<
                   >
                     {displaySessionTitle}
                   </h2>
-                  {isSessionViewLoading ? (
-                    <Badge variant="outline">Loading</Badge>
-                  ) : sessionState.draft ? (
+                  {!isSessionViewLoading && sessionState.draft ? (
                     <Badge variant="outline">Draft</Badge>
                   ) : null}
                 </div>
