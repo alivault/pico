@@ -365,7 +365,7 @@ function SidebarSessionItem({
 }: SidebarSessionItemProps) {
   const [menuOpen, setMenuOpen] = React.useState(false)
   const timestamp = entry.lastUserMessageAt || entry.modified
-  const timeAgo = relativeTime(timestamp)
+  const timeAgo = relativeTime(timestamp).replace(/ ago$/, "")
   const exactTimestamp = timestamp
     ? new Date(timestamp).toLocaleString()
     : undefined
