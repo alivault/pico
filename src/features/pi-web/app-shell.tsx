@@ -2900,7 +2900,11 @@ const AppShellSessionWorkspace = React.forwardRef<
             cwd={sessionState.cwd}
           />
 
-          <TabsContent value="session" className="flex min-h-0 flex-1 flex-col">
+          <TabsContent
+            value="session"
+            keepMounted
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <AppShellSessionConversation
               awaitingFirstTurn={awaitingFirstTurn}
               centerMessages={centerMessages}
@@ -3002,6 +3006,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
           <TabsContent
             value="git"
+            keepMounted
             className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
           >
             <GitPanel
