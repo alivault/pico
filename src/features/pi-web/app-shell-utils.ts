@@ -2,6 +2,7 @@ import {
   buildItemsFromSync,
   createInitialSessionState,
   previewUrlForImage,
+  promptDraftKey,
   sameContextUsage,
   type PromptImage,
   type SessionState,
@@ -217,8 +218,15 @@ export function updateStateFromSync(
         connected: previous.connected,
       }
     : previous
+  const nextDraftOwnerKey = promptDraftKey({
+    cwd: typeof sync.cwd === "string" ? sync.cwd : previous.cwd,
+  })
+  const replacingOptimisticDraft =
+    replacingSession &&
+    previous.sessionKey === `optimistic:${nextDraftOwnerKey}`
+  const previousItems = replacingOptimisticDraft ? previous.items : base.items
   const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
-  const { items } = buildItemsFromSync(sync, base.items)
+  const { items } = buildItemsFromSync(sync, previousItems)
   const streaming =
     typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
   const draft = typeof sync.draft === "boolean" ? sync.draft : base.draft

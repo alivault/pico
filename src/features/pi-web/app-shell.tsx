@@ -388,6 +388,56 @@ type AssistantConversationItem = Extract<
   { kind: "assistant" }
 >
 
+function createOptimisticPendingId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `optimistic:${crypto.randomUUID()}`
+  }
+
+  return `optimistic:${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
+function insertOptimisticUserItem(
+  items: Array<ConversationItem>,
+  item: UserConversationItem
+) {
+  if (
+    item.pendingId &&
+    items.some(
+      (entry) => entry.kind === "user" && entry.pendingId === item.pendingId
+    )
+  ) {
+    return items
+  }
+
+  const nextItems = [...items]
+  const lastItem = nextItems[nextItems.length - 1]
+  const insertIndex =
+    lastItem?.kind === "assistant" && lastItem.streaming
+      ? nextItems.length - 1
+      : nextItems.length
+  nextItems.splice(insertIndex, 0, item)
+  return nextItems
+}
+
+function removeOptimisticUserItem(
+  items: Array<ConversationItem>,
+  pendingId: string
+) {
+  let changed = false
+  const nextItems = items.filter((item) => {
+    const remove = item.kind === "user" && item.pendingId === pendingId
+    if (remove) changed = true
+    return !remove
+  })
+
+  return changed ? nextItems : items
+}
+
 type RenderConversationGroup =
   | {
       kind: "user"
@@ -1234,12 +1284,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     message: string
     images: Array<PromptImage>
     streamingBehavior?: StreamingBehavior
+    optimisticId?: string
   } | null>(null)
   const [pendingDraftFollowUps, setPendingDraftFollowUps] = React.useState<
     Array<{
       message: string
       images: Array<PromptImage>
       streamingBehavior: "steer" | "followUp"
+      optimisticId?: string
     }>
   >([])
   const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -1312,6 +1364,73 @@ const AppShellSessionWorkspace = React.forwardRef<
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       conversationItemsStore.setItems(items)
+    },
+    [conversationItemsStore]
+  )
+  const addOptimisticUserMessage = React.useCallback(
+    (options: {
+      message: string
+      images: Array<PromptImage>
+      queued: boolean
+      streamingBehavior?: StreamingBehavior
+    }) => {
+      const pendingId = createOptimisticPendingId()
+      const item = {
+        kind: "user",
+        itemKey: `pending:${pendingId}`,
+        pendingId,
+        text: options.message,
+        images: options.images.map((image) => ({ ...image })),
+        queued: options.queued,
+        streamingBehavior: options.streamingBehavior,
+      } satisfies UserConversationItem
+
+      const currentState = sessionStateRef.current
+      const nextItems = insertOptimisticUserItem(currentState.items, item)
+      if (nextItems !== currentState.items) {
+        const nextState = { ...currentState, items: nextItems }
+        sessionStateRef.current = nextState
+        conversationItemsStore.setItems(nextItems)
+      }
+
+      setSessionState((current) => {
+        const currentNextItems = insertOptimisticUserItem(current.items, item)
+        if (currentNextItems === current.items) return current
+
+        const nextState = { ...current, items: currentNextItems }
+        sessionStateRef.current = nextState
+        conversationItemsStore.setItems(currentNextItems)
+        return nextState
+      })
+
+      return pendingId
+    },
+    [conversationItemsStore]
+  )
+  const removeOptimisticUserMessage = React.useCallback(
+    (pendingId: string | undefined) => {
+      if (!pendingId) return
+
+      const currentState = sessionStateRef.current
+      const nextItems = removeOptimisticUserItem(currentState.items, pendingId)
+      if (nextItems !== currentState.items) {
+        const nextState = { ...currentState, items: nextItems }
+        sessionStateRef.current = nextState
+        conversationItemsStore.setItems(nextItems)
+      }
+
+      setSessionState((current) => {
+        const currentNextItems = removeOptimisticUserItem(
+          current.items,
+          pendingId
+        )
+        if (currentNextItems === current.items) return current
+
+        const nextState = { ...current, items: currentNextItems }
+        sessionStateRef.current = nextState
+        conversationItemsStore.setItems(currentNextItems)
+        return nextState
+      })
     },
     [conversationItemsStore]
   )
@@ -1865,6 +1984,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     lastSyncedEditorTextRef,
     rememberRecentDirectory,
     prefetchDirectorySessionsIndex,
+    addOptimisticUserMessage,
+    removeOptimisticUserMessage,
     setSidebarDirectories,
     setDirectoryInput,
     setAddDirectoryOpen,

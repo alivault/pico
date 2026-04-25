@@ -390,6 +390,7 @@ function ComposerPromptEditor({
 
   const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
+  const blockInitialSubmit = isSubmitting && !acceptFollowUps
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
     const draftText = draftTextRef.current
@@ -617,7 +618,7 @@ function ComposerPromptEditor({
           <Button
             size="icon-sm"
             disabled={
-              isSubmitting ||
+              blockInitialSubmit ||
               (!hasSubmittableContent && !isStreaming && !slashMenuState)
             }
             title="Send"
@@ -626,7 +627,7 @@ function ComposerPromptEditor({
               runPrimaryComposerAction(acceptFollowUps ? "steer" : undefined)
             }}
           >
-            {isSubmitting ? (
+            {blockInitialSubmit ? (
               <LoaderCircleIcon className="animate-spin" />
             ) : (
               <ArrowUpIcon />
@@ -661,7 +662,7 @@ function ComposerPromptEditor({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSubmitting || !hasSubmittableContent}
+            disabled={!hasSubmittableContent}
             onClick={() => runPrimaryComposerAction("followUp")}
           >
             Queue
@@ -669,7 +670,7 @@ function ComposerPromptEditor({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSubmitting || !hasSubmittableContent}
+            disabled={!hasSubmittableContent}
             onClick={() => runPrimaryComposerAction("steer")}
           >
             Steer

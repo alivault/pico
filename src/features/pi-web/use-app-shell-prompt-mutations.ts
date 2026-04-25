@@ -28,12 +28,14 @@ type PendingDraftPrompt = {
   message: string
   images: Array<PromptImage>
   streamingBehavior?: StreamingBehavior
+  optimisticId?: string
 }
 
 type PendingDraftFollowUp = {
   message: string
   images: Array<PromptImage>
   streamingBehavior: "steer" | "followUp"
+  optimisticId?: string
 }
 
 type PendingComposerMessage = {
@@ -67,6 +69,13 @@ type UseAppShellPromptMutationsOptions = {
   lastSyncedEditorTextRef: React.MutableRefObject<string>
   rememberRecentDirectory: (directory: string) => void
   prefetchDirectorySessionsIndex: (directory: string) => void
+  addOptimisticUserMessage: (options: {
+    message: string
+    images: Array<PromptImage>
+    queued: boolean
+    streamingBehavior?: StreamingBehavior
+  }) => string
+  removeOptimisticUserMessage: (pendingId: string | undefined) => void
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setDirectoryInput: React.Dispatch<React.SetStateAction<string>>
   setAddDirectoryOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -109,6 +118,8 @@ export function useAppShellPromptMutations({
   lastSyncedEditorTextRef,
   rememberRecentDirectory,
   prefetchDirectorySessionsIndex,
+  addOptimisticUserMessage,
+  removeOptimisticUserMessage,
   setSidebarDirectories,
   setDirectoryInput,
   setAddDirectoryOpen,
@@ -120,6 +131,34 @@ export function useAppShellPromptMutations({
   setIsSubmitting,
   setComposerImages,
 }: UseAppShellPromptMutationsOptions) {
+  const draftSessionLoadingOwnerKeyRef = React.useRef(
+    draftSessionLoadingOwnerKey
+  )
+  const pendingDraftPromptRef = React.useRef(pendingDraftPrompt)
+  const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
+  const awaitingFirstTurnRef = React.useRef(awaitingFirstTurn)
+  const sessionStreamingRef = React.useRef(sessionState.streaming)
+
+  React.useEffect(() => {
+    draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
+  }, [draftSessionLoadingOwnerKey])
+
+  React.useEffect(() => {
+    pendingDraftPromptRef.current = pendingDraftPrompt
+  }, [pendingDraftPrompt])
+
+  React.useEffect(() => {
+    pendingDraftFollowUpsRef.current = pendingDraftFollowUps
+  }, [pendingDraftFollowUps])
+
+  React.useEffect(() => {
+    awaitingFirstTurnRef.current = awaitingFirstTurn
+  }, [awaitingFirstTurn])
+
+  React.useEffect(() => {
+    sessionStreamingRef.current = sessionState.streaming
+  }, [sessionState.streaming])
+
   const addDirectoryMutation = useMutation({
     mutationFn: async (requestedPath: string) => {
       if (!viewerContextId) {
@@ -151,18 +190,27 @@ export function useAppShellPromptMutations({
 
   const restorePendingDraftPrompt = React.useCallback(
     (ownerKey: string) => {
-      if (!pendingDraftPrompt || pendingDraftPrompt.ownerKey !== ownerKey) {
+      const nextPrompt = pendingDraftPromptRef.current
+      if (!nextPrompt || nextPrompt.ownerKey !== ownerKey) {
         return false
       }
-      const nextPrompt = pendingDraftPrompt
+
+      removeOptimisticUserMessage(nextPrompt.optimisticId)
+      for (const followUp of pendingDraftFollowUpsRef.current) {
+        removeOptimisticUserMessage(followUp.optimisticId)
+      }
+
+      pendingDraftPromptRef.current = null
+      pendingDraftFollowUpsRef.current = []
       setPendingDraftPrompt(null)
       setPendingDraftFollowUps([])
+      awaitingFirstTurnRef.current = false
       setAwaitingFirstTurn(false)
       return applyPendingDraftPromptToComposer(nextPrompt)
     },
     [
       applyPendingDraftPromptToComposer,
-      pendingDraftPrompt,
+      removeOptimisticUserMessage,
       setAwaitingFirstTurn,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
@@ -241,12 +289,16 @@ export function useAppShellPromptMutations({
         setStoredDraftDirectory(nextCwd)
       }
       const ownerKey = promptDraftKey({ cwd: nextCwd })
+      draftSessionLoadingOwnerKeyRef.current = ownerKey
       setDraftSessionLoadingOwnerKey(ownerKey)
 
       try {
         await createSessionMutation.mutateAsync({ cwd: nextCwd })
         return true
       } catch (error) {
+        if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
+          draftSessionLoadingOwnerKeyRef.current = null
+        }
         setDraftSessionLoadingOwnerKey((current) =>
           current === ownerKey ? null : current
         )
@@ -270,7 +322,8 @@ export function useAppShellPromptMutations({
 
   const queuePendingDraftPrompt = React.useCallback(
     (streamingBehavior?: StreamingBehavior) => {
-      if (!draftSessionLoadingOwnerKey) return false
+      const ownerKey = draftSessionLoadingOwnerKeyRef.current
+      if (!ownerKey) return false
 
       const message = serializeComposerDraft({
         text: composerTextRef.current,
@@ -279,42 +332,60 @@ export function useAppShellPromptMutations({
       const images = composerImages.map((image) => ({ ...image }))
       if (!message && images.length === 0) return false
 
-      if (!pendingDraftPrompt) {
-        setPendingDraftPrompt({
-          ownerKey: draftSessionLoadingOwnerKey,
+      const currentPendingPrompt =
+        pendingDraftPromptRef.current?.ownerKey === ownerKey
+          ? pendingDraftPromptRef.current
+          : null
+
+      if (!currentPendingPrompt) {
+        const optimisticId = addOptimisticUserMessage({
           message,
           images,
-          streamingBehavior,
+          queued: false,
         })
+        const nextPrompt = {
+          ownerKey,
+          message,
+          images,
+          optimisticId,
+        } satisfies PendingDraftPrompt
+        pendingDraftPromptRef.current = nextPrompt
+        setPendingDraftPrompt(nextPrompt)
+        toast.info("Prompt will send when the new session is ready.")
       } else {
-        setPendingDraftFollowUps((current) => [
-          ...current,
+        const queuedStreamingBehavior =
+          normalizeQueuedStreamingBehavior(streamingBehavior)
+        const optimisticId = addOptimisticUserMessage({
+          message,
+          images,
+          queued: true,
+          streamingBehavior: queuedStreamingBehavior,
+        })
+        const nextFollowUps = [
+          ...pendingDraftFollowUpsRef.current,
           {
             message,
             images,
-            streamingBehavior:
-              normalizeQueuedStreamingBehavior(streamingBehavior),
+            streamingBehavior: queuedStreamingBehavior,
+            optimisticId,
           },
-        ])
+        ] satisfies Array<PendingDraftFollowUp>
+        pendingDraftFollowUpsRef.current = nextFollowUps
+        setPendingDraftFollowUps(nextFollowUps)
       }
 
       replaceComposerDraft("", undefined, { forceSync: true })
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
 
-      if (!pendingDraftPrompt) {
-        toast.info("Prompt will send when the new session is ready.")
-      }
-
       return true
     },
     [
+      addOptimisticUserMessage,
       composerImages,
       composerSkillRef,
       composerTextRef,
-      draftSessionLoadingOwnerKey,
       lastSyncedEditorTextRef,
-      pendingDraftPrompt,
       replaceComposerDraft,
       setComposerImages,
       setPendingDraftFollowUps,
@@ -355,9 +426,15 @@ export function useAppShellPromptMutations({
   })
 
   const submitPrompt = React.useCallback(
-    async (streamingBehavior?: StreamingBehavior) => {
+    async (
+      streamingBehavior?: StreamingBehavior,
+      options?: {
+        forceFirstPrompt?: boolean
+        optimisticId?: string
+      }
+    ) => {
       if (!viewerContextId) return false
-      if (draftSessionLoadingOwnerKey) {
+      if (draftSessionLoadingOwnerKeyRef.current) {
         return queuePendingDraftPrompt(streamingBehavior)
       }
 
@@ -367,17 +444,26 @@ export function useAppShellPromptMutations({
       }).trim()
       if (!message && composerImages.length === 0) return false
 
-      const treatAsQueuedPrompt = Boolean(
-        sessionState.streaming || awaitingFirstTurn
-      )
+      const treatAsQueuedPrompt = options?.forceFirstPrompt
+        ? false
+        : Boolean(sessionStreamingRef.current || awaitingFirstTurnRef.current)
       const normalizedStreamingBehavior = treatAsQueuedPrompt
         ? normalizeQueuedStreamingBehavior(streamingBehavior)
-        : streamingBehavior
+        : undefined
       const submittedImages = composerImages.map((image) => ({ ...image }))
       const shouldOptimisticallyClearComposer = true
+      const optimisticId =
+        options?.optimisticId ??
+        addOptimisticUserMessage({
+          message,
+          images: submittedImages,
+          queued: treatAsQueuedPrompt,
+          streamingBehavior: normalizedStreamingBehavior,
+        })
 
       setIsSubmitting(true)
       if (!treatAsQueuedPrompt) {
+        awaitingFirstTurnRef.current = true
         setAwaitingFirstTurn(true)
       }
       if (shouldOptimisticallyClearComposer) {
@@ -399,7 +485,9 @@ export function useAppShellPromptMutations({
         }
         return true
       } catch (error) {
+        removeOptimisticUserMessage(optimisticId)
         if (!treatAsQueuedPrompt) {
+          awaitingFirstTurnRef.current = false
           setAwaitingFirstTurn(false)
         }
         if (shouldOptimisticallyClearComposer) {
@@ -426,16 +514,15 @@ export function useAppShellPromptMutations({
       }
     },
     [
-      awaitingFirstTurn,
+      addOptimisticUserMessage,
       composerImages,
       composerSkillRef,
       composerTextRef,
-      draftSessionLoadingOwnerKey,
       lastSyncedEditorTextRef,
       promptMutation,
       queuePendingDraftPrompt,
+      removeOptimisticUserMessage,
       replaceComposerDraft,
-      sessionState.streaming,
       setAwaitingFirstTurn,
       setComposerImages,
       setIsSubmitting,
@@ -444,19 +531,29 @@ export function useAppShellPromptMutations({
   )
 
   const flushPendingDraftFollowUps = React.useCallback(async () => {
-    if (draftSessionLoadingOwnerKey || pendingDraftFollowUps.length === 0) {
+    if (draftSessionLoadingOwnerKeyRef.current) {
       return false
     }
 
-    const followUps = pendingDraftFollowUps.map((entry) => ({
+    const pendingFollowUps = pendingDraftFollowUpsRef.current
+    if (pendingFollowUps.length === 0) {
+      return false
+    }
+
+    const followUps = pendingFollowUps.map((entry) => ({
       message: entry.message,
       images: entry.images.map((image) => ({ ...image })),
       streamingBehavior: entry.streamingBehavior,
+      optimisticId: entry.optimisticId,
     }))
 
+    pendingDraftFollowUpsRef.current = []
     setPendingDraftFollowUps([])
 
-    for (const followUp of followUps) {
+    for (let index = 0; index < followUps.length; index += 1) {
+      const followUp = followUps[index]
+      if (!followUp) continue
+
       try {
         await promptMutation.mutateAsync({
           message: followUp.message,
@@ -464,6 +561,9 @@ export function useAppShellPromptMutations({
           streamingBehavior: followUp.streamingBehavior,
         })
       } catch (error) {
+        for (const unsentFollowUp of followUps.slice(index)) {
+          removeOptimisticUserMessage(unsentFollowUp.optimisticId)
+        }
         if (!composerTextRef.current) {
           replaceComposerDraft(followUp.message)
           setComposerImages(followUp.images)
@@ -480,9 +580,8 @@ export function useAppShellPromptMutations({
     return true
   }, [
     composerTextRef,
-    draftSessionLoadingOwnerKey,
-    pendingDraftFollowUps,
     promptMutation,
+    removeOptimisticUserMessage,
     replaceComposerDraft,
     setComposerImages,
     setPendingDraftFollowUps,
@@ -490,19 +589,27 @@ export function useAppShellPromptMutations({
 
   const flushPendingDraftPrompt = React.useCallback(
     async (ownerKey: string) => {
+      const nextPrompt = pendingDraftPromptRef.current
       if (
-        !pendingDraftPrompt ||
-        pendingDraftPrompt.ownerKey !== ownerKey ||
-        draftSessionLoadingOwnerKey
+        !nextPrompt ||
+        nextPrompt.ownerKey !== ownerKey ||
+        draftSessionLoadingOwnerKeyRef.current
       ) {
         return false
       }
 
-      const nextPrompt = pendingDraftPrompt
+      pendingDraftPromptRef.current = null
       setPendingDraftPrompt(null)
       applyPendingDraftPromptToComposer(nextPrompt)
-      const sent = await submitPrompt(nextPrompt.streamingBehavior)
+      const sent = await submitPrompt(nextPrompt.streamingBehavior, {
+        forceFirstPrompt: true,
+        optimisticId: nextPrompt.optimisticId,
+      })
       if (!sent) {
+        for (const followUp of pendingDraftFollowUpsRef.current) {
+          removeOptimisticUserMessage(followUp.optimisticId)
+        }
+        pendingDraftFollowUpsRef.current = []
         setPendingDraftFollowUps([])
         return false
       }
@@ -511,9 +618,8 @@ export function useAppShellPromptMutations({
     },
     [
       applyPendingDraftPromptToComposer,
-      draftSessionLoadingOwnerKey,
       flushPendingDraftFollowUps,
-      pendingDraftPrompt,
+      removeOptimisticUserMessage,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
       submitPrompt,
@@ -534,14 +640,16 @@ export function useAppShellPromptMutations({
       return
     }
 
+    draftSessionLoadingOwnerKeyRef.current = null
     setDraftSessionLoadingOwnerKey(null)
-    if (pendingDraftPrompt?.ownerKey === draftSessionLoadingOwnerKey) {
+    if (
+      pendingDraftPromptRef.current?.ownerKey === draftSessionLoadingOwnerKey
+    ) {
       void flushPendingDraftPrompt(draftSessionLoadingOwnerKey)
     }
   }, [
     draftSessionLoadingOwnerKey,
     flushPendingDraftPrompt,
-    pendingDraftPrompt?.ownerKey,
     sessionState,
     setDraftSessionLoadingOwnerKey,
   ])
@@ -559,6 +667,7 @@ export function useAppShellPromptMutations({
       hasAssistantOutput ||
       pendingMessages.length > 0
     ) {
+      awaitingFirstTurnRef.current = false
       setAwaitingFirstTurn(false)
     }
   }, [
