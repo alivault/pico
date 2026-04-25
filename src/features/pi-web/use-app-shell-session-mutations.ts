@@ -5,10 +5,8 @@ import { toast } from "sonner"
 import type { SessionState } from "@/lib/pi-web"
 import type {
   DeleteSessionResponse,
-  ExtensionUiEvent,
   RenameSessionResponse,
   SessionListEntry,
-  UiRequestResponse,
 } from "@/lib/pi-web-api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
@@ -18,28 +16,20 @@ type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
   sessionState: SessionState
-  pendingUiRequest: ExtensionUiEvent | null
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
   setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
   setRunningSlashCommand: React.Dispatch<React.SetStateAction<string | null>>
-  setPendingUiRequest: React.Dispatch<
-    React.SetStateAction<ExtensionUiEvent | null>
-  >
-  setPendingUiValue: React.Dispatch<React.SetStateAction<string>>
 }
 
 export function useAppShellSessionMutations({
   viewerContextId,
   activeSessionId,
   sessionState,
-  pendingUiRequest,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
-  setPendingUiRequest,
-  setPendingUiValue,
 }: UseAppShellSessionMutationsOptions) {
   const setModelMutation = useMutation({
     mutationFn: async ({
@@ -327,64 +317,10 @@ export function useAppShellSessionMutations({
     ]
   )
 
-  const resolveUiRequestMutation = useMutation({
-    mutationFn: async ({
-      requestId,
-      body,
-    }: {
-      requestId: string
-      body: Record<string, unknown>
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<UiRequestResponse>(
-        buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      )
-    },
-  })
-
-  const resolveUiRequest = React.useCallback(
-    async (body: Record<string, unknown>) => {
-      if (!viewerContextId || !pendingUiRequest) return
-      try {
-        await resolveUiRequestMutation.mutateAsync({
-          requestId: pendingUiRequest.id,
-          body,
-        })
-        setPendingUiRequest(null)
-        setPendingUiValue("")
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to resolve UI request"
-        )
-      }
-    },
-    [
-      pendingUiRequest,
-      resolveUiRequestMutation,
-      setPendingUiRequest,
-      setPendingUiValue,
-      viewerContextId,
-    ]
-  )
-
   return {
     cycleThinkingLevel,
     deleteSessions,
     renameSessionPath,
-    resolveUiRequest,
     runCompact,
     setModel,
     setThinkingBlocksHidden,

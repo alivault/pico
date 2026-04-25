@@ -67,11 +67,14 @@ import {
   AppShellAddDirectoryDialogController,
   type AppShellAddDirectoryDialogHandle,
 } from "@/features/pi-web/app-shell-add-directory-dialog"
-import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
   AppShellTreeDialogController,
   type AppShellTreeDialogHandle,
 } from "@/features/pi-web/app-shell-tree-dialog"
+import {
+  AppShellUiRequestDialogController,
+  type AppShellUiRequestDialogHandle,
+} from "@/features/pi-web/app-shell-ui-request-dialog"
 import {
   DeleteSessionsDialogController,
   ForkSessionDialogController,
@@ -1274,9 +1277,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [pendingUiRequest, setPendingUiRequest] =
-    React.useState<ExtensionUiEvent | null>(null)
-  const [pendingUiValue, setPendingUiValue] = React.useState("")
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
   const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
     React.useState(true)
@@ -1306,6 +1306,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     null
   )
   const settingsOpenRef = React.useRef(false)
+  const uiRequestDialogRef = React.useRef<AppShellUiRequestDialogHandle | null>(
+    null
+  )
+  const uiRequestOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1315,6 +1319,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerDraftSeed.skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
+  const pendingUiRequestHandlerRef = React.useRef(
+    (_request: ExtensionUiEvent) => {}
+  )
+  pendingUiRequestHandlerRef.current = (request) => {
+    uiRequestDialogRef.current?.open(request)
+  }
   const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
   const lastEscapePressedAtRef = React.useRef(0)
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
@@ -1731,8 +1741,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSessionsEvent,
     setComposerImages,
     setPendingMessages,
-    setPendingUiRequest,
-    setPendingUiValue,
+    pendingUiRequestHandlerRef,
     lastSyncedEditorTextRef,
   })
 
@@ -1981,7 +1990,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     cycleThinkingLevel,
     deleteSessions,
     renameSessionPath,
-    resolveUiRequest,
     runCompact,
     setModel,
     setThinkingBlocksHidden,
@@ -1991,12 +1999,9 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     activeSessionId,
     sessionState,
-    pendingUiRequest,
     setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor,
     setRunningSlashCommand,
-    setPendingUiRequest,
-    setPendingUiValue,
   })
 
   const setToolBlocksHidden = (hidden: boolean) => {
@@ -2448,7 +2453,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     currentTab,
     deleteOpenRef,
     forkOpenRef,
-    hasPendingUiRequest: Boolean(pendingUiRequest),
+    pendingUiRequestOpenRef: uiRequestOpenRef,
     lastEscapePressedAtRef,
     renameOpenRef,
     selectedSidebarSessions,
@@ -2856,13 +2861,11 @@ const AppShellSessionWorkspace = React.forwardRef<
         desktopNotificationPermission={desktopNotificationPermission}
       />
 
-      <AppShellDialogs
-        pendingUiRequest={pendingUiRequest}
-        pendingUiValue={pendingUiValue}
-        onPendingUiValueChange={setPendingUiValue}
-        onResolveUiRequest={(body) => {
-          void resolveUiRequest(body)
-        }}
+      <AppShellUiRequestDialogController
+        ref={uiRequestDialogRef}
+        openStateRef={uiRequestOpenRef}
+        viewerContextId={viewerContextId}
+        sessionId={activeSessionId}
       />
     </>
   )

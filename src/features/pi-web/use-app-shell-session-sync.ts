@@ -67,10 +67,9 @@ type UseAppShellSessionSyncOptions = {
   setPendingMessages: React.Dispatch<
     React.SetStateAction<Array<PendingComposerMessage>>
   >
-  setPendingUiRequest: React.Dispatch<
-    React.SetStateAction<ExtensionUiEvent | null>
+  pendingUiRequestHandlerRef: React.MutableRefObject<
+    (request: ExtensionUiEvent) => void
   >
-  setPendingUiValue: React.Dispatch<React.SetStateAction<string>>
   lastSyncedEditorTextRef: React.MutableRefObject<string>
 }
 
@@ -299,8 +298,7 @@ export function useAppShellSessionSync({
   setSessionsEvent,
   setComposerImages,
   setPendingMessages,
-  setPendingUiRequest,
-  setPendingUiValue,
+  pendingUiRequestHandlerRef,
   lastSyncedEditorTextRef,
 }: UseAppShellSessionSyncOptions) {
   const queryClient = useQueryClient()
@@ -468,8 +466,7 @@ export function useAppShellSessionSync({
           return
         }
 
-        setPendingUiRequest(payload)
-        setPendingUiValue(payload.prefill || "")
+        pendingUiRequestHandlerRef.current(payload)
       }
     }
 
@@ -491,8 +488,7 @@ export function useAppShellSessionSync({
     setComposerImages,
     setConversationItems,
     setPendingMessages,
-    setPendingUiRequest,
-    setPendingUiValue,
+    pendingUiRequestHandlerRef,
     setSessionState,
     setSessionsEvent,
     viewerContextId,

@@ -31,7 +31,7 @@ type UseAppShellShortcutsOptions = {
   currentTab: string
   deleteOpenRef: React.MutableRefObject<boolean>
   forkOpenRef: React.MutableRefObject<boolean>
-  hasPendingUiRequest: boolean
+  pendingUiRequestOpenRef: React.MutableRefObject<boolean>
   lastEscapePressedAtRef: React.MutableRefObject<number>
   renameOpenRef: React.MutableRefObject<boolean>
   selectedSidebarSessions: Array<SessionListEntry>
@@ -77,7 +77,7 @@ export function useAppShellShortcuts({
   currentTab,
   deleteOpenRef,
   forkOpenRef,
-  hasPendingUiRequest,
+  pendingUiRequestOpenRef,
   lastEscapePressedAtRef,
   renameOpenRef,
   selectedSidebarSessions,
@@ -100,7 +100,7 @@ export function useAppShellShortcuts({
         treeOpenRef.current ||
         settingsOpenRef.current ||
         commandPaletteOpen ||
-        hasPendingUiRequest
+        pendingUiRequestOpenRef.current
 
       const activeElement = document.activeElement
       const activeElementIsConversationViewport =
@@ -371,7 +371,7 @@ export function useAppShellShortcuts({
     currentTab,
     deleteOpenRef,
     forkOpenRef,
-    hasPendingUiRequest,
+    pendingUiRequestOpenRef,
     lastEscapePressedAtRef,
     renameOpenRef,
     selectedSidebarSessions,
