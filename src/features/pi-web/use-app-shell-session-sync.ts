@@ -49,6 +49,7 @@ type UseAppShellSessionSyncOptions = {
   sessionId?: string
   draftSessionLoadingOwnerKey: string | null
   bootstrapSidebarDirectories: Array<string>
+  hideToolBlocks: boolean
   sessionState: SessionState
   sessionStateRef: React.MutableRefObject<SessionState>
   setConnected?: React.Dispatch<React.SetStateAction<boolean>>
@@ -69,6 +70,7 @@ type UseAppShellSessionSyncOptions = {
   pendingRouteSessionIdRef: React.MutableRefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
+  setHiddenThinkingPreview: (value: string) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSessionDoneEvents: React.Dispatch<
     React.SetStateAction<Array<SessionDoneEvent>>
@@ -256,6 +258,76 @@ function sameSessionsEvent(
   )
 }
 
+function visibleAssistantBlockKey(
+  block: Extract<
+    SessionState["items"][number],
+    { kind: "assistant" }
+  >["blocks"][number],
+  options: { hideThinking: boolean; hideToolBlocks: boolean }
+) {
+  switch (block.type) {
+    case "text":
+      return block.text.trim() ? `text:${block.text}` : ""
+    case "compaction":
+      return `compaction:${block.tokensBefore}:${block.summary}`
+    case "thinking":
+      return options.hideThinking
+        ? ""
+        : `thinking:${block.summaryLabel || ""}:${block.text}`
+    case "tool":
+      return options.hideToolBlocks
+        ? ""
+        : `tool:${block.callId || ""}:${block.name || ""}:${JSON.stringify(
+            block.args ?? null
+          )}:${block.output}:${JSON.stringify(block.details ?? null)}:${
+            block.isError ? "1" : "0"
+          }:${block.running ? "1" : "0"}`
+    default:
+      return ""
+  }
+}
+
+function visibleConversationSignature(
+  items: SessionState["items"],
+  options: { hideThinking: boolean; hideToolBlocks: boolean }
+) {
+  const parts: Array<string> = []
+
+  for (const item of items) {
+    if (item.kind === "user") {
+      parts.push(
+        `user:${item.itemKey || ""}:${item.pendingId || ""}:${item.text}:${
+          item.queued ? "1" : "0"
+        }:${item.streamingBehavior || ""}:${item.images
+          .map((image) => `${image.mimeType}:${image.data}`)
+          .join(",")}`
+      )
+      continue
+    }
+
+    const blockKeys = item.blocks
+      .map((block) => visibleAssistantBlockKey(block, options))
+      .filter(Boolean)
+    if (blockKeys.length === 0) continue
+    parts.push(`assistant:${item.itemKey || ""}:${blockKeys.join("|")}`)
+  }
+
+  return parts.join("\n")
+}
+
+function sameVisibleConversation(
+  left: SessionState["items"],
+  right: SessionState["items"],
+  options: { hideThinking: boolean; hideToolBlocks: boolean }
+) {
+  if (left === right) return true
+
+  return (
+    visibleConversationSignature(left, options) ===
+    visibleConversationSignature(right, options)
+  )
+}
+
 function sameSessionStateExceptConversation(
   left: SessionState,
   right: SessionState
@@ -280,7 +352,6 @@ function sameSessionStateExceptConversation(
     left.availableModels === right.availableModels &&
     left.availableSkills === right.availableSkills &&
     left.hideThinkingBlock === right.hideThinkingBlock &&
-    left.hiddenThinkingPreview === right.hiddenThinkingPreview &&
     left.contextUsage === right.contextUsage &&
     left.uiState === right.uiState &&
     left.uiRequest === right.uiRequest
@@ -301,6 +372,7 @@ export function useAppShellSessionSync({
   sessionId,
   draftSessionLoadingOwnerKey,
   bootstrapSidebarDirectories,
+  hideToolBlocks,
   sessionState,
   sessionStateRef,
   setConnected,
@@ -311,6 +383,7 @@ export function useAppShellSessionSync({
   pendingRouteSessionIdRef,
   setSessionState,
   setConversationItems,
+  setHiddenThinkingPreview,
   setSessionsEvent,
   setSessionDoneEvents,
   applySidebarSessionStatusRef,
@@ -322,6 +395,9 @@ export function useAppShellSessionSync({
   const queryClient = useQueryClient()
   const initialEventsSessionIdRef = React.useRef(sessionId)
   const currentSessionIdRef = React.useRef(sessionId)
+  const draftSessionLoadingOwnerKeyRef = React.useRef(
+    draftSessionLoadingOwnerKey
+  )
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
   const backgroundedAtRef = React.useRef<number | null>(null)
@@ -331,6 +407,10 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     currentSessionIdRef.current = sessionId
   }, [sessionId])
+
+  React.useEffect(() => {
+    draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
+  }, [draftSessionLoadingOwnerKey])
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
@@ -477,6 +557,15 @@ export function useAppShellSessionSync({
         const nextState = updateStateFromSync(previousState, payload)
         const sessionChanged =
           promptDraftKey(nextState) !== promptDraftKey(previousState)
+        const currentRouteSessionId = currentSessionIdRef.current
+        const currentDraftOwnerKey = draftSessionLoadingOwnerKeyRef.current
+        const shouldClearDraftRoute = Boolean(
+          currentRouteSessionId &&
+          currentDraftOwnerKey &&
+          nextState.draft &&
+          !nextState.sessionKey?.startsWith("optimistic:") &&
+          promptDraftKey(nextState) === currentDraftOwnerKey
+        )
         const preserveLocalPrompt =
           !sessionChanged && localPromptText !== previousEditorText
         const nextPromptText = preserveLocalPrompt
@@ -486,7 +575,20 @@ export function useAppShellSessionSync({
             "")
 
         sessionStateRef.current = nextState
-        setConversationItems(nextState.items)
+        setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "")
+        const forceConversationSync =
+          previousState.sessionKey !== nextState.sessionKey ||
+          previousState.sessionId !== nextState.sessionId ||
+          previousState.sessionFile !== nextState.sessionFile
+        if (
+          forceConversationSync ||
+          !sameVisibleConversation(previousState.items, nextState.items, {
+            hideThinking: nextState.hideThinkingBlock,
+            hideToolBlocks,
+          })
+        ) {
+          setConversationItems(nextState.items)
+        }
         if (shouldPublishSessionState(previousState, nextState)) {
           setSessionState(nextState)
         }
@@ -509,6 +611,10 @@ export function useAppShellSessionSync({
 
         if (sessionChanged) {
           setComposerImages((current) => (current.length === 0 ? current : []))
+        }
+
+        if (shouldClearDraftRoute) {
+          handleSelectSessionRef.current(undefined, { replace: true })
         }
 
         if (!preserveLocalPrompt) {
@@ -625,6 +731,7 @@ export function useAppShellSessionSync({
     }
   }, [
     bootstrapSidebarDirectories,
+    hideToolBlocks,
     composerSkillRef,
     composerTextRef,
     lastSyncedEditorTextRef,
@@ -634,6 +741,7 @@ export function useAppShellSessionSync({
     sessionStateRef,
     setConnected,
     setComposerImages,
+    setHiddenThinkingPreview,
     setConversationItems,
     setPendingMessages,
     pendingUiRequestHandlerRef,

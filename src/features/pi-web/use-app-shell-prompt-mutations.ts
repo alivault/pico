@@ -327,8 +327,8 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  const createSessionMutation = useMutation({
-    mutationFn: async ({ cwd }: { cwd?: string }) => {
+  const createSessionRequest = React.useCallback(
+    async ({ cwd }: { cwd?: string }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
@@ -345,7 +345,8 @@ export function useAppShellPromptMutations({
         }
       )
     },
-  })
+    [activeSessionId, viewerContextId]
+  )
 
   const createSession = React.useCallback(
     async (cwdOverride?: string) => {
@@ -362,7 +363,7 @@ export function useAppShellPromptMutations({
       setDraftSessionLoadingOwnerKey(ownerKey)
 
       try {
-        await createSessionMutation.mutateAsync({ cwd: nextCwd })
+        await createSessionRequest({ cwd: nextCwd })
         return true
       } catch (error) {
         if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
@@ -379,7 +380,7 @@ export function useAppShellPromptMutations({
       }
     },
     [
-      createSessionMutation,
+      createSessionRequest,
       defaultNewSessionDirectory,
       rememberRecentDirectory,
       restorePendingDraftPrompt,

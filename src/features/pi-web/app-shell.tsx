@@ -220,6 +220,77 @@ type DirectorySessionsIndexesData = Extract<
   DirectorySessionsIndexesResponse,
   { ok: true }
 >
+
+type AppShellSidebarSnapshot = {
+  baseSidebarDirectories: Array<string>
+  directoryStateByPath: Map<string, DirectoryState>
+  directoryIndexes: Record<string, Array<SessionListEntry>>
+  sidebarSessions: Array<SessionListEntry>
+  selectedSidebarSessions: Array<SessionListEntry>
+  sidebarSessionEntriesByKey: Map<string, SessionListEntry>
+}
+
+type AppShellSidebarState = {
+  connected: boolean
+  sessionsEvent: SessionsEvent | null
+  sidebarDirectories: Array<string>
+  initialSidebarBootstrapDirectories: Array<string>
+  directoryIndexDataByPath: Record<string, DirectorySessionsIndexData>
+  directoryIndexLoading: Record<string, boolean>
+  sidebarSessionStatusByKey: SidebarSessionStatusMap
+  sidebarDeferredDirectoryLoadingReady: boolean
+  sessionSearch: string
+  selectedSidebarSessionKeys: Array<string>
+  sidebarSessionSelectionAnchor: string
+}
+
+type AppShellSidebarDerived = AppShellSidebarSnapshot & {
+  sidebarDirectoryIndexes: Record<string, Array<SessionListEntry>>
+  visibleDirectories: Array<string>
+  filteredDirectorySessions: Record<string, Array<SessionListEntry>>
+  emptySidebarStateText: string
+  workspaceVersion: string
+}
+
+type AppShellSidebarStoreSnapshot = {
+  state: AppShellSidebarState
+  derived: AppShellSidebarDerived
+  revision: number
+}
+
+type AppShellSidebarStateUpdate =
+  | Partial<AppShellSidebarState>
+  | ((
+      current: AppShellSidebarState
+    ) => Partial<AppShellSidebarState> | AppShellSidebarState)
+
+type AppShellSidebarStore = {
+  getSnapshot: () => AppShellSidebarStoreSnapshot
+  getWorkspaceSnapshot: () => AppShellSidebarSnapshot
+  getWorkspaceVersion: () => string
+  subscribe: (listener: () => void) => () => void
+  setState: (update: AppShellSidebarStateUpdate) => void
+  setConnected: React.Dispatch<React.SetStateAction<boolean>>
+  setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
+  setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
+  setDirectoryIndexDataByPath: React.Dispatch<
+    React.SetStateAction<Record<string, DirectorySessionsIndexData>>
+  >
+  setDirectoryIndexLoading: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >
+  setSidebarSessionStatusByKey: React.Dispatch<
+    React.SetStateAction<SidebarSessionStatusMap>
+  >
+  setSidebarDeferredDirectoryLoadingReady: React.Dispatch<
+    React.SetStateAction<boolean>
+  >
+  setSessionSearch: React.Dispatch<React.SetStateAction<string>>
+  setSelectedSidebarSessionKeys: React.Dispatch<
+    React.SetStateAction<Array<string>>
+  >
+  setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
+}
 function sessionScrollKey(sessionState: {
   draft: boolean
   sessionFile?: string
@@ -503,6 +574,313 @@ function applySidebarSessionStatusOverlay(
   return changed ? nextIndexes : indexes
 }
 
+function createInitialSidebarState(): AppShellSidebarState {
+  return {
+    connected: false,
+    sessionsEvent: null,
+    sidebarDirectories: [],
+    initialSidebarBootstrapDirectories: [],
+    directoryIndexDataByPath: {},
+    directoryIndexLoading: {},
+    sidebarSessionStatusByKey: {},
+    sidebarDeferredDirectoryLoadingReady: false,
+    sessionSearch: "",
+    selectedSidebarSessionKeys: [],
+    sidebarSessionSelectionAnchor: "",
+  }
+}
+
+function computeAppShellSidebarDerived(
+  state: AppShellSidebarState
+): AppShellSidebarDerived {
+  const directoryStates = state.sessionsEvent?.directoryStates || []
+  const directoryStateByPath = new Map(
+    directoryStates.map((directoryState) => [
+      directoryState.path,
+      directoryState,
+    ])
+  )
+  const baseSidebarDirectories = normalizeStoredDirectoryList(
+    state.sidebarDirectories
+  )
+  const directoryIndexes: Record<string, Array<SessionListEntry>> = {}
+
+  for (const directory of baseSidebarDirectories) {
+    directoryIndexes[directory] =
+      state.directoryIndexDataByPath[directory]?.sessions || []
+  }
+
+  const sidebarDirectoryIndexes = applySidebarSessionStatusOverlay(
+    directoryIndexes,
+    state.sidebarSessionStatusByKey
+  )
+  const query = state.sessionSearch.trim().toLowerCase()
+  const sidebarSearchPending = query
+    ? baseSidebarDirectories.some((directory) => {
+        const totalCount = directoryStateByPath.get(directory)?.totalCount ?? 0
+        const loadedCount = Object.prototype.hasOwnProperty.call(
+          directoryIndexes,
+          directory
+        )
+          ? directoryIndexes[directory].length
+          : 0
+        const loading = Boolean(state.directoryIndexLoading[directory])
+        return loading || (!loadedCount && totalCount > 0)
+      })
+    : false
+  const visibleDirectories: Array<string> = []
+  const filteredDirectorySessions: Record<string, Array<SessionListEntry>> = {}
+
+  for (const directory of baseSidebarDirectories) {
+    const sessions = Object.prototype.hasOwnProperty.call(
+      sidebarDirectoryIndexes,
+      directory
+    )
+      ? sidebarDirectoryIndexes[directory]
+      : []
+
+    if (!query) {
+      visibleDirectories.push(directory)
+      filteredDirectorySessions[directory] = sessions
+      continue
+    }
+
+    const directoryMatches = directory.toLowerCase().includes(query)
+    const filteredSessions = directoryMatches
+      ? sessions
+      : sessions.filter((entry) => {
+          const haystack = [entry.title, entry.name, entry.path, entry.cwd]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+          return haystack.includes(query)
+        })
+
+    if (directoryMatches || filteredSessions.length > 0) {
+      visibleDirectories.push(directory)
+      filteredDirectorySessions[directory] = filteredSessions
+    }
+  }
+
+  const sidebarSessionEntriesByKey = new Map<string, SessionListEntry>()
+  for (const directory of baseSidebarDirectories) {
+    const entries = Object.prototype.hasOwnProperty.call(
+      sidebarDirectoryIndexes,
+      directory
+    )
+      ? sidebarDirectoryIndexes[directory]
+      : []
+
+    for (const entry of entries) {
+      const key = sessionListEntryKey(entry)
+      if (!key || sidebarSessionEntriesByKey.has(key)) continue
+      sidebarSessionEntriesByKey.set(key, entry)
+    }
+  }
+
+  const sidebarSessions = Array.from(sidebarSessionEntriesByKey.values())
+  const selectedSidebarSessions = state.selectedSidebarSessionKeys
+    .map((key) => sidebarSessionEntriesByKey.get(key))
+    .filter((entry): entry is SessionListEntry =>
+      Boolean(entry?.path || entry?.id)
+    )
+  const sidebarUnreadVersion = sidebarSessions
+    .filter((session) => session.unread)
+    .map((session) => sessionNotificationKey(session))
+    .filter(Boolean)
+    .sort()
+    .join("\n")
+  const workspaceVersion = [
+    baseSidebarDirectories.join("\n"),
+    state.selectedSidebarSessionKeys.join("\n"),
+    sidebarUnreadVersion,
+  ].join("\0")
+
+  return {
+    baseSidebarDirectories,
+    directoryStateByPath,
+    directoryIndexes: sidebarDirectoryIndexes,
+    sidebarDirectoryIndexes,
+    sidebarSessions,
+    selectedSidebarSessions,
+    sidebarSessionEntriesByKey,
+    visibleDirectories,
+    filteredDirectorySessions,
+    emptySidebarStateText: query
+      ? sidebarSearchPending
+        ? "Searching sessions…"
+        : "No sessions or directories match your search."
+      : baseSidebarDirectories.length > 0
+        ? "No directories match this view."
+        : "No directories added yet.",
+    workspaceVersion,
+  }
+}
+
+function applySidebarStateAction<T>(
+  current: T,
+  action: React.SetStateAction<T>
+) {
+  return typeof action === "function"
+    ? (action as (value: T) => T)(current)
+    : action
+}
+
+function createAppShellSidebarStore(): AppShellSidebarStore {
+  let state = createInitialSidebarState()
+  let snapshot: AppShellSidebarStoreSnapshot = {
+    state,
+    derived: computeAppShellSidebarDerived(state),
+    revision: 0,
+  }
+  const listeners = new Set<() => void>()
+
+  const publish = (nextState: AppShellSidebarState) => {
+    if (nextState === state) return
+
+    state = nextState
+    snapshot = {
+      state,
+      derived: computeAppShellSidebarDerived(state),
+      revision: snapshot.revision + 1,
+    }
+    for (const listener of listeners) {
+      listener()
+    }
+  }
+
+  const setState = (update: AppShellSidebarStateUpdate) => {
+    const partial = typeof update === "function" ? update(state) : update
+    if (partial === state) return
+
+    const entries = Object.entries(partial) as Array<
+      [
+        keyof AppShellSidebarState,
+        AppShellSidebarState[keyof AppShellSidebarState],
+      ]
+    >
+    if (entries.every(([key, value]) => Object.is(state[key], value))) {
+      return
+    }
+
+    publish({
+      ...state,
+      ...partial,
+    })
+  }
+
+  return {
+    getSnapshot: () => snapshot,
+    getWorkspaceSnapshot: () => snapshot.derived,
+    getWorkspaceVersion: () => snapshot.derived.workspaceVersion,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    setState,
+    setConnected: (action) => {
+      const connected = applySidebarStateAction(state.connected, action)
+      if (connected === state.connected) return
+      setState({ connected })
+    },
+    setSessionsEvent: (action) => {
+      const sessionsEvent = applySidebarStateAction(state.sessionsEvent, action)
+      if (sessionsEvent === state.sessionsEvent) return
+      setState({ sessionsEvent })
+    },
+    setSidebarDirectories: (action) => {
+      const sidebarDirectories = applySidebarStateAction(
+        state.sidebarDirectories,
+        action
+      )
+      if (sidebarDirectories === state.sidebarDirectories) return
+      setState({ sidebarDirectories })
+    },
+    setDirectoryIndexDataByPath: (action) => {
+      const directoryIndexDataByPath = applySidebarStateAction(
+        state.directoryIndexDataByPath,
+        action
+      )
+      if (directoryIndexDataByPath === state.directoryIndexDataByPath) return
+      setState({ directoryIndexDataByPath })
+    },
+    setDirectoryIndexLoading: (action) => {
+      const directoryIndexLoading = applySidebarStateAction(
+        state.directoryIndexLoading,
+        action
+      )
+      if (directoryIndexLoading === state.directoryIndexLoading) return
+      setState({ directoryIndexLoading })
+    },
+    setSidebarSessionStatusByKey: (action) => {
+      const sidebarSessionStatusByKey = applySidebarStateAction(
+        state.sidebarSessionStatusByKey,
+        action
+      )
+      if (sidebarSessionStatusByKey === state.sidebarSessionStatusByKey) return
+      setState({ sidebarSessionStatusByKey })
+    },
+    setSidebarDeferredDirectoryLoadingReady: (action) => {
+      const sidebarDeferredDirectoryLoadingReady = applySidebarStateAction(
+        state.sidebarDeferredDirectoryLoadingReady,
+        action
+      )
+      if (
+        sidebarDeferredDirectoryLoadingReady ===
+        state.sidebarDeferredDirectoryLoadingReady
+      ) {
+        return
+      }
+      setState({ sidebarDeferredDirectoryLoadingReady })
+    },
+    setSessionSearch: (action) => {
+      const sessionSearch = applySidebarStateAction(state.sessionSearch, action)
+      if (sessionSearch === state.sessionSearch) return
+      setState({ sessionSearch })
+    },
+    setSelectedSidebarSessionKeys: (action) => {
+      const selectedSidebarSessionKeys = applySidebarStateAction(
+        state.selectedSidebarSessionKeys,
+        action
+      )
+      if (selectedSidebarSessionKeys === state.selectedSidebarSessionKeys) {
+        return
+      }
+      setState({ selectedSidebarSessionKeys })
+    },
+    setSidebarSessionSelectionAnchor: (action) => {
+      const sidebarSessionSelectionAnchor = applySidebarStateAction(
+        state.sidebarSessionSelectionAnchor,
+        action
+      )
+      if (
+        sidebarSessionSelectionAnchor === state.sidebarSessionSelectionAnchor
+      ) {
+        return
+      }
+      setState({ sidebarSessionSelectionAnchor })
+    },
+  }
+}
+
+function useAppShellSidebarSnapshot(store: AppShellSidebarStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  )
+}
+
+function useAppShellSidebarWorkspaceVersion(store: AppShellSidebarStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getWorkspaceVersion,
+    store.getWorkspaceVersion
+  )
+}
+
 function useLatestRef<T>(value: T) {
   const ref = React.useRef(value)
   ref.current = value
@@ -648,6 +1026,12 @@ type ConversationItemsStore = {
   subscribe: (listener: () => void) => () => void
 }
 
+type TextValueStore = {
+  getSnapshot: () => string
+  setValue: (value: string) => void
+  subscribe: (listener: () => void) => () => void
+}
+
 function createConversationItemsStore(
   initialItems: Array<ConversationItem>
 ): ConversationItemsStore {
@@ -680,6 +1064,37 @@ function createConversationItemsStore(
 }
 
 function useConversationItemsSnapshot(store: ConversationItemsStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  )
+}
+
+function createTextValueStore(initialValue = ""): TextValueStore {
+  let value = initialValue
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => value,
+    setValue: (nextValue) => {
+      if (value === nextValue) return
+
+      value = nextValue
+      for (const listener of listeners) {
+        listener()
+      }
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+function useTextValueSnapshot(store: TextValueStore) {
   return React.useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
@@ -937,6 +1352,24 @@ type AppShellWorkingState = {
   done?: boolean
 }
 
+function AppShellMessagesWorkingIndicator({
+  hiddenThinkingPreviewStore,
+  state,
+  useHiddenThinkingPreview,
+}: {
+  hiddenThinkingPreviewStore: TextValueStore
+  state: AppShellWorkingState
+  useHiddenThinkingPreview: boolean
+}) {
+  const hiddenThinkingPreview = useTextValueSnapshot(hiddenThinkingPreviewStore)
+  const displayedState =
+    useHiddenThinkingPreview && hiddenThinkingPreview
+      ? { ...state, label: hiddenThinkingPreview }
+      : state
+
+  return <MessagesWorkingIndicator state={displayedState} />
+}
+
 function AppShellTabsList({
   viewerContextId,
   cwd,
@@ -991,6 +1424,7 @@ function AppShellSessionConversation({
   conversationItemsStore,
   hideThinking,
   hideToolBlocks,
+  hiddenThinkingPreviewStore,
   isSessionViewLoading,
   isSubmitting,
   onCreateSession,
@@ -1002,6 +1436,7 @@ function AppShellSessionConversation({
   centerMessages: boolean
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
+  hiddenThinkingPreviewStore: TextValueStore
   hideThinking: boolean
   hideToolBlocks: boolean
   isSessionViewLoading: boolean
@@ -1064,7 +1499,13 @@ function AppShellSessionConversation({
           ))}
           {workingState ? (
             <div className={conversationMessageColumnClassName}>
-              <MessagesWorkingIndicator state={workingState} />
+              <AppShellMessagesWorkingIndicator
+                hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+                state={workingState}
+                useHiddenThinkingPreview={
+                  sessionState.streaming && hideThinking
+                }
+              />
             </div>
           ) : null}
         </div>
@@ -1342,25 +1783,8 @@ type AppShellSessionWorkspaceProps = {
     sessionId?: string,
     options?: SelectSessionNavigationOptions
   ) => void
-  setConnected: React.Dispatch<React.SetStateAction<boolean>>
-  setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
-  applySidebarSessionStatusRef: React.MutableRefObject<
-    (status: SessionStatusEvent) => void
-  >
-  bootstrapSidebarDirectories: Array<string>
-  baseSidebarDirectories: Array<string>
-  directoryStateByPath: Map<string, DirectoryState>
-  directoryIndexes: Record<string, Array<SessionListEntry>>
-  sidebarSessions: Array<SessionListEntry>
-  selectedSidebarSessions: Array<SessionListEntry>
+  sidebarStore: AppShellSidebarStore
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
-  sidebarSessionEntriesByKey: Map<string, SessionListEntry>
-  clearSelectedSidebarSelection: () => void
-  setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
-  setSelectedSidebarSessionKeys: React.Dispatch<
-    React.SetStateAction<Array<string>>
-  >
-  setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
 }
 
 const AppShellSessionWorkspace = React.forwardRef<
@@ -1371,21 +1795,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     sessionId,
     onSelectSession,
-    setConnected,
-    setSessionsEvent,
-    applySidebarSessionStatusRef,
-    bootstrapSidebarDirectories,
-    baseSidebarDirectories,
-    directoryStateByPath,
-    directoryIndexes,
-    sidebarSessions,
-    selectedSidebarSessions,
+    sidebarStore,
     sessionSearchInputRef,
-    sidebarSessionEntriesByKey,
-    clearSelectedSidebarSelection,
-    setSidebarDirectories,
-    setSelectedSidebarSessionKeys,
-    setSidebarSessionSelectionAnchor,
   },
   ref
 ) {
@@ -1509,11 +1920,26 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const conversationItemsStore = conversationItemsStoreRef.current
+  const hiddenThinkingPreviewStoreRef = React.useRef<TextValueStore | null>(
+    null
+  )
+  if (!hiddenThinkingPreviewStoreRef.current) {
+    hiddenThinkingPreviewStoreRef.current = createTextValueStore(
+      sessionState.hiddenThinkingPreview || ""
+    )
+  }
+  const hiddenThinkingPreviewStore = hiddenThinkingPreviewStoreRef.current
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       conversationItemsStore.setItems(items)
     },
     [conversationItemsStore]
+  )
+  const setHiddenThinkingPreview = React.useCallback(
+    (value: string) => {
+      hiddenThinkingPreviewStore.setValue(value)
+    },
+    [hiddenThinkingPreviewStore]
   )
   const addOptimisticUserMessage = React.useCallback(
     (options: {
@@ -1539,17 +1965,8 @@ const AppShellSessionWorkspace = React.forwardRef<
         const nextState = { ...currentState, items: nextItems }
         sessionStateRef.current = nextState
         conversationItemsStore.setItems(nextItems)
+        setSessionState(nextState)
       }
-
-      setSessionState((current) => {
-        const currentNextItems = insertOptimisticUserItem(current.items, item)
-        if (currentNextItems === current.items) return current
-
-        const nextState = { ...current, items: currentNextItems }
-        sessionStateRef.current = nextState
-        conversationItemsStore.setItems(currentNextItems)
-        return nextState
-      })
 
       return pendingId
     },
@@ -1561,30 +1978,41 @@ const AppShellSessionWorkspace = React.forwardRef<
 
       const currentState = sessionStateRef.current
       const nextItems = removeOptimisticUserItem(currentState.items, pendingId)
-      if (nextItems !== currentState.items) {
-        const nextState = { ...currentState, items: nextItems }
-        sessionStateRef.current = nextState
-        conversationItemsStore.setItems(nextItems)
-      }
+      if (nextItems === currentState.items) return
 
-      setSessionState((current) => {
-        const currentNextItems = removeOptimisticUserItem(
-          current.items,
-          pendingId
-        )
-        if (currentNextItems === current.items) return current
-
-        const nextState = { ...current, items: currentNextItems }
-        sessionStateRef.current = nextState
-        conversationItemsStore.setItems(currentNextItems)
-        return nextState
-      })
+      const nextState = { ...currentState, items: nextItems }
+      sessionStateRef.current = nextState
+      conversationItemsStore.setItems(nextItems)
+      setSessionState(nextState)
     },
     [conversationItemsStore]
   )
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
+  const sidebarWorkspaceVersion =
+    useAppShellSidebarWorkspaceVersion(sidebarStore)
+  void sidebarWorkspaceVersion
+  const {
+    baseSidebarDirectories,
+    directoryStateByPath,
+    directoryIndexes,
+    sidebarSessions,
+    selectedSidebarSessions,
+    sidebarSessionEntriesByKey,
+  } = sidebarStore.getWorkspaceSnapshot()
+  const applySidebarSessionStatusRef = React.useRef(
+    (status: SessionStatusEvent) => {
+      sidebarStore.setSidebarSessionStatusByKey((current) =>
+        mergeSidebarSessionStatusMap(current, status)
+      )
+    }
+  )
+  applySidebarSessionStatusRef.current = (status) => {
+    sidebarStore.setSidebarSessionStatusByKey((current) =>
+      mergeSidebarSessionStatusMap(current, status)
+    )
+  }
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionQueryScope = sessionScrollKey(sessionState)
@@ -1652,8 +2080,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   }, [sessionState])
 
   React.useLayoutEffect(() => {
-    conversationItemsStore.setItems(sessionState.items)
-  }, [conversationItemsStore, sessionState.items])
+    conversationItemsStore.setItems(sessionStateRef.current.items)
+  }, [conversationItemsStore, hideToolBlocks, sessionState.hideThinkingBlock])
 
   const syncComposerDraft = (
     value: string,
@@ -1896,10 +2324,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     sessionId,
     draftSessionLoadingOwnerKey,
-    bootstrapSidebarDirectories,
+    bootstrapSidebarDirectories:
+      sidebarStore.getSnapshot().state.initialSidebarBootstrapDirectories,
+    hideToolBlocks,
     sessionState,
     sessionStateRef,
-    setConnected,
+    setConnected: sidebarStore.setConnected,
     composerTextRef,
     composerSkillRef,
     replaceComposerDraftRef,
@@ -1907,7 +2337,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     pendingRouteSessionIdRef,
     setSessionState,
     setConversationItems,
-    setSessionsEvent,
+    setHiddenThinkingPreview,
+    setSessionsEvent: sidebarStore.setSessionsEvent,
     setSessionDoneEvents,
     applySidebarSessionStatusRef,
     setComposerImages,
@@ -1952,7 +2383,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     if (autoAddedSessionDirectoryKeysRef.current.has(autoAddKey)) return
     autoAddedSessionDirectoryKeysRef.current.add(autoAddKey)
 
-    setSidebarDirectories((current) => {
+    sidebarStore.setSidebarDirectories((current) => {
       const normalizedCurrent = normalizeStoredDirectoryList(current)
       if (normalizedCurrent.includes(nextDirectory)) return current
 
@@ -1966,7 +2397,13 @@ const AppShellSessionWorkspace = React.forwardRef<
       )
       return nextDirectories
     })
-  }, [sessionId, sessionState.cwd, sessionState.draft, sessionState.sessionId])
+  }, [
+    sessionId,
+    sessionState.cwd,
+    sessionState.draft,
+    sessionState.sessionId,
+    sidebarStore,
+  ])
 
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
@@ -2028,6 +2465,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     []
   )
 
+  const clearSelectedSidebarSelection = React.useCallback(() => {
+    sidebarStore.setSelectedSidebarSessionKeys((current) =>
+      current.length === 0 ? current : []
+    )
+    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+      current ? "" : current
+    )
+  }, [sidebarStore])
+
   const {
     abortSession,
     addDirectoryPath,
@@ -2054,7 +2500,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     prefetchDirectorySessionsIndex,
     addOptimisticUserMessage,
     removeOptimisticUserMessage,
-    setSidebarDirectories,
+    setSidebarDirectories: sidebarStore.setSidebarDirectories,
     setStoredDraftDirectory,
     setDraftSessionLoadingOwnerKey,
     setPendingDraftPrompt,
@@ -2074,7 +2520,9 @@ const AppShellSessionWorkspace = React.forwardRef<
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
-      handleSelectSession(undefined)
+      pendingRouteSessionIdRef.current = undefined
+      setLoadingSessionId(null)
+      setCurrentTab((tab) => (tab === "git" ? "session" : tab))
       clearSelectedSidebarSelection()
       if (shouldCloseMobileSidebar) {
         pendingMobileSidebarPromptFocusRef.current = true
@@ -2084,38 +2532,33 @@ const AppShellSessionWorkspace = React.forwardRef<
       }
       setAwaitingFirstTurn(false)
       setPendingMessages((current) => (current.length === 0 ? current : []))
-      setSessionState(() => {
-        const nextState = createOptimisticDraftSessionState({
-          previous: previousState,
-          cwd: nextCwd,
-          ownerKey,
-        })
-        sessionStateRef.current = nextState
-        conversationItemsStore.setItems(nextState.items)
-        return nextState
+      const nextState = createOptimisticDraftSessionState({
+        previous: previousState,
+        cwd: nextCwd,
+        ownerKey,
       })
+      sessionStateRef.current = nextState
+      conversationItemsStore.setItems(nextState.items)
+      setSessionState(nextState)
 
       const created = await requestCreateSession(cwdOverride)
       if (created) {
         return
       }
 
-      setSessionState((current) => {
-        if (current.sessionKey !== optimisticSessionKey) {
-          return current
-        }
+      if (sessionStateRef.current.sessionKey !== optimisticSessionKey) {
+        return
+      }
 
-        sessionStateRef.current = previousState
-        conversationItemsStore.setItems(previousState.items)
-        return previousState
-      })
+      sessionStateRef.current = previousState
+      conversationItemsStore.setItems(previousState.items)
+      setSessionState(previousState)
     },
     [
       clearSelectedSidebarSelection,
       conversationItemsStore,
       defaultNewSessionDirectory,
       focusPrompt,
-      handleSelectSession,
       isMobile,
       openMobile,
       requestCreateSession,
@@ -2126,27 +2569,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       setSessionState,
     ]
   )
-
-  React.useEffect(() => {
-    if (!sessionId || !draftSessionLoadingOwnerKey || !sessionState.draft) {
-      return
-    }
-
-    if (sessionState.sessionKey?.startsWith("optimistic:")) {
-      return
-    }
-
-    if (promptDraftKey(sessionState) !== draftSessionLoadingOwnerKey) {
-      return
-    }
-
-    handleSelectSession(undefined, { replace: true })
-  }, [
-    draftSessionLoadingOwnerKey,
-    handleSelectSession,
-    sessionId,
-    sessionState,
-  ])
 
   const onPickImages = async (files: FileList | Array<File> | null) => {
     if (!files || files.length === 0) return
@@ -2240,8 +2662,9 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     activeSessionId,
     sessionState,
-    setSelectedSidebarSessionKeys,
-    setSidebarSessionSelectionAnchor,
+    setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
+    setSidebarSessionSelectionAnchor:
+      sidebarStore.setSidebarSessionSelectionAnchor,
     setRunningSlashCommand,
   })
 
@@ -2434,13 +2857,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     if (sessionState.streaming) {
-      const thinkingSummary = sessionState.hideThinkingBlock
-        ? sessionState.hiddenThinkingPreview
-        : undefined
-
       return {
-        label:
-          thinkingSummary || sessionState.uiState.workingMessage || "Working…",
+        label: sessionState.uiState.workingMessage || "Working…",
       }
     }
 
@@ -2921,6 +3339,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               centerMessages={centerMessages}
               conversationFrameRef={conversationFrameRef}
               conversationItemsStore={conversationItemsStore}
+              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
               hideThinking={sessionState.hideThinkingBlock}
               hideToolBlocks={hideToolBlocks}
               isSessionViewLoading={isSessionViewLoading}
@@ -3131,46 +3550,37 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
 })
 
-export function PiWebAppShell({
-  sessionId,
-  onSelectSession,
+function AppShellSidebarController({
+  viewerContextId,
+  sidebarStore,
+  sessionSearchInputRef,
+  sessionWorkspaceRef,
 }: {
-  sessionId?: string
-  onSelectSession?: (
-    sessionId?: string,
-    options?: SelectSessionNavigationOptions
-  ) => void
+  viewerContextId: string
+  sidebarStore: AppShellSidebarStore
+  sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
+  sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
 }) {
-  const [viewerContextId, setViewerContextId] = React.useState("")
-  const [connected, setConnected] = React.useState(false)
-  const [sessionsEvent, setSessionsEvent] =
-    React.useState<SessionsEvent | null>(null)
-  const [sidebarDirectories, setSidebarDirectories] = React.useState<
-    Array<string>
-  >([])
-  const [
-    initialSidebarBootstrapDirectories,
-    setInitialSidebarBootstrapDirectories,
-  ] = React.useState<Array<string>>([])
-  const [directoryIndexDataByPath, setDirectoryIndexDataByPath] =
-    React.useState<Record<string, DirectorySessionsIndexData>>({})
-  const [directoryIndexLoading, setDirectoryIndexLoading] = React.useState<
-    Record<string, boolean>
-  >({})
-  const [sidebarSessionStatusByKey, setSidebarSessionStatusByKey] =
-    React.useState<SidebarSessionStatusMap>({})
-  const [
+  const sidebarSnapshot = useAppShellSidebarSnapshot(sidebarStore)
+  const { derived, state } = sidebarSnapshot
+  const {
+    baseSidebarDirectories,
+    directoryStateByPath,
+    emptySidebarStateText,
+    filteredDirectorySessions,
+    sidebarSessionEntriesByKey,
+    visibleDirectories,
+  } = derived
+  const {
+    connected,
+    directoryIndexDataByPath,
+    directoryIndexLoading,
+    selectedSidebarSessionKeys,
+    sessionsEvent,
+    sessionSearch,
     sidebarDeferredDirectoryLoadingReady,
-    setSidebarDeferredDirectoryLoadingReady,
-  ] = React.useState(false)
-  const [sessionSearch, setSessionSearch] = React.useState("")
-  const [selectedSidebarSessionKeys, setSelectedSidebarSessionKeys] =
-    React.useState<Array<string>>([])
-  const [sidebarSessionSelectionAnchor, setSidebarSessionSelectionAnchor] =
-    React.useState("")
-  const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const sessionWorkspaceRef =
-    React.useRef<AppShellSessionWorkspaceHandle | null>(null)
+    sidebarSessionSelectionAnchor,
+  } = state
   const directoryIndexRequestIdRef = React.useRef(0)
   const directoryIndexRequestIdsByPathRef = React.useRef<
     Record<string, number>
@@ -3181,34 +3591,6 @@ export function PiWebAppShell({
     activeSessionPath: string
     revisions: Record<string, string>
   } | null>(null)
-
-  const directoryStates = sessionsEvent?.directoryStates || []
-  const directoryStateByPath = (() =>
-    new Map(directoryStates.map((state) => [state.path, state])))()
-  const baseSidebarDirectories = (() =>
-    normalizeStoredDirectoryList(sidebarDirectories))()
-  const directoryIndexes = (() => {
-    const nextIndexes: Record<string, Array<SessionListEntry>> = {}
-
-    for (const directory of baseSidebarDirectories) {
-      nextIndexes[directory] =
-        directoryIndexDataByPath[directory]?.sessions || []
-    }
-
-    return nextIndexes
-  })()
-  const sidebarDirectoryIndexes = applySidebarSessionStatusOverlay(
-    directoryIndexes,
-    sidebarSessionStatusByKey
-  )
-  const applySidebarSessionStatusEvent = (status: SessionStatusEvent) => {
-    setSidebarSessionStatusByKey((current) =>
-      mergeSidebarSessionStatusMap(current, status)
-    )
-  }
-  const applySidebarSessionStatusRef = useLatestRef(
-    applySidebarSessionStatusEvent
-  )
 
   const startDirectoryIndexRequest = (directories: Array<string>) => {
     const requestId = directoryIndexRequestIdRef.current + 1
@@ -3231,28 +3613,10 @@ export function PiWebAppShell({
     )
 
   React.useEffect(() => {
-    const storedContext = window.localStorage.getItem(
-      VIEWER_CONTEXT_STORAGE_KEY
-    )
-    const nextContext = storedContext?.trim() || createContextId()
-    safeLocalStorageSetItem(VIEWER_CONTEXT_STORAGE_KEY, nextContext)
-    setViewerContextId(nextContext)
-
-    const storedDirectories = readStoredSidebarDirectories()
-    const nextDirectories = normalizeStoredDirectoryList(
-      storedDirectories.directories
-    )
-    setSidebarDirectories(nextDirectories)
-    setInitialSidebarBootstrapDirectories(
-      nextDirectories.slice(0, INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT)
-    )
-  }, [])
-
-  React.useEffect(() => {
     let timeoutId = 0
     const frameId = window.requestAnimationFrame(() => {
       timeoutId = window.setTimeout(() => {
-        setSidebarDeferredDirectoryLoadingReady(true)
+        sidebarStore.setSidebarDeferredDirectoryLoadingReady(true)
       }, 0)
     })
 
@@ -3262,12 +3626,12 @@ export function PiWebAppShell({
         window.clearTimeout(timeoutId)
       }
     }
-  }, [])
+  }, [sidebarStore])
 
   React.useEffect(() => {
     const sidebarDirectorySet = new Set(baseSidebarDirectories)
 
-    setDirectoryIndexDataByPath((current) => {
+    sidebarStore.setDirectoryIndexDataByPath((current) => {
       const next: Record<string, DirectorySessionsIndexData> = {}
 
       for (const [directory, payload] of Object.entries(current)) {
@@ -3278,7 +3642,7 @@ export function PiWebAppShell({
       return JSON.stringify(next) === JSON.stringify(current) ? current : next
     })
 
-    setDirectoryIndexLoading((current) => {
+    sidebarStore.setDirectoryIndexLoading((current) => {
       const next: Record<string, boolean> = {}
 
       for (const [directory, loading] of Object.entries(current)) {
@@ -3297,7 +3661,7 @@ export function PiWebAppShell({
       nextRequestIdsByPath[directory] = requestId
     }
     directoryIndexRequestIdsByPathRef.current = nextRequestIdsByPath
-  }, [baseSidebarDirectories])
+  }, [baseSidebarDirectories, sidebarStore])
 
   React.useEffect(() => {
     if (!viewerContextId || !sessionsEvent) return
@@ -3305,7 +3669,7 @@ export function PiWebAppShell({
     const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
 
-    setDirectoryIndexDataByPath((current) => {
+    sidebarStore.setDirectoryIndexDataByPath((current) => {
       const merged = payloadDirectories.length
         ? mergeDirectoryIndexData(current, payloadDirectoryIndexes)
         : current
@@ -3317,7 +3681,7 @@ export function PiWebAppShell({
     })
 
     if (payloadDirectories.length > 0) {
-      setDirectoryIndexLoading((current) =>
+      sidebarStore.setDirectoryIndexLoading((current) =>
         updateDirectoryIndexLoadingState(current, payloadDirectories, false)
       )
     }
@@ -3367,7 +3731,7 @@ export function PiWebAppShell({
     }
 
     const requestId = startDirectoryIndexRequest(directoriesToRefresh)
-    setDirectoryIndexLoading((current) =>
+    sidebarStore.setDirectoryIndexLoading((current) =>
       updateDirectoryIndexLoadingState(current, directoriesToRefresh, true)
     )
 
@@ -3392,11 +3756,11 @@ export function PiWebAppShell({
         )
 
         if (Object.keys(activeDirectoryIndexes).length > 0) {
-          setDirectoryIndexDataByPath((current) =>
+          sidebarStore.setDirectoryIndexDataByPath((current) =>
             mergeDirectoryIndexData(current, activeDirectoryIndexes)
           )
         }
-        setDirectoryIndexLoading((current) =>
+        sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
       })
@@ -3407,7 +3771,7 @@ export function PiWebAppShell({
         )
         if (activeDirectories.length === 0) return
 
-        setDirectoryIndexLoading((current) =>
+        sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
         toast.error(
@@ -3419,15 +3783,17 @@ export function PiWebAppShell({
   }, [
     baseSidebarDirectories,
     directoryIndexDataByPath,
+    directoryIndexLoading,
     directoryStateByPath,
     sessionsEvent,
+    sidebarStore,
     viewerContextId,
   ])
 
   React.useEffect(() => {
     if (!sessionsEvent) return
 
-    setSidebarSessionStatusByKey((current) =>
+    sidebarStore.setSidebarSessionStatusByKey((current) =>
       mergeSidebarSessionStatusMap(current, {
         type: "session_status",
         sessionKey: sessionsEvent.activeSessionKey,
@@ -3440,6 +3806,7 @@ export function PiWebAppShell({
     sessionsEvent?.activeSessionId,
     sessionsEvent?.activeSessionKey,
     sessionsEvent?.activeSessionPath,
+    sidebarStore,
   ])
 
   React.useEffect(() => {
@@ -3458,7 +3825,7 @@ export function PiWebAppShell({
     }
 
     const requestId = startDirectoryIndexRequest(missingDirectories)
-    setDirectoryIndexLoading((current) =>
+    sidebarStore.setDirectoryIndexLoading((current) =>
       updateDirectoryIndexLoadingState(current, missingDirectories, true)
     )
 
@@ -3483,11 +3850,11 @@ export function PiWebAppShell({
         )
 
         if (Object.keys(activeDirectoryIndexes).length > 0) {
-          setDirectoryIndexDataByPath((current) =>
+          sidebarStore.setDirectoryIndexDataByPath((current) =>
             mergeDirectoryIndexData(current, activeDirectoryIndexes)
           )
         }
-        setDirectoryIndexLoading((current) =>
+        sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
       })
@@ -3498,7 +3865,7 @@ export function PiWebAppShell({
         )
         if (activeDirectories.length === 0) return
 
-        setDirectoryIndexLoading((current) =>
+        sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
         )
         toast.error(
@@ -3510,85 +3877,30 @@ export function PiWebAppShell({
   }, [
     baseSidebarDirectories,
     directoryIndexDataByPath,
+    directoryIndexLoading,
     sidebarDeferredDirectoryLoadingReady,
+    sidebarStore,
     viewerContextId,
   ])
 
-  const sidebarSearchPending = (() => {
-    const query = sessionSearch.trim()
-    if (!query) return false
+  React.useEffect(() => {
+    const validKeys = new Set(sidebarSessionEntriesByKey.keys())
 
-    return baseSidebarDirectories.some((directory) => {
-      const totalCount = directoryStateByPath.get(directory)?.totalCount ?? 0
-      const loadedCount = Object.prototype.hasOwnProperty.call(
-        directoryIndexes,
-        directory
-      )
-        ? directoryIndexes[directory].length
-        : 0
-      const loading = Boolean(directoryIndexLoading[directory])
-      return loading || (!loadedCount && totalCount > 0)
+    sidebarStore.setSelectedSidebarSessionKeys((current) => {
+      const next = current.filter((key) => validKeys.has(key))
+      return next.length === current.length ? current : next
     })
-  })()
 
-  const {
-    visibleDirectories,
-    filteredDirectorySessions,
-    emptySidebarStateText,
-  } = (() => {
-    const query = sessionSearch.trim().toLowerCase()
-    const nextVisibleDirectories: Array<string> = []
-    const nextFilteredSessions: Record<string, Array<SessionListEntry>> = {}
-
-    for (const directory of baseSidebarDirectories) {
-      const sessions = Object.prototype.hasOwnProperty.call(
-        sidebarDirectoryIndexes,
-        directory
-      )
-        ? sidebarDirectoryIndexes[directory]
-        : []
-
-      if (!query) {
-        nextVisibleDirectories.push(directory)
-        nextFilteredSessions[directory] = sessions
-        continue
-      }
-
-      const directoryMatches = directory.toLowerCase().includes(query)
-      const filteredSessions = directoryMatches
-        ? sessions
-        : sessions.filter((entry) => {
-            const haystack = [entry.title, entry.name, entry.path, entry.cwd]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase()
-            return haystack.includes(query)
-          })
-
-      if (directoryMatches || filteredSessions.length > 0) {
-        nextVisibleDirectories.push(directory)
-        nextFilteredSessions[directory] = filteredSessions
-      }
-    }
-
-    return {
-      visibleDirectories: nextVisibleDirectories,
-      filteredDirectorySessions: nextFilteredSessions,
-      emptySidebarStateText: query
-        ? sidebarSearchPending
-          ? "Searching sessions…"
-          : "No sessions or directories match your search."
-        : baseSidebarDirectories.length > 0
-          ? "No directories match this view."
-          : "No directories added yet.",
-    }
-  })()
+    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+      current && validKeys.has(current) ? current : ""
+    )
+  }, [sidebarSessionEntriesByKey, sidebarStore])
 
   const reorderSidebarDirectories = (nextDirectories: Array<string>) => {
     const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
     if (normalizedNext.length === 0) return
 
-    setSidebarDirectories((current) => {
+    sidebarStore.setSidebarDirectories((current) => {
       const previous = normalizeStoredDirectoryList(current)
       if (JSON.stringify(previous) === JSON.stringify(normalizedNext)) {
         return current
@@ -3602,50 +3914,6 @@ export function PiWebAppShell({
     })
   }
 
-  const sidebarSessionEntriesByKey = (() => {
-    const nextEntries = new Map<string, SessionListEntry>()
-
-    for (const directory of baseSidebarDirectories) {
-      const entries = Object.prototype.hasOwnProperty.call(
-        sidebarDirectoryIndexes,
-        directory
-      )
-        ? sidebarDirectoryIndexes[directory]
-        : []
-
-      for (const entry of entries) {
-        const key = sessionListEntryKey(entry)
-        if (!key || nextEntries.has(key)) continue
-        nextEntries.set(key, entry)
-      }
-    }
-
-    return nextEntries
-  })()
-
-  const sidebarSessions = (() =>
-    Array.from(sidebarSessionEntriesByKey.values()))()
-
-  React.useEffect(() => {
-    const validKeys = new Set(sidebarSessionEntriesByKey.keys())
-
-    setSelectedSidebarSessionKeys((current) => {
-      const next = current.filter((key) => validKeys.has(key))
-      return next.length === current.length ? current : next
-    })
-
-    setSidebarSessionSelectionAnchor((current) =>
-      current && validKeys.has(current) ? current : ""
-    )
-  }, [sidebarSessionEntriesByKey])
-
-  const selectedSidebarSessions = (() =>
-    selectedSidebarSessionKeys
-      .map((key) => sidebarSessionEntriesByKey.get(key))
-      .filter((entry): entry is SessionListEntry =>
-        Boolean(entry?.path || entry?.id)
-      ))()
-
   const setSidebarSelection = (nextKeys: Array<string>, anchorKey = "") => {
     const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
     const nextAnchor =
@@ -3655,17 +3923,13 @@ export function PiWebAppShell({
           ? anchorKey
           : (normalizedKeys[normalizedKeys.length - 1] ?? "")
 
-    setSelectedSidebarSessionKeys((current) =>
+    sidebarStore.setSelectedSidebarSessionKeys((current) =>
       sameStringArray(current, normalizedKeys) ? current : normalizedKeys
     )
-    setSidebarSessionSelectionAnchor((current) =>
+    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
       current === nextAnchor ? current : nextAnchor
     )
   }
-
-  const clearSelectedSidebarSelection = React.useCallback(() => {
-    setSidebarSelection([])
-  }, [])
 
   const selectSidebarSessionRange = (targetKey: string) => {
     const normalizedTargetKey = targetKey.trim()
@@ -3730,64 +3994,128 @@ export function PiWebAppShell({
   }
 
   return (
+    <AppSidebar
+      connected={connected}
+      sessionSearch={sessionSearch}
+      onSessionSearchChange={sidebarStore.setSessionSearch}
+      sessionSearchInputRef={sessionSearchInputRef}
+      visibleDirectories={visibleDirectories}
+      directoryCount={baseSidebarDirectories.length}
+      filteredDirectorySessions={filteredDirectorySessions}
+      directoryIndexLoading={directoryIndexLoading}
+      selectedSessionKeys={selectedSidebarSessionKeys}
+      activeSessionId={sessionsEvent?.activeSessionId}
+      activeSessionKey={sessionsEvent?.activeSessionKey}
+      emptyStateText={emptySidebarStateText}
+      onOpenAddDirectoryDialog={() => {
+        sessionWorkspaceRef.current?.openAddDirectoryDialog()
+      }}
+      onOpenCommandPalette={() => {
+        sessionWorkspaceRef.current?.openCommandPalette()
+      }}
+      onOpenSettings={() => {
+        sessionWorkspaceRef.current?.openSettingsDialog()
+      }}
+      onSessionClick={handleSidebarSessionClick}
+      onRenameSession={(entry) => {
+        sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
+      }}
+      onDeleteSession={(entry) => {
+        sessionWorkspaceRef.current?.openDeleteDialog([entry])
+      }}
+      onCreateSessionInDirectory={(directory) => {
+        void sessionWorkspaceRef.current?.createSession(directory, {
+          closeMobileSidebar: true,
+        })
+      }}
+      onRemoveDirectory={(directory) => {
+        sidebarStore.setSidebarDirectories((current) => {
+          const next = current.filter((entry) => entry !== directory)
+          safeLocalStorageSetItem(
+            SIDEBAR_DIRECTORIES_STORAGE_KEY,
+            JSON.stringify(next)
+          )
+          return next
+        })
+      }}
+      onRemoveAllDirectories={() => {
+        sidebarStore.setSidebarDirectories((current) => {
+          if (current.length === 0) {
+            return current
+          }
+          safeLocalStorageSetItem(
+            SIDEBAR_DIRECTORIES_STORAGE_KEY,
+            JSON.stringify([])
+          )
+          return []
+        })
+      }}
+      onReorderDirectories={reorderSidebarDirectories}
+    />
+  )
+}
+
+export function PiWebAppShell({
+  sessionId,
+  onSelectSession,
+}: {
+  sessionId?: string
+  onSelectSession?: (
+    sessionId?: string,
+    options?: SelectSessionNavigationOptions
+  ) => void
+}) {
+  const [viewerContextId, setViewerContextId] = React.useState("")
+  const sidebarStoreRef = React.useRef<AppShellSidebarStore | null>(null)
+  if (!sidebarStoreRef.current) {
+    sidebarStoreRef.current = createAppShellSidebarStore()
+  }
+  const sidebarStore = sidebarStoreRef.current
+  const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const sessionWorkspaceRef =
+    React.useRef<AppShellSessionWorkspaceHandle | null>(null)
+
+  React.useEffect(() => {
+    const storedContext = window.localStorage.getItem(
+      VIEWER_CONTEXT_STORAGE_KEY
+    )
+    const nextContext = storedContext?.trim() || createContextId()
+    safeLocalStorageSetItem(VIEWER_CONTEXT_STORAGE_KEY, nextContext)
+    setViewerContextId(nextContext)
+
+    const storedDirectories = readStoredSidebarDirectories()
+    const nextDirectories = normalizeStoredDirectoryList(
+      storedDirectories.directories
+    )
+    const nextBootstrapDirectories = nextDirectories.slice(
+      0,
+      INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
+    )
+    sidebarStore.setState((current) => {
+      if (
+        sameStringArray(current.sidebarDirectories, nextDirectories) &&
+        sameStringArray(
+          current.initialSidebarBootstrapDirectories,
+          nextBootstrapDirectories
+        )
+      ) {
+        return current
+      }
+
+      return {
+        sidebarDirectories: nextDirectories,
+        initialSidebarBootstrapDirectories: nextBootstrapDirectories,
+      }
+    })
+  }, [sidebarStore])
+
+  return (
     <SidebarProvider className="h-full overflow-hidden bg-background">
-      <AppSidebar
-        connected={connected}
-        sessionSearch={sessionSearch}
-        onSessionSearchChange={setSessionSearch}
+      <AppShellSidebarController
+        viewerContextId={viewerContextId}
+        sidebarStore={sidebarStore}
         sessionSearchInputRef={sessionSearchInputRef}
-        visibleDirectories={visibleDirectories}
-        directoryCount={baseSidebarDirectories.length}
-        filteredDirectorySessions={filteredDirectorySessions}
-        directoryIndexLoading={directoryIndexLoading}
-        selectedSessionKeys={selectedSidebarSessionKeys}
-        activeSessionId={sessionsEvent?.activeSessionId}
-        activeSessionKey={sessionsEvent?.activeSessionKey}
-        emptyStateText={emptySidebarStateText}
-        onOpenAddDirectoryDialog={() => {
-          sessionWorkspaceRef.current?.openAddDirectoryDialog()
-        }}
-        onOpenCommandPalette={() => {
-          sessionWorkspaceRef.current?.openCommandPalette()
-        }}
-        onOpenSettings={() => {
-          sessionWorkspaceRef.current?.openSettingsDialog()
-        }}
-        onSessionClick={handleSidebarSessionClick}
-        onRenameSession={(entry) => {
-          sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
-        }}
-        onDeleteSession={(entry) => {
-          sessionWorkspaceRef.current?.openDeleteDialog([entry])
-        }}
-        onCreateSessionInDirectory={(directory) => {
-          void sessionWorkspaceRef.current?.createSession(directory, {
-            closeMobileSidebar: true,
-          })
-        }}
-        onRemoveDirectory={(directory) => {
-          setSidebarDirectories((current) => {
-            const next = current.filter((entry) => entry !== directory)
-            safeLocalStorageSetItem(
-              SIDEBAR_DIRECTORIES_STORAGE_KEY,
-              JSON.stringify(next)
-            )
-            return next
-          })
-        }}
-        onRemoveAllDirectories={() => {
-          setSidebarDirectories((current) => {
-            if (current.length === 0) {
-              return current
-            }
-            safeLocalStorageSetItem(
-              SIDEBAR_DIRECTORIES_STORAGE_KEY,
-              JSON.stringify([])
-            )
-            return []
-          })
-        }}
-        onReorderDirectories={reorderSidebarDirectories}
+        sessionWorkspaceRef={sessionWorkspaceRef}
       />
 
       <AppShellSessionWorkspace
@@ -3795,21 +4123,8 @@ export function PiWebAppShell({
         viewerContextId={viewerContextId}
         sessionId={sessionId}
         onSelectSession={onSelectSession}
-        setConnected={setConnected}
-        setSessionsEvent={setSessionsEvent}
-        applySidebarSessionStatusRef={applySidebarSessionStatusRef}
-        bootstrapSidebarDirectories={initialSidebarBootstrapDirectories}
-        baseSidebarDirectories={baseSidebarDirectories}
-        directoryStateByPath={directoryStateByPath}
-        directoryIndexes={sidebarDirectoryIndexes}
-        sidebarSessions={sidebarSessions}
-        selectedSidebarSessions={selectedSidebarSessions}
+        sidebarStore={sidebarStore}
         sessionSearchInputRef={sessionSearchInputRef}
-        sidebarSessionEntriesByKey={sidebarSessionEntriesByKey}
-        clearSelectedSidebarSelection={clearSelectedSidebarSelection}
-        setSidebarDirectories={setSidebarDirectories}
-        setSelectedSidebarSessionKeys={setSelectedSidebarSessionKeys}
-        setSidebarSessionSelectionAnchor={setSidebarSessionSelectionAnchor}
       />
     </SidebarProvider>
   )

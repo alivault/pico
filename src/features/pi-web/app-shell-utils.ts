@@ -123,7 +123,7 @@ function latestCurrentTurnThinkingSummaryText(items: SessionState["items"]) {
       const block = item.blocks[blockIndex]
       if (block?.type !== "thinking") continue
 
-      const summary = thinkingSummaryText(block)
+      const summary = thinkingSummaryText(block, { allowPlaceholder: true })
       if (summary) return summary
     }
   }
