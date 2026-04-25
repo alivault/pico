@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import { isAbsolute, resolve } from "node:path"
 
 export type GitStatusSummary = {
   branch?: string
@@ -50,6 +51,13 @@ export type GitChangesSummary = {
   unpushedCommitShortHashes: Array<string>
 }
 
+export type GitRepositoryInfo = {
+  cwd: string
+  root: string
+  gitDir: string
+  gitCommonDir: string
+}
+
 const GIT_STATUS_CACHE_TTL_MS = 5_000
 const GIT_CHANGES_CACHE_TTL_MS = 5_000
 const GIT_COMMITS_LIMIT = 20
@@ -62,6 +70,30 @@ const gitChangesCache = new Map<
   string,
   { value: GitChangesSummary | null; expiresAt: number }
 >()
+
+function normalizeGitCwd(cwd: string) {
+  return typeof cwd === "string" ? cwd.trim() : ""
+}
+
+function normalizeGitPath(path: string, cwd: string) {
+  const trimmed = typeof path === "string" ? path.trim() : ""
+  if (!trimmed) return ""
+
+  return isAbsolute(trimmed) ? resolve(trimmed) : resolve(cwd, trimmed)
+}
+
+export function invalidateDirectoryGitCaches(cwd: string) {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) return
+
+  gitStatusCache.delete(normalizedCwd)
+  gitChangesCache.delete(normalizedCwd)
+}
+
+export function invalidateAllDirectoryGitCaches() {
+  gitStatusCache.clear()
+  gitChangesCache.clear()
+}
 
 async function runCommand(
   command: string,
@@ -454,6 +486,54 @@ async function isInsideWorkTree(cwd: string) {
   )
 
   return insideWorkTree.code === 0 && insideWorkTree.stdout.trim() === "true"
+}
+
+export async function resolveDirectoryGitRepository(
+  cwd: string
+): Promise<GitRepositoryInfo | null> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) return null
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    return null
+  }
+
+  const [rootResult, gitDirResult, gitCommonDirResult] = await Promise.all([
+    runCommand("git", ["rev-parse", "--show-toplevel"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand("git", ["rev-parse", "--absolute-git-dir"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
+    runCommand(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+  ])
+
+  const root = normalizeGitPath(rootResult.stdout, normalizedCwd)
+  const gitDir = normalizeGitPath(gitDirResult.stdout, normalizedCwd)
+  const gitCommonDir = normalizeGitPath(
+    gitCommonDirResult.code === 0 ? gitCommonDirResult.stdout : gitDir,
+    normalizedCwd
+  )
+
+  if (rootResult.code !== 0 || gitDirResult.code !== 0 || !root || !gitDir) {
+    return null
+  }
+
+  return {
+    cwd: normalizedCwd,
+    root,
+    gitDir,
+    gitCommonDir: gitCommonDir || gitDir,
+  }
 }
 
 export async function readDirectoryGitStatus(

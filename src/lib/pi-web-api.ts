@@ -340,6 +340,13 @@ export type AutoSessionNamingErrorEvent = {
   refinementReason?: string
 }
 
+export type GitChangedEvent = {
+  type: "git_changed"
+  cwd: string
+  repositoryRoot?: string
+  changedAt: number
+}
+
 export type PiWebServerEvent =
   | StateSyncPayload
   | SessionsEvent
@@ -348,6 +355,7 @@ export type PiWebServerEvent =
   | ExtensionUiEvent
   | UserMessageEvent
   | AutoSessionNamingErrorEvent
+  | GitChangedEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return Boolean(
@@ -371,5 +379,14 @@ export function isSessionsEvent(value: unknown): value is SessionsEvent {
     value &&
     typeof value === "object" &&
     (value as { type?: unknown }).type === "sessions"
+  )
+}
+
+export function isGitChangedEvent(value: unknown): value is GitChangedEvent {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "git_changed" &&
+    typeof (value as { cwd?: unknown }).cwd === "string"
   )
 }

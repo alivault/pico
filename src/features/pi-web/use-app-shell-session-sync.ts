@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { PromptImage, SessionState } from "@/lib/pi-web"
@@ -16,13 +17,18 @@ import {
   updateStateFromSync,
 } from "@/features/pi-web/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pi-web/composer-utils"
+import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import {
   normalizePromptImage,
   promptDraftKey,
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pi-web"
-import { isSessionsEvent, isStateSyncEvent } from "@/lib/pi-web-api"
+import {
+  isGitChangedEvent,
+  isSessionsEvent,
+  isStateSyncEvent,
+} from "@/lib/pi-web-api"
 
 type PendingComposerMessage = {
   pendingId: string
@@ -297,6 +303,7 @@ export function useAppShellSessionSync({
   setPendingUiValue,
   lastSyncedEditorTextRef,
 }: UseAppShellSessionSyncOptions) {
+  const queryClient = useQueryClient()
   const initialEventsSessionIdRef = React.useRef(sessionId)
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
@@ -418,6 +425,25 @@ export function useAppShellSessionSync({
         return
       }
 
+      if (isGitChangedEvent(payload)) {
+        const cwd = payload.cwd.trim()
+        if (cwd) {
+          void Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
+              exact: true,
+              refetchType: "active",
+            }),
+            queryClient.invalidateQueries({
+              queryKey: piWebQueryKeys.gitChanges(viewerContextId, cwd),
+              exact: true,
+              refetchType: "active",
+            }),
+          ]).catch(() => undefined)
+        }
+        return
+      }
+
       if (payload.type === "request_error") {
         toast.error(payload.error || "Request failed")
         return
@@ -458,6 +484,7 @@ export function useAppShellSessionSync({
     composerSkillRef,
     composerTextRef,
     lastSyncedEditorTextRef,
+    queryClient,
     replaceComposerDraftRef,
     sessionStateRef,
     setConnected,

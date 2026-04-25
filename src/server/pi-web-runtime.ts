@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stat, unlink } from "node:fs/promises"
+import { resolve as resolvePath } from "node:path"
 
 import type {
   DirectoryState,
@@ -50,6 +51,8 @@ import {
   resolvePendingUiRequest,
 } from "@/server/pi-web-runtime-ui-requests"
 import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
+import { GitWatchManager, type GitWatchChange } from "@/server/git-watch"
+import type { GitChangedEvent } from "@/lib/pi-web-api"
 import type {
   AgentSessionLike,
   AgentSessionRuntimeLike,
@@ -222,6 +225,11 @@ const STATE_SYNC_JSON_FIELDS = [
 
 function cryptoRandomId() {
   return randomUUID()
+}
+
+function normalizeRuntimeGitCwd(cwd: string) {
+  const trimmed = typeof cwd === "string" ? cwd.trim() : ""
+  return trimmed ? resolvePath(trimmed) : ""
 }
 
 function formatError(error: unknown) {
@@ -496,6 +504,9 @@ export class PiWebRuntime {
   private readonly servicesByCwd = new Map<string, SessionServicesLike>()
   private readonly pendingUiRequests = new Map<string, PendingUiRequest>()
   private readonly highlightCache = new Map<string, HighlightPayload>()
+  private readonly gitWatchManager = new GitWatchManager((change) => {
+    this.handleGitWatchChange(change)
+  })
   private sdkPromise?: Promise<PiSdkLike>
   private heartbeat: NodeJS.Timeout
   private highlightLoadErrorLogged = false
@@ -1160,6 +1171,41 @@ export class PiWebRuntime {
     )
   }
 
+  private syncGitWatchDirectories() {
+    const cwds = new Set<string>()
+    for (const context of this.contexts.values()) {
+      if (context.clients.size === 0) continue
+
+      const entry = this.getActiveEntry(context)
+      const cwd = entry
+        ? normalizeRuntimeGitCwd(this.getBaseCwd(entry, context))
+        : ""
+      if (cwd) {
+        cwds.add(cwd)
+      }
+    }
+
+    this.gitWatchManager.setWatchedDirectories(cwds)
+  }
+
+  private handleGitWatchChange(change: GitWatchChange) {
+    for (const context of this.contexts.values()) {
+      if (context.clients.size === 0) continue
+
+      const entry = this.getActiveEntry(context)
+      const cwd = entry ? this.getBaseCwd(entry, context).trim() : ""
+      if (!cwd || normalizeRuntimeGitCwd(cwd) !== change.cwd) continue
+
+      const payload = {
+        type: "git_changed",
+        cwd,
+        repositoryRoot: change.repositoryRoot,
+        changedAt: Date.now(),
+      } satisfies GitChangedEvent
+      this.sendToContext(context, payload)
+    }
+  }
+
   private markUnreadFinished(entry: SessionEntry) {
     const sessionPath = this.getSessionPath(entry)
     for (const context of this.contexts.values()) {
@@ -1188,6 +1234,7 @@ export class PiWebRuntime {
         await this.sendSessionsToContext(activeContext),
       notify: options?.notify,
     })
+    this.syncGitWatchDirectories()
   }
 
   private async disposeDraftIfUnused(entry: SessionEntry | undefined) {
@@ -1235,6 +1282,7 @@ export class PiWebRuntime {
       existing.cwd === desiredCwd
     ) {
       context.activeKey = existing.key
+      this.syncGitWatchDirectories()
       return existing
     }
     if (existing) {
@@ -1245,6 +1293,7 @@ export class PiWebRuntime {
     })
     context.draftKey = draftEntry.key
     context.activeKey = draftEntry.key
+    this.syncGitWatchDirectories()
     return draftEntry
   }
 
@@ -2184,6 +2233,7 @@ export class PiWebRuntime {
     if (client.closed) return
     client.closed = true
     context.clients.delete(client)
+    this.syncGitWatchDirectories()
     try {
       client.controller.close()
     } catch {
@@ -2207,6 +2257,7 @@ export class PiWebRuntime {
           lastStateSyncSnapshot: undefined,
         }
         context.clients.add(client)
+        this.syncGitWatchDirectories()
         this.writeRawToClient(context, client, ": connected\n\n")
 
         void (async () => {
@@ -2234,6 +2285,7 @@ export class PiWebRuntime {
               ? this.sessionEntries.get(context.draftKey)
               : undefined
             this.contexts.delete(context.id)
+            this.syncGitWatchDirectories()
             void this.disposeDraftIfUnused(draftEntry)
           }
         }
