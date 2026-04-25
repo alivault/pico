@@ -3,6 +3,7 @@ import {
   ArrowUpIcon,
   ImagePlusIcon,
   LoaderCircleIcon,
+  SquareIcon,
   XIcon,
 } from "lucide-react"
 
@@ -677,8 +678,14 @@ function ComposerPromptEditor({
             Steer
           </Button>
           {isStreaming ? (
-            <Button variant="outline" size="sm" onClick={onAbort}>
-              Abort
+            <Button
+              variant="destructive"
+              size="icon-sm"
+              title="Abort"
+              aria-label="Abort"
+              onClick={onAbort}
+            >
+              <SquareIcon />
             </Button>
           ) : null}
         </div>
