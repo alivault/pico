@@ -385,6 +385,13 @@ function ComposerPromptEditor({
   const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
   const blockInitialSubmit = isSubmitting && !acceptFollowUps
+  const composerGridClassName = acceptFollowUps
+    ? "relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-end gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+    : `relative grid min-w-0 items-end gap-2 ${
+        isStreaming
+          ? "grid-cols-[auto_minmax(0,1fr)]"
+          : "grid-cols-[auto_minmax(0,1fr)_auto]"
+      }`
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
     const draftText = draftTextRef.current
@@ -543,13 +550,7 @@ function ComposerPromptEditor({
 
   return (
     <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
-      <div
-        className={`relative grid min-w-0 items-end gap-2 ${
-          isStreaming
-            ? "grid-cols-[auto_minmax(0,1fr)]"
-            : "grid-cols-[auto_minmax(0,1fr)_auto]"
-        }`}
-      >
+      <div className={composerGridClassName}>
         <ComposerAssistMenu
           visibleCompletion={visibleCompletion}
           slashMenuState={slashMenuState}
@@ -565,6 +566,9 @@ function ComposerPromptEditor({
           size="icon-sm"
           title="Add images"
           aria-label="Add images"
+          className={
+            acceptFollowUps ? "row-span-2 self-end md:row-span-1" : undefined
+          }
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlusIcon />
@@ -616,7 +620,7 @@ function ComposerPromptEditor({
           </div>
         </div>
 
-        {!isStreaming ? (
+        {!acceptFollowUps ? (
           <Button
             size="icon-sm"
             disabled={
@@ -626,7 +630,7 @@ function ComposerPromptEditor({
             title="Send"
             aria-label="Send"
             onClick={() => {
-              runPrimaryComposerAction(acceptFollowUps ? "steer" : undefined)
+              runPrimaryComposerAction(undefined)
             }}
           >
             {blockInitialSubmit ? (
@@ -635,6 +639,38 @@ function ComposerPromptEditor({
               <ArrowUpIcon />
             )}
           </Button>
+        ) : null}
+
+        {acceptFollowUps ? (
+          <div className="col-start-2 row-start-2 flex flex-nowrap items-center justify-end gap-2 md:col-start-3 md:row-start-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasSubmittableContent}
+              onClick={() => runPrimaryComposerAction("followUp")}
+            >
+              Queue
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasSubmittableContent}
+              onClick={() => runPrimaryComposerAction("steer")}
+            >
+              Steer
+            </Button>
+            {isStreaming ? (
+              <Button
+                variant="destructive"
+                size="icon-sm"
+                title="Abort"
+                aria-label="Abort"
+                onClick={onAbort}
+              >
+                <SquareIcon />
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -656,38 +692,6 @@ function ComposerPromptEditor({
               </button>
             </div>
           ))}
-        </div>
-      ) : null}
-
-      {acceptFollowUps ? (
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasSubmittableContent}
-            onClick={() => runPrimaryComposerAction("followUp")}
-          >
-            Queue
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasSubmittableContent}
-            onClick={() => runPrimaryComposerAction("steer")}
-          >
-            Steer
-          </Button>
-          {isStreaming ? (
-            <Button
-              variant="destructive"
-              size="icon-sm"
-              title="Abort"
-              aria-label="Abort"
-              onClick={onAbort}
-            >
-              <SquareIcon />
-            </Button>
-          ) : null}
         </div>
       ) : null}
     </div>
