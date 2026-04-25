@@ -109,11 +109,9 @@ import { useAppShellSessionSync } from "@/features/pi-web/use-app-shell-session-
 import { useAppShellShortcuts } from "@/features/pi-web/use-app-shell-shortcuts"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  DIRECTORY_SESSION_LOAD_MORE_COUNT,
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
-  INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
@@ -283,6 +281,16 @@ function sameStringArray(left: Array<string>, right: Array<string>) {
   }
 
   return true
+}
+
+function getRenderedSidebarSessionKeys() {
+  if (typeof document === "undefined") return []
+
+  return Array.from(
+    document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+  )
+    .map((element) => element.dataset.sessionKey?.trim() || "")
+    .filter((key) => key.length > 0)
 }
 
 function clearUnreadForActiveSidebarSession(
@@ -1215,7 +1223,6 @@ type AppShellSessionWorkspaceProps = {
   directoryIndexes: Record<string, Array<SessionListEntry>>
   sidebarSessions: Array<SessionListEntry>
   selectedSidebarSessions: Array<SessionListEntry>
-  renderedSidebarSessionKeys: Array<string>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   sidebarSessionEntriesByKey: Map<string, SessionListEntry>
   clearSelectedSidebarSelection: () => void
@@ -1242,7 +1249,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     directoryIndexes,
     sidebarSessions,
     selectedSidebarSessions,
-    renderedSidebarSessionKeys,
     sessionSearchInputRef,
     sidebarSessionEntriesByKey,
     clearSelectedSidebarSelection,
@@ -2589,7 +2595,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     hasPendingUiRequest: Boolean(pendingUiRequest),
     lastEscapePressedAtRef,
     renameOpen,
-    renderedSidebarSessionKeys,
     selectedSidebarSessions,
     sessionHasAvailableModels: sessionState.availableModels.length > 0,
     sessionHasFile: Boolean(sessionState.sessionFile),
@@ -3054,9 +3059,6 @@ export function PiWebAppShell({
   ] = React.useState<Array<string>>([])
   const [collapsedDirectories, setCollapsedDirectories] = React.useState<
     Record<string, boolean>
-  >({})
-  const [directoryRenderCounts, setDirectoryRenderCounts] = React.useState<
-    Record<string, number>
   >({})
   const [directoryIndexDataByPath, setDirectoryIndexDataByPath] =
     React.useState<Record<string, DirectorySessionsIndexData>>({})
@@ -3528,38 +3530,6 @@ export function PiWebAppShell({
   const sidebarSessions = (() =>
     Array.from(sidebarSessionEntriesByKey.values()))()
 
-  const renderedSidebarSessionKeys = (() => {
-    const searchActive = sessionSearch.trim().length > 0
-    const nextKeys: Array<string> = []
-
-    for (const directory of visibleDirectories) {
-      if (!searchActive && collapsedDirectories[directory]) continue
-
-      const sessions = Object.prototype.hasOwnProperty.call(
-        filteredDirectorySessions,
-        directory
-      )
-        ? filteredDirectorySessions[directory]
-        : []
-      const visibleCount = searchActive
-        ? sessions.length
-        : Math.min(
-            sessions.length,
-            directoryRenderCounts[directory] ??
-              INITIAL_DIRECTORY_SESSION_RENDER_COUNT
-          )
-
-      for (const entry of sessions.slice(0, visibleCount)) {
-        const key = sessionListEntryKey(entry)
-        if (key) {
-          nextKeys.push(key)
-        }
-      }
-    }
-
-    return nextKeys
-  })()
-
   React.useEffect(() => {
     const validKeys = new Set(sidebarSessionEntriesByKey.keys())
 
@@ -3605,7 +3575,7 @@ export function PiWebAppShell({
     const normalizedTargetKey = targetKey.trim()
     if (!normalizedTargetKey) return
 
-    const orderedKeys = renderedSidebarSessionKeys
+    const orderedKeys = getRenderedSidebarSessionKeys()
     const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
     if (targetIndex < 0) {
       setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
@@ -3663,15 +3633,6 @@ export function PiWebAppShell({
     }
   }
 
-  const loadMoreDirectorySessions = (directory: string) => {
-    setDirectoryRenderCounts((current) => ({
-      ...current,
-      [directory]:
-        (current[directory] ?? INITIAL_DIRECTORY_SESSION_RENDER_COUNT) +
-        DIRECTORY_SESSION_LOAD_MORE_COUNT,
-    }))
-  }
-
   const toggleDirectory = (directory: string) => {
     setCollapsedDirectories((current) => {
       const next = {
@@ -3695,21 +3656,14 @@ export function PiWebAppShell({
         sessionSearchInputRef={sessionSearchInputRef}
         visibleDirectories={visibleDirectories}
         directoryCount={baseSidebarDirectories.length}
-        directoryStateByPath={directoryStateByPath}
         filteredDirectorySessions={filteredDirectorySessions}
         collapsedDirectories={collapsedDirectories}
         directoryIndexLoading={directoryIndexLoading}
-        directoryRenderCounts={directoryRenderCounts}
         selectedSessionKeys={selectedSidebarSessionKeys}
         activeSessionId={sessionsEvent?.activeSessionId}
         activeSessionKey={sessionsEvent?.activeSessionKey}
         emptyStateText={emptySidebarStateText}
         allDirectoriesCollapsed={allDirectoriesCollapsed}
-        onCreateSession={() => {
-          void sessionWorkspaceRef.current?.createSession(undefined, {
-            closeMobileSidebar: true,
-          })
-        }}
         onOpenAddDirectoryDialog={() => {
           sessionWorkspaceRef.current?.openAddDirectoryDialog()
         }}
@@ -3790,7 +3744,6 @@ export function PiWebAppShell({
           })
         }}
         onReorderDirectories={reorderSidebarDirectories}
-        onLoadMoreDirectorySessions={loadMoreDirectorySessions}
       />
 
       <AppShellSessionWorkspace
@@ -3806,7 +3759,6 @@ export function PiWebAppShell({
         directoryIndexes={directoryIndexes}
         sidebarSessions={sidebarSessions}
         selectedSidebarSessions={selectedSidebarSessions}
-        renderedSidebarSessionKeys={renderedSidebarSessionKeys}
         sessionSearchInputRef={sessionSearchInputRef}
         sidebarSessionEntriesByKey={sidebarSessionEntriesByKey}
         clearSelectedSidebarSelection={clearSelectedSidebarSelection}

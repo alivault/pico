@@ -34,7 +34,6 @@ type UseAppShellShortcutsOptions = {
   hasPendingUiRequest: boolean
   lastEscapePressedAtRef: React.MutableRefObject<number>
   renameOpen: boolean
-  renderedSidebarSessionKeys: Array<string>
   selectedSidebarSessions: Array<SessionListEntry>
   sessionHasAvailableModels: boolean
   sessionHasFile: boolean
@@ -81,7 +80,6 @@ export function useAppShellShortcuts({
   hasPendingUiRequest,
   lastEscapePressedAtRef,
   renameOpen,
-  renderedSidebarSessionKeys,
   selectedSidebarSessions,
   sessionHasAvailableModels,
   sessionHasFile,
@@ -156,8 +154,7 @@ export function useAppShellShortcuts({
           (key === "arrowdown" ||
             key === "arrowup" ||
             key === "home" ||
-            key === "end") &&
-          renderedSidebarSessionKeys.length > 0
+            key === "end")
         ) {
           const sessionButtons = Array.from(
             document.querySelectorAll<HTMLElement>(
@@ -377,7 +374,6 @@ export function useAppShellShortcuts({
     hasPendingUiRequest,
     lastEscapePressedAtRef,
     renameOpen,
-    renderedSidebarSessionKeys,
     selectedSidebarSessions,
     sessionHasAvailableModels,
     sessionHasFile,
