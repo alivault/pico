@@ -733,8 +733,23 @@ export class PiWebRuntime {
     for (const entry of candidates) {
       if (this.sessionEntries.get(entry.key) !== entry) continue
       if (this.isSessionEntryReferenced(entry)) continue
+      if (this.isSessionBusyForDone(entry)) continue
       await this.disposeSessionEntry(entry)
     }
+  }
+
+  private async cleanupInactiveContexts() {
+    for (const context of this.contexts.values()) {
+      if (context.clients.size > 0) continue
+
+      const activeEntry = this.getActiveEntry(context)
+      if (activeEntry && this.isSessionBusyForDone(activeEntry)) continue
+
+      this.contexts.delete(context.id)
+    }
+
+    this.syncGitWatchDirectories()
+    await this.disposeUnreferencedSessionEntries()
   }
 
   private touchSessionEntry(
@@ -2573,6 +2588,10 @@ export class PiWebRuntime {
     ) {
       await this.broadcastSessionsAll()
     }
+
+    if (type === "agent_end" || type === "compaction_end") {
+      await this.cleanupInactiveContexts()
+    }
   }
 
   private writeRawToClient(
@@ -2663,9 +2682,7 @@ export class PiWebRuntime {
         cleanup = () => {
           this.closeSseClient(context, client)
           if (context.clients.size === 0) {
-            this.contexts.delete(context.id)
-            this.syncGitWatchDirectories()
-            void this.disposeUnreferencedSessionEntries()
+            void this.cleanupInactiveContexts()
           }
         }
 
