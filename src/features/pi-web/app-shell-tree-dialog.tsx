@@ -1,7 +1,13 @@
 import * as React from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
 import type { TreeNavigateOptions } from "@/features/pi-web/app-shell-dialog-types"
 import type { FlatTreeNode, TreeNode } from "@/lib/pi-web"
+import type {
+  NavigateSessionTreeResponse,
+  SessionTreeResponse,
+} from "@/lib/pi-web-api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,8 +34,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
+import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { flattenTree } from "@/lib/pi-web"
 import { cn } from "@/lib/utils"
+
+type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
+type NavigateSessionTreeData = Extract<
+  NavigateSessionTreeResponse,
+  { ok: true }
+>
 
 type TreeFilterMode =
   | "default"
@@ -1571,5 +1586,259 @@ export function AppShellTreeDialog({
         {treeDialogBody}
       </DialogContent>
     </Dialog>
+  )
+}
+export type AppShellTreeDialogHandle = {
+  open: () => Promise<void> | void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type AppShellTreeDialogControllerProps = {
+  ref?: React.Ref<AppShellTreeDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  viewerContextId: string
+  sessionScopeKey: string
+  sessionId?: string
+  treeSummaryAvailable: boolean
+}
+
+export function AppShellTreeDialogController({
+  ref,
+  openStateRef,
+  viewerContextId,
+  sessionScopeKey,
+  sessionId,
+  treeSummaryAvailable,
+}: AppShellTreeDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const [treeQuery, setTreeQuery] = React.useState("")
+  const [selectedTreeNodeId, setSelectedTreeNodeId] = React.useState<
+    string | null
+  >(null)
+  const [selectedTreeNodeLabel, setSelectedTreeNodeLabel] = React.useState("")
+  const openRef = React.useRef(open)
+  const queryClient = useQueryClient()
+  const queryKey = piWebQueryKeys.sessionTree(viewerContextId, sessionScopeKey)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  const treeQueryResult = useQuery({
+    queryKey,
+    queryFn: () =>
+      fetchJson<SessionTreeData>(
+        buildRequestUrl("/api/session/tree", {
+          contextId: viewerContextId,
+          sessionId,
+        })
+      ),
+    staleTime: 0,
+    gcTime: 1000 * 60 * 10,
+    enabled: Boolean(viewerContextId && open && sessionScopeKey),
+  })
+
+  const saveTreeLabelMutation = useMutation({
+    mutationFn: async ({
+      entryId,
+      label,
+    }: {
+      entryId: string
+      label: string
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<SessionTreeData>(
+        buildRequestUrl("/api/session/tree/label", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entryId, label }),
+        }
+      )
+    },
+    onSuccess: (response) => {
+      queryClient.setQueryData(queryKey, response)
+    },
+  })
+
+  const navigateTreeNodeMutation = useMutation({
+    mutationFn: async ({
+      targetId,
+      summarize,
+      customInstructions,
+    }: {
+      targetId: string
+      summarize?: boolean
+      customInstructions?: string
+    }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<NavigateSessionTreeData>(
+        buildRequestUrl("/api/session/tree", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            targetId,
+            summarize: Boolean(summarize),
+            customInstructions,
+          }),
+        }
+      )
+    },
+  })
+
+  const openDialog = async () => {
+    if (!viewerContextId) return
+
+    setTreeQuery("")
+    setOpenState(true)
+    await queryClient.invalidateQueries({
+      queryKey,
+      exact: true,
+      refetchType: "active",
+    })
+  }
+
+  const saveTreeLabel = async () => {
+    if (!viewerContextId || !selectedTreeNodeId) return
+
+    try {
+      await saveTreeLabelMutation.mutateAsync({
+        entryId: selectedTreeNodeId,
+        label: selectedTreeNodeLabel,
+      })
+      toast.success("Saved tree label")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save label"
+      )
+    }
+  }
+
+  const navigateTreeNode = async (
+    targetId: string,
+    options?: TreeNavigateOptions
+  ) => {
+    if (!viewerContextId) return
+
+    try {
+      const response = await navigateTreeNodeMutation.mutateAsync({
+        targetId,
+        summarize: options?.summarize,
+        customInstructions: options?.customInstructions,
+      })
+      if (response.aborted) {
+        toast.info("Branch summarization cancelled")
+        return
+      }
+      if (response.cancelled) {
+        toast.info("Tree navigation cancelled")
+        return
+      }
+      setOpenState(false)
+      toast.success(
+        options?.summarize
+          ? "Continued from summarized branch"
+          : "Moved session tree cursor"
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to navigate tree"
+      )
+    }
+  }
+
+  React.useEffect(() => {
+    if (!open || !treeQueryResult.error) return
+
+    toast.error(
+      treeQueryResult.error instanceof Error
+        ? treeQueryResult.error.message
+        : "Failed to load tree"
+    )
+  }, [open, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
+
+  const treeData = treeQueryResult.data ?? null
+  const flatTree = treeData ? flattenTree(treeData.tree) : []
+  const treeLeafId = treeData?.leafId ?? null
+
+  React.useEffect(() => {
+    if (!open || !treeData) return
+
+    const flat = flattenTree(treeData.tree)
+    setSelectedTreeNodeId((current) => {
+      if (current && flat.some((entry) => entry.id === current)) {
+        return current
+      }
+      return treeData.leafId
+    })
+  }, [treeData, open])
+
+  React.useEffect(() => {
+    if (!treeData) return
+
+    const flat = flattenTree(treeData.tree)
+    const fallbackId = selectedTreeNodeId || treeData.leafId
+    const selected = flat.find((entry) => entry.id === fallbackId)
+    setSelectedTreeNodeLabel(selected?.label || "")
+  }, [selectedTreeNodeId, treeData])
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: openDialog,
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    [queryKey, viewerContextId]
+  )
+
+  const treeLoading = Boolean(
+    treeQueryResult.isPending && !treeQueryResult.data
+  )
+  const treeSubmitting =
+    saveTreeLabelMutation.isPending || navigateTreeNodeMutation.isPending
+
+  return (
+    <AppShellTreeDialog
+      open={open}
+      onOpenChange={setOpenState}
+      treeLoading={treeLoading}
+      treeSubmitting={treeSubmitting}
+      treeLeafId={treeLeafId}
+      treeSummaryAvailable={treeSummaryAvailable}
+      treeQuery={treeQuery}
+      onTreeQueryChange={setTreeQuery}
+      flatTree={flatTree}
+      selectedTreeNodeId={selectedTreeNodeId}
+      onSelectedTreeNodeIdChange={setSelectedTreeNodeId}
+      selectedTreeNodeLabel={selectedTreeNodeLabel}
+      onSelectedTreeNodeLabelChange={setSelectedTreeNodeLabel}
+      onNavigateTreeNode={(targetId, options) => {
+        void navigateTreeNode(targetId, options)
+      }}
+      onSaveTreeLabel={() => {
+        void saveTreeLabel()
+      }}
+    />
   )
 }

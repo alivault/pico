@@ -41,7 +41,7 @@ type UseAppShellShortcutsOptions = {
   settingsOpen: boolean
   shortcutActionsRef: React.MutableRefObject<ShortcutActions>
   sidebarSessionEntriesByKey: Map<string, SessionListEntry>
-  treeOpen: boolean
+  treeOpenRef: React.MutableRefObject<boolean>
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -87,7 +87,7 @@ export function useAppShellShortcuts({
   settingsOpen,
   shortcutActionsRef,
   sidebarSessionEntriesByKey,
-  treeOpen,
+  treeOpenRef,
 }: UseAppShellShortcutsOptions) {
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -97,7 +97,7 @@ export function useAppShellShortcuts({
         renameOpenRef.current ||
         deleteOpenRef.current ||
         forkOpenRef.current ||
-        treeOpen ||
+        treeOpenRef.current ||
         settingsOpen ||
         commandPaletteOpen ||
         hasPendingUiRequest
@@ -381,6 +381,6 @@ export function useAppShellShortcuts({
     settingsOpen,
     shortcutActionsRef,
     sidebarSessionEntriesByKey,
-    treeOpen,
+    treeOpenRef,
   ])
 }

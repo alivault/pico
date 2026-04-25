@@ -1,39 +1,24 @@
 import * as React from "react"
-import { useMutation, type QueryClient } from "@tanstack/react-query"
+import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { SessionState } from "@/lib/pi-web"
 import type {
   DeleteSessionResponse,
   ExtensionUiEvent,
-  NavigateSessionTreeResponse,
   RenameSessionResponse,
   SessionListEntry,
-  SessionTreeResponse,
   UiRequestResponse,
 } from "@/lib/pi-web-api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
-import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import { sessionListEntryKey } from "@/lib/pi-web"
-
-type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
-type NavigateSessionTreeData = Extract<
-  NavigateSessionTreeResponse,
-  { ok: true }
->
 
 type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
-  currentSessionQueryScope: string
   sessionState: SessionState
-  selectedTreeNodeId: string | null
-  selectedTreeNodeLabel: string
   pendingUiRequest: ExtensionUiEvent | null
-  queryClient: QueryClient
-  setTreeOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setTreeQuery: React.Dispatch<React.SetStateAction<string>>
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -48,14 +33,8 @@ type UseAppShellSessionMutationsOptions = {
 export function useAppShellSessionMutations({
   viewerContextId,
   activeSessionId,
-  currentSessionQueryScope,
   sessionState,
-  selectedTreeNodeId,
-  selectedTreeNodeLabel,
   pendingUiRequest,
-  queryClient,
-  setTreeOpen,
-  setTreeQuery,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
@@ -235,145 +214,6 @@ export function useAppShellSessionMutations({
     }
   }, [compactMutation, setRunningSlashCommand, viewerContextId])
 
-  const openTreeDialog = React.useCallback(async () => {
-    if (!viewerContextId) return
-    setTreeOpen(true)
-    setTreeQuery("")
-    await queryClient.invalidateQueries({
-      queryKey: piWebQueryKeys.sessionTree(
-        viewerContextId,
-        currentSessionQueryScope
-      ),
-      exact: true,
-      refetchType: "active",
-    })
-  }, [
-    currentSessionQueryScope,
-    queryClient,
-    setTreeOpen,
-    setTreeQuery,
-    viewerContextId,
-  ])
-
-  const saveTreeLabelMutation = useMutation({
-    mutationFn: async ({
-      entryId,
-      label,
-    }: {
-      entryId: string
-      label: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<SessionTreeData>(
-        buildRequestUrl("/api/session/tree/label", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entryId, label }),
-        }
-      )
-    },
-    onSuccess: (response) => {
-      queryClient.setQueryData(
-        piWebQueryKeys.sessionTree(viewerContextId, currentSessionQueryScope),
-        response
-      )
-    },
-  })
-
-  const saveTreeLabel = React.useCallback(async () => {
-    if (!viewerContextId || !selectedTreeNodeId) return
-    try {
-      await saveTreeLabelMutation.mutateAsync({
-        entryId: selectedTreeNodeId,
-        label: selectedTreeNodeLabel,
-      })
-      toast.success("Saved tree label")
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save label"
-      )
-    }
-  }, [
-    saveTreeLabelMutation,
-    selectedTreeNodeId,
-    selectedTreeNodeLabel,
-    viewerContextId,
-  ])
-
-  const navigateTreeNodeMutation = useMutation({
-    mutationFn: async ({
-      targetId,
-      summarize,
-      customInstructions,
-    }: {
-      targetId: string
-      summarize?: boolean
-      customInstructions?: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<NavigateSessionTreeData>(
-        buildRequestUrl("/api/session/tree", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            targetId,
-            summarize: Boolean(summarize),
-            customInstructions,
-          }),
-        }
-      )
-    },
-  })
-
-  const navigateTreeNode = React.useCallback(
-    async (
-      targetId: string,
-      options?: { summarize?: boolean; customInstructions?: string }
-    ) => {
-      if (!viewerContextId) return
-      try {
-        const response = await navigateTreeNodeMutation.mutateAsync({
-          targetId,
-          summarize: options?.summarize,
-          customInstructions: options?.customInstructions,
-        })
-        if (response.aborted) {
-          toast.info("Branch summarization cancelled")
-          return
-        }
-        if (response.cancelled) {
-          toast.info("Tree navigation cancelled")
-          return
-        }
-        setTreeOpen(false)
-        toast.success(
-          options?.summarize
-            ? "Continued from summarized branch"
-            : "Moved session tree cursor"
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to navigate tree"
-        )
-      }
-    },
-    [navigateTreeNodeMutation, setTreeOpen, viewerContextId]
-  )
-
   const renameSessionMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
       if (!viewerContextId) {
@@ -543,17 +383,12 @@ export function useAppShellSessionMutations({
   return {
     cycleThinkingLevel,
     deleteSessions,
-    navigateTreeNode,
-    openTreeDialog,
     renameSessionPath,
     resolveUiRequest,
     runCompact,
-    saveTreeLabel,
     setModel,
     setThinkingBlocksHidden,
     setThinkingLevel,
     toggleHideThinking,
-    treeSubmitting:
-      saveTreeLabelMutation.isPending || navigateTreeNodeMutation.isPending,
   }
 }

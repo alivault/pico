@@ -1,31 +1,11 @@
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
-import type { TreeNavigateOptions } from "@/features/pi-web/app-shell-dialog-types"
-import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
+import type { ThemeMode } from "@/lib/pi-web"
 import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 
 import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dialog"
-import { AppShellTreeDialog } from "@/features/pi-web/app-shell-tree-dialog"
 import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 
 type AppShellDialogsProps = {
-  treeOpen: boolean
-  onTreeOpenChange: (open: boolean) => void
-  treeLoading: boolean
-  treeSubmitting: boolean
-  treeLeafId: string | null
-  treeSummaryAvailable: boolean
-  treeQuery: string
-  onTreeQueryChange: (value: string) => void
-  flatTree: Array<FlatTreeNode>
-  selectedTreeNodeId: string | null
-  onSelectedTreeNodeIdChange: (value: string | null) => void
-  selectedTreeNodeLabel: string
-  onSelectedTreeNodeLabelChange: (value: string) => void
-  onNavigateTreeNode: (
-    targetId: string,
-    options?: TreeNavigateOptions
-  ) => Promise<void> | void
-  onSaveTreeLabel: () => Promise<void> | void
   settingsOpen: boolean
   onSettingsOpenChange: (open: boolean) => void
   currentTheme: ThemeMode
@@ -48,21 +28,6 @@ type AppShellDialogsProps = {
 }
 
 export function AppShellDialogs({
-  treeOpen,
-  onTreeOpenChange,
-  treeLoading,
-  treeSubmitting,
-  treeLeafId,
-  treeSummaryAvailable,
-  treeQuery,
-  onTreeQueryChange,
-  flatTree,
-  selectedTreeNodeId,
-  onSelectedTreeNodeIdChange,
-  selectedTreeNodeLabel,
-  onSelectedTreeNodeLabelChange,
-  onNavigateTreeNode,
-  onSaveTreeLabel,
   settingsOpen,
   onSettingsOpenChange,
   currentTheme,
@@ -85,24 +50,6 @@ export function AppShellDialogs({
 }: AppShellDialogsProps) {
   return (
     <>
-      <AppShellTreeDialog
-        open={treeOpen}
-        onOpenChange={onTreeOpenChange}
-        treeLoading={treeLoading}
-        treeSubmitting={treeSubmitting}
-        treeLeafId={treeLeafId}
-        treeSummaryAvailable={treeSummaryAvailable}
-        treeQuery={treeQuery}
-        onTreeQueryChange={onTreeQueryChange}
-        flatTree={flatTree}
-        selectedTreeNodeId={selectedTreeNodeId}
-        onSelectedTreeNodeIdChange={onSelectedTreeNodeIdChange}
-        selectedTreeNodeLabel={selectedTreeNodeLabel}
-        onSelectedTreeNodeLabelChange={onSelectedTreeNodeLabelChange}
-        onNavigateTreeNode={onNavigateTreeNode}
-        onSaveTreeLabel={onSaveTreeLabel}
-      />
-
       <AppShellSettingsDialog
         open={settingsOpen}
         onOpenChange={onSettingsOpenChange}

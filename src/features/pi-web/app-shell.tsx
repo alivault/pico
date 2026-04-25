@@ -1,5 +1,4 @@
 import * as React from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowDownIcon,
   ArrowUpToLineIcon,
@@ -25,7 +24,6 @@ import type {
   FileCompletionsResponse,
   PathCompletionsResponse,
   SessionListEntry,
-  SessionTreeResponse,
   SessionsEvent,
 } from "@/lib/pi-web-api"
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
@@ -67,6 +65,10 @@ import {
 } from "@/features/pi-web/app-shell-add-directory-dialog"
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
+  AppShellTreeDialogController,
+  type AppShellTreeDialogHandle,
+} from "@/features/pi-web/app-shell-tree-dialog"
+import {
   DeleteSessionsDialogController,
   ForkSessionDialogController,
   RenameSessionDialogController,
@@ -103,10 +105,7 @@ import {
   GitTabStatusText,
   HeaderGitStatusText,
 } from "@/features/pi-web/git-panel"
-import {
-  piWebQueryKeys,
-  piWebSessionScopeKey,
-} from "@/features/pi-web/query-keys"
+import { piWebSessionScopeKey } from "@/features/pi-web/query-keys"
 import { RelativeTime } from "@/features/pi-web/relative-time"
 import { AppSidebar } from "@/features/pi-web/sidebar"
 import {
@@ -130,7 +129,6 @@ import {
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
   createInitialSessionState,
-  flattenTree,
   getSessionTitle,
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
@@ -188,8 +186,6 @@ type DirectorySessionsIndexesData = Extract<
   DirectorySessionsIndexesResponse,
   { ok: true }
 >
-type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
-
 function sessionScrollKey(sessionState: {
   draft: boolean
   sessionFile?: string
@@ -344,31 +340,6 @@ function clearUnreadForActiveSidebarSession(
   }
 
   return changed ? next : current
-}
-
-type SessionTreeQueryOptions = {
-  viewerContextId: string
-  sessionScopeKey: string
-  sessionId?: string
-}
-
-function sessionTreeQueryOptions({
-  viewerContextId,
-  sessionScopeKey,
-  sessionId,
-}: SessionTreeQueryOptions) {
-  return {
-    queryKey: piWebQueryKeys.sessionTree(viewerContextId, sessionScopeKey),
-    queryFn: () =>
-      fetchJson<SessionTreeData>(
-        buildRequestUrl("/api/session/tree", {
-          contextId: viewerContextId,
-          sessionId,
-        })
-      ),
-    staleTime: 0,
-    gcTime: 1000 * 60 * 10,
-  }
 }
 
 function useLatestRef<T>(value: T) {
@@ -1299,12 +1270,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [treeOpen, setTreeOpen] = React.useState(false)
-  const [treeQuery, setTreeQuery] = React.useState("")
-  const [selectedTreeNodeId, setSelectedTreeNodeId] = React.useState<
-    string | null
-  >(null)
-  const [selectedTreeNodeLabel, setSelectedTreeNodeLabel] = React.useState("")
   const [pendingUiRequest, setPendingUiRequest] =
     React.useState<ExtensionUiEvent | null>(null)
   const [pendingUiValue, setPendingUiValue] = React.useState("")
@@ -1332,6 +1297,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const deleteOpenRef = React.useRef(false)
   const forkDialogRef = React.useRef<ForkSessionDialogHandle | null>(null)
   const forkOpenRef = React.useRef(false)
+  const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
+  const treeOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1429,7 +1396,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
-  const queryClient = useQueryClient()
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionQueryScope = sessionScrollKey(sessionState)
@@ -1450,14 +1416,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const loadingSessionSummary = activeLoadingSessionId
     ? sidebarSessions.find((session) => session.id === activeLoadingSessionId)
     : undefined
-  const treeQueryResult = useQuery({
-    ...sessionTreeQueryOptions({
-      viewerContextId,
-      sessionScopeKey: currentSessionQueryScope,
-      sessionId: activeSessionId,
-    }),
-    enabled: Boolean(viewerContextId && treeOpen && currentSessionQueryScope),
-  })
   const currentSessionTitle = getSessionTitle({
     title:
       sessionState.sessionName || sessionState.firstMessage || "New session",
@@ -1483,10 +1441,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     ? displaySessionTitle
     : sessionState.uiState.title?.trim() ||
       (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
-  const treeData = treeQueryResult.data ?? null
-  const treeLoading = Boolean(
-    treeQueryResult.isPending && !treeQueryResult.data
-  )
 
   React.useEffect(() => {
     const previousSessionId = previousRouteSessionIdRef.current
@@ -1639,6 +1593,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const openForkDialog = async () => {
     await forkDialogRef.current?.open()
+  }
+
+  const openTreeDialog = async () => {
+    await treeDialogRef.current?.open()
   }
 
   const focusSessionSearch = () => {
@@ -1822,38 +1780,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       return nextDirectories
     })
   }, [sessionId, sessionState.cwd, sessionState.draft, sessionState.sessionId])
-
-  React.useEffect(() => {
-    if (!treeOpen || !treeQueryResult.error) return
-
-    toast.error(
-      treeQueryResult.error instanceof Error
-        ? treeQueryResult.error.message
-        : "Failed to load tree"
-    )
-    setTreeOpen(false)
-  }, [treeOpen, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
-
-  React.useEffect(() => {
-    if (!treeOpen || !treeData) return
-
-    const flat = flattenTree(treeData.tree)
-    setSelectedTreeNodeId((current) => {
-      if (current && flat.some((entry) => entry.id === current)) {
-        return current
-      }
-      return treeData.leafId
-    })
-  }, [treeData, treeOpen])
-
-  React.useEffect(() => {
-    if (!treeData) return
-
-    const flat = flattenTree(treeData.tree)
-    const fallbackId = selectedTreeNodeId || treeData.leafId
-    const selected = flat.find((entry) => entry.id === fallbackId)
-    setSelectedTreeNodeLabel(selected?.label || "")
-  }, [selectedTreeNodeId, treeData])
 
   const defaultNewSessionDirectory =
     sessionState.cwd?.trim() ||
@@ -2047,28 +1973,18 @@ const AppShellSessionWorkspace = React.forwardRef<
   const {
     cycleThinkingLevel,
     deleteSessions,
-    navigateTreeNode,
-    openTreeDialog,
     renameSessionPath,
     resolveUiRequest,
     runCompact,
-    saveTreeLabel,
     setModel,
     setThinkingBlocksHidden,
     setThinkingLevel,
     toggleHideThinking,
-    treeSubmitting,
   } = useAppShellSessionMutations({
     viewerContextId,
     activeSessionId,
-    currentSessionQueryScope,
     sessionState,
-    selectedTreeNodeId,
-    selectedTreeNodeLabel,
     pendingUiRequest,
-    queryClient,
-    setTreeOpen,
-    setTreeQuery,
     setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor,
     setRunningSlashCommand,
@@ -2173,8 +2089,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
-  const flatTree = treeData ? flattenTree(treeData.tree) : []
-  const treeLeafId = treeData?.leafId ?? null
   const treeSummaryAvailable = sessionState.availableModels.length > 0
 
   const handleThemeChange = (value: ThemeMode) => {
@@ -2537,7 +2451,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     settingsOpen,
     shortcutActionsRef,
     sidebarSessionEntriesByKey,
-    treeOpen,
+    treeOpenRef,
   })
 
   React.useImperativeHandle(
@@ -2902,26 +2816,16 @@ const AppShellSessionWorkspace = React.forwardRef<
         sessionId={activeSessionId}
       />
 
-      <AppShellDialogs
-        treeOpen={treeOpen}
-        onTreeOpenChange={setTreeOpen}
-        treeLoading={treeLoading}
-        treeSubmitting={treeSubmitting}
-        treeLeafId={treeLeafId}
+      <AppShellTreeDialogController
+        ref={treeDialogRef}
+        openStateRef={treeOpenRef}
+        viewerContextId={viewerContextId}
+        sessionScopeKey={currentSessionQueryScope}
+        sessionId={activeSessionId}
         treeSummaryAvailable={treeSummaryAvailable}
-        treeQuery={treeQuery}
-        onTreeQueryChange={setTreeQuery}
-        flatTree={flatTree}
-        selectedTreeNodeId={selectedTreeNodeId}
-        onSelectedTreeNodeIdChange={setSelectedTreeNodeId}
-        selectedTreeNodeLabel={selectedTreeNodeLabel}
-        onSelectedTreeNodeLabelChange={setSelectedTreeNodeLabel}
-        onNavigateTreeNode={(targetId, options) => {
-          void navigateTreeNode(targetId, options)
-        }}
-        onSaveTreeLabel={() => {
-          void saveTreeLabel()
-        }}
+      />
+
+      <AppShellDialogs
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
         currentTheme={currentTheme}
