@@ -479,7 +479,9 @@ export function useAppShellSessionSync({
           setComposerImages((current) => (current.length === 0 ? current : []))
         }
 
-        replaceComposerDraftRef.current(nextPromptText, nextState)
+        if (!preserveLocalPrompt) {
+          replaceComposerDraftRef.current(nextPromptText, nextState)
+        }
         lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
         const nextPendingMessages = normalizePendingMessages(payload)
         if (nextPendingMessages) {

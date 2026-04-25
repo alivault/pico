@@ -39,12 +39,6 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type WorkingState = {
-  label: string
-  summary?: string
-  done?: boolean
-}
-
 export type ComposerPanelHandle = {
   focusPrompt: (options?: FocusOptions) => void
   openModelPicker: () => void
@@ -65,7 +59,6 @@ type ComposerPanelProps = {
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
-  workingState: WorkingState | null
   fileInputRef: React.RefObject<HTMLInputElement | null>
   slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
@@ -268,7 +261,6 @@ function ComposerPromptEditor({
   const [hasDraftText, setHasDraftText] = React.useState(
     hasDraftTextRef.current
   )
-  const draftSyncTimeoutRef = React.useRef<number | null>(null)
   const refreshAssistStateRef = React.useRef<() => void>(() => {})
 
   const syncDraftToParent = (text: string, skillName?: string) => {
@@ -276,14 +268,7 @@ function ComposerPromptEditor({
   }
 
   const scheduleDraftSync = (text: string, skillName?: string) => {
-    if (draftSyncTimeoutRef.current != null) {
-      window.clearTimeout(draftSyncTimeoutRef.current)
-    }
-
-    draftSyncTimeoutRef.current = window.setTimeout(() => {
-      draftSyncTimeoutRef.current = null
-      syncDraftToParent(text, skillName)
-    }, 120)
+    syncDraftToParent(text, skillName)
   }
 
   const applyDraft = (
@@ -320,10 +305,6 @@ function ComposerPromptEditor({
     refreshAssistStateRef.current()
 
     if (options?.immediate) {
-      if (draftSyncTimeoutRef.current != null) {
-        window.clearTimeout(draftSyncTimeoutRef.current)
-        draftSyncTimeoutRef.current = null
-      }
       syncDraftToParent(text, skillName)
       return
     }
@@ -379,14 +360,6 @@ function ComposerPromptEditor({
     dismissMenus()
     refreshAssistStateRef.current()
   }, [composerSkill, composerSyncNonce, composerText, dismissMenus, promptRef])
-
-  React.useEffect(() => {
-    return () => {
-      if (draftSyncTimeoutRef.current != null) {
-        window.clearTimeout(draftSyncTimeoutRef.current)
-      }
-    }
-  }, [])
 
   const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn

@@ -2797,7 +2797,6 @@ const AppShellSessionWorkspace = React.forwardRef<
               isSubmitting={isSubmitting}
               isStreaming={sessionState.streaming}
               awaitingFirstTurn={awaitingFirstTurn}
-              workingState={workingState}
               fileInputRef={fileInputRef}
               slashCommands={slashCommands}
               onComposerTextChange={syncComposerDraft}
