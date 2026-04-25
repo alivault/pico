@@ -89,6 +89,7 @@ export async function activateContextSession<
   getSessionPath: (entry: E) => string
   sendStateToContext: (context: C) => void
   sendSessionsToContext: (context: C) => Promise<void>
+  afterActiveChanged?: (context: C) => Promise<void>
   notify?: boolean
 }) {
   const {
@@ -100,6 +101,7 @@ export async function activateContextSession<
     getSessionPath,
     sendStateToContext,
     sendSessionsToContext,
+    afterActiveChanged,
     notify = true,
   } = options
 
@@ -115,6 +117,7 @@ export async function activateContextSession<
   if (isDraftEntry(entry)) {
     context.draftKey = entry.key
   }
+  await afterActiveChanged?.(context)
   context.unreadFinished.delete(getSessionPath(entry))
   if (!notify) {
     return

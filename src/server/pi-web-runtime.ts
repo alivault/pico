@@ -717,6 +717,26 @@ export class PiWebRuntime {
     return Boolean(entry.draft) && !this.hasVisibleSessionContent(entry)
   }
 
+  private isSessionEntryReferenced(entry: SessionEntry) {
+    for (const context of this.contexts.values()) {
+      if (context.activeKey === entry.key || context.draftKey === entry.key) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private async disposeUnreferencedSessionEntries() {
+    const candidates = [...this.sessionEntries.values()]
+
+    for (const entry of candidates) {
+      if (this.sessionEntries.get(entry.key) !== entry) continue
+      if (this.isSessionEntryReferenced(entry)) continue
+      await this.disposeSessionEntry(entry)
+    }
+  }
+
   private touchSessionEntry(
     entry: SessionEntry,
     value: Date | string = new Date()
@@ -1547,6 +1567,8 @@ export class PiWebRuntime {
         this.sendStateToContext(activeContext),
       sendSessionsToContext: async (activeContext) =>
         await this.sendSessionsToContext(activeContext),
+      afterActiveChanged: async () =>
+        await this.disposeUnreferencedSessionEntries(),
       notify: options?.notify,
     })
     if (options?.notify !== false) {
@@ -2641,12 +2663,9 @@ export class PiWebRuntime {
         cleanup = () => {
           this.closeSseClient(context, client)
           if (context.clients.size === 0) {
-            const draftEntry = context.draftKey
-              ? this.sessionEntries.get(context.draftKey)
-              : undefined
             this.contexts.delete(context.id)
             this.syncGitWatchDirectories()
-            void this.disposeDraftIfUnused(draftEntry)
+            void this.disposeUnreferencedSessionEntries()
           }
         }
 
