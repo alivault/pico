@@ -42,6 +42,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -363,99 +369,84 @@ function SidebarSessionItem({
   onRenameSession,
   onDeleteSession,
 }: SidebarSessionItemProps) {
-  const [menuOpen, setMenuOpen] = React.useState(false)
   const timestamp = entry.lastUserMessageAt || entry.modified
   const timeAgo = relativeTime(timestamp).replace(/ ago$/, "")
   const exactTimestamp = timestamp
     ? new Date(timestamp).toLocaleString()
     : undefined
   const showUnread = Boolean(entry.unread) && !entry.streaming
+  const hasSessionActions =
+    Boolean(entry.path) && (onRenameSession || onDeleteSession) && !overlay
+
+  const sessionButton = (
+    <SidebarMenuButton
+      type="button"
+      data-sidebar-session-item
+      data-session-key={entryKey}
+      isActive={isActive}
+      className={cn(
+        "h-auto min-w-0 items-center gap-2 py-2 pr-2",
+        (isActive || isSelected) &&
+          "bg-sidebar-accent text-sidebar-accent-foreground"
+      )}
+      onClick={(event) => {
+        onSessionClick?.(entry, {
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+        })
+        if (isMobile) {
+          setOpenMobile(false)
+        }
+      }}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {entry.streaming ? (
+          <Spinner
+            className="size-3.5 shrink-0 text-sidebar-foreground/60"
+            aria-label="Session streaming"
+          />
+        ) : showUnread ? (
+          <span className="size-2 shrink-0 rounded-full bg-primary" />
+        ) : null}
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {entry.title}
+        </span>
+      </span>
+      {timeAgo ? (
+        <span
+          className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
+          title={exactTimestamp}
+        >
+          {timeAgo}
+        </span>
+      ) : null}
+    </SidebarMenuButton>
+  )
 
   return (
     <SidebarMenuItem>
-      <div className={cn("group/session relative", menuOpen && "menu-open")}>
-        <SidebarMenuButton
-          type="button"
-          data-sidebar-session-item
-          data-session-key={entryKey}
-          isActive={isActive}
-          className={cn(
-            "h-auto min-w-0 items-center gap-2 py-2 pr-2 transition-[padding] group-focus-within/session:pr-10 group-hover/session:pr-10",
-            menuOpen && "pr-10",
-            (isActive || isSelected) &&
-              "bg-sidebar-accent text-sidebar-accent-foreground"
-          )}
-          onClick={(event) => {
-            onSessionClick?.(entry, {
-              ctrlKey: event.ctrlKey,
-              shiftKey: event.shiftKey,
-            })
-            if (isMobile) {
-              setOpenMobile(false)
-            }
-          }}
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            {entry.streaming ? (
-              <Spinner
-                className="size-3.5 shrink-0 text-sidebar-foreground/60"
-                aria-label="Session streaming"
-              />
-            ) : showUnread ? (
-              <span className="size-2 shrink-0 rounded-full bg-primary" />
+      {hasSessionActions ? (
+        <ContextMenu>
+          <ContextMenuTrigger render={sessionButton} />
+          <ContextMenuContent className="w-40">
+            {onRenameSession ? (
+              <ContextMenuItem onClick={() => onRenameSession(entry)}>
+                Rename
+              </ContextMenuItem>
             ) : null}
-            <span className="min-w-0 flex-1 truncate font-medium">
-              {entry.title}
-            </span>
-          </span>
-          {timeAgo ? (
-            <span
-              className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
-              title={exactTimestamp}
-            >
-              {timeAgo}
-            </span>
-          ) : null}
-        </SidebarMenuButton>
-
-        {entry.path && (onRenameSession || onDeleteSession) && !overlay ? (
-          <div
-            className={cn(
-              "pointer-events-none absolute top-2 right-2 opacity-0 transition-opacity group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100 group-hover/session:pointer-events-auto group-hover/session:opacity-100",
-              menuOpen && "pointer-events-auto opacity-100"
-            )}
-          >
-            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    title={`Session actions for ${entry.title}`}
-                  />
-                }
+            {onDeleteSession ? (
+              <ContextMenuItem
+                variant="destructive"
+                onClick={() => onDeleteSession(entry)}
               >
-                <EllipsisIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                {onRenameSession ? (
-                  <DropdownMenuItem onClick={() => onRenameSession(entry)}>
-                    Rename
-                  </DropdownMenuItem>
-                ) : null}
-                {onDeleteSession ? (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => onDeleteSession(entry)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : null}
-      </div>
+                Delete
+              </ContextMenuItem>
+            ) : null}
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        sessionButton
+      )}
     </SidebarMenuItem>
   )
 }
