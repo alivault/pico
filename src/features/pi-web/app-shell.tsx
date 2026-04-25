@@ -2173,6 +2173,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     ...pendingDraftFollowUpMessages,
     ...pendingMessages,
   ]
+  const composerDisabled = isSessionViewLoading
+  const displayedPendingMessages = composerDisabled
+    ? []
+    : currentPendingMessages
+  const displayedComposerImages = composerDisabled ? [] : composerImages
+  const displayedComposerText = composerDisabled ? "" : composerDraftSeed.text
+  const displayedComposerSkill = composerDisabled
+    ? undefined
+    : composerDraftSeed.skillName
 
   const removePendingDraftFollowUp = (pendingId: string) => {
     if (
@@ -2926,10 +2935,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
             <ComposerPanel
               ref={composerPanelRef}
-              currentPendingMessages={currentPendingMessages}
-              composerImages={composerImages}
-              composerText={composerDraftSeed.text}
-              composerSkill={composerDraftSeed.skillName}
+              currentPendingMessages={displayedPendingMessages}
+              composerImages={displayedComposerImages}
+              composerText={displayedComposerText}
+              composerSkill={displayedComposerSkill}
               composerSyncNonce={composerDraftSeed.syncNonce}
               centerMessages={centerMessages}
               availableModels={sessionState.availableModels}
@@ -2937,46 +2946,61 @@ const AppShellSessionWorkspace = React.forwardRef<
               thinkingLevel={sessionState.thinkingLevel}
               availableThinkingLevels={sessionState.availableThinkingLevels}
               contextUsage={
-                isSessionViewLoading ? undefined : sessionState.contextUsage
+                composerDisabled ? undefined : sessionState.contextUsage
               }
-              isSubmitting={isSubmitting}
-              isStreaming={sessionState.streaming}
-              awaitingFirstTurn={awaitingFirstTurn}
+              isSubmitting={composerDisabled ? false : isSubmitting}
+              isStreaming={composerDisabled ? false : sessionState.streaming}
+              awaitingFirstTurn={composerDisabled ? false : awaitingFirstTurn}
+              disabled={composerDisabled}
               fileInputRef={fileInputRef}
               slashCommands={slashCommands}
-              onComposerTextChange={syncComposerDraft}
+              onComposerTextChange={(value) => {
+                if (composerDisabled) return
+                syncComposerDraft(value)
+              }}
               onPickImages={(files) => {
+                if (composerDisabled) return
                 void onPickImages(files)
               }}
               onRemoveComposerImage={(index) => {
+                if (composerDisabled) return
                 setComposerImages((current) =>
                   current.filter((_, imageIndex) => imageIndex !== index)
                 )
               }}
               onSubmitPrompt={(streamingBehavior) => {
+                if (composerDisabled) return
                 void submitPrompt(streamingBehavior)
               }}
               onAbort={() => {
+                if (composerDisabled) return
                 void abortSession()
               }}
               onRemovePendingMessage={(pendingId) => {
+                if (composerDisabled) return
                 if (removePendingDraftFollowUp(pendingId)) return
                 void removePendingMessage(pendingId)
               }}
               onReorderPending={(pendingId, direction) => {
+                if (composerDisabled) return
                 if (reorderPendingDraftFollowUp(pendingId, direction)) return
                 void reorderPending(pendingId, direction)
               }}
               onRunBuiltinSlashCommand={(name, args) => {
+                if (composerDisabled) return
                 void runBuiltinSlashCommand(name, args)
               }}
               onSelectModel={(value) => {
+                if (composerDisabled) return
                 void setModel(value)
               }}
               onSelectThinkingLevel={(level) => {
+                if (composerDisabled) return
                 void setThinkingLevel(level)
               }}
               requestPathCompletions={async (prefix) => {
+                if (composerDisabled) return []
+
                 const response = await fetchJson<PathCompletionsResponse>(
                   buildRequestUrl("/api/path-completions", {
                     contextId: viewerContextId,
@@ -2991,6 +3015,8 @@ const AppShellSessionWorkspace = React.forwardRef<
                 return isApiErrorResponse(response) ? [] : response.items
               }}
               requestFileCompletions={async (query, isQuotedPrefix) => {
+                if (composerDisabled) return []
+
                 const response = await fetchJson<FileCompletionsResponse>(
                   buildRequestUrl("/api/file-completions", {
                     contextId: viewerContextId,

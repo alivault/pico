@@ -65,6 +65,7 @@ type ComposerPanelProps = {
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
+  disabled?: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
   slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
@@ -92,6 +93,7 @@ type ComposerPromptEditorProps = {
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
+  disabled?: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
   promptRef: React.RefObject<HTMLTextAreaElement | null>
   slashCommands: Array<SlashCommandDescriptor>
@@ -149,6 +151,7 @@ export const ComposerPanel = React.forwardRef<
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
+    disabled = false,
     fileInputRef,
     slashCommands,
     onComposerTextChange,
@@ -190,10 +193,16 @@ export const ComposerPanel = React.forwardRef<
   )
 
   React.useEffect(() => {
+    if (disabled) {
+      setModelPickerOpen(false)
+      setThinkingPickerOpen(false)
+      return
+    }
+
     if (!modelPickerOpen) {
       setModelQuery("")
     }
-  }, [modelPickerOpen])
+  }, [disabled, modelPickerOpen])
 
   const composerColumnClassName = centerMessages
     ? "mx-auto flex w-full max-w-[80ch] flex-col gap-3"
@@ -217,6 +226,7 @@ export const ComposerPanel = React.forwardRef<
             isSubmitting={isSubmitting}
             isStreaming={isStreaming}
             awaitingFirstTurn={awaitingFirstTurn}
+            disabled={disabled}
             fileInputRef={fileInputRef}
             promptRef={promptRef}
             slashCommands={slashCommands}
@@ -242,6 +252,7 @@ export const ComposerPanel = React.forwardRef<
             thinkingLevel={thinkingLevel}
             availableThinkingLevels={availableThinkingLevels}
             contextUsage={contextUsage}
+            disabled={disabled}
             onSelectModel={onSelectModel}
             onSelectThinkingLevel={onSelectThinkingLevel}
           />
@@ -255,7 +266,11 @@ export const ComposerPanel = React.forwardRef<
         accept="image/*"
         multiple
         className="hidden"
-        onChange={(event) => onPickImages(event.target.files)}
+        disabled={disabled}
+        onChange={(event) => {
+          if (disabled) return
+          onPickImages(event.target.files)
+        }}
       />
     </div>
   )
@@ -269,6 +284,7 @@ function ComposerPromptEditor({
   isSubmitting,
   isStreaming,
   awaitingFirstTurn,
+  disabled = false,
   fileInputRef,
   promptRef,
   slashCommands,
@@ -404,6 +420,8 @@ function ComposerPromptEditor({
       }`
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
+    if (disabled) return
+
     const draftText = draftTextRef.current
     const draftSkill = draftSkillRef.current
     const exact = findExactSlashCommand(draftText, slashCommands)
@@ -433,6 +451,8 @@ function ComposerPromptEditor({
   }
 
   const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (disabled) return
+
     const parsed = parseComposerSkillMessage(event.target.value)
     const nextText = parsed.matched ? parsed.text : event.target.value
     const nextSelection = parsed.matched
@@ -451,6 +471,8 @@ function ComposerPromptEditor({
   }
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return
+
     const imageFiles = getClipboardImageFiles(event.clipboardData)
     if (imageFiles.length === 0) return
 
@@ -458,6 +480,11 @@ function ComposerPromptEditor({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) {
+      event.preventDefault()
+      return
+    }
+
     const draftText = draftTextRef.current
     const currentDraftSkill = draftSkillRef.current
     const ctrlShortcut = event.ctrlKey && !event.metaKey
@@ -575,6 +602,7 @@ function ComposerPromptEditor({
           className={
             acceptFollowUps ? "row-span-2 self-end md:row-span-1" : undefined
           }
+          disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlusIcon />
@@ -592,6 +620,7 @@ function ComposerPromptEditor({
                   variant="ghost"
                   className="ml-1 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
                   aria-label={`Remove skill ${formatComposerSkillName(draftSkill)}`}
+                  disabled={disabled}
                   onClick={() =>
                     applyDraft(draftTextRef.current, undefined, {
                       immediate: true,
@@ -614,14 +643,17 @@ function ComposerPromptEditor({
               onSelect={syncSelection}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              disabled={disabled}
               placeholder={
-                acceptFollowUps
-                  ? "Write a follow-up message..."
-                  : draftSkill
-                    ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                    : "Ask anything…"
+                disabled
+                  ? "Loading session…"
+                  : acceptFollowUps
+                    ? "Write a follow-up message..."
+                    : draftSkill
+                      ? `Ask with ${formatComposerSkillName(draftSkill)}…`
+                      : "Ask anything…"
               }
-              className="max-h-[min(40dvh,18rem)] min-h-[22px] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
+              className="max-h-[min(40dvh,18rem)] min-h-[22px] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60 md:text-sm dark:bg-transparent"
             />
           </div>
         </div>
@@ -630,6 +662,7 @@ function ComposerPromptEditor({
           <Button
             size="icon-sm"
             disabled={
+              disabled ||
               blockInitialSubmit ||
               (!hasSubmittableContent && !isStreaming && !slashMenuState)
             }
@@ -652,7 +685,7 @@ function ComposerPromptEditor({
             <Button
               variant="outline"
               size="sm"
-              disabled={!hasSubmittableContent}
+              disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("followUp")}
             >
               <ListEndIcon data-icon="inline-start" />
@@ -661,7 +694,7 @@ function ComposerPromptEditor({
             <Button
               variant="outline"
               size="sm"
-              disabled={!hasSubmittableContent}
+              disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("steer")}
             >
               <ListStartIcon data-icon="inline-start" />
@@ -673,6 +706,7 @@ function ComposerPromptEditor({
                 size="icon-sm"
                 title="Abort"
                 aria-label="Abort"
+                disabled={disabled}
                 onClick={onAbort}
               >
                 <SquareIcon />
@@ -693,7 +727,8 @@ function ComposerPromptEditor({
               />
               <button
                 type="button"
-                className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm"
+                className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={disabled}
                 onClick={() => onRemoveComposerImage(index)}
               >
                 <XIcon className="size-3" />

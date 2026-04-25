@@ -53,6 +53,7 @@ type ComposerPickersProps = {
   thinkingLevel: string
   availableThinkingLevels: Array<string>
   contextUsage?: SessionState["contextUsage"]
+  disabled?: boolean
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
 }
@@ -69,6 +70,7 @@ export function ComposerPickers({
   thinkingLevel,
   availableThinkingLevels,
   contextUsage,
+  disabled = false,
   onSelectModel,
   onSelectThinkingLevel,
 }: ComposerPickersProps) {
@@ -100,12 +102,32 @@ export function ComposerPickers({
     return [...groups.entries()]
   })()
 
+  const handleModelPickerOpenChange = (open: boolean) => {
+    if (disabled && open) return
+    onModelPickerOpenChange(open)
+  }
+
+  const handleThinkingPickerOpenChange = (open: boolean) => {
+    if (disabled && open) return
+    onThinkingPickerOpenChange(open)
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Popover open={modelPickerOpen} onOpenChange={onModelPickerOpenChange}>
+        <Popover
+          open={!disabled && modelPickerOpen}
+          onOpenChange={handleModelPickerOpenChange}
+        >
           <PopoverTrigger
-            render={<Button variant="ghost" size="sm" className="max-w-full" />}
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="max-w-full"
+                disabled={disabled}
+              />
+            }
           >
             <span className="truncate">{model?.name || "Select model"}</span>
             <ChevronDownIcon data-icon="inline-end" />
@@ -129,6 +151,7 @@ export function ComposerPickers({
                           key={value}
                           value={`${entry.provider || ""} ${entry.name || entry.id} ${entry.id}`}
                           onSelect={() => {
+                            if (disabled) return
                             onSelectModel(value)
                             onModelPickerOpenChange(false)
                           }}
@@ -153,11 +176,18 @@ export function ComposerPickers({
         </Popover>
 
         <Popover
-          open={thinkingPickerOpen}
-          onOpenChange={onThinkingPickerOpenChange}
+          open={!disabled && thinkingPickerOpen}
+          onOpenChange={handleThinkingPickerOpenChange}
         >
           <PopoverTrigger
-            render={<Button variant="ghost" size="sm" className="max-w-full" />}
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="max-w-full"
+                disabled={disabled}
+              />
+            }
           >
             <span className="truncate">{thinkingLabel(thinkingLevel)}</span>
             <ChevronDownIcon data-icon="inline-end" />
@@ -171,6 +201,7 @@ export function ComposerPickers({
                       key={level}
                       value={level}
                       onSelect={() => {
+                        if (disabled) return
                         onSelectThinkingLevel(level)
                         onThinkingPickerOpenChange(false)
                       }}
