@@ -146,6 +146,7 @@ export type SessionListEntry = {
   name?: string
   title: string
   modified?: string
+  lastUserMessageAt?: string
   streaming?: boolean
   unread?: boolean
 }

@@ -30,7 +30,7 @@ import {
   type HighlightPayload,
 } from "@/server/pi-web-runtime-highlight"
 import {
-  compareSessionListEntriesByModified,
+  compareSessionListEntriesByLastUserMessage,
   createDirectorySessionRevision,
   getSessionListTitle,
   laterModifiedTimestamp,
@@ -38,6 +38,7 @@ import {
   mergeSessionListEntry,
   normalizeModifiedTimestamp,
   normalizeSessionListTitle,
+  readSessionLastUserMessageTimestamp,
   serializeSessionListEntry,
 } from "@/server/pi-web-runtime-session-list"
 import {
@@ -137,6 +138,7 @@ type SessionEntry = {
   pendingQueueMutation: boolean
   firstMessageHint: string
   modifiedAt?: string
+  lastUserMessageAt?: string
   uiState: SessionUiState
   unsubscribe?: (() => void) | undefined
   restoreSessionMetadataSync?: (() => void) | undefined
@@ -708,6 +710,20 @@ export class PiWebRuntime {
       laterModifiedTimestamp(entry.modifiedAt, nextValue) || nextValue
   }
 
+  private markSessionUserMessage(
+    entry: SessionEntry,
+    value: Date | string = new Date()
+  ) {
+    const nextValue =
+      value instanceof Date
+        ? value.toISOString()
+        : normalizeModifiedTimestamp(value)
+    if (!nextValue) return
+    entry.lastUserMessageAt =
+      laterModifiedTimestamp(entry.lastUserMessageAt, nextValue) || nextValue
+    this.touchSessionEntry(entry, nextValue)
+  }
+
   private async sessionEntryModified(entry: SessionEntry) {
     let modified = laterModifiedTimestamp(entry.modifiedAt)
     if (entry.session.sessionFile) {
@@ -733,6 +749,18 @@ export class PiWebRuntime {
     }
 
     return entry.firstMessageHint.trim()
+  }
+
+  private getSessionLastUserMessageTimestamp(entry: SessionEntry) {
+    let lastValue = laterModifiedTimestamp(entry.lastUserMessageAt)
+
+    for (const message of entry.session.messages) {
+      if (message?.role !== "user") continue
+      lastValue =
+        laterModifiedTimestamp(lastValue, message.timestamp) || lastValue
+    }
+
+    return lastValue
   }
 
   private currentStatePayload(entry: SessionEntry): StateSyncPayload {
@@ -794,14 +822,25 @@ export class PiWebRuntime {
         firstMessage,
       }),
       modified: await this.sessionEntryModified(entry),
+      lastUserMessageAt: this.getSessionLastUserMessageTimestamp(entry),
     }
   }
 
   private async listSessionIndexEntries() {
     const sdk = await this.getSdk()
     try {
-      return (await sdk.SessionManager.listAll()).filter(
+      const sessions = (await sdk.SessionManager.listAll()).filter(
         (entry) => (entry.messageCount ?? 0) > 0
+      )
+
+      return await Promise.all(
+        sessions.map(async (entry) => ({
+          ...entry,
+          lastUserMessageAt: entry.path
+            ? ((await readSessionLastUserMessageTimestamp(entry.path)) ??
+              entry.lastUserMessageAt)
+            : entry.lastUserMessageAt,
+        }))
       )
     } catch (error) {
       console.error("[pi-web] failed to list sessions:", error)
@@ -818,11 +857,11 @@ export class PiWebRuntime {
     })
   }
 
-  private compareSessionListEntriesByModified(
+  private compareSessionListEntriesByLastUserMessage(
     left: SessionListInfoLike,
     right: SessionListInfoLike
   ) {
-    return compareSessionListEntriesByModified(left, right)
+    return compareSessionListEntriesByLastUserMessage(left, right)
   }
 
   private serializeSessionListEntry(
@@ -884,7 +923,7 @@ export class PiWebRuntime {
     }
 
     return sessions.sort((left, right) =>
-      this.compareSessionListEntriesByModified(left, right)
+      this.compareSessionListEntriesByLastUserMessage(left, right)
     )
   }
 
@@ -927,6 +966,7 @@ export class PiWebRuntime {
         firstMessage: entry.firstMessage,
       }),
       modified: normalizeModifiedTimestamp(entry.modified),
+      lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
     }))
 
     return {
@@ -1494,6 +1534,7 @@ export class PiWebRuntime {
       pendingQueueMutation: false,
       firstMessageHint: "",
       modifiedAt: undefined,
+      lastUserMessageAt: undefined,
       uiState: createInitialUiState(),
       unsubscribe: undefined,
       restoreSessionMetadataSync: undefined,
@@ -2496,7 +2537,7 @@ export class PiWebRuntime {
           images,
           queuedStreamingBehavior
         )
-        this.touchSessionEntry(activeEntry)
+        this.markSessionUserMessage(activeEntry)
         activeEntry.pendingUserMessages.push(pendingMessage)
         await this.broadcastEntryState(activeEntry)
 
@@ -2522,7 +2563,7 @@ export class PiWebRuntime {
       }
 
       activeEntry.streamingState = true
-      this.touchSessionEntry(activeEntry)
+      this.markSessionUserMessage(activeEntry)
 
       if (promotedDraft) {
         activeEntry.draft = false

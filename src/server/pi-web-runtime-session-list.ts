@@ -1,9 +1,16 @@
 import { createHash } from "node:crypto"
+import { readFile } from "node:fs/promises"
 
 import type { SessionListInfoLike } from "@/server/pi-sdk-types"
 
+type UnknownRecord = Record<string, unknown>
+
 function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, " ").trim()
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object"
 }
 
 export function normalizeModifiedTimestamp(value: unknown) {
@@ -66,20 +73,71 @@ export function mergeSessionListEntry(
   target.cwd = fallback.cwd || target.cwd
   target.name = fallback.name || target.name
   target.modified = laterModifiedTimestamp(target.modified, fallback.modified)
+  target.lastUserMessageAt = laterModifiedTimestamp(
+    target.lastUserMessageAt,
+    fallback.lastUserMessageAt
+  )
   if (fallback.firstMessage) {
     target.firstMessage = fallback.firstMessage
   }
   return target
 }
 
-export function compareSessionListEntriesByModified(
+export function sessionListLastUserMessageTimestampValue(
+  entry: SessionListInfoLike
+) {
+  return (
+    modifiedTimestampValue(entry.lastUserMessageAt) ||
+    modifiedTimestampValue(entry.modified)
+  )
+}
+
+export function compareSessionListEntriesByLastUserMessage(
   left: SessionListInfoLike,
   right: SessionListInfoLike
 ) {
   return (
+    sessionListLastUserMessageTimestampValue(right) -
+      sessionListLastUserMessageTimestampValue(left) ||
     modifiedTimestampValue(right.modified) -
-    modifiedTimestampValue(left.modified)
+      modifiedTimestampValue(left.modified)
   )
+}
+
+export async function readSessionLastUserMessageTimestamp(sessionPath: string) {
+  try {
+    const content = await readFile(sessionPath, "utf8")
+    let lastTimestamp = 0
+    let lastValue: string | undefined
+
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue
+
+      let entry: unknown
+      try {
+        entry = JSON.parse(line)
+      } catch {
+        continue
+      }
+
+      if (!isRecord(entry) || entry.type !== "message") continue
+      const message = isRecord(entry.message) ? entry.message : undefined
+      if (message?.role !== "user") continue
+
+      const normalized =
+        normalizeModifiedTimestamp(message.timestamp) ||
+        normalizeModifiedTimestamp(entry.timestamp)
+      const timestamp = modifiedTimestampValue(normalized)
+      if (!timestamp || timestamp < lastTimestamp) continue
+
+      lastTimestamp = timestamp
+      lastValue = normalized
+    }
+
+    return lastValue
+  } catch {
+    return undefined
+  }
 }
 
 export function listKnownDirectories(options: {
@@ -114,6 +172,7 @@ export function serializeSessionListEntry(options: {
     name,
     title: getSessionListTitle({ name, firstMessage: entry.firstMessage }),
     modified: normalizeModifiedTimestamp(entry.modified),
+    lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
     streaming: path ? streamingPaths.has(path) : false,
     unread: path ? unreadSessionPaths.has(path) : false,
   }
@@ -127,6 +186,7 @@ export function createDirectorySessionRevision(
     name?: string
     title?: string
     modified?: string
+    lastUserMessageAt?: string
   }>
 ) {
   const hash = createHash("sha1")
@@ -143,6 +203,8 @@ export function createDirectorySessionRevision(
     hash.update(String(entry.title || ""))
     hash.update("\0")
     hash.update(String(entry.modified || ""))
+    hash.update("\0")
+    hash.update(String(entry.lastUserMessageAt || ""))
   }
 
   return hash.digest("hex")

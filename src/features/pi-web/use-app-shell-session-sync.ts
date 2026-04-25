@@ -192,6 +192,9 @@ function sameSessionListEntries(
     if (leftEntry.name !== rightEntry.name) return false
     if (leftEntry.title !== rightEntry.title) return false
     if (leftEntry.modified !== rightEntry.modified) return false
+    if (leftEntry.lastUserMessageAt !== rightEntry.lastUserMessageAt) {
+      return false
+    }
     if (Boolean(leftEntry.streaming) !== Boolean(rightEntry.streaming)) {
       return false
     }

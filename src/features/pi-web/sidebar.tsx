@@ -67,6 +67,7 @@ import {
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   readStoredCollapsedDirectories,
+  relativeTime,
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pi-web"
@@ -362,16 +363,25 @@ function SidebarSessionItem({
   onRenameSession,
   onDeleteSession,
 }: SidebarSessionItemProps) {
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const timestamp = entry.lastUserMessageAt || entry.modified
+  const timeAgo = relativeTime(timestamp)
+  const exactTimestamp = timestamp
+    ? new Date(timestamp).toLocaleString()
+    : undefined
+  const showUnread = Boolean(entry.unread) && !entry.streaming
+
   return (
     <SidebarMenuItem>
-      <div className="relative">
+      <div className={cn("group/session relative", menuOpen && "menu-open")}>
         <SidebarMenuButton
           type="button"
           data-sidebar-session-item
           data-session-key={entryKey}
           isActive={isActive}
           className={cn(
-            "h-auto items-start gap-2 py-2 pr-10",
+            "h-auto min-w-0 items-center gap-2 py-2 pr-2 transition-[padding] group-focus-within/session:pr-10 group-hover/session:pr-10",
+            menuOpen && "pr-10",
             (isActive || isSelected) &&
               "bg-sidebar-accent text-sidebar-accent-foreground"
           )}
@@ -391,19 +401,31 @@ function SidebarSessionItem({
                 className="size-3.5 shrink-0 text-sidebar-foreground/60"
                 aria-label="Session streaming"
               />
+            ) : showUnread ? (
+              <span className="size-2 shrink-0 rounded-full bg-primary" />
             ) : null}
             <span className="min-w-0 flex-1 truncate font-medium">
               {entry.title}
             </span>
-            {entry.unread ? (
-              <span className="size-2 shrink-0 rounded-full bg-primary" />
-            ) : null}
           </span>
+          {timeAgo ? (
+            <span
+              className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
+              title={exactTimestamp}
+            >
+              {timeAgo}
+            </span>
+          ) : null}
         </SidebarMenuButton>
 
         {entry.path && (onRenameSession || onDeleteSession) && !overlay ? (
-          <div className="absolute top-2 right-2">
-            <DropdownMenu>
+          <div
+            className={cn(
+              "pointer-events-none absolute top-2 right-2 opacity-0 transition-opacity group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100 group-hover/session:pointer-events-auto group-hover/session:opacity-100",
+              menuOpen && "pointer-events-auto opacity-100"
+            )}
+          >
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger
                 render={
                   <Button
