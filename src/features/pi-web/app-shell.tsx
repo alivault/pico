@@ -62,6 +62,10 @@ import {
 } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AppShellCommandPalette } from "@/features/pi-web/app-shell-command-palette"
+import {
+  AppShellAddDirectoryDialogController,
+  type AppShellAddDirectoryDialogHandle,
+} from "@/features/pi-web/app-shell-add-directory-dialog"
 import { AppShellDialogs } from "@/features/pi-web/app-shell-dialogs"
 import {
   buildRequestUrl,
@@ -1307,8 +1311,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       streamingBehavior: "steer" | "followUp"
     }>
   >([])
-  const [addDirectoryOpen, setAddDirectoryOpen] = React.useState(false)
-  const [directoryInput, setDirectoryInput] = React.useState("")
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
@@ -1344,6 +1346,9 @@ const AppShellSessionWorkspace = React.forwardRef<
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
+  const addDirectoryDialogRef =
+    React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
+  const addDirectoryOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1673,8 +1678,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const openAddDirectoryDialog = () => {
-    setDirectoryInput("")
-    setAddDirectoryOpen(true)
+    addDirectoryDialogRef.current?.open()
   }
 
   const focusSessionSearch = () => {
@@ -1964,7 +1968,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const {
     abortSession,
-    addDirectory,
     addDirectoryPath,
     createSession: requestCreateSession,
     removePendingMessage,
@@ -1973,7 +1976,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   } = useAppShellPromptMutations({
     viewerContextId,
     activeSessionId,
-    directoryInput,
     defaultNewSessionDirectory,
     sessionState,
     draftSessionLoadingOwnerKey,
@@ -1991,8 +1993,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     addOptimisticUserMessage,
     removeOptimisticUserMessage,
     setSidebarDirectories,
-    setDirectoryInput,
-    setAddDirectoryOpen,
     setStoredDraftDirectory,
     setDraftSessionLoadingOwnerKey,
     setPendingDraftPrompt,
@@ -2585,7 +2585,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   useAppShellShortcuts({
-    addDirectoryOpen,
+    addDirectoryOpenRef,
     commandPaletteOpen,
     currentTab,
     deleteOpen,
@@ -2935,21 +2935,17 @@ const AppShellSessionWorkspace = React.forwardRef<
         }}
       />
 
-      <AppShellDialogs
-        addDirectoryOpen={addDirectoryOpen}
-        onAddDirectoryOpenChange={setAddDirectoryOpen}
-        directoryInput={directoryInput}
-        onDirectoryInputChange={setDirectoryInput}
+      <AppShellAddDirectoryDialogController
+        ref={addDirectoryDialogRef}
+        openStateRef={addDirectoryOpenRef}
         openedDirectories={baseSidebarDirectories}
         currentDirectory={sessionState.cwd}
         recentDirectories={recentDirectories}
         knownDirectories={knownDirectories}
-        onAddDirectory={() => {
-          void addDirectory()
-        }}
-        onAddDirectoryPath={(path) => {
-          void addDirectoryPath(path)
-        }}
+        onAddDirectoryPath={addDirectoryPath}
+      />
+
+      <AppShellDialogs
         renameOpen={renameOpen}
         onRenameOpenChange={(open) => {
           if (!open) {

@@ -48,7 +48,6 @@ type PendingComposerMessage = {
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
-  directoryInput: string
   defaultNewSessionDirectory?: string
   sessionState: SessionState
   draftSessionLoadingOwnerKey: string | null
@@ -77,8 +76,6 @@ type UseAppShellPromptMutationsOptions = {
   }) => string
   removeOptimisticUserMessage: (pendingId: string | undefined) => void
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
-  setDirectoryInput: React.Dispatch<React.SetStateAction<string>>
-  setAddDirectoryOpen: React.Dispatch<React.SetStateAction<boolean>>
   setStoredDraftDirectory: React.Dispatch<React.SetStateAction<string>>
   setDraftSessionLoadingOwnerKey: React.Dispatch<
     React.SetStateAction<string | null>
@@ -103,7 +100,6 @@ function normalizeQueuedStreamingBehavior(
 export function useAppShellPromptMutations({
   viewerContextId,
   activeSessionId,
-  directoryInput,
   defaultNewSessionDirectory,
   sessionState,
   draftSessionLoadingOwnerKey,
@@ -121,8 +117,6 @@ export function useAppShellPromptMutations({
   addOptimisticUserMessage,
   removeOptimisticUserMessage,
   setSidebarDirectories,
-  setDirectoryInput,
-  setAddDirectoryOpen,
   setStoredDraftDirectory,
   setDraftSessionLoadingOwnerKey,
   setPendingDraftPrompt,
@@ -219,9 +213,9 @@ export function useAppShellPromptMutations({
 
   const addDirectoryPath = React.useCallback(
     async (path: string) => {
-      if (!viewerContextId) return
+      if (!viewerContextId) return false
       const requestedPath = path.trim()
-      if (!requestedPath) return
+      if (!requestedPath) return false
 
       try {
         const response = await addDirectoryMutation.mutateAsync(requestedPath)
@@ -234,29 +228,23 @@ export function useAppShellPromptMutations({
           return next
         })
         rememberRecentDirectory(response.path)
-        setDirectoryInput("")
-        setAddDirectoryOpen(false)
         prefetchDirectorySessionsIndex(response.path)
+        return true
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to add directory"
         )
+        return false
       }
     },
     [
       addDirectoryMutation,
       prefetchDirectorySessionsIndex,
       rememberRecentDirectory,
-      setAddDirectoryOpen,
-      setDirectoryInput,
       setSidebarDirectories,
       viewerContextId,
     ]
   )
-
-  const addDirectory = React.useCallback(async () => {
-    await addDirectoryPath(directoryInput)
-  }, [addDirectoryPath, directoryInput])
 
   const createSessionMutation = useMutation({
     mutationFn: async ({ cwd }: { cwd?: string }) => {
@@ -788,7 +776,6 @@ export function useAppShellPromptMutations({
 
   return {
     abortSession,
-    addDirectory,
     addDirectoryPath,
     createSession,
     removePendingMessage,

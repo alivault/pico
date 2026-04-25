@@ -6,7 +6,6 @@ import type {
 import type { FlatTreeNode, ThemeMode } from "@/lib/pi-web"
 import type { ExtensionUiEvent } from "@/lib/pi-web-api"
 
-import { AppShellAddDirectoryDialog } from "@/features/pi-web/app-shell-add-directory-dialog"
 import { AppShellSettingsDialog } from "@/features/pi-web/app-shell-settings-dialog"
 import {
   DeleteSessionsDialog,
@@ -17,16 +16,6 @@ import { AppShellTreeDialog } from "@/features/pi-web/app-shell-tree-dialog"
 import { AppShellUiRequestDialog } from "@/features/pi-web/app-shell-ui-request-dialog"
 
 type AppShellDialogsProps = {
-  addDirectoryOpen: boolean
-  onAddDirectoryOpenChange: (open: boolean) => void
-  directoryInput: string
-  onDirectoryInputChange: (value: string) => void
-  openedDirectories: Array<string>
-  currentDirectory?: string
-  recentDirectories: Array<string>
-  knownDirectories: Array<string>
-  onAddDirectory: () => void
-  onAddDirectoryPath: (path: string) => void
   renameOpen: boolean
   onRenameOpenChange: (open: boolean) => void
   renameValue: string
@@ -82,16 +71,6 @@ type AppShellDialogsProps = {
 }
 
 export function AppShellDialogs({
-  addDirectoryOpen,
-  onAddDirectoryOpenChange,
-  directoryInput,
-  onDirectoryInputChange,
-  openedDirectories,
-  currentDirectory,
-  recentDirectories,
-  knownDirectories,
-  onAddDirectory,
-  onAddDirectoryPath,
   renameOpen,
   onRenameOpenChange,
   renameValue,
@@ -144,19 +123,6 @@ export function AppShellDialogs({
 }: AppShellDialogsProps) {
   return (
     <>
-      <AppShellAddDirectoryDialog
-        open={addDirectoryOpen}
-        onOpenChange={onAddDirectoryOpenChange}
-        directoryInput={directoryInput}
-        onDirectoryInputChange={onDirectoryInputChange}
-        openedDirectories={openedDirectories}
-        currentDirectory={currentDirectory}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
-        onAddDirectory={onAddDirectory}
-        onAddDirectoryPath={onAddDirectoryPath}
-      />
-
       <RenameSessionDialog
         open={renameOpen}
         onOpenChange={onRenameOpenChange}

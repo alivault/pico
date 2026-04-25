@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -40,6 +42,12 @@ function directoryDialogHasExactMatch(
   return directoryPaths.some(
     (directoryPath) => directoryPath.trim().toLowerCase() === normalizedQuery
   )
+}
+
+export type AppShellAddDirectoryDialogHandle = {
+  open: () => void
+  close: () => void
+  isOpen: () => boolean
 }
 
 type AppShellAddDirectoryDialogProps = {
@@ -260,5 +268,78 @@ export function AppShellAddDirectoryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+type AppShellAddDirectoryDialogControllerProps = {
+  ref?: React.Ref<AppShellAddDirectoryDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  openedDirectories: Array<string>
+  currentDirectory?: string
+  recentDirectories: Array<string>
+  knownDirectories: Array<string>
+  onAddDirectoryPath: (path: string) => Promise<boolean> | boolean | void
+}
+
+export function AppShellAddDirectoryDialogController({
+  ref,
+  openStateRef,
+  openedDirectories,
+  currentDirectory,
+  recentDirectories,
+  knownDirectories,
+  onAddDirectoryPath,
+}: AppShellAddDirectoryDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const [directoryInput, setDirectoryInput] = React.useState("")
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  const addDirectoryPath = async (path: string) => {
+    const success = await onAddDirectoryPath(path)
+    if (success === false) return
+
+    setDirectoryInput("")
+    setOpenState(false)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        setDirectoryInput("")
+        setOpenState(true)
+      },
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    []
+  )
+
+  return (
+    <AppShellAddDirectoryDialog
+      open={open}
+      onOpenChange={setOpenState}
+      directoryInput={directoryInput}
+      onDirectoryInputChange={setDirectoryInput}
+      openedDirectories={openedDirectories}
+      currentDirectory={currentDirectory}
+      recentDirectories={recentDirectories}
+      knownDirectories={knownDirectories}
+      onAddDirectory={() => {
+        void addDirectoryPath(directoryInput)
+      }}
+      onAddDirectoryPath={(path) => {
+        void addDirectoryPath(path)
+      }}
+    />
   )
 }

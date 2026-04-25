@@ -26,7 +26,7 @@ type ShortcutActions = {
 }
 
 type UseAppShellShortcutsOptions = {
-  addDirectoryOpen: boolean
+  addDirectoryOpenRef: React.MutableRefObject<boolean>
   commandPaletteOpen: boolean
   currentTab: string
   deleteOpen: boolean
@@ -72,7 +72,7 @@ function hasSelectedText(target: EventTarget | null) {
 }
 
 export function useAppShellShortcuts({
-  addDirectoryOpen,
+  addDirectoryOpenRef,
   commandPaletteOpen,
   currentTab,
   deleteOpen,
@@ -93,7 +93,7 @@ export function useAppShellShortcuts({
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
       const modalOpen =
-        addDirectoryOpen ||
+        addDirectoryOpenRef.current ||
         renameOpen ||
         deleteOpen ||
         forkOpen ||
@@ -366,7 +366,7 @@ export function useAppShellShortcuts({
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, [
-    addDirectoryOpen,
+    addDirectoryOpenRef,
     commandPaletteOpen,
     currentTab,
     deleteOpen,
