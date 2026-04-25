@@ -2,6 +2,8 @@ import * as React from "react"
 import {
   ArrowUpIcon,
   ImagePlusIcon,
+  ListEndIcon,
+  ListStartIcon,
   LoaderCircleIcon,
   SquareIcon,
   XIcon,
@@ -649,6 +651,7 @@ function ComposerPromptEditor({
               disabled={!hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("followUp")}
             >
+              <ListEndIcon data-icon="inline-start" />
               Queue
             </Button>
             <Button
@@ -657,6 +660,7 @@ function ComposerPromptEditor({
               disabled={!hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("steer")}
             >
+              <ListStartIcon data-icon="inline-start" />
               Steer
             </Button>
             {isStreaming ? (
