@@ -45,6 +45,8 @@ export type ComposerPanelHandle = {
   openThinkingPicker: () => void
 }
 
+type ImageFileSelection = FileList | Array<File> | null
+
 type ComposerPanelProps = {
   currentPendingMessages: Array<PendingComposerMessage>
   composerImages: Array<PromptImage>
@@ -62,7 +64,7 @@ type ComposerPanelProps = {
   fileInputRef: React.RefObject<HTMLInputElement | null>
   slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
-  onPickImages: (files: FileList | null) => void
+  onPickImages: (files: ImageFileSelection) => void
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
@@ -90,6 +92,7 @@ type ComposerPromptEditorProps = {
   promptRef: React.RefObject<HTMLTextAreaElement | null>
   slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
+  onPickImages: (files: ImageFileSelection) => void
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
@@ -106,6 +109,21 @@ function selectionIsAtStart(textarea: HTMLTextAreaElement | null) {
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
   return start === 0 && end === 0
+}
+
+function getClipboardImageFiles(data: DataTransfer) {
+  const itemFiles = Array.from(data.items)
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(
+      (file): file is File => file !== null && file.type.startsWith("image/")
+    )
+
+  if (itemFiles.length > 0) {
+    return itemFiles
+  }
+
+  return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
 }
 
 export const ComposerPanel = React.forwardRef<
@@ -193,6 +211,7 @@ export const ComposerPanel = React.forwardRef<
           promptRef={promptRef}
           slashCommands={slashCommands}
           onComposerTextChange={onComposerTextChange}
+          onPickImages={onPickImages}
           onRemoveComposerImage={onRemoveComposerImage}
           onSubmitPrompt={onSubmitPrompt}
           onAbort={onAbort}
@@ -243,6 +262,7 @@ function ComposerPromptEditor({
   promptRef,
   slashCommands,
   onComposerTextChange,
+  onPickImages,
   onRemoveComposerImage,
   onSubmitPrompt,
   onAbort,
@@ -412,6 +432,13 @@ function ComposerPromptEditor({
     })
   }
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getClipboardImageFiles(event.clipboardData)
+    if (imageFiles.length === 0) return
+
+    onPickImages(imageFiles)
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const draftText = draftTextRef.current
     const currentDraftSkill = draftSkillRef.current
@@ -575,6 +602,7 @@ function ComposerPromptEditor({
               onKeyUp={syncSelection}
               onSelect={syncSelection}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={
                 acceptFollowUps
                   ? "Write a steer or follow-up message…"

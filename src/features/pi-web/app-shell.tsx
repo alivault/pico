@@ -2012,10 +2012,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionState,
   ])
 
-  const onPickImages = async (files: FileList | null) => {
+  const onPickImages = async (files: FileList | Array<File> | null) => {
     if (!files || files.length === 0) return
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type.startsWith("image/")
+    )
+    if (imageFiles.length === 0) return
+
     const nextImages = await Promise.all(
-      [...files].slice(0, 8).map((file) => readFileAsPromptImage(file))
+      imageFiles.slice(0, 8).map((file) => readFileAsPromptImage(file))
     )
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
