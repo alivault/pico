@@ -1191,6 +1191,10 @@ function AppShellWindowEffects({
   return null
 }
 
+export type SelectSessionNavigationOptions = {
+  replace?: boolean
+}
+
 type CreateSessionOptions = {
   closeMobileSidebar?: boolean
 }
@@ -1205,13 +1209,19 @@ type AppShellSessionWorkspaceHandle = {
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openRenameDialogForEntry: (entry: SessionListEntry) => void
   openSettingsDialog: () => void
-  selectSession: (nextSessionId?: string) => void
+  selectSession: (
+    nextSessionId?: string,
+    options?: SelectSessionNavigationOptions
+  ) => void
 }
 
 type AppShellSessionWorkspaceProps = {
   viewerContextId: string
   sessionId?: string
-  onSelectSession?: (sessionId?: string) => void
+  onSelectSession?: (
+    sessionId?: string,
+    options?: SelectSessionNavigationOptions
+  ) => void
   setConnected: React.Dispatch<React.SetStateAction<boolean>>
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   bootstrapSidebarDirectories: Array<string>
@@ -1733,7 +1743,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const handleSelectSession = React.useCallback(
-    (nextSessionId?: string) => {
+    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
 
       pendingRouteSessionIdRef.current = nextSessionId
@@ -1749,7 +1759,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
         return nextSessionId
       })
-      onSelectSession?.(nextSessionId)
+      onSelectSession?.(nextSessionId, options)
     },
     [onSelectSession, sessionStateRef]
   )
@@ -2000,7 +2010,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       return
     }
 
-    handleSelectSession(undefined)
+    handleSelectSession(undefined, { replace: true })
   }, [
     draftSessionLoadingOwnerKey,
     handleSelectSession,
@@ -2959,7 +2969,10 @@ export function PiWebAppShell({
   onSelectSession,
 }: {
   sessionId?: string
-  onSelectSession?: (sessionId?: string) => void
+  onSelectSession?: (
+    sessionId?: string,
+    options?: SelectSessionNavigationOptions
+  ) => void
 }) {
   const [viewerContextId, setViewerContextId] = React.useState("")
   const [connected, setConnected] = React.useState(false)

@@ -2,6 +2,7 @@ import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import type { SelectSessionNavigationOptions } from "@/features/pi-web/app-shell"
 import type { PromptImage, SessionState } from "@/lib/pi-web"
 import type {
   ExtensionUiEvent,
@@ -59,7 +60,7 @@ type UseAppShellSessionSyncOptions = {
     ) => void
   >
   handleSelectSessionRef: React.MutableRefObject<
-    (nextSessionId?: string) => void
+    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => void
   >
   pendingRouteSessionIdRef: React.MutableRefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
@@ -642,7 +643,7 @@ export function useAppShellSessionSync({
     }
 
     if (sessionState.sessionId !== sessionId) {
-      handleSelectSessionRef.current(sessionState.sessionId)
+      handleSelectSessionRef.current(sessionState.sessionId, { replace: true })
     }
   }, [
     handleSelectSessionRef,

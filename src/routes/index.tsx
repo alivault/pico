@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { z } from "zod"
 
 import { PiWebAppShell } from "@/features/pi-web/app-shell"
+import type { SelectSessionNavigationOptions } from "@/features/pi-web/app-shell"
 
 const indexSearchSchema = z.object({
   session: z.string().optional(),
@@ -19,13 +20,19 @@ function App() {
   return (
     <PiWebAppShell
       sessionId={session}
-      onSelectSession={(nextSessionId) => {
+      onSelectSession={(
+        nextSessionId?: string,
+        options?: SelectSessionNavigationOptions
+      ) => {
+        const nextRouteSessionId = nextSessionId || undefined
+        if (nextRouteSessionId === session) return
+
         void navigate({
           search: (previous) => ({
             ...previous,
-            session: nextSessionId || undefined,
+            session: nextRouteSessionId,
           }),
-          replace: true,
+          replace: options?.replace ?? false,
         })
       }}
     />
