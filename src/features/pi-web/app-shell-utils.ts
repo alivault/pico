@@ -96,12 +96,24 @@ function normalizeStatuses(
   return normalized
 }
 
-function latestStreamingThinkingSummaryText(items: SessionState["items"]) {
-  // Scope the hidden-thinking working label to the current assistant turn.
-  // Older thinking summaries should not flash before fresh reasoning arrives.
+function isCurrentResponseBoundaryUser(item: SessionState["items"][number]) {
+  return (
+    item.kind === "user" &&
+    !item.queued &&
+    item.streamingBehavior !== "followUp" &&
+    item.streamingBehavior !== "steer"
+  )
+}
+
+function latestCurrentTurnThinkingSummaryText(items: SessionState["items"]) {
+  // Match legacy pi-web's current-response scope: scan backwards until the
+  // latest real user turn, but ignore queued follow-ups/steering messages.
   for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
     const item = items[itemIndex]
-    if (item?.kind !== "assistant" || !item.streaming) continue
+    if (!item) continue
+
+    if (isCurrentResponseBoundaryUser(item)) return undefined
+    if (item.kind !== "assistant") continue
 
     for (
       let blockIndex = item.blocks.length - 1;
@@ -114,8 +126,6 @@ function latestStreamingThinkingSummaryText(items: SessionState["items"]) {
       const summary = thinkingSummaryText(block)
       if (summary) return summary
     }
-
-    return undefined
   }
 
   return undefined
@@ -331,7 +341,7 @@ export function updateStateFromSync(
   const uiState = shareUiState(base.uiState, sync.uiState)
   const hiddenThinkingPreview =
     streaming && hideThinkingBlock
-      ? latestStreamingThinkingSummaryText(items)
+      ? latestCurrentTurnThinkingSummaryText(items)
       : undefined
 
   if (
