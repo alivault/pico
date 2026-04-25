@@ -73,6 +73,8 @@ type TreeVisibleNode = TreeLinearNode & {
   hasVisibleChildren: boolean
   isCurrentLeaf: boolean
   isActivePath: boolean
+  isFoldable: boolean
+  isFolded: boolean
 }
 
 type TreeDialogViewModel = {
@@ -588,18 +590,44 @@ function buildTreeDialogViewModel({
   currentLeafId,
   query,
   filterMode,
+  foldedEntryIds,
 }: {
   flatTree: Array<FlatTreeNode>
   currentLeafId: string | null
   query: string
   filterMode: TreeFilterMode
+  foldedEntryIds: ReadonlySet<string>
 }): TreeDialogViewModel {
   const nodeById = new Map(flatTree.map((node) => [node.id, node]))
   const activePathIds = treeDialogActivePathIds(nodeById, currentLeafId)
   const flattenedNodes = treeDialogFlattenTree({ flatTree, currentLeafId })
   const searchTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const visibleNodes = flattenedNodes.filter((node) =>
+  const visibleNodesBeforeFold = flattenedNodes.filter((node) =>
     treeDialogPassesFilter(node, filterMode, currentLeafId, searchTokens)
+  )
+  const {
+    visibleParentById: unfoldedVisibleParentById,
+    visibleChildrenById: unfoldedVisibleChildrenById,
+  } = treeDialogRecalculateVisualStructure(
+    visibleNodesBeforeFold,
+    flattenedNodes
+  )
+  const hiddenByFoldIds = new Set<string>()
+
+  if (foldedEntryIds.size > 0) {
+    for (const node of flattenedNodes) {
+      const parentId = node.parentId ?? null
+      if (
+        parentId !== null &&
+        (foldedEntryIds.has(parentId) || hiddenByFoldIds.has(parentId))
+      ) {
+        hiddenByFoldIds.add(node.id)
+      }
+    }
+  }
+
+  const visibleNodes = visibleNodesBeforeFold.filter(
+    (node) => !hiddenByFoldIds.has(node.id)
   )
   const { visibleParentById, visibleChildrenById } =
     treeDialogRecalculateVisualStructure(visibleNodes, flattenedNodes)
@@ -608,12 +636,24 @@ function buildTreeDialogViewModel({
     nodeById,
     visibleParentById,
     visibleChildrenById,
-    orderedVisibleNodes: visibleNodes.map((node) => ({
-      ...node,
-      hasVisibleChildren: (visibleChildrenById.get(node.id)?.length ?? 0) > 0,
-      isCurrentLeaf: node.id === currentLeafId,
-      isActivePath: activePathIds.has(node.id),
-    })),
+    orderedVisibleNodes: visibleNodes.map((node) => {
+      const unfoldedChildren = unfoldedVisibleChildrenById.get(node.id) ?? []
+      const unfoldedParentId = unfoldedVisibleParentById.get(node.id)
+      const unfoldedSiblings =
+        unfoldedVisibleChildrenById.get(unfoldedParentId ?? null) ?? []
+      const isFoldable =
+        unfoldedChildren.length > 0 &&
+        (unfoldedParentId == null || unfoldedSiblings.length > 1)
+
+      return {
+        ...node,
+        hasVisibleChildren: (visibleChildrenById.get(node.id)?.length ?? 0) > 0,
+        isCurrentLeaf: node.id === currentLeafId,
+        isActivePath: activePathIds.has(node.id),
+        isFoldable,
+        isFolded: foldedEntryIds.has(node.id),
+      }
+    }),
   }
 }
 
@@ -650,6 +690,46 @@ function treeDialogIsBranchStart(
   return Array.isArray(siblings) && siblings.length > 1
 }
 
+function treeDialogFindBranchSegmentStart(
+  viewModel: TreeDialogViewModel,
+  selectedEntryId: string,
+  direction: "up" | "down"
+) {
+  const indexByEntryId = new Map(
+    viewModel.orderedVisibleNodes.map((node, index) => [node.id, index])
+  )
+  let currentId = selectedEntryId
+
+  if (direction === "down") {
+    while (true) {
+      const children = viewModel.visibleChildrenById.get(currentId) ?? []
+      if (children.length === 0) return currentId
+      if (children.length > 1) return children[0] ?? currentId
+      currentId = children[0] ?? currentId
+    }
+  }
+
+  while (true) {
+    const parentId = viewModel.visibleParentById.get(currentId) ?? null
+    if (parentId === null) return currentId
+
+    const children = viewModel.visibleChildrenById.get(parentId) ?? []
+    if (children.length > 1) {
+      const currentIndex = indexByEntryId.get(currentId)
+      const selectedIndex = indexByEntryId.get(selectedEntryId)
+      if (
+        typeof currentIndex === "number" &&
+        typeof selectedIndex === "number" &&
+        currentIndex < selectedIndex
+      ) {
+        return currentId
+      }
+    }
+
+    currentId = parentId
+  }
+}
+
 function treeDialogLegacyIconSvg(
   name:
     | "gutter"
@@ -657,6 +737,7 @@ function treeDialogLegacyIconSvg(
     | "connector-elbow"
     | "leaf-line"
     | "fold-open"
+    | "fold-closed"
     | "active-path"
 ) {
   const wrap = (body: string, viewBox = "0 0 10 24") =>
@@ -679,6 +760,10 @@ function treeDialogLegacyIconSvg(
       return wrap(
         '<rect x="0.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1"/><path d="M2.5 12H7.5" stroke="currentColor" stroke-width="1"/>'
       )
+    case "fold-closed":
+      return wrap(
+        '<rect x="0.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1"/><path d="M2.5 12H7.5M5 9.5V14.5" stroke="currentColor" stroke-width="1"/>'
+      )
     case "active-path":
       return wrap('<circle cx="5" cy="12" r="2.25" fill="currentColor"/>')
   }
@@ -694,6 +779,7 @@ function TreeHierarchyIcon({
     | "connector-elbow"
     | "leaf-line"
     | "fold-open"
+    | "fold-closed"
     | "active-path"
   className?: string
 }) {
@@ -771,7 +857,13 @@ function TreeCommandPrefix({
                 className="flex h-6 w-2.5 items-center justify-center"
               >
                 <TreeHierarchyIcon
-                  name={branchStart ? "fold-open" : "leaf-line"}
+                  name={
+                    node.isFolded
+                      ? "fold-closed"
+                      : branchStart
+                        ? "fold-open"
+                        : "leaf-line"
+                  }
                 />
               </span>
             )
@@ -967,6 +1059,8 @@ type TreeBrowsePanelProps = {
   treeQuery: string
   onTreeQueryChange: (value: string) => void
   treeViewModel: TreeDialogViewModel
+  foldedTreeNodeIds: ReadonlySet<string>
+  onFoldedTreeNodeIdsChange: (value: Set<string>) => void
   selectedTreeNodeId: string | null
   onSelectTreeNode: (nodeId: string) => void
   onLabelTreeNode: (nodeId: string) => void
@@ -982,6 +1076,8 @@ function TreeBrowsePanel({
   treeQuery,
   onTreeQueryChange,
   treeViewModel,
+  foldedTreeNodeIds,
+  onFoldedTreeNodeIdsChange,
   selectedTreeNodeId,
   onSelectTreeNode,
   onLabelTreeNode,
@@ -1079,6 +1175,36 @@ function TreeBrowsePanel({
     setTreeCursorNodeId(nextNode.id)
   }
 
+  const toggleTreeNodeFold = (open: boolean) => {
+    if (!cursorVisibleTreeNode) return
+
+    const nextFoldedTreeNodeIds = new Set(foldedTreeNodeIds)
+    let nextCursorNodeId = cursorVisibleTreeNode.id
+
+    if (!open) {
+      if (cursorVisibleTreeNode.isFoldable && !cursorVisibleTreeNode.isFolded) {
+        nextFoldedTreeNodeIds.add(cursorVisibleTreeNode.id)
+      } else {
+        nextCursorNodeId = treeDialogFindBranchSegmentStart(
+          treeViewModel,
+          cursorVisibleTreeNode.id,
+          "up"
+        )
+      }
+    } else if (cursorVisibleTreeNode.isFolded) {
+      nextFoldedTreeNodeIds.delete(cursorVisibleTreeNode.id)
+    } else {
+      nextCursorNodeId = treeDialogFindBranchSegmentStart(
+        treeViewModel,
+        cursorVisibleTreeNode.id,
+        "down"
+      )
+    }
+
+    onFoldedTreeNodeIdsChange(nextFoldedTreeNodeIds)
+    setTreeCursorNodeId(nextCursorNodeId)
+  }
+
   const treeVisibleRowCount = () => {
     const listElement = treeListRef.current
     const visibleNodes = treeViewModel.orderedVisibleNodes
@@ -1131,6 +1257,11 @@ function TreeBrowsePanel({
         }}
         onKeyDownCapture={(event) => {
           const key = event.key.toLowerCase()
+          const target = event.target
+          const editingText =
+            target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement ||
+            (target instanceof HTMLElement && target.isContentEditable)
 
           if (
             event.shiftKey &&
@@ -1151,13 +1282,24 @@ function TreeBrowsePanel({
             !event.shiftKey &&
             !event.ctrlKey &&
             !event.metaKey &&
-            !event.altKey &&
-            (event.key === "ArrowUp" || event.key === "ArrowDown")
+            !event.altKey
           ) {
-            event.preventDefault()
-            event.stopPropagation()
-            moveTreeCursorBy(event.key === "ArrowDown" ? 1 : -1)
-            return
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+              event.preventDefault()
+              event.stopPropagation()
+              moveTreeCursorBy(event.key === "ArrowDown" ? 1 : -1)
+              return
+            }
+
+            if (
+              !editingText &&
+              (event.key === "ArrowLeft" || event.key === "ArrowRight")
+            ) {
+              event.preventDefault()
+              event.stopPropagation()
+              toggleTreeNodeFold(event.key === "ArrowRight")
+              return
+            }
           }
 
           if (
@@ -1300,6 +1442,10 @@ function TreeBrowsePanel({
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
           <span>Start/end</span>
           <TreeShortcutKeys keys={["Option", "←/→"]} />
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
+          <span>Fold/branch</span>
+          <TreeShortcutKeys keys={["←", "→"]} />
         </span>
         {TREE_FILTER_OPTIONS.map((option) => (
           <span
@@ -1626,8 +1772,15 @@ export function AppShellTreeDialog({
   const [treeFilterMode, setTreeFilterMode] =
     React.useState<TreeFilterMode>("no-tools")
   const [treeStage, setTreeStage] = React.useState<TreeStage>("browse")
+  const [foldedTreeNodeIds, setFoldedTreeNodeIds] = React.useState(
+    () => new Set<string>()
+  )
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
   const treeWasOpenRef = React.useRef(false)
+  const treeFoldResetRef = React.useRef({
+    filterMode: treeFilterMode,
+    query: treeQuery,
+  })
   const isMobile = useIsMobile()
 
   const treeViewModel = React.useMemo(
@@ -1637,8 +1790,9 @@ export function AppShellTreeDialog({
         currentLeafId: treeLeafId,
         query: treeQuery,
         filterMode: treeFilterMode,
+        foldedEntryIds: foldedTreeNodeIds,
       }),
-    [flatTree, treeFilterMode, treeLeafId, treeQuery]
+    [flatTree, foldedTreeNodeIds, treeFilterMode, treeLeafId, treeQuery]
   )
 
   const selectedTreeNode =
@@ -1654,7 +1808,25 @@ export function AppShellTreeDialog({
 
     setTreeFilterMode("no-tools")
     setTreeStage("browse")
+    setFoldedTreeNodeIds(new Set())
   }, [open, selectedTreeNodeId, treeLeafId])
+
+  React.useEffect(() => {
+    const previous = treeFoldResetRef.current
+    treeFoldResetRef.current = {
+      filterMode: treeFilterMode,
+      query: treeQuery,
+    }
+
+    if (
+      previous.filterMode === treeFilterMode &&
+      previous.query === treeQuery
+    ) {
+      return
+    }
+
+    setFoldedTreeNodeIds(new Set())
+  }, [treeFilterMode, treeQuery])
 
   React.useEffect(() => {
     if (!open) return
@@ -1805,6 +1977,8 @@ export function AppShellTreeDialog({
         treeQuery={treeQuery}
         onTreeQueryChange={onTreeQueryChange}
         treeViewModel={treeViewModel}
+        foldedTreeNodeIds={foldedTreeNodeIds}
+        onFoldedTreeNodeIdsChange={setFoldedTreeNodeIds}
         selectedTreeNodeId={selectedTreeNodeId}
         onSelectTreeNode={selectTreeNode}
         onLabelTreeNode={labelTreeNode}
