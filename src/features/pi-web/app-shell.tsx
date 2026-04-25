@@ -2928,6 +2928,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               composerText={composerDraftSeed.text}
               composerSkill={composerDraftSeed.skillName}
               composerSyncNonce={composerDraftSeed.syncNonce}
+              centerMessages={centerMessages}
               availableModels={sessionState.availableModels}
               model={sessionState.model}
               thinkingLevel={sessionState.thinkingLevel}

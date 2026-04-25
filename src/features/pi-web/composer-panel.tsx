@@ -56,6 +56,7 @@ type ComposerPanelProps = {
   composerText: string
   composerSkill?: string
   composerSyncNonce: number
+  centerMessages: boolean
   availableModels: Array<ModelOption>
   model?: ModelOption
   thinkingLevel: string
@@ -139,6 +140,7 @@ export const ComposerPanel = React.forwardRef<
     composerText,
     composerSkill,
     composerSyncNonce,
+    centerMessages,
     availableModels,
     model,
     thinkingLevel,
@@ -193,51 +195,57 @@ export const ComposerPanel = React.forwardRef<
     }
   }, [modelPickerOpen])
 
+  const composerColumnClassName = centerMessages
+    ? "mx-auto flex w-full max-w-[80ch] flex-col gap-3"
+    : "flex w-full flex-col gap-3"
+
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <ComposerPendingMessages
-        currentPendingMessages={currentPendingMessages}
-        onRemovePendingMessage={onRemovePendingMessage}
-        onReorderPending={onReorderPending}
-      />
-
-      <div className="overflow-visible rounded-[18px] border bg-card">
-        <ComposerPromptEditor
-          composerImages={composerImages}
-          composerText={composerText}
-          composerSkill={composerSkill}
-          composerSyncNonce={composerSyncNonce}
-          isSubmitting={isSubmitting}
-          isStreaming={isStreaming}
-          awaitingFirstTurn={awaitingFirstTurn}
-          fileInputRef={fileInputRef}
-          promptRef={promptRef}
-          slashCommands={slashCommands}
-          onComposerTextChange={onComposerTextChange}
-          onPickImages={onPickImages}
-          onRemoveComposerImage={onRemoveComposerImage}
-          onSubmitPrompt={onSubmitPrompt}
-          onAbort={onAbort}
-          onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
-          requestPathCompletions={requestPathCompletions}
-          requestFileCompletions={requestFileCompletions}
+    <div className="p-4">
+      <div className={composerColumnClassName}>
+        <ComposerPendingMessages
+          currentPendingMessages={currentPendingMessages}
+          onRemovePendingMessage={onRemovePendingMessage}
+          onReorderPending={onReorderPending}
         />
 
-        <ComposerPickers
-          modelPickerOpen={modelPickerOpen}
-          onModelPickerOpenChange={setModelPickerOpen}
-          thinkingPickerOpen={thinkingPickerOpen}
-          onThinkingPickerOpenChange={setThinkingPickerOpen}
-          modelQuery={modelQuery}
-          onModelQueryChange={setModelQuery}
-          availableModels={availableModels}
-          model={model}
-          thinkingLevel={thinkingLevel}
-          availableThinkingLevels={availableThinkingLevels}
-          contextUsage={contextUsage}
-          onSelectModel={onSelectModel}
-          onSelectThinkingLevel={onSelectThinkingLevel}
-        />
+        <div className="overflow-visible rounded-[18px] border bg-card">
+          <ComposerPromptEditor
+            composerImages={composerImages}
+            composerText={composerText}
+            composerSkill={composerSkill}
+            composerSyncNonce={composerSyncNonce}
+            isSubmitting={isSubmitting}
+            isStreaming={isStreaming}
+            awaitingFirstTurn={awaitingFirstTurn}
+            fileInputRef={fileInputRef}
+            promptRef={promptRef}
+            slashCommands={slashCommands}
+            onComposerTextChange={onComposerTextChange}
+            onPickImages={onPickImages}
+            onRemoveComposerImage={onRemoveComposerImage}
+            onSubmitPrompt={onSubmitPrompt}
+            onAbort={onAbort}
+            onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
+            requestPathCompletions={requestPathCompletions}
+            requestFileCompletions={requestFileCompletions}
+          />
+
+          <ComposerPickers
+            modelPickerOpen={modelPickerOpen}
+            onModelPickerOpenChange={setModelPickerOpen}
+            thinkingPickerOpen={thinkingPickerOpen}
+            onThinkingPickerOpenChange={setThinkingPickerOpen}
+            modelQuery={modelQuery}
+            onModelQueryChange={setModelQuery}
+            availableModels={availableModels}
+            model={model}
+            thinkingLevel={thinkingLevel}
+            availableThinkingLevels={availableThinkingLevels}
+            contextUsage={contextUsage}
+            onSelectModel={onSelectModel}
+            onSelectThinkingLevel={onSelectThinkingLevel}
+          />
+        </div>
       </div>
 
       <input
