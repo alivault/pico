@@ -661,7 +661,12 @@ export class PiWebRuntime {
   }
 
   private getEntryStreamingState(entry: SessionEntry) {
-    return entry.streamingState || entry.session.isStreaming
+    // Keep the browser-facing streaming state on our own lifecycle flag.
+    // The SDK clears `session.isStreaming` only after awaited `agent_end`
+    // listeners finish. Since this runtime broadcasts from inside that listener,
+    // OR-ing with `session.isStreaming` can send a final stale `streaming: true`
+    // patch and leave the UI stuck in "Working…" until reconnect/reload.
+    return entry.streamingState
   }
 
   private hasVisibleSessionContent(entry: SessionEntry) {
@@ -2399,6 +2404,12 @@ export class PiWebRuntime {
 
       void Promise.resolve()
         .then(() => activeEntry.session.prompt(message, promptOptions))
+        .then(async () => {
+          activeEntry.streamingState = false
+          this.reconcilePendingUserMessages(activeEntry)
+          await this.broadcastEntryState(activeEntry)
+          await this.broadcastSessionsAll()
+        })
         .catch(async (error) => {
           const endedRun = !activeEntry.session.isStreaming
           if (endedRun) {
