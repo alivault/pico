@@ -616,7 +616,7 @@ function ComposerPromptEditor({
               onPaste={handlePaste}
               placeholder={
                 acceptFollowUps
-                  ? "Write a steer or follow-up message…"
+                  ? "Write a follow-up message..."
                   : draftSkill
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                     : "Ask anything…"
