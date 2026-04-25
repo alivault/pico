@@ -108,7 +108,6 @@ import { useAppShellSessionMutations } from "@/features/pi-web/use-app-shell-ses
 import { useAppShellSessionSync } from "@/features/pi-web/use-app-shell-session-sync"
 import { useAppShellShortcuts } from "@/features/pi-web/use-app-shell-shortcuts"
 import {
-  COLLAPSED_DIRECTORIES_STORAGE_KEY,
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
@@ -125,7 +124,6 @@ import {
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   normalizeThemeMode,
-  readStoredCollapsedDirectories,
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
   readStoredCenterMessages,
@@ -3057,9 +3055,6 @@ export function PiWebAppShell({
     initialSidebarBootstrapDirectories,
     setInitialSidebarBootstrapDirectories,
   ] = React.useState<Array<string>>([])
-  const [collapsedDirectories, setCollapsedDirectories] = React.useState<
-    Record<string, boolean>
-  >({})
   const [directoryIndexDataByPath, setDirectoryIndexDataByPath] =
     React.useState<Record<string, DirectorySessionsIndexData>>({})
   const [directoryIndexLoading, setDirectoryIndexLoading] = React.useState<
@@ -3140,7 +3135,6 @@ export function PiWebAppShell({
     setInitialSidebarBootstrapDirectories(
       nextDirectories.slice(0, INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT)
     )
-    setCollapsedDirectories(readStoredCollapsedDirectories())
   }, [])
 
   React.useEffect(() => {
@@ -3461,33 +3455,6 @@ export function PiWebAppShell({
     }
   })()
 
-  const allDirectoriesCollapsed = (() =>
-    baseSidebarDirectories.length > 0 &&
-    baseSidebarDirectories.every(
-      (directory) => collapsedDirectories[directory]
-    ))()
-
-  const toggleAllDirectories = () => {
-    setCollapsedDirectories((current) => {
-      const next = { ...current }
-      const nextCollapsed = !allDirectoriesCollapsed
-
-      for (const directory of baseSidebarDirectories) {
-        if (nextCollapsed) {
-          next[directory] = true
-        } else {
-          delete next[directory]
-        }
-      }
-
-      safeLocalStorageSetItem(
-        COLLAPSED_DIRECTORIES_STORAGE_KEY,
-        JSON.stringify(next)
-      )
-      return next
-    })
-  }
-
   const reorderSidebarDirectories = (nextDirectories: Array<string>) => {
     const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
     if (normalizedNext.length === 0) return
@@ -3633,20 +3600,6 @@ export function PiWebAppShell({
     }
   }
 
-  const toggleDirectory = (directory: string) => {
-    setCollapsedDirectories((current) => {
-      const next = {
-        ...current,
-        [directory]: !current[directory],
-      }
-      safeLocalStorageSetItem(
-        COLLAPSED_DIRECTORIES_STORAGE_KEY,
-        JSON.stringify(next)
-      )
-      return next
-    })
-  }
-
   return (
     <SidebarProvider className="h-full overflow-hidden bg-background">
       <AppSidebar
@@ -3657,13 +3610,11 @@ export function PiWebAppShell({
         visibleDirectories={visibleDirectories}
         directoryCount={baseSidebarDirectories.length}
         filteredDirectorySessions={filteredDirectorySessions}
-        collapsedDirectories={collapsedDirectories}
         directoryIndexLoading={directoryIndexLoading}
         selectedSessionKeys={selectedSidebarSessionKeys}
         activeSessionId={sessionsEvent?.activeSessionId}
         activeSessionKey={sessionsEvent?.activeSessionKey}
         emptyStateText={emptySidebarStateText}
-        allDirectoriesCollapsed={allDirectoriesCollapsed}
         onOpenAddDirectoryDialog={() => {
           sessionWorkspaceRef.current?.openAddDirectoryDialog()
         }}
@@ -3673,8 +3624,6 @@ export function PiWebAppShell({
         onOpenSettings={() => {
           sessionWorkspaceRef.current?.openSettingsDialog()
         }}
-        onToggleDirectory={toggleDirectory}
-        onToggleAllDirectories={toggleAllDirectories}
         onSessionClick={handleSidebarSessionClick}
         onRenameSession={(entry) => {
           sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
@@ -3696,18 +3645,6 @@ export function PiWebAppShell({
             )
             return next
           })
-          setCollapsedDirectories((current) => {
-            if (!Object.prototype.hasOwnProperty.call(current, directory)) {
-              return current
-            }
-            const next = { ...current }
-            delete next[directory]
-            safeLocalStorageSetItem(
-              COLLAPSED_DIRECTORIES_STORAGE_KEY,
-              JSON.stringify(next)
-            )
-            return next
-          })
         }}
         onRemoveAllDirectories={() => {
           setSidebarDirectories((current) => {
@@ -3719,28 +3656,6 @@ export function PiWebAppShell({
               JSON.stringify([])
             )
             return []
-          })
-          setCollapsedDirectories((current) => {
-            let changed = false
-            const next = { ...current }
-
-            for (const directory of baseSidebarDirectories) {
-              if (!Object.prototype.hasOwnProperty.call(next, directory)) {
-                continue
-              }
-              delete next[directory]
-              changed = true
-            }
-
-            if (!changed) {
-              return current
-            }
-
-            safeLocalStorageSetItem(
-              COLLAPSED_DIRECTORIES_STORAGE_KEY,
-              JSON.stringify(next)
-            )
-            return next
           })
         }}
         onReorderDirectories={reorderSidebarDirectories}

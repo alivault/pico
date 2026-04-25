@@ -64,8 +64,11 @@ import {
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  COLLAPSED_DIRECTORIES_STORAGE_KEY,
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
+  readStoredCollapsedDirectories,
+  safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pi-web"
 import { cn } from "@/lib/utils"
@@ -135,10 +138,132 @@ type SessionClickModifiers = {
   shiftKey: boolean
 }
 
+const EMPTY_DIRECTORY_SESSIONS: Array<SessionListEntry> = []
+
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
 
   return left.every((directory, index) => directory === right[index])
+}
+
+type CollapsedDirectoryStore = {
+  subscribe: (listener: () => void) => () => void
+  isCollapsed: (directory: string) => boolean
+  areAllCollapsed: (directories: Array<string>) => boolean
+  loadStored: () => void
+  toggle: (directory: string) => void
+  setAll: (directories: Array<string>, collapsed: boolean) => void
+  remove: (directory: string) => void
+  clear: () => void
+}
+
+function createCollapsedDirectoryStore(): CollapsedDirectoryStore {
+  let collapsedDirectories: Record<string, boolean> = {}
+  const listeners = new Set<() => void>()
+
+  const notify = () => {
+    for (const listener of listeners) {
+      listener()
+    }
+  }
+
+  const persist = () => {
+    safeLocalStorageSetItem(
+      COLLAPSED_DIRECTORIES_STORAGE_KEY,
+      JSON.stringify(collapsedDirectories)
+    )
+  }
+
+  return {
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    isCollapsed(directory) {
+      return Boolean(collapsedDirectories[directory])
+    },
+    areAllCollapsed(directories) {
+      return (
+        directories.length > 0 &&
+        directories.every((directory) => collapsedDirectories[directory])
+      )
+    },
+    loadStored() {
+      collapsedDirectories = readStoredCollapsedDirectories()
+      notify()
+    },
+    toggle(directory) {
+      const next = { ...collapsedDirectories }
+      if (next[directory]) {
+        delete next[directory]
+      } else {
+        next[directory] = true
+      }
+      collapsedDirectories = next
+      persist()
+      notify()
+    },
+    setAll(directories, collapsed) {
+      let changed = false
+      const next = { ...collapsedDirectories }
+
+      for (const directory of directories) {
+        if (collapsed) {
+          if (next[directory]) continue
+          next[directory] = true
+          changed = true
+        } else {
+          if (!next[directory]) continue
+          delete next[directory]
+          changed = true
+        }
+      }
+
+      if (!changed) return
+      collapsedDirectories = next
+      persist()
+      notify()
+    },
+    remove(directory) {
+      if (!collapsedDirectories[directory]) return
+      const next = { ...collapsedDirectories }
+      delete next[directory]
+      collapsedDirectories = next
+      persist()
+      notify()
+    },
+    clear() {
+      if (Object.keys(collapsedDirectories).length === 0) return
+      collapsedDirectories = {}
+      persist()
+      notify()
+    },
+  }
+}
+
+function useDirectoryCollapsed(
+  store: CollapsedDirectoryStore,
+  directory: string,
+  searchActive: boolean
+) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => (searchActive ? false : store.isCollapsed(directory)),
+    () => false
+  )
+}
+
+function useAllDirectoriesCollapsed(
+  store: CollapsedDirectoryStore,
+  directories: Array<string>
+) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => store.areAllCollapsed(directories),
+    () => false
+  )
 }
 
 type AppSidebarProps = {
@@ -149,18 +274,14 @@ type AppSidebarProps = {
   visibleDirectories: Array<string>
   directoryCount: number
   filteredDirectorySessions: Record<string, Array<SessionListEntry>>
-  collapsedDirectories: Record<string, boolean>
   directoryIndexLoading: Record<string, boolean>
   selectedSessionKeys: Array<string>
   activeSessionId?: string
   activeSessionKey?: string
   emptyStateText: string
-  allDirectoriesCollapsed: boolean
   onOpenAddDirectoryDialog: () => void
   onOpenCommandPalette: () => void
   onOpenSettings: () => void
-  onToggleDirectory: (directory: string) => void
-  onToggleAllDirectories: () => void
   onSessionClick?: (
     entry: SessionListEntry,
     modifiers: SessionClickModifiers
@@ -320,7 +441,7 @@ function SidebarSessionItem({
 type DirectorySessionGroupProps = {
   directory: string
   sessions: Array<SessionListEntry>
-  collapsed: boolean
+  collapsedDirectoryStore: CollapsedDirectoryStore
   searchActive: boolean
   isLoadingSessions: boolean
   directoryOrderingEnabled: boolean
@@ -333,7 +454,6 @@ type DirectorySessionGroupProps = {
   overlay?: boolean
   attributes?: Record<string, unknown>
   listeners?: Record<string, unknown>
-  onToggleDirectory: (directory: string) => void
   onSessionClick?: (
     entry: SessionListEntry,
     modifiers: SessionClickModifiers
@@ -347,7 +467,7 @@ type DirectorySessionGroupProps = {
 function DirectorySessionGroup({
   directory,
   sessions,
-  collapsed,
+  collapsedDirectoryStore,
   searchActive,
   isLoadingSessions,
   directoryOrderingEnabled,
@@ -360,7 +480,6 @@ function DirectorySessionGroup({
   overlay = false,
   attributes,
   listeners,
-  onToggleDirectory,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -369,6 +488,11 @@ function DirectorySessionGroup({
 }: DirectorySessionGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+  )
+  const collapsed = useDirectoryCollapsed(
+    collapsedDirectoryStore,
+    directory,
+    searchActive
   )
   const visibleCount = searchActive
     ? sessions.length
@@ -399,7 +523,7 @@ function DirectorySessionGroup({
           }
           onClick={() => {
             if (!searchActive && !overlay) {
-              onToggleDirectory(directory)
+              collapsedDirectoryStore.toggle(directory)
             }
           }}
           title={directory}
@@ -522,6 +646,156 @@ function DirectorySessionGroup({
   )
 }
 
+type DirectoryCollapseAllButtonProps = {
+  searchActive: boolean
+  visibleDirectories: Array<string>
+  collapsedDirectoryStore: CollapsedDirectoryStore
+}
+
+function DirectoryCollapseAllButton({
+  searchActive,
+  visibleDirectories,
+  collapsedDirectoryStore,
+}: DirectoryCollapseAllButtonProps) {
+  const allDirectoriesCollapsed = useAllDirectoriesCollapsed(
+    collapsedDirectoryStore,
+    visibleDirectories
+  )
+
+  return (
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+      disabled={searchActive || visibleDirectories.length === 0}
+      onClick={() => {
+        collapsedDirectoryStore.setAll(
+          visibleDirectories,
+          !allDirectoriesCollapsed
+        )
+      }}
+      aria-label={
+        allDirectoriesCollapsed
+          ? "Expand all directories"
+          : "Collapse all directories"
+      }
+      title={
+        allDirectoriesCollapsed
+          ? "Expand all directories"
+          : "Collapse all directories"
+      }
+    >
+      {allDirectoriesCollapsed ? <ChevronsUpDown /> : <ChevronsDownUpIcon />}
+    </Button>
+  )
+}
+
+type AppSidebarHeaderProps = {
+  connected: boolean
+  sessionSearch: string
+  onSessionSearchChange: (value: string) => void
+  sessionSearchInputRef?: React.Ref<HTMLInputElement>
+  visibleDirectories: Array<string>
+  directoryCount: number
+  matchingSessionCount: number
+  collapsedDirectoryStore: CollapsedDirectoryStore
+  onOpenAddDirectoryDialog: () => void
+  onRemoveAllDirectories?: () => void
+}
+
+function AppSidebarHeader({
+  connected,
+  sessionSearch,
+  onSessionSearchChange,
+  sessionSearchInputRef,
+  visibleDirectories,
+  directoryCount,
+  matchingSessionCount,
+  collapsedDirectoryStore,
+  onOpenAddDirectoryDialog,
+  onRemoveAllDirectories,
+}: AppSidebarHeaderProps) {
+  const searchActive = sessionSearch.trim().length > 0
+
+  return (
+    <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col">
+          <h1 className="truncate text-xl font-semibold tracking-tight text-sidebar-foreground">
+            Pi
+          </h1>
+        </div>
+        <ConnectionBadge connected={connected} />
+      </div>
+
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
+        <Input
+          ref={sessionSearchInputRef}
+          value={sessionSearch}
+          onChange={(event) => onSessionSearchChange(event.target.value)}
+          placeholder="Search sessions..."
+          className="border-sidebar-border/70 bg-sidebar-accent/20 pl-9"
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/70">
+        <span>
+          {searchActive
+            ? `${matchingSessionCount} matching session${matchingSessionCount === 1 ? "" : "s"}`
+            : "Directories"}
+        </span>
+        <div className="flex items-center gap-1">
+          <DirectoryCollapseAllButton
+            searchActive={searchActive}
+            visibleDirectories={visibleDirectories}
+            collapsedDirectoryStore={collapsedDirectoryStore}
+          />
+          {onRemoveAllDirectories ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    disabled={directoryCount === 0}
+                    aria-label="Directory actions"
+                    title="Directory actions"
+                  />
+                }
+              >
+                <EllipsisIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={directoryCount === 0}
+                  onClick={() => {
+                    collapsedDirectoryStore.clear()
+                    onRemoveAllDirectories()
+                  }}
+                >
+                  Remove all
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            onClick={onOpenAddDirectoryDialog}
+            aria-label="Add directory"
+            title="Add directory"
+          >
+            <FolderPlusIcon />
+          </Button>
+        </div>
+      </div>
+    </SidebarHeader>
+  )
+}
+
 export function AppSidebar({
   connected,
   sessionSearch,
@@ -530,18 +804,14 @@ export function AppSidebar({
   visibleDirectories,
   directoryCount,
   filteredDirectorySessions,
-  collapsedDirectories,
   directoryIndexLoading,
   selectedSessionKeys,
   activeSessionId,
   activeSessionKey,
   emptyStateText,
-  allDirectoriesCollapsed,
   onOpenAddDirectoryDialog,
   onOpenCommandPalette,
   onOpenSettings,
-  onToggleDirectory,
-  onToggleAllDirectories,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -559,6 +829,9 @@ export function AppSidebar({
   )
   const [previewDirectoryOrder, setPreviewDirectoryOrder] =
     React.useState<Array<string> | null>(null)
+  const [collapsedDirectoryStore] = React.useState(
+    createCollapsedDirectoryStore
+  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -567,6 +840,10 @@ export function AppSidebar({
       },
     })
   )
+
+  React.useEffect(() => {
+    collapsedDirectoryStore.loadStored()
+  }, [collapsedDirectoryStore])
 
   React.useEffect(() => {
     if (directoryOrderingEnabled) return
@@ -606,10 +883,15 @@ export function AppSidebar({
         directory
       )
     ) {
-      return []
+      return EMPTY_DIRECTORY_SESSIONS
     }
 
-    return filteredDirectorySessions[directory] ?? []
+    return filteredDirectorySessions[directory] ?? EMPTY_DIRECTORY_SESSIONS
+  }
+
+  const removeDirectory = (directory: string) => {
+    collapsedDirectoryStore.remove(directory)
+    onRemoveDirectory?.(directory)
   }
 
   const matchingSessionCount = visibleDirectories.reduce(
@@ -682,96 +964,18 @@ export function AppSidebar({
       collapsible="offcanvas"
       className="border-r border-sidebar-border/70"
     >
-      <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col">
-            <h1 className="truncate text-xl font-semibold tracking-tight text-sidebar-foreground">
-              Pi
-            </h1>
-          </div>
-          <ConnectionBadge connected={connected} />
-        </div>
-
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
-          <Input
-            ref={sessionSearchInputRef}
-            value={sessionSearch}
-            onChange={(event) => onSessionSearchChange(event.target.value)}
-            placeholder="Search sessions..."
-            className="border-sidebar-border/70 bg-sidebar-accent/20 pl-9"
-          />
-        </div>
-
-        <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/70">
-          <span>
-            {searchActive
-              ? `${matchingSessionCount} matching session${matchingSessionCount === 1 ? "" : "s"}`
-              : "Directories"}
-          </span>
-          <div className="flex items-center gap-1">
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
-              disabled={searchActive || visibleDirectories.length === 0}
-              onClick={onToggleAllDirectories}
-              aria-label={
-                allDirectoriesCollapsed
-                  ? "Expand all directories"
-                  : "Collapse all directories"
-              }
-              title={
-                allDirectoriesCollapsed
-                  ? "Expand all directories"
-                  : "Collapse all directories"
-              }
-            >
-              {allDirectoriesCollapsed ? (
-                <ChevronsUpDown />
-              ) : (
-                <ChevronsDownUpIcon />
-              )}
-            </Button>
-            {onRemoveAllDirectories ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                      disabled={directoryCount === 0}
-                      aria-label="Directory actions"
-                      title="Directory actions"
-                    />
-                  }
-                >
-                  <EllipsisIcon />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={directoryCount === 0}
-                    onClick={onRemoveAllDirectories}
-                  >
-                    Remove all
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-            <Button
-              variant="secondary"
-              size="icon-sm"
-              onClick={onOpenAddDirectoryDialog}
-              aria-label="Add directory"
-              title="Add directory"
-            >
-              <FolderPlusIcon />
-            </Button>
-          </div>
-        </div>
-      </SidebarHeader>
+      <AppSidebarHeader
+        connected={connected}
+        sessionSearch={sessionSearch}
+        onSessionSearchChange={onSessionSearchChange}
+        sessionSearchInputRef={sessionSearchInputRef}
+        visibleDirectories={visibleDirectories}
+        directoryCount={directoryCount}
+        matchingSessionCount={matchingSessionCount}
+        collapsedDirectoryStore={collapsedDirectoryStore}
+        onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+        onRemoveAllDirectories={onRemoveAllDirectories}
+      />
 
       <SidebarContent className="px-2 py-3">
         {visibleDirectories.length === 0 ? (
@@ -803,9 +1007,6 @@ export function AppSidebar({
             >
               {orderedVisibleDirectories.map((directory) => {
                 const sessions = getDirectorySessions(directory)
-                const collapsed = searchActive
-                  ? false
-                  : Boolean(collapsedDirectories[directory])
                 const isLoadingSessions = Boolean(
                   directoryIndexLoading[directory]
                 )
@@ -820,7 +1021,7 @@ export function AppSidebar({
                       <DirectorySessionGroup
                         directory={directory}
                         sessions={sessions}
-                        collapsed={collapsed}
+                        collapsedDirectoryStore={collapsedDirectoryStore}
                         searchActive={searchActive}
                         isLoadingSessions={isLoadingSessions}
                         directoryOrderingEnabled={directoryOrderingEnabled}
@@ -832,12 +1033,13 @@ export function AppSidebar({
                         isDragging={isDragging}
                         attributes={attributes}
                         listeners={listeners}
-                        onToggleDirectory={onToggleDirectory}
                         onSessionClick={onSessionClick}
                         onRenameSession={onRenameSession}
                         onDeleteSession={onDeleteSession}
                         onCreateSessionInDirectory={onCreateSessionInDirectory}
-                        onRemoveDirectory={onRemoveDirectory}
+                        onRemoveDirectory={
+                          onRemoveDirectory ? removeDirectory : undefined
+                        }
                       />
                     )}
                   </SortableDirectoryGroup>
@@ -850,11 +1052,7 @@ export function AppSidebar({
                 <DirectorySessionGroup
                   directory={activeDirectory}
                   sessions={getDirectorySessions(activeDirectory)}
-                  collapsed={
-                    searchActive
-                      ? false
-                      : Boolean(collapsedDirectories[activeDirectory])
-                  }
+                  collapsedDirectoryStore={collapsedDirectoryStore}
                   searchActive={searchActive}
                   isLoadingSessions={Boolean(
                     directoryIndexLoading[activeDirectory]
@@ -866,12 +1064,13 @@ export function AppSidebar({
                   isMobile={isMobile}
                   setOpenMobile={setOpenMobile}
                   overlay
-                  onToggleDirectory={onToggleDirectory}
                   onSessionClick={onSessionClick}
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
                   onCreateSessionInDirectory={onCreateSessionInDirectory}
-                  onRemoveDirectory={onRemoveDirectory}
+                  onRemoveDirectory={
+                    onRemoveDirectory ? removeDirectory : undefined
+                  }
                 />
               ) : null}
             </DragOverlay>
