@@ -164,6 +164,33 @@ function scrollViewportToBottom(
   viewport.scrollTo({ top: viewport.scrollHeight, behavior })
 }
 
+function isScrollUpKey(event: KeyboardEvent) {
+  return (
+    event.key === "ArrowUp" ||
+    event.key === "PageUp" ||
+    event.key === "Home" ||
+    (event.key === " " && event.shiftKey)
+  )
+}
+
+function isToolAccordionToggleKey(event: KeyboardEvent) {
+  return event.key === "Enter" || event.key === " "
+}
+
+function findOpeningToolAccordionTrigger(
+  target: EventTarget | null,
+  viewport: HTMLDivElement
+) {
+  if (!(target instanceof Element)) return null
+
+  const trigger = target.closest<HTMLElement>(
+    "[data-conversation-tool-accordion-trigger='true']"
+  )
+  if (!trigger || !viewport.contains(trigger)) return null
+
+  return trigger.getAttribute("aria-expanded") === "true" ? null : trigger
+}
+
 export function useAppShellMessageScroll({
   conversationRevision,
   isSessionViewLoading,
@@ -174,37 +201,51 @@ export function useAppShellMessageScroll({
   const bottomRef = React.useRef<HTMLDivElement | null>(null)
   const messageViewportRef = React.useRef<HTMLDivElement | null>(null)
   const lastLoadedSessionScrollKeyRef = React.useRef("")
+  const lastMessagesScrollTopRef = React.useRef(0)
+  const lastMessagesScrollHeightRef = React.useRef(0)
+  const lastMessagesClientHeightRef = React.useRef(0)
+  const followMessagesRef = React.useRef(true)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
   const syncViewportState = React.useCallback((viewport: HTMLDivElement) => {
     scrollStateStoreRef.current.setSnapshot(viewportStateSnapshot(viewport))
   }, [])
 
-  const scrollViewportToBottomIfPinned = React.useCallback(
+  const rememberViewportLayout = React.useCallback(
     (viewport: HTMLDivElement) => {
-      const wasNearBottom =
-        scrollStateStoreRef.current.getSnapshot().isMessagesNearBottom
-      syncViewportState(viewport)
+      lastMessagesScrollTopRef.current = viewport.scrollTop
+      lastMessagesScrollHeightRef.current = viewport.scrollHeight
+      lastMessagesClientHeightRef.current = viewport.clientHeight
+    },
+    []
+  )
 
-      if (!wasNearBottom) {
+  const scrollViewportToBottomIfFollowing = React.useCallback(
+    (viewport: HTMLDivElement) => {
+      if (!followMessagesRef.current) {
+        rememberViewportLayout(viewport)
+        syncViewportState(viewport)
         return
       }
 
       scrollViewportToBottom(viewport, "auto")
+      rememberViewportLayout(viewport)
       syncViewportState(viewport)
     },
-    [syncViewportState]
+    [rememberViewportLayout, syncViewportState]
   )
 
   const scrollConversationToTop = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
+    followMessagesRef.current = false
     viewport.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const scrollConversationToBottom = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
+    followMessagesRef.current = true
     scrollViewportToBottom(viewport, "smooth")
   }, [])
 
@@ -213,6 +254,7 @@ export function useAppShellMessageScroll({
     if (!viewport) return
     const target = previousMessageJumpTarget(viewport)
     if (!target) return
+    followMessagesRef.current = false
     viewport.scrollTo({
       top: Math.max(0, target.offsetTop - 8),
       behavior: "smooth",
@@ -224,6 +266,7 @@ export function useAppShellMessageScroll({
     if (!viewport) return
     const target = nextMessageJumpTarget(viewport)
     if (!target) return
+    followMessagesRef.current = false
     viewport.scrollTo({
       top: Math.max(0, target.offsetTop - 8),
       behavior: "smooth",
@@ -236,15 +279,68 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     const handleScroll = () => {
+      const currentScrollTop = viewport.scrollTop
+      const currentScrollHeight = viewport.scrollHeight
+      const currentClientHeight = viewport.clientHeight
+      const movedUp = currentScrollTop < lastMessagesScrollTopRef.current - 1
+      const layoutChanged =
+        currentScrollHeight !== lastMessagesScrollHeightRef.current ||
+        currentClientHeight !== lastMessagesClientHeightRef.current
+
+      if (movedUp && !layoutChanged && !isViewportNearBottom(viewport)) {
+        followMessagesRef.current = false
+      } else if (isViewportNearBottom(viewport)) {
+        followMessagesRef.current = true
+      }
+
+      rememberViewportLayout(viewport)
       syncViewportState(viewport)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) {
+        followMessagesRef.current = false
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (findOpeningToolAccordionTrigger(event.target, viewport)) {
+        followMessagesRef.current = false
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const openingToolAccordionTrigger = findOpeningToolAccordionTrigger(
+        event.target,
+        viewport
+      )
+      if (openingToolAccordionTrigger && isToolAccordionToggleKey(event)) {
+        followMessagesRef.current = false
+        return
+      }
+
+      if (isScrollUpKey(event)) {
+        followMessagesRef.current = false
+      }
     }
 
     handleScroll()
     viewport.addEventListener("scroll", handleScroll, { passive: true })
+    viewport.addEventListener("wheel", handleWheel, { passive: true })
+    viewport.addEventListener("pointerdown", handlePointerDown, {
+      capture: true,
+      passive: true,
+    })
+    viewport.addEventListener("keydown", handleKeyDown, { capture: true })
     return () => {
       viewport.removeEventListener("scroll", handleScroll)
+      viewport.removeEventListener("wheel", handleWheel)
+      viewport.removeEventListener("pointerdown", handlePointerDown, {
+        capture: true,
+      })
+      viewport.removeEventListener("keydown", handleKeyDown, { capture: true })
     }
-  }, [syncViewportState])
+  }, [rememberViewportLayout, syncViewportState])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -255,11 +351,11 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     messageViewportRef.current = viewport
-    scrollViewportToBottomIfPinned(viewport)
+    scrollViewportToBottomIfFollowing(viewport)
   }, [
     conversationRevision,
     isSessionViewLoading,
-    scrollViewportToBottomIfPinned,
+    scrollViewportToBottomIfFollowing,
     sessionState.streaming,
   ])
 
@@ -279,17 +375,18 @@ export function useAppShellMessageScroll({
       window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(() => {
         if (!viewport.isConnected) return
-        scrollViewportToBottomIfPinned(viewport)
+        scrollViewportToBottomIfFollowing(viewport)
       })
     }
     const resizeObserver = new ResizeObserver(handleResize)
     resizeObserver.observe(content)
+    resizeObserver.observe(viewport)
 
     return () => {
       window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
     }
-  }, [scrollViewportToBottomIfPinned])
+  }, [scrollViewportToBottomIfFollowing])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -305,7 +402,9 @@ export function useAppShellMessageScroll({
 
     messageViewportRef.current = viewport
     lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
+    followMessagesRef.current = true
     viewport.scrollTop = viewport.scrollHeight
+    rememberViewportLayout(viewport)
     syncViewportState(viewport)
   }, [
     isSessionViewLoading,
@@ -313,6 +412,7 @@ export function useAppShellMessageScroll({
     sessionState.draft,
     sessionState.sessionFile,
     sessionState.sessionId,
+    rememberViewportLayout,
     syncViewportState,
   ])
 
