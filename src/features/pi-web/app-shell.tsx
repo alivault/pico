@@ -60,6 +60,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AppShellCommandPalette } from "@/features/pi-web/app-shell-command-palette"
 import {
+  AppShellSettingsDialogController,
+  type AppShellSettingsDialogHandle,
+} from "@/features/pi-web/app-shell-settings-dialog"
+import {
   AppShellAddDirectoryDialogController,
   type AppShellAddDirectoryDialogHandle,
 } from "@/features/pi-web/app-shell-add-directory-dialog"
@@ -1274,7 +1278,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.useState<ExtensionUiEvent | null>(null)
   const [pendingUiValue, setPendingUiValue] = React.useState("")
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
-  const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
     React.useState(true)
   const [
@@ -1299,6 +1302,10 @@ const AppShellSessionWorkspace = React.forwardRef<
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
   const treeOpenRef = React.useRef(false)
+  const settingsDialogRef = React.useRef<AppShellSettingsDialogHandle | null>(
+    null
+  )
+  const settingsOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
@@ -1548,13 +1555,13 @@ const AppShellSessionWorkspace = React.forwardRef<
   }, [sessionDoneSoundEnabled])
 
   const openCommandPalette = () => {
-    setSettingsOpen(false)
+    settingsDialogRef.current?.close()
     setCommandPaletteOpen(true)
   }
 
   const openSettingsDialog = () => {
     setCommandPaletteOpen(false)
-    setSettingsOpen(true)
+    settingsDialogRef.current?.open()
   }
 
   const openRenameDialog = () => {
@@ -2448,7 +2455,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionHasAvailableModels: sessionState.availableModels.length > 0,
     sessionHasFile: Boolean(sessionState.sessionFile),
     sessionSearchInputRef,
-    settingsOpen,
+    settingsOpenRef,
     shortcutActionsRef,
     sidebarSessionEntriesByKey,
     treeOpenRef,
@@ -2825,9 +2832,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         treeSummaryAvailable={treeSummaryAvailable}
       />
 
-      <AppShellDialogs
-        settingsOpen={settingsOpen}
-        onSettingsOpenChange={setSettingsOpen}
+      <AppShellSettingsDialogController
+        ref={settingsDialogRef}
+        openStateRef={settingsOpenRef}
         currentTheme={currentTheme}
         onThemeChange={handleThemeChange}
         hideThinkingBlocks={sessionState.hideThinkingBlock}
@@ -2847,6 +2854,9 @@ const AppShellSessionWorkspace = React.forwardRef<
           handleSessionDoneDesktopNotificationsEnabledChange
         }
         desktopNotificationPermission={desktopNotificationPermission}
+      />
+
+      <AppShellDialogs
         pendingUiRequest={pendingUiRequest}
         pendingUiValue={pendingUiValue}
         onPendingUiValueChange={setPendingUiValue}

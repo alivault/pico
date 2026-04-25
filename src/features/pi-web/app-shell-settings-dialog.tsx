@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
 import type { ThemeMode } from "@/lib/pi-web"
 
@@ -36,6 +38,12 @@ function desktopNotificationPermissionLabel(
   }
 
   return "Desktop notifications will ask for browser permission when enabled."
+}
+
+export type AppShellSettingsDialogHandle = {
+  open: () => void
+  close: () => void
+  isOpen: () => boolean
 }
 
 type AppShellSettingsDialogProps = {
@@ -229,5 +237,51 @@ export function AppShellSettingsDialog({
         {settingsSections}
       </DialogContent>
     </Dialog>
+  )
+}
+type AppShellSettingsDialogControllerProps = Omit<
+  AppShellSettingsDialogProps,
+  "open" | "onOpenChange"
+> & {
+  ref?: React.Ref<AppShellSettingsDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+}
+
+export function AppShellSettingsDialogController({
+  ref,
+  openStateRef,
+  ...props
+}: AppShellSettingsDialogControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        setOpenState(true)
+      },
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    []
+  )
+
+  return (
+    <AppShellSettingsDialog
+      open={open}
+      onOpenChange={setOpenState}
+      {...props}
+    />
   )
 }

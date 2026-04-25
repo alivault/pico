@@ -38,7 +38,7 @@ type UseAppShellShortcutsOptions = {
   sessionHasAvailableModels: boolean
   sessionHasFile: boolean
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
-  settingsOpen: boolean
+  settingsOpenRef: React.MutableRefObject<boolean>
   shortcutActionsRef: React.MutableRefObject<ShortcutActions>
   sidebarSessionEntriesByKey: Map<string, SessionListEntry>
   treeOpenRef: React.MutableRefObject<boolean>
@@ -84,7 +84,7 @@ export function useAppShellShortcuts({
   sessionHasAvailableModels,
   sessionHasFile,
   sessionSearchInputRef,
-  settingsOpen,
+  settingsOpenRef,
   shortcutActionsRef,
   sidebarSessionEntriesByKey,
   treeOpenRef,
@@ -98,7 +98,7 @@ export function useAppShellShortcuts({
         deleteOpenRef.current ||
         forkOpenRef.current ||
         treeOpenRef.current ||
-        settingsOpen ||
+        settingsOpenRef.current ||
         commandPaletteOpen ||
         hasPendingUiRequest
 
@@ -378,7 +378,7 @@ export function useAppShellShortcuts({
     sessionHasAvailableModels,
     sessionHasFile,
     sessionSearchInputRef,
-    settingsOpen,
+    settingsOpenRef,
     shortcutActionsRef,
     sidebarSessionEntriesByKey,
     treeOpenRef,
