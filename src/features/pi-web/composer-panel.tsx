@@ -522,11 +522,7 @@ function ComposerPromptEditor({
 
       event.preventDefault()
       runPrimaryComposerAction(
-        ctrlShortcut && event.altKey
-          ? "followUp"
-          : acceptFollowUps
-            ? "steer"
-            : undefined
+        event.altKey ? "followUp" : acceptFollowUps ? "steer" : undefined
       )
       return
     }

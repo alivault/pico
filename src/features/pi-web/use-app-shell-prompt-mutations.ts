@@ -352,6 +352,8 @@ export function useAppShellPromptMutations({
         } satisfies PendingDraftPrompt
         pendingDraftPromptRef.current = nextPrompt
         setPendingDraftPrompt(nextPrompt)
+        awaitingFirstTurnRef.current = true
+        setAwaitingFirstTurn(true)
         toast.info("Prompt will send when the new session is ready.")
       } else {
         const queuedStreamingBehavior =
@@ -383,6 +385,7 @@ export function useAppShellPromptMutations({
       composerTextRef,
       lastSyncedEditorTextRef,
       replaceComposerDraft,
+      setAwaitingFirstTurn,
       setComposerImages,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,

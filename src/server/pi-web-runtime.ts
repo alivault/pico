@@ -2496,8 +2496,22 @@ export class PiWebRuntime {
         queued: false,
       })
 
-      void Promise.resolve()
-        .then(() => activeEntry.session.prompt(message, promptOptions))
+      let promptPreflightComplete: (() => void) | undefined
+      let promptPreflightSettled = false
+      const promptPreflight = new Promise<void>((resolve) => {
+        promptPreflightComplete = resolve
+      })
+      const settlePromptPreflight = () => {
+        if (promptPreflightSettled) return
+        promptPreflightSettled = true
+        promptPreflightComplete?.()
+      }
+      const promptPromise = activeEntry.session.prompt(message, {
+        ...promptOptions,
+        preflightResult: settlePromptPreflight,
+      })
+
+      void promptPromise
         .then(async () => {
           activeEntry.streamingState = false
           this.reconcilePendingUserMessages(activeEntry)
@@ -2520,6 +2534,11 @@ export class PiWebRuntime {
             error: formatError(error),
           })
         })
+        .finally(() => {
+          settlePromptPreflight()
+        })
+
+      await promptPreflight
 
       return { ok: true, queued: false }
     })

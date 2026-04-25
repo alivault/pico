@@ -162,6 +162,7 @@ export type AgentSessionLike = {
     options?: {
       images?: Array<PromptImageInputLike>
       streamingBehavior?: "steer" | "followUp"
+      preflightResult?: (success: boolean) => void
     }
   ): Promise<void>
   abort(): Promise<void>
