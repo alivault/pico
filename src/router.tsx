@@ -8,7 +8,7 @@ export function getRouter() {
     defaultOptions: {
       queries: {
         retry: 1,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
       },
     },
   })

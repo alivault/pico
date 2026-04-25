@@ -30,6 +30,8 @@ import {
   isStateSyncEvent,
 } from "@/lib/pi-web-api"
 
+const RESUME_RECONNECT_AFTER_MS = 30_000
+
 type PendingComposerMessage = {
   pendingId: string
   text: string
@@ -303,8 +305,16 @@ export function useAppShellSessionSync({
 }: UseAppShellSessionSyncOptions) {
   const queryClient = useQueryClient()
   const initialEventsSessionIdRef = React.useRef(sessionId)
+  const currentSessionIdRef = React.useRef(sessionId)
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
+  const backgroundedAtRef = React.useRef<number | null>(null)
+  const wasBackgroundedRef = React.useRef(false)
+  const [eventsReconnectNonce, setEventsReconnectNonce] = React.useState(0)
+
+  React.useEffect(() => {
+    currentSessionIdRef.current = sessionId
+  }, [sessionId])
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
@@ -326,6 +336,72 @@ export function useAppShellSessionSync({
 
     pendingRouteSessionIdRef.current = sessionId
   }, [pendingRouteSessionIdRef, sessionId, sessionState.sessionId])
+
+  React.useEffect(() => {
+    if (!viewerContextId) return
+
+    const markBackgrounded = () => {
+      backgroundedAtRef.current = Date.now()
+      wasBackgroundedRef.current = true
+    }
+
+    const refreshAfterResume = (force = false) => {
+      if (document.visibilityState !== "visible") return
+
+      const backgroundedAt = backgroundedAtRef.current
+      const backgroundedFor = backgroundedAt ? Date.now() - backgroundedAt : 0
+      const shouldRefresh =
+        force ||
+        (wasBackgroundedRef.current &&
+          backgroundedFor >= RESUME_RECONNECT_AFTER_MS)
+
+      backgroundedAtRef.current = null
+      wasBackgroundedRef.current = false
+
+      if (!shouldRefresh) return
+
+      initialEventsSessionIdRef.current = currentSessionIdRef.current
+      setEventsReconnectNonce((nonce) => nonce + 1)
+      void queryClient
+        .invalidateQueries({ refetchType: "active" })
+        .catch(() => undefined)
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        markBackgrounded()
+        return
+      }
+
+      refreshAfterResume()
+    }
+
+    const handleFocus = () => {
+      refreshAfterResume()
+    }
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      refreshAfterResume(event.persisted)
+    }
+
+    if (document.visibilityState === "hidden") {
+      markBackgrounded()
+    }
+
+    window.addEventListener("blur", markBackgrounded)
+    window.addEventListener("focus", handleFocus)
+    window.addEventListener("pagehide", markBackgrounded)
+    window.addEventListener("pageshow", handlePageShow)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener("blur", markBackgrounded)
+      window.removeEventListener("focus", handleFocus)
+      window.removeEventListener("pagehide", markBackgrounded)
+      window.removeEventListener("pageshow", handlePageShow)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [queryClient, viewerContextId])
 
   React.useEffect(() => {
     if (!viewerContextId) return
@@ -492,6 +568,7 @@ export function useAppShellSessionSync({
     setSessionState,
     setSessionsEvent,
     viewerContextId,
+    eventsReconnectNonce,
   ])
 
   React.useEffect(() => {
