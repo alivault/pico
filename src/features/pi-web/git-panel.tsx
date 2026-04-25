@@ -212,7 +212,7 @@ function gitFileHasLineChanges(file: GitChangeFile) {
 }
 
 function gitFilesSummaryText(files: Array<GitChangeFile>) {
-  if (!files.length) return "Working tree clean"
+  if (!files.length) return ""
 
   let stagedCount = 0
   let unstagedCount = 0
@@ -1039,15 +1039,9 @@ export function GitTabStatusText({
     select: selectGitWorkingTreeSummary,
     notifyOnChangeProps: ["data"],
   })
-  const text = statusQuery.data
+  const text = statusQuery.data || "Git"
 
-  if (!text) return null
-
-  return (
-    <span className="max-w-48 truncate text-xs font-normal text-muted-foreground/80">
-      {text}
-    </span>
-  )
+  return <span className="max-w-48 truncate">{text}</span>
 }
 
 export function HeaderGitStatusText({

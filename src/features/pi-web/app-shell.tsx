@@ -924,7 +924,6 @@ function AppShellTabsList({
     <TabsList className="w-full rounded-none border-b border-border/70">
       <TabsTrigger value="session">Session</TabsTrigger>
       <TabsTrigger value="git">
-        <span>Git</span>
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
       </TabsTrigger>
     </TabsList>
