@@ -996,7 +996,10 @@ function AppShellWindowEffects({
     backgroundCurrentSessionUnreadKey,
     setBackgroundCurrentSessionUnreadKey,
   ] = React.useState("")
-  const lastStreamingRef = React.useRef(false)
+  const lastStreamingSnapshotRef = React.useRef({
+    key: "",
+    streaming: false,
+  })
   const sessionUnreadSnapshotsRef = React.useRef<Map<string, boolean>>(
     new Map()
   )
@@ -1050,7 +1053,14 @@ function AppShellWindowEffects({
   }, [sessionStreaming])
 
   React.useEffect(() => {
-    if (lastStreamingRef.current && !sessionStreaming) {
+    const lastStreamingSnapshot = lastStreamingSnapshotRef.current
+    const finishedActiveSession =
+      lastStreamingSnapshot.streaming &&
+      lastStreamingSnapshot.key &&
+      lastStreamingSnapshot.key === activeSessionNotificationKey &&
+      !sessionStreaming
+
+    if (finishedActiveSession) {
       const finishedLabel = finishedSessionLabel(currentSessionTitle)
       toast.success(finishedLabel)
 
@@ -1070,7 +1080,11 @@ function AppShellWindowEffects({
         void playSessionDoneSound()
       }
     }
-    lastStreamingRef.current = sessionStreaming
+
+    lastStreamingSnapshotRef.current = {
+      key: activeSessionNotificationKey,
+      streaming: sessionStreaming,
+    }
   }, [
     activeSessionNotificationKey,
     currentSessionTitle,
