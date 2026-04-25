@@ -756,7 +756,7 @@ const AppShellConversationFrame = React.forwardRef<
         aria-label="Conversation messages"
         className="h-full overflow-auto px-4 outline-none"
       >
-        <div ref={messagesContentRef} className="min-h-full">
+        <div ref={messagesContentRef} className="flex min-h-full flex-col">
           {children}
           <div ref={bottomRef} />
         </div>
@@ -897,7 +897,7 @@ function AppShellSessionConversation({
       sessionState={sessionState}
     >
       {showConversationLoadingState ? (
-        <div className="flex min-h-full flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
           <Spinner />
           <div>{conversationLoadingLabel}</div>
         </div>
