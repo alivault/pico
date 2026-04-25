@@ -33,7 +33,6 @@ import {
 } from "lucide-react"
 
 import type { SessionListEntry } from "@/lib/pi-web-api"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -386,18 +385,19 @@ function SidebarSessionItem({
             }
           }}
         >
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center justify-between gap-3">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {entry.title}
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                {entry.streaming ? <Badge variant="outline">Live</Badge> : null}
-                {entry.unread ? (
-                  <span className="size-2 rounded-full bg-primary" />
-                ) : null}
-              </span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            {entry.streaming ? (
+              <Spinner
+                className="size-3.5 shrink-0 text-sidebar-foreground/60"
+                aria-label="Session streaming"
+              />
+            ) : null}
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {entry.title}
             </span>
+            {entry.unread ? (
+              <span className="size-2 shrink-0 rounded-full bg-primary" />
+            ) : null}
           </span>
         </SidebarMenuButton>
 

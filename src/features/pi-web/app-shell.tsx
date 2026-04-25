@@ -2604,6 +2604,12 @@ const AppShellSessionWorkspace = React.forwardRef<
               <SidebarTrigger className="mt-0.5 shrink-0" />
               <div className="min-w-0 space-y-1">
                 <div className="flex min-w-0 items-center gap-1.5">
+                  {!isSessionViewLoading && sessionState.streaming ? (
+                    <Spinner
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                      aria-label="Session streaming"
+                    />
+                  ) : null}
                   <h2
                     className="min-w-0 truncate text-[15px] leading-tight font-semibold"
                     title={displaySessionTitle}
@@ -2612,16 +2618,9 @@ const AppShellSessionWorkspace = React.forwardRef<
                   </h2>
                   {isSessionViewLoading ? (
                     <Badge variant="outline">Loading</Badge>
-                  ) : (
-                    <>
-                      {sessionState.draft && (
-                        <Badge variant="outline">Draft</Badge>
-                      )}
-                      {sessionState.streaming && (
-                        <Badge variant="outline">Streaming</Badge>
-                      )}
-                    </>
-                  )}
+                  ) : sessionState.draft ? (
+                    <Badge variant="outline">Draft</Badge>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   {displaySessionCwd && (
