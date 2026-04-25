@@ -698,14 +698,8 @@ function exploreGroupSummary(
     .join(", ")
 }
 
-function exploreGroupStatusLabel(
-  blocks: Array<
-    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
-      type: "tool"
-    }
-  >
-) {
-  return blocks.some((block) => block.running) ? "Exploring" : "Explored"
+function exploreGroupStatusLabel() {
+  return "Explore"
 }
 
 function exploreToolLine(
@@ -826,16 +820,15 @@ function groupAssistantBlocks(
       .slice(start, end + 1)
       .filter(isExploreToolBlock)
     const first = groupedBlocks[0]
-    const last = groupedBlocks[groupedBlocks.length - 1]
 
-    if (!first || !last) {
+    if (!first) {
       start = -1
       return
     }
 
     result.push({
       type: "explore",
-      key: `explore:${first.blockKey || assistantBlockKey(first)}:${last.blockKey || assistantBlockKey(last)}:${start}:${end}`,
+      key: `explore:${first.blockKey || assistantBlockKey(first)}:${start}`,
       blocks: groupedBlocks,
     })
 
@@ -1343,7 +1336,7 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
   >
 }) {
   const summary = exploreGroupSummary(blocks)
-  const statusLabel = exploreGroupStatusLabel(blocks)
+  const statusLabel = exploreGroupStatusLabel()
   const hasRunning = blocks.some((block) => block.running)
   const hasError = blocks.some((block) => block.isError)
 
