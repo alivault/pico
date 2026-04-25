@@ -908,7 +908,7 @@ function AppShellSessionConversation({
           <div>{conversationLoadingLabel}</div>
         </div>
       ) : renderedConversationGroups.length > 0 ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 pt-4">
           {renderedConversationGroups.map((group) => (
             <ConversationGroupView
               key={group.key}
