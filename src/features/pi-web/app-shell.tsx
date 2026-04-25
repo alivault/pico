@@ -973,6 +973,7 @@ function AppShellWindowEffects({
   sessionId,
   sessionStreaming,
   sidebarSessions,
+  onSelectSession,
 }: {
   activeSessionNotificationKey: string
   currentPageTitle: string
@@ -984,6 +985,7 @@ function AppShellWindowEffects({
   sessionId?: string
   sessionStreaming: boolean
   sidebarSessions: Array<SessionListEntry>
+  onSelectSession: (nextSessionId?: string) => void
 }) {
   const [isPageForeground, setIsPageForeground] = React.useState(() =>
     typeof document === "undefined"
@@ -1062,7 +1064,16 @@ function AppShellWindowEffects({
 
     if (finishedActiveSession) {
       const finishedLabel = finishedSessionLabel(currentSessionTitle)
-      toast.success(finishedLabel)
+      if (sessionId) {
+        toast.success(finishedLabel, {
+          action: {
+            label: "Open",
+            onClick: () => onSelectSession(sessionId),
+          },
+        })
+      } else {
+        toast.success(finishedLabel)
+      }
 
       if (!isPageForeground && activeSessionNotificationKey) {
         setBackgroundCurrentSessionUnreadKey(activeSessionNotificationKey)
@@ -1089,6 +1100,7 @@ function AppShellWindowEffects({
     activeSessionNotificationKey,
     currentSessionTitle,
     isPageForeground,
+    onSelectSession,
     sessionCwd,
     sessionDoneDesktopNotificationsEnabled,
     sessionDoneSoundEnabled,
@@ -1155,7 +1167,16 @@ function AppShellWindowEffects({
 
     for (const [index, session] of finishedSessions.entries()) {
       const finishedLabel = finishedSessionLabel(session.title || "New session")
-      toast.success(finishedLabel)
+      if (session.id) {
+        toast.success(finishedLabel, {
+          action: {
+            label: "Open",
+            onClick: () => onSelectSession(session.id),
+          },
+        })
+      } else {
+        toast.success(finishedLabel)
+      }
 
       if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
         showSessionDoneDesktopNotification({
@@ -1172,6 +1193,7 @@ function AppShellWindowEffects({
   }, [
     isPageForeground,
     sessionDoneDesktopNotificationsEnabled,
+    onSelectSession,
     sessionDoneSoundEnabled,
     sidebarSessions,
   ])
@@ -2526,6 +2548,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         sessionId={sessionState.sessionId}
         sessionStreaming={sessionState.streaming}
         sidebarSessions={sidebarSessions}
+        onSelectSession={handleSelectSession}
       />
 
       <SidebarInset className="min-h-0 overflow-hidden">
