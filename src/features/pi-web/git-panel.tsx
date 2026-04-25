@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query"
-import { GitBranchIcon, RefreshCwIcon } from "lucide-react"
+import { CheckIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -54,6 +54,15 @@ function formatDisplayPath(value: string | undefined) {
   return path
     .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
+}
+
+function formatFolderName(value: string | undefined) {
+  const path = value?.trim().replace(/\/+$/, "") || ""
+  if (!path) return ""
+  if (path === "/") return "/"
+
+  const parts = path.split("/").filter(Boolean)
+  return parts[parts.length - 1] || path
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -256,6 +265,34 @@ function gitLocalBranchTrackClass(branch: GitLocalBranch, trackText: string) {
   if (branch.upstreamGone) return "text-red-500"
   if (trackText === "synced") return "text-emerald-500"
   return "text-amber-500"
+}
+
+function formatGitRelativeDateCompact(value: string | undefined) {
+  const text = value?.trim().toLowerCase() || ""
+  if (!text) return ""
+  if (text === "now") return "now"
+
+  const match = text.match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?/)
+  if (!match) return text.replace(/\s+ago$/, "")
+
+  const amount = match[1]
+  const unit = match[2]
+  const suffix =
+    unit === "second"
+      ? "s"
+      : unit === "minute"
+        ? "m"
+        : unit === "hour"
+          ? "h"
+          : unit === "day"
+            ? "d"
+            : unit === "week"
+              ? "w"
+              : unit === "month"
+                ? "mo"
+                : "y"
+
+  return `${amount}${suffix}`
 }
 
 function gitLocalBranchesForRender(
@@ -474,29 +511,38 @@ function GitRepositorySummary({
     ? `Detached HEAD${gitStatus.revision ? ` (${gitStatus.revision})` : ""}`
     : gitStatus.branch || gitStatus.label
 
+  const folderName = formatFolderName(normalizedCwd)
+  const synced = gitStatus.ahead === 0 && gitStatus.behind === 0
+  const title = [formatDisplayPath(normalizedCwd), gitStatus.title]
+    .filter(Boolean)
+    .join(" · ")
+
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-      <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate font-medium" title={gitStatus.title}>
-        {branchLabel}
-      </span>
-      {gitStatus.dirty ? (
-        <Badge variant="outline" className="text-amber-600 dark:text-amber-400">
-          modified
-        </Badge>
-      ) : null}
-      {gitStatus.ahead > 0 ? (
-        <Badge
-          variant="outline"
-          className="text-emerald-600 dark:text-emerald-400"
-        >
-          ↑{gitStatus.ahead}
-        </Badge>
+    <div
+      className="flex min-w-0 items-center gap-2 text-lg leading-7"
+      title={title}
+    >
+      {synced ? (
+        <CheckIcon className="size-4 shrink-0 text-emerald-500" />
       ) : null}
       {gitStatus.behind > 0 ? (
-        <Badge variant="outline" className="text-sky-600 dark:text-sky-400">
+        <span className="shrink-0 font-semibold text-sky-500 tabular-nums">
           ↓{gitStatus.behind}
-        </Badge>
+        </span>
+      ) : null}
+      {gitStatus.ahead > 0 ? (
+        <span className="shrink-0 font-semibold text-amber-500 tabular-nums">
+          ↑{gitStatus.ahead}
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate font-semibold">
+        {folderName || "No cwd"}
+      </span>
+      {branchLabel ? (
+        <>
+          <span className="shrink-0 text-muted-foreground">→</span>
+          <span className="min-w-0 truncate">{branchLabel}</span>
+        </>
       ) : null}
     </div>
   )
@@ -560,24 +606,18 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0 space-y-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="text-sm font-semibold">Git</div>
-          {active && refreshing ? (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Spinner className="size-3" /> Updating
-            </span>
-          ) : null}
-        </div>
-        <div className="min-w-0 truncate text-xs text-muted-foreground">
-          {formatDisplayPath(normalizedCwd) || "No cwd"}
-        </div>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
         <GitRepositorySummary
           viewerContextId={viewerContextId}
           cwd={normalizedCwd}
           active={active}
         />
+        {active && refreshing ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+            <Spinner className="size-3" /> Updating
+          </span>
+        ) : null}
       </div>
 
       <Button
@@ -759,6 +799,9 @@ function GitBranchesControls({
 
 function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
   const trackText = gitLocalBranchTrackText(branch)
+  const relativeDateText = branch.current
+    ? "*"
+    : formatGitRelativeDateCompact(branch.relativeDate)
   const title =
     [branch.name, branch.upstream, branch.subject]
       .filter(Boolean)
@@ -767,29 +810,36 @@ function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
   return (
     <li
       title={title}
-      className="grid min-h-7 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-border/70 py-1.5 font-mono text-[13px] leading-5 first:border-t-0"
+      className="flex min-h-7 min-w-0 items-center gap-2 border-t border-border/70 py-1.5 font-mono text-[13px] leading-5 first:border-t-0"
     >
+      <span
+        className={cn(
+          "w-[4ch] shrink-0 text-right text-muted-foreground/70 tabular-nums",
+          branch.current && "text-emerald-500"
+        )}
+      >
+        {relativeDateText}
+      </span>
       <span className="min-w-0 truncate">
         <span className={cn(branch.current && "text-emerald-500")}>
           {branch.name}
         </span>
-        {branch.upstream ? (
-          <span className="text-muted-foreground/70"> {branch.upstream}</span>
-        ) : null}
       </span>
-      <span className="inline-flex min-w-0 gap-2 justify-self-end whitespace-nowrap">
-        {branch.hash ? (
-          <span className="text-sky-500">{branch.hash}</span>
-        ) : null}
-        {branch.current ? (
-          <span className="text-emerald-500">current</span>
-        ) : null}
-        {trackText ? (
-          <span className={gitLocalBranchTrackClass(branch, trackText)}>
-            {trackText}
-          </span>
-        ) : null}
-      </span>
+      {trackText ? (
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center whitespace-nowrap",
+            gitLocalBranchTrackClass(branch, trackText)
+          )}
+          title={trackText}
+        >
+          {trackText === "synced" ? (
+            <CheckIcon className="size-3.5" />
+          ) : (
+            trackText
+          )}
+        </span>
+      ) : null}
     </li>
   )
 }
@@ -810,11 +860,7 @@ function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
         ) : null}
         <span>{parts.branch || branch.name}</span>
       </span>
-      <span className="inline-flex min-w-0 gap-2 justify-self-end whitespace-nowrap">
-        {branch.hash ? (
-          <span className="text-sky-500">{branch.hash}</span>
-        ) : null}
-      </span>
+      <span className="inline-flex min-w-0 gap-2 justify-self-end whitespace-nowrap" />
     </li>
   )
 }
@@ -1089,7 +1135,7 @@ export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
   const normalizedCwd = normalizeCwd(cwd)
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-3">
+    <div className="mx-auto grid w-full max-w-[80ch] gap-3">
       <GitPanelErrorToasts
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
