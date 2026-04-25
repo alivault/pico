@@ -36,13 +36,19 @@ type AppShellCommandPaletteProps = {
   onCommandError?: (error: unknown) => void
 }
 
+export type AppShellCommandPaletteHandle = {
+  open: () => void
+  close: () => void
+  isOpen: () => boolean
+}
+
 function commandValue(command: AppCommand) {
   return [command.title, command.description, ...(command.keywords ?? [])].join(
     " "
   )
 }
 
-export function AppShellCommandPalette({
+function AppShellCommandPalette({
   open,
   onOpenChange,
   commands,
@@ -143,5 +149,52 @@ export function AppShellCommandPalette({
     >
       {commandPaletteBody}
     </CommandDialog>
+  )
+}
+
+type AppShellCommandPaletteControllerProps = Omit<
+  AppShellCommandPaletteProps,
+  "open" | "onOpenChange"
+> & {
+  ref?: React.Ref<AppShellCommandPaletteHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+}
+
+export function AppShellCommandPaletteController({
+  ref,
+  openStateRef,
+  ...props
+}: AppShellCommandPaletteControllerProps) {
+  const [open, setOpen] = React.useState(false)
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        setOpenState(true)
+      },
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    []
+  )
+
+  return (
+    <AppShellCommandPalette
+      open={open}
+      onOpenChange={setOpenState}
+      {...props}
+    />
   )
 }

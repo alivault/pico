@@ -58,7 +58,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AppShellCommandPalette } from "@/features/pi-web/app-shell-command-palette"
+import {
+  AppShellCommandPaletteController,
+  type AppShellCommandPaletteHandle,
+} from "@/features/pi-web/app-shell-command-palette"
 import {
   AppShellSettingsDialogController,
   type AppShellSettingsDialogHandle,
@@ -1277,7 +1280,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false)
   const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
     React.useState(true)
   const [
@@ -1291,6 +1293,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
+  const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
+    null
+  )
+  const commandPaletteOpenRef = React.useRef(false)
   const addDirectoryDialogRef =
     React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
   const addDirectoryOpenRef = React.useRef(false)
@@ -1566,11 +1572,11 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const openCommandPalette = () => {
     settingsDialogRef.current?.close()
-    setCommandPaletteOpen(true)
+    commandPaletteRef.current?.open()
   }
 
   const openSettingsDialog = () => {
-    setCommandPaletteOpen(false)
+    commandPaletteRef.current?.close()
     settingsDialogRef.current?.open()
   }
 
@@ -2449,7 +2455,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   useAppShellShortcuts({
     addDirectoryOpenRef,
-    commandPaletteOpen,
+    commandPaletteOpenRef,
     currentTab,
     deleteOpenRef,
     forkOpenRef,
@@ -2787,9 +2793,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         </Tabs>
       </SidebarInset>
 
-      <AppShellCommandPalette
-        open={commandPaletteOpen}
-        onOpenChange={setCommandPaletteOpen}
+      <AppShellCommandPaletteController
+        ref={commandPaletteRef}
+        openStateRef={commandPaletteOpenRef}
         commands={commandPaletteCommands}
         onCommandError={(error) => {
           toast.error(

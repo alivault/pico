@@ -27,7 +27,7 @@ type ShortcutActions = {
 
 type UseAppShellShortcutsOptions = {
   addDirectoryOpenRef: React.MutableRefObject<boolean>
-  commandPaletteOpen: boolean
+  commandPaletteOpenRef: React.MutableRefObject<boolean>
   currentTab: string
   deleteOpenRef: React.MutableRefObject<boolean>
   forkOpenRef: React.MutableRefObject<boolean>
@@ -73,7 +73,7 @@ function hasSelectedText(target: EventTarget | null) {
 
 export function useAppShellShortcuts({
   addDirectoryOpenRef,
-  commandPaletteOpen,
+  commandPaletteOpenRef,
   currentTab,
   deleteOpenRef,
   forkOpenRef,
@@ -99,7 +99,7 @@ export function useAppShellShortcuts({
         forkOpenRef.current ||
         treeOpenRef.current ||
         settingsOpenRef.current ||
-        commandPaletteOpen ||
+        commandPaletteOpenRef.current ||
         pendingUiRequestOpenRef.current
 
       const activeElement = document.activeElement
@@ -367,7 +367,7 @@ export function useAppShellShortcuts({
     }
   }, [
     addDirectoryOpenRef,
-    commandPaletteOpen,
+    commandPaletteOpenRef,
     currentTab,
     deleteOpenRef,
     forkOpenRef,
