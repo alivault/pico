@@ -754,46 +754,14 @@ export function thinkingSummaryText(
         "text" | "summaryLabel"
       >
     | undefined,
-  options: { hiddenThinkingLabel?: unknown; allowPlaceholder?: boolean } = {}
+  options: { allowPlaceholder?: boolean } = {}
 ) {
   const blockLabel = meaningfulHiddenThinkingLabel(block?.summaryLabel)
   if (blockLabel) return truncateThinkingSummary(blockLabel)
 
-  const hiddenLabel = meaningfulHiddenThinkingLabel(options.hiddenThinkingLabel)
-  if (hiddenLabel) return truncateThinkingSummary(hiddenLabel)
-
   const text = primaryThinkingSummaryText(block?.text)
   if (!text) return options.allowPlaceholder ? "Thinking…" : ""
   return truncateThinkingSummary(text)
-}
-
-export function latestThinkingSummaryText(
-  items: Array<ConversationItem>,
-  options: { hiddenThinkingLabel?: unknown; allowPlaceholder?: boolean } = {}
-) {
-  const hiddenLabel = meaningfulHiddenThinkingLabel(options.hiddenThinkingLabel)
-  if (hiddenLabel) return truncateThinkingSummary(hiddenLabel)
-
-  for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
-    const item = items[itemIndex]
-    if (item?.kind !== "assistant") continue
-
-    for (
-      let blockIndex = item.blocks.length - 1;
-      blockIndex >= 0;
-      blockIndex -= 1
-    ) {
-      const block = item.blocks[blockIndex]
-      if (block?.type !== "thinking") continue
-
-      const summary = thinkingSummaryText(block, {
-        allowPlaceholder: options.allowPlaceholder,
-      })
-      if (summary) return summary
-    }
-  }
-
-  return options.allowPlaceholder ? "Thinking…" : ""
 }
 
 export function createInitialSessionState(): SessionState {

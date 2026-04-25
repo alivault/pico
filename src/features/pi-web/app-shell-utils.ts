@@ -149,17 +149,12 @@ function shareUiState(
       typeof next.editorText === "string" ? next.editorText : undefined,
     workingMessage:
       typeof next.workingMessage === "string" ? next.workingMessage : undefined,
-    hiddenThinkingLabel:
-      typeof next.hiddenThinkingLabel === "string"
-        ? next.hiddenThinkingLabel
-        : undefined,
   } satisfies SessionState["uiState"]
 
   return sharedStatuses === previous.statuses &&
     previous.title === sharedUiState.title &&
     previous.editorText === sharedUiState.editorText &&
-    previous.workingMessage === sharedUiState.workingMessage &&
-    previous.hiddenThinkingLabel === sharedUiState.hiddenThinkingLabel
+    previous.workingMessage === sharedUiState.workingMessage
     ? previous
     : sharedUiState
 }

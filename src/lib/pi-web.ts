@@ -46,7 +46,6 @@ export {
   extractMessageImages,
   extractMessageText,
   extractToolText,
-  latestThinkingSummaryText,
   meaningfulHiddenThinkingLabel,
   normalizePromptImage,
   previewUrlForImage,
@@ -188,7 +187,6 @@ export type SessionUiState = {
   title?: string
   editorText?: string
   workingMessage?: string
-  hiddenThinkingLabel?: string
 }
 
 export type SessionState = {
