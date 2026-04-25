@@ -1035,6 +1035,168 @@ function TreeSelectedNodeCard({
   )
 }
 
+type TreeBrowsePanelProps = {
+  isMobile: boolean
+  treeFilterMode: TreeFilterMode
+  onTreeFilterModeChange: (value: TreeFilterMode) => void
+  treeLoading: boolean
+  treeSubmitting: boolean
+  treeLeafId: string | null
+  treeQuery: string
+  onTreeQueryChange: (value: string) => void
+  treeViewModel: TreeDialogViewModel
+  selectedTreeNodeId: string | null
+  onSelectTreeNode: (nodeId: string) => void
+}
+
+function TreeBrowsePanel({
+  isMobile,
+  treeFilterMode,
+  onTreeFilterModeChange,
+  treeLoading,
+  treeSubmitting,
+  treeLeafId,
+  treeQuery,
+  onTreeQueryChange,
+  treeViewModel,
+  selectedTreeNodeId,
+  onSelectTreeNode,
+}: TreeBrowsePanelProps) {
+  const [treeCursorNodeId, setTreeCursorNodeId] = React.useState<string | null>(
+    selectedTreeNodeId || treeLeafId || null
+  )
+
+  const cursorVisibleTreeNode =
+    treeCursorNodeId != null
+      ? (treeViewModel.orderedVisibleNodes.find(
+          (node) => node.id === treeCursorNodeId
+        ) ?? null)
+      : null
+  const cursorTreeIndex = treeCursorNodeId
+    ? treeViewModel.orderedVisibleNodes.findIndex(
+        (node) => node.id === treeCursorNodeId
+      )
+    : -1
+
+  React.useEffect(() => {
+    const fallbackId = findNearestVisibleTreeNodeId(
+      treeCursorNodeId || selectedTreeNodeId || treeLeafId,
+      treeViewModel.orderedVisibleNodes,
+      treeViewModel.nodeById
+    )
+
+    if (fallbackId !== treeCursorNodeId) {
+      setTreeCursorNodeId(fallbackId)
+    }
+  }, [
+    selectedTreeNodeId,
+    treeCursorNodeId,
+    treeLeafId,
+    treeViewModel.nodeById,
+    treeViewModel.orderedVisibleNodes,
+  ])
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2">
+        {TREE_FILTER_OPTIONS.map((option) => (
+          <Button
+            key={option.mode}
+            size="sm"
+            variant={treeFilterMode === option.mode ? "default" : "outline"}
+            onClick={() => onTreeFilterModeChange(option.mode)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
+      <Command
+        shouldFilter={false}
+        loop
+        value={cursorVisibleTreeNode?.id ?? undefined}
+        onValueChange={(value) => {
+          if (!value || value === treeCursorNodeId) return
+          if (!treeViewModel.nodeById.has(value)) return
+          setTreeCursorNodeId(value)
+        }}
+        className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
+      >
+        <CommandInput
+          autoFocus={!isMobile}
+          value={treeQuery}
+          onValueChange={onTreeQueryChange}
+          placeholder="Search tree"
+          className="text-base md:text-sm"
+        />
+        <CommandList className="max-h-none min-h-0 flex-1">
+          {treeLoading ? (
+            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Spinner /> Loading tree…
+            </div>
+          ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
+            treeViewModel.orderedVisibleNodes.map((node) => (
+              <CommandItem
+                key={node.id}
+                value={node.id}
+                disabled={treeSubmitting || node.id === treeLeafId}
+                onMouseEnter={() => {
+                  if (treeCursorNodeId !== node.id) {
+                    setTreeCursorNodeId(node.id)
+                  }
+                }}
+                onClick={() => onSelectTreeNode(node.id)}
+                onSelect={() => onSelectTreeNode(node.id)}
+                title={treeDialogPlainText(node)}
+                className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
+              >
+                <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
+                  <TreeCommandPrefix node={node} viewModel={treeViewModel} />
+                  <span className="flex h-6 w-2.5 items-center justify-center">
+                    {node.isActivePath ? (
+                      <TreeHierarchyIcon
+                        name="active-path"
+                        className={cn(
+                          node.isActivePath
+                            ? "text-[var(--success)]"
+                            : "text-muted-foreground"
+                        )}
+                      />
+                    ) : null}
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                  {node.label ? (
+                    <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
+                      [{node.label}]
+                    </span>
+                  ) : null}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <TreeEntryLine node={node} />
+                  </div>
+                </div>
+              </CommandItem>
+            ))
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">
+              {treeQuery.trim()
+                ? "No tree entries match the current search."
+                : "No tree entries match the current filter."}
+            </div>
+          )}
+        </CommandList>
+      </Command>
+
+      <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+        {treeLoading
+          ? "Loading tree…"
+          : `${Math.max(0, cursorTreeIndex + 1)}/${treeViewModel.orderedVisibleNodes.length}`}
+      </div>
+    </div>
+  )
+}
+
 type AppShellTreeDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1076,12 +1238,10 @@ export function AppShellTreeDialog({
   const [treeFilterMode, setTreeFilterMode] =
     React.useState<TreeFilterMode>("no-tools")
   const [treeStage, setTreeStage] = React.useState<TreeStage>("browse")
-  const [treeCursorNodeId, setTreeCursorNodeId] = React.useState<string | null>(
-    selectedTreeNodeId || treeLeafId || null
-  )
   const [customTreeSummaryInstructions, setCustomTreeSummaryInstructions] =
     React.useState("")
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const treeWasOpenRef = React.useRef(false)
   const isMobile = useIsMobile()
 
   const treeViewModel = React.useMemo(
@@ -1105,53 +1265,25 @@ export function AppShellTreeDialog({
           (node) => node.id === selectedTreeNodeId
         ) ?? null)
       : null
-  const cursorVisibleTreeNode =
-    treeCursorNodeId != null
-      ? (treeViewModel.orderedVisibleNodes.find(
-          (node) => node.id === treeCursorNodeId
-        ) ?? null)
-      : null
-  const cursorTreeIndex = treeCursorNodeId
-    ? treeViewModel.orderedVisibleNodes.findIndex(
-        (node) => node.id === treeCursorNodeId
-      )
-    : -1
 
   React.useEffect(() => {
-    if (!open) return
+    const wasOpen = treeWasOpenRef.current
+    treeWasOpenRef.current = open
+
+    if (!open || wasOpen) return
 
     setTreeFilterMode("no-tools")
     setTreeStage("browse")
-    setTreeCursorNodeId(selectedTreeNodeId || treeLeafId || null)
     setCustomTreeSummaryInstructions("")
   }, [open, selectedTreeNodeId, treeLeafId])
 
   React.useEffect(() => {
     if (!open) return
 
-    const fallbackId = findNearestVisibleTreeNodeId(
-      treeCursorNodeId || selectedTreeNodeId || treeLeafId,
-      treeViewModel.orderedVisibleNodes,
-      treeViewModel.nodeById
-    )
-
-    if (fallbackId !== treeCursorNodeId) {
-      setTreeCursorNodeId(fallbackId)
-    }
-
     if (treeStage !== "browse" && !selectedTreeNode) {
       setTreeStage("browse")
     }
-  }, [
-    open,
-    selectedTreeNode,
-    selectedTreeNodeId,
-    treeCursorNodeId,
-    treeLeafId,
-    treeStage,
-    treeViewModel.nodeById,
-    treeViewModel.orderedVisibleNodes,
-  ])
+  }, [open, selectedTreeNode, treeStage])
 
   React.useEffect(() => {
     if (!open) return
@@ -1259,7 +1391,6 @@ export function AppShellTreeDialog({
     const node = treeViewModel.nodeById.get(nodeId)
     if (!node) return
 
-    setTreeCursorNodeId(nodeId)
     onSelectedTreeNodeIdChange(nodeId)
     onSelectedTreeNodeLabelChange(node.label || "")
     setTreeStage("actions")
@@ -1271,103 +1402,19 @@ export function AppShellTreeDialog({
 
   const treeDialogBody =
     treeStage === "browse" ? (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2">
-          {TREE_FILTER_OPTIONS.map((option) => (
-            <Button
-              key={option.mode}
-              size="sm"
-              variant={treeFilterMode === option.mode ? "default" : "outline"}
-              onClick={() => setTreeFilterMode(option.mode)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-
-        <Command
-          shouldFilter={false}
-          loop
-          value={cursorVisibleTreeNode?.id ?? undefined}
-          onValueChange={(value) => {
-            if (!value || value === treeCursorNodeId) return
-            if (!treeViewModel.nodeById.has(value)) return
-            setTreeCursorNodeId(value)
-          }}
-          className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
-        >
-          <CommandInput
-            autoFocus={!isMobile}
-            value={treeQuery}
-            onValueChange={onTreeQueryChange}
-            placeholder="Search tree"
-            className="text-base md:text-sm"
-          />
-          <CommandList className="max-h-none min-h-0 flex-1">
-            {treeLoading ? (
-              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                <Spinner /> Loading tree…
-              </div>
-            ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
-              treeViewModel.orderedVisibleNodes.map((node) => (
-                <CommandItem
-                  key={node.id}
-                  value={node.id}
-                  disabled={treeSubmitting || node.id === treeLeafId}
-                  onMouseEnter={() => {
-                    if (treeCursorNodeId !== node.id) {
-                      setTreeCursorNodeId(node.id)
-                    }
-                  }}
-                  onClick={() => selectTreeNode(node.id)}
-                  onSelect={() => selectTreeNode(node.id)}
-                  title={treeDialogPlainText(node)}
-                  className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
-                >
-                  <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
-                    <TreeCommandPrefix node={node} viewModel={treeViewModel} />
-                    <span className="flex h-6 w-2.5 items-center justify-center">
-                      {node.isActivePath ? (
-                        <TreeHierarchyIcon
-                          name="active-path"
-                          className={cn(
-                            node.isActivePath
-                              ? "text-[var(--success)]"
-                              : "text-muted-foreground"
-                          )}
-                        />
-                      ) : null}
-                    </span>
-                  </div>
-
-                  <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                    {node.label ? (
-                      <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
-                        [{node.label}]
-                      </span>
-                    ) : null}
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                      <TreeEntryLine node={node} />
-                    </div>
-                  </div>
-                </CommandItem>
-              ))
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">
-                {treeQuery.trim()
-                  ? "No tree entries match the current search."
-                  : "No tree entries match the current filter."}
-              </div>
-            )}
-          </CommandList>
-        </Command>
-
-        <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-          {treeLoading
-            ? "Loading tree…"
-            : `${Math.max(0, cursorTreeIndex + 1)}/${treeViewModel.orderedVisibleNodes.length}`}
-        </div>
-      </div>
+      <TreeBrowsePanel
+        isMobile={isMobile}
+        treeFilterMode={treeFilterMode}
+        onTreeFilterModeChange={setTreeFilterMode}
+        treeLoading={treeLoading}
+        treeSubmitting={treeSubmitting}
+        treeLeafId={treeLeafId}
+        treeQuery={treeQuery}
+        onTreeQueryChange={onTreeQueryChange}
+        treeViewModel={treeViewModel}
+        selectedTreeNodeId={selectedTreeNodeId}
+        onSelectTreeNode={selectTreeNode}
+      />
     ) : selectedTreeNode ? (
       <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto">
         <div className="flex items-center justify-between gap-2">
