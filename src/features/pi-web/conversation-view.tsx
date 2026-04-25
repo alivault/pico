@@ -63,6 +63,38 @@ function parseCodeLanguage(className?: string) {
   return match?.[1]
 }
 
+const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  c: "c",
+  cc: "c",
+  cpp: "c",
+  cs: "c",
+  css: "css",
+  go: "go",
+  h: "c",
+  htm: "html",
+  html: "html",
+  java: "java",
+  js: "javascript",
+  jsx: "jsx",
+  json: "json",
+  jsonc: "jsonc",
+  mjs: "javascript",
+  mdx: "mdx",
+  py: "python",
+  rs: "rust",
+  ts: "typescript",
+  tsx: "tsx",
+  xml: "xml",
+}
+
+function codeLanguageFromPath(path: string) {
+  const cleanPath = path.split(/[?#]/)[0] || ""
+  const extension = cleanPath.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase()
+  if (!extension) return undefined
+
+  return CODE_LANGUAGE_BY_EXTENSION[extension]
+}
+
 function markdownNodeText(node: React.ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
     return String(node)
@@ -405,6 +437,15 @@ function toolReadLocation(
     return `${filePath} limit=${limit}`.trim()
   }
   return filePath
+}
+
+function toolFilePath(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool") return ""
+
+  const args = normalizeToolArgs(block.args)
+  return getToolArgText(args, "path") || getToolArgText(args, "filePath")
 }
 
 function collapseToolPreview(text: string) {
@@ -1248,6 +1289,189 @@ function AnsiText({ text }: { text: string }) {
   )
 }
 
+type EditDiffLine = {
+  kind: "added" | "removed" | "context" | "omitted"
+  marker: string
+  lineNumber: string
+  content: string
+}
+
+function parseEditDiffLine(line: string): EditDiffLine {
+  const marker = line.startsWith("+") ? "+" : line.startsWith("-") ? "-" : " "
+  const body = line.slice(1)
+
+  if (marker === " " && body.trim() === "...") {
+    return {
+      kind: "omitted",
+      marker: "",
+      lineNumber: "",
+      content: "...",
+    }
+  }
+
+  const lineMatch = body.match(/^(\s*\d+)(?: (.*))?$/)
+  const kind = marker === "+" ? "added" : marker === "-" ? "removed" : "context"
+
+  if (!lineMatch) {
+    return {
+      kind,
+      marker,
+      lineNumber: "",
+      content: body,
+    }
+  }
+
+  return {
+    kind,
+    marker,
+    lineNumber: lineMatch[1].trim(),
+    content: lineMatch[2] ?? "",
+  }
+}
+
+function parseEditDiff(diff: string) {
+  const lines = diff.split("\n").map((line) => parseEditDiffLine(line))
+  const lineNumberWidth = Math.max(
+    1,
+    ...lines.map((line) => line.lineNumber.length)
+  )
+
+  return { lines, lineNumberWidth }
+}
+
+function editDiffLineClassName(kind: EditDiffLine["kind"]) {
+  switch (kind) {
+    case "added":
+      return "bg-success/10"
+    case "removed":
+      return "bg-destructive/10"
+    default:
+      return ""
+  }
+}
+
+function editDiffMarkerClassName(kind: EditDiffLine["kind"]) {
+  switch (kind) {
+    case "added":
+      return "text-success"
+    case "removed":
+      return "text-destructive"
+    default:
+      return "text-muted-foreground"
+  }
+}
+
+function EditDiffBlock({
+  diff,
+  language,
+}: {
+  diff: string
+  language?: string
+}) {
+  const parsed = parseEditDiff(diff)
+  const code = parsed.lines
+    .map((line) => (line.kind === "omitted" ? "" : line.content))
+    .join("\n")
+  const [highlighted, setHighlighted] =
+    React.useState<HighlightResponse | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    if (!language || !code.trim()) {
+      setHighlighted(null)
+      return
+    }
+
+    setHighlighted(null)
+    void getHighlightedCode(code, language)
+      .then((payload) => {
+        if (!cancelled) {
+          setHighlighted(payload)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHighlighted({ ok: true, unavailable: true })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [code, language])
+
+  const renderedLanguage =
+    highlighted && "language" in highlighted && highlighted.language
+      ? highlighted.language
+      : language
+  const highlightedHtml = hasHighlightHtml(highlighted)
+    ? highlighted.html
+    : null
+  const highlightedLines = highlightedHtml ? highlightedHtml.split("\n") : []
+
+  return (
+    <div className="overflow-hidden rounded-md border bg-muted/20 py-1 font-mono text-xs leading-5">
+      <div className="w-max min-w-full">
+        {parsed.lines.map((line, index) => {
+          const highlightedLine = highlightedLines[index]
+
+          return (
+            <div
+              key={index}
+              className={cn(
+                "flex w-max min-w-full whitespace-pre",
+                editDiffLineClassName(line.kind)
+              )}
+            >
+              <span
+                className={cn(
+                  "w-4 shrink-0 pr-1 text-right select-none",
+                  editDiffMarkerClassName(line.kind)
+                )}
+              >
+                {line.marker}
+              </span>
+              <span
+                className="shrink-0 pr-3 text-right text-muted-foreground select-none"
+                style={{ width: `${parsed.lineNumberWidth}ch` }}
+              >
+                {line.lineNumber}
+              </span>
+              <span
+                className={cn(
+                  "pr-4",
+                  line.kind === "omitted" && "text-muted-foreground"
+                )}
+              >
+                {highlightedLine && line.kind !== "omitted" ? (
+                  <code
+                    className={cn(
+                      renderedLanguage && `language-${renderedLanguage}`
+                    )}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: syntax highlighting HTML is generated by sugar-high
+                    dangerouslySetInnerHTML={{ __html: highlightedLine }}
+                  />
+                ) : (
+                  <code>{line.content}</code>
+                )}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PlainToolOutput({ text }: { text: string }) {
+  return (
+    <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+      {text}
+    </pre>
+  )
+}
+
 const ToolBlockSection = React.memo(function ToolBlockSection({
   label,
   text,
@@ -1260,12 +1484,35 @@ const ToolBlockSection = React.memo(function ToolBlockSection({
       <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </div>
-      <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
-        {text}
-      </pre>
+      <PlainToolOutput text={text} />
     </section>
   )
 })
+
+function EditToolOutput({
+  block,
+}: {
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
+    type: "tool"
+  }
+}) {
+  const diff = toolDiffText(block)
+  const output = block.output.trimEnd()
+  const extraOutput = output && output !== diff ? output : ""
+  const fallbackOutput = toolOutputText(block)
+  const language = codeLanguageFromPath(toolFilePath(block))
+
+  if (!diff) {
+    return <PlainToolOutput text={fallbackOutput} />
+  }
+
+  return (
+    <div className="space-y-3">
+      <EditDiffBlock diff={diff} language={language} />
+      {extraOutput ? <PlainToolOutput text={extraOutput} /> : null}
+    </div>
+  )
+}
 
 const ToolBlockCard = React.memo(function ToolBlockCard({
   block,
@@ -1314,6 +1561,8 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
                 <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
                   <AnsiText text={shellBodyText} />
                 </pre>
+              ) : block.name === "edit" ? (
+                <EditToolOutput block={block} />
               ) : (
                 <div className="space-y-4">
                   {callText ? (
