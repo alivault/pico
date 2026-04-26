@@ -1,6 +1,6 @@
-# Pi
+# Phi
 
-Pi is the TanStack Start rewrite of the legacy `pi-web` browser app. It keeps the same local Pi workflow—directory-organized session browsing, a live conversation shell, tree navigation, session forking, git inspection, and Pi SDK-backed prompt execution—while moving the app to a TypeScript/TanStack/Vite+ stack.
+Phi is the TanStack Start rewrite of the legacy `pi-web` browser app. It keeps the same local Phi workflow—directory-organized session browsing, a live conversation shell, tree navigation, session forking, git inspection, and bundled SDK-backed prompt execution—while moving the app to a TypeScript/TanStack/Vite+ stack.
 
 The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web-legacy` and remains the parity reference until manual sign-off is recorded.
 
@@ -11,7 +11,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Vite+ + Nitro
 - Tailwind CSS v4
 - shadcn-style UI components built on Base UI
-- Native Pi SDK-backed runtime loaded from the bundled `@mariozechner/pi-coding-agent` dependency
+- Native bundled-SDK-backed runtime loaded from the `@mariozechner/pi-coding-agent` dependency
 - Server-sent events for live session sync
 
 ## Current feature snapshot
@@ -90,8 +90,8 @@ Main feature code lives in `src/features/pi-web`:
 
 - `src/routes/events.ts` — SSE event stream endpoint
 - `src/routes/api.*.ts` — server endpoints for prompts, sessions, tree actions, git, completions, settings, highlighting, and UI callbacks
-- `src/server/pi-web-runtime.ts` — runtime bridge between TanStack Start routes and the Pi SDK session model
-- `src/server/pi-sdk.ts` — Pi SDK loading and settings-manager adaptation
+- `src/server/pi-web-runtime.ts` — runtime bridge between TanStack Start routes and the SDK session model
+- `src/server/pi-sdk.ts` — SDK loading and settings-manager adaptation
 - `src/server/git.ts` — git status/change inspection helpers
 
 ## Key HTTP/SSE endpoints
@@ -137,7 +137,7 @@ pnpm dev
 
 The server prefers the repo-local `@mariozechner/pi-coding-agent` dependency, so a separate global `pi` install is not required. Set `PI_REMOTE_PI_SDK_DIR` only when you intentionally want to test against a different SDK checkout/install.
 
-To refresh the bundled Pi SDK to the current npm `latest` release:
+To refresh the bundled SDK to the current npm `latest` release:
 
 ```bash
 pnpm update:pi

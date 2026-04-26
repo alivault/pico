@@ -41,7 +41,7 @@ export function AppShellUiRequestDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{pendingUiRequest?.title || "Pi request"}</DialogTitle>
+          <DialogTitle>{pendingUiRequest?.title || "Phi request"}</DialogTitle>
           {pendingUiRequest?.message && (
             <DialogDescription>{pendingUiRequest.message}</DialogDescription>
           )}

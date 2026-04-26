@@ -1974,7 +1974,7 @@ function AppShellConversationEmptyState({
         <EmptyDescription>
           {draft
             ? undefined
-            : "This is the native Pi session view backed by the new TypeScript runtime."}
+            : "This is the native Phi session view backed by the new TypeScript runtime."}
         </EmptyDescription>
       </EmptyHeader>
       {draft ? (
@@ -2331,7 +2331,7 @@ function AppShellWindowEffectsHost({
   const currentPageTitle = isSessionViewLoading
     ? displaySessionTitle
     : sessionWindowState.uiTitle ||
-      (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
+      (currentSessionTitle !== "New session" ? currentSessionTitle : "Phi")
   const onConsumeSessionDoneEvents = (ids: Array<string>) => {
     const consumedIds = new Set(ids)
     setValueStoreField(notificationStore, "sessionDoneEvents", (current) =>
@@ -2469,7 +2469,7 @@ function AppShellWindowEffects({
           event.sessionKey === activeSessionKey)
       )
       const label = doneEventLabel(event)
-      const body = event.cwd || sessionCwd || "Open Pi to continue"
+      const body = event.cwd || sessionCwd || "Open Phi to continue"
       const tag = event.sessionPath || event.sessionId || event.id
 
       if (matchesCurrentSession) {

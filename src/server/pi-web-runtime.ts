@@ -2838,7 +2838,7 @@ export class PiWebRuntime {
         },
         custom: async () => {
           throw new Error(
-            "Custom extension UI is not supported in Pi browser mode."
+            "Custom extension UI is not supported in Phi browser mode."
           )
         },
         pasteToEditor: (text: string) => {
@@ -2856,7 +2856,7 @@ export class PiWebRuntime {
         getTheme: () => undefined,
         setTheme: () => ({
           success: false,
-          error: "Theme switching is not supported in Pi browser mode.",
+          error: "Theme switching is not supported in Phi browser mode.",
         }),
       },
       commandContextActions: {

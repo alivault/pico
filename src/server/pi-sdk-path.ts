@@ -90,6 +90,6 @@ export function resolvePiSdkDir() {
   }
 
   throw new Error(
-    "Could not locate the Pi SDK package. Run pnpm install or set PI_REMOTE_PI_SDK_DIR."
+    "Could not locate the bundled SDK package. Run pnpm install or set PI_REMOTE_PI_SDK_DIR."
   )
 }
