@@ -32,6 +32,7 @@ import {
 } from "@/server/pi-web-runtime-highlight"
 import {
   compareSessionListEntriesByLastUserMessage,
+  countFullTurnUserAndAssistantMessages,
   createDirectorySessionRevision,
   getSessionListTitle,
   laterModifiedTimestamp,
@@ -40,7 +41,7 @@ import {
   normalizeModifiedTimestamp,
   normalizeSessionListContextUsage,
   normalizeSessionListTitle,
-  readSessionLastUserMessageTimestamp,
+  readSessionListMetrics,
   serializeSessionListEntry,
 } from "@/server/pi-web-runtime-session-list"
 import {
@@ -1024,7 +1025,9 @@ export class PiWebRuntime {
       }),
       modified: await this.sessionEntryModified(entry),
       lastUserMessageAt: this.getSessionLastUserMessageTimestamp(entry),
-      messageCount: entry.session.messages.length,
+      messageCount: countFullTurnUserAndAssistantMessages(
+        entry.session.messages
+      ),
       contextUsage: normalizeSessionListContextUsage(
         entry.session.getContextUsage()
       ),
@@ -1048,25 +1051,29 @@ export class PiWebRuntime {
       const sessions = allSessions.filter(
         (entry) => (entry.messageCount ?? 0) > 0
       )
-      const timestampsStartedAt = performance.now()
-      const withTimestamps = await Promise.all(
-        sessions.map(async (entry) => ({
-          ...entry,
-          lastUserMessageAt: entry.path
-            ? ((await readSessionLastUserMessageTimestamp(entry.path)) ??
-              entry.lastUserMessageAt)
-            : entry.lastUserMessageAt,
-        }))
+      const metricsStartedAt = performance.now()
+      const withMetrics = await Promise.all(
+        sessions.map(async (entry) => {
+          const metrics = entry.path
+            ? await readSessionListMetrics(entry.path)
+            : undefined
+          return {
+            ...entry,
+            lastUserMessageAt:
+              metrics?.lastUserMessageAt ?? entry.lastUserMessageAt,
+            messageCount: metrics?.messageCount ?? entry.messageCount,
+          }
+        })
       )
-      this.logSessionLoadDebug("session_index:last_user_timestamps", {
-        durationMs: roundedDurationMs(timestampsStartedAt),
+      this.logSessionLoadDebug("session_index:metrics", {
+        durationMs: roundedDurationMs(metricsStartedAt),
         sessionCount: sessions.length,
       })
       this.sessionIndexCache = {
-        entries: withTimestamps,
+        entries: withMetrics,
         expiresAt: Date.now() + SESSION_INDEX_CACHE_TTL_MS,
       }
-      return withTimestamps
+      return withMetrics
     } catch (error) {
       console.error("[pi-web] failed to list sessions:", error)
       return []

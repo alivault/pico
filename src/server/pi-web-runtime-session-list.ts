@@ -17,6 +17,10 @@ function normalizeFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
+function completeTurnStopReason(value: unknown) {
+  return typeof value === "string" && value !== "toolUse"
+}
+
 function normalizeNonNegativeInteger(value: unknown) {
   const number = normalizeFiniteNumber(value)
   if (number == null || number < 0) return undefined
@@ -148,11 +152,53 @@ export function compareSessionListEntriesByLastUserMessage(
   )
 }
 
-export async function readSessionLastUserMessageTimestamp(sessionPath: string) {
+export function countFullTurnUserAndAssistantMessages(
+  messages: Array<unknown>
+) {
+  let count = 0
+  let hasTurnUser = false
+  let turnAssistantCount = 0
+  let turnComplete = false
+
+  const finishTurn = (assumeComplete: boolean) => {
+    if (
+      hasTurnUser &&
+      turnAssistantCount > 0 &&
+      (turnComplete || assumeComplete)
+    ) {
+      count += 1 + turnAssistantCount
+    }
+  }
+
+  for (const message of messages) {
+    if (!isRecord(message)) continue
+
+    if (message.role === "user") {
+      finishTurn(true)
+      hasTurnUser = true
+      turnAssistantCount = 0
+      turnComplete = false
+      continue
+    }
+
+    if (message.role !== "assistant" || !hasTurnUser) continue
+
+    turnAssistantCount += 1
+    if (completeTurnStopReason(message.stopReason)) {
+      turnComplete = true
+    }
+  }
+
+  finishTurn(false)
+  return count
+}
+
+export async function readSessionListMetrics(sessionPath: string) {
   try {
     const content = await readFile(sessionPath, "utf8")
     let lastTimestamp = 0
     let lastValue: string | undefined
+    const messages: Array<UnknownRecord> = []
 
     for (const line of content.split("\n")) {
       if (!line.trim()) continue
@@ -166,22 +212,35 @@ export async function readSessionLastUserMessageTimestamp(sessionPath: string) {
 
       if (!isRecord(entry) || entry.type !== "message") continue
       const message = isRecord(entry.message) ? entry.message : undefined
-      if (message?.role !== "user") continue
+      if (!message) continue
 
-      const normalized =
-        normalizeModifiedTimestamp(message.timestamp) ||
-        normalizeModifiedTimestamp(entry.timestamp)
-      const timestamp = modifiedTimestampValue(normalized)
-      if (!timestamp || timestamp < lastTimestamp) continue
+      if (message.role === "user") {
+        const normalized =
+          normalizeModifiedTimestamp(message.timestamp) ||
+          normalizeModifiedTimestamp(entry.timestamp)
+        const timestamp = modifiedTimestampValue(normalized)
+        if (timestamp && timestamp >= lastTimestamp) {
+          lastTimestamp = timestamp
+          lastValue = normalized
+        }
+      }
 
-      lastTimestamp = timestamp
-      lastValue = normalized
+      if (message.role === "user" || message.role === "assistant") {
+        messages.push(message)
+      }
     }
 
-    return lastValue
+    return {
+      lastUserMessageAt: lastValue,
+      messageCount: countFullTurnUserAndAssistantMessages(messages),
+    }
   } catch {
     return undefined
   }
+}
+
+export async function readSessionLastUserMessageTimestamp(sessionPath: string) {
+  return (await readSessionListMetrics(sessionPath))?.lastUserMessageAt
 }
 
 export function listKnownDirectories(options: {
