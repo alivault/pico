@@ -38,7 +38,6 @@ import type { SessionListEntry } from "@/lib/pi-web-api"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -1457,8 +1456,7 @@ export function AppSidebar({
                 <EmptyMedia variant="icon">
                   <FolderIcon />
                 </EmptyMedia>
-                <EmptyTitle>No sidebar results</EmptyTitle>
-                <EmptyDescription>{emptyStateText}</EmptyDescription>
+                <EmptyTitle>{emptyStateText}</EmptyTitle>
               </EmptyHeader>
             </Empty>
           </SidebarGroup>
