@@ -1839,6 +1839,35 @@ export function assistantMessageHasVisibleBlocks({
   )
 }
 
+const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
+  group,
+}: {
+  group: AssistantBlockGroup
+}) {
+  if (group.type === "explore") {
+    return <ExploreToolGroupCard blocks={group.blocks} />
+  }
+
+  const block = group.block
+
+  switch (block.type) {
+    case "text":
+      return <MarkdownBlock text={block.text} />
+    case "thinking":
+      return (
+        <section className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground">
+          <MarkdownBlock text={block.text} />
+        </section>
+      )
+    case "tool":
+      return <ToolBlockCard block={block} />
+    case "compaction":
+      return <CompactionBlockCard block={block} />
+    default:
+      return null
+  }
+})
+
 export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   items,
   hideThinking,
@@ -1858,36 +1887,15 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
     return null
   }
 
-  const renderedBlocks = groupAssistantBlocks(blocks).flatMap((group) => {
-    if (group.type === "explore") {
-      return <ExploreToolGroupCard key={group.key} blocks={group.blocks} />
-    }
+  const renderedBlocks = groupAssistantBlocks(blocks)
 
-    const block = group.block
-    const key = group.key
-
-    switch (block.type) {
-      case "text":
-        return <MarkdownBlock key={key} text={block.text} />
-      case "thinking":
-        return (
-          <section
-            key={key}
-            className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground"
-          >
-            <MarkdownBlock text={block.text} />
-          </section>
-        )
-      case "tool":
-        return <ToolBlockCard key={key} block={block} />
-      case "compaction":
-        return <CompactionBlockCard key={key} block={block} />
-      default:
-        return []
-    }
-  })
-
-  return <div className="flex flex-col gap-4">{renderedBlocks}</div>
+  return (
+    <div className="flex flex-col gap-4">
+      {renderedBlocks.map((group) => (
+        <AssistantBlockGroupView key={group.key} group={group} />
+      ))}
+    </div>
+  )
 })
 
 export const AssistantMessageCard = React.memo(function AssistantMessageCard({

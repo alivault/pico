@@ -17,10 +17,10 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
   - [ ] Memoize/split sidebar header, footer, directory groups, and session rows.
   - [ ] Avoid rebuilding selection lookup and derived counts in wide render paths where possible.
   - [ ] Preserve drag/reorder, collapse, search, and mobile behavior.
-- [ ] Assistant block-level rendering
-  - [ ] Split assistant block rendering below the assistant message group.
-  - [ ] Reuse block descriptors where block identities/signatures are unchanged.
-  - [ ] Preserve markdown, tool, thinking, and compaction rendering behavior.
+- [x] Assistant block-level rendering
+  - [x] Split assistant block rendering below the assistant message group.
+  - [x] Reuse block descriptors where block identities/signatures are unchanged.
+  - [x] Preserve markdown, tool, thinking, and compaction rendering behavior.
 - [ ] Command palette command slicing
   - [ ] Move command builder dependencies behind refs/stores where possible.
   - [ ] Keep lazy command construction on palette open.
