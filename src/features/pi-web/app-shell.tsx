@@ -2688,6 +2688,32 @@ type AppShellDraftFlowState = {
   storedDraftDirectory: string
 }
 
+type AppShellController = {
+  stores: {
+    appUi: ValueStore<AppShellUiState>
+    composer: ValueStore<AppShellComposerSnapshot>
+    conversationItems: ConversationItemsStore
+    displaySettings: ValueStore<AppShellDisplaySettingsState>
+    draftFlow: ValueStore<AppShellDraftFlowState>
+    notification: ValueStore<AppShellNotificationState>
+    session: ValueStore<SessionState>
+    sidebar: AppShellSidebarStore
+  }
+  refs: {
+    composerImages: React.MutableRefObject<Array<PromptImage>>
+    composerPanel: React.RefObject<ComposerPanelHandle | null>
+    composerSkill: React.MutableRefObject<string | undefined>
+    composerText: React.MutableRefObject<string>
+    conversationFrame: React.RefObject<AppShellConversationFrameHandle | null>
+    sessionState: React.MutableRefObject<SessionState>
+  }
+  actions: AppShellSessionWorkspaceHandle & {
+    focusModelSelector: () => void
+    focusPrompt: () => void
+    focusSessionSearch: () => void
+  }
+}
+
 type AppShellSessionWorkspaceProps = {
   viewerContextId: string
   sessionId?: string
@@ -4500,27 +4526,62 @@ const AppShellSessionWorkspace = React.forwardRef<
     treeOpenRef,
   })
 
-  React.useImperativeHandle(
-    ref,
-    () => ({
+  const appShellControllerRef = React.useRef<AppShellController | null>(null)
+  appShellControllerRef.current = {
+    stores: {
+      appUi: appUiStore,
+      composer: composerStore,
+      conversationItems: conversationItemsStore,
+      displaySettings: displaySettingsStore,
+      draftFlow: draftFlowStore,
+      notification: notificationStore,
+      session: sessionStore,
+      sidebar: sidebarStore,
+    },
+    refs: {
+      composerImages: composerImagesRef,
+      composerPanel: composerPanelRef,
+      composerSkill: composerSkillRef,
+      composerText: composerTextRef,
+      conversationFrame: conversationFrameRef,
+      sessionState: sessionStateRef,
+    },
+    actions: {
       createSession,
+      focusModelSelector,
+      focusPrompt,
+      focusSessionSearch,
       openAddDirectoryDialog,
       openCommandPalette,
       openDeleteDialog,
       openRenameDialogForEntry,
       openSettingsDialog,
       selectSession: handleSelectSession,
-    }),
-    [
-      createSession,
-      handleSelectSession,
-      openAddDirectoryDialog,
-      openCommandPalette,
-      openDeleteDialog,
-      openRenameDialogForEntry,
-      openSettingsDialog,
-    ]
-  )
+    },
+  }
+
+  React.useImperativeHandle(ref, () => {
+    const actions = appShellControllerRef.current?.actions
+    return {
+      createSession: actions?.createSession ?? createSession,
+      openAddDirectoryDialog:
+        actions?.openAddDirectoryDialog ?? openAddDirectoryDialog,
+      openCommandPalette: actions?.openCommandPalette ?? openCommandPalette,
+      openDeleteDialog: actions?.openDeleteDialog ?? openDeleteDialog,
+      openRenameDialogForEntry:
+        actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
+      openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
+      selectSession: actions?.selectSession ?? handleSelectSession,
+    }
+  }, [
+    createSession,
+    handleSelectSession,
+    openAddDirectoryDialog,
+    openCommandPalette,
+    openDeleteDialog,
+    openRenameDialogForEntry,
+    openSettingsDialog,
+  ])
 
   return (
     <>

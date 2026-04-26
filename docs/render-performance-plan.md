@@ -16,10 +16,10 @@ The previous render performance checklist was completed. This file now tracks th
   - [x] Move display settings such as tool visibility and message centering to a display settings store.
   - [x] Move notification settings/permission and session-done events to a notification store.
   - [x] Move draft-session loading owner state to a loading/draft flow store.
-- [ ] Extract app-shell controller/actions
-  - [ ] Centralize refs, stores, mutation actions, and imperative flows in an app-shell controller object.
-  - [ ] Keep React components as selector-driven hosts instead of orchestration owners.
-  - [ ] Keep prompt/session mutation hooks ref/store-backed with minimal render dependencies.
+- [x] Extract app-shell controller/actions
+  - [x] Centralize refs, stores, mutation actions, and imperative flows in an app-shell controller object.
+  - [x] Keep React components as selector-driven hosts instead of orchestration owners.
+  - [x] Keep prompt/session mutation hooks ref/store-backed with minimal render dependencies.
 - [x] Directory-keyed sidebar subscriptions
   - [x] Store directory loading/session slices by directory key.
   - [x] Let each directory row subscribe only to its own sessions/loading/collapse state.
