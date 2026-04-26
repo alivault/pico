@@ -2666,29 +2666,56 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [initialLoadingSessionId, setInitialLoadingSessionId] = React.useState<
     string | null
   >(() => sessionId || null)
-  const [pendingDraftPrompt, setPendingDraftPrompt] = React.useState<{
+  const pendingDraftPromptStoreRef = React.useRef<ValueStore<{
     ownerKey: string
     message: string
     images: Array<PromptImage>
     streamingBehavior?: StreamingBehavior
     optimisticId?: string
-  } | null>(null)
-  const [pendingDraftFollowUps, setPendingDraftFollowUps] = React.useState<
+  } | null> | null>(null)
+  if (!pendingDraftPromptStoreRef.current) {
+    pendingDraftPromptStoreRef.current = createValueStore<{
+      ownerKey: string
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior?: StreamingBehavior
+      optimisticId?: string
+    } | null>(null)
+  }
+  const pendingDraftPromptStore = pendingDraftPromptStoreRef.current
+  const pendingDraftFollowUpsStoreRef = React.useRef<ValueStore<
     Array<{
       message: string
       images: Array<PromptImage>
       streamingBehavior: "steer" | "followUp"
       optimisticId?: string
     }>
-  >([])
+  > | null>(null)
+  if (!pendingDraftFollowUpsStoreRef.current) {
+    pendingDraftFollowUpsStoreRef.current = createValueStore<
+      Array<{
+        message: string
+        images: Array<PromptImage>
+        streamingBehavior: "steer" | "followUp"
+        optimisticId?: string
+      }>
+    >([])
+  }
+  const pendingDraftFollowUpsStore = pendingDraftFollowUpsStoreRef.current
   const isSubmittingStoreRef = React.useRef<ValueStore<boolean> | null>(null)
   if (!isSubmittingStoreRef.current) {
     isSubmittingStoreRef.current = createValueStore(false)
   }
   const isSubmittingStore = isSubmittingStoreRef.current
-  const [pendingMessages, setPendingMessages] = React.useState<
+  const pendingMessagesStoreRef = React.useRef<ValueStore<
     Array<PendingComposerMessage>
-  >([])
+  > | null>(null)
+  if (!pendingMessagesStoreRef.current) {
+    pendingMessagesStoreRef.current = createValueStore<
+      Array<PendingComposerMessage>
+    >([])
+  }
+  const pendingMessagesStore = pendingMessagesStoreRef.current
   const [sessionDoneEvents, setSessionDoneEvents] = React.useState<
     Array<SessionDoneEvent>
   >([])
@@ -2884,6 +2911,85 @@ const AppShellSessionWorkspace = React.forwardRef<
       })
     },
     [composerStore, isSubmittingStore]
+  )
+  const refreshComposerPendingMessages = React.useCallback(() => {
+    const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore
+      .getSnapshot()
+      .map((message, index) => ({
+        pendingId: message.optimisticId || `pending-draft:${index}`,
+        text: message.message,
+        images: message.images,
+        streamingBehavior: message.streamingBehavior,
+      }))
+    const currentComposerSnapshot = composerStore.getSnapshot()
+    composerStore.setSnapshot({
+      ...currentComposerSnapshot,
+      currentPendingMessages: currentComposerSnapshot.disabled
+        ? []
+        : [
+            ...pendingDraftFollowUpMessages,
+            ...pendingMessagesStore.getSnapshot(),
+          ],
+    })
+  }, [composerStore, pendingDraftFollowUpsStore, pendingMessagesStore])
+  const setPendingDraftPrompt = React.useCallback<
+    React.Dispatch<
+      React.SetStateAction<{
+        ownerKey: string
+        message: string
+        images: Array<PromptImage>
+        streamingBehavior?: StreamingBehavior
+        optimisticId?: string
+      } | null>
+    >
+  >(
+    (action) => {
+      const current = pendingDraftPromptStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      pendingDraftPromptStore.setSnapshot(next)
+      if (next) {
+        workingStateStore.setSnapshot({ label: "Waiting for new session…" })
+      } else if (
+        workingStateStore.getSnapshot()?.label === "Waiting for new session…"
+      ) {
+        workingStateStore.setSnapshot(null)
+      }
+    },
+    [pendingDraftPromptStore, workingStateStore]
+  )
+  const setPendingDraftFollowUps = React.useCallback<
+    React.Dispatch<
+      React.SetStateAction<
+        Array<{
+          message: string
+          images: Array<PromptImage>
+          streamingBehavior: "steer" | "followUp"
+          optimisticId?: string
+        }>
+      >
+    >
+  >(
+    (action) => {
+      const current = pendingDraftFollowUpsStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      pendingDraftFollowUpsStore.setSnapshot(next)
+      refreshComposerPendingMessages()
+    },
+    [pendingDraftFollowUpsStore, refreshComposerPendingMessages]
+  )
+  const setPendingMessages = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<PendingComposerMessage>>>
+  >(
+    (action) => {
+      const current = pendingMessagesStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      pendingMessagesStore.setSnapshot(next)
+      refreshComposerPendingMessages()
+    },
+    [pendingMessagesStore, refreshComposerPendingMessages]
   )
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
@@ -3438,6 +3544,9 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const awaitingFirstTurn = awaitingFirstTurnStore.getSnapshot()
   const isSubmitting = isSubmittingStore.getSnapshot()
+  const pendingDraftPrompt = pendingDraftPromptStore.getSnapshot()
+  const pendingDraftFollowUps = pendingDraftFollowUpsStore.getSnapshot()
+  const pendingMessages = pendingMessagesStore.getSnapshot()
 
   const {
     abortSession,
