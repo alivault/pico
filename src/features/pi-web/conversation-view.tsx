@@ -624,21 +624,51 @@ const SHELL_COMMAND_WRAPPER_NAMES = new Set([
   "time",
 ])
 
+type AssistantConversationBlock = Extract<
+  ConversationItem,
+  { kind: "assistant" }
+>["blocks"][number]
+
+type AssistantToolBlock = AssistantConversationBlock & { type: "tool" }
+
 type AssistantBlockGroup =
   | {
       type: "block"
       key: string
-      block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+      block: AssistantConversationBlock
     }
   | {
       type: "explore"
       key: string
-      blocks: Array<
-        Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
-          type: "tool"
-        }
-      >
+      blocks: Array<AssistantToolBlock>
     }
+
+type AssistantBlockGroupDescriptor =
+  | {
+      type: "block"
+      key: string
+      blockKey: string
+    }
+  | {
+      type: "explore"
+      key: string
+      blockKeys: Array<string>
+    }
+
+type AssistantBlockStoreSnapshot = {
+  blockByKey: Map<string, AssistantConversationBlock>
+  groups: Array<AssistantBlockGroupDescriptor>
+  revision: number
+}
+
+type AssistantBlockStore = {
+  getBlock: (key: string) => AssistantConversationBlock | undefined
+  getBlocks: (keys: Array<string>) => Array<AssistantConversationBlock>
+  getGroups: () => Array<AssistantBlockGroupDescriptor>
+  setBlocks: (blocks: Array<AssistantConversationBlock>) => void
+  subscribe: (listener: () => void) => () => void
+  subscribeBlocks: (keys: Array<string>, listener: () => void) => () => void
+}
 
 function shellCommandNameFromSegment(segment: string) {
   let text = segment.trim()
@@ -687,13 +717,8 @@ function exploreShellCommandName(
 }
 
 function isExploreToolBlock(
-  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
-): block is Extract<
-  ConversationItem,
-  { kind: "assistant" }
->["blocks"][number] & {
-  type: "tool"
-} {
+  block: AssistantConversationBlock
+): block is AssistantToolBlock {
   if (block.type !== "tool") return false
   return (
     EXPLORE_TOOL_NAMES.has(block.name || "") ||
@@ -890,11 +915,14 @@ function exploreToolLine(
   }
 }
 
-function groupAssistantBlocks(
-  blocks: Array<
-    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
-  >
+function assistantBlockRenderKey(
+  block: AssistantConversationBlock,
+  index: number
 ) {
+  return block.blockKey || `${assistantBlockKey(block)}:${index}`
+}
+
+function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
   const result: Array<AssistantBlockGroup> = []
   let start = -1
 
@@ -913,7 +941,7 @@ function groupAssistantBlocks(
 
     result.push({
       type: "explore",
-      key: `explore:${first.blockKey || assistantBlockKey(first)}:${start}`,
+      key: `explore:${assistantBlockRenderKey(first, start)}`,
       blocks: groupedBlocks,
     })
 
@@ -931,13 +959,235 @@ function groupAssistantBlocks(
     flushExploreGroup(index - 1)
     result.push({
       type: "block",
-      key: block.blockKey || `${assistantBlockKey(block)}:${index}`,
+      key: assistantBlockRenderKey(block, index),
       block,
     })
   })
 
   flushExploreGroup(blocks.length - 1)
   return result
+}
+
+function sameAssistantBlockGroupDescriptors(
+  left: Array<AssistantBlockGroupDescriptor>,
+  right: Array<AssistantBlockGroupDescriptor>
+) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftGroup = left[index]
+    const rightGroup = right[index]
+    if (!leftGroup || !rightGroup) return false
+    if (
+      leftGroup.type !== rightGroup.type ||
+      leftGroup.key !== rightGroup.key
+    ) {
+      return false
+    }
+
+    if (leftGroup.type === "block" && rightGroup.type === "block") {
+      if (leftGroup.blockKey !== rightGroup.blockKey) return false
+      continue
+    }
+
+    if (leftGroup.type !== "explore" || rightGroup.type !== "explore") {
+      return false
+    }
+
+    if (leftGroup.blockKeys.length !== rightGroup.blockKeys.length) {
+      return false
+    }
+
+    for (
+      let blockIndex = 0;
+      blockIndex < leftGroup.blockKeys.length;
+      blockIndex += 1
+    ) {
+      if (
+        leftGroup.blockKeys[blockIndex] !== rightGroup.blockKeys[blockIndex]
+      ) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+function buildAssistantBlockSnapshot(
+  blocks: Array<AssistantConversationBlock>,
+  previousSnapshot?: AssistantBlockStoreSnapshot
+): AssistantBlockStoreSnapshot {
+  const blockByKey = new Map<string, AssistantConversationBlock>()
+  const fullGroups = groupAssistantBlocks(blocks)
+
+  blocks.forEach((block, index) => {
+    blockByKey.set(assistantBlockRenderKey(block, index), block)
+  })
+
+  const groups = fullGroups.map((group): AssistantBlockGroupDescriptor => {
+    if (group.type === "block") {
+      return {
+        type: "block",
+        key: group.key,
+        blockKey: group.key,
+      }
+    }
+
+    return {
+      type: "explore",
+      key: group.key,
+      blockKeys: group.blocks.map((block) =>
+        assistantBlockRenderKey(block, blocks.indexOf(block))
+      ),
+    }
+  })
+
+  return {
+    blockByKey,
+    groups:
+      previousSnapshot &&
+      sameAssistantBlockGroupDescriptors(previousSnapshot.groups, groups)
+        ? previousSnapshot.groups
+        : groups,
+    revision: (previousSnapshot?.revision ?? 0) + 1,
+  }
+}
+
+function createAssistantBlockStore(
+  blocks: Array<AssistantConversationBlock>
+): AssistantBlockStore {
+  let snapshot = buildAssistantBlockSnapshot(blocks)
+  const listeners = new Set<() => void>()
+  const blockListeners = new Map<string, Set<() => void>>()
+
+  const notifyBlock = (key: string) => {
+    const listenersForBlock = blockListeners.get(key)
+    if (!listenersForBlock) return
+    for (const listener of listenersForBlock) listener()
+  }
+
+  return {
+    getBlock: (key) => snapshot.blockByKey.get(key),
+    getBlocks: (keys) =>
+      keys
+        .map((key) => snapshot.blockByKey.get(key))
+        .filter((block): block is AssistantConversationBlock => Boolean(block)),
+    getGroups: () => snapshot.groups,
+    setBlocks: (blocks) => {
+      const previousSnapshot = snapshot
+      const nextSnapshot = buildAssistantBlockSnapshot(blocks, previousSnapshot)
+      let blockChanged =
+        previousSnapshot.blockByKey.size !== nextSnapshot.blockByKey.size
+      const changedKeys = new Set<string>()
+
+      for (const key of previousSnapshot.blockByKey.keys()) {
+        if (
+          previousSnapshot.blockByKey.get(key) !==
+          nextSnapshot.blockByKey.get(key)
+        ) {
+          changedKeys.add(key)
+          blockChanged = true
+        }
+      }
+      for (const key of nextSnapshot.blockByKey.keys()) {
+        if (
+          previousSnapshot.blockByKey.get(key) !==
+          nextSnapshot.blockByKey.get(key)
+        ) {
+          changedKeys.add(key)
+          blockChanged = true
+        }
+      }
+
+      if (!blockChanged && previousSnapshot.groups === nextSnapshot.groups) {
+        return
+      }
+
+      snapshot = nextSnapshot
+      if (previousSnapshot.groups !== nextSnapshot.groups) {
+        for (const listener of listeners) listener()
+      }
+      for (const key of changedKeys) notifyBlock(key)
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    subscribeBlocks: (keys, listener) => {
+      const uniqueKeys = [...new Set(keys)]
+      for (const key of uniqueKeys) {
+        const listenersForBlock =
+          blockListeners.get(key) ?? new Set<() => void>()
+        listenersForBlock.add(listener)
+        blockListeners.set(key, listenersForBlock)
+      }
+
+      return () => {
+        for (const key of uniqueKeys) {
+          const listenersForBlock = blockListeners.get(key)
+          if (!listenersForBlock) continue
+          listenersForBlock.delete(listener)
+          if (listenersForBlock.size === 0) {
+            blockListeners.delete(key)
+          }
+        }
+      }
+    },
+  }
+}
+
+function useAssistantBlockGroups(store: AssistantBlockStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getGroups,
+    store.getGroups
+  )
+}
+
+function useAssistantBlock(store: AssistantBlockStore, key: string) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeBlocks([key], listener),
+      [key, store]
+    ),
+    () => store.getBlock(key),
+    () => store.getBlock(key)
+  )
+}
+
+function useAssistantBlocks(store: AssistantBlockStore, keys: Array<string>) {
+  const cacheRef = React.useRef<{
+    keys: Array<string>
+    blocks: Array<AssistantConversationBlock>
+  }>({ keys: [], blocks: [] })
+
+  const getSnapshot = () => {
+    const blocks = store.getBlocks(keys)
+    const cache = cacheRef.current
+    if (
+      cache.keys.length === keys.length &&
+      cache.keys.every((key, index) => key === keys[index]) &&
+      cache.blocks.length === blocks.length &&
+      cache.blocks.every((block, index) => block === blocks[index])
+    ) {
+      return cache.blocks
+    }
+
+    cacheRef.current = { keys, blocks }
+    return blocks
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeBlocks(keys, listener),
+      [keys, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
 }
 
 function compactionTriggerText(
@@ -1877,17 +2127,56 @@ export function assistantMessageHasVisibleBlocks({
 }
 
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
-  group,
+  descriptor,
+  store,
   streaming,
 }: {
-  group: AssistantBlockGroup
+  descriptor: AssistantBlockGroupDescriptor
+  store: AssistantBlockStore
   streaming: boolean
 }) {
-  if (group.type === "explore") {
-    return <ExploreToolGroupCard blocks={group.blocks} />
+  if (descriptor.type === "explore") {
+    return (
+      <AssistantExploreBlockGroupView
+        blockKeys={descriptor.blockKeys}
+        store={store}
+      />
+    )
   }
 
-  const block = group.block
+  return (
+    <AssistantSingleBlockGroupView
+      blockKey={descriptor.blockKey}
+      store={store}
+      streaming={streaming}
+    />
+  )
+})
+
+function AssistantExploreBlockGroupView({
+  blockKeys,
+  store,
+}: {
+  blockKeys: Array<string>
+  store: AssistantBlockStore
+}) {
+  const blocks = useAssistantBlocks(store, blockKeys).filter(isExploreToolBlock)
+  if (blocks.length === 0) return null
+
+  return <ExploreToolGroupCard blocks={blocks} />
+}
+
+function AssistantSingleBlockGroupView({
+  blockKey,
+  store,
+  streaming,
+}: {
+  blockKey: string
+  store: AssistantBlockStore
+  streaming: boolean
+}) {
+  const block = useAssistantBlock(store, blockKey)
+  if (!block) return null
 
   switch (block.type) {
     case "text":
@@ -1905,7 +2194,30 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
     default:
       return null
   }
-})
+}
+
+function AssistantBlockGroupsView({
+  store,
+  streaming,
+}: {
+  store: AssistantBlockStore
+  streaming: boolean
+}) {
+  const renderedBlocks = useAssistantBlockGroups(store)
+
+  return (
+    <>
+      {renderedBlocks.map((descriptor) => (
+        <AssistantBlockGroupView
+          key={descriptor.key}
+          descriptor={descriptor}
+          store={store}
+          streaming={streaming}
+        />
+      ))}
+    </>
+  )
+}
 
 export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   items,
@@ -1927,17 +2239,22 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
     return null
   }
 
-  const renderedBlocks = groupAssistantBlocks(blocks)
+  const assistantBlockStoreRef = React.useRef<AssistantBlockStore | null>(null)
+  if (!assistantBlockStoreRef.current) {
+    assistantBlockStoreRef.current = createAssistantBlockStore(blocks)
+  }
+  const assistantBlockStore = assistantBlockStoreRef.current
+
+  React.useLayoutEffect(() => {
+    assistantBlockStore.setBlocks(blocks)
+  }, [assistantBlockStore, blocks])
 
   return (
     <div className="flex flex-col gap-4">
-      {renderedBlocks.map((group) => (
-        <AssistantBlockGroupView
-          key={group.key}
-          group={group}
-          streaming={streaming}
-        />
-      ))}
+      <AssistantBlockGroupsView
+        store={assistantBlockStore}
+        streaming={streaming}
+      />
     </div>
   )
 })

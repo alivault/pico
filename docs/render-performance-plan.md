@@ -24,10 +24,10 @@ The previous render performance checklist was completed. This file now tracks th
   - [x] Store directory loading/session slices by directory key.
   - [x] Let each directory row subscribe only to its own sessions/loading/collapse state.
   - [x] Preserve search, drag/reorder, selection, collapse, and mobile sidebar behavior.
-- [ ] Assistant block store
-  - [ ] Add assistant block descriptors keyed by block key/signature.
-  - [ ] Let assistant block views subscribe to individual block snapshots where possible.
-  - [ ] Preserve text, thinking, tool, explore-group, and compaction rendering.
+- [x] Assistant block store
+  - [x] Add assistant block descriptors keyed by block key/signature.
+  - [x] Let assistant block views subscribe to individual block snapshots where possible.
+  - [x] Preserve text, thinking, tool, explore-group, and compaction rendering.
 - [x] Markdown streaming optimization
   - [x] Profile streaming markdown cost before changing UX.
   - [x] Consider plain-text/high-frequency streaming fallback with markdown render after idle.
