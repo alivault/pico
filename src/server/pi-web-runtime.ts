@@ -2669,21 +2669,27 @@ export class PiWebRuntime {
         this.writeRawToClient(context, client, ": connected\n\n")
 
         void (async () => {
-          this.sendStatePayloadToClient(
-            context,
-            client,
-            this.currentStatePayload(activeEntry),
-            {
-              forceFull: true,
-            }
-          )
-          this.sendPayloadToClient(
-            context,
-            client,
-            await this.listSessionsPayload(context, {
-              includeBootstrapIndexes: true,
-            })
-          )
+          try {
+            this.sendStatePayloadToClient(
+              context,
+              client,
+              this.currentStatePayload(activeEntry),
+              {
+                forceFull: true,
+              }
+            )
+            if (client.closed || request.signal.aborted) return
+            this.sendPayloadToClient(
+              context,
+              client,
+              await this.listSessionsPayload(context, {
+                includeBootstrapIndexes: true,
+              })
+            )
+          } catch (error) {
+            if (client.closed || request.signal.aborted) return
+            throw error
+          }
         })()
 
         cleanup = () => {
