@@ -2292,22 +2292,16 @@ function AppShellWindowEffectsHost({
   currentSessionTitle,
   displaySessionTitle,
   isSessionViewLoading,
-  onConsumeSessionDoneEvents,
+  notificationStore,
   onSelectSession,
-  sessionDoneDesktopNotificationsEnabled,
-  sessionDoneEvents,
-  sessionDoneSoundEnabled,
   sessionStore,
   sidebarStore,
 }: {
   currentSessionTitle: string
   displaySessionTitle: string
   isSessionViewLoading: boolean
-  onConsumeSessionDoneEvents: (ids: Array<string>) => void
+  notificationStore: ValueStore<AppShellNotificationState>
   onSelectSession: (nextSessionId?: string) => void
-  sessionDoneDesktopNotificationsEnabled: boolean
-  sessionDoneEvents: Array<SessionDoneEvent>
-  sessionDoneSoundEnabled: boolean
   sessionStore: ValueStore<SessionState>
   sidebarStore: AppShellSidebarStore
 }) {
@@ -2325,10 +2319,17 @@ function AppShellWindowEffectsHost({
     }),
     shallowRecordEqual
   )
+  const notificationState = useValueStore(notificationStore)
   const currentPageTitle = isSessionViewLoading
     ? displaySessionTitle
     : sessionWindowState.uiTitle ||
       (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
+  const onConsumeSessionDoneEvents = (ids: Array<string>) => {
+    const consumedIds = new Set(ids)
+    setValueStoreField(notificationStore, "sessionDoneEvents", (current) =>
+      current.filter((event) => !consumedIds.has(event.id))
+    )
+  }
 
   return (
     <AppShellWindowEffects
@@ -2339,11 +2340,11 @@ function AppShellWindowEffectsHost({
       currentPageTitle={currentPageTitle}
       sessionCwd={sessionWindowState.sessionCwd}
       sessionDoneDesktopNotificationsEnabled={
-        sessionDoneDesktopNotificationsEnabled
+        notificationState.sessionDoneDesktopNotificationsEnabled
       }
-      sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+      sessionDoneSoundEnabled={notificationState.sessionDoneSoundEnabled}
       sessionStreaming={sessionWindowState.sessionStreaming}
-      sessionDoneEvents={sessionDoneEvents}
+      sessionDoneEvents={notificationState.sessionDoneEvents}
       sidebarStore={sidebarStore}
       onConsumeSessionDoneEvents={onConsumeSessionDoneEvents}
       onSelectSession={onSelectSession}
@@ -3048,6 +3049,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [contextUsageStore]
   )
+  const setComposerStreaming = React.useCallback(
+    (streaming: boolean) => {
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        isStreaming: currentComposerSnapshot.disabled ? false : streaming,
+      })
+    },
+    [composerStore]
+  )
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
   )
@@ -3371,9 +3382,17 @@ const AppShellSessionWorkspace = React.forwardRef<
   const {
     desktopNotificationPermission,
     sessionDoneDesktopNotificationsEnabled,
-    sessionDoneEvents,
     sessionDoneSoundEnabled,
-  } = useValueStore(notificationStore)
+  } = useSelectedValueStore(
+    notificationStore,
+    (state) => ({
+      desktopNotificationPermission: state.desktopNotificationPermission,
+      sessionDoneDesktopNotificationsEnabled:
+        state.sessionDoneDesktopNotificationsEnabled,
+      sessionDoneSoundEnabled: state.sessionDoneSoundEnabled,
+    }),
+    shallowRecordEqual
+  )
   const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
     useValueStore(draftFlowStore)
   const sessionState = useSelectedValueStore(
@@ -3391,7 +3410,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
       sessionName: currentSessionState.sessionName,
-      streaming: currentSessionState.streaming,
       thinkingLevel: currentSessionState.thinkingLevel,
     }),
     shallowRecordEqual
@@ -3737,6 +3755,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setHiddenThinkingPreview,
     setWorkingState,
     setComposerContextUsage,
+    setComposerStreaming,
     setSessionsEvent: sidebarStore.setSessionsEvent,
     setSessionDoneEvents,
     applySidebarSessionStatusRef,
@@ -4248,7 +4267,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerText: displayedComposerText,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
-    isStreaming: composerDisabled ? false : sessionState.streaming,
+    isStreaming: composerDisabled ? false : sessionStateRef.current.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
     model: sessionState.model,
     slashCommands,
@@ -4623,19 +4642,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         currentSessionTitle={currentSessionTitle}
         displaySessionTitle={displaySessionTitle}
         isSessionViewLoading={isSessionViewLoading}
-        sessionDoneDesktopNotificationsEnabled={
-          sessionDoneDesktopNotificationsEnabled
-        }
-        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-        sessionDoneEvents={sessionDoneEvents}
+        notificationStore={notificationStore}
         sessionStore={sessionStore}
         sidebarStore={sidebarStore}
-        onConsumeSessionDoneEvents={(ids) => {
-          const consumedIds = new Set(ids)
-          setSessionDoneEvents((current) =>
-            current.filter((event) => !consumedIds.has(event.id))
-          )
-        }}
         onSelectSession={handleSelectSession}
       />
 

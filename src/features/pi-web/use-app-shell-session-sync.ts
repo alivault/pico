@@ -85,6 +85,7 @@ type UseAppShellSessionSyncOptions = {
   setHiddenThinkingPreview: (value: string) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
   setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
+  setComposerStreaming: (streaming: boolean) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSessionDoneEvents: React.Dispatch<
     React.SetStateAction<Array<SessionDoneEvent>>
@@ -414,6 +415,7 @@ export function useAppShellSessionSync({
   setHiddenThinkingPreview,
   setWorkingState,
   setComposerContextUsage,
+  setComposerStreaming,
   setSessionsEvent,
   setSessionDoneEvents,
   applySidebarSessionStatusRef,
@@ -626,6 +628,9 @@ export function useAppShellSessionSync({
         if (previousState.contextUsage !== nextState.contextUsage) {
           setComposerContextUsage(nextState.contextUsage)
         }
+        if (previousState.streaming !== nextState.streaming) {
+          setComposerStreaming(nextState.streaming)
+        }
         if (previousState.streaming || nextState.streaming) {
           setWorkingState(
             nextState.streaming
@@ -800,6 +805,7 @@ export function useAppShellSessionSync({
     setHiddenThinkingPreview,
     setWorkingState,
     setComposerContextUsage,
+    setComposerStreaming,
     setConversationItems,
     setPendingMessages,
     pendingUiRequestHandlerRef,
