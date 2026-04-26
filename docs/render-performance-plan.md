@@ -1,33 +1,40 @@
 # Render Performance Refactor Plan
 
-Goal: push the Pi web app toward minimal unnecessary rendering by moving high-churn state out of broad React render paths, narrowing subscriptions, and splitting expensive UI renderers.
+Goal: continue reducing broad app-shell rerenders by making external stores/controllers the primary state architecture, then target the remaining expensive UI render paths based on stable subscriptions.
+
+The previous render performance checklist was completed. This file now tracks the next phase.
 
 ## Checklist
 
-- [x] Composer state stores
-  - [x] Move composer draft/image state to a dedicated external store.
-  - [x] Move pending composer messages/follow-ups to a dedicated external store.
-  - [x] Move submit/awaiting-first-turn state to a dedicated external store.
-  - [x] Feed composer UI from store selectors instead of workspace-owned React state where possible.
-- [x] Ref-based mutation hooks
-  - [x] Refactor prompt mutation inputs away from broad render-time values where safe.
-  - [x] Refactor session mutation inputs away from broad render-time values where safe.
-  - [x] Keep behavior compatible with draft sessions, pending queues, and optimistic messages.
-- [x] Sidebar internals
-  - [x] Memoize/split sidebar header, footer, directory groups, and session rows.
-  - [x] Avoid rebuilding selection lookup and derived counts in wide render paths where possible.
-  - [x] Preserve drag/reorder, collapse, search, and mobile behavior.
-- [x] Assistant block-level rendering
-  - [x] Split assistant block rendering below the assistant message group.
-  - [x] Reuse block descriptors where block identities/signatures are unchanged.
-  - [x] Preserve markdown, tool, thinking, and compaction rendering behavior.
-- [x] Command palette command slicing
-  - [x] Move command builder dependencies behind refs/stores where possible.
-  - [x] Keep lazy command construction on palette open.
-- [x] Remaining session-derived slice stores
-  - [x] Identify high-churn `sessionState` reads still performed by `AppShellSessionWorkspace`.
-  - [x] Move safe derived values to selectors/stores or ref-backed hosts.
-  - [x] Keep routing, title, notification, tree/fork, and settings flows intact.
+- [ ] Remove the `sessionState` React state mirror
+  - [ ] Make `sessionStore` + `sessionStateRef` the source of truth for session data.
+  - [ ] Replace remaining workspace render reads of `sessionState` with store selectors or refs.
+  - [ ] Ensure SSE sync, optimistic messages, draft sessions, and route loading still publish to narrow stores.
+  - [ ] Preserve session selection, title, notification, tree/fork, rename/delete, and composer behavior.
+- [ ] Move remaining workspace UI state to stores
+  - [ ] Move `currentTab`, route/session loading ids, and initial loading state to an app UI store.
+  - [ ] Move display settings such as tool visibility and message centering to a display settings store.
+  - [ ] Move notification settings/permission and session-done events to a notification store.
+  - [ ] Move draft-session loading owner state to a loading/draft flow store.
+- [ ] Extract app-shell controller/actions
+  - [ ] Centralize refs, stores, mutation actions, and imperative flows in an app-shell controller object.
+  - [ ] Keep React components as selector-driven hosts instead of orchestration owners.
+  - [ ] Keep prompt/session mutation hooks ref/store-backed with minimal render dependencies.
+- [ ] Directory-keyed sidebar subscriptions
+  - [ ] Store directory loading/session slices by directory key.
+  - [ ] Let each directory row subscribe only to its own sessions/loading/collapse state.
+  - [ ] Preserve search, drag/reorder, selection, collapse, and mobile sidebar behavior.
+- [ ] Assistant block store
+  - [ ] Add assistant block descriptors keyed by block key/signature.
+  - [ ] Let assistant block views subscribe to individual block snapshots where possible.
+  - [ ] Preserve text, thinking, tool, explore-group, and compaction rendering.
+- [ ] Markdown streaming optimization
+  - [ ] Profile streaming markdown cost before changing UX.
+  - [ ] Consider plain-text/high-frequency streaming fallback with markdown render after idle.
+  - [ ] Keep code highlighting/cache behavior intact.
+- [ ] Git panel active-section splitting
+  - [ ] Split active git UI into lazy/section-specific render and query boundaries.
+  - [ ] Avoid mounting expensive git sections until they are visible or requested.
 
 ## Validation
 
@@ -43,5 +50,5 @@ Manual smoke areas:
 - submit prompt, queue/steer/abort
 - sidebar search/select/multi-select/reorder/collapse
 - tree/fork/rename/delete/settings dialogs
-- git tab activation
+- git tab activation and refresh
 - long streaming assistant response with markdown/tools/thinking
