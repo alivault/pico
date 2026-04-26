@@ -12,7 +12,7 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
 - [ ] Ref-based mutation hooks
   - [x] Refactor prompt mutation inputs away from broad render-time values where safe.
   - [x] Refactor session mutation inputs away from broad render-time values where safe.
-  - [ ] Keep behavior compatible with draft sessions, pending queues, and optimistic messages.
+  - [x] Keep behavior compatible with draft sessions, pending queues, and optimistic messages.
 - [x] Sidebar internals
   - [x] Memoize/split sidebar header, footer, directory groups, and session rows.
   - [x] Avoid rebuilding selection lookup and derived counts in wide render paths where possible.
