@@ -998,6 +998,20 @@ function useValueStore<T>(store: ValueStore<T>) {
   )
 }
 
+function setValueStoreField<T extends object, K extends keyof T>(
+  store: ValueStore<T>,
+  key: K,
+  action: React.SetStateAction<T[K]>
+) {
+  const current = store.getSnapshot()
+  const nextValue = applySidebarStateAction(current[key], action)
+  if (Object.is(current[key], nextValue)) return
+  store.setSnapshot({
+    ...current,
+    [key]: nextValue,
+  })
+}
+
 function useSelectedValueStore<T, S>(
   store: ValueStore<T>,
   selector: (snapshot: T) => S,
@@ -2651,6 +2665,29 @@ type AppShellSessionWorkspaceHandle = {
   ) => void
 }
 
+type AppShellUiState = {
+  currentTab: string
+  initialLoadingSessionId: string | null
+  loadingSessionId: string | null
+}
+
+type AppShellDisplaySettingsState = {
+  centerMessages: boolean
+  hideToolBlocks: boolean
+}
+
+type AppShellNotificationState = {
+  desktopNotificationPermission: DesktopNotificationPermission
+  sessionDoneDesktopNotificationsEnabled: boolean
+  sessionDoneEvents: Array<SessionDoneEvent>
+  sessionDoneSoundEnabled: boolean
+}
+
+type AppShellDraftFlowState = {
+  draftSessionLoadingOwnerKey: string | null
+  storedDraftDirectory: string
+}
+
 type AppShellSessionWorkspaceProps = {
   viewerContextId: string
   sessionId?: string
@@ -2685,7 +2722,42 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
   const sessionStore = sessionStoreRef.current
   const sessionStateRef = React.useRef(sessionStore.getSnapshot())
-  const [currentTab, setCurrentTab] = React.useState("session")
+  const appUiStoreRef = React.useRef<ValueStore<AppShellUiState> | null>(null)
+  if (!appUiStoreRef.current) {
+    appUiStoreRef.current = createValueStore<AppShellUiState>(
+      {
+        currentTab: "session",
+        initialLoadingSessionId: sessionId || null,
+        loadingSessionId: null,
+      },
+      shallowRecordEqual
+    )
+  }
+  const appUiStore = appUiStoreRef.current
+  const setCurrentTab = React.useCallback<
+    React.Dispatch<React.SetStateAction<string>>
+  >(
+    (action) => {
+      setValueStoreField(appUiStore, "currentTab", action)
+    },
+    [appUiStore]
+  )
+  const setLoadingSessionId = React.useCallback<
+    React.Dispatch<React.SetStateAction<string | null>>
+  >(
+    (action) => {
+      setValueStoreField(appUiStore, "loadingSessionId", action)
+    },
+    [appUiStore]
+  )
+  const setInitialLoadingSessionId = React.useCallback<
+    React.Dispatch<React.SetStateAction<string | null>>
+  >(
+    (action) => {
+      setValueStoreField(appUiStore, "initialLoadingSessionId", action)
+    },
+    [appUiStore]
+  )
   const previousRouteSessionIdRef = React.useRef(sessionId)
   const composerDraftSeedStoreRef = React.useRef<ValueStore<{
     text: string
@@ -2707,8 +2779,35 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
   const composerImagesStore = composerImagesStoreRef.current
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
-  const [hideToolBlocks, setHideToolBlocks] = React.useState(false)
-  const [centerMessages, setCenterMessages] = React.useState(false)
+  const displaySettingsStoreRef =
+    React.useRef<ValueStore<AppShellDisplaySettingsState> | null>(null)
+  if (!displaySettingsStoreRef.current) {
+    displaySettingsStoreRef.current =
+      createValueStore<AppShellDisplaySettingsState>(
+        {
+          centerMessages: false,
+          hideToolBlocks: false,
+        },
+        shallowRecordEqual
+      )
+  }
+  const displaySettingsStore = displaySettingsStoreRef.current!
+  const setHideToolBlocks = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      setValueStoreField(displaySettingsStore, "hideToolBlocks", action)
+    },
+    [displaySettingsStore]
+  )
+  const setCenterMessages = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      setValueStoreField(displaySettingsStore, "centerMessages", action)
+    },
+    [displaySettingsStore]
+  )
   const awaitingFirstTurnStoreRef = React.useRef<ValueStore<boolean> | null>(
     null
   )
@@ -2719,14 +2818,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const [runningSlashCommand, setRunningSlashCommand] = React.useState<
     string | null
   >(null)
-  const [draftSessionLoadingOwnerKey, setDraftSessionLoadingOwnerKey] =
-    React.useState<string | null>(null)
-  const [loadingSessionId, setLoadingSessionId] = React.useState<string | null>(
-    null
-  )
-  const [initialLoadingSessionId, setInitialLoadingSessionId] = React.useState<
-    string | null
-  >(() => sessionId || null)
   const pendingDraftPromptStoreRef = React.useRef<ValueStore<{
     ownerKey: string
     message: string
@@ -2777,21 +2868,91 @@ const AppShellSessionWorkspace = React.forwardRef<
     >([])
   }
   const pendingMessagesStore = pendingMessagesStoreRef.current
-  const [sessionDoneEvents, setSessionDoneEvents] = React.useState<
-    Array<SessionDoneEvent>
-  >([])
+  const notificationStoreRef =
+    React.useRef<ValueStore<AppShellNotificationState> | null>(null)
+  if (!notificationStoreRef.current) {
+    notificationStoreRef.current = createValueStore<AppShellNotificationState>(
+      {
+        desktopNotificationPermission: "unsupported",
+        sessionDoneDesktopNotificationsEnabled: true,
+        sessionDoneEvents: [],
+        sessionDoneSoundEnabled: true,
+      },
+      shallowRecordEqual
+    )
+  }
+  const notificationStore = notificationStoreRef.current!
+  const setSessionDoneEvents = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<SessionDoneEvent>>>
+  >(
+    (action) => {
+      setValueStoreField(notificationStore, "sessionDoneEvents", action)
+    },
+    [notificationStore]
+  )
+  const setSessionDoneSoundEnabled = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      setValueStoreField(notificationStore, "sessionDoneSoundEnabled", action)
+    },
+    [notificationStore]
+  )
+  const setSessionDoneDesktopNotificationsEnabled = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      setValueStoreField(
+        notificationStore,
+        "sessionDoneDesktopNotificationsEnabled",
+        action
+      )
+    },
+    [notificationStore]
+  )
+  const setDesktopNotificationPermission = React.useCallback<
+    React.Dispatch<React.SetStateAction<DesktopNotificationPermission>>
+  >(
+    (action) => {
+      setValueStoreField(
+        notificationStore,
+        "desktopNotificationPermission",
+        action
+      )
+    },
+    [notificationStore]
+  )
+  const draftFlowStoreRef =
+    React.useRef<ValueStore<AppShellDraftFlowState> | null>(null)
+  if (!draftFlowStoreRef.current) {
+    draftFlowStoreRef.current = createValueStore<AppShellDraftFlowState>(
+      {
+        draftSessionLoadingOwnerKey: null,
+        storedDraftDirectory: "",
+      },
+      shallowRecordEqual
+    )
+  }
+  const draftFlowStore = draftFlowStoreRef.current!
+  const setDraftSessionLoadingOwnerKey = React.useCallback<
+    React.Dispatch<React.SetStateAction<string | null>>
+  >(
+    (action) => {
+      setValueStoreField(draftFlowStore, "draftSessionLoadingOwnerKey", action)
+    },
+    [draftFlowStore]
+  )
+  const setStoredDraftDirectory = React.useCallback<
+    React.Dispatch<React.SetStateAction<string>>
+  >(
+    (action) => {
+      setValueStoreField(draftFlowStore, "storedDraftDirectory", action)
+    },
+    [draftFlowStore]
+  )
   const [recentDirectories, setRecentDirectories] = React.useState<
     Array<string>
   >([])
-  const [sessionDoneSoundEnabled, setSessionDoneSoundEnabled] =
-    React.useState(true)
-  const [
-    sessionDoneDesktopNotificationsEnabled,
-    setSessionDoneDesktopNotificationsEnabled,
-  ] = React.useState(true)
-  const [desktopNotificationPermission, setDesktopNotificationPermission] =
-    React.useState<DesktopNotificationPermission>("unsupported")
-  const [storedDraftDirectory, setStoredDraftDirectory] = React.useState("")
   const { isMobile, openMobile, openMobileSettled, setOpenMobile } =
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -3111,6 +3272,17 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
+  const { currentTab, initialLoadingSessionId, loadingSessionId } =
+    useValueStore(appUiStore)
+  const { centerMessages, hideToolBlocks } = useValueStore(displaySettingsStore)
+  const {
+    desktopNotificationPermission,
+    sessionDoneDesktopNotificationsEnabled,
+    sessionDoneEvents,
+    sessionDoneSoundEnabled,
+  } = useValueStore(notificationStore)
+  const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
+    useValueStore(draftFlowStore)
   const sessionState = useSelectedValueStore(
     sessionStore,
     (currentSessionState) => ({

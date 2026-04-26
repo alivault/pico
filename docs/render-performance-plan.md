@@ -11,11 +11,11 @@ The previous render performance checklist was completed. This file now tracks th
   - [x] Replace remaining workspace render reads of `sessionState` with store selectors or refs.
   - [x] Ensure SSE sync, optimistic messages, draft sessions, and route loading still publish to narrow stores.
   - [x] Preserve session selection, title, notification, tree/fork, rename/delete, and composer behavior.
-- [ ] Move remaining workspace UI state to stores
-  - [ ] Move `currentTab`, route/session loading ids, and initial loading state to an app UI store.
-  - [ ] Move display settings such as tool visibility and message centering to a display settings store.
-  - [ ] Move notification settings/permission and session-done events to a notification store.
-  - [ ] Move draft-session loading owner state to a loading/draft flow store.
+- [x] Move remaining workspace UI state to stores
+  - [x] Move `currentTab`, route/session loading ids, and initial loading state to an app UI store.
+  - [x] Move display settings such as tool visibility and message centering to a display settings store.
+  - [x] Move notification settings/permission and session-done events to a notification store.
+  - [x] Move draft-session loading owner state to a loading/draft flow store.
 - [ ] Extract app-shell controller/actions
   - [ ] Centralize refs, stores, mutation actions, and imperative flows in an app-shell controller object.
   - [ ] Keep React components as selector-driven hosts instead of orchestration owners.
