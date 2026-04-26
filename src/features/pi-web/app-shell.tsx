@@ -4807,7 +4807,6 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     sessionStore,
     (sessionState) => ({
       hideThinkingBlock: sessionState.hideThinkingBlock,
-      sessionDraft: sessionState.draft,
       sessionHasFile: Boolean(sessionState.sessionFile),
       sessionStreaming: sessionState.streaming,
     }),
@@ -4833,9 +4832,6 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 {displaySessionTitle}
               </h2>
-              {!isSessionViewLoading && sessionHeaderState.sessionDraft ? (
-                <Badge variant="outline">Draft</Badge>
-              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               {displaySessionCwd ? (
