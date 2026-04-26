@@ -3237,11 +3237,53 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [pendingMessagesStore, refreshComposerPendingMessages]
   )
+  const pendingConversationItemsRef =
+    React.useRef<Array<ConversationItem> | null>(null)
+  const conversationItemsFrameRef = React.useRef<number | null>(null)
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
+      const hasStreamingAssistant = items.some(
+        (item) => item.kind === "assistant" && item.streaming
+      )
+
+      if (hasStreamingAssistant && typeof window !== "undefined") {
+        pendingConversationItemsRef.current = items
+        if (conversationItemsFrameRef.current !== null) return
+
+        conversationItemsFrameRef.current = window.requestAnimationFrame(() => {
+          conversationItemsFrameRef.current = null
+          const pendingItems = pendingConversationItemsRef.current
+          pendingConversationItemsRef.current = null
+          if (pendingItems) {
+            conversationItemsStore.setItems(pendingItems)
+          }
+        })
+        return
+      }
+
+      if (
+        conversationItemsFrameRef.current !== null &&
+        typeof window !== "undefined"
+      ) {
+        window.cancelAnimationFrame(conversationItemsFrameRef.current)
+        conversationItemsFrameRef.current = null
+      }
+      pendingConversationItemsRef.current = null
       conversationItemsStore.setItems(items)
     },
     [conversationItemsStore]
+  )
+
+  React.useEffect(
+    () => () => {
+      if (
+        conversationItemsFrameRef.current !== null &&
+        typeof window !== "undefined"
+      ) {
+        window.cancelAnimationFrame(conversationItemsFrameRef.current)
+      }
+    },
+    []
   )
   const setHiddenThinkingPreview = React.useCallback(
     (value: string) => {
