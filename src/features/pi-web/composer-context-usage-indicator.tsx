@@ -1,3 +1,5 @@
+import * as React from "react"
+
 import type { SessionState } from "@/lib/pi-web"
 
 import {
@@ -42,13 +44,32 @@ function contextUsageStroke(percent: number) {
   return "var(--primary)"
 }
 
+export type ComposerContextUsageStore = {
+  getSnapshot: () => SessionState["contextUsage"]
+  subscribe: (listener: () => void) => () => void
+}
+
+const emptyContextUsageStore: ComposerContextUsageStore = {
+  getSnapshot: () => undefined,
+  subscribe: () => () => {},
+}
+
 type ComposerContextUsageIndicatorProps = {
-  contextUsage?: SessionState["contextUsage"]
+  contextUsageStore?: ComposerContextUsageStore
+  disabled?: boolean
 }
 
 export function ComposerContextUsageIndicator({
-  contextUsage,
+  contextUsageStore = emptyContextUsageStore,
+  disabled = false,
 }: ComposerContextUsageIndicatorProps) {
+  const contextUsage = React.useSyncExternalStore(
+    contextUsageStore.subscribe,
+    contextUsageStore.getSnapshot,
+    contextUsageStore.getSnapshot
+  )
+
+  if (disabled) return null
   if (!contextUsage?.contextWindow) return null
 
   const tokens =

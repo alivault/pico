@@ -9,12 +9,7 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type {
-  ModelOption,
-  PromptImage,
-  SessionState,
-  StreamingBehavior,
-} from "@/lib/pi-web"
+import type { ModelOption, PromptImage, StreamingBehavior } from "@/lib/pi-web"
 import type { CompletionItem } from "@/lib/pi-web-api"
 
 import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
@@ -24,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ComposerAssistMenu } from "@/features/pi-web/composer-assist-menu"
 import { ComposerPendingMessages } from "@/features/pi-web/composer-pending-messages"
 import { ComposerPickers } from "@/features/pi-web/composer-pickers"
+import type { ComposerContextUsageStore } from "@/features/pi-web/composer-context-usage-indicator"
 import {
   formatComposerSkillName,
   parseComposerSkillMessage,
@@ -61,7 +57,7 @@ type ComposerPanelProps = {
   model?: ModelOption
   thinkingLevel: string
   availableThinkingLevels: Array<string>
-  contextUsage?: SessionState["contextUsage"]
+  contextUsageStore: ComposerContextUsageStore
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
@@ -153,7 +149,7 @@ export const ComposerPanel = React.forwardRef<
     model,
     thinkingLevel,
     availableThinkingLevels,
-    contextUsage,
+    contextUsageStore,
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
@@ -257,7 +253,7 @@ export const ComposerPanel = React.forwardRef<
             model={model}
             thinkingLevel={thinkingLevel}
             availableThinkingLevels={availableThinkingLevels}
-            contextUsage={contextUsage}
+            contextUsageStore={contextUsageStore}
             disabled={disabled}
             onSelectModel={onSelectModel}
             onSelectThinkingLevel={onSelectThinkingLevel}

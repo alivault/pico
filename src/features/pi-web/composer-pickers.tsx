@@ -1,7 +1,7 @@
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
-import type { ModelOption, SessionState } from "@/lib/pi-web"
+import type { ModelOption } from "@/lib/pi-web"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -17,7 +17,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ComposerContextUsageIndicator } from "@/features/pi-web/composer-context-usage-indicator"
+import {
+  ComposerContextUsageIndicator,
+  type ComposerContextUsageStore,
+} from "@/features/pi-web/composer-context-usage-indicator"
 
 function thinkingLabel(level: string) {
   switch (level) {
@@ -53,7 +56,7 @@ type ComposerPickersProps = {
   model?: ModelOption
   thinkingLevel: string
   availableThinkingLevels: Array<string>
-  contextUsage?: SessionState["contextUsage"]
+  contextUsageStore: ComposerContextUsageStore
   disabled?: boolean
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
@@ -70,7 +73,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   model,
   thinkingLevel,
   availableThinkingLevels,
-  contextUsage,
+  contextUsageStore,
   disabled = false,
   onSelectModel,
   onSelectThinkingLevel,
@@ -220,7 +223,10 @@ export const ComposerPickers = React.memo(function ComposerPickers({
         </Popover>
       </div>
 
-      <ComposerContextUsageIndicator contextUsage={contextUsage} />
+      <ComposerContextUsageIndicator
+        contextUsageStore={contextUsageStore}
+        disabled={disabled}
+      />
     </div>
   )
 })

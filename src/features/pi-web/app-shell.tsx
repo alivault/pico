@@ -29,6 +29,7 @@ import type {
   SessionsEvent,
 } from "@/lib/pi-web-api"
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
+import type { ComposerContextUsageStore } from "@/features/pi-web/composer-context-usage-indicator"
 import type { ComposerPanelHandle } from "@/features/pi-web/composer-panel"
 import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
 
@@ -2160,11 +2161,13 @@ const AppShellComposerController = React.memo(
   function AppShellComposerController({
     actionsRef,
     composerPanelRef,
+    contextUsageStore,
     fileInputRef,
     store,
   }: {
     actionsRef: React.MutableRefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
+    contextUsageStore: ComposerContextUsageStore
     fileInputRef: React.RefObject<HTMLInputElement | null>
     store: ValueStore<AppShellComposerSnapshot>
   }) {
@@ -2275,7 +2278,7 @@ const AppShellComposerController = React.memo(
         model={snapshot.model}
         thinkingLevel={snapshot.thinkingLevel}
         availableThinkingLevels={snapshot.availableThinkingLevels}
-        contextUsage={snapshot.contextUsage}
+        contextUsageStore={contextUsageStore}
         isSubmitting={snapshot.isSubmitting}
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
@@ -2600,7 +2603,6 @@ type AppShellComposerSnapshot = {
   composerSkill?: string
   composerSyncNonce: number
   composerText: string
-  contextUsage?: SessionState["contextUsage"]
   currentPendingMessages: Array<PendingComposerMessage>
   disabled: boolean
   isStreaming: boolean
@@ -2648,7 +2650,6 @@ function createInitialAppShellComposerSnapshot(
     composerSkill: undefined,
     composerSyncNonce: 0,
     composerText: "",
-    contextUsage: undefined,
     currentPendingMessages: [],
     disabled: false,
     isStreaming: false,
@@ -2703,6 +2704,7 @@ type AppShellController = {
   stores: {
     appUi: ValueStore<AppShellUiState>
     composer: ValueStore<AppShellComposerSnapshot>
+    contextUsage: ComposerContextUsageStore
     conversationItems: ConversationItemsStore
     displaySettings: ValueStore<AppShellDisplaySettingsState>
     draftFlow: ValueStore<AppShellDraftFlowState>
@@ -3003,6 +3005,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const composerStore = composerStoreRef.current
+  const contextUsageStoreRef = React.useRef<ValueStore<
+    SessionState["contextUsage"]
+  > | null>(null)
+  if (!contextUsageStoreRef.current) {
+    contextUsageStoreRef.current =
+      createValueStore<SessionState["contextUsage"]>(undefined)
+  }
+  const contextUsageStore = contextUsageStoreRef.current
   const setComposerDraftSeed = React.useCallback<
     React.Dispatch<
       React.SetStateAction<{
@@ -3048,15 +3058,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
   const setComposerContextUsage = React.useCallback(
     (contextUsage: SessionState["contextUsage"]) => {
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
-        ...currentComposerSnapshot,
-        contextUsage: currentComposerSnapshot.disabled
-          ? undefined
-          : contextUsage,
-      })
+      contextUsageStore.setSnapshot(contextUsage)
     },
-    [composerStore]
+    [contextUsageStore]
   )
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
@@ -3432,6 +3436,12 @@ const AppShellSessionWorkspace = React.forwardRef<
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionQueryScope = sessionScrollKey(sessionState)
+  const contextUsageSessionScopeRef = React.useRef("")
+  React.useLayoutEffect(() => {
+    if (contextUsageSessionScopeRef.current === currentSessionQueryScope) return
+    contextUsageSessionScopeRef.current = currentSessionQueryScope
+    contextUsageStore.setSnapshot(sessionStateRef.current.contextUsage)
+  }, [contextUsageStore, currentSessionQueryScope])
   const initialRouteLoadingSessionId =
     initialLoadingSessionId && !sessionState.sessionKey
       ? initialLoadingSessionId
@@ -4250,9 +4260,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerSkill: displayedComposerSkill,
     composerSyncNonce: composerDraftSeed.syncNonce,
     composerText: displayedComposerText,
-    contextUsage: composerDisabled
-      ? undefined
-      : sessionStateRef.current.contextUsage,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
     isStreaming: composerDisabled ? false : sessionState.streaming,
@@ -4571,6 +4578,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     stores: {
       appUi: appUiStore,
       composer: composerStore,
+      contextUsage: contextUsageStore,
       conversationItems: conversationItemsStore,
       displaySettings: displaySettingsStore,
       draftFlow: draftFlowStore,
@@ -4694,6 +4702,7 @@ const AppShellSessionWorkspace = React.forwardRef<
             <AppShellComposerController
               actionsRef={composerActionsRef}
               composerPanelRef={composerPanelRef}
+              contextUsageStore={contextUsageStore}
               fileInputRef={fileInputRef}
               store={composerStore}
             />
