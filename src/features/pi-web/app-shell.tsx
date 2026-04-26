@@ -4011,10 +4011,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
-      pendingRouteSessionIdRef.current = undefined
-      pendingRouteSessionPathRef.current = undefined
-      setLoadingSessionId(null)
-      setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+      handleSelectSession(undefined, { replace: true })
       clearSelectedSidebarSelection()
       if (shouldCloseMobileSidebar) {
         pendingMobileSidebarPromptFocusRef.current = true
@@ -4051,6 +4048,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       conversationItemsStore,
       defaultNewSessionDirectory,
       focusPrompt,
+      handleSelectSession,
       isMobile,
       openMobile,
       requestCreateSession,

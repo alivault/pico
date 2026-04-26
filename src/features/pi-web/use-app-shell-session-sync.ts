@@ -622,12 +622,19 @@ export function useAppShellSessionSync({
           promptDraftKey(nextState) !== promptDraftKey(previousState)
         const currentRouteSessionId = currentSessionIdRef.current
         const currentDraftOwnerKey = draftSessionLoadingOwnerKeyRef.current
+        const confirmedDraft =
+          nextState.draft && !nextState.sessionKey?.startsWith("optimistic:")
+        const previousWasOptimisticDraft =
+          previousState.draft &&
+          previousState.sessionKey?.startsWith("optimistic:")
+        const draftMatchesPendingOwner = currentDraftOwnerKey
+          ? promptDraftKey(nextState) === currentDraftOwnerKey
+          : false
         const shouldClearDraftRoute = Boolean(
           currentRouteSessionId &&
-          currentDraftOwnerKey &&
-          nextState.draft &&
-          !nextState.sessionKey?.startsWith("optimistic:") &&
-          promptDraftKey(nextState) === currentDraftOwnerKey
+          !pendingRouteSessionIdRef.current &&
+          confirmedDraft &&
+          (draftMatchesPendingOwner || previousWasOptimisticDraft)
         )
         const preserveLocalPrompt =
           !sessionChanged && localPromptText !== previousEditorText
