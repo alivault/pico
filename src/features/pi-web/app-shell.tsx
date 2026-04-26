@@ -2274,6 +2274,69 @@ const AppShellComposerController = React.memo(
   }
 )
 
+function AppShellWindowEffectsHost({
+  currentSessionTitle,
+  displaySessionTitle,
+  isSessionViewLoading,
+  onConsumeSessionDoneEvents,
+  onSelectSession,
+  sessionDoneDesktopNotificationsEnabled,
+  sessionDoneEvents,
+  sessionDoneSoundEnabled,
+  sessionStore,
+  sidebarStore,
+}: {
+  currentSessionTitle: string
+  displaySessionTitle: string
+  isSessionViewLoading: boolean
+  onConsumeSessionDoneEvents: (ids: Array<string>) => void
+  onSelectSession: (nextSessionId?: string) => void
+  sessionDoneDesktopNotificationsEnabled: boolean
+  sessionDoneEvents: Array<SessionDoneEvent>
+  sessionDoneSoundEnabled: boolean
+  sessionStore: ValueStore<SessionState>
+  sidebarStore: AppShellSidebarStore
+}) {
+  const sessionWindowState = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => ({
+      activeSessionKey: sessionState.sessionKey,
+      activeSessionNotificationKey: sessionNotificationKey({
+        sessionId: sessionState.sessionId,
+        sessionFile: sessionState.sessionFile,
+      }),
+      sessionCwd: sessionState.cwd,
+      sessionStreaming: sessionState.streaming,
+      uiTitle: sessionState.uiState.title?.trim() || "",
+    }),
+    shallowRecordEqual
+  )
+  const currentPageTitle = isSessionViewLoading
+    ? displaySessionTitle
+    : sessionWindowState.uiTitle ||
+      (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
+
+  return (
+    <AppShellWindowEffects
+      activeSessionKey={sessionWindowState.activeSessionKey}
+      activeSessionNotificationKey={
+        sessionWindowState.activeSessionNotificationKey
+      }
+      currentPageTitle={currentPageTitle}
+      sessionCwd={sessionWindowState.sessionCwd}
+      sessionDoneDesktopNotificationsEnabled={
+        sessionDoneDesktopNotificationsEnabled
+      }
+      sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+      sessionStreaming={sessionWindowState.sessionStreaming}
+      sessionDoneEvents={sessionDoneEvents}
+      sidebarStore={sidebarStore}
+      onConsumeSessionDoneEvents={onConsumeSessionDoneEvents}
+      onSelectSession={onSelectSession}
+    />
+  )
+}
+
 function AppShellWindowEffects({
   activeSessionKey,
   activeSessionNotificationKey,
@@ -3107,15 +3170,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const displaySessionCwd = isSessionViewLoading
     ? loadingSessionSummary?.cwd
     : sessionState.cwd
-  const activeSessionNotificationKey = sessionNotificationKey({
-    sessionId: sessionState.sessionId,
-    sessionFile: sessionState.sessionFile,
-  })
-  const currentPageTitle = isSessionViewLoading
-    ? displaySessionTitle
-    : sessionState.uiState.title?.trim() ||
-      (currentSessionTitle !== "New session" ? currentSessionTitle : "Pi")
-
   React.useEffect(() => {
     const previousSessionId = previousRouteSessionIdRef.current
     previousRouteSessionIdRef.current = sessionId
@@ -4282,17 +4336,16 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   return (
     <>
-      <AppShellWindowEffects
-        activeSessionKey={sessionState.sessionKey}
-        activeSessionNotificationKey={activeSessionNotificationKey}
-        currentPageTitle={currentPageTitle}
-        sessionCwd={sessionState.cwd}
+      <AppShellWindowEffectsHost
+        currentSessionTitle={currentSessionTitle}
+        displaySessionTitle={displaySessionTitle}
+        isSessionViewLoading={isSessionViewLoading}
         sessionDoneDesktopNotificationsEnabled={
           sessionDoneDesktopNotificationsEnabled
         }
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-        sessionStreaming={sessionState.streaming}
         sessionDoneEvents={sessionDoneEvents}
+        sessionStore={sessionStore}
         sidebarStore={sidebarStore}
         onConsumeSessionDoneEvents={(ids) => {
           const consumedIds = new Set(ids)

@@ -24,10 +24,10 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
 - [x] Command palette command slicing
   - [x] Move command builder dependencies behind refs/stores where possible.
   - [x] Keep lazy command construction on palette open.
-- [ ] Remaining session-derived slice stores
-  - [ ] Identify high-churn `sessionState` reads still performed by `AppShellSessionWorkspace`.
-  - [ ] Move safe derived values to selectors/stores or ref-backed hosts.
-  - [ ] Keep routing, title, notification, tree/fork, and settings flows intact.
+- [x] Remaining session-derived slice stores
+  - [x] Identify high-churn `sessionState` reads still performed by `AppShellSessionWorkspace`.
+  - [x] Move safe derived values to selectors/stores or ref-backed hosts.
+  - [x] Keep routing, title, notification, tree/fork, and settings flows intact.
 
 ## Validation
 
