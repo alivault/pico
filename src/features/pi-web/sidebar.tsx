@@ -170,13 +170,13 @@ type SessionClickModifiers = {
 const EMPTY_DIRECTORY_SESSIONS: Array<SessionListEntry> = []
 const SIDEBAR_SEARCH_COMMIT_DELAY_MS = 150
 
-function formatSidebarSessionTime(value?: string) {
+function formatSidebarSessionTime(value?: string, now = Date.now()) {
   if (!value) return ""
 
   const timestamp = new Date(value).getTime()
   if (Number.isNaN(timestamp)) return ""
 
-  const diffMs = Date.now() - timestamp
+  const diffMs = now - timestamp
   const past = diffMs >= 0
   const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
   const suffix = past ? "ago" : "from now"
@@ -218,9 +218,11 @@ function isValidSidebarTimestamp(value?: string) {
 
 function SidebarSessionTime({ value }: { value?: string }) {
   const timestamp = value ? new Date(value).getTime() : Number.NaN
-  useRelativeTimeTicker(Number.isNaN(timestamp) ? undefined : timestamp)
+  const now = useRelativeTimeTicker(
+    Number.isNaN(timestamp) ? undefined : timestamp
+  )
 
-  const label = formatSidebarSessionTime(value)
+  const label = formatSidebarSessionTime(value, now)
   if (!label) return null
 
   return <>{label}</>

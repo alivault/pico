@@ -20,7 +20,7 @@ export function relativeTimeRefreshDelay(timestamp: number) {
 }
 
 export function useRelativeTimeTicker(timestamp: number | undefined) {
-  const [, refresh] = React.useReducer((tick: number) => tick + 1, 0)
+  const [now, setNow] = React.useState(() => Date.now())
 
   React.useEffect(() => {
     if (timestamp === undefined || Number.isNaN(timestamp)) return
@@ -32,7 +32,7 @@ export function useRelativeTimeTicker(timestamp: number | undefined) {
       timeoutId = window.setTimeout(() => {
         if (cancelled) return
 
-        refresh()
+        setNow(Date.now())
         schedule()
       }, relativeTimeRefreshDelay(timestamp))
     }
@@ -45,7 +45,9 @@ export function useRelativeTimeTicker(timestamp: number | undefined) {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [refresh, timestamp])
+  }, [timestamp])
+
+  return now
 }
 
 export function RelativeTime({
@@ -58,9 +60,11 @@ export function RelativeTime({
   className?: string
 }) {
   const timestamp = new Date(value).getTime()
-  useRelativeTimeTicker(Number.isNaN(timestamp) ? undefined : timestamp)
+  const now = useRelativeTimeTicker(
+    Number.isNaN(timestamp) ? undefined : timestamp
+  )
 
-  const label = relativeTime(value)
+  const label = relativeTime(value, now)
   if (!label) return null
 
   return (

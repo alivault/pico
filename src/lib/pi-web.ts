@@ -339,7 +339,7 @@ function shortRelativeTime(value: number, unit: string, past: boolean) {
   return past ? `${value}${unit} ago` : `in ${value}${unit}`
 }
 
-export function relativeTime(value?: string) {
+export function relativeTime(value?: string, now = Date.now()) {
   if (!value) return ""
 
   const date = new Date(value)
@@ -348,7 +348,7 @@ export function relativeTime(value?: string) {
     return ""
   }
 
-  const diffMs = Date.now() - timestamp
+  const diffMs = now - timestamp
   const past = diffMs >= 0
   const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
 
