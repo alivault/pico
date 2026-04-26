@@ -50,6 +50,12 @@ type SessionStateStore = {
   subscribe: (listener: () => void) => () => void
 }
 
+type SyncedWorkingState = {
+  label: string
+  summary?: string
+  done?: boolean
+}
+
 type UseAppShellSessionSyncOptions = {
   viewerContextId: string
   sessionId?: string
@@ -77,6 +83,7 @@ type UseAppShellSessionSyncOptions = {
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
   setHiddenThinkingPreview: (value: string) => void
+  setWorkingState: (state: SyncedWorkingState | null) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSessionDoneEvents: React.Dispatch<
     React.SetStateAction<Array<SessionDoneEvent>>
@@ -363,8 +370,18 @@ function sameSessionStateExceptConversation(
     left.availableSkills === right.availableSkills &&
     left.hideThinkingBlock === right.hideThinkingBlock &&
     left.contextUsage === right.contextUsage &&
-    left.uiState === right.uiState &&
     left.uiRequest === right.uiRequest
+  )
+}
+
+function samePublishableUiState(
+  left: SessionState["uiState"],
+  right: SessionState["uiState"]
+) {
+  return (
+    left.statuses === right.statuses &&
+    left.title === right.title &&
+    left.editorText === right.editorText
   )
 }
 
@@ -373,6 +390,7 @@ function shouldPublishSessionState(previous: SessionState, next: SessionState) {
 
   return (
     !sameSessionStateExceptConversation(previous, next) ||
+    !samePublishableUiState(previous.uiState, next.uiState) ||
     (previous.items.length === 0) !== (next.items.length === 0)
   )
 }
@@ -394,6 +412,7 @@ export function useAppShellSessionSync({
   setSessionState,
   setConversationItems,
   setHiddenThinkingPreview,
+  setWorkingState,
   setSessionsEvent,
   setSessionDoneEvents,
   applySidebarSessionStatusRef,
@@ -602,6 +621,13 @@ export function useAppShellSessionSync({
 
         sessionStateRef.current = nextState
         setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "")
+        if (previousState.streaming || nextState.streaming) {
+          setWorkingState(
+            nextState.streaming
+              ? { label: nextState.uiState.workingMessage || "Working…" }
+              : null
+          )
+        }
         const forceConversationSync =
           previousState.sessionKey !== nextState.sessionKey ||
           previousState.sessionId !== nextState.sessionId ||
@@ -767,6 +793,7 @@ export function useAppShellSessionSync({
     setConnected,
     setComposerImages,
     setHiddenThinkingPreview,
+    setWorkingState,
     setConversationItems,
     setPendingMessages,
     pendingUiRequestHandlerRef,

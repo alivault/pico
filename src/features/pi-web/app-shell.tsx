@@ -3308,6 +3308,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [hiddenThinkingPreviewStore]
   )
+  const setWorkingState = React.useCallback(
+    (state: AppShellWorkingState | null) => {
+      workingStateStore.setSnapshot(state)
+    },
+    [workingStateStore]
+  )
   const addOptimisticUserMessage = React.useCallback(
     (options: {
       message: string
@@ -3380,14 +3386,12 @@ const AppShellSessionWorkspace = React.forwardRef<
       firstMessage: currentSessionState.firstMessage,
       hideThinkingBlock: currentSessionState.hideThinkingBlock,
       model: currentSessionState.model,
-      modified: currentSessionState.modified,
       sessionFile: currentSessionState.sessionFile,
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
       sessionName: currentSessionState.sessionName,
       streaming: currentSessionState.streaming,
       thinkingLevel: currentSessionState.thinkingLevel,
-      workingMessage: currentSessionState.uiState.workingMessage,
     }),
     shallowRecordEqual
   )
@@ -3582,7 +3586,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: sessionState.sessionId,
         title: currentSessionTitle,
         name: sessionState.sessionName,
-        modified: sessionState.modified,
+        modified: sessionStateRef.current.modified,
       },
     ])
   }
@@ -3724,6 +3728,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSessionState,
     setConversationItems,
     setHiddenThinkingPreview,
+    setWorkingState,
     setSessionsEvent: sidebarStore.setSessionsEvent,
     setSessionDoneEvents,
     applySidebarSessionStatusRef,
@@ -4284,37 +4289,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     syncComposerDraft,
   })
 
-  const workingState = (() => {
-    if (draftSessionLoadingOwnerKey && pendingDraftPrompt) {
-      return {
-        label: "Waiting for new session…",
-      }
-    }
-
-    if (awaitingFirstTurn && !sessionState.streaming) {
-      return {
-        label: "Waiting for first response…",
-      }
-    }
-
-    if (runningSlashCommand === "compact") {
-      return {
-        label: "Compacting context…",
-      }
-    }
-
-    if (sessionState.streaming) {
-      return {
-        label: sessionState.workingMessage || "Working…",
-      }
-    }
-
-    return null
-  })()
-
   React.useLayoutEffect(() => {
-    workingStateStore.setSnapshot(workingState)
-  })
+    if (runningSlashCommand === "compact") {
+      workingStateStore.setSnapshot({ label: "Compacting context…" })
+      return
+    }
+
+    if (workingStateStore.getSnapshot()?.label === "Compacting context…") {
+      workingStateStore.setSnapshot(null)
+    }
+  }, [runningSlashCommand, workingStateStore])
 
   const commandPaletteStateRef = useLatestRef({
     currentSessionTitle,

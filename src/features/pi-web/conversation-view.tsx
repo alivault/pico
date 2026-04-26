@@ -1885,9 +1885,15 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
     type: "tool"
   }
 }) {
-  const callText = toolCallText(block)
-  const outputText = toolOutputText(block)
-  const editDiff = block.name === "edit" ? toolDiffText(block) : ""
+  const [openValue, setOpenValue] = React.useState<Array<string>>([])
+  const isOpen = openValue.includes("tool")
+  const renderBody = isOpen || block.name !== "edit" || !block.running
+  const callText =
+    renderBody || block.name === "bash" ? toolCallText(block) : ""
+  const outputText =
+    renderBody || block.name === "bash" ? toolOutputText(block) : ""
+  const editDiff =
+    block.name === "edit" && !block.running ? toolDiffText(block) : ""
   const shellBodyText =
     block.name === "bash"
       ? [callText, block.output.trimEnd()].filter(Boolean).join("\n\n") ||
@@ -1897,6 +1903,8 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
 
   return (
     <Accordion
+      value={openValue}
+      onValueChange={setOpenValue}
       className={cn(
         "rounded-xl border text-sm",
         block.running && "border-amber-500/30 bg-amber-500/5",
@@ -1920,29 +1928,31 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
           {block.name === "edit" ? <EditDiffStats diff={editDiff} /> : null}
         </AccordionTrigger>
 
-        <AccordionContent className="px-3 pb-3">
-          <div className="border-t pt-3">
-            <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
-              {block.name === "bash" ? (
-                <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
-                  <AnsiText text={shellBodyText} />
-                </pre>
-              ) : block.name === "edit" ? (
-                <EditToolOutput block={block} />
-              ) : (
-                <div className="space-y-4">
-                  {callText ? (
-                    <ToolBlockSection label="Call" text={callText} />
-                  ) : null}
-                  <ToolBlockSection
-                    label={block.running ? "Output (streaming)" : "Output"}
-                    text={outputText}
-                  />
-                </div>
-              )}
+        {renderBody ? (
+          <AccordionContent className="px-3 pb-3">
+            <div className="border-t pt-3">
+              <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
+                {block.name === "bash" ? (
+                  <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+                    <AnsiText text={shellBodyText} />
+                  </pre>
+                ) : block.name === "edit" ? (
+                  <EditToolOutput block={block} />
+                ) : (
+                  <div className="space-y-4">
+                    {callText ? (
+                      <ToolBlockSection label="Call" text={callText} />
+                    ) : null}
+                    <ToolBlockSection
+                      label={block.running ? "Output (streaming)" : "Output"}
+                      text={outputText}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </AccordionContent>
+          </AccordionContent>
+        ) : null}
       </AccordionItem>
     </Accordion>
   )
