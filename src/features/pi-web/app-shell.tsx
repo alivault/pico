@@ -127,7 +127,10 @@ import type { MessageScrollStateStore } from "@/features/pi-web/use-app-shell-me
 import { useAppShellPromptMutations } from "@/features/pi-web/use-app-shell-prompt-mutations"
 import { useAppShellSessionMutations } from "@/features/pi-web/use-app-shell-session-mutations"
 import { useAppShellSessionSync } from "@/features/pi-web/use-app-shell-session-sync"
-import { useAppShellShortcuts } from "@/features/pi-web/use-app-shell-shortcuts"
+import {
+  useAppShellShortcuts,
+  type AppShellShortcutState,
+} from "@/features/pi-web/use-app-shell-shortcuts"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
@@ -887,6 +890,58 @@ function useLatestRef<T>(value: T) {
   return ref
 }
 
+type ValueStore<T> = {
+  getSnapshot: () => T
+  setSnapshot: (nextSnapshot: T) => void
+  subscribe: (listener: () => void) => () => void
+}
+
+function createValueStore<T>(
+  initialSnapshot: T,
+  isEqual: (left: T, right: T) => boolean = Object.is
+): ValueStore<T> {
+  let snapshot = initialSnapshot
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => snapshot,
+    setSnapshot: (nextSnapshot) => {
+      if (isEqual(snapshot, nextSnapshot)) return
+      snapshot = nextSnapshot
+      for (const listener of listeners) listener()
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+function useValueStore<T>(store: ValueStore<T>) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  )
+}
+
+function shallowRecordEqual<T extends Record<string, unknown>>(
+  left: T,
+  right: T
+) {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+
+  for (const key of leftKeys) {
+    if (!Object.is(left[key], right[key])) return false
+  }
+
+  return true
+}
+
 type UserConversationItem = Extract<ConversationItem, { kind: "user" }>
 type AssistantConversationItem = Extract<
   ConversationItem,
@@ -1063,11 +1118,48 @@ function createConversationItemsStore(
   }
 }
 
-function useConversationItemsSnapshot(store: ConversationItemsStore) {
+function useConversationItems(store: ConversationItemsStore) {
   return React.useSyncExternalStore(
     store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot
+    () => store.getSnapshot().items,
+    () => store.getSnapshot().items
+  )
+}
+
+function useConversationRevision(store: ConversationItemsStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => store.getSnapshot().revision,
+    () => store.getSnapshot().revision
+  )
+}
+
+function conversationHasAssistantOutput(items: Array<ConversationItem>) {
+  return items.some(
+    (item) =>
+      item.kind === "assistant" &&
+      item.blocks.some(
+        (block) =>
+          block.type === "text" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0
+      )
+  )
+}
+
+function useConversationHasMessages(store: ConversationItemsStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => store.getSnapshot().items.length > 0,
+    () => store.getSnapshot().items.length > 0
+  )
+}
+
+function useConversationHasAssistantOutput(store: ConversationItemsStore) {
+  return React.useSyncExternalStore(
+    store.subscribe,
+    () => conversationHasAssistantOutput(store.getSnapshot().items),
+    () => conversationHasAssistantOutput(store.getSnapshot().items)
   )
 }
 
@@ -1200,16 +1292,17 @@ type AppShellConversationFrameHandle = {
 }
 
 function ConversationLatestMessageButton({
+  conversationItemsStore,
   draft,
-  hasMessages,
   onClick,
   scrollStateStore,
 }: {
+  conversationItemsStore: ConversationItemsStore
   draft: boolean
-  hasMessages: boolean
   onClick: () => void
   scrollStateStore: MessageScrollStateStore
 }) {
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
   const isDisabled = useMessageScrollValue(
     scrollStateStore,
     (snapshot) => draft || !hasMessages || snapshot.isMessagesNearBottom
@@ -1228,6 +1321,25 @@ function ConversationLatestMessageButton({
       <ArrowDownIcon className="size-4" />
     </Button>
   )
+}
+
+function ConversationScrollRevisionObserver({
+  conversationItemsStore,
+  disabled,
+  onRevisionChange,
+}: {
+  conversationItemsStore: ConversationItemsStore
+  disabled: boolean
+  onRevisionChange: () => void
+}) {
+  const conversationRevision = useConversationRevision(conversationItemsStore)
+
+  React.useLayoutEffect(() => {
+    if (disabled) return
+    onRevisionChange()
+  }, [conversationRevision, disabled, onRevisionChange])
+
+  return null
 }
 
 function ConversationPreviousMessageButton({
@@ -1266,19 +1378,12 @@ const AppShellConversationFrame = React.forwardRef<
   AppShellConversationFrameHandle,
   {
     children: React.ReactNode
-    conversationRevision: number
-    hasMessages: boolean
+    conversationItemsStore: ConversationItemsStore
     isSessionViewLoading: boolean
     sessionState: AppShellConversationSessionState
   }
 >(function AppShellConversationFrameImpl(
-  {
-    children,
-    conversationRevision,
-    hasMessages,
-    isSessionViewLoading,
-    sessionState,
-  },
+  { children, conversationItemsStore, isSessionViewLoading, sessionState },
   ref
 ) {
   const {
@@ -1290,8 +1395,8 @@ const AppShellConversationFrame = React.forwardRef<
     scrollConversationToBottom,
     scrollConversationToTop,
     scrollStateStore,
+    syncAfterConversationChange,
   } = useAppShellMessageScroll({
-    conversationRevision,
     isSessionViewLoading,
     sessionState,
   })
@@ -1323,6 +1428,11 @@ const AppShellConversationFrame = React.forwardRef<
         className="h-full overflow-auto px-4 outline-none"
       >
         <div ref={messagesContentRef} className="flex min-h-full flex-col">
+          <ConversationScrollRevisionObserver
+            conversationItemsStore={conversationItemsStore}
+            disabled={isSessionViewLoading}
+            onRevisionChange={syncAfterConversationChange}
+          />
           {children}
           <div ref={bottomRef} />
         </div>
@@ -1331,8 +1441,8 @@ const AppShellConversationFrame = React.forwardRef<
       {!isSessionViewLoading ? (
         <>
           <ConversationLatestMessageButton
+            conversationItemsStore={conversationItemsStore}
             draft={sessionState.draft}
-            hasMessages={hasMessages}
             onClick={scrollConversationToBottom}
             scrollStateStore={scrollStateStore}
           />
@@ -1417,6 +1527,205 @@ function ConversationGroupView({
   )
 }
 
+function AppShellConversationItemGroups({
+  centerMessages,
+  conversationItemsStore,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  centerMessages: boolean
+  conversationItemsStore: ConversationItemsStore
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  const displayedConversationItems = useConversationItems(
+    conversationItemsStore
+  )
+  const conversationMessageColumnClassName = centerMessages
+    ? "mx-auto w-full max-w-[80ch]"
+    : "w-full"
+  const renderedConversationGroups = useRenderConversationGroups({
+    items: displayedConversationItems,
+    hideThinking,
+    hideToolBlocks,
+  })
+
+  if (renderedConversationGroups.length === 0) return null
+
+  return (
+    <>
+      {renderedConversationGroups.map((group) => (
+        <ConversationGroupView
+          key={group.key}
+          className={conversationMessageColumnClassName}
+          group={group}
+          hideThinking={hideThinking}
+          hideToolBlocks={hideToolBlocks}
+        />
+      ))}
+    </>
+  )
+}
+
+function AppShellConversationEmptyState({
+  awaitingFirstTurn,
+  conversationItemsStore,
+  draft,
+  cwd,
+  isSessionViewLoading,
+  isSubmitting,
+  onCreateSession,
+  streaming,
+  viewerContextId,
+  workingState,
+}: {
+  awaitingFirstTurn: boolean
+  conversationItemsStore: ConversationItemsStore
+  draft: boolean
+  cwd?: string
+  isSessionViewLoading: boolean
+  isSubmitting: boolean
+  onCreateSession: () => void
+  streaming: boolean
+  viewerContextId: string
+  workingState: AppShellWorkingState | null
+}) {
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const hasAssistantOutput = useConversationHasAssistantOutput(
+    conversationItemsStore
+  )
+  const displayedWorkingState =
+    workingState ||
+    (hasAssistantOutput
+      ? {
+          label: "Done",
+          done: true,
+        }
+      : null)
+  const showConversationLoadingState = Boolean(
+    isSessionViewLoading ||
+    (!draft &&
+      !hasMessages &&
+      (isSubmitting ||
+        awaitingFirstTurn ||
+        streaming ||
+        Boolean(displayedWorkingState)))
+  )
+  const conversationLoadingLabel = isSessionViewLoading
+    ? "Loading session…"
+    : displayedWorkingState && !displayedWorkingState.done
+      ? displayedWorkingState.label
+      : "Loading…"
+
+  if (hasMessages) return null
+
+  if (showConversationLoadingState) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+        <Spinner />
+        <div>{conversationLoadingLabel}</div>
+      </div>
+    )
+  }
+
+  return (
+    <Empty>
+      <EmptyHeader>
+        <EmptyTitle>
+          {draft ? "New session" : "Start a new conversation"}
+        </EmptyTitle>
+        <EmptyDescription>
+          {draft
+            ? undefined
+            : "This is the native Pi session view backed by the new TypeScript runtime."}
+        </EmptyDescription>
+      </EmptyHeader>
+      {draft ? (
+        <EmptyContent className="flex flex-col items-center gap-3">
+          {cwd ? (
+            <Badge variant="outline">{formatDisplayPath(cwd)}</Badge>
+          ) : null}
+          <DraftGitStatusBadge viewerContextId={viewerContextId} cwd={cwd} />
+        </EmptyContent>
+      ) : (
+        <EmptyContent>
+          <Button onClick={onCreateSession}>New session</Button>
+        </EmptyContent>
+      )}
+    </Empty>
+  )
+}
+
+function AppShellConversationWorkingFooter({
+  centerMessages,
+  conversationItemsStore,
+  hiddenThinkingPreviewStore,
+  hideThinking,
+  streaming,
+  workingState,
+}: {
+  centerMessages: boolean
+  conversationItemsStore: ConversationItemsStore
+  hiddenThinkingPreviewStore: TextValueStore
+  hideThinking: boolean
+  streaming: boolean
+  workingState: AppShellWorkingState | null
+}) {
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const hasAssistantOutput = useConversationHasAssistantOutput(
+    conversationItemsStore
+  )
+  const conversationMessageColumnClassName = centerMessages
+    ? "mx-auto w-full max-w-[80ch]"
+    : "w-full"
+  const displayedWorkingState =
+    workingState ||
+    (hasAssistantOutput
+      ? {
+          label: "Done",
+          done: true,
+        }
+      : null)
+
+  if (!hasMessages || !displayedWorkingState) return null
+
+  return (
+    <div className={`${conversationMessageColumnClassName} mt-4`}>
+      <AppShellMessagesWorkingIndicator
+        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        state={displayedWorkingState}
+        useHiddenThinkingPreview={streaming && hideThinking}
+      />
+    </div>
+  )
+}
+
+function AppShellConversationMessageStack({
+  centerMessages,
+  conversationItemsStore,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  centerMessages: boolean
+  conversationItemsStore: ConversationItemsStore
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
+  if (!hasMessages) return null
+
+  return (
+    <div className="flex flex-col gap-4 pt-4">
+      <AppShellConversationItemGroups
+        centerMessages={centerMessages}
+        conversationItemsStore={conversationItemsStore}
+        hideThinking={hideThinking}
+        hideToolBlocks={hideToolBlocks}
+      />
+    </div>
+  )
+}
+
 function AppShellSessionConversation({
   awaitingFirstTurn,
   centerMessages,
@@ -1446,103 +1755,165 @@ function AppShellSessionConversation({
   viewerContextId: string
   workingState: AppShellWorkingState | null
 }) {
-  const conversationSnapshot = useConversationItemsSnapshot(
-    conversationItemsStore
-  )
-  const displayedConversationItems = conversationSnapshot.items
-  const conversationMessageColumnClassName = centerMessages
-    ? "mx-auto w-full max-w-[80ch]"
-    : "w-full"
-  const renderedConversationGroups = useRenderConversationGroups({
-    items: displayedConversationItems,
-    hideThinking,
-    hideToolBlocks,
-  })
-  const showConversationLoadingState = Boolean(
-    isSessionViewLoading ||
-    (!sessionState.draft &&
-      displayedConversationItems.length === 0 &&
-      (isSubmitting ||
-        awaitingFirstTurn ||
-        sessionState.streaming ||
-        Boolean(workingState)))
-  )
-  const conversationLoadingLabel = isSessionViewLoading
-    ? "Loading session…"
-    : workingState && !workingState.done
-      ? workingState.label
-      : "Loading…"
-
   return (
     <AppShellConversationFrame
       ref={conversationFrameRef}
-      conversationRevision={conversationSnapshot.revision}
-      hasMessages={displayedConversationItems.length > 0}
+      conversationItemsStore={conversationItemsStore}
       isSessionViewLoading={isSessionViewLoading}
       sessionState={sessionState}
     >
-      {showConversationLoadingState ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
-          <Spinner />
-          <div>{conversationLoadingLabel}</div>
-        </div>
-      ) : renderedConversationGroups.length > 0 ? (
-        <div className="flex flex-col gap-4 pt-4">
-          {renderedConversationGroups.map((group) => (
-            <ConversationGroupView
-              key={group.key}
-              className={conversationMessageColumnClassName}
-              group={group}
-              hideThinking={hideThinking}
-              hideToolBlocks={hideToolBlocks}
-            />
-          ))}
-          {workingState ? (
-            <div className={conversationMessageColumnClassName}>
-              <AppShellMessagesWorkingIndicator
-                hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-                state={workingState}
-                useHiddenThinkingPreview={
-                  sessionState.streaming && hideThinking
-                }
-              />
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>
-              {sessionState.draft ? "New session" : "Start a new conversation"}
-            </EmptyTitle>
-            <EmptyDescription>
-              {sessionState.draft
-                ? undefined
-                : "This is the native Pi session view backed by the new TypeScript runtime."}
-            </EmptyDescription>
-          </EmptyHeader>
-          {sessionState.draft ? (
-            <EmptyContent className="flex flex-col items-center gap-3">
-              {sessionState.cwd ? (
-                <Badge variant="outline">
-                  {formatDisplayPath(sessionState.cwd)}
-                </Badge>
-              ) : null}
-              <DraftGitStatusBadge
-                viewerContextId={viewerContextId}
-                cwd={sessionState.cwd}
-              />
-            </EmptyContent>
-          ) : (
-            <EmptyContent>
-              <Button onClick={onCreateSession}>New session</Button>
-            </EmptyContent>
-          )}
-        </Empty>
-      )}
+      <AppShellConversationEmptyState
+        awaitingFirstTurn={awaitingFirstTurn}
+        conversationItemsStore={conversationItemsStore}
+        cwd={sessionState.cwd}
+        draft={sessionState.draft}
+        isSessionViewLoading={isSessionViewLoading}
+        isSubmitting={isSubmitting}
+        onCreateSession={onCreateSession}
+        streaming={sessionState.streaming}
+        viewerContextId={viewerContextId}
+        workingState={workingState}
+      />
+      <AppShellConversationMessageStack
+        centerMessages={centerMessages}
+        conversationItemsStore={conversationItemsStore}
+        hideThinking={hideThinking}
+        hideToolBlocks={hideToolBlocks}
+      />
+      <AppShellConversationWorkingFooter
+        centerMessages={centerMessages}
+        conversationItemsStore={conversationItemsStore}
+        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        hideThinking={hideThinking}
+        streaming={sessionState.streaming}
+        workingState={workingState}
+      />
     </AppShellConversationFrame>
   )
 }
+
+function useAppShellComposerSnapshot(
+  store: ValueStore<AppShellComposerSnapshot>
+) {
+  return useValueStore(store)
+}
+
+const AppShellComposerController = React.memo(
+  function AppShellComposerController({
+    actionsRef,
+    composerPanelRef,
+    fileInputRef,
+    store,
+  }: {
+    actionsRef: React.MutableRefObject<AppShellComposerActions>
+    composerPanelRef: React.RefObject<ComposerPanelHandle | null>
+    fileInputRef: React.RefObject<HTMLInputElement | null>
+    store: ValueStore<AppShellComposerSnapshot>
+  }) {
+    const snapshot = useAppShellComposerSnapshot(store)
+
+    return (
+      <ComposerPanel
+        ref={composerPanelRef}
+        currentPendingMessages={snapshot.currentPendingMessages}
+        composerImages={snapshot.composerImages}
+        composerText={snapshot.composerText}
+        composerSkill={snapshot.composerSkill}
+        composerSyncNonce={snapshot.composerSyncNonce}
+        centerMessages={snapshot.centerMessages}
+        availableModels={snapshot.availableModels}
+        model={snapshot.model}
+        thinkingLevel={snapshot.thinkingLevel}
+        availableThinkingLevels={snapshot.availableThinkingLevels}
+        contextUsage={snapshot.contextUsage}
+        isSubmitting={snapshot.isSubmitting}
+        isStreaming={snapshot.isStreaming}
+        awaitingFirstTurn={snapshot.awaitingFirstTurn}
+        disabled={snapshot.disabled}
+        fileInputRef={fileInputRef}
+        slashCommands={snapshot.slashCommands}
+        onComposerTextChange={(value) => {
+          if (snapshot.disabled) return
+          actionsRef.current.syncComposerDraft(value)
+        }}
+        onPickImages={(files) => {
+          if (snapshot.disabled) return
+          void actionsRef.current.onPickImages(files)
+        }}
+        onRemoveComposerImage={(index) => {
+          if (snapshot.disabled) return
+          actionsRef.current.onRemoveComposerImage(index)
+        }}
+        onSubmitPrompt={(streamingBehavior) => {
+          if (snapshot.disabled) return
+          void actionsRef.current.submitPrompt(streamingBehavior)
+        }}
+        onAbort={() => {
+          if (snapshot.disabled) return
+          void actionsRef.current.abortSession()
+        }}
+        onRemovePendingMessage={(pendingId) => {
+          if (snapshot.disabled) return
+          if (actionsRef.current.removePendingDraftFollowUp(pendingId)) return
+          void actionsRef.current.removePendingMessage(pendingId)
+        }}
+        onReorderPending={(pendingId, direction) => {
+          if (snapshot.disabled) return
+          if (
+            actionsRef.current.reorderPendingDraftFollowUp(pendingId, direction)
+          ) {
+            return
+          }
+          void actionsRef.current.reorderPending(pendingId, direction)
+        }}
+        onRunBuiltinSlashCommand={(name, args) => {
+          if (snapshot.disabled) return
+          void actionsRef.current.runBuiltinSlashCommand(name, args)
+        }}
+        onSelectModel={(value) => {
+          if (snapshot.disabled) return
+          void actionsRef.current.setModel(value)
+        }}
+        onSelectThinkingLevel={(level) => {
+          if (snapshot.disabled) return
+          void actionsRef.current.setThinkingLevel(level)
+        }}
+        requestPathCompletions={async (prefix) => {
+          if (snapshot.disabled) return []
+
+          const response = await fetchJson<PathCompletionsResponse>(
+            buildRequestUrl("/api/path-completions", {
+              contextId: snapshot.viewerContextId,
+              sessionId: snapshot.activeSessionId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ prefix }),
+            }
+          )
+          return isApiErrorResponse(response) ? [] : response.items
+        }}
+        requestFileCompletions={async (query, isQuotedPrefix) => {
+          if (snapshot.disabled) return []
+
+          const response = await fetchJson<FileCompletionsResponse>(
+            buildRequestUrl("/api/file-completions", {
+              contextId: snapshot.viewerContextId,
+              sessionId: snapshot.activeSessionId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ query, isQuotedPrefix }),
+            }
+          )
+          return isApiErrorResponse(response) ? [] : response.items
+        }}
+      />
+    )
+  }
+)
 
 function AppShellWindowEffects({
   activeSessionKey,
@@ -1553,7 +1924,7 @@ function AppShellWindowEffects({
   sessionDoneSoundEnabled,
   sessionStreaming,
   sessionDoneEvents,
-  sidebarSessions,
+  sidebarStore,
   onConsumeSessionDoneEvents,
   onSelectSession,
 }: {
@@ -1565,7 +1936,7 @@ function AppShellWindowEffects({
   sessionDoneSoundEnabled: boolean
   sessionStreaming: boolean
   sessionDoneEvents: Array<SessionDoneEvent>
-  sidebarSessions: Array<SessionListEntry>
+  sidebarStore: AppShellSidebarStore
   onConsumeSessionDoneEvents: (ids: Array<string>) => void
   onSelectSession: (nextSessionId?: string) => void
 }) {
@@ -1714,19 +2085,24 @@ function AppShellWindowEffects({
     sessionDoneSoundEnabled,
   ])
 
+  const sidebarUnreadVersion = React.useSyncExternalStore(
+    sidebarStore.subscribe,
+    () =>
+      sidebarStore
+        .getWorkspaceSnapshot()
+        .sidebarSessions.filter((session) => session.unread)
+        .map((session) => sessionNotificationKey(session))
+        .filter(Boolean)
+        .sort()
+        .join("\n"),
+    () => ""
+  )
   const unreadSessionCount = (() => {
-    const unreadKeys = new Set<string>()
+    const unreadKeys = new Set(
+      sidebarUnreadVersion ? sidebarUnreadVersion.split("\n") : []
+    )
 
-    for (const session of sidebarSessions) {
-      const key = sessionNotificationKey(session)
-      if (!key || !session.unread) continue
-      unreadKeys.add(key)
-    }
-
-    if (
-      backgroundCurrentSessionUnreadKey &&
-      !unreadKeys.has(backgroundCurrentSessionUnreadKey)
-    ) {
+    if (backgroundCurrentSessionUnreadKey) {
       unreadKeys.add(backgroundCurrentSessionUnreadKey)
     }
 
@@ -1758,6 +2134,83 @@ export type SelectSessionNavigationOptions = {
 
 type CreateSessionOptions = {
   closeMobileSidebar?: boolean
+}
+
+type PendingComposerMessage = {
+  pendingId: string
+  text: string
+  images: Array<PromptImage>
+  streamingBehavior: "steer" | "followUp"
+}
+
+type AppShellComposerSnapshot = {
+  activeSessionId?: string
+  awaitingFirstTurn: boolean
+  availableModels: SessionState["availableModels"]
+  availableThinkingLevels: SessionState["availableThinkingLevels"]
+  centerMessages: boolean
+  composerImages: Array<PromptImage>
+  composerSkill?: string
+  composerSyncNonce: number
+  composerText: string
+  contextUsage?: SessionState["contextUsage"]
+  currentPendingMessages: Array<PendingComposerMessage>
+  disabled: boolean
+  isStreaming: boolean
+  isSubmitting: boolean
+  model: SessionState["model"]
+  slashCommands: Array<SlashCommandDescriptor>
+  thinkingLevel: SessionState["thinkingLevel"]
+  viewerContextId: string
+}
+
+type AppShellComposerActions = {
+  abortSession: () => void | Promise<unknown>
+  onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
+  onRemoveComposerImage: (index: number) => void
+  removePendingDraftFollowUp: (pendingId: string) => boolean
+  removePendingMessage: (pendingId: string) => void | Promise<unknown>
+  reorderPending: (
+    pendingId: string,
+    direction: -1 | 1
+  ) => void | Promise<unknown>
+  reorderPendingDraftFollowUp: (pendingId: string, direction: -1 | 1) => boolean
+  runBuiltinSlashCommand: (
+    name: string,
+    args: string
+  ) => void | Promise<unknown>
+  setModel: (value: string) => void | Promise<unknown>
+  setThinkingLevel: (level: string) => void | Promise<unknown>
+  submitPrompt: (
+    streamingBehavior?: StreamingBehavior
+  ) => void | Promise<unknown>
+  syncComposerDraft: (value: string) => void
+}
+
+function createInitialAppShellComposerSnapshot(
+  viewerContextId: string
+): AppShellComposerSnapshot {
+  const initialSessionState = createInitialSessionState()
+  return {
+    activeSessionId: undefined,
+    awaitingFirstTurn: false,
+    availableModels: initialSessionState.availableModels,
+    availableThinkingLevels: initialSessionState.availableThinkingLevels,
+    centerMessages: false,
+    composerImages: [],
+    composerSkill: undefined,
+    composerSyncNonce: 0,
+    composerText: "",
+    contextUsage: undefined,
+    currentPendingMessages: [],
+    disabled: false,
+    isStreaming: false,
+    isSubmitting: false,
+    model: initialSessionState.model,
+    slashCommands: [],
+    thinkingLevel: initialSessionState.thinkingLevel,
+    viewerContextId,
+  }
 }
 
 type AppShellSessionWorkspaceHandle = {
@@ -1844,12 +2297,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   >([])
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [pendingMessages, setPendingMessages] = React.useState<
-    Array<{
-      pendingId: string
-      text: string
-      images: Array<PromptImage>
-      streamingBehavior: "steer" | "followUp"
-    }>
+    Array<PendingComposerMessage>
   >([])
   const [sessionDoneEvents, setSessionDoneEvents] = React.useState<
     Array<SessionDoneEvent>
@@ -1870,6 +2318,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
+  const composerStoreRef =
+    React.useRef<ValueStore<AppShellComposerSnapshot> | null>(null)
+  if (!composerStoreRef.current) {
+    composerStoreRef.current = createValueStore(
+      createInitialAppShellComposerSnapshot(viewerContextId),
+      shallowRecordEqual
+    )
+  }
+  const composerStore = composerStoreRef.current
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
   )
@@ -2016,8 +2473,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionQueryScope = sessionScrollKey(sessionState)
-  const conversationItemsSnapshot = conversationItemsStore.getSnapshot()
-  const displayedConversationItems = conversationItemsSnapshot.items
   const initialRouteLoadingSessionId =
     initialLoadingSessionId && !sessionState.sessionKey
       ? initialLoadingSessionId
@@ -2410,7 +2865,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     baseSidebarDirectories[0] ||
     storedDraftDirectory ||
     ""
-  const newSessionDirectoryOptions = (() => {
+  const newSessionDirectoryOptions = React.useMemo(() => {
     const nextOptions: Array<{ path: string; label: string }> = []
     const seen = new Set<string>()
     const pushDirectoryOption = (path: string, label: string) => {
@@ -2431,17 +2886,25 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     return nextOptions
-  })()
+  }, [baseSidebarDirectories, sessionState.cwd, storedDraftDirectory])
 
-  const knownDirectories = (() =>
-    normalizeStoredDirectoryList([
-      ...baseSidebarDirectories,
-      sessionState.cwd || "",
-      ...Array.from(directoryStateByPath.keys()),
-      ...Object.values(directoryIndexes).flatMap((entries) =>
-        entries.map((entry) => entry.cwd || "")
-      ),
-    ]))()
+  const knownDirectories = React.useMemo(
+    () =>
+      normalizeStoredDirectoryList([
+        ...baseSidebarDirectories,
+        sessionState.cwd || "",
+        ...Array.from(directoryStateByPath.keys()),
+        ...Object.values(directoryIndexes).flatMap((entries) =>
+          entries.map((entry) => entry.cwd || "")
+        ),
+      ]),
+    [
+      baseSidebarDirectories,
+      directoryIndexes,
+      directoryStateByPath,
+      sessionState.cwd,
+    ]
+  )
 
   const rememberRecentDirectory = (directory: string) => {
     const normalizedDirectory = directory.trim()
@@ -2837,6 +3300,50 @@ const AppShellSessionWorkspace = React.forwardRef<
     })),
   ])()
 
+  const composerSnapshot = {
+    activeSessionId,
+    awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
+    availableModels: sessionState.availableModels,
+    availableThinkingLevels: sessionState.availableThinkingLevels,
+    centerMessages,
+    composerImages: displayedComposerImages,
+    composerSkill: displayedComposerSkill,
+    composerSyncNonce: composerDraftSeed.syncNonce,
+    composerText: displayedComposerText,
+    contextUsage: composerDisabled ? undefined : sessionState.contextUsage,
+    currentPendingMessages: displayedPendingMessages,
+    disabled: composerDisabled,
+    isStreaming: composerDisabled ? false : sessionState.streaming,
+    isSubmitting: composerDisabled ? false : isSubmitting,
+    model: sessionState.model,
+    slashCommands,
+    thinkingLevel: sessionState.thinkingLevel,
+    viewerContextId,
+  } satisfies AppShellComposerSnapshot
+
+  React.useLayoutEffect(() => {
+    composerStore.setSnapshot(composerSnapshot)
+  })
+
+  const composerActionsRef = useLatestRef<AppShellComposerActions>({
+    abortSession,
+    onPickImages,
+    onRemoveComposerImage: (index) => {
+      setComposerImages((current) =>
+        current.filter((_, imageIndex) => imageIndex !== index)
+      )
+    },
+    removePendingDraftFollowUp,
+    removePendingMessage,
+    reorderPending,
+    reorderPendingDraftFollowUp,
+    runBuiltinSlashCommand,
+    setModel,
+    setThinkingLevel,
+    submitPrompt,
+    syncComposerDraft,
+  })
+
   const workingState = (() => {
     if (draftSessionLoadingOwnerKey && pendingDraftPrompt) {
       return {
@@ -2862,26 +3369,10 @@ const AppShellSessionWorkspace = React.forwardRef<
       }
     }
 
-    const hasAssistantOutput = displayedConversationItems.some(
-      (item) =>
-        item.kind === "assistant" &&
-        item.blocks.some(
-          (block) =>
-            block.type === "text" &&
-            typeof block.text === "string" &&
-            block.text.trim().length > 0
-        )
-    )
-
-    return hasAssistantOutput
-      ? {
-          label: "Done",
-          done: true,
-        }
-      : null
+    return null
   })()
 
-  const commandPaletteCommands = (() => {
+  const buildCommandPaletteCommands = () => {
     const commands: Array<AppCommand> = [
       {
         id: "new-session",
@@ -3068,7 +3559,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     return commands
-  })()
+  }
+  const commandPaletteCommandsRef = useLatestRef(buildCommandPaletteCommands)
 
   const shortcutActionsRef = useLatestRef({
     createSession,
@@ -3101,22 +3593,26 @@ const AppShellSessionWorkspace = React.forwardRef<
     cycleThinkingLevel,
   })
 
+  const shortcutStateRef = useLatestRef<AppShellShortcutState>({
+    currentTab,
+    selectedSidebarSessions,
+    sessionHasAvailableModels: sessionState.availableModels.length > 0,
+    sessionHasFile: Boolean(sessionState.sessionFile),
+    sidebarSessionEntriesByKey,
+  })
+
   useAppShellShortcuts({
     addDirectoryOpenRef,
     commandPaletteOpenRef,
-    currentTab,
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     lastEscapePressedAtRef,
     renameOpenRef,
-    selectedSidebarSessions,
-    sessionHasAvailableModels: sessionState.availableModels.length > 0,
-    sessionHasFile: Boolean(sessionState.sessionFile),
     sessionSearchInputRef,
     settingsOpenRef,
     shortcutActionsRef,
-    sidebarSessionEntriesByKey,
+    shortcutStateRef,
     treeOpenRef,
   })
 
@@ -3155,7 +3651,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
         sessionStreaming={sessionState.streaming}
         sessionDoneEvents={sessionDoneEvents}
-        sidebarSessions={sidebarSessions}
+        sidebarStore={sidebarStore}
         onConsumeSessionDoneEvents={(ids) => {
           const consumedIds = new Set(ids)
           setSessionDoneEvents((current) =>
@@ -3166,158 +3662,27 @@ const AppShellSessionWorkspace = React.forwardRef<
       />
 
       <SidebarInset className="min-h-0 overflow-hidden">
-        <div className="shrink-0 border-b border-border/70 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <SidebarTrigger className="mt-0.5 shrink-0" />
-              <div className="min-w-0 space-y-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {!isSessionViewLoading && sessionState.streaming ? (
-                    <Spinner
-                      className="size-3.5 shrink-0 text-muted-foreground"
-                      aria-label="Session streaming"
-                    />
-                  ) : null}
-                  <h2
-                    className="min-w-0 truncate text-[15px] leading-tight font-semibold"
-                    title={displaySessionTitle}
-                  >
-                    {displaySessionTitle}
-                  </h2>
-                  {!isSessionViewLoading && sessionState.draft ? (
-                    <Badge variant="outline">Draft</Badge>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  {displaySessionCwd && (
-                    <span>{formatDisplayPath(displaySessionCwd)}</span>
-                  )}
-                  <HeaderGitStatusText
-                    viewerContextId={viewerContextId}
-                    cwd={displaySessionCwd}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label="Session menu"
-                      title="Session menu"
-                    />
-                  }
-                >
-                  <EllipsisIcon />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void createSession()
-                    }}
-                  >
-                    <span>Create new session</span>
-                    <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  {newSessionDirectoryOptions.length > 0 ? (
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        New session in…
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-72">
-                        {newSessionDirectoryOptions.map((option) => (
-                          <DropdownMenuItem
-                            key={option.path}
-                            onClick={() => {
-                              void createSession(option.path)
-                            }}
-                          >
-                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <span className="text-xs text-muted-foreground">
-                                {option.label}
-                              </span>
-                              <span className="truncate">
-                                {formatDisplayPath(option.path)}
-                              </span>
-                            </div>
-                            {option.path === defaultNewSessionDirectory ? (
-                              <DropdownMenuShortcut>
-                                Default
-                              </DropdownMenuShortcut>
-                            ) : null}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                  ) : null}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={runCompact}>
-                    <span>Compact session</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={openTreeDialog}>
-                    <span>Tree</span>
-                    <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={openForkDialog}>
-                    <span>Fork</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      void toggleHideThinking()
-                    }}
-                  >
-                    <span>
-                      {sessionState.hideThinkingBlock
-                        ? "Show thinking"
-                        : "Hide thinking"}
-                    </span>
-                    <DropdownMenuShortcut>Ctrl+G</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={toggleHideToolBlocks}>
-                    <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
-                    <DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={!sessionState.sessionFile}
-                    onClick={openRenameDialog}
-                  >
-                    <span>Rename session</span>
-                    <DropdownMenuShortcut>Ctrl+E</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={!sessionState.sessionFile}
-                    onClick={openDeleteDialogForCurrentSession}
-                  >
-                    <span>Delete session</span>
-                    <DropdownMenuShortcut>Ctrl+X</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                aria-label="Create a new session"
-                title={
-                  defaultNewSessionDirectory
-                    ? `Create a new session in ${defaultNewSessionDirectory}`
-                    : "Create a new session"
-                }
-                onClick={() => {
-                  void createSession()
-                }}
-              >
-                <SquarePenIcon />
-              </Button>
-            </div>
-          </div>
-        </div>
+        <AppShellSessionHeader
+          createSession={createSession}
+          defaultNewSessionDirectory={defaultNewSessionDirectory}
+          displaySessionCwd={displaySessionCwd}
+          displaySessionTitle={displaySessionTitle}
+          hideThinkingBlock={sessionState.hideThinkingBlock}
+          hideToolBlocks={hideToolBlocks}
+          isSessionViewLoading={isSessionViewLoading}
+          newSessionDirectoryOptions={newSessionDirectoryOptions}
+          onDeleteCurrentSession={openDeleteDialogForCurrentSession}
+          onForkSession={openForkDialog}
+          onRenameSession={openRenameDialog}
+          onRunCompact={runCompact}
+          onToggleHideThinking={toggleHideThinking}
+          onToggleHideToolBlocks={toggleHideToolBlocks}
+          onTreeSession={openTreeDialog}
+          sessionDraft={sessionState.draft}
+          sessionHasFile={Boolean(sessionState.sessionFile)}
+          sessionStreaming={sessionState.streaming}
+          viewerContextId={viewerContextId}
+        />
 
         <Tabs
           value={currentTab}
@@ -3352,103 +3717,11 @@ const AppShellSessionWorkspace = React.forwardRef<
               workingState={workingState}
             />
 
-            <ComposerPanel
-              ref={composerPanelRef}
-              currentPendingMessages={displayedPendingMessages}
-              composerImages={displayedComposerImages}
-              composerText={displayedComposerText}
-              composerSkill={displayedComposerSkill}
-              composerSyncNonce={composerDraftSeed.syncNonce}
-              centerMessages={centerMessages}
-              availableModels={sessionState.availableModels}
-              model={sessionState.model}
-              thinkingLevel={sessionState.thinkingLevel}
-              availableThinkingLevels={sessionState.availableThinkingLevels}
-              contextUsage={
-                composerDisabled ? undefined : sessionState.contextUsage
-              }
-              isSubmitting={composerDisabled ? false : isSubmitting}
-              isStreaming={composerDisabled ? false : sessionState.streaming}
-              awaitingFirstTurn={composerDisabled ? false : awaitingFirstTurn}
-              disabled={composerDisabled}
+            <AppShellComposerController
+              actionsRef={composerActionsRef}
+              composerPanelRef={composerPanelRef}
               fileInputRef={fileInputRef}
-              slashCommands={slashCommands}
-              onComposerTextChange={(value) => {
-                if (composerDisabled) return
-                syncComposerDraft(value)
-              }}
-              onPickImages={(files) => {
-                if (composerDisabled) return
-                void onPickImages(files)
-              }}
-              onRemoveComposerImage={(index) => {
-                if (composerDisabled) return
-                setComposerImages((current) =>
-                  current.filter((_, imageIndex) => imageIndex !== index)
-                )
-              }}
-              onSubmitPrompt={(streamingBehavior) => {
-                if (composerDisabled) return
-                void submitPrompt(streamingBehavior)
-              }}
-              onAbort={() => {
-                if (composerDisabled) return
-                void abortSession()
-              }}
-              onRemovePendingMessage={(pendingId) => {
-                if (composerDisabled) return
-                if (removePendingDraftFollowUp(pendingId)) return
-                void removePendingMessage(pendingId)
-              }}
-              onReorderPending={(pendingId, direction) => {
-                if (composerDisabled) return
-                if (reorderPendingDraftFollowUp(pendingId, direction)) return
-                void reorderPending(pendingId, direction)
-              }}
-              onRunBuiltinSlashCommand={(name, args) => {
-                if (composerDisabled) return
-                void runBuiltinSlashCommand(name, args)
-              }}
-              onSelectModel={(value) => {
-                if (composerDisabled) return
-                void setModel(value)
-              }}
-              onSelectThinkingLevel={(level) => {
-                if (composerDisabled) return
-                void setThinkingLevel(level)
-              }}
-              requestPathCompletions={async (prefix) => {
-                if (composerDisabled) return []
-
-                const response = await fetchJson<PathCompletionsResponse>(
-                  buildRequestUrl("/api/path-completions", {
-                    contextId: viewerContextId,
-                    sessionId: activeSessionId,
-                  }),
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ prefix }),
-                  }
-                )
-                return isApiErrorResponse(response) ? [] : response.items
-              }}
-              requestFileCompletions={async (query, isQuotedPrefix) => {
-                if (composerDisabled) return []
-
-                const response = await fetchJson<FileCompletionsResponse>(
-                  buildRequestUrl("/api/file-completions", {
-                    contextId: viewerContextId,
-                    sessionId: activeSessionId,
-                  }),
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ query, isQuotedPrefix }),
-                  }
-                )
-                return isApiErrorResponse(response) ? [] : response.items
-              }}
+              store={composerStore}
             />
           </TabsContent>
 
@@ -3466,89 +3739,432 @@ const AppShellSessionWorkspace = React.forwardRef<
         </Tabs>
       </SidebarInset>
 
-      <AppShellCommandPaletteController
-        ref={commandPaletteRef}
-        openStateRef={commandPaletteOpenRef}
-        commands={commandPaletteCommands}
-        onCommandError={(error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to run command"
-          )
-        }}
-      />
-
-      <AppShellAddDirectoryDialogController
-        ref={addDirectoryDialogRef}
-        openStateRef={addDirectoryOpenRef}
-        openedDirectories={baseSidebarDirectories}
-        currentDirectory={sessionState.cwd}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
-        onAddDirectoryPath={addDirectoryPath}
-      />
-
-      <RenameSessionDialogController
-        ref={renameDialogRef}
-        openStateRef={renameOpenRef}
-        onRenameSession={renameSessionPath}
-      />
-
-      <DeleteSessionsDialogController
-        ref={deleteDialogRef}
-        openStateRef={deleteOpenRef}
-        onDeleteSession={deleteSessions}
-      />
-
-      <ForkSessionDialogController
-        ref={forkDialogRef}
-        openStateRef={forkOpenRef}
-        viewerContextId={viewerContextId}
-        sessionScopeKey={currentSessionQueryScope}
-        sessionId={activeSessionId}
-      />
-
-      <AppShellTreeDialogController
-        ref={treeDialogRef}
-        openStateRef={treeOpenRef}
-        viewerContextId={viewerContextId}
-        sessionScopeKey={currentSessionQueryScope}
-        sessionId={activeSessionId}
-        treeSummaryAvailable={treeSummaryAvailable}
-      />
-
-      <AppShellSettingsDialogController
-        ref={settingsDialogRef}
-        openStateRef={settingsOpenRef}
+      <AppShellFloatingControllers
+        activeSessionId={activeSessionId}
+        addDirectoryDialogRef={addDirectoryDialogRef}
+        addDirectoryOpenRef={addDirectoryOpenRef}
+        addDirectoryPath={addDirectoryPath}
+        baseSidebarDirectories={baseSidebarDirectories}
+        centerMessages={centerMessages}
+        commandPaletteCommandsRef={commandPaletteCommandsRef}
+        commandPaletteOpenRef={commandPaletteOpenRef}
+        commandPaletteRef={commandPaletteRef}
+        currentSessionQueryScope={currentSessionQueryScope}
         currentTheme={currentTheme}
-        onThemeChange={handleThemeChange}
+        deleteDialogRef={deleteDialogRef}
+        deleteOpenRef={deleteOpenRef}
+        deleteSessions={deleteSessions}
+        desktopNotificationPermission={desktopNotificationPermission}
+        forkDialogRef={forkDialogRef}
+        forkOpenRef={forkOpenRef}
         hideThinkingBlocks={sessionState.hideThinkingBlock}
+        hideToolBlocks={hideToolBlocks}
+        knownDirectories={knownDirectories}
+        onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {
           void setThinkingBlocksHidden(hidden)
         }}
-        hideToolBlocks={hideToolBlocks}
         onHideToolBlocksChange={setToolBlocksHidden}
-        centerMessages={centerMessages}
-        onCenterMessagesChange={setMessagesCentered}
-        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-        onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
-        sessionDoneDesktopNotificationsEnabled={
-          sessionDoneDesktopNotificationsEnabled
-        }
         onSessionDoneDesktopNotificationsEnabledChange={
           handleSessionDoneDesktopNotificationsEnabledChange
         }
-        desktopNotificationPermission={desktopNotificationPermission}
-      />
-
-      <AppShellUiRequestDialogController
-        ref={uiRequestDialogRef}
-        openStateRef={uiRequestOpenRef}
+        onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
+        onThemeChange={handleThemeChange}
+        recentDirectories={recentDirectories}
+        renameDialogRef={renameDialogRef}
+        renameOpenRef={renameOpenRef}
+        renameSessionPath={renameSessionPath}
+        sessionCwd={sessionState.cwd}
+        sessionDoneDesktopNotificationsEnabled={
+          sessionDoneDesktopNotificationsEnabled
+        }
+        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+        settingsDialogRef={settingsDialogRef}
+        settingsOpenRef={settingsOpenRef}
+        treeDialogRef={treeDialogRef}
+        treeOpenRef={treeOpenRef}
+        treeSummaryAvailable={treeSummaryAvailable}
+        uiRequestDialogRef={uiRequestDialogRef}
+        uiRequestOpenRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
-        sessionId={activeSessionId}
       />
     </>
   )
 })
+
+type AppShellSessionHeaderProps = {
+  createSession: (cwdOverride?: string) => void | Promise<unknown>
+  defaultNewSessionDirectory: string
+  displaySessionCwd?: string
+  displaySessionTitle: string
+  hideThinkingBlock: boolean
+  hideToolBlocks: boolean
+  isSessionViewLoading: boolean
+  newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  onDeleteCurrentSession: () => void
+  onForkSession: () => void | Promise<unknown>
+  onRenameSession: () => void
+  onRunCompact: () => void | Promise<unknown>
+  onToggleHideThinking: () => void | Promise<unknown>
+  onToggleHideToolBlocks: () => void
+  onTreeSession: () => void | Promise<unknown>
+  sessionDraft: boolean
+  sessionHasFile: boolean
+  sessionStreaming: boolean
+  viewerContextId: string
+}
+
+const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
+  createSession,
+  defaultNewSessionDirectory,
+  displaySessionCwd,
+  displaySessionTitle,
+  hideThinkingBlock,
+  hideToolBlocks,
+  isSessionViewLoading,
+  newSessionDirectoryOptions,
+  onDeleteCurrentSession,
+  onForkSession,
+  onRenameSession,
+  onRunCompact,
+  onToggleHideThinking,
+  onToggleHideToolBlocks,
+  onTreeSession,
+  sessionDraft,
+  sessionHasFile,
+  sessionStreaming,
+  viewerContextId,
+}: AppShellSessionHeaderProps) {
+  return (
+    <div className="shrink-0 border-b border-border/70 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <SidebarTrigger className="mt-0.5 shrink-0" />
+          <div className="min-w-0 space-y-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {!isSessionViewLoading && sessionStreaming ? (
+                <Spinner
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-label="Session streaming"
+                />
+              ) : null}
+              <h2
+                className="min-w-0 truncate text-[15px] leading-tight font-semibold"
+                title={displaySessionTitle}
+              >
+                {displaySessionTitle}
+              </h2>
+              {!isSessionViewLoading && sessionDraft ? (
+                <Badge variant="outline">Draft</Badge>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              {displaySessionCwd ? (
+                <span>{formatDisplayPath(displaySessionCwd)}</span>
+              ) : null}
+              <HeaderGitStatusText
+                viewerContextId={viewerContextId}
+                cwd={displaySessionCwd}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label="Session menu"
+                  title="Session menu"
+                />
+              }
+            >
+              <EllipsisIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => {
+                  void createSession()
+                }}
+              >
+                <span>Create new session</span>
+                <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              {newSessionDirectoryOptions.length > 0 ? (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    New session in…
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-72">
+                    {newSessionDirectoryOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.path}
+                        onClick={() => {
+                          void createSession(option.path)
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            {option.label}
+                          </span>
+                          <span className="truncate">
+                            {formatDisplayPath(option.path)}
+                          </span>
+                        </div>
+                        {option.path === defaultNewSessionDirectory ? (
+                          <DropdownMenuShortcut>Default</DropdownMenuShortcut>
+                        ) : null}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onRunCompact}>
+                <span>Compact session</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onTreeSession}>
+                <span>Tree</span>
+                <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onForkSession}>
+                <span>Fork</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  void onToggleHideThinking()
+                }}
+              >
+                <span>
+                  {hideThinkingBlock ? "Show thinking" : "Hide thinking"}
+                </span>
+                <DropdownMenuShortcut>Ctrl+G</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onToggleHideToolBlocks}>
+                <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
+                <DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!sessionHasFile}
+                onClick={onRenameSession}
+              >
+                <span>Rename session</span>
+                <DropdownMenuShortcut>Ctrl+E</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={!sessionHasFile}
+                onClick={onDeleteCurrentSession}
+              >
+                <span>Delete session</span>
+                <DropdownMenuShortcut>Ctrl+X</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            size="icon-sm"
+            variant="outline"
+            aria-label="Create a new session"
+            title={
+              defaultNewSessionDirectory
+                ? `Create a new session in ${defaultNewSessionDirectory}`
+                : "Create a new session"
+            }
+            onClick={() => {
+              void createSession()
+            }}
+          >
+            <SquarePenIcon />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+type AppShellFloatingControllersProps = {
+  activeSessionId?: string
+  addDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
+  addDirectoryOpenRef: React.MutableRefObject<boolean>
+  addDirectoryPath: React.ComponentProps<
+    typeof AppShellAddDirectoryDialogController
+  >["onAddDirectoryPath"]
+  baseSidebarDirectories: Array<string>
+  centerMessages: boolean
+  commandPaletteCommandsRef: React.MutableRefObject<() => Array<AppCommand>>
+  commandPaletteOpenRef: React.MutableRefObject<boolean>
+  commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
+  currentSessionQueryScope: string
+  currentTheme: ThemeMode
+  deleteDialogRef: React.RefObject<DeleteSessionsDialogHandle | null>
+  deleteOpenRef: React.MutableRefObject<boolean>
+  deleteSessions: React.ComponentProps<
+    typeof DeleteSessionsDialogController
+  >["onDeleteSession"]
+  desktopNotificationPermission: DesktopNotificationPermission
+  forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
+  forkOpenRef: React.MutableRefObject<boolean>
+  hideThinkingBlocks: boolean
+  hideToolBlocks: boolean
+  knownDirectories: Array<string>
+  onCenterMessagesChange: (centered: boolean) => void
+  onHideThinkingBlocksChange: (hidden: boolean) => void
+  onHideToolBlocksChange: (hidden: boolean) => void
+  onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
+  onSessionDoneSoundEnabledChange: (enabled: boolean) => void
+  onThemeChange: (value: ThemeMode) => void
+  recentDirectories: Array<string>
+  renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
+  renameOpenRef: React.MutableRefObject<boolean>
+  renameSessionPath: React.ComponentProps<
+    typeof RenameSessionDialogController
+  >["onRenameSession"]
+  sessionCwd?: string
+  sessionDoneDesktopNotificationsEnabled: boolean
+  sessionDoneSoundEnabled: boolean
+  settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
+  settingsOpenRef: React.MutableRefObject<boolean>
+  treeDialogRef: React.RefObject<AppShellTreeDialogHandle | null>
+  treeOpenRef: React.MutableRefObject<boolean>
+  treeSummaryAvailable: boolean
+  uiRequestDialogRef: React.RefObject<AppShellUiRequestDialogHandle | null>
+  uiRequestOpenRef: React.MutableRefObject<boolean>
+  viewerContextId: string
+}
+
+const AppShellFloatingControllers = React.memo(
+  function AppShellFloatingControllers({
+    activeSessionId,
+    addDirectoryDialogRef,
+    addDirectoryOpenRef,
+    addDirectoryPath,
+    baseSidebarDirectories,
+    centerMessages,
+    commandPaletteCommandsRef,
+    commandPaletteOpenRef,
+    commandPaletteRef,
+    currentSessionQueryScope,
+    currentTheme,
+    deleteDialogRef,
+    deleteOpenRef,
+    deleteSessions,
+    desktopNotificationPermission,
+    forkDialogRef,
+    forkOpenRef,
+    hideThinkingBlocks,
+    hideToolBlocks,
+    knownDirectories,
+    onCenterMessagesChange,
+    onHideThinkingBlocksChange,
+    onHideToolBlocksChange,
+    onSessionDoneDesktopNotificationsEnabledChange,
+    onSessionDoneSoundEnabledChange,
+    onThemeChange,
+    recentDirectories,
+    renameDialogRef,
+    renameOpenRef,
+    renameSessionPath,
+    sessionCwd,
+    sessionDoneDesktopNotificationsEnabled,
+    sessionDoneSoundEnabled,
+    settingsDialogRef,
+    settingsOpenRef,
+    treeDialogRef,
+    treeOpenRef,
+    treeSummaryAvailable,
+    uiRequestDialogRef,
+    uiRequestOpenRef,
+    viewerContextId,
+  }: AppShellFloatingControllersProps) {
+    return (
+      <>
+        <AppShellCommandPaletteController
+          ref={commandPaletteRef}
+          openStateRef={commandPaletteOpenRef}
+          getCommandsRef={commandPaletteCommandsRef}
+          onCommandError={(error) => {
+            toast.error(
+              error instanceof Error ? error.message : "Failed to run command"
+            )
+          }}
+        />
+
+        <AppShellAddDirectoryDialogController
+          ref={addDirectoryDialogRef}
+          openStateRef={addDirectoryOpenRef}
+          openedDirectories={baseSidebarDirectories}
+          currentDirectory={sessionCwd}
+          recentDirectories={recentDirectories}
+          knownDirectories={knownDirectories}
+          onAddDirectoryPath={addDirectoryPath}
+        />
+
+        <RenameSessionDialogController
+          ref={renameDialogRef}
+          openStateRef={renameOpenRef}
+          onRenameSession={renameSessionPath}
+        />
+
+        <DeleteSessionsDialogController
+          ref={deleteDialogRef}
+          openStateRef={deleteOpenRef}
+          onDeleteSession={deleteSessions}
+        />
+
+        <ForkSessionDialogController
+          ref={forkDialogRef}
+          openStateRef={forkOpenRef}
+          viewerContextId={viewerContextId}
+          sessionScopeKey={currentSessionQueryScope}
+          sessionId={activeSessionId}
+        />
+
+        <AppShellTreeDialogController
+          ref={treeDialogRef}
+          openStateRef={treeOpenRef}
+          viewerContextId={viewerContextId}
+          sessionScopeKey={currentSessionQueryScope}
+          sessionId={activeSessionId}
+          treeSummaryAvailable={treeSummaryAvailable}
+        />
+
+        <AppShellSettingsDialogController
+          ref={settingsDialogRef}
+          openStateRef={settingsOpenRef}
+          currentTheme={currentTheme}
+          onThemeChange={onThemeChange}
+          hideThinkingBlocks={hideThinkingBlocks}
+          onHideThinkingBlocksChange={onHideThinkingBlocksChange}
+          hideToolBlocks={hideToolBlocks}
+          onHideToolBlocksChange={onHideToolBlocksChange}
+          centerMessages={centerMessages}
+          onCenterMessagesChange={onCenterMessagesChange}
+          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+          sessionDoneDesktopNotificationsEnabled={
+            sessionDoneDesktopNotificationsEnabled
+          }
+          onSessionDoneDesktopNotificationsEnabledChange={
+            onSessionDoneDesktopNotificationsEnabledChange
+          }
+          desktopNotificationPermission={desktopNotificationPermission}
+        />
+
+        <AppShellUiRequestDialogController
+          ref={uiRequestDialogRef}
+          openStateRef={uiRequestOpenRef}
+          viewerContextId={viewerContextId}
+          sessionId={activeSessionId}
+        />
+      </>
+    )
+  }
+)
 
 function AppShellSidebarController({
   viewerContextId,

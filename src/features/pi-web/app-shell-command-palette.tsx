@@ -154,24 +154,36 @@ function AppShellCommandPalette({
 
 type AppShellCommandPaletteControllerProps = Omit<
   AppShellCommandPaletteProps,
-  "open" | "onOpenChange"
+  "open" | "onOpenChange" | "commands"
 > & {
   ref?: React.Ref<AppShellCommandPaletteHandle>
   openStateRef?: React.MutableRefObject<boolean>
+  commands?: Array<AppCommand>
+  getCommandsRef?: React.MutableRefObject<() => Array<AppCommand>>
 }
 
 export function AppShellCommandPaletteController({
   ref,
   openStateRef,
+  commands,
+  getCommandsRef,
   ...props
 }: AppShellCommandPaletteControllerProps) {
   const [open, setOpen] = React.useState(false)
+  const [openedCommands, setOpenedCommands] = React.useState<Array<AppCommand>>(
+    () => commands ?? []
+  )
   const openRef = React.useRef(open)
+
+  const readCommands = () => getCommandsRef?.current() ?? commands ?? []
 
   const setOpenState = (nextOpen: boolean) => {
     openRef.current = nextOpen
     if (openStateRef) {
       openStateRef.current = nextOpen
+    }
+    if (nextOpen) {
+      setOpenedCommands(readCommands())
     }
     setOpen(nextOpen)
   }
@@ -194,6 +206,7 @@ export function AppShellCommandPaletteController({
     <AppShellCommandPalette
       open={open}
       onOpenChange={setOpenState}
+      commands={open ? openedCommands : []}
       {...props}
     />
   )

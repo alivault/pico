@@ -11,7 +11,6 @@ type ScrollSessionState = {
 }
 
 type UseAppShellMessageScrollOptions = {
-  conversationRevision: number
   isSessionViewLoading: boolean
   sessionState: ScrollSessionState
 }
@@ -192,7 +191,6 @@ function findOpeningToolAccordionTrigger(
 }
 
 export function useAppShellMessageScroll({
-  conversationRevision,
   isSessionViewLoading,
   sessionState,
 }: UseAppShellMessageScrollOptions) {
@@ -342,7 +340,7 @@ export function useAppShellMessageScroll({
     }
   }, [rememberViewportLayout, syncViewportState])
 
-  React.useLayoutEffect(() => {
+  const syncAfterConversationChange = React.useCallback(() => {
     if (isSessionViewLoading) return
 
     const viewport =
@@ -352,12 +350,11 @@ export function useAppShellMessageScroll({
 
     messageViewportRef.current = viewport
     scrollViewportToBottomIfFollowing(viewport)
-  }, [
-    conversationRevision,
-    isSessionViewLoading,
-    scrollViewportToBottomIfFollowing,
-    sessionState.streaming,
-  ])
+  }, [isSessionViewLoading, scrollViewportToBottomIfFollowing])
+
+  React.useLayoutEffect(() => {
+    syncAfterConversationChange()
+  }, [sessionState.streaming, syncAfterConversationChange])
 
   React.useLayoutEffect(() => {
     if (typeof ResizeObserver === "undefined") return
@@ -425,5 +422,6 @@ export function useAppShellMessageScroll({
     scrollConversationToBottom,
     scrollConversationToTop,
     scrollStateStore: scrollStateStoreRef.current,
+    syncAfterConversationChange,
   }
 }

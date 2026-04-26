@@ -25,22 +25,26 @@ type ShortcutActions = {
   cycleThinkingLevel: (direction: -1 | 1) => void | Promise<unknown>
 }
 
+export type AppShellShortcutState = {
+  currentTab: string
+  selectedSidebarSessions: Array<SessionListEntry>
+  sessionHasAvailableModels: boolean
+  sessionHasFile: boolean
+  sidebarSessionEntriesByKey: Map<string, SessionListEntry>
+}
+
 type UseAppShellShortcutsOptions = {
   addDirectoryOpenRef: React.MutableRefObject<boolean>
   commandPaletteOpenRef: React.MutableRefObject<boolean>
-  currentTab: string
   deleteOpenRef: React.MutableRefObject<boolean>
   forkOpenRef: React.MutableRefObject<boolean>
   pendingUiRequestOpenRef: React.MutableRefObject<boolean>
   lastEscapePressedAtRef: React.MutableRefObject<number>
   renameOpenRef: React.MutableRefObject<boolean>
-  selectedSidebarSessions: Array<SessionListEntry>
-  sessionHasAvailableModels: boolean
-  sessionHasFile: boolean
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   settingsOpenRef: React.MutableRefObject<boolean>
   shortcutActionsRef: React.MutableRefObject<ShortcutActions>
-  sidebarSessionEntriesByKey: Map<string, SessionListEntry>
+  shortcutStateRef: React.MutableRefObject<AppShellShortcutState>
   treeOpenRef: React.MutableRefObject<boolean>
 }
 
@@ -74,24 +78,27 @@ function hasSelectedText(target: EventTarget | null) {
 export function useAppShellShortcuts({
   addDirectoryOpenRef,
   commandPaletteOpenRef,
-  currentTab,
   deleteOpenRef,
   forkOpenRef,
   pendingUiRequestOpenRef,
   lastEscapePressedAtRef,
   renameOpenRef,
-  selectedSidebarSessions,
-  sessionHasAvailableModels,
-  sessionHasFile,
   sessionSearchInputRef,
   settingsOpenRef,
   shortcutActionsRef,
-  sidebarSessionEntriesByKey,
+  shortcutStateRef,
   treeOpenRef,
 }: UseAppShellShortcutsOptions) {
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
+      const {
+        currentTab,
+        selectedSidebarSessions,
+        sessionHasAvailableModels,
+        sessionHasFile,
+        sidebarSessionEntriesByKey,
+      } = shortcutStateRef.current
       const modalOpen =
         addDirectoryOpenRef.current ||
         renameOpenRef.current ||
@@ -368,19 +375,15 @@ export function useAppShellShortcuts({
   }, [
     addDirectoryOpenRef,
     commandPaletteOpenRef,
-    currentTab,
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef,
     lastEscapePressedAtRef,
     renameOpenRef,
-    selectedSidebarSessions,
-    sessionHasAvailableModels,
-    sessionHasFile,
     sessionSearchInputRef,
     settingsOpenRef,
     shortcutActionsRef,
-    sidebarSessionEntriesByKey,
+    shortcutStateRef,
     treeOpenRef,
   ])
 }
