@@ -4178,6 +4178,48 @@ const AppShellSessionWorkspace = React.forwardRef<
     activeSessionId,
     sessionStateRef,
     setSessionState,
+    getDirectoryIndexDataByPath: () =>
+      sidebarStore.getSnapshot().state.directoryIndexDataByPath,
+    setDirectoryIndexDataByPath: sidebarStore.setDirectoryIndexDataByPath,
+    getSessionsEvent: () => sidebarStore.getSnapshot().state.sessionsEvent,
+    setSessionsEvent: sidebarStore.setSessionsEvent,
+    getSidebarSelection: () => {
+      const sidebarState = sidebarStore.getSnapshot().state
+      return {
+        selectedSidebarSessionKeys: sidebarState.selectedSidebarSessionKeys,
+        sidebarSessionSelectionAnchor:
+          sidebarState.sidebarSessionSelectionAnchor,
+      }
+    },
+    optimisticallyClearActiveDeletedSession: (targetPath) => {
+      const previousState = sessionStateRef.current
+      if (previousState.sessionFile !== targetPath) return undefined
+
+      const ownerKey = `delete:${targetPath}`
+      const optimisticSessionKey = `optimistic:${ownerKey}`
+      handleSelectSession(undefined, { replace: true })
+      const nextState = createOptimisticDraftSessionState({
+        previous: previousState,
+        cwd: previousState.cwd,
+        ownerKey,
+      })
+      sessionStateRef.current = nextState
+      conversationItemsStore.setItems(nextState.items)
+      setSessionState(nextState)
+
+      return () => {
+        if (sessionStateRef.current.sessionKey !== optimisticSessionKey) return
+        if (previousState.sessionId) {
+          handleSelectSession(previousState.sessionId, {
+            replace: true,
+            sessionPath: previousState.sessionFile,
+          })
+        }
+        sessionStateRef.current = previousState
+        conversationItemsStore.setItems(previousState.items)
+        setSessionState(previousState)
+      }
+    },
     setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor:
       sidebarStore.setSidebarSessionSelectionAnchor,
