@@ -556,31 +556,28 @@ function GitRepositorySummary({
   )
 }
 
-function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
+function GitPanelToolbar({
+  active,
+  activeSection,
+  cwd,
+  viewerContextId,
+}: GitScopedProps & { activeSection: GitPanelSectionId }) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
   const statusFetchCount = useIsFetching({
     queryKey: piWebQueryKeys.gitStatus(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const filesFetchCount = useIsFetching({
-    queryKey: piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd),
+  const sectionFetchCount = useIsFetching({
+    queryKey:
+      activeSection === "files"
+        ? piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd)
+        : activeSection === "branches"
+          ? piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd)
+          : piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const branchesFetchCount = useIsFetching({
-    queryKey: piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd),
-    exact: true,
-  })
-  const commitsFetchCount = useIsFetching({
-    queryKey: piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
-    exact: true,
-  })
-  const refreshing =
-    statusFetchCount +
-      filesFetchCount +
-      branchesFetchCount +
-      commitsFetchCount >
-    0
+  const refreshing = statusFetchCount + sectionFetchCount > 0
 
   const refreshGit = async () => {
     if (!viewerContextId || !normalizedCwd) return
@@ -1225,6 +1222,7 @@ export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
         active={active}
+        activeSection={activeSection}
       />
       <div className="flex justify-end">
         <GitPanelSectionTabs
