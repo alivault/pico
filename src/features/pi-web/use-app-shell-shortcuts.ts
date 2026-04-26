@@ -99,15 +99,16 @@ export function useAppShellShortcuts({
         sessionHasFile,
         sidebarSessionEntriesByKey,
       } = shortcutStateRef.current
-      const modalOpen =
+      const commandPaletteOpen = commandPaletteOpenRef.current
+      const blockingModalOpen =
         addDirectoryOpenRef.current ||
         renameOpenRef.current ||
         deleteOpenRef.current ||
         forkOpenRef.current ||
         treeOpenRef.current ||
         settingsOpenRef.current ||
-        commandPaletteOpenRef.current ||
         pendingUiRequestOpenRef.current
+      const modalOpen = blockingModalOpen || commandPaletteOpen
 
       const activeElement = document.activeElement
       const activeElementIsConversationViewport =
@@ -274,6 +275,17 @@ export function useAppShellShortcuts({
       }
 
       if (!event.ctrlKey || event.metaKey || event.altKey) return
+
+      if (
+        commandPaletteOpen &&
+        !blockingModalOpen &&
+        key === "," &&
+        !event.shiftKey
+      ) {
+        event.preventDefault()
+        shortcutActionsRef.current.openSettingsDialog()
+        return
+      }
 
       if (modalOpen) return
 
