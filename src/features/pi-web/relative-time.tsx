@@ -4,13 +4,19 @@ import { relativeTime } from "@/lib/pi-web"
 
 const RELATIVE_TIME_FIRST_MINUTE_MS = 60 * 1000
 const RELATIVE_TIME_FIRST_MINUTE_REFRESH_MS = 1000
-const RELATIVE_TIME_DEFAULT_REFRESH_MS = 2000
+const RELATIVE_TIME_MINUTE_REFRESH_MS = 60 * 1000
 
 export function relativeTimeRefreshDelay(timestamp: number) {
   const ageMs = Math.abs(Date.now() - timestamp)
-  return ageMs < RELATIVE_TIME_FIRST_MINUTE_MS
-    ? RELATIVE_TIME_FIRST_MINUTE_REFRESH_MS
-    : RELATIVE_TIME_DEFAULT_REFRESH_MS
+  if (ageMs < RELATIVE_TIME_FIRST_MINUTE_MS) {
+    return RELATIVE_TIME_FIRST_MINUTE_REFRESH_MS
+  }
+
+  const nextMinuteDelay =
+    RELATIVE_TIME_MINUTE_REFRESH_MS - (ageMs % RELATIVE_TIME_MINUTE_REFRESH_MS)
+  return nextMinuteDelay === RELATIVE_TIME_MINUTE_REFRESH_MS
+    ? RELATIVE_TIME_MINUTE_REFRESH_MS
+    : nextMinuteDelay
 }
 
 export function useRelativeTimeTicker(timestamp: number | undefined) {

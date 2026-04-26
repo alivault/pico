@@ -33,6 +33,7 @@ import {
   XIcon,
 } from "lucide-react"
 
+import { useRelativeTimeTicker } from "@/features/pi-web/relative-time"
 import type { SessionListEntry } from "@/lib/pi-web-api"
 import { Button } from "@/components/ui/button"
 import {
@@ -211,13 +212,19 @@ function formatSessionMessageCount(value?: number) {
   return `${count.toLocaleString()} msg${count === 1 ? "" : "s"}`
 }
 
-function sessionMetaLine(entry: SessionListEntry, timestamp?: string) {
-  return [
-    formatSidebarSessionTime(timestamp),
-    formatSessionMessageCount(entry.messageCount),
-  ]
-    .filter(Boolean)
-    .join(" · ")
+function isValidSidebarTimestamp(value?: string) {
+  if (!value) return false
+  return !Number.isNaN(new Date(value).getTime())
+}
+
+function SidebarSessionTime({ value }: { value?: string }) {
+  const timestamp = value ? new Date(value).getTime() : Number.NaN
+  useRelativeTimeTicker(Number.isNaN(timestamp) ? undefined : timestamp)
+
+  const label = formatSidebarSessionTime(value)
+  if (!label) return null
+
+  return <>{label}</>
 }
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
@@ -608,10 +615,11 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
     entry.id
   )
   const timestamp = entry.lastUserMessageAt || entry.modified
-  const metaLine = sessionMetaLine(entry, timestamp)
-  const exactTimestamp = timestamp
-    ? new Date(timestamp).toLocaleString()
-    : undefined
+  const hasTimestamp = isValidSidebarTimestamp(timestamp)
+  const messageCount = formatSessionMessageCount(entry.messageCount)
+  const hasMetaLine = hasTimestamp || Boolean(messageCount)
+  const exactTimestamp =
+    hasTimestamp && timestamp ? new Date(timestamp).toLocaleString() : undefined
   const showUnread = Boolean(entry.unread) && !entry.streaming
   const hasSessionActions =
     Boolean(entry.path) && (onRenameSession || onDeleteSession) && !overlay
@@ -653,12 +661,14 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
               />
             ) : null}
           </span>
-          {metaLine ? (
+          {hasMetaLine ? (
             <span
               className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50"
               title={exactTimestamp}
             >
-              {metaLine}
+              {hasTimestamp ? <SidebarSessionTime value={timestamp} /> : null}
+              {hasTimestamp && messageCount ? " · " : null}
+              {messageCount}
             </span>
           ) : null}
         </span>
