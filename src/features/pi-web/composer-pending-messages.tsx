@@ -27,11 +27,11 @@ function groupPendingMessages(messages: Array<PendingComposerMessage>) {
       emptyLabel: "Steer prompts will interrupt the current response.",
     },
     {
-      title: "Queue",
+      title: "Follow-up",
       items: messages.filter(
         (message) => message.streamingBehavior !== "steer"
       ),
-      emptyLabel: "Queued prompts will run after the current response.",
+      emptyLabel: "Follow-up prompts will run after the current response.",
     },
   ]
 }
@@ -57,7 +57,7 @@ export const ComposerPendingMessages = React.memo(
         <AccordionItem value="pending-prompts" className="border-0">
           <AccordionTrigger className="min-h-10 items-center gap-3 px-3 py-2 hover:no-underline">
             <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-              <span className="truncate">Pending prompts</span>
+              <span className="truncate">Queue</span>
               <Badge variant="outline" className="shrink-0">
                 {currentPendingMessages.length}
               </Badge>
@@ -89,13 +89,11 @@ export const ComposerPendingMessages = React.memo(
                             key={message.pendingId}
                             className="rounded-xl border bg-muted/25 p-2.5"
                           >
-                            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline">
-                                {isSteer ? "Steer" : "Follow-up"}
-                              </Badge>
-                            </div>
                             <div className="line-clamp-3 text-sm">
-                              {message.text || "Queued image prompt"}
+                              {message.text ||
+                                (isSteer
+                                  ? "Steer image prompt"
+                                  : "Follow-up image prompt")}
                             </div>
                             {message.images.length > 0 ? (
                               <div className="mt-2 text-xs text-muted-foreground">
@@ -125,7 +123,7 @@ export const ComposerPendingMessages = React.memo(
                                 disabled={moveDownDisabled}
                                 title={
                                   isSteer
-                                    ? "Move down or demote to queue"
+                                    ? "Move down or demote to follow-up"
                                     : "Move down"
                                 }
                                 onClick={() =>

@@ -680,7 +680,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               disabled={disabled}
               placeholder={
                 acceptFollowUps
-                  ? "Write a follow-up message..."
+                  ? "Add a message to the queue..."
                   : draftSkill
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                     : "Ask anything…"
@@ -721,7 +721,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               onClick={() => runPrimaryComposerAction("followUp")}
             >
               <ListEndIcon data-icon="inline-start" />
-              Queue
+              Follow-up
             </Button>
             <Button
               variant="outline"
