@@ -395,6 +395,41 @@ function sameStringArray(left: Array<string>, right: Array<string>) {
   return true
 }
 
+function sameReferenceArray<T>(left: Array<T>, right: Array<T>) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+
+  return true
+}
+
+function sameMapEntries<K, V>(left: Map<K, V>, right: Map<K, V>) {
+  if (left.size !== right.size) return false
+
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) return false
+  }
+
+  return true
+}
+
+function sameSessionEntryRecord(
+  left: Record<string, Array<SessionListEntry>>,
+  right: Record<string, Array<SessionListEntry>>
+) {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (!sameStringArray(leftKeys.sort(), rightKeys.sort())) return false
+
+  for (const key of leftKeys) {
+    if (!sameReferenceArray(left[key] || [], right[key] || [])) return false
+  }
+
+  return true
+}
+
 function getRenderedSidebarSessionKeys() {
   if (typeof document === "undefined") return []
 
@@ -868,12 +903,37 @@ function createAppShellSidebarStore(): AppShellSidebarStore {
   }
 }
 
-function useAppShellSidebarSnapshot(store: AppShellSidebarStore) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot
-  )
+function useAppShellSidebarValue<T>(
+  store: AppShellSidebarStore,
+  selector: (snapshot: AppShellSidebarStoreSnapshot) => T,
+  isEqual: (left: T, right: T) => boolean = Object.is
+) {
+  const cacheRef = React.useRef<{
+    source: AppShellSidebarStoreSnapshot | undefined
+    selected: T | undefined
+  }>({
+    source: undefined,
+    selected: undefined,
+  })
+
+  const getSnapshot = () => {
+    const source = store.getSnapshot()
+    const cache = cacheRef.current
+    if (cache.source === source && cache.selected !== undefined) {
+      return cache.selected
+    }
+
+    const selected = selector(source)
+    if (cache.selected !== undefined && isEqual(cache.selected, selected)) {
+      cacheRef.current = { source, selected: cache.selected }
+      return cache.selected
+    }
+
+    cacheRef.current = { source, selected }
+    return selected
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
 }
 
 function useAppShellSidebarWorkspaceVersion(store: AppShellSidebarStore) {
@@ -1708,6 +1768,8 @@ const AppShellGitPanelController = React.memo(
       sessionStore,
       (sessionState) => sessionState.cwd
     )
+
+    if (!active) return null
 
     return (
       <GitPanel viewerContextId={viewerContextId} cwd={cwd} active={active} />
@@ -4061,7 +4123,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
           <TabsContent
             value="git"
-            keepMounted
             className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
           >
             <AppShellGitPanelController
@@ -4395,6 +4456,241 @@ type AppShellFloatingControllersProps = {
   viewerContextId: string
 }
 
+const AppShellCommandPaletteHost = React.memo(
+  function AppShellCommandPaletteHost({
+    commandPaletteCommandsRef,
+    commandPaletteOpenRef,
+    commandPaletteRef,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    "commandPaletteCommandsRef" | "commandPaletteOpenRef" | "commandPaletteRef"
+  >) {
+    return (
+      <AppShellCommandPaletteController
+        ref={commandPaletteRef}
+        openStateRef={commandPaletteOpenRef}
+        getCommandsRef={commandPaletteCommandsRef}
+        onCommandError={(error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to run command"
+          )
+        }}
+      />
+    )
+  }
+)
+
+const AppShellAddDirectoryDialogHost = React.memo(
+  function AppShellAddDirectoryDialogHost({
+    addDirectoryDialogRef,
+    addDirectoryOpenRef,
+    addDirectoryPath,
+    baseSidebarDirectories,
+    knownDirectories,
+    recentDirectories,
+    sessionCwd,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "addDirectoryDialogRef"
+    | "addDirectoryOpenRef"
+    | "addDirectoryPath"
+    | "baseSidebarDirectories"
+    | "knownDirectories"
+    | "recentDirectories"
+    | "sessionCwd"
+  >) {
+    return (
+      <AppShellAddDirectoryDialogController
+        ref={addDirectoryDialogRef}
+        openStateRef={addDirectoryOpenRef}
+        openedDirectories={baseSidebarDirectories}
+        currentDirectory={sessionCwd}
+        recentDirectories={recentDirectories}
+        knownDirectories={knownDirectories}
+        onAddDirectoryPath={addDirectoryPath}
+      />
+    )
+  }
+)
+
+const AppShellRenameSessionDialogHost = React.memo(
+  function AppShellRenameSessionDialogHost({
+    renameDialogRef,
+    renameOpenRef,
+    renameSessionPath,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    "renameDialogRef" | "renameOpenRef" | "renameSessionPath"
+  >) {
+    return (
+      <RenameSessionDialogController
+        ref={renameDialogRef}
+        openStateRef={renameOpenRef}
+        onRenameSession={renameSessionPath}
+      />
+    )
+  }
+)
+
+const AppShellDeleteSessionsDialogHost = React.memo(
+  function AppShellDeleteSessionsDialogHost({
+    deleteDialogRef,
+    deleteOpenRef,
+    deleteSessions,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    "deleteDialogRef" | "deleteOpenRef" | "deleteSessions"
+  >) {
+    return (
+      <DeleteSessionsDialogController
+        ref={deleteDialogRef}
+        openStateRef={deleteOpenRef}
+        onDeleteSession={deleteSessions}
+      />
+    )
+  }
+)
+
+const AppShellForkSessionDialogHost = React.memo(
+  function AppShellForkSessionDialogHost({
+    activeSessionId,
+    currentSessionQueryScope,
+    forkDialogRef,
+    forkOpenRef,
+    viewerContextId,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "activeSessionId"
+    | "currentSessionQueryScope"
+    | "forkDialogRef"
+    | "forkOpenRef"
+    | "viewerContextId"
+  >) {
+    return (
+      <ForkSessionDialogController
+        ref={forkDialogRef}
+        openStateRef={forkOpenRef}
+        viewerContextId={viewerContextId}
+        sessionScopeKey={currentSessionQueryScope}
+        sessionId={activeSessionId}
+      />
+    )
+  }
+)
+
+const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
+  activeSessionId,
+  currentSessionQueryScope,
+  treeDialogRef,
+  treeOpenRef,
+  treeSummaryAvailable,
+  viewerContextId,
+}: Pick<
+  AppShellFloatingControllersProps,
+  | "activeSessionId"
+  | "currentSessionQueryScope"
+  | "treeDialogRef"
+  | "treeOpenRef"
+  | "treeSummaryAvailable"
+  | "viewerContextId"
+>) {
+  return (
+    <AppShellTreeDialogController
+      ref={treeDialogRef}
+      openStateRef={treeOpenRef}
+      viewerContextId={viewerContextId}
+      sessionScopeKey={currentSessionQueryScope}
+      sessionId={activeSessionId}
+      treeSummaryAvailable={treeSummaryAvailable}
+    />
+  )
+})
+
+const AppShellSettingsDialogHost = React.memo(
+  function AppShellSettingsDialogHost({
+    centerMessages,
+    currentTheme,
+    desktopNotificationPermission,
+    hideThinkingBlocks,
+    hideToolBlocks,
+    onCenterMessagesChange,
+    onHideThinkingBlocksChange,
+    onHideToolBlocksChange,
+    onSessionDoneDesktopNotificationsEnabledChange,
+    onSessionDoneSoundEnabledChange,
+    onThemeChange,
+    sessionDoneDesktopNotificationsEnabled,
+    sessionDoneSoundEnabled,
+    settingsDialogRef,
+    settingsOpenRef,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "centerMessages"
+    | "currentTheme"
+    | "desktopNotificationPermission"
+    | "hideThinkingBlocks"
+    | "hideToolBlocks"
+    | "onCenterMessagesChange"
+    | "onHideThinkingBlocksChange"
+    | "onHideToolBlocksChange"
+    | "onSessionDoneDesktopNotificationsEnabledChange"
+    | "onSessionDoneSoundEnabledChange"
+    | "onThemeChange"
+    | "sessionDoneDesktopNotificationsEnabled"
+    | "sessionDoneSoundEnabled"
+    | "settingsDialogRef"
+    | "settingsOpenRef"
+  >) {
+    return (
+      <AppShellSettingsDialogController
+        ref={settingsDialogRef}
+        openStateRef={settingsOpenRef}
+        currentTheme={currentTheme}
+        onThemeChange={onThemeChange}
+        hideThinkingBlocks={hideThinkingBlocks}
+        onHideThinkingBlocksChange={onHideThinkingBlocksChange}
+        hideToolBlocks={hideToolBlocks}
+        onHideToolBlocksChange={onHideToolBlocksChange}
+        centerMessages={centerMessages}
+        onCenterMessagesChange={onCenterMessagesChange}
+        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+        onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+        sessionDoneDesktopNotificationsEnabled={
+          sessionDoneDesktopNotificationsEnabled
+        }
+        onSessionDoneDesktopNotificationsEnabledChange={
+          onSessionDoneDesktopNotificationsEnabledChange
+        }
+        desktopNotificationPermission={desktopNotificationPermission}
+      />
+    )
+  }
+)
+
+const AppShellUiRequestDialogHost = React.memo(
+  function AppShellUiRequestDialogHost({
+    activeSessionId,
+    uiRequestDialogRef,
+    uiRequestOpenRef,
+    viewerContextId,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "activeSessionId"
+    | "uiRequestDialogRef"
+    | "uiRequestOpenRef"
+    | "viewerContextId"
+  >) {
+    return (
+      <AppShellUiRequestDialogController
+        ref={uiRequestDialogRef}
+        openStateRef={uiRequestOpenRef}
+        viewerContextId={viewerContextId}
+        sessionId={activeSessionId}
+      />
+    )
+  }
+)
+
 const AppShellFloatingControllers = React.memo(
   function AppShellFloatingControllers({
     activeSessionId,
@@ -4441,83 +4737,78 @@ const AppShellFloatingControllers = React.memo(
   }: AppShellFloatingControllersProps) {
     return (
       <>
-        <AppShellCommandPaletteController
-          ref={commandPaletteRef}
-          openStateRef={commandPaletteOpenRef}
-          getCommandsRef={commandPaletteCommandsRef}
-          onCommandError={(error) => {
-            toast.error(
-              error instanceof Error ? error.message : "Failed to run command"
-            )
-          }}
+        <AppShellCommandPaletteHost
+          commandPaletteCommandsRef={commandPaletteCommandsRef}
+          commandPaletteOpenRef={commandPaletteOpenRef}
+          commandPaletteRef={commandPaletteRef}
         />
 
-        <AppShellAddDirectoryDialogController
-          ref={addDirectoryDialogRef}
-          openStateRef={addDirectoryOpenRef}
-          openedDirectories={baseSidebarDirectories}
-          currentDirectory={sessionCwd}
-          recentDirectories={recentDirectories}
+        <AppShellAddDirectoryDialogHost
+          addDirectoryDialogRef={addDirectoryDialogRef}
+          addDirectoryOpenRef={addDirectoryOpenRef}
+          addDirectoryPath={addDirectoryPath}
+          baseSidebarDirectories={baseSidebarDirectories}
           knownDirectories={knownDirectories}
-          onAddDirectoryPath={addDirectoryPath}
+          recentDirectories={recentDirectories}
+          sessionCwd={sessionCwd}
         />
 
-        <RenameSessionDialogController
-          ref={renameDialogRef}
-          openStateRef={renameOpenRef}
-          onRenameSession={renameSessionPath}
+        <AppShellRenameSessionDialogHost
+          renameDialogRef={renameDialogRef}
+          renameOpenRef={renameOpenRef}
+          renameSessionPath={renameSessionPath}
         />
 
-        <DeleteSessionsDialogController
-          ref={deleteDialogRef}
-          openStateRef={deleteOpenRef}
-          onDeleteSession={deleteSessions}
+        <AppShellDeleteSessionsDialogHost
+          deleteDialogRef={deleteDialogRef}
+          deleteOpenRef={deleteOpenRef}
+          deleteSessions={deleteSessions}
         />
 
-        <ForkSessionDialogController
-          ref={forkDialogRef}
-          openStateRef={forkOpenRef}
+        <AppShellForkSessionDialogHost
+          activeSessionId={activeSessionId}
+          currentSessionQueryScope={currentSessionQueryScope}
+          forkDialogRef={forkDialogRef}
+          forkOpenRef={forkOpenRef}
           viewerContextId={viewerContextId}
-          sessionScopeKey={currentSessionQueryScope}
-          sessionId={activeSessionId}
         />
 
-        <AppShellTreeDialogController
-          ref={treeDialogRef}
-          openStateRef={treeOpenRef}
-          viewerContextId={viewerContextId}
-          sessionScopeKey={currentSessionQueryScope}
-          sessionId={activeSessionId}
+        <AppShellTreeDialogHost
+          activeSessionId={activeSessionId}
+          currentSessionQueryScope={currentSessionQueryScope}
+          treeDialogRef={treeDialogRef}
+          treeOpenRef={treeOpenRef}
           treeSummaryAvailable={treeSummaryAvailable}
+          viewerContextId={viewerContextId}
         />
 
-        <AppShellSettingsDialogController
-          ref={settingsDialogRef}
-          openStateRef={settingsOpenRef}
-          currentTheme={currentTheme}
-          onThemeChange={onThemeChange}
-          hideThinkingBlocks={hideThinkingBlocks}
-          onHideThinkingBlocksChange={onHideThinkingBlocksChange}
-          hideToolBlocks={hideToolBlocks}
-          onHideToolBlocksChange={onHideToolBlocksChange}
+        <AppShellSettingsDialogHost
           centerMessages={centerMessages}
+          currentTheme={currentTheme}
+          desktopNotificationPermission={desktopNotificationPermission}
+          hideThinkingBlocks={hideThinkingBlocks}
+          hideToolBlocks={hideToolBlocks}
           onCenterMessagesChange={onCenterMessagesChange}
-          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
-          sessionDoneDesktopNotificationsEnabled={
-            sessionDoneDesktopNotificationsEnabled
-          }
+          onHideThinkingBlocksChange={onHideThinkingBlocksChange}
+          onHideToolBlocksChange={onHideToolBlocksChange}
           onSessionDoneDesktopNotificationsEnabledChange={
             onSessionDoneDesktopNotificationsEnabledChange
           }
-          desktopNotificationPermission={desktopNotificationPermission}
+          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+          onThemeChange={onThemeChange}
+          sessionDoneDesktopNotificationsEnabled={
+            sessionDoneDesktopNotificationsEnabled
+          }
+          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+          settingsDialogRef={settingsDialogRef}
+          settingsOpenRef={settingsOpenRef}
         />
 
-        <AppShellUiRequestDialogController
-          ref={uiRequestDialogRef}
-          openStateRef={uiRequestOpenRef}
+        <AppShellUiRequestDialogHost
+          activeSessionId={activeSessionId}
+          uiRequestDialogRef={uiRequestDialogRef}
+          uiRequestOpenRef={uiRequestOpenRef}
           viewerContextId={viewerContextId}
-          sessionId={activeSessionId}
         />
       </>
     )
@@ -4535,26 +4826,68 @@ function AppShellSidebarController({
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
 }) {
-  const sidebarSnapshot = useAppShellSidebarSnapshot(sidebarStore)
-  const { derived, state } = sidebarSnapshot
-  const {
-    baseSidebarDirectories,
-    directoryStateByPath,
-    emptySidebarStateText,
-    filteredDirectorySessions,
-    sidebarSessionEntriesByKey,
-    visibleDirectories,
-  } = derived
-  const {
-    connected,
-    directoryIndexDataByPath,
-    directoryIndexLoading,
-    selectedSidebarSessionKeys,
-    sessionsEvent,
-    sessionSearch,
-    sidebarDeferredDirectoryLoadingReady,
-    sidebarSessionSelectionAnchor,
-  } = state
+  const baseSidebarDirectories = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.baseSidebarDirectories,
+    sameStringArray
+  )
+  const directoryStateByPath = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.directoryStateByPath,
+    sameMapEntries
+  )
+  const emptySidebarStateText = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.emptySidebarStateText
+  )
+  const filteredDirectorySessions = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.filteredDirectorySessions,
+    sameSessionEntryRecord
+  )
+  const sidebarSessionEntriesByKey = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.sidebarSessionEntriesByKey,
+    sameMapEntries
+  )
+  const visibleDirectories = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.visibleDirectories,
+    sameStringArray
+  )
+  const connected = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.connected
+  )
+  const directoryIndexDataByPath = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.directoryIndexDataByPath
+  )
+  const directoryIndexLoading = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.directoryIndexLoading
+  )
+  const selectedSidebarSessionKeys = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.selectedSidebarSessionKeys,
+    sameStringArray
+  )
+  const sessionsEvent = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sessionsEvent
+  )
+  const sessionSearch = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sessionSearch
+  )
+  const sidebarDeferredDirectoryLoadingReady = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sidebarDeferredDirectoryLoadingReady
+  )
+  const sidebarSessionSelectionAnchor = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sidebarSessionSelectionAnchor
+  )
   const directoryIndexRequestIdRef = React.useRef(0)
   const directoryIndexRequestIdsByPathRef = React.useRef<
     Record<string, number>
