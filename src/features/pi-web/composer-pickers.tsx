@@ -6,7 +6,9 @@ import type { ModelOption, SessionState } from "@/lib/pi-web"
 import { Button } from "@/components/ui/button"
 import {
   Command,
+  CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
@@ -133,55 +135,46 @@ export const ComposerPickers = React.memo(function ComposerPickers({
             <span className="truncate">{model?.name || "Select model"}</span>
             <ChevronDownIcon data-icon="inline-end" />
           </PopoverTrigger>
-          <PopoverContent className="w-88 p-1" side="top" align="start">
-            <div className="p-1 pb-0">
-              <input
+          <PopoverContent className="w-88 p-0" side="top" align="start">
+            <Command shouldFilter={false}>
+              <CommandInput
                 value={modelQuery}
-                onChange={(event) => onModelQueryChange(event.target.value)}
+                onValueChange={onModelQueryChange}
                 placeholder="Search models"
-                className="h-8 w-full rounded-lg border border-input/30 bg-input/30 px-3 text-sm outline-hidden"
               />
-            </div>
-            <div className="no-scrollbar max-h-72 overflow-x-hidden overflow-y-auto p-1">
-              {groupedModels.length === 0 ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  No models match your search.
-                </div>
-              ) : null}
-              {groupedModels.map(([provider, items]) => (
-                <div key={provider} className="overflow-hidden p-1">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    {provider}
-                  </div>
-                  {items.map((entry) => {
-                    const value = `${entry.provider}/${entry.id}`
-                    const active = value === currentModelValue(model)
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        className="relative flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden hover:bg-muted hover:text-foreground"
-                        onClick={() => {
-                          if (disabled) return
-                          onSelectModel(value)
-                          onModelPickerOpenChange(false)
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="truncate font-medium">
-                            {entry.name || entry.id}
-                          </span>
-                          <span className="truncate text-xs text-muted-foreground">
-                            {entry.provider}/{entry.id}
-                          </span>
-                        </div>
-                        {active ? <CheckIcon /> : null}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
+              <CommandList>
+                <CommandEmpty>No models match your search.</CommandEmpty>
+                {groupedModels.map(([provider, items]) => (
+                  <CommandGroup key={provider} heading={provider}>
+                    {items.map((entry) => {
+                      const value = `${entry.provider}/${entry.id}`
+                      const active = value === currentModelValue(model)
+                      return (
+                        <CommandItem
+                          key={value}
+                          value={`${entry.provider || ""} ${entry.name || entry.id} ${entry.id}`}
+                          onSelect={() => {
+                            if (disabled) return
+                            onSelectModel(value)
+                            onModelPickerOpenChange(false)
+                          }}
+                        >
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="truncate font-medium">
+                              {entry.name || entry.id}
+                            </span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {entry.provider}/{entry.id}
+                            </span>
+                          </div>
+                          {active ? <CheckIcon /> : null}
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                ))}
+              </CommandList>
+            </Command>
           </PopoverContent>
         </Popover>
 
