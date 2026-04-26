@@ -3769,7 +3769,18 @@ const AppShellSessionWorkspace = React.forwardRef<
     workingStateStore.setSnapshot(workingState)
   })
 
+  const commandPaletteStateRef = useLatestRef({
+    currentSessionTitle,
+    hasAvailableModels: sessionState.availableModels.length > 0,
+    hideThinkingBlock: sessionState.hideThinkingBlock,
+    hideToolBlocks,
+    selectedSidebarSessions,
+    sessionFile: sessionState.sessionFile,
+    thinkingLevel: sessionState.thinkingLevel,
+  })
+
   const buildCommandPaletteCommands = () => {
+    const commandState = commandPaletteStateRef.current
     const commands: Array<AppCommand> = [
       {
         id: "new-session",
@@ -3806,7 +3817,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         shortcut: "Ctrl+M",
         keywords: ["model", "provider", "picker", "choose"],
         onSelect: () => {
-          if (sessionState.availableModels.length === 0) {
+          if (!commandPaletteStateRef.current.hasAvailableModels) {
             throw new Error("No models are available right now.")
           }
 
@@ -3852,10 +3863,10 @@ const AppShellSessionWorkspace = React.forwardRef<
       {
         id: "toggle-thinking",
         group: "Assistant",
-        title: sessionState.hideThinkingBlock
+        title: commandState.hideThinkingBlock
           ? "Show thinking blocks"
           : "Hide thinking blocks",
-        description: sessionState.hideThinkingBlock
+        description: commandState.hideThinkingBlock
           ? "Show assistant thinking blocks"
           : "Hide assistant thinking blocks",
         shortcut: "Ctrl+G",
@@ -3866,7 +3877,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "cycle-reasoning",
         group: "Assistant",
         title: "Next reasoning level",
-        description: `Current level: ${sessionState.thinkingLevel}`,
+        description: `Current level: ${commandState.thinkingLevel}`,
         shortcut: "Ctrl+R",
         keywords: ["thinking", "reasoning", "level", "cycle", "next"],
         onSelect: () => {
@@ -3877,7 +3888,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "previous-reasoning",
         group: "Assistant",
         title: "Previous reasoning level",
-        description: `Current level: ${sessionState.thinkingLevel}`,
+        description: `Current level: ${commandState.thinkingLevel}`,
         shortcut: "Ctrl+Shift+R",
         keywords: [
           "thinking",
@@ -3894,8 +3905,10 @@ const AppShellSessionWorkspace = React.forwardRef<
       {
         id: "toggle-tools",
         group: "Assistant",
-        title: hideToolBlocks ? "Show tool calls" : "Hide tool calls",
-        description: hideToolBlocks
+        title: commandState.hideToolBlocks
+          ? "Show tool calls"
+          : "Hide tool calls",
+        description: commandState.hideToolBlocks
           ? "Show assistant tool calls"
           : "Hide assistant tool calls",
         shortcut: "Ctrl+O",
@@ -3913,7 +3926,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       },
     ]
 
-    if (sessionState.sessionFile) {
+    if (commandState.sessionFile) {
       commands.splice(1, 0, {
         id: "rename-session",
         group: "Sessions",
@@ -3927,19 +3940,19 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "delete-session",
         group: "Sessions",
         title: "Delete session",
-        description: `Delete ${currentSessionTitle}`,
+        description: `Delete ${commandState.currentSessionTitle}`,
         shortcut: "Ctrl+X",
         keywords: ["delete", "remove", "session"],
         onSelect: openDeleteDialogForCurrentSession,
       })
     }
 
-    if (selectedSidebarSessions.length > 0) {
+    if (commandState.selectedSidebarSessions.length > 0) {
       commands.push({
         id: "clear-selected-sessions",
         group: "Sidebar",
         title: "Clear selected sidebar sessions",
-        description: `Clear ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
+        description: `Clear ${commandState.selectedSidebarSessions.length} selected sidebar ${commandState.selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
         keywords: ["clear", "selected", "sidebar", "sessions"],
         onSelect: clearSelectedSidebarSelection,
       })
@@ -3947,10 +3960,12 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "delete-selected-sessions",
         group: "Sidebar",
         title: "Delete selected sidebar sessions",
-        description: `Delete ${selectedSidebarSessions.length} selected sidebar ${selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
+        description: `Delete ${commandState.selectedSidebarSessions.length} selected sidebar ${commandState.selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
         keywords: ["delete", "selected", "sidebar", "sessions"],
         onSelect: () => {
-          openDeleteDialog(selectedSidebarSessions)
+          openDeleteDialog(
+            commandPaletteStateRef.current.selectedSidebarSessions
+          )
         },
       })
     }

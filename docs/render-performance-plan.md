@@ -21,9 +21,9 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
   - [x] Split assistant block rendering below the assistant message group.
   - [x] Reuse block descriptors where block identities/signatures are unchanged.
   - [x] Preserve markdown, tool, thinking, and compaction rendering behavior.
-- [ ] Command palette command slicing
-  - [ ] Move command builder dependencies behind refs/stores where possible.
-  - [ ] Keep lazy command construction on palette open.
+- [x] Command palette command slicing
+  - [x] Move command builder dependencies behind refs/stores where possible.
+  - [x] Keep lazy command construction on palette open.
 - [ ] Remaining session-derived slice stores
   - [ ] Identify high-churn `sessionState` reads still performed by `AppShellSessionWorkspace`.
   - [ ] Move safe derived values to selectors/stores or ref-backed hosts.
