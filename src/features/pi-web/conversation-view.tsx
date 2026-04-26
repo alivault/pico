@@ -278,11 +278,26 @@ function getCodeBlockChild(children: React.ReactNode) {
   return child
 }
 
+const STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD = 1200
+
 const MarkdownBlock = React.memo(function MarkdownBlock({
+  streaming = false,
   text,
 }: {
+  streaming?: boolean
   text: string
 }) {
+  const useStreamingPlainText =
+    streaming && text.length >= STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD
+
+  if (useStreamingPlainText) {
+    return (
+      <div className="text-sm leading-6 wrap-break-word whitespace-pre-wrap">
+        {text}
+      </div>
+    )
+  }
+
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
       <MemoizedReactMarkdown
@@ -1841,8 +1856,10 @@ export function assistantMessageHasVisibleBlocks({
 
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
   group,
+  streaming,
 }: {
   group: AssistantBlockGroup
+  streaming: boolean
 }) {
   if (group.type === "explore") {
     return <ExploreToolGroupCard blocks={group.blocks} />
@@ -1852,11 +1869,11 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
 
   switch (block.type) {
     case "text":
-      return <MarkdownBlock text={block.text} />
+      return <MarkdownBlock text={block.text} streaming={streaming} />
     case "thinking":
       return (
         <section className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground">
-          <MarkdownBlock text={block.text} />
+          <MarkdownBlock text={block.text} streaming={streaming} />
         </section>
       )
     case "tool":
@@ -1877,6 +1894,7 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
+  const streaming = items.some((item) => item.streaming)
   const blocks = items.flatMap((item) =>
     item.blocks.filter((block) =>
       assistantBlockIsVisible({ block, hideThinking, hideToolBlocks })
@@ -1892,7 +1910,11 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   return (
     <div className="flex flex-col gap-4">
       {renderedBlocks.map((group) => (
-        <AssistantBlockGroupView key={group.key} group={group} />
+        <AssistantBlockGroupView
+          key={group.key}
+          group={group}
+          streaming={streaming}
+        />
       ))}
     </div>
   )
