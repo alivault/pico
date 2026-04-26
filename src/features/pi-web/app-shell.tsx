@@ -2631,9 +2631,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     skillName?: string
     syncNonce: number
   }>({ text: "", syncNonce: 0 })
-  const [composerImages, setComposerImages] = React.useState<
+  const composerImagesStoreRef = React.useRef<ValueStore<
     Array<PromptImage>
-  >([])
+  > | null>(null)
+  if (!composerImagesStoreRef.current) {
+    composerImagesStoreRef.current = createValueStore<Array<PromptImage>>([])
+  }
+  const composerImagesStore = composerImagesStoreRef.current
+  const composerImagesRef = React.useRef<Array<PromptImage>>([])
   const [hideToolBlocks, setHideToolBlocks] = React.useState(false)
   const [centerMessages, setCenterMessages] = React.useState(false)
   const [awaitingFirstTurn, setAwaitingFirstTurn] = React.useState(false)
@@ -2695,6 +2700,23 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const composerStore = composerStoreRef.current
+  const setComposerImages = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<PromptImage>>>
+  >(
+    (action) => {
+      const current = composerImagesStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      composerImagesRef.current = next
+      composerImagesStore.setSnapshot(next)
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        composerImages: currentComposerSnapshot.disabled ? [] : next,
+      })
+    },
+    [composerImagesStore, composerStore]
+  )
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
   )
@@ -2739,7 +2761,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [sessionStore]
   )
-  const composerImagesRef = useLatestRef(composerImages)
   const composerTextRef = React.useRef(composerDraftSeed.text)
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeed.skillName
@@ -3439,6 +3460,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
+  const composerImages = composerImagesStore.getSnapshot()
   const pendingDraftFollowUpMessages = pendingDraftFollowUps.map(
     (message, index) => ({
       pendingId: message.optimisticId || `pending-draft:${index}`,
