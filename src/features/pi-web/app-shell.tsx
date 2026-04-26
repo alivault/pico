@@ -2648,7 +2648,13 @@ const AppShellSessionWorkspace = React.forwardRef<
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
   const [hideToolBlocks, setHideToolBlocks] = React.useState(false)
   const [centerMessages, setCenterMessages] = React.useState(false)
-  const [awaitingFirstTurn, setAwaitingFirstTurn] = React.useState(false)
+  const awaitingFirstTurnStoreRef = React.useRef<ValueStore<boolean> | null>(
+    null
+  )
+  if (!awaitingFirstTurnStoreRef.current) {
+    awaitingFirstTurnStoreRef.current = createValueStore(false)
+  }
+  const awaitingFirstTurnStore = awaitingFirstTurnStoreRef.current
   const [runningSlashCommand, setRunningSlashCommand] = React.useState<
     string | null
   >(null)
@@ -2675,7 +2681,11 @@ const AppShellSessionWorkspace = React.forwardRef<
       optimisticId?: string
     }>
   >([])
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const isSubmittingStoreRef = React.useRef<ValueStore<boolean> | null>(null)
+  if (!isSubmittingStoreRef.current) {
+    isSubmittingStoreRef.current = createValueStore(false)
+  }
+  const isSubmittingStore = isSubmittingStoreRef.current
   const [pendingMessages, setPendingMessages] = React.useState<
     Array<PendingComposerMessage>
   >([])
@@ -2835,6 +2845,46 @@ const AppShellSessionWorkspace = React.forwardRef<
       createValueStore<AppShellWorkingState | null>(null, sameWorkingState)
   }
   const workingStateStore = workingStateStoreRef.current
+  const setAwaitingFirstTurn = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      const current = awaitingFirstTurnStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      awaitingFirstTurnStore.setSnapshot(next)
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
+      })
+      if (next && !sessionStateRef.current.streaming) {
+        workingStateStore.setSnapshot({ label: "Waiting for first response…" })
+      } else if (
+        !next &&
+        workingStateStore.getSnapshot()?.label === "Waiting for first response…"
+      ) {
+        workingStateStore.setSnapshot(null)
+      }
+    },
+    [awaitingFirstTurnStore, composerStore, workingStateStore]
+  )
+  const setIsSubmitting = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      const current = isSubmittingStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      isSubmittingStore.setSnapshot(next)
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        isSubmitting: currentComposerSnapshot.disabled ? false : next,
+      })
+    },
+    [composerStore, isSubmittingStore]
+  )
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       conversationItemsStore.setItems(items)
@@ -3385,6 +3435,9 @@ const AppShellSessionWorkspace = React.forwardRef<
       current ? "" : current
     )
   }, [sidebarStore])
+
+  const awaitingFirstTurn = awaitingFirstTurnStore.getSnapshot()
+  const isSubmitting = isSubmittingStore.getSnapshot()
 
   const {
     abortSession,

@@ -7,7 +7,7 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
 - [ ] Composer state stores
   - [x] Move composer draft/image state to a dedicated external store.
   - [ ] Move pending composer messages/follow-ups to a dedicated external store.
-  - [ ] Move submit/awaiting-first-turn state to a dedicated external store.
+  - [x] Move submit/awaiting-first-turn state to a dedicated external store.
   - [ ] Feed composer UI from store selectors instead of workspace-owned React state where possible.
 - [ ] Ref-based mutation hooks
   - [x] Refactor prompt mutation inputs away from broad render-time values where safe.
