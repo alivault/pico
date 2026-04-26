@@ -398,6 +398,16 @@ type SelectedSessionKeyStore = {
   setKeys: (keys: Array<string>) => void
 }
 
+type ActiveSidebarSessionStore = {
+  subscribeEntry: (
+    entryKey: string,
+    sessionId: string | undefined,
+    listener: () => void
+  ) => () => void
+  isActive: (entryKey: string, sessionId: string | undefined) => boolean
+  setActive: (active: { sessionId?: string; sessionKey?: string }) => void
+}
+
 function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
   let selectedKeys = new Set<string>()
   const listenersByKey = new Map<string, Set<() => void>>()
@@ -440,6 +450,74 @@ function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
   }
 }
 
+function createActiveSidebarSessionStore(): ActiveSidebarSessionStore {
+  let activeSessionId = ""
+  let activeSessionKey = ""
+  const listenersByKey = new Map<string, Set<() => void>>()
+
+  const subscriptionKeys = (entryKey: string, sessionId: string | undefined) =>
+    [
+      entryKey ? `key:${entryKey}` : "",
+      sessionId ? `id:${sessionId}` : "",
+    ].filter(Boolean)
+
+  const notifyKey = (key: string) => {
+    const listeners = listenersByKey.get(key)
+    if (!listeners) return
+    for (const listener of listeners) listener()
+  }
+
+  return {
+    subscribeEntry(entryKey, sessionId, listener) {
+      const keys = subscriptionKeys(entryKey, sessionId)
+      if (keys.length === 0) return () => {}
+
+      for (const key of keys) {
+        const listeners = listenersByKey.get(key) ?? new Set<() => void>()
+        listeners.add(listener)
+        listenersByKey.set(key, listeners)
+      }
+
+      return () => {
+        for (const key of keys) {
+          const listeners = listenersByKey.get(key)
+          if (!listeners) continue
+          listeners.delete(listener)
+          if (listeners.size === 0) {
+            listenersByKey.delete(key)
+          }
+        }
+      }
+    },
+    isActive(entryKey, sessionId) {
+      if (activeSessionKey) return entryKey === activeSessionKey
+      return Boolean(activeSessionId && sessionId === activeSessionId)
+    },
+    setActive(active) {
+      const nextSessionId = active.sessionId || ""
+      const nextSessionKey = active.sessionKey || ""
+      if (
+        activeSessionId === nextSessionId &&
+        activeSessionKey === nextSessionKey
+      ) {
+        return
+      }
+
+      const changedKeys = new Set([
+        activeSessionKey ? `key:${activeSessionKey}` : "",
+        nextSessionKey ? `key:${nextSessionKey}` : "",
+        activeSessionId ? `id:${activeSessionId}` : "",
+        nextSessionId ? `id:${nextSessionId}` : "",
+      ])
+      activeSessionId = nextSessionId
+      activeSessionKey = nextSessionKey
+      for (const key of changedKeys) {
+        if (key) notifyKey(key)
+      }
+    },
+  }
+}
+
 function useSidebarSessionSelected(
   store: SelectedSessionKeyStore,
   entryKey: string
@@ -454,10 +532,25 @@ function useSidebarSessionSelected(
   )
 }
 
+function useSidebarSessionActive(
+  store: ActiveSidebarSessionStore,
+  entryKey: string,
+  sessionId: string | undefined
+) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeEntry(entryKey, sessionId, listener),
+      [entryKey, sessionId, store]
+    ),
+    () => store.isActive(entryKey, sessionId),
+    () => false
+  )
+}
+
 type SidebarSessionItemProps = {
   entry: SessionListEntry
   entryKey: string
-  isActive: boolean
+  activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
   isMobile: boolean
   overlay: boolean
@@ -473,7 +566,7 @@ type SidebarSessionItemProps = {
 const SidebarSessionItem = React.memo(function SidebarSessionItem({
   entry,
   entryKey,
-  isActive,
+  activeSessionStore,
   selectedSessionKeyStore,
   isMobile,
   overlay,
@@ -485,6 +578,11 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
     entryKey
+  )
+  const isActive = useSidebarSessionActive(
+    activeSessionStore,
+    entryKey,
+    entry.id
   )
   const timestamp = entry.lastUserMessageAt || entry.modified
   const metaLine = sessionMetaLine(entry, timestamp)
@@ -680,9 +778,8 @@ type DirectorySessionGroupProps = {
   collapsedDirectoryStore: CollapsedDirectoryStore
   searchActive: boolean
   directoryOrderingEnabled: boolean
+  activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
-  activeSessionId?: string
-  activeSessionKey?: string
   isMobile: boolean
   setOpenMobile: (open: boolean) => void
   isDragging?: boolean
@@ -705,9 +802,8 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   collapsedDirectoryStore,
   searchActive,
   directoryOrderingEnabled,
+  activeSessionStore,
   selectedSessionKeyStore,
-  activeSessionId,
-  activeSessionKey,
   isMobile,
   setOpenMobile,
   isDragging,
@@ -823,9 +919,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               <SidebarMenu>
                 {visibleSessions.map((entry) => {
                   const entryKey = sessionListEntryKey(entry)
-                  const isActive = activeSessionKey
-                    ? entryKey === activeSessionKey
-                    : Boolean(activeSessionId) && entry.id === activeSessionId
                   return (
                     <SidebarSessionItem
                       key={
@@ -833,7 +926,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                       }
                       entry={entry}
                       entryKey={entryKey}
-                      isActive={isActive}
+                      activeSessionStore={activeSessionStore}
                       selectedSessionKeyStore={selectedSessionKeyStore}
                       isMobile={isMobile}
                       overlay={overlay}
@@ -1138,6 +1231,7 @@ export function AppSidebar({
   const [selectedSessionKeyStore] = React.useState(
     createSelectedSessionKeyStore
   )
+  const [activeSessionStore] = React.useState(createActiveSidebarSessionStore)
   const [directorySessionsStore] = React.useState(() =>
     createDirectorySessionsStore(
       filteredDirectorySessions,
@@ -1155,6 +1249,13 @@ export function AppSidebar({
   React.useLayoutEffect(() => {
     selectedSessionKeyStore.setKeys(selectedSessionKeys)
   }, [selectedSessionKeyStore, selectedSessionKeys])
+
+  React.useLayoutEffect(() => {
+    activeSessionStore.setActive({
+      sessionId: activeSessionId,
+      sessionKey: activeSessionKey,
+    })
+  }, [activeSessionId, activeSessionKey, activeSessionStore])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1342,9 +1443,8 @@ export function AppSidebar({
                         collapsedDirectoryStore={collapsedDirectoryStore}
                         searchActive={searchActive}
                         directoryOrderingEnabled={directoryOrderingEnabled}
+                        activeSessionStore={activeSessionStore}
                         selectedSessionKeyStore={selectedSessionKeyStore}
-                        activeSessionId={activeSessionId}
-                        activeSessionKey={activeSessionKey}
                         isMobile={isMobile}
                         setOpenMobile={setOpenMobile}
                         isDragging={isDragging}
@@ -1372,9 +1472,8 @@ export function AppSidebar({
                   collapsedDirectoryStore={collapsedDirectoryStore}
                   searchActive={searchActive}
                   directoryOrderingEnabled={directoryOrderingEnabled}
+                  activeSessionStore={activeSessionStore}
                   selectedSessionKeyStore={selectedSessionKeyStore}
-                  activeSessionId={activeSessionId}
-                  activeSessionKey={activeSessionKey}
                   isMobile={isMobile}
                   setOpenMobile={setOpenMobile}
                   overlay
