@@ -684,6 +684,7 @@ type AssistantBlockGroupDescriptor =
       type: "block"
       key: string
       blockKey: string
+      blockType: AssistantConversationBlock["type"]
     }
   | {
       type: "explore"
@@ -1022,7 +1023,12 @@ function sameAssistantBlockGroupDescriptors(
     }
 
     if (leftGroup.type === "block" && rightGroup.type === "block") {
-      if (leftGroup.blockKey !== rightGroup.blockKey) return false
+      if (
+        leftGroup.blockKey !== rightGroup.blockKey ||
+        leftGroup.blockType !== rightGroup.blockType
+      ) {
+        return false
+      }
       continue
     }
 
@@ -1067,6 +1073,7 @@ function buildAssistantBlockSnapshot(
         type: "block",
         key: group.key,
         blockKey: group.key,
+        blockType: group.block.type,
       }
     }
 
@@ -1194,14 +1201,186 @@ function useAssistantBlock(store: AssistantBlockStore, key: string) {
   )
 }
 
-function useAssistantBlocks(store: AssistantBlockStore, keys: Array<string>) {
-  const cacheRef = React.useRef<{
-    keys: Array<string>
-    blocks: Array<AssistantConversationBlock>
-  }>({ keys: [], blocks: [] })
+const EMPTY_TOOL_BLOCKS: Array<AssistantToolBlock> = []
+
+type ToolBlockHeaderSnapshot = {
+  name: string | undefined
+  running: boolean
+  isError: boolean
+  summary: string
+  editStats: EditDiffStatCounts | null
+}
+
+type ExploreToolGroupHeaderSnapshot = {
+  count: number
+  summary: string
+  hasRunning: boolean
+  hasError: boolean
+}
+
+function sameEditDiffStatCounts(
+  left: EditDiffStatCounts | null,
+  right: EditDiffStatCounts | null
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+  return left.additions === right.additions && left.removals === right.removals
+}
+
+function buildToolBlockHeaderSnapshot(
+  block: AssistantConversationBlock | undefined
+): ToolBlockHeaderSnapshot | null {
+  if (!block || block.type !== "tool") return null
+
+  return {
+    name: block.name,
+    running: block.running,
+    isError: block.isError,
+    summary: toolSummary(block),
+    editStats:
+      block.name === "edit" && !block.running
+        ? getEditDiffStats(toolDiffText(block))
+        : null,
+  }
+}
+
+function sameToolBlockHeaderSnapshot(
+  left: ToolBlockHeaderSnapshot | null,
+  right: ToolBlockHeaderSnapshot | null
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+
+  return (
+    left.name === right.name &&
+    left.running === right.running &&
+    left.isError === right.isError &&
+    left.summary === right.summary &&
+    sameEditDiffStatCounts(left.editStats, right.editStats)
+  )
+}
+
+function useAssistantToolBlockHeader(store: AssistantBlockStore, key: string) {
+  const cacheRef = React.useRef<ToolBlockHeaderSnapshot | null>(null)
 
   const getSnapshot = () => {
-    const blocks = store.getBlocks(keys)
+    const next = buildToolBlockHeaderSnapshot(store.getBlock(key))
+    const cache = cacheRef.current
+    if (sameToolBlockHeaderSnapshot(cache, next)) return cache
+
+    cacheRef.current = next
+    return next
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeBlocks([key], listener),
+      [key, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
+}
+
+function useAssistantToolBlockBody(
+  store: AssistantBlockStore,
+  key: string,
+  enabled: boolean
+) {
+  const getSnapshot = () => {
+    if (!enabled) return undefined
+
+    const block = store.getBlock(key)
+    return block?.type === "tool" ? block : undefined
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) =>
+        enabled ? store.subscribeBlocks([key], listener) : () => {},
+      [enabled, key, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
+}
+
+function assistantToolBlocksFromStore(
+  store: AssistantBlockStore,
+  keys: Array<string>
+) {
+  return store.getBlocks(keys).filter(isExploreToolBlock)
+}
+
+function buildExploreToolGroupHeaderSnapshot(
+  blocks: Array<AssistantToolBlock>
+): ExploreToolGroupHeaderSnapshot {
+  return {
+    count: blocks.length,
+    summary: blocks.length > 0 ? exploreGroupSummary(blocks) : "",
+    hasRunning: blocks.some((block) => block.running),
+    hasError: blocks.some((block) => block.isError),
+  }
+}
+
+function sameExploreToolGroupHeaderSnapshot(
+  left: ExploreToolGroupHeaderSnapshot,
+  right: ExploreToolGroupHeaderSnapshot
+) {
+  return (
+    left.count === right.count &&
+    left.summary === right.summary &&
+    left.hasRunning === right.hasRunning &&
+    left.hasError === right.hasError
+  )
+}
+
+function useAssistantToolGroupHeader(
+  store: AssistantBlockStore,
+  keys: Array<string>
+) {
+  const cacheRef = React.useRef<ExploreToolGroupHeaderSnapshot>({
+    count: 0,
+    summary: "",
+    hasRunning: false,
+    hasError: false,
+  })
+
+  const getSnapshot = () => {
+    const next = buildExploreToolGroupHeaderSnapshot(
+      assistantToolBlocksFromStore(store, keys)
+    )
+    const cache = cacheRef.current
+    if (sameExploreToolGroupHeaderSnapshot(cache, next)) return cache
+
+    cacheRef.current = next
+    return next
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeBlocks(keys, listener),
+      [keys, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
+}
+
+function useAssistantToolGroupBodyBlocks(
+  store: AssistantBlockStore,
+  keys: Array<string>,
+  enabled: boolean
+) {
+  const cacheRef = React.useRef<{
+    keys: Array<string>
+    blocks: Array<AssistantToolBlock>
+  }>({ keys: [], blocks: EMPTY_TOOL_BLOCKS })
+
+  const getSnapshot = () => {
+    if (!enabled) return EMPTY_TOOL_BLOCKS
+
+    const blocks = assistantToolBlocksFromStore(store, keys)
     const cache = cacheRef.current
     if (
       cache.keys.length === keys.length &&
@@ -1218,8 +1397,9 @@ function useAssistantBlocks(store: AssistantBlockStore, keys: Array<string>) {
 
   return React.useSyncExternalStore(
     React.useCallback(
-      (listener) => store.subscribeBlocks(keys, listener),
-      [keys, store]
+      (listener) =>
+        enabled ? store.subscribeBlocks(keys, listener) : () => {},
+      [enabled, keys, store]
     ),
     getSnapshot,
     getSnapshot
@@ -1697,9 +1877,12 @@ function editDiffMarkerClassName(kind: EditDiffLine["kind"]) {
   }
 }
 
-function EditDiffStats({ diff }: { diff: string }) {
-  const stats = getEditDiffStats(diff)
+type EditDiffStatCounts = {
+  additions: number
+  removals: number
+}
 
+function EditDiffStatCountsView({ stats }: { stats: EditDiffStatCounts }) {
   if (!stats.additions && !stats.removals) return null
 
   return (
@@ -1878,22 +2061,9 @@ function EditToolOutput({
   )
 }
 
-const ToolBlockCard = React.memo(function ToolBlockCard({
-  block,
-}: {
-  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
-    type: "tool"
-  }
-}) {
-  const [openValue, setOpenValue] = React.useState<Array<string>>([])
-  const isOpen = openValue.includes("tool")
-  const renderBody = isOpen || block.name !== "edit" || !block.running
-  const callText =
-    renderBody || block.name === "bash" ? toolCallText(block) : ""
-  const outputText =
-    renderBody || block.name === "bash" ? toolOutputText(block) : ""
-  const editDiff =
-    block.name === "edit" && !block.running ? toolDiffText(block) : ""
+function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
+  const callText = toolCallText(block)
+  const outputText = toolOutputText(block)
   const shellBodyText =
     block.name === "bash"
       ? [callText, block.output.trimEnd()].filter(Boolean).join("\n\n") ||
@@ -1902,14 +2072,53 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
       : ""
 
   return (
+    <div className="border-t pt-3">
+      <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
+        {block.name === "bash" ? (
+          <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+            <AnsiText text={shellBodyText} />
+          </pre>
+        ) : block.name === "edit" ? (
+          <EditToolOutput block={block} />
+        ) : (
+          <div className="space-y-4">
+            {callText ? (
+              <ToolBlockSection label="Call" text={callText} />
+            ) : null}
+            <ToolBlockSection
+              label={block.running ? "Output (streaming)" : "Output"}
+              text={outputText}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const ToolBlockCard = React.memo(function ToolBlockCard({
+  blockKey,
+  store,
+}: {
+  blockKey: string
+  store: AssistantBlockStore
+}) {
+  const [openValue, setOpenValue] = React.useState<Array<string>>([])
+  const isOpen = openValue.includes("tool")
+  const header = useAssistantToolBlockHeader(store, blockKey)
+  const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
+
+  if (!header) return null
+
+  return (
     <Accordion
       value={openValue}
       onValueChange={setOpenValue}
       className={cn(
         "rounded-xl border text-sm",
-        block.running && "border-amber-500/30 bg-amber-500/5",
-        block.isError && "border-destructive/30 bg-destructive/5",
-        !block.running && !block.isError && "bg-muted/20"
+        header.running && "border-amber-500/30 bg-amber-500/5",
+        header.isError && "border-destructive/30 bg-destructive/5",
+        !header.running && !header.isError && "bg-muted/20"
       )}
     >
       <AccordionItem value="tool" className="border-0">
@@ -1919,38 +2128,20 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
         >
           <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
             <span className="truncate font-medium whitespace-nowrap text-foreground">
-              {toolDisplayName(block.name)}
+              {toolDisplayName(header.name)}
             </span>
             <span className="truncate text-muted-foreground">
-              {toolSummary(block)}
+              {header.summary}
             </span>
           </span>
-          {block.name === "edit" ? <EditDiffStats diff={editDiff} /> : null}
+          {header.editStats ? (
+            <EditDiffStatCountsView stats={header.editStats} />
+          ) : null}
         </AccordionTrigger>
 
-        {renderBody ? (
+        {isOpen && bodyBlock ? (
           <AccordionContent className="px-3 pb-3">
-            <div className="border-t pt-3">
-              <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
-                {block.name === "bash" ? (
-                  <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
-                    <AnsiText text={shellBodyText} />
-                  </pre>
-                ) : block.name === "edit" ? (
-                  <EditToolOutput block={block} />
-                ) : (
-                  <div className="space-y-4">
-                    {callText ? (
-                      <ToolBlockSection label="Call" text={callText} />
-                    ) : null}
-                    <ToolBlockSection
-                      label={block.running ? "Output (streaming)" : "Output"}
-                      text={outputText}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
+            <ToolBlockCardBody block={bodyBlock} />
           </AccordionContent>
         ) : null}
       </AccordionItem>
@@ -1958,27 +2149,75 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
   )
 })
 
-const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
+function ExploreToolGroupCardBody({
   blocks,
 }: {
-  blocks: Array<
-    Extract<ConversationItem, { kind: "assistant" }>["blocks"][number] & {
-      type: "tool"
-    }
-  >
+  blocks: Array<AssistantToolBlock>
 }) {
-  const summary = exploreGroupSummary(blocks)
+  return (
+    <div className="border-t pt-3">
+      <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
+        <div className="space-y-3">
+          {blocks.map((block, index) => {
+            const line = exploreToolLine(block)
+            const lineText = line.details || toolSummary(block)
+
+            return (
+              <div
+                key={
+                  block.blockKey ||
+                  block.callId ||
+                  `${block.name || "tool"}:${index}`
+                }
+                className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3 text-sm"
+              >
+                <span className="truncate font-medium whitespace-nowrap text-foreground">
+                  {line.label}
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-muted-foreground",
+                    block.isError && "text-destructive"
+                  )}
+                  title={lineText}
+                >
+                  {lineText}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
+  blockKeys,
+  store,
+}: {
+  blockKeys: Array<string>
+  store: AssistantBlockStore
+}) {
+  const [openValue, setOpenValue] = React.useState<Array<string>>([])
+  const isOpen = openValue.includes("explore")
+  const header = useAssistantToolGroupHeader(store, blockKeys)
+  const blocks = useAssistantToolGroupBodyBlocks(store, blockKeys, isOpen)
   const statusLabel = exploreGroupStatusLabel()
-  const hasRunning = blocks.some((block) => block.running)
-  const hasError = blocks.some((block) => block.isError)
+
+  if (header.count === 0) return null
 
   return (
     <Accordion
+      value={openValue}
+      onValueChange={setOpenValue}
       className={cn(
         "rounded-xl border text-sm",
-        hasRunning && "border-amber-500/30 bg-amber-500/5",
-        !hasRunning && hasError && "border-destructive/30 bg-destructive/5",
-        !hasRunning && !hasError && "bg-muted/20"
+        header.hasRunning && "border-amber-500/30 bg-amber-500/5",
+        !header.hasRunning &&
+          header.hasError &&
+          "border-destructive/30 bg-destructive/5",
+        !header.hasRunning && !header.hasError && "bg-muted/20"
       )}
     >
       <AccordionItem value="explore" className="border-0">
@@ -1990,46 +2229,17 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
             <span className="truncate font-medium whitespace-nowrap text-foreground">
               {statusLabel}
             </span>
-            <span className="truncate text-muted-foreground">{summary}</span>
+            <span className="truncate text-muted-foreground">
+              {header.summary}
+            </span>
           </span>
         </AccordionTrigger>
 
-        <AccordionContent className="px-3 pb-3">
-          <div className="border-t pt-3">
-            <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
-              <div className="space-y-3">
-                {blocks.map((block, index) => {
-                  const line = exploreToolLine(block)
-                  const lineText = line.details || toolSummary(block)
-
-                  return (
-                    <div
-                      key={
-                        block.blockKey ||
-                        block.callId ||
-                        `${block.name || "tool"}:${index}`
-                      }
-                      className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3 text-sm"
-                    >
-                      <span className="truncate font-medium whitespace-nowrap text-foreground">
-                        {line.label}
-                      </span>
-                      <span
-                        className={cn(
-                          "truncate text-muted-foreground",
-                          block.isError && "text-destructive"
-                        )}
-                        title={lineText}
-                      >
-                        {lineText}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </AccordionContent>
+        {isOpen ? (
+          <AccordionContent className="px-3 pb-3">
+            <ExploreToolGroupCardBody blocks={blocks} />
+          </AccordionContent>
+        ) : null}
       </AccordionItem>
     </Accordion>
   )
@@ -2193,6 +2403,7 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
   return (
     <AssistantSingleBlockGroupView
       blockKey={descriptor.blockKey}
+      blockType={descriptor.blockType}
       store={store}
       streaming={streaming}
     />
@@ -2206,23 +2417,47 @@ function AssistantExploreBlockGroupView({
   blockKeys: Array<string>
   store: AssistantBlockStore
 }) {
-  const blocks = useAssistantBlocks(store, blockKeys).filter(isExploreToolBlock)
-  if (blocks.length === 0) return null
-
-  return <ExploreToolGroupCard blocks={blocks} />
+  return <ExploreToolGroupCard blockKeys={blockKeys} store={store} />
 }
 
 function AssistantSingleBlockGroupView({
   blockKey,
+  blockType,
   store,
   streaming,
 }: {
   blockKey: string
+  blockType: AssistantConversationBlock["type"]
+  store: AssistantBlockStore
+  streaming: boolean
+}) {
+  if (blockType === "tool") {
+    return <ToolBlockCard blockKey={blockKey} store={store} />
+  }
+
+  return (
+    <AssistantSubscribedBlockView
+      blockKey={blockKey}
+      blockType={blockType}
+      store={store}
+      streaming={streaming}
+    />
+  )
+}
+
+function AssistantSubscribedBlockView({
+  blockKey,
+  blockType,
+  store,
+  streaming,
+}: {
+  blockKey: string
+  blockType: AssistantConversationBlock["type"]
   store: AssistantBlockStore
   streaming: boolean
 }) {
   const block = useAssistantBlock(store, blockKey)
-  if (!block) return null
+  if (!block || block.type !== blockType) return null
 
   switch (block.type) {
     case "text":
@@ -2233,8 +2468,6 @@ function AssistantSingleBlockGroupView({
           <MarkdownBlock text={block.text} streaming={streaming} />
         </section>
       )
-    case "tool":
-      return <ToolBlockCard block={block} />
     case "compaction":
       return <CompactionBlockCard block={block} />
     default:
