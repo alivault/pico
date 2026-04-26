@@ -10,7 +10,7 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
   - [ ] Move submit/awaiting-first-turn state to a dedicated external store.
   - [ ] Feed composer UI from store selectors instead of workspace-owned React state where possible.
 - [ ] Ref-based mutation hooks
-  - [ ] Refactor prompt mutation inputs away from broad render-time values where safe.
+  - [x] Refactor prompt mutation inputs away from broad render-time values where safe.
   - [x] Refactor session mutation inputs away from broad render-time values where safe.
   - [ ] Keep behavior compatible with draft sessions, pending queues, and optimistic messages.
 - [ ] Sidebar internals

@@ -55,7 +55,7 @@ type UseAppShellPromptMutationsOptions = {
   pendingDraftFollowUps: Array<PendingDraftFollowUp>
   awaitingFirstTurn: boolean
   pendingMessages: Array<PendingComposerMessage>
-  composerImages: Array<PromptImage>
+  composerImagesRef: React.MutableRefObject<Array<PromptImage>>
   composerTextRef: React.MutableRefObject<string>
   composerSkillRef: React.MutableRefObject<string | undefined>
   replaceComposerDraft: (
@@ -130,7 +130,7 @@ export function useAppShellPromptMutations({
   pendingDraftFollowUps,
   awaitingFirstTurn,
   pendingMessages,
-  composerImages,
+  composerImagesRef,
   composerTextRef,
   composerSkillRef,
   replaceComposerDraft,
@@ -399,7 +399,7 @@ export function useAppShellPromptMutations({
         text: composerTextRef.current,
         skillName: composerSkillRef.current,
       }).trim()
-      const images = composerImages.map((image) => ({ ...image }))
+      const images = composerImagesRef.current.map((image) => ({ ...image }))
       if (!message && images.length === 0) return false
 
       const currentPendingPrompt =
@@ -449,7 +449,7 @@ export function useAppShellPromptMutations({
     },
     [
       addOptimisticUserMessage,
-      composerImages,
+      composerImagesRef,
       composerSkillRef,
       composerTextRef,
       lastSyncedEditorTextRef,
@@ -513,7 +513,7 @@ export function useAppShellPromptMutations({
         text: composerTextRef.current,
         skillName: composerSkillRef.current,
       }).trim()
-      if (!message && composerImages.length === 0) return false
+      if (!message && composerImagesRef.current.length === 0) return false
 
       const treatAsQueuedPrompt = options?.forceFirstPrompt
         ? false
@@ -521,7 +521,9 @@ export function useAppShellPromptMutations({
       const normalizedStreamingBehavior = treatAsQueuedPrompt
         ? normalizeQueuedStreamingBehavior(streamingBehavior)
         : undefined
-      const submittedImages = composerImages.map((image) => ({ ...image }))
+      const submittedImages = composerImagesRef.current.map((image) => ({
+        ...image,
+      }))
       const shouldOptimisticallyClearComposer = true
       const queuedPendingId = treatAsQueuedPrompt
         ? createLocalPendingId()
@@ -611,7 +613,7 @@ export function useAppShellPromptMutations({
     [
       addOptimisticPendingMessage,
       addOptimisticUserMessage,
-      composerImages,
+      composerImagesRef,
       composerSkillRef,
       composerTextRef,
       lastSyncedEditorTextRef,
@@ -883,7 +885,7 @@ export function useAppShellPromptMutations({
   const reorderPending = React.useCallback(
     async (pendingId: string, direction: -1 | 1) => {
       if (!viewerContextId) return
-      const next = [...pendingMessages]
+      const next = [...pendingMessagesRef.current]
       const index = next.findIndex((entry) => entry.pendingId === pendingId)
       if (index === -1) return
       const targetIndex = index + direction
@@ -900,7 +902,7 @@ export function useAppShellPromptMutations({
         )
       }
     },
-    [pendingMessages, reorderPendingMessagesMutation, viewerContextId]
+    [pendingMessagesRef, reorderPendingMessagesMutation, viewerContextId]
   )
 
   return {

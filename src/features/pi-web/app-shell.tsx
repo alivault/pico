@@ -2739,6 +2739,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [sessionStore]
   )
+  const composerImagesRef = useLatestRef(composerImages)
   const composerTextRef = React.useRef(composerDraftSeed.text)
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeed.skillName
@@ -3346,7 +3347,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     pendingDraftFollowUps,
     awaitingFirstTurn,
     pendingMessages,
-    composerImages,
+    composerImagesRef,
     composerTextRef,
     composerSkillRef,
     replaceComposerDraft,
