@@ -2626,11 +2626,18 @@ const AppShellSessionWorkspace = React.forwardRef<
   const sessionStore = sessionStoreRef.current
   const [currentTab, setCurrentTab] = React.useState("session")
   const previousRouteSessionIdRef = React.useRef(sessionId)
-  const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
+  const composerDraftSeedStoreRef = React.useRef<ValueStore<{
     text: string
     skillName?: string
     syncNonce: number
-  }>({ text: "", syncNonce: 0 })
+  }> | null>(null)
+  if (!composerDraftSeedStoreRef.current) {
+    composerDraftSeedStoreRef.current = createValueStore({
+      text: "",
+      syncNonce: 0,
+    })
+  }
+  const composerDraftSeedStore = composerDraftSeedStoreRef.current
   const composerImagesStoreRef = React.useRef<ValueStore<
     Array<PromptImage>
   > | null>(null)
@@ -2700,6 +2707,32 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const composerStore = composerStoreRef.current
+  const setComposerDraftSeed = React.useCallback<
+    React.Dispatch<
+      React.SetStateAction<{
+        text: string
+        skillName?: string
+        syncNonce: number
+      }>
+    >
+  >(
+    (action) => {
+      const current = composerDraftSeedStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      composerDraftSeedStore.setSnapshot(next)
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        composerSkill: currentComposerSnapshot.disabled
+          ? undefined
+          : next.skillName,
+        composerSyncNonce: next.syncNonce,
+        composerText: currentComposerSnapshot.disabled ? "" : next.text,
+      })
+    },
+    [composerDraftSeedStore, composerStore]
+  )
   const setComposerImages = React.useCallback<
     React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   >(
@@ -2761,9 +2794,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [sessionStore]
   )
-  const composerTextRef = React.useRef(composerDraftSeed.text)
+  const composerTextRef = React.useRef(
+    composerDraftSeedStore.getSnapshot().text
+  )
   const composerSkillRef = React.useRef<string | undefined>(
-    composerDraftSeed.skillName
+    composerDraftSeedStore.getSnapshot().skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const pendingUiRequestHandlerRef = React.useRef(
@@ -3460,6 +3495,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
+  const composerDraftSeed = composerDraftSeedStore.getSnapshot()
   const composerImages = composerImagesStore.getSnapshot()
   const pendingDraftFollowUpMessages = pendingDraftFollowUps.map(
     (message, index) => ({

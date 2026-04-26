@@ -5,7 +5,7 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
 ## Checklist
 
 - [ ] Composer state stores
-  - [ ] Move composer draft/image state to a dedicated external store. _(image state moved; draft state pending)_
+  - [x] Move composer draft/image state to a dedicated external store.
   - [ ] Move pending composer messages/follow-ups to a dedicated external store.
   - [ ] Move submit/awaiting-first-turn state to a dedicated external store.
   - [ ] Feed composer UI from store selectors instead of workspace-owned React state where possible.
