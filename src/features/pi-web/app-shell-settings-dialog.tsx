@@ -3,24 +3,40 @@ import * as React from "react"
 import type { DesktopNotificationPermission } from "@/features/pi-web/session-done-notifications"
 import type { ThemeMode } from "@/lib/pi-web"
 
-import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command"
 import {
   Drawer,
   DrawerContent,
   DrawerDescription,
-  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const THEME_OPTIONS: Array<ThemeMode> = ["system", "light", "dark"]
+
+type SettingsCommand = {
+  id: string
+  title: string
+  description: string
+  valueLabel: string
+  keywords: Array<string>
+  onSelect: () => void | Promise<void>
+}
+
+type SettingsCommandGroup = {
+  heading: string
+  commands: Array<SettingsCommand>
+}
 
 function desktopNotificationPermissionLabel(
   permission: DesktopNotificationPermission
@@ -38,6 +54,30 @@ function desktopNotificationPermissionLabel(
   }
 
   return "Desktop notifications will ask for browser permission when enabled."
+}
+
+function formatThemeMode(theme: ThemeMode) {
+  return `${theme[0].toUpperCase()}${theme.slice(1)}`
+}
+
+function formatToggleValue(enabled: boolean) {
+  return enabled ? "On" : "Off"
+}
+
+function nextThemeMode(currentTheme: ThemeMode) {
+  const currentIndex = THEME_OPTIONS.indexOf(currentTheme)
+  const nextIndex = (currentIndex + 1) % THEME_OPTIONS.length
+
+  return THEME_OPTIONS[nextIndex] ?? "system"
+}
+
+function settingsCommandKeywords(command: SettingsCommand) {
+  return [
+    command.title,
+    command.description,
+    command.valueLabel,
+    ...command.keywords,
+  ]
 }
 
 export type AppShellSettingsDialogHandle = {
@@ -81,162 +121,180 @@ export function AppShellSettingsDialog({
   onSessionDoneDesktopNotificationsEnabledChange,
   desktopNotificationPermission,
 }: AppShellSettingsDialogProps) {
+  const [query, setQuery] = React.useState("")
+  const [selectedCommandId, setSelectedCommandId] = React.useState("theme")
   const isMobile = useIsMobile()
+  const desktopNotificationDescription = desktopNotificationPermissionLabel(
+    desktopNotificationPermission
+  )
+  const settingGroups: Array<SettingsCommandGroup> = [
+    {
+      heading: "Appearance",
+      commands: [
+        {
+          id: "theme",
+          title: "Theme",
+          description: "Cycle between system, light, and dark mode.",
+          valueLabel: formatThemeMode(currentTheme),
+          keywords: ["color", "mode", "system", "light", "dark"],
+          onSelect: () => onThemeChange(nextThemeMode(currentTheme)),
+        },
+      ],
+    },
+    {
+      heading: "Conversation display",
+      commands: [
+        {
+          id: "hide-thinking-blocks",
+          title: "Hide thinking blocks",
+          description:
+            "Collapse assistant reasoning into the short hidden-thinking preview.",
+          valueLabel: formatToggleValue(hideThinkingBlocks),
+          keywords: ["reasoning", "thinking", "display", "collapse"],
+          onSelect: () => onHideThinkingBlocksChange(!hideThinkingBlocks),
+        },
+        {
+          id: "hide-tool-calls",
+          title: "Hide tool calls",
+          description:
+            "Hide assistant tool execution cards in the conversation view.",
+          valueLabel: formatToggleValue(hideToolBlocks),
+          keywords: ["tools", "calls", "display", "cards"],
+          onSelect: () => onHideToolBlocksChange(!hideToolBlocks),
+        },
+        {
+          id: "center-messages",
+          title: "Center messages at 80ch",
+          description:
+            "Constrain each message to a centered 80 character column.",
+          valueLabel: formatToggleValue(centerMessages),
+          keywords: ["center", "messages", "width", "80", "column"],
+          onSelect: () => onCenterMessagesChange(!centerMessages),
+        },
+      ],
+    },
+    {
+      heading: "Session completion notifications",
+      commands: [
+        {
+          id: "desktop-notifications",
+          title: "Desktop notifications",
+          description: desktopNotificationDescription,
+          valueLabel: formatToggleValue(sessionDoneDesktopNotificationsEnabled),
+          keywords: [
+            "desktop",
+            "browser",
+            "notifications",
+            "permission",
+            desktopNotificationPermission,
+          ],
+          onSelect: () =>
+            onSessionDoneDesktopNotificationsEnabledChange(
+              !sessionDoneDesktopNotificationsEnabled
+            ),
+        },
+        {
+          id: "completion-sound",
+          title: "Completion sound",
+          description:
+            "Play a short confirmation sound when a session finishes.",
+          valueLabel: formatToggleValue(sessionDoneSoundEnabled),
+          keywords: ["sound", "audio", "completion", "notifications"],
+          onSelect: () =>
+            onSessionDoneSoundEnabledChange(!sessionDoneSoundEnabled),
+        },
+      ],
+    },
+  ]
 
-  const settingsSections = (
-    <div className="space-y-6">
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Theme</h3>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {THEME_OPTIONS.map((themeOption) => (
-            <Button
-              key={themeOption}
-              variant={currentTheme === themeOption ? "default" : "outline"}
-              onClick={() => onThemeChange(themeOption)}
-            >
-              {themeOption[0].toUpperCase()}
-              {themeOption.slice(1)}
-            </Button>
-          ))}
-        </div>
-      </section>
+  React.useEffect(() => {
+    if (!open && query) {
+      setQuery("")
+    }
+  }, [open, query])
 
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Conversation display</h3>
-        </div>
+  const handleSelect = (command: SettingsCommand) => {
+    void Promise.resolve(command.onSelect()).catch((error: unknown) => {
+      console.error(error)
+    })
+  }
 
-        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">Hide thinking blocks</div>
-            <div className="text-sm text-muted-foreground">
-              Collapse assistant reasoning into the short hidden-thinking
-              preview.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={hideThinkingBlocks}
-            onChange={(event) =>
-              onHideThinkingBlocksChange(event.target.checked)
-            }
-          />
-        </label>
-
-        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">Hide tool calls</div>
-            <div className="text-sm text-muted-foreground">
-              Hide assistant tool execution cards in the conversation view.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={hideToolBlocks}
-            onChange={(event) => onHideToolBlocksChange(event.target.checked)}
-          />
-        </label>
-
-        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">Center messages at 80ch</div>
-            <div className="text-sm text-muted-foreground">
-              Constrain each message to a centered 80 character column.
-            </div>
-          </div>
-          <input
-            name="center-messages"
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={centerMessages}
-            onChange={(event) => onCenterMessagesChange(event.target.checked)}
-          />
-        </label>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">
-            Session completion notifications
-          </h3>
-        </div>
-
-        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">Desktop notifications</div>
-            <div className="text-sm text-muted-foreground">
-              {desktopNotificationPermissionLabel(
-                desktopNotificationPermission
-              )}
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={sessionDoneDesktopNotificationsEnabled}
-            onChange={(event) =>
-              onSessionDoneDesktopNotificationsEnabledChange(
-                event.target.checked
-              )
-            }
-          />
-        </label>
-
-        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">Completion sound</div>
-            <div className="text-sm text-muted-foreground">
-              Play a short confirmation sound when a session finishes.
-            </div>
-          </div>
-          <input
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={sessionDoneSoundEnabled}
-            onChange={(event) =>
-              onSessionDoneSoundEnabledChange(event.target.checked)
-            }
-          />
-        </label>
-      </section>
-    </div>
+  const settingsCommandBody = (
+    <Command
+      shouldFilter
+      loop
+      value={selectedCommandId}
+      onValueChange={setSelectedCommandId}
+      className="min-h-0 flex-1 rounded-lg border"
+    >
+      <CommandInput
+        autoFocus={!isMobile}
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search settings"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+        <CommandEmpty>No settings found.</CommandEmpty>
+        {settingGroups.map((group) => (
+          <CommandGroup key={group.heading} heading={group.heading}>
+            {group.commands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={command.id}
+                keywords={settingsCommandKeywords(command)}
+                onSelect={() => handleSelect(command)}
+                className="items-start py-2"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{command.title}</span>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
+                    {command.description}
+                  </span>
+                </div>
+                <CommandShortcut className="shrink-0 tracking-normal normal-case">
+                  {command.valueLabel}
+                </CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
+      </CommandList>
+      <div className="border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        Use ↑/↓ to select, Enter to cycle or toggle, and Esc to close.
+      </div>
+    </Command>
   )
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Settings</DrawerTitle>
-            <DrawerDescription className="sr-only">
-              Customize theme, conversation display, and session completion
-              notifications.
+            <DrawerDescription>
+              Search settings. Press Enter on a setting to cycle or toggle it.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
-            {settingsSections}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {settingsCommandBody}
           </div>
-          <DrawerFooter className="border-t border-border/70">
-            <Button onClick={() => onOpenChange(false)}>Done</Button>
-          </DrawerFooter>
         </DrawerContent>
       </Drawer>
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
-        {settingsSections}
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Settings"
+      description="Search settings. Press Enter on a setting to cycle or toggle it."
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {settingsCommandBody}
+    </CommandDialog>
   )
 }
 type AppShellSettingsDialogControllerProps = Omit<

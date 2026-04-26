@@ -408,6 +408,7 @@ export function useAppShellSessionSync({
   const draftSessionLoadingOwnerKeyRef = React.useRef(
     draftSessionLoadingOwnerKey
   )
+  const hideToolBlocksRef = React.useRef(hideToolBlocks)
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
   const backgroundedAtRef = React.useRef<number | null>(null)
@@ -421,6 +422,10 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
   }, [draftSessionLoadingOwnerKey])
+
+  React.useEffect(() => {
+    hideToolBlocksRef.current = hideToolBlocks
+  }, [hideToolBlocks])
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
@@ -605,7 +610,7 @@ export function useAppShellSessionSync({
           forceConversationSync ||
           !sameVisibleConversation(previousState.items, nextState.items, {
             hideThinking: nextState.hideThinkingBlock,
-            hideToolBlocks,
+            hideToolBlocks: hideToolBlocksRef.current,
           })
         ) {
           setConversationItems(nextState.items)
@@ -752,7 +757,6 @@ export function useAppShellSessionSync({
     }
   }, [
     bootstrapSidebarDirectories,
-    hideToolBlocks,
     composerSkillRef,
     composerTextRef,
     lastSyncedEditorTextRef,
