@@ -3516,7 +3516,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   } = useAppShellSessionMutations({
     viewerContextId,
     activeSessionId,
-    sessionState,
+    sessionStateRef,
     setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor:
       sidebarStore.setSidebarSessionSelectionAnchor,

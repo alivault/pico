@@ -15,7 +15,7 @@ import { sessionListEntryKey } from "@/lib/pi-web"
 type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
-  sessionState: SessionState
+  sessionStateRef: React.MutableRefObject<SessionState>
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -26,7 +26,7 @@ type UseAppShellSessionMutationsOptions = {
 export function useAppShellSessionMutations({
   viewerContextId,
   activeSessionId,
-  sessionState,
+  sessionStateRef,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
@@ -111,6 +111,7 @@ export function useAppShellSessionMutations({
 
   const cycleThinkingLevel = React.useCallback(
     async (direction: -1 | 1) => {
+      const sessionState = sessionStateRef.current
       const levels = sessionState.availableThinkingLevels.length
         ? sessionState.availableThinkingLevels
         : ["off"]
@@ -121,11 +122,7 @@ export function useAppShellSessionMutations({
         levels[0]
       await setThinkingLevel(nextLevel)
     },
-    [
-      sessionState.availableThinkingLevels,
-      sessionState.thinkingLevel,
-      setThinkingLevel,
-    ]
+    [sessionStateRef, setThinkingLevel]
   )
 
   const setThinkingBlocksHiddenMutation = useMutation({
@@ -166,8 +163,8 @@ export function useAppShellSessionMutations({
   )
 
   const toggleHideThinking = React.useCallback(async () => {
-    await setThinkingBlocksHidden(!sessionState.hideThinkingBlock)
-  }, [sessionState.hideThinkingBlock, setThinkingBlocksHidden])
+    await setThinkingBlocksHidden(!sessionStateRef.current.hideThinkingBlock)
+  }, [sessionStateRef, setThinkingBlocksHidden])
 
   const compactMutation = useMutation({
     mutationFn: async () => {
@@ -271,10 +268,12 @@ export function useAppShellSessionMutations({
 
       const orderedTargets = [
         ...targets.filter(
-          (target) => target.path && target.path !== sessionState.sessionFile
+          (target) =>
+            target.path && target.path !== sessionStateRef.current.sessionFile
         ),
         ...targets.filter(
-          (target) => target.path && target.path === sessionState.sessionFile
+          (target) =>
+            target.path && target.path === sessionStateRef.current.sessionFile
         ),
       ]
 
@@ -309,7 +308,7 @@ export function useAppShellSessionMutations({
     },
     [
       deleteSessionMutation,
-      sessionState.sessionFile,
+      sessionStateRef,
       setSelectedSidebarSessionKeys,
       setSidebarSessionSelectionAnchor,
       viewerContextId,
