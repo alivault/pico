@@ -1967,8 +1967,6 @@ function AppShellConversationEmptyState({
       ? displayedWorkingState.label
       : "Loading…"
 
-  if (hasMessages) return null
-
   if (showConversationLoadingState) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
@@ -1977,6 +1975,8 @@ function AppShellConversationEmptyState({
       </div>
     )
   }
+
+  if (hasMessages) return null
 
   return (
     <Empty>
@@ -2127,20 +2127,24 @@ const AppShellSessionConversation = React.memo(
           viewerContextId={viewerContextId}
           workingStateStore={workingStateStore}
         />
-        <AppShellConversationMessageStack
-          centerMessages={centerMessages}
-          conversationItemsStore={conversationItemsStore}
-          hideThinking={hideThinking}
-          hideToolBlocks={hideToolBlocks}
-        />
-        <AppShellConversationWorkingFooter
-          centerMessages={centerMessages}
-          conversationItemsStore={conversationItemsStore}
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-          hideThinking={hideThinking}
-          streaming={sessionState.streaming}
-          workingStateStore={workingStateStore}
-        />
+        {!isSessionViewLoading ? (
+          <>
+            <AppShellConversationMessageStack
+              centerMessages={centerMessages}
+              conversationItemsStore={conversationItemsStore}
+              hideThinking={hideThinking}
+              hideToolBlocks={hideToolBlocks}
+            />
+            <AppShellConversationWorkingFooter
+              centerMessages={centerMessages}
+              conversationItemsStore={conversationItemsStore}
+              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+              hideThinking={hideThinking}
+              streaming={sessionState.streaming}
+              workingStateStore={workingStateStore}
+            />
+          </>
+        ) : null}
       </AppShellConversationFrame>
     )
   }
