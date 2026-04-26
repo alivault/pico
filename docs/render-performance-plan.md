@@ -13,10 +13,10 @@ Goal: push the Pi web app toward minimal unnecessary rendering by moving high-ch
   - [x] Refactor prompt mutation inputs away from broad render-time values where safe.
   - [x] Refactor session mutation inputs away from broad render-time values where safe.
   - [ ] Keep behavior compatible with draft sessions, pending queues, and optimistic messages.
-- [ ] Sidebar internals
-  - [ ] Memoize/split sidebar header, footer, directory groups, and session rows.
-  - [ ] Avoid rebuilding selection lookup and derived counts in wide render paths where possible.
-  - [ ] Preserve drag/reorder, collapse, search, and mobile behavior.
+- [x] Sidebar internals
+  - [x] Memoize/split sidebar header, footer, directory groups, and session rows.
+  - [x] Avoid rebuilding selection lookup and derived counts in wide render paths where possible.
+  - [x] Preserve drag/reorder, collapse, search, and mobile behavior.
 - [x] Assistant block-level rendering
   - [x] Split assistant block rendering below the assistant message group.
   - [x] Reuse block descriptors where block identities/signatures are unchanged.

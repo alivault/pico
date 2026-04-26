@@ -392,11 +392,73 @@ function SortableDirectoryGroup({
   )
 }
 
+type SelectedSessionKeyStore = {
+  subscribeKey: (key: string, listener: () => void) => () => void
+  isSelected: (key: string) => boolean
+  setKeys: (keys: Array<string>) => void
+}
+
+function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
+  let selectedKeys = new Set<string>()
+  const listenersByKey = new Map<string, Set<() => void>>()
+
+  const notifyKey = (key: string) => {
+    const listeners = listenersByKey.get(key)
+    if (!listeners) return
+    for (const listener of listeners) listener()
+  }
+
+  return {
+    subscribeKey(key, listener) {
+      if (!key) return () => {}
+      const listeners = listenersByKey.get(key) ?? new Set<() => void>()
+      listeners.add(listener)
+      listenersByKey.set(key, listeners)
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) {
+          listenersByKey.delete(key)
+        }
+      }
+    },
+    isSelected(key) {
+      return Boolean(key && selectedKeys.has(key))
+    },
+    setKeys(keys) {
+      const nextKeys = new Set(keys.filter(Boolean))
+      const changedKeys = new Set<string>()
+      for (const key of selectedKeys) {
+        if (!nextKeys.has(key)) changedKeys.add(key)
+      }
+      for (const key of nextKeys) {
+        if (!selectedKeys.has(key)) changedKeys.add(key)
+      }
+      if (changedKeys.size === 0) return
+      selectedKeys = nextKeys
+      for (const key of changedKeys) notifyKey(key)
+    },
+  }
+}
+
+function useSidebarSessionSelected(
+  store: SelectedSessionKeyStore,
+  entryKey: string
+) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeKey(entryKey, listener),
+      [entryKey, store]
+    ),
+    () => store.isSelected(entryKey),
+    () => false
+  )
+}
+
 type SidebarSessionItemProps = {
   entry: SessionListEntry
   entryKey: string
   isActive: boolean
-  isSelected: boolean
+  selectedSessionKeyStore: SelectedSessionKeyStore
   isMobile: boolean
   overlay: boolean
   setOpenMobile: (open: boolean) => void
@@ -408,11 +470,11 @@ type SidebarSessionItemProps = {
   onDeleteSession?: (entry: SessionListEntry) => void
 }
 
-function SidebarSessionItem({
+const SidebarSessionItem = React.memo(function SidebarSessionItem({
   entry,
   entryKey,
   isActive,
-  isSelected,
+  selectedSessionKeyStore,
   isMobile,
   overlay,
   setOpenMobile,
@@ -420,6 +482,10 @@ function SidebarSessionItem({
   onRenameSession,
   onDeleteSession,
 }: SidebarSessionItemProps) {
+  const isSelected = useSidebarSessionSelected(
+    selectedSessionKeyStore,
+    entryKey
+  )
   const timestamp = entry.lastUserMessageAt || entry.modified
   const metaLine = sessionMetaLine(entry, timestamp)
   const exactTimestamp = timestamp
@@ -500,7 +566,7 @@ function SidebarSessionItem({
       )}
     </SidebarMenuItem>
   )
-}
+})
 
 type DirectorySessionGroupProps = {
   directory: string
@@ -509,7 +575,7 @@ type DirectorySessionGroupProps = {
   searchActive: boolean
   isLoadingSessions: boolean
   directoryOrderingEnabled: boolean
-  selectedSessionKeys: Array<string>
+  selectedSessionKeyStore: SelectedSessionKeyStore
   activeSessionId?: string
   activeSessionKey?: string
   isMobile: boolean
@@ -528,14 +594,14 @@ type DirectorySessionGroupProps = {
   onRemoveDirectory?: (directory: string) => void
 }
 
-function DirectorySessionGroup({
+const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   directory,
   sessions,
   collapsedDirectoryStore,
   searchActive,
   isLoadingSessions,
   directoryOrderingEnabled,
-  selectedSessionKeys,
+  selectedSessionKeyStore,
   activeSessionId,
   activeSessionKey,
   isMobile,
@@ -564,7 +630,6 @@ function DirectorySessionGroup({
   const visibleSessions = sessions.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < sessions.length
   const showLoadingState = isLoadingSessions && sessions.length === 0
-  const selectedSessionKeySet = new Set(selectedSessionKeys)
 
   return (
     <SidebarGroup
@@ -653,9 +718,6 @@ function DirectorySessionGroup({
                   const isActive = activeSessionKey
                     ? entryKey === activeSessionKey
                     : Boolean(activeSessionId) && entry.id === activeSessionId
-                  const isSelected =
-                    entryKey.length > 0 && selectedSessionKeySet.has(entryKey)
-
                   return (
                     <SidebarSessionItem
                       key={
@@ -664,7 +726,7 @@ function DirectorySessionGroup({
                       entry={entry}
                       entryKey={entryKey}
                       isActive={isActive}
-                      isSelected={isSelected}
+                      selectedSessionKeyStore={selectedSessionKeyStore}
                       isMobile={isMobile}
                       overlay={overlay}
                       setOpenMobile={setOpenMobile}
@@ -708,7 +770,7 @@ function DirectorySessionGroup({
       ) : null}
     </SidebarGroup>
   )
-}
+})
 
 type DirectoryCollapseAllButtonProps = {
   searchActive: boolean
@@ -965,6 +1027,13 @@ export function AppSidebar({
   const [collapsedDirectoryStore] = React.useState(
     createCollapsedDirectoryStore
   )
+  const [selectedSessionKeyStore] = React.useState(
+    createSelectedSessionKeyStore
+  )
+
+  React.useLayoutEffect(() => {
+    selectedSessionKeyStore.setKeys(selectedSessionKeys)
+  }, [selectedSessionKeyStore, selectedSessionKeys])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1158,7 +1227,7 @@ export function AppSidebar({
                         searchActive={searchActive}
                         isLoadingSessions={isLoadingSessions}
                         directoryOrderingEnabled={directoryOrderingEnabled}
-                        selectedSessionKeys={selectedSessionKeys}
+                        selectedSessionKeyStore={selectedSessionKeyStore}
                         activeSessionId={activeSessionId}
                         activeSessionKey={activeSessionKey}
                         isMobile={isMobile}
@@ -1191,7 +1260,7 @@ export function AppSidebar({
                     directoryIndexLoading[activeDirectory]
                   )}
                   directoryOrderingEnabled={directoryOrderingEnabled}
-                  selectedSessionKeys={selectedSessionKeys}
+                  selectedSessionKeyStore={selectedSessionKeyStore}
                   activeSessionId={activeSessionId}
                   activeSessionKey={activeSessionKey}
                   isMobile={isMobile}
