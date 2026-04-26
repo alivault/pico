@@ -28,8 +28,8 @@ The previous render performance checklist was completed. This file now tracks th
   - [ ] Add assistant block descriptors keyed by block key/signature.
   - [ ] Let assistant block views subscribe to individual block snapshots where possible.
   - [ ] Preserve text, thinking, tool, explore-group, and compaction rendering.
-- [ ] Markdown streaming optimization
-  - [ ] Profile streaming markdown cost before changing UX.
+- [x] Markdown streaming optimization
+  - [x] Profile streaming markdown cost before changing UX.
   - [x] Consider plain-text/high-frequency streaming fallback with markdown render after idle.
   - [x] Keep code highlighting/cache behavior intact.
 - [x] Git panel active-section splitting

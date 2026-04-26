@@ -279,6 +279,12 @@ function getCodeBlockChild(children: React.ReactNode) {
 }
 
 const STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD = 1200
+const STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS = 16
+
+function shouldLogMarkdownProfile() {
+  if (typeof window === "undefined") return false
+  return window.localStorage.getItem("pi-web-profile-markdown") === "1"
+}
 
 const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming = false,
@@ -289,6 +295,22 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
 }) {
   const useStreamingPlainText =
     streaming && text.length >= STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD
+  const renderStartedAt =
+    typeof performance !== "undefined" ? performance.now() : 0
+
+  React.useLayoutEffect(() => {
+    if (!streaming || useStreamingPlainText || !shouldLogMarkdownProfile()) {
+      return
+    }
+
+    const duration = performance.now() - renderStartedAt
+    if (duration < STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS) return
+
+    console.debug("[pi-web] streaming markdown render", {
+      durationMs: Math.round(duration),
+      length: text.length,
+    })
+  })
 
   if (useStreamingPlainText) {
     return (
