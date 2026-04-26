@@ -2755,6 +2755,7 @@ export class PiWebRuntime {
       images?: unknown
       streamingBehavior?: unknown
       pendingId?: unknown
+      thinkingLevel?: unknown
     }
   ) {
     const { context, activeEntry } = await this.resolveRequest(request)
@@ -2762,6 +2763,19 @@ export class PiWebRuntime {
     const images = normalizePromptImages(body.images)
     if (!message.trim() && images.length === 0) {
       throw new Error("message or image is required")
+    }
+
+    const requestedThinkingLevel =
+      typeof body.thinkingLevel === "string" && body.thinkingLevel
+        ? body.thinkingLevel
+        : undefined
+    if (
+      requestedThinkingLevel &&
+      !VALID_THINKING_LEVELS.has(requestedThinkingLevel)
+    ) {
+      throw new Error(
+        `Invalid thinking level: ${requestedThinkingLevel || "(empty)"}`
+      )
     }
 
     const streamingBehavior =
@@ -2773,6 +2787,13 @@ export class PiWebRuntime {
     const clientPendingId = normalizeClientPendingId(body.pendingId)
 
     return await this.runSerializedPromptRequest(activeEntry, async () => {
+      if (
+        requestedThinkingLevel &&
+        activeEntry.session.thinkingLevel !== requestedThinkingLevel
+      ) {
+        activeEntry.session.setThinkingLevel(requestedThinkingLevel)
+      }
+
       const promptOptions = images.length > 0 ? { images } : undefined
       const promotedDraft = this.isDraftEntry(activeEntry)
       const isAlreadyStreaming = this.getEntryStreamingState(activeEntry)

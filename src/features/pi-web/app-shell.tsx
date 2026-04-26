@@ -4138,6 +4138,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     activeSessionId,
     sessionStateRef,
+    setSessionState,
     setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor:
       sidebarStore.setSidebarSessionSelectionAnchor,

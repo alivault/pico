@@ -14,6 +14,7 @@ export const Route = createFileRoute("/api/prompt")({
             images?: unknown
             streamingBehavior?: unknown
             pendingId?: unknown
+            thinkingLevel?: unknown
           }>(request)
           return jsonResponse(await getPiWebRuntime().prompt(request, body))
         } catch (error) {

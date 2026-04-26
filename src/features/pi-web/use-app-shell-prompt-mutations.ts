@@ -581,11 +581,13 @@ export function useAppShellPromptMutations({
       images,
       streamingBehavior,
       pendingId,
+      thinkingLevel,
     }: {
       message: string
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
       pendingId?: string
+      thinkingLevel?: string
     }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -604,6 +606,7 @@ export function useAppShellPromptMutations({
             images,
             streamingBehavior,
             pendingId,
+            thinkingLevel,
           }),
         }
       )
@@ -678,6 +681,7 @@ export function useAppShellPromptMutations({
           images: submittedImages,
           streamingBehavior: normalizedStreamingBehavior,
           pendingId: queuedPendingId,
+          thinkingLevel: sessionStateRef.current.thinkingLevel,
         })
         if (
           queuedPendingId &&
@@ -733,6 +737,7 @@ export function useAppShellPromptMutations({
       lastSyncedEditorTextRef,
       promptMutation,
       queuePendingDraftPrompt,
+      sessionStateRef,
       removeOptimisticPendingMessage,
       removeOptimisticUserMessage,
       replaceComposerDraft,
@@ -773,6 +778,7 @@ export function useAppShellPromptMutations({
           images: followUp.images,
           streamingBehavior: followUp.streamingBehavior,
           pendingId: followUp.optimisticId,
+          thinkingLevel: sessionStateRef.current.thinkingLevel,
         })
       } catch (error) {
         for (const unsentFollowUp of followUps.slice(index)) {
@@ -796,6 +802,7 @@ export function useAppShellPromptMutations({
     composerTextRef,
     promptMutation,
     removeOptimisticUserMessage,
+    sessionStateRef,
     replaceComposerDraft,
     setComposerImages,
     setPendingDraftFollowUps,

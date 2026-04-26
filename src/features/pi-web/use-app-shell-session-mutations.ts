@@ -7,15 +7,43 @@ import type {
   DeleteSessionResponse,
   RenameSessionResponse,
   SessionListEntry,
+  ThinkingResponse,
 } from "@/lib/pi-web-api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
 import { sessionListEntryKey } from "@/lib/pi-web"
 
+type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
+
+type ThinkingLevelSessionTarget = {
+  cwd: string | undefined
+  draft: boolean
+  sessionFile: string | undefined
+  sessionId: string | undefined
+  sessionKey: string | undefined
+}
+
+function sameThinkingLevelSessionTarget(
+  target: ThinkingLevelSessionTarget,
+  state: SessionState
+) {
+  if (target.sessionKey || state.sessionKey) {
+    return target.sessionKey === state.sessionKey
+  }
+  if (target.sessionId || state.sessionId) {
+    return target.sessionId === state.sessionId
+  }
+  if (target.sessionFile || state.sessionFile) {
+    return target.sessionFile === state.sessionFile
+  }
+  return target.cwd === state.cwd && target.draft === state.draft
+}
+
 type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
   sessionStateRef: React.MutableRefObject<SessionState>
+  setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -27,10 +55,24 @@ export function useAppShellSessionMutations({
   viewerContextId,
   activeSessionId,
   sessionStateRef,
+  setSessionState,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
   setRunningSlashCommand,
 }: UseAppShellSessionMutationsOptions) {
+  const thinkingLevelRequestIdRef = React.useRef(0)
+  const thinkingLevelSyncTimerRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
+
+  React.useEffect(() => {
+    return () => {
+      if (thinkingLevelSyncTimerRef.current) {
+        clearTimeout(thinkingLevelSyncTimerRef.current)
+      }
+    }
+  }, [])
+
   const setModelMutation = useMutation({
     mutationFn: async ({
       provider,
@@ -79,7 +121,7 @@ export function useAppShellSessionMutations({
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson(
+      return await fetchJson<ThinkingResponseData>(
         buildRequestUrl("/api/thinking", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -96,17 +138,88 @@ export function useAppShellSessionMutations({
   const setThinkingLevel = React.useCallback(
     async (level: string) => {
       if (!viewerContextId) return
-      try {
-        await setThinkingLevelMutation.mutateAsync(level)
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update thinking level"
-        )
+
+      const requestId = thinkingLevelRequestIdRef.current + 1
+      thinkingLevelRequestIdRef.current = requestId
+      const previousState = sessionStateRef.current
+      const previousLevel = previousState.thinkingLevel
+      const previousAvailableThinkingLevels =
+        previousState.availableThinkingLevels
+      const targetSession = {
+        cwd: previousState.cwd,
+        draft: previousState.draft,
+        sessionFile: previousState.sessionFile,
+        sessionId: previousState.sessionId,
+        sessionKey: previousState.sessionKey,
+      } satisfies ThinkingLevelSessionTarget
+
+      if (previousLevel !== level) {
+        setSessionState({ ...previousState, thinkingLevel: level })
       }
+
+      if (thinkingLevelSyncTimerRef.current) {
+        clearTimeout(thinkingLevelSyncTimerRef.current)
+      }
+
+      thinkingLevelSyncTimerRef.current = setTimeout(() => {
+        thinkingLevelSyncTimerRef.current = null
+        void (async () => {
+          try {
+            const response = await setThinkingLevelMutation.mutateAsync(level)
+            if (thinkingLevelRequestIdRef.current !== requestId) return
+
+            const currentState = sessionStateRef.current
+            if (!sameThinkingLevelSessionTarget(targetSession, currentState)) {
+              return
+            }
+
+            const nextLevel = response.thinkingLevel || level
+            const nextAvailableThinkingLevels =
+              response.availableThinkingLevels.length > 0
+                ? response.availableThinkingLevels
+                : currentState.availableThinkingLevels
+            if (
+              currentState.thinkingLevel === nextLevel &&
+              currentState.availableThinkingLevels ===
+                nextAvailableThinkingLevels
+            ) {
+              return
+            }
+
+            setSessionState({
+              ...currentState,
+              thinkingLevel: nextLevel,
+              availableThinkingLevels: nextAvailableThinkingLevels,
+            })
+          } catch (error) {
+            if (thinkingLevelRequestIdRef.current !== requestId) return
+
+            const currentState = sessionStateRef.current
+            if (
+              sameThinkingLevelSessionTarget(targetSession, currentState) &&
+              currentState.thinkingLevel === level
+            ) {
+              setSessionState({
+                ...currentState,
+                thinkingLevel: previousLevel,
+                availableThinkingLevels: previousAvailableThinkingLevels,
+              })
+            }
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Failed to update thinking level"
+            )
+          }
+        })()
+      }, 100)
     },
-    [setThinkingLevelMutation, viewerContextId]
+    [
+      sessionStateRef,
+      setSessionState,
+      setThinkingLevelMutation,
+      viewerContextId,
+    ]
   )
 
   const cycleThinkingLevel = React.useCallback(
