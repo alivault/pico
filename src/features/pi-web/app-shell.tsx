@@ -728,8 +728,15 @@ function computeAppShellSidebarDerived(
     .filter(Boolean)
     .sort()
     .join("\n")
+  const discoveredDirectoryVersion = directoryStates
+    .map(
+      (directoryState) =>
+        `${directoryState.path}:${directoryState.revision}:${directoryState.totalCount}`
+    )
+    .join("\n")
   const workspaceVersion = [
     baseSidebarDirectories.join("\n"),
+    discoveredDirectoryVersion,
     state.selectedSidebarSessionKeys.join("\n"),
     sidebarUnreadVersion,
   ].join("\0")
