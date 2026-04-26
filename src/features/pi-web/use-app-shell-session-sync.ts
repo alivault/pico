@@ -329,7 +329,9 @@ function visibleConversationSignature(
       .map((block) => visibleAssistantBlockKey(block, options))
       .filter(Boolean)
     if (blockKeys.length === 0) continue
-    parts.push(`assistant:${item.itemKey || ""}:${blockKeys.join("|")}`)
+    parts.push(
+      `assistant:${item.itemKey || ""}:${item.streaming ? "1" : "0"}:${blockKeys.join("|")}`
+    )
   }
 
   return parts.join("\n")
