@@ -80,6 +80,7 @@ type UseAppShellSessionSyncOptions = {
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => void
   >
   pendingRouteSessionIdRef: React.MutableRefObject<string | undefined>
+  pendingRouteSessionPathRef: React.MutableRefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
   setHiddenThinkingPreview: (value: string) => void
@@ -410,6 +411,7 @@ export function useAppShellSessionSync({
   replaceComposerDraftRef,
   handleSelectSessionRef,
   pendingRouteSessionIdRef,
+  pendingRouteSessionPathRef,
   setSessionState,
   setConversationItems,
   setHiddenThinkingPreview,
@@ -469,18 +471,28 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     if (!sessionId) {
       pendingRouteSessionIdRef.current = undefined
+      pendingRouteSessionPathRef.current = undefined
       return
     }
 
     if (sessionId === syncedSessionId) {
       if (pendingRouteSessionIdRef.current === sessionId) {
         pendingRouteSessionIdRef.current = undefined
+        pendingRouteSessionPathRef.current = undefined
       }
       return
     }
 
+    if (pendingRouteSessionIdRef.current !== sessionId) {
+      pendingRouteSessionPathRef.current = undefined
+    }
     pendingRouteSessionIdRef.current = sessionId
-  }, [pendingRouteSessionIdRef, sessionId, syncedSessionId])
+  }, [
+    pendingRouteSessionIdRef,
+    pendingRouteSessionPathRef,
+    sessionId,
+    syncedSessionId,
+  ])
 
   React.useEffect(() => {
     if (!viewerContextId) return
@@ -672,6 +684,21 @@ export function useAppShellSessionSync({
         }
 
         if (sessionChanged) {
+          setSessionsEvent((current) => {
+            if (!current) return current
+            const nextSessionsEvent = {
+              ...current,
+              activeSessionId: nextState.sessionId,
+              activeSessionKey: nextState.sessionKey,
+              activeSessionPath: nextState.sessionFile,
+            }
+            return sameSessionsEvent(current, nextSessionsEvent)
+              ? current
+              : nextSessionsEvent
+          })
+        }
+
+        if (sessionChanged) {
           setComposerImages((current) => (current.length === 0 ? current : []))
         }
 
@@ -827,11 +854,15 @@ export function useAppShellSessionSync({
     if (sessionId === syncedSessionIdRef.current) return
 
     const abortController = new AbortController()
+    const sessionPath = pendingRouteSessionPathRef.current
 
     void fetchJson<SimpleOkResponse>(
       buildRequestUrl("/api/session/select", {
         contextId: viewerContextId,
         sessionId,
+        searchParams: {
+          sessionPath,
+        },
       }),
       {
         method: "POST",
@@ -847,7 +878,12 @@ export function useAppShellSessionSync({
     return () => {
       abortController.abort()
     }
-  }, [draftSessionLoadingOwnerKey, viewerContextId, sessionId])
+  }, [
+    draftSessionLoadingOwnerKey,
+    pendingRouteSessionPathRef,
+    viewerContextId,
+    sessionId,
+  ])
 
   React.useEffect(() => {
     if (syncedSessionDraft || !syncedSessionId) return
@@ -856,6 +892,7 @@ export function useAppShellSessionSync({
     if (pendingRouteSessionId) {
       if (syncedSessionId === pendingRouteSessionId) {
         pendingRouteSessionIdRef.current = undefined
+        pendingRouteSessionPathRef.current = undefined
       }
       return
     }
@@ -866,6 +903,7 @@ export function useAppShellSessionSync({
   }, [
     handleSelectSessionRef,
     pendingRouteSessionIdRef,
+    pendingRouteSessionPathRef,
     sessionId,
     syncedSessionDraft,
     syncedSessionId,

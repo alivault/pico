@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { stat, unlink } from "node:fs/promises"
 import { resolve as resolvePath } from "node:path"
+import { performance } from "node:perf_hooks"
 
 import type {
   DirectoryState,
@@ -95,6 +96,38 @@ const SESSION_HISTORY_PAGE_LIMIT_DEFAULT = 50
 const SESSION_HISTORY_PAGE_LIMIT_MAX = 200
 const SESSION_NAME_MAX_LENGTH = 48
 const HEARTBEAT_INTERVAL_MS = 20_000
+const SESSION_INDEX_CACHE_TTL_MS = 5_000
+const SESSION_LOAD_DEBUG_ENV_KEYS = [
+  "PI_WEB_DEBUG_SESSION_LOAD",
+  "PI_WEB_DEBUG_SESSIONS",
+  "PI_WEB_DEBUG",
+]
+
+function isTruthyEnvValue(value: string | undefined) {
+  return /^(1|true|yes|on)$/i.test(value ?? "")
+}
+
+function isSessionLoadDebugEnabled() {
+  return SESSION_LOAD_DEBUG_ENV_KEYS.some((key) =>
+    isTruthyEnvValue(process.env[key])
+  )
+}
+
+function roundedDurationMs(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10
+}
+
+function safeErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function debugJson(details: Record<string, unknown>) {
+  try {
+    return JSON.stringify(details)
+  } catch {
+    return JSON.stringify({ details: "[unserializable]" })
+  }
+}
 
 const identityTheme = {
   fg: (_color: unknown, text: string) => text,
@@ -550,6 +583,11 @@ export class PiWebRuntime {
   private readonly gitWatchManager = new GitWatchManager((change) => {
     void this.handleGitWatchChange(change)
   })
+  private sessionIndexCache?: {
+    expiresAt: number
+    entries: Array<SessionListInfoLike>
+  }
+  private sessionIndexPromise?: Promise<Array<SessionListInfoLike>>
   private sdkPromise?: Promise<PiSdkLike>
   private heartbeat: NodeJS.Timeout
   private highlightLoadErrorLogged = false
@@ -566,8 +604,73 @@ export class PiWebRuntime {
   }
 
   private async getSdk() {
-    this.sdkPromise ??= loadPiSdk().then((sdk) => sdk as unknown as PiSdkLike)
-    return await this.sdkPromise
+    if (this.sdkPromise) return await this.sdkPromise
+
+    const startedAt = performance.now()
+    this.logSessionLoadDebug("sdk_load:start")
+    this.sdkPromise = loadPiSdk().then((sdk) => sdk as unknown as PiSdkLike)
+    try {
+      const sdk = await this.sdkPromise
+      this.logSessionLoadDebug("sdk_load:done", {
+        durationMs: roundedDurationMs(startedAt),
+      })
+      return sdk
+    } catch (error) {
+      this.logSessionLoadDebug("sdk_load:error", {
+        durationMs: roundedDurationMs(startedAt),
+        error: safeErrorMessage(error),
+      })
+      throw error
+    }
+  }
+
+  private logSessionLoadDebug(
+    event: string,
+    details: Record<string, unknown> = {}
+  ) {
+    if (!isSessionLoadDebugEnabled()) return
+    const suffix =
+      Object.keys(details).length > 0 ? ` ${debugJson(details)}` : ""
+    console.log(`[pi-web:session-load] ${event}${suffix}`)
+  }
+
+  private async timeSessionLoad<T>(
+    event: string,
+    details: Record<string, unknown>,
+    action: () => Promise<T>
+  ) {
+    if (!isSessionLoadDebugEnabled()) return await action()
+
+    const startedAt = performance.now()
+    this.logSessionLoadDebug(`${event}:start`, details)
+    try {
+      const result = await action()
+      this.logSessionLoadDebug(`${event}:done`, {
+        ...details,
+        durationMs: roundedDurationMs(startedAt),
+      })
+      return result
+    } catch (error) {
+      this.logSessionLoadDebug(`${event}:error`, {
+        ...details,
+        durationMs: roundedDurationMs(startedAt),
+        error: safeErrorMessage(error),
+      })
+      throw error
+    }
+  }
+
+  private sessionDebugDetails(entry: SessionEntry | undefined) {
+    if (!entry) return {}
+    return {
+      key: entry.key,
+      sessionId: entry.session.sessionId,
+      sessionFile: entry.session.sessionFile,
+      cwd: entry.cwd,
+      draft: entry.draft,
+      streaming: this.getEntryStreamingState(entry),
+      messageCount: entry.session.messages.length,
+    }
   }
 
   private logRuntimeDiagnostics(
@@ -591,26 +694,45 @@ export class PiWebRuntime {
 
   private async getServicesForCwd(cwd: string) {
     const cached = this.servicesByCwd.get(cwd)
-    if (cached) return cached
+    if (cached) {
+      this.logSessionLoadDebug("services_for_cwd:cache_hit", { cwd })
+      return cached
+    }
 
-    const sdk = await this.getSdk()
-    const agentDir = sdk.getAgentDir()
-    const settingsManager = makeSelfContainedSettingsManager(
-      sdk.SettingsManager.create(cwd, agentDir)
-    ) as SettingsManagerLike
+    return await this.timeSessionLoad(
+      "services_for_cwd:create",
+      { cwd },
+      async () => {
+        const sdk = await this.getSdk()
+        const agentDir = sdk.getAgentDir()
+        const settingsStartedAt = performance.now()
+        const settingsManager = makeSelfContainedSettingsManager(
+          sdk.SettingsManager.create(cwd, agentDir)
+        ) as SettingsManagerLike
+        this.logSessionLoadDebug("settings_manager:create", {
+          cwd,
+          durationMs: roundedDurationMs(settingsStartedAt),
+        })
 
-    const services = await sdk.createAgentSessionServices({
-      cwd,
-      agentDir,
-      settingsManager,
-      resourceLoaderOptions: {
-        noExtensions: true,
-      },
-    })
+        const servicesStartedAt = performance.now()
+        const services = await sdk.createAgentSessionServices({
+          cwd,
+          agentDir,
+          settingsManager,
+          resourceLoaderOptions: {
+            noExtensions: true,
+          },
+        })
+        this.logSessionLoadDebug("agent_session_services:create", {
+          cwd,
+          durationMs: roundedDurationMs(servicesStartedAt),
+        })
 
-    this.logRuntimeDiagnostics(services.diagnostics)
-    this.servicesByCwd.set(cwd, services)
-    return services
+        this.logRuntimeDiagnostics(services.diagnostics)
+        this.servicesByCwd.set(cwd, services)
+        return services
+      }
+    )
   }
 
   private async createSessionRuntime(
@@ -619,29 +741,46 @@ export class PiWebRuntime {
       sessionStartEvent?: SessionStartEventLike
     }
   ) {
-    const sdk = await this.getSdk()
-    const agentDir = sdk.getAgentDir()
     const cwd = sessionManager.getCwd()
+    const reason = options?.sessionStartEvent?.reason
 
-    return await sdk.createAgentSessionRuntime(
-      async ({ cwd: runtimeCwd, sessionManager, sessionStartEvent }) => {
-        const services = await this.getServicesForCwd(runtimeCwd)
-        const result = await sdk.createAgentSessionFromServices({
-          services,
-          sessionManager,
-          sessionStartEvent,
-        })
-        return {
-          ...result,
-          services,
-          diagnostics: services.diagnostics ?? [],
-        }
-      },
-      {
-        cwd,
-        agentDir,
-        sessionManager,
-        sessionStartEvent: options?.sessionStartEvent,
+    return await this.timeSessionLoad(
+      "session_runtime:create",
+      { cwd, reason },
+      async () => {
+        const sdk = await this.getSdk()
+        const agentDir = sdk.getAgentDir()
+
+        return await sdk.createAgentSessionRuntime(
+          async ({ cwd: runtimeCwd, sessionManager, sessionStartEvent }) => {
+            const services = await this.getServicesForCwd(runtimeCwd)
+            const sessionStartedAt = performance.now()
+            const result = await sdk.createAgentSessionFromServices({
+              services,
+              sessionManager,
+              sessionStartEvent,
+            })
+            this.logSessionLoadDebug("agent_session_from_services:create", {
+              cwd: runtimeCwd,
+              reason: sessionStartEvent?.reason,
+              durationMs: roundedDurationMs(sessionStartedAt),
+              messageCount: result.session?.messages.length,
+              sessionId: result.session?.sessionId,
+              sessionFile: result.session?.sessionFile,
+            })
+            return {
+              ...result,
+              services,
+              diagnostics: services.diagnostics ?? [],
+            }
+          },
+          {
+            cwd,
+            agentDir,
+            sessionManager,
+            sessionStartEvent: options?.sessionStartEvent,
+          }
+        )
       }
     )
   }
@@ -892,14 +1031,25 @@ export class PiWebRuntime {
     }
   }
 
-  private async listSessionIndexEntries() {
+  private invalidateSessionIndexCache() {
+    this.sessionIndexCache = undefined
+  }
+
+  private async readSessionIndexEntries() {
     const sdk = await this.getSdk()
     try {
-      const sessions = (await sdk.SessionManager.listAll()).filter(
+      const listStartedAt = performance.now()
+      const allSessions = await sdk.SessionManager.listAll()
+      this.logSessionLoadDebug("session_index:list_all", {
+        durationMs: roundedDurationMs(listStartedAt),
+        totalCount: allSessions.length,
+      })
+
+      const sessions = allSessions.filter(
         (entry) => (entry.messageCount ?? 0) > 0
       )
-
-      return await Promise.all(
+      const timestampsStartedAt = performance.now()
+      const withTimestamps = await Promise.all(
         sessions.map(async (entry) => ({
           ...entry,
           lastUserMessageAt: entry.path
@@ -908,9 +1058,46 @@ export class PiWebRuntime {
             : entry.lastUserMessageAt,
         }))
       )
+      this.logSessionLoadDebug("session_index:last_user_timestamps", {
+        durationMs: roundedDurationMs(timestampsStartedAt),
+        sessionCount: sessions.length,
+      })
+      this.sessionIndexCache = {
+        entries: withTimestamps,
+        expiresAt: Date.now() + SESSION_INDEX_CACHE_TTL_MS,
+      }
+      return withTimestamps
     } catch (error) {
       console.error("[pi-web] failed to list sessions:", error)
       return []
+    }
+  }
+
+  private async listSessionIndexEntries() {
+    const cached = this.sessionIndexCache
+    if (cached && cached.expiresAt > Date.now()) {
+      this.logSessionLoadDebug("session_index:list:cache_hit", {
+        sessionCount: cached.entries.length,
+        ttlMs: cached.expiresAt - Date.now(),
+      })
+      return cached.entries
+    }
+
+    if (this.sessionIndexPromise) {
+      this.logSessionLoadDebug("session_index:list:in_flight_hit")
+      return await this.sessionIndexPromise
+    }
+
+    const promise = this.timeSessionLoad("session_index:list", {}, async () =>
+      this.readSessionIndexEntries()
+    )
+    this.sessionIndexPromise = promise
+    try {
+      return await promise
+    } finally {
+      if (this.sessionIndexPromise === promise) {
+        this.sessionIndexPromise = undefined
+      }
     }
   }
 
@@ -1072,55 +1259,71 @@ export class PiWebRuntime {
     context: ContextState,
     options?: { includeBootstrapIndexes?: boolean }
   ) {
-    const allSessions = await this.listSessionIndexEntries()
-    const activeEntry = this.getActiveEntry(context)
-    const directories = this.listKnownDirectories(allSessions)
-    const activeDirectory = activeEntry?.cwd?.trim() || ""
-    const bootstrapDirectories = options?.includeBootstrapIndexes
-      ? normalizeRequestedDirectories(context.sidebarBootstrapDirectories)
-      : []
-    const payloadIndexDirectories = normalizeRequestedDirectories([
-      ...bootstrapDirectories,
-      activeDirectory,
-    ])
-    const allDirectories = normalizeRequestedDirectories([
-      ...directories,
-      ...payloadIndexDirectories,
-    ])
-    const entriesByDirectory = await this.collectDirectoryEntries(
-      allSessions,
-      allDirectories
-    )
-    const streamingPaths = this.buildStreamingPaths()
-    const directoryIndexes =
-      payloadIndexDirectories.length > 0
-        ? Object.fromEntries(
-            payloadIndexDirectories.map((directoryPath) => [
-              directoryPath,
-              this.createDirectoryIndexPayload(
-                directoryPath,
-                entriesByDirectory.get(directoryPath) ?? [],
-                context,
-                streamingPaths
-              ),
-            ])
-          )
-        : undefined
-
-    return {
-      type: "sessions",
-      directories,
-      directoryStates: directories.map((directoryPath) =>
-        this.createDirectoryStatePayload(
-          directoryPath,
-          entriesByDirectory.get(directoryPath) ?? []
+    return await this.timeSessionLoad(
+      "sessions_payload:build",
+      {
+        contextId: context.id,
+        includeBootstrapIndexes: Boolean(options?.includeBootstrapIndexes),
+      },
+      async () => {
+        const allSessions = await this.listSessionIndexEntries()
+        const activeEntry = this.getActiveEntry(context)
+        const directories = this.listKnownDirectories(allSessions)
+        const activeDirectory = activeEntry?.cwd?.trim() || ""
+        const bootstrapDirectories = options?.includeBootstrapIndexes
+          ? normalizeRequestedDirectories(context.sidebarBootstrapDirectories)
+          : []
+        const payloadIndexDirectories = normalizeRequestedDirectories([
+          ...bootstrapDirectories,
+          activeDirectory,
+        ])
+        const allDirectories = normalizeRequestedDirectories([
+          ...directories,
+          ...payloadIndexDirectories,
+        ])
+        const collectStartedAt = performance.now()
+        const entriesByDirectory = await this.collectDirectoryEntries(
+          allSessions,
+          allDirectories
         )
-      ),
-      ...(directoryIndexes ? { directoryIndexes } : {}),
-      activeSessionPath: activeEntry?.session.sessionFile,
-      activeSessionId: activeEntry?.session.sessionId,
-      activeSessionKey: activeEntry?.key,
-    }
+        this.logSessionLoadDebug("sessions_payload:collect_directories", {
+          contextId: context.id,
+          durationMs: roundedDurationMs(collectStartedAt),
+          directoryCount: allDirectories.length,
+          payloadIndexDirectoryCount: payloadIndexDirectories.length,
+        })
+        const streamingPaths = this.buildStreamingPaths()
+        const directoryIndexes =
+          payloadIndexDirectories.length > 0
+            ? Object.fromEntries(
+                payloadIndexDirectories.map((directoryPath) => [
+                  directoryPath,
+                  this.createDirectoryIndexPayload(
+                    directoryPath,
+                    entriesByDirectory.get(directoryPath) ?? [],
+                    context,
+                    streamingPaths
+                  ),
+                ])
+              )
+            : undefined
+
+        return {
+          type: "sessions",
+          directories,
+          directoryStates: directories.map((directoryPath) =>
+            this.createDirectoryStatePayload(
+              directoryPath,
+              entriesByDirectory.get(directoryPath) ?? []
+            )
+          ),
+          ...(directoryIndexes ? { directoryIndexes } : {}),
+          activeSessionPath: activeEntry?.session.sessionFile,
+          activeSessionId: activeEntry?.session.sessionId,
+          activeSessionKey: activeEntry?.key,
+        }
+      }
+    )
   }
 
   async listDirectorySessions(
@@ -1221,10 +1424,13 @@ export class PiWebRuntime {
     request: Request,
     options?: { before?: number; limit?: number }
   ) {
+    const startedAt = performance.now()
     const { activeEntry } = await this.resolveRequest(request)
+    const sanitizeStartedAt = performance.now()
     const sanitizedMessages = activeEntry.session.messages.map((message) =>
       sanitizeSessionMessage(message)
     )
+    const sanitizeDurationMs = roundedDurationMs(sanitizeStartedAt)
     const totalCount = sanitizedMessages.length
     const safeLimit =
       Number.isInteger(options?.limit) && (options?.limit ?? 0) > 0
@@ -1235,6 +1441,19 @@ export class PiWebRuntime {
         ? Math.min(Number(options?.before), totalCount)
         : totalCount
     const offset = Math.max(0, safeBefore - safeLimit)
+    const messages = sanitizedMessages.slice(offset, safeBefore)
+
+    this.logSessionLoadDebug("session_history:load", {
+      before: options?.before,
+      requestedLimit: options?.limit,
+      offset,
+      limit: safeLimit,
+      totalCount,
+      returnedCount: messages.length,
+      sanitizeDurationMs,
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(activeEntry),
+    })
 
     return {
       ok: true,
@@ -1242,7 +1461,7 @@ export class PiWebRuntime {
       limit: safeLimit,
       totalCount,
       hasMoreBefore: offset > 0,
-      messages: sanitizedMessages.slice(offset, safeBefore),
+      messages,
     }
   }
 
@@ -1258,14 +1477,51 @@ export class PiWebRuntime {
     payload: StateSyncPayload,
     options?: { forceFull?: boolean }
   ) {
+    const debug = isSessionLoadDebugEnabled()
+    const startedAt = performance.now()
+    const patchStartedAt = performance.now()
     const nextPayload = options?.forceFull
       ? payload
       : createStateSyncPatch(client.lastStateSyncSnapshot, payload)
-    if (!nextPayload) return false
+    const patchDurationMs = roundedDurationMs(patchStartedAt)
+    if (!nextPayload) {
+      this.logSessionLoadDebug("state_sync:client_noop", {
+        contextId: context.id,
+        clientId: client.id,
+        sessionKey: payload.sessionKey,
+        patchDurationMs,
+      })
+      return false
+    }
 
+    const sendStartedAt = performance.now()
     const sent = this.sendPayloadToClient(context, client, nextPayload)
+    const sendDurationMs = roundedDurationMs(sendStartedAt)
+    let snapshotDurationMs: number | undefined
     if (sent) {
+      const snapshotStartedAt = performance.now()
       client.lastStateSyncSnapshot = createStateSyncSnapshot(payload)
+      snapshotDurationMs = roundedDurationMs(snapshotStartedAt)
+    }
+    if (debug) {
+      this.logSessionLoadDebug("state_sync:client_send", {
+        contextId: context.id,
+        clientId: client.id,
+        sessionKey: payload.sessionKey,
+        forceFull: Boolean(options?.forceFull),
+        sent,
+        patchDurationMs,
+        sendDurationMs,
+        snapshotDurationMs,
+        durationMs: roundedDurationMs(startedAt),
+        fieldCount: Object.keys(nextPayload).length,
+        includesMessages: Object.prototype.hasOwnProperty.call(
+          nextPayload,
+          "messages"
+        ),
+        messageCount: nextPayload.messages?.length,
+        approxBytes: JSON.stringify(nextPayload).length,
+      })
     }
     return sent
   }
@@ -1285,14 +1541,50 @@ export class PiWebRuntime {
     const entry = this.getActiveEntry(context)
     if (!entry) return
 
+    const startedAt = performance.now()
+    const payloadStartedAt = performance.now()
     const payload = this.currentStatePayload(entry)
+    const payloadDurationMs = roundedDurationMs(payloadStartedAt)
+    let sentCount = 0
     for (const client of context.clients) {
-      this.sendStatePayloadToClient(context, client, payload, options)
+      if (this.sendStatePayloadToClient(context, client, payload, options)) {
+        sentCount += 1
+      }
     }
+    this.logSessionLoadDebug("state_sync:context_send", {
+      contextId: context.id,
+      clientCount: context.clients.size,
+      sentCount,
+      forceFull: Boolean(options?.forceFull),
+      payloadDurationMs,
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(entry),
+    })
   }
 
   private async sendSessionsToContext(context: ContextState) {
-    this.sendToContext(context, await this.listSessionsPayload(context))
+    if (context.clients.size === 0) {
+      this.logSessionLoadDebug("sessions_payload:context_skip_no_clients", {
+        contextId: context.id,
+      })
+      return
+    }
+
+    const startedAt = performance.now()
+    const payload = await this.listSessionsPayload(context)
+    this.sendToContext(context, payload)
+    this.logSessionLoadDebug("sessions_payload:context_send", {
+      contextId: context.id,
+      clientCount: context.clients.size,
+      directoryCount: payload.directories.length,
+      directoryStateCount: payload.directoryStates.length,
+      activeSessionId: payload.activeSessionId,
+      activeSessionPath: payload.activeSessionPath,
+      durationMs: roundedDurationMs(startedAt),
+      approxBytes: isSessionLoadDebugEnabled()
+        ? JSON.stringify(payload).length
+        : undefined,
+    })
   }
 
   private sessionStatusPayload(
@@ -1325,10 +1617,16 @@ export class PiWebRuntime {
   }
 
   private async broadcastSessionsAll() {
+    const connectedContexts = [...this.contexts.values()].filter(
+      (context) => context.clients.size > 0
+    )
+    if (connectedContexts.length === 0) {
+      this.logSessionLoadDebug("sessions_payload:broadcast_skip_no_clients")
+      return
+    }
+
     await Promise.all(
-      [...this.contexts.values()].map((context) =>
-        this.sendSessionsToContext(context)
-      )
+      connectedContexts.map((context) => this.sendSessionsToContext(context))
     )
   }
 
@@ -1586,8 +1884,10 @@ export class PiWebRuntime {
   private async activateContextSession(
     context: ContextState,
     entry: SessionEntry,
-    options?: { notify?: boolean }
+    options?: { notify?: boolean; refreshSessions?: boolean }
   ) {
+    const previousActiveKey = context.activeKey
+    const startedAt = performance.now()
     await activateRuntimeContextSession({
       context,
       entry,
@@ -1598,16 +1898,36 @@ export class PiWebRuntime {
       getSessionPath: (sessionEntry) => this.getSessionPath(sessionEntry),
       sendStateToContext: (activeContext) =>
         this.sendStateToContext(activeContext),
-      sendSessionsToContext: async (activeContext) =>
-        await this.sendSessionsToContext(activeContext),
+      sendSessionsToContext: async (activeContext) => {
+        if (!options?.refreshSessions) {
+          this.logSessionLoadDebug("sessions_payload:activation_skip", {
+            contextId: activeContext.id,
+            reason: "active-session-only",
+          })
+          return
+        }
+        await this.sendSessionsToContext(activeContext)
+      },
       afterActiveChanged: async () =>
         await this.disposeUnreferencedSessionEntries(),
       notify: options?.notify,
     })
+    const statusStartedAt = performance.now()
     if (options?.notify !== false) {
       this.sendSessionStatusToContext(context, entry)
     }
+    const statusDurationMs = roundedDurationMs(statusStartedAt)
+    const gitStartedAt = performance.now()
     this.syncGitWatchDirectories()
+    this.logSessionLoadDebug("context_session:activate", {
+      contextId: context.id,
+      previousActiveKey,
+      notify: options?.notify !== false,
+      statusDurationMs,
+      gitWatchDurationMs: roundedDurationMs(gitStartedAt),
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(entry),
+    })
   }
 
   private async disposeDraftIfUnused(entry: SessionEntry | undefined) {
@@ -1632,16 +1952,40 @@ export class PiWebRuntime {
   }
 
   private async ensureSessionEntryById(sessionId: string) {
+    const startedAt = performance.now()
     for (const entry of this.sessionEntries.values()) {
       if (entry.session.sessionId === sessionId) {
+        this.logSessionLoadDebug("session_entry_by_id:cache_hit", {
+          sessionId,
+          durationMs: roundedDurationMs(startedAt),
+          ...this.sessionDebugDetails(entry),
+        })
         return entry
       }
     }
 
+    this.logSessionLoadDebug("session_entry_by_id:cache_miss", {
+      sessionId,
+      loadedEntryCount: this.sessionEntries.size,
+    })
     const sessions = await this.listSessionIndexEntries()
     const match = sessions.find((entry) => entry.id === sessionId && entry.path)
-    if (!match?.path) return undefined
-    return await this.ensureSessionEntryByPath(match.path)
+    if (!match?.path) {
+      this.logSessionLoadDebug("session_entry_by_id:not_found", {
+        sessionId,
+        durationMs: roundedDurationMs(startedAt),
+        indexEntryCount: sessions.length,
+      })
+      return undefined
+    }
+    const entry = await this.ensureSessionEntryByPath(match.path)
+    this.logSessionLoadDebug("session_entry_by_id:loaded", {
+      sessionId,
+      sessionPath: match.path,
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(entry),
+    })
+    return entry
   }
 
   private async getOrCreateDraftEntry(context: ContextState) {
@@ -1698,6 +2042,7 @@ export class PiWebRuntime {
     request: Request,
     options?: { notifyOnActivate?: boolean }
   ): Promise<ResolveRequestResult> {
+    const startedAt = performance.now()
     const url = new URL(request.url)
     const context = this.ensureContext(
       url.searchParams.get("context") || "default"
@@ -1706,10 +2051,34 @@ export class PiWebRuntime {
       url.searchParams.get("scope"),
       process.cwd()
     )
-    const activeEntry = await this.resolveRequestedEntry(url, context, {
+    this.logSessionLoadDebug("request_resolve:start", {
+      pathname: url.pathname,
+      contextId: context.id,
+      requestedSession: url.searchParams.get("session"),
+      requestedSessionKey: url.searchParams.get("sessionKey"),
       notifyOnActivate: options?.notifyOnActivate ?? false,
+      scope: context.sessionScope,
     })
-    return { url, context, activeEntry }
+    try {
+      const activeEntry = await this.resolveRequestedEntry(url, context, {
+        notifyOnActivate: options?.notifyOnActivate ?? false,
+      })
+      this.logSessionLoadDebug("request_resolve:done", {
+        pathname: url.pathname,
+        contextId: context.id,
+        durationMs: roundedDurationMs(startedAt),
+        ...this.sessionDebugDetails(activeEntry),
+      })
+      return { url, context, activeEntry }
+    } catch (error) {
+      this.logSessionLoadDebug("request_resolve:error", {
+        pathname: url.pathname,
+        contextId: context.id,
+        durationMs: roundedDurationMs(startedAt),
+        error: safeErrorMessage(error),
+      })
+      throw error
+    }
   }
 
   getBaseCwd(activeEntry: SessionEntry, context: ContextState) {
@@ -1724,6 +2093,7 @@ export class PiWebRuntime {
       draft?: boolean
     }
   ) {
+    const startedAt = performance.now()
     this.logRuntimeDiagnostics(runtime.diagnostics)
 
     const session = runtime.session
@@ -1732,7 +2102,15 @@ export class PiWebRuntime {
     const key = session.sessionFile ?? `ephemeral:${cryptoRandomId()}`
     const existing = this.sessionEntries.get(key)
     if (existing) {
+      const disposeStartedAt = performance.now()
       await runtime.dispose()
+      this.logSessionLoadDebug("session_entry:create_duplicate", {
+        key,
+        cwd,
+        disposeDurationMs: roundedDurationMs(disposeStartedAt),
+        durationMs: roundedDurationMs(startedAt),
+        ...this.sessionDebugDetails(existing),
+      })
       return existing
     }
 
@@ -1764,9 +2142,23 @@ export class PiWebRuntime {
     }
 
     this.sessionEntries.set(key, entry)
+    const metadataStartedAt = performance.now()
     this.installSessionMetadataSync(entry)
+    this.logSessionLoadDebug("session_entry:metadata_sync_installed", {
+      durationMs: roundedDurationMs(metadataStartedAt),
+      ...this.sessionDebugDetails(entry),
+    })
+    const autoNameStartedAt = performance.now()
     this.maybeAutoNameSession(entry)
+    this.logSessionLoadDebug("session_entry:auto_name_checked", {
+      durationMs: roundedDurationMs(autoNameStartedAt),
+      ...this.sessionDebugDetails(entry),
+    })
     await this.bindSessionEntry(entry)
+    this.logSessionLoadDebug("session_entry:create", {
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(entry),
+    })
     return entry
   }
 
@@ -1777,12 +2169,22 @@ export class PiWebRuntime {
       sessionStartEvent?: SessionStartEventLike
     }
   ) {
-    const runtime = await this.createSessionRuntime(sessionManager, {
-      sessionStartEvent: options?.sessionStartEvent,
-    })
-    return await this.createSessionEntryFromRuntime(runtime, {
-      draft: options?.draft,
-    })
+    return await this.timeSessionLoad(
+      "session_entry:create_from_manager",
+      {
+        cwd: sessionManager.getCwd(),
+        draft: Boolean(options?.draft),
+        reason: options?.sessionStartEvent?.reason,
+      },
+      async () => {
+        const runtime = await this.createSessionRuntime(sessionManager, {
+          sessionStartEvent: options?.sessionStartEvent,
+        })
+        return await this.createSessionEntryFromRuntime(runtime, {
+          draft: options?.draft,
+        })
+      }
+    )
   }
 
   async createNewSessionEntry(
@@ -1806,16 +2208,34 @@ export class PiWebRuntime {
 
   private async ensureSessionEntryByPath(sessionPath: string) {
     const existing = this.sessionEntries.get(sessionPath)
-    if (existing) return existing
+    if (existing) {
+      this.logSessionLoadDebug("session_entry_by_path:cache_hit", {
+        sessionPath,
+        ...this.sessionDebugDetails(existing),
+      })
+      return existing
+    }
 
-    const sdk = await this.getSdk()
-    const sessionManager = sdk.SessionManager.open(sessionPath)
-    return await this.createSessionEntry(sessionManager, {
-      sessionStartEvent: {
-        type: "session_start",
-        reason: "resume",
-      },
-    })
+    return await this.timeSessionLoad(
+      "session_entry_by_path:load",
+      { sessionPath },
+      async () => {
+        const sdk = await this.getSdk()
+        const openStartedAt = performance.now()
+        const sessionManager = sdk.SessionManager.open(sessionPath)
+        this.logSessionLoadDebug("session_manager:open", {
+          sessionPath,
+          cwd: sessionManager.getCwd(),
+          durationMs: roundedDurationMs(openStartedAt),
+        })
+        return await this.createSessionEntry(sessionManager, {
+          sessionStartEvent: {
+            type: "session_start",
+            reason: "resume",
+          },
+        })
+      }
+    )
   }
 
   private async cloneSessionManagerForEntry(entry: SessionEntry) {
@@ -2251,7 +2671,13 @@ export class PiWebRuntime {
   }
 
   private async bindSessionEntry(entry: SessionEntry) {
+    const startedAt = performance.now()
+    const unsubscribeStartedAt = performance.now()
     entry.unsubscribe?.()
+    this.logSessionLoadDebug("session_entry:unsubscribe_previous", {
+      durationMs: roundedDurationMs(unsubscribeStartedAt),
+      ...this.sessionDebugDetails(entry),
+    })
     const session = entry.session
 
     const viewers = () =>
@@ -2267,6 +2693,7 @@ export class PiWebRuntime {
         this.broadcastToViewers(sessionKey, payload),
     })
 
+    const bindStartedAt = performance.now()
     await session.bindExtensions({
       uiContext: {
         select: (
@@ -2503,8 +2930,21 @@ export class PiWebRuntime {
       },
     })
 
+    this.logSessionLoadDebug("session_entry:bind_extensions", {
+      durationMs: roundedDurationMs(bindStartedAt),
+      ...this.sessionDebugDetails(entry),
+    })
+    const subscribeStartedAt = performance.now()
     entry.unsubscribe = session.subscribe((event) => {
       void this.handleSessionEvent(entry, event)
+    })
+    this.logSessionLoadDebug("session_entry:subscribe", {
+      durationMs: roundedDurationMs(subscribeStartedAt),
+      ...this.sessionDebugDetails(entry),
+    })
+    this.logSessionLoadDebug("session_entry:bind", {
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(entry),
     })
   }
 
@@ -2659,10 +3099,18 @@ export class PiWebRuntime {
   }
 
   async createEventsResponse(request: Request) {
+    const startedAt = performance.now()
     const { url, context, activeEntry } = await this.resolveRequest(request)
     context.sidebarBootstrapDirectories = normalizeRequestedDirectories(
       url.searchParams.getAll("sidebarDirectory")
     )
+    this.logSessionLoadDebug("events_response:create", {
+      contextId: context.id,
+      sidebarBootstrapDirectoryCount:
+        context.sidebarBootstrapDirectories.length,
+      durationMs: roundedDurationMs(startedAt),
+      ...this.sessionDebugDetails(activeEntry),
+    })
     let cleanup: (() => void) | undefined
 
     const stream = new ReadableStream<Uint8Array>({
@@ -2678,7 +3126,9 @@ export class PiWebRuntime {
         this.writeRawToClient(context, client, ": connected\n\n")
 
         void (async () => {
+          const bootstrapStartedAt = performance.now()
           try {
+            const stateStartedAt = performance.now()
             this.sendStatePayloadToClient(
               context,
               client,
@@ -2687,7 +3137,14 @@ export class PiWebRuntime {
                 forceFull: true,
               }
             )
+            this.logSessionLoadDebug("events_response:bootstrap_state", {
+              contextId: context.id,
+              clientId: client.id,
+              durationMs: roundedDurationMs(stateStartedAt),
+              ...this.sessionDebugDetails(activeEntry),
+            })
             if (client.closed || request.signal.aborted) return
+            const sessionsStartedAt = performance.now()
             this.sendPayloadToClient(
               context,
               client,
@@ -2695,6 +3152,16 @@ export class PiWebRuntime {
                 includeBootstrapIndexes: true,
               })
             )
+            this.logSessionLoadDebug("events_response:bootstrap_sessions", {
+              contextId: context.id,
+              clientId: client.id,
+              durationMs: roundedDurationMs(sessionsStartedAt),
+            })
+            this.logSessionLoadDebug("events_response:bootstrap_done", {
+              contextId: context.id,
+              clientId: client.id,
+              durationMs: roundedDurationMs(bootstrapStartedAt),
+            })
           } catch (error) {
             if (client.closed || request.signal.aborted) return
             throw error
@@ -3048,20 +3515,69 @@ export class PiWebRuntime {
   }
 
   async selectSession(request: Request) {
-    const { url, context } = await this.resolveRequest(request)
+    const startedAt = performance.now()
+    const url = new URL(request.url)
     const requestedSessionId = url.searchParams.get("session")?.trim() || ""
+    const requestedSessionPath =
+      url.searchParams.get("sessionPath")?.trim() || ""
+    const context = this.ensureContext(
+      url.searchParams.get("context") || "default"
+    )
+    context.sessionScope = normalizeSessionScope(
+      url.searchParams.get("scope"),
+      process.cwd()
+    )
+    this.logSessionLoadDebug("select_session:start", {
+      requestedSessionId,
+      requestedSessionPath,
+      contextId: context.id,
+    })
 
-    if (!requestedSessionId) {
-      throw new Error("session is required")
+    try {
+      if (!requestedSessionId && !requestedSessionPath) {
+        throw new Error("session is required")
+      }
+
+      const ensureStartedAt = performance.now()
+      const nextEntry = requestedSessionPath
+        ? await this.ensureSessionEntryByPath(requestedSessionPath)
+        : await this.ensureSessionEntryById(requestedSessionId)
+      this.logSessionLoadDebug("select_session:ensure_entry", {
+        requestedSessionId,
+        requestedSessionPath,
+        durationMs: roundedDurationMs(ensureStartedAt),
+        found: Boolean(nextEntry),
+        via: requestedSessionPath ? "path" : "id",
+        ...this.sessionDebugDetails(nextEntry),
+      })
+      if (!nextEntry) {
+        throw new Error(`Unknown session: ${requestedSessionId}`)
+      }
+
+      const activateStartedAt = performance.now()
+      await this.activateContextSession(context, nextEntry)
+      this.logSessionLoadDebug("select_session:activate", {
+        requestedSessionId,
+        requestedSessionPath,
+        durationMs: roundedDurationMs(activateStartedAt),
+        ...this.sessionDebugDetails(nextEntry),
+      })
+      this.logSessionLoadDebug("select_session:done", {
+        requestedSessionId,
+        requestedSessionPath,
+        durationMs: roundedDurationMs(startedAt),
+        ...this.sessionDebugDetails(nextEntry),
+      })
+      return { ok: true }
+    } catch (error) {
+      this.logSessionLoadDebug("select_session:error", {
+        requestedSessionId,
+        requestedSessionPath,
+        durationMs: roundedDurationMs(startedAt),
+        error: safeErrorMessage(error),
+      })
+      throw error
     }
-
-    const nextEntry = await this.ensureSessionEntryById(requestedSessionId)
-    if (!nextEntry) {
-      throw new Error(`Unknown session: ${requestedSessionId}`)
-    }
-
-    await this.activateContextSession(context, nextEntry)
-    return { ok: true }
   }
 
   async setModel(
@@ -3368,6 +3884,7 @@ export class PiWebRuntime {
       manager.appendSessionInfo?.(clampSessionNameLength(nextName))
     }
 
+    this.invalidateSessionIndexCache()
     await this.broadcastSessionsAll()
     return { ok: true, name: nextName }
   }
@@ -3409,6 +3926,7 @@ export class PiWebRuntime {
       }
     }
 
+    this.invalidateSessionIndexCache()
     await this.broadcastSessionsAll()
     return {
       ok: true,

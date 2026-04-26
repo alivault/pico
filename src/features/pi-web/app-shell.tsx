@@ -2567,6 +2567,7 @@ function AppShellWindowEffects({
 
 export type SelectSessionNavigationOptions = {
   replace?: boolean
+  sessionPath?: string
 }
 
 type CreateSessionOptions = {
@@ -3184,6 +3185,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerDraftSeedStore.getSnapshot().skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
+  const pendingRouteSessionPathRef = React.useRef<string | undefined>(undefined)
   const pendingUiRequestHandlerRef = React.useRef(
     (_request: ExtensionUiEvent) => {}
   )
@@ -3787,6 +3789,8 @@ const AppShellSessionWorkspace = React.forwardRef<
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
 
       pendingRouteSessionIdRef.current = nextSessionId
+      pendingRouteSessionPathRef.current =
+        options?.sessionPath?.trim() || undefined
       setLoadingSessionId((current) => {
         if (!nextSessionId) {
           return null
@@ -3820,6 +3824,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     replaceComposerDraftRef,
     handleSelectSessionRef,
     pendingRouteSessionIdRef,
+    pendingRouteSessionPathRef,
     setSessionState,
     setConversationItems,
     setHiddenThinkingPreview,
@@ -4007,6 +4012,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
       pendingRouteSessionIdRef.current = undefined
+      pendingRouteSessionPathRef.current = undefined
       setLoadingSessionId(null)
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
       clearSelectedSidebarSelection()
@@ -5980,7 +5986,9 @@ function AppShellSidebarController({
 
     if (!key) {
       if (entry.id) {
-        sessionWorkspaceRef.current?.selectSession(entry.id)
+        sessionWorkspaceRef.current?.selectSession(entry.id, {
+          sessionPath: entry.path,
+        })
       }
       return
     }
@@ -6004,7 +6012,9 @@ function AppShellSidebarController({
 
     setSidebarSelection([key], key)
     if (entry.id) {
-      sessionWorkspaceRef.current?.selectSession(entry.id)
+      sessionWorkspaceRef.current?.selectSession(entry.id, {
+        sessionPath: entry.path,
+      })
     }
   }
 
