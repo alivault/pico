@@ -37,6 +37,7 @@ import {
   listKnownDirectories,
   mergeSessionListEntry,
   normalizeModifiedTimestamp,
+  normalizeSessionListContextUsage,
   normalizeSessionListTitle,
   readSessionLastUserMessageTimestamp,
   serializeSessionListEntry,
@@ -878,6 +879,10 @@ export class PiWebRuntime {
       }),
       modified: await this.sessionEntryModified(entry),
       lastUserMessageAt: this.getSessionLastUserMessageTimestamp(entry),
+      messageCount: entry.session.messages.length,
+      contextUsage: normalizeSessionListContextUsage(
+        entry.session.getContextUsage()
+      ),
     }
   }
 
@@ -1022,6 +1027,8 @@ export class PiWebRuntime {
       }),
       modified: normalizeModifiedTimestamp(entry.modified),
       lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
+      messageCount: entry.messageCount,
+      contextUsage: normalizeSessionListContextUsage(entry.contextUsage),
     }))
 
     return {

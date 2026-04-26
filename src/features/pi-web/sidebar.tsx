@@ -74,7 +74,6 @@ import {
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   readStoredCollapsedDirectories,
-  relativeTime,
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pi-web"
@@ -147,6 +146,56 @@ type SessionClickModifiers = {
 
 const EMPTY_DIRECTORY_SESSIONS: Array<SessionListEntry> = []
 const SIDEBAR_SEARCH_COMMIT_DELAY_MS = 150
+
+function formatSidebarSessionTime(value?: string) {
+  if (!value) return ""
+
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return ""
+
+  const diffMs = Date.now() - timestamp
+  const past = diffMs >= 0
+  const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
+  const suffix = past ? "ago" : "from now"
+
+  if (seconds < 60) return `${seconds}s ${suffix}`
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ${suffix}`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ${suffix}`
+
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ${suffix}`
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ${suffix}`
+
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${Math.max(1, months)}mo ${suffix}`
+
+  const years = Math.floor(days / 365)
+  return `${Math.max(1, years)}y ${suffix}`
+}
+
+function formatSessionMessageCount(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return ""
+  }
+
+  const count = Math.floor(value)
+  return `${count.toLocaleString()} msg${count === 1 ? "" : "s"}`
+}
+
+function sessionMetaLine(entry: SessionListEntry, timestamp?: string) {
+  return [
+    formatSidebarSessionTime(timestamp),
+    formatSessionMessageCount(entry.messageCount),
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
@@ -372,7 +421,7 @@ function SidebarSessionItem({
   onDeleteSession,
 }: SidebarSessionItemProps) {
   const timestamp = entry.lastUserMessageAt || entry.modified
-  const timeAgo = relativeTime(timestamp).replace(/ ago$/, "")
+  const metaLine = sessionMetaLine(entry, timestamp)
   const exactTimestamp = timestamp
     ? new Date(timestamp).toLocaleString()
     : undefined
@@ -387,7 +436,7 @@ function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive}
       className={cn(
-        "h-auto min-w-0 items-center gap-2 py-2 pr-2",
+        "h-auto min-w-0 items-start gap-2 py-2 pr-2",
         (isActive || isSelected) &&
           "bg-sidebar-accent text-sidebar-accent-foreground"
       )}
@@ -401,27 +450,27 @@ function SidebarSessionItem({
         }
       }}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="flex min-w-0 flex-1 items-start gap-2">
         {entry.streaming ? (
           <Spinner
-            className="size-3.5 shrink-0 text-sidebar-foreground/60"
+            className="mt-0.5 size-3.5 shrink-0 text-sidebar-foreground/60"
             aria-label="Session streaming"
           />
         ) : showUnread ? (
-          <span className="size-2 shrink-0 rounded-full bg-primary" />
+          <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
         ) : null}
-        <span className="min-w-0 flex-1 truncate font-medium">
-          {entry.title}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="min-w-0 truncate font-medium">{entry.title}</span>
+          {metaLine ? (
+            <span
+              className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50"
+              title={exactTimestamp}
+            >
+              {metaLine}
+            </span>
+          ) : null}
         </span>
       </span>
-      {timeAgo ? (
-        <span
-          className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
-          title={exactTimestamp}
-        >
-          {timeAgo}
-        </span>
-      ) : null}
     </SidebarMenuButton>
   )
 

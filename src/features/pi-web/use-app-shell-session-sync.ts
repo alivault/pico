@@ -27,6 +27,7 @@ import {
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pi-web"
+import { sameContextUsage } from "@/lib/pi-web-sync"
 import {
   isGitChangedEvent,
   isSessionDoneEvent,
@@ -200,6 +201,10 @@ function sameSessionListEntries(
     if (leftEntry.title !== rightEntry.title) return false
     if (leftEntry.modified !== rightEntry.modified) return false
     if (leftEntry.lastUserMessageAt !== rightEntry.lastUserMessageAt) {
+      return false
+    }
+    if (leftEntry.messageCount !== rightEntry.messageCount) return false
+    if (!sameContextUsage(leftEntry.contextUsage, rightEntry.contextUsage)) {
       return false
     }
     if (Boolean(leftEntry.streaming) !== Boolean(rightEntry.streaming)) {

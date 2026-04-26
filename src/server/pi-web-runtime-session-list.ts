@@ -13,6 +13,39 @@ function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === "object"
 }
 
+function normalizeFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeNonNegativeInteger(value: unknown) {
+  const number = normalizeFiniteNumber(value)
+  if (number == null || number < 0) return undefined
+  return Math.floor(number)
+}
+
+export function normalizeSessionListContextUsage(value: unknown) {
+  if (!isRecord(value)) return undefined
+
+  const tokens = normalizeFiniteNumber(value.tokens)
+  const contextWindow = normalizeFiniteNumber(value.contextWindow)
+  const explicitPercent = normalizeFiniteNumber(value.percent)
+  const percent =
+    explicitPercent ??
+    (tokens != null && contextWindow != null && contextWindow > 0
+      ? (tokens / contextWindow) * 100
+      : undefined)
+
+  if (tokens == null && contextWindow == null && percent == null) {
+    return undefined
+  }
+
+  return {
+    ...(tokens != null ? { tokens } : {}),
+    ...(contextWindow != null ? { contextWindow } : {}),
+    ...(percent != null ? { percent } : {}),
+  }
+}
+
 export function normalizeModifiedTimestamp(value: unknown) {
   if (!value) return undefined
   const timestamp = new Date(value as string | number | Date).getTime()
@@ -77,6 +110,17 @@ export function mergeSessionListEntry(
     target.lastUserMessageAt,
     fallback.lastUserMessageAt
   )
+  const fallbackMessageCount = normalizeNonNegativeInteger(
+    fallback.messageCount
+  )
+  const targetMessageCount = normalizeNonNegativeInteger(target.messageCount)
+  target.messageCount =
+    fallbackMessageCount != null && targetMessageCount != null
+      ? Math.max(fallbackMessageCount, targetMessageCount)
+      : (fallbackMessageCount ?? targetMessageCount)
+  target.contextUsage =
+    normalizeSessionListContextUsage(fallback.contextUsage) ??
+    normalizeSessionListContextUsage(target.contextUsage)
   if (fallback.firstMessage) {
     target.firstMessage = fallback.firstMessage
   }
@@ -173,6 +217,8 @@ export function serializeSessionListEntry(options: {
     title: getSessionListTitle({ name, firstMessage: entry.firstMessage }),
     modified: normalizeModifiedTimestamp(entry.modified),
     lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
+    messageCount: normalizeNonNegativeInteger(entry.messageCount),
+    contextUsage: normalizeSessionListContextUsage(entry.contextUsage),
     streaming: path ? streamingPaths.has(path) : false,
     unread: path ? unreadSessionPaths.has(path) : false,
   }
@@ -187,6 +233,12 @@ export function createDirectorySessionRevision(
     title?: string
     modified?: string
     lastUserMessageAt?: string
+    messageCount?: number
+    contextUsage?: {
+      tokens?: number
+      contextWindow?: number
+      percent?: number
+    }
   }>
 ) {
   const hash = createHash("sha1")
@@ -205,6 +257,14 @@ export function createDirectorySessionRevision(
     hash.update(String(entry.modified || ""))
     hash.update("\0")
     hash.update(String(entry.lastUserMessageAt || ""))
+    hash.update("\0")
+    hash.update(String(entry.messageCount ?? ""))
+    hash.update("\0")
+    hash.update(String(entry.contextUsage?.tokens ?? ""))
+    hash.update("\0")
+    hash.update(String(entry.contextUsage?.contextWindow ?? ""))
+    hash.update("\0")
+    hash.update(String(entry.contextUsage?.percent ?? ""))
   }
 
   return hash.digest("hex")

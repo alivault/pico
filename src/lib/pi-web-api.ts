@@ -1,6 +1,7 @@
 import type {
   DirectoryState,
   MessagePayload,
+  SessionState,
   SessionsPayload,
   StateSyncPayload,
   TreeNode,
@@ -147,6 +148,8 @@ export type SessionListEntry = {
   title: string
   modified?: string
   lastUserMessageAt?: string
+  messageCount?: number
+  contextUsage?: SessionState["contextUsage"]
   streaming?: boolean
   unread?: boolean
 }
