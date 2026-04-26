@@ -568,12 +568,117 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
   )
 })
 
+type DirectorySessionsSnapshot = {
+  sessions: Array<SessionListEntry>
+  isLoadingSessions: boolean
+}
+
+type DirectorySessionsStore = {
+  getSnapshot: (directory: string) => DirectorySessionsSnapshot
+  setData: (
+    sessionsByDirectory: Record<string, Array<SessionListEntry>>,
+    loadingByDirectory: Record<string, boolean>
+  ) => void
+  subscribeDirectory: (directory: string, listener: () => void) => () => void
+}
+
+function createDirectorySessionsStore(
+  sessionsByDirectory: Record<string, Array<SessionListEntry>>,
+  loadingByDirectory: Record<string, boolean>
+): DirectorySessionsStore {
+  let snapshots = new Map<string, DirectorySessionsSnapshot>()
+  const listenersByDirectory = new Map<string, Set<() => void>>()
+
+  const readSnapshot = (directory: string) => ({
+    sessions: sessionsByDirectory[directory] ?? EMPTY_DIRECTORY_SESSIONS,
+    isLoadingSessions: Boolean(loadingByDirectory[directory]),
+  })
+
+  const notifyDirectory = (directory: string) => {
+    const listeners = listenersByDirectory.get(directory)
+    if (!listeners) return
+    for (const listener of listeners) listener()
+  }
+
+  const getCachedSnapshot = (directory: string) => {
+    const snapshot = snapshots.get(directory)
+    if (snapshot) return snapshot
+
+    const nextSnapshot = readSnapshot(directory)
+    snapshots.set(directory, nextSnapshot)
+    return nextSnapshot
+  }
+
+  for (const directory of new Set([
+    ...Object.keys(sessionsByDirectory),
+    ...Object.keys(loadingByDirectory),
+  ])) {
+    snapshots.set(directory, readSnapshot(directory))
+  }
+
+  return {
+    getSnapshot(directory) {
+      return getCachedSnapshot(directory)
+    },
+    setData(nextSessionsByDirectory, nextLoadingByDirectory) {
+      const directories = new Set([
+        ...Object.keys(sessionsByDirectory),
+        ...Object.keys(loadingByDirectory),
+        ...Object.keys(nextSessionsByDirectory),
+        ...Object.keys(nextLoadingByDirectory),
+      ])
+      sessionsByDirectory = nextSessionsByDirectory
+      loadingByDirectory = nextLoadingByDirectory
+
+      for (const directory of directories) {
+        const previous = snapshots.get(directory)
+        const next = readSnapshot(directory)
+        if (
+          previous &&
+          previous.sessions === next.sessions &&
+          previous.isLoadingSessions === next.isLoadingSessions
+        ) {
+          continue
+        }
+
+        snapshots.set(directory, next)
+        notifyDirectory(directory)
+      }
+    },
+    subscribeDirectory(directory, listener) {
+      const listeners = listenersByDirectory.get(directory) ?? new Set()
+      listeners.add(listener)
+      listenersByDirectory.set(directory, listeners)
+
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) {
+          listenersByDirectory.delete(directory)
+        }
+      }
+    },
+  }
+}
+
+function useDirectorySessions(
+  store: DirectorySessionsStore,
+  directory: string
+) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeDirectory(directory, listener),
+      [directory, store]
+    ),
+    () => store.getSnapshot(directory),
+    () => store.getSnapshot(directory)
+  )
+}
+
 type DirectorySessionGroupProps = {
   directory: string
-  sessions: Array<SessionListEntry>
+  directorySessionsStore: DirectorySessionsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
   searchActive: boolean
-  isLoadingSessions: boolean
   directoryOrderingEnabled: boolean
   selectedSessionKeyStore: SelectedSessionKeyStore
   activeSessionId?: string
@@ -596,10 +701,9 @@ type DirectorySessionGroupProps = {
 
 const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   directory,
-  sessions,
+  directorySessionsStore,
   collapsedDirectoryStore,
   searchActive,
-  isLoadingSessions,
   directoryOrderingEnabled,
   selectedSessionKeyStore,
   activeSessionId,
@@ -618,6 +722,10 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
 }: DirectorySessionGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+  )
+  const { isLoadingSessions, sessions } = useDirectorySessions(
+    directorySessionsStore,
+    directory
   )
   const collapsed = useDirectoryCollapsed(
     collapsedDirectoryStore,
@@ -1030,6 +1138,19 @@ export function AppSidebar({
   const [selectedSessionKeyStore] = React.useState(
     createSelectedSessionKeyStore
   )
+  const [directorySessionsStore] = React.useState(() =>
+    createDirectorySessionsStore(
+      filteredDirectorySessions,
+      directoryIndexLoading
+    )
+  )
+
+  React.useLayoutEffect(() => {
+    directorySessionsStore.setData(
+      filteredDirectorySessions,
+      directoryIndexLoading
+    )
+  }, [directoryIndexLoading, directorySessionsStore, filteredDirectorySessions])
 
   React.useLayoutEffect(() => {
     selectedSessionKeyStore.setKeys(selectedSessionKeys)
@@ -1208,11 +1329,6 @@ export function AppSidebar({
               strategy={verticalListSortingStrategy}
             >
               {orderedVisibleDirectories.map((directory) => {
-                const sessions = getDirectorySessions(directory)
-                const isLoadingSessions = Boolean(
-                  directoryIndexLoading[directory]
-                )
-
                 return (
                   <SortableDirectoryGroup
                     key={directory}
@@ -1222,10 +1338,9 @@ export function AppSidebar({
                     {({ attributes, listeners, isDragging }) => (
                       <DirectorySessionGroup
                         directory={directory}
-                        sessions={sessions}
+                        directorySessionsStore={directorySessionsStore}
                         collapsedDirectoryStore={collapsedDirectoryStore}
                         searchActive={searchActive}
-                        isLoadingSessions={isLoadingSessions}
                         directoryOrderingEnabled={directoryOrderingEnabled}
                         selectedSessionKeyStore={selectedSessionKeyStore}
                         activeSessionId={activeSessionId}
@@ -1253,12 +1368,9 @@ export function AppSidebar({
               {activeDirectory ? (
                 <DirectorySessionGroup
                   directory={activeDirectory}
-                  sessions={getDirectorySessions(activeDirectory)}
+                  directorySessionsStore={directorySessionsStore}
                   collapsedDirectoryStore={collapsedDirectoryStore}
                   searchActive={searchActive}
-                  isLoadingSessions={Boolean(
-                    directoryIndexLoading[activeDirectory]
-                  )}
                   directoryOrderingEnabled={directoryOrderingEnabled}
                   selectedSessionKeyStore={selectedSessionKeyStore}
                   activeSessionId={activeSessionId}

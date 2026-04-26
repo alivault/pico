@@ -20,10 +20,10 @@ The previous render performance checklist was completed. This file now tracks th
   - [ ] Centralize refs, stores, mutation actions, and imperative flows in an app-shell controller object.
   - [ ] Keep React components as selector-driven hosts instead of orchestration owners.
   - [ ] Keep prompt/session mutation hooks ref/store-backed with minimal render dependencies.
-- [ ] Directory-keyed sidebar subscriptions
-  - [ ] Store directory loading/session slices by directory key.
-  - [ ] Let each directory row subscribe only to its own sessions/loading/collapse state.
-  - [ ] Preserve search, drag/reorder, selection, collapse, and mobile sidebar behavior.
+- [x] Directory-keyed sidebar subscriptions
+  - [x] Store directory loading/session slices by directory key.
+  - [x] Let each directory row subscribe only to its own sessions/loading/collapse state.
+  - [x] Preserve search, drag/reorder, selection, collapse, and mobile sidebar behavior.
 - [ ] Assistant block store
   - [ ] Add assistant block descriptors keyed by block key/signature.
   - [ ] Let assistant block views subscribe to individual block snapshots where possible.
