@@ -2679,14 +2679,12 @@ const AppShellSessionWorkspace = React.forwardRef<
   if (!initialSessionStateRef.current) {
     initialSessionStateRef.current = createInitialSessionState()
   }
-  const [sessionState, setSessionStateState] = React.useState<SessionState>(
-    initialSessionStateRef.current
-  )
   const sessionStoreRef = React.useRef<ValueStore<SessionState> | null>(null)
   if (!sessionStoreRef.current) {
     sessionStoreRef.current = createValueStore(initialSessionStateRef.current)
   }
   const sessionStore = sessionStoreRef.current
+  const sessionStateRef = React.useRef(sessionStore.getSnapshot())
   const [currentTab, setCurrentTab] = React.useState("session")
   const previousRouteSessionIdRef = React.useRef(sessionId)
   const composerDraftSeedStoreRef = React.useRef<ValueStore<{
@@ -2876,7 +2874,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
-  const sessionStateRef = React.useRef(sessionState)
   const setSessionState = React.useCallback<
     React.Dispatch<React.SetStateAction<SessionState>>
   >(
@@ -2890,7 +2887,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
       sessionStateRef.current = nextState
       sessionStore.setSnapshot(nextState)
-      setSessionStateState(nextState)
     },
     [sessionStore]
   )
@@ -2915,7 +2911,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
   if (!conversationItemsStoreRef.current) {
     conversationItemsStoreRef.current = createConversationItemsStore(
-      sessionState.items
+      sessionStateRef.current.items
     )
   }
   const conversationItemsStore = conversationItemsStoreRef.current
@@ -2924,7 +2920,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
   if (!hiddenThinkingPreviewStoreRef.current) {
     hiddenThinkingPreviewStoreRef.current = createTextValueStore(
-      sessionState.hiddenThinkingPreview || ""
+      sessionStateRef.current.hiddenThinkingPreview || ""
     )
   }
   const hiddenThinkingPreviewStore = hiddenThinkingPreviewStoreRef.current
@@ -3115,6 +3111,29 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
+  const sessionState = useSelectedValueStore(
+    sessionStore,
+    (currentSessionState) => ({
+      availableModels: currentSessionState.availableModels,
+      availableSkills: currentSessionState.availableSkills,
+      availableThinkingLevels: currentSessionState.availableThinkingLevels,
+      contextUsage: currentSessionState.contextUsage,
+      cwd: currentSessionState.cwd,
+      draft: currentSessionState.draft,
+      firstMessage: currentSessionState.firstMessage,
+      hideThinkingBlock: currentSessionState.hideThinkingBlock,
+      model: currentSessionState.model,
+      modified: currentSessionState.modified,
+      sessionFile: currentSessionState.sessionFile,
+      sessionId: currentSessionState.sessionId,
+      sessionKey: currentSessionState.sessionKey,
+      sessionName: currentSessionState.sessionName,
+      streaming: currentSessionState.streaming,
+      thinkingLevel: currentSessionState.thinkingLevel,
+      workingMessage: currentSessionState.uiState.workingMessage,
+    }),
+    shallowRecordEqual
+  )
   const sidebarWorkspaceVersion =
     useAppShellSidebarWorkspaceVersion(sidebarStore)
   void sidebarWorkspaceVersion
@@ -3188,10 +3207,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       setLoadingSessionId(sessionId)
     }
   }, [sessionId])
-
-  React.useEffect(() => {
-    sessionStateRef.current = sessionState
-  }, [sessionState])
 
   React.useLayoutEffect(() => {
     conversationItemsStore.setItems(sessionStateRef.current.items)
@@ -3441,7 +3456,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     bootstrapSidebarDirectories:
       sidebarStore.getSnapshot().state.initialSidebarBootstrapDirectories,
     hideToolBlocks,
-    sessionState,
+    sessionStore,
     sessionStateRef,
     setConnected: sidebarStore.setConnected,
     composerTextRef,
@@ -3613,7 +3628,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     activeSessionId,
     defaultNewSessionDirectory,
-    sessionState,
+    sessionStore,
+    sessionStateRef,
     draftSessionLoadingOwnerKey,
     pendingDraftPrompt,
     pendingDraftFollowUps,
@@ -4032,7 +4048,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     if (sessionState.streaming) {
       return {
-        label: sessionState.uiState.workingMessage || "Working…",
+        label: sessionState.workingMessage || "Working…",
       }
     }
 

@@ -45,13 +45,18 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
+type SessionStateStore = {
+  getSnapshot: () => SessionState
+  subscribe: (listener: () => void) => () => void
+}
+
 type UseAppShellSessionSyncOptions = {
   viewerContextId: string
   sessionId?: string
   draftSessionLoadingOwnerKey: string | null
   bootstrapSidebarDirectories: Array<string>
   hideToolBlocks: boolean
-  sessionState: SessionState
+  sessionStore: SessionStateStore
   sessionStateRef: React.MutableRefObject<SessionState>
   setConnected?: React.Dispatch<React.SetStateAction<boolean>>
   composerTextRef: React.MutableRefObject<string>
@@ -378,7 +383,7 @@ export function useAppShellSessionSync({
   draftSessionLoadingOwnerKey,
   bootstrapSidebarDirectories,
   hideToolBlocks,
-  sessionState,
+  sessionStore,
   sessionStateRef,
   setConnected,
   composerTextRef,
@@ -422,13 +427,24 @@ export function useAppShellSessionSync({
     initialEventsSessionIdRef.current = sessionId
   }, [sessionId])
 
+  const syncedSessionId = React.useSyncExternalStore(
+    sessionStore.subscribe,
+    () => sessionStore.getSnapshot().sessionId,
+    () => sessionStore.getSnapshot().sessionId
+  )
+  const syncedSessionDraft = React.useSyncExternalStore(
+    sessionStore.subscribe,
+    () => sessionStore.getSnapshot().draft,
+    () => sessionStore.getSnapshot().draft
+  )
+
   React.useEffect(() => {
     if (!sessionId) {
       pendingRouteSessionIdRef.current = undefined
       return
     }
 
-    if (sessionId === sessionState.sessionId) {
+    if (sessionId === syncedSessionId) {
       if (pendingRouteSessionIdRef.current === sessionId) {
         pendingRouteSessionIdRef.current = undefined
       }
@@ -436,7 +452,7 @@ export function useAppShellSessionSync({
     }
 
     pendingRouteSessionIdRef.current = sessionId
-  }, [pendingRouteSessionIdRef, sessionId, sessionState.sessionId])
+  }, [pendingRouteSessionIdRef, sessionId, syncedSessionId])
 
   React.useEffect(() => {
     if (!viewerContextId) return
@@ -761,7 +777,7 @@ export function useAppShellSessionSync({
     if (!viewerContextId || !sessionId) return
     if (draftSessionLoadingOwnerKey) return
     if (!hasReceivedStateSyncRef.current) return
-    if (sessionId === sessionState.sessionId) return
+    if (sessionId === syncedSessionId) return
 
     const abortController = new AbortController()
 
@@ -784,32 +800,27 @@ export function useAppShellSessionSync({
     return () => {
       abortController.abort()
     }
-  }, [
-    draftSessionLoadingOwnerKey,
-    viewerContextId,
-    sessionId,
-    sessionState.sessionId,
-  ])
+  }, [draftSessionLoadingOwnerKey, viewerContextId, sessionId, syncedSessionId])
 
   React.useEffect(() => {
-    if (sessionState.draft || !sessionState.sessionId) return
+    if (syncedSessionDraft || !syncedSessionId) return
 
     const pendingRouteSessionId = pendingRouteSessionIdRef.current
     if (pendingRouteSessionId) {
-      if (sessionState.sessionId === pendingRouteSessionId) {
+      if (syncedSessionId === pendingRouteSessionId) {
         pendingRouteSessionIdRef.current = undefined
       }
       return
     }
 
-    if (sessionState.sessionId !== sessionId) {
-      handleSelectSessionRef.current(sessionState.sessionId, { replace: true })
+    if (syncedSessionId !== sessionId) {
+      handleSelectSessionRef.current(syncedSessionId, { replace: true })
     }
   }, [
     handleSelectSessionRef,
     pendingRouteSessionIdRef,
     sessionId,
-    sessionState.draft,
-    sessionState.sessionId,
+    syncedSessionDraft,
+    syncedSessionId,
   ])
 }

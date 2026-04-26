@@ -6,11 +6,11 @@ The previous render performance checklist was completed. This file now tracks th
 
 ## Checklist
 
-- [ ] Remove the `sessionState` React state mirror
-  - [ ] Make `sessionStore` + `sessionStateRef` the source of truth for session data.
-  - [ ] Replace remaining workspace render reads of `sessionState` with store selectors or refs.
-  - [ ] Ensure SSE sync, optimistic messages, draft sessions, and route loading still publish to narrow stores.
-  - [ ] Preserve session selection, title, notification, tree/fork, rename/delete, and composer behavior.
+- [x] Remove the `sessionState` React state mirror
+  - [x] Make `sessionStore` + `sessionStateRef` the source of truth for session data.
+  - [x] Replace remaining workspace render reads of `sessionState` with store selectors or refs.
+  - [x] Ensure SSE sync, optimistic messages, draft sessions, and route loading still publish to narrow stores.
+  - [x] Preserve session selection, title, notification, tree/fork, rename/delete, and composer behavior.
 - [ ] Move remaining workspace UI state to stores
   - [ ] Move `currentTab`, route/session loading ids, and initial loading state to an app UI store.
   - [ ] Move display settings such as tool visibility and message centering to a display settings store.

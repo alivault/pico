@@ -45,11 +45,17 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
+type SessionStateStore = {
+  getSnapshot: () => SessionState
+  subscribe: (listener: () => void) => () => void
+}
+
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
   defaultNewSessionDirectory?: string
-  sessionState: SessionState
+  sessionStore: SessionStateStore
+  sessionStateRef: React.MutableRefObject<SessionState>
   draftSessionLoadingOwnerKey: string | null
   pendingDraftPrompt: PendingDraftPrompt | null
   pendingDraftFollowUps: Array<PendingDraftFollowUp>
@@ -94,6 +100,59 @@ type UseAppShellPromptMutationsOptions = {
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
 }
 
+type PromptMutationSessionSnapshot = {
+  cwd?: string
+  draft: boolean
+  sessionFile?: string
+  sessionId?: string
+  sessionKey?: string
+  streaming: boolean
+}
+
+function samePromptMutationSessionSnapshot(
+  left: PromptMutationSessionSnapshot,
+  right: PromptMutationSessionSnapshot
+) {
+  return (
+    left.cwd === right.cwd &&
+    left.draft === right.draft &&
+    left.sessionFile === right.sessionFile &&
+    left.sessionId === right.sessionId &&
+    left.sessionKey === right.sessionKey &&
+    left.streaming === right.streaming
+  )
+}
+
+function usePromptMutationSessionSnapshot(store: SessionStateStore) {
+  const cacheRef = React.useRef<PromptMutationSessionSnapshot | undefined>(
+    undefined
+  )
+
+  const getSnapshot = () => {
+    const sessionState = store.getSnapshot()
+    const nextSnapshot = {
+      cwd: sessionState.cwd,
+      draft: sessionState.draft,
+      sessionFile: sessionState.sessionFile,
+      sessionId: sessionState.sessionId,
+      sessionKey: sessionState.sessionKey,
+      streaming: sessionState.streaming,
+    }
+    const previousSnapshot = cacheRef.current
+    if (
+      previousSnapshot &&
+      samePromptMutationSessionSnapshot(previousSnapshot, nextSnapshot)
+    ) {
+      return previousSnapshot
+    }
+
+    cacheRef.current = nextSnapshot
+    return nextSnapshot
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+}
+
 function normalizeQueuedStreamingBehavior(
   streamingBehavior?: StreamingBehavior
 ) {
@@ -124,7 +183,8 @@ export function useAppShellPromptMutations({
   viewerContextId,
   activeSessionId,
   defaultNewSessionDirectory,
-  sessionState,
+  sessionStore,
+  sessionStateRef,
   draftSessionLoadingOwnerKey,
   pendingDraftPrompt,
   pendingDraftFollowUps,
@@ -156,7 +216,8 @@ export function useAppShellPromptMutations({
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
   const pendingMessagesRef = React.useRef(pendingMessages)
   const awaitingFirstTurnRef = React.useRef(awaitingFirstTurn)
-  const sessionStreamingRef = React.useRef(sessionState.streaming)
+  const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
+  const sessionStreamingRef = React.useRef(sessionSnapshot.streaming)
 
   React.useEffect(() => {
     draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
@@ -179,8 +240,8 @@ export function useAppShellPromptMutations({
   }, [awaitingFirstTurn])
 
   React.useEffect(() => {
-    sessionStreamingRef.current = sessionState.streaming
-  }, [sessionState.streaming])
+    sessionStreamingRef.current = sessionSnapshot.streaming
+  }, [sessionSnapshot.streaming])
 
   const updatePendingMessages = React.useCallback(
     (
@@ -728,13 +789,14 @@ export function useAppShellPromptMutations({
 
   React.useEffect(() => {
     if (!draftSessionLoadingOwnerKey) return
-    if (sessionState.sessionKey?.startsWith("optimistic:")) {
+    const currentSessionState = sessionStateRef.current
+    if (currentSessionState.sessionKey?.startsWith("optimistic:")) {
       return
     }
 
-    const currentOwnerKey = promptDraftKey(sessionState)
+    const currentOwnerKey = promptDraftKey(currentSessionState)
     if (
-      !sessionState.draft ||
+      !currentSessionState.draft ||
       currentOwnerKey !== draftSessionLoadingOwnerKey
     ) {
       return
@@ -750,20 +812,22 @@ export function useAppShellPromptMutations({
   }, [
     draftSessionLoadingOwnerKey,
     flushPendingDraftPrompt,
-    sessionState,
+    sessionSnapshot,
+    sessionStateRef,
     setDraftSessionLoadingOwnerKey,
   ])
 
   React.useEffect(() => {
     if (!awaitingFirstTurn) return
-    const hasAssistantOutput = sessionState.items.some(
+    const currentSessionState = sessionStateRef.current
+    const hasAssistantOutput = currentSessionState.items.some(
       (item) =>
         item.kind === "assistant" &&
         item.blocks.some((block) => block.type === "text" && block.text.trim())
     )
 
     if (
-      sessionState.streaming ||
+      currentSessionState.streaming ||
       hasAssistantOutput ||
       pendingMessages.length > 0
     ) {
@@ -773,8 +837,8 @@ export function useAppShellPromptMutations({
   }, [
     awaitingFirstTurn,
     pendingMessages.length,
-    sessionState.items,
-    sessionState.streaming,
+    sessionSnapshot.streaming,
+    sessionStateRef,
     setAwaitingFirstTurn,
   ])
 
