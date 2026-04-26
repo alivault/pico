@@ -3072,12 +3072,18 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<SessionState>>
   >(
     (action) => {
-      const currentState = sessionStateRef.current
+      const currentRefState = sessionStateRef.current
       const nextState =
         typeof action === "function"
-          ? (action as (current: SessionState) => SessionState)(currentState)
+          ? (action as (current: SessionState) => SessionState)(currentRefState)
           : action
-      if (Object.is(currentState, nextState)) return
+      const currentStoreState = sessionStore.getSnapshot()
+      if (
+        Object.is(currentRefState, nextState) &&
+        Object.is(currentStoreState, nextState)
+      ) {
+        return
+      }
 
       sessionStateRef.current = nextState
       sessionStore.setSnapshot(nextState)
