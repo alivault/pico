@@ -4878,18 +4878,18 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           <SidebarTrigger className="mt-0.5 shrink-0" />
           <div className="min-w-0 space-y-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-                <Spinner
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                  aria-label="Session streaming"
-                />
-              ) : null}
               <h2
                 className="min-w-0 truncate text-[15px] leading-tight font-semibold"
                 title={displaySessionTitle}
               >
                 {displaySessionTitle}
               </h2>
+              {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
+                <Spinner
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-label="Session streaming"
+                />
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               {displaySessionCwd ? (

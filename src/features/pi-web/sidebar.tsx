@@ -638,16 +638,21 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
       }}
     >
       <span className="flex min-w-0 flex-1 items-start gap-2">
-        {entry.streaming ? (
-          <Spinner
-            className="mt-0.5 size-3.5 shrink-0 text-sidebar-foreground/60"
-            aria-label="Session streaming"
-          />
-        ) : showUnread ? (
-          <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
-        ) : null}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="min-w-0 truncate font-medium">{entry.title}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="min-w-0 truncate font-medium">{entry.title}</span>
+            {entry.streaming ? (
+              <Spinner
+                className="size-3.5 shrink-0 text-sidebar-foreground/60"
+                aria-label="Session streaming"
+              />
+            ) : showUnread ? (
+              <span
+                className="size-2 shrink-0 rounded-full bg-primary"
+                aria-label="Session done"
+              />
+            ) : null}
+          </span>
           {metaLine ? (
             <span
               className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50"
