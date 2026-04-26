@@ -890,6 +890,17 @@ function useLatestRef<T>(value: T) {
   return ref
 }
 
+function useStableEvent<Args extends Array<unknown>, Result>(
+  handler: (...args: Args) => Result
+) {
+  const handlerRef = useLatestRef(handler)
+
+  return React.useCallback(
+    (...args: Args) => handlerRef.current(...args),
+    [handlerRef]
+  )
+}
+
 type ValueStore<T> = {
   getSnapshot: () => T
   setSnapshot: (nextSnapshot: T) => void
@@ -925,6 +936,39 @@ function useValueStore<T>(store: ValueStore<T>) {
     store.getSnapshot,
     store.getSnapshot
   )
+}
+
+function useSelectedValueStore<T, S>(
+  store: ValueStore<T>,
+  selector: (snapshot: T) => S,
+  isEqual: (left: S, right: S) => boolean = Object.is
+) {
+  const cacheRef = React.useRef<{
+    source: T | undefined
+    selected: S | undefined
+  }>({
+    source: undefined,
+    selected: undefined,
+  })
+
+  const getSnapshot = () => {
+    const source = store.getSnapshot()
+    const cache = cacheRef.current
+    if (cache.source === source && cache.selected !== undefined) {
+      return cache.selected
+    }
+
+    const selected = selector(source)
+    if (cache.selected !== undefined && isEqual(cache.selected, selected)) {
+      cacheRef.current = { source, selected: cache.selected }
+      return cache.selected
+    }
+
+    cacheRef.current = { source, selected }
+    return selected
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
 }
 
 function shallowRecordEqual<T extends Record<string, unknown>>(
@@ -998,63 +1042,66 @@ function removeOptimisticUserItem(
   return changed ? nextItems : items
 }
 
-type RenderConversationGroup =
+type RenderConversationGroupDescriptor =
   | {
       kind: "user"
       key: string
-      item: UserConversationItem
+      itemKey: string
     }
   | {
       kind: "assistant"
       key: string
-      items: Array<AssistantConversationItem>
+      itemKeys: Array<string>
     }
+
+function conversationItemKey(item: ConversationItem, index: number) {
+  return item.itemKey || `message-row:${index}`
+}
 
 function groupConversationItemsForRender(options: {
   items: Array<ConversationItem>
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  const groups: Array<RenderConversationGroup> = []
-  let pendingAssistantGroup: RenderConversationGroup | null = null
+  const groups: Array<RenderConversationGroupDescriptor> = []
+  let pendingAssistantGroup: Extract<
+    RenderConversationGroupDescriptor,
+    { kind: "assistant" }
+  > | null = null
+  let pendingAssistantVisible = false
 
   const flushAssistantGroup = () => {
-    if (!pendingAssistantGroup || pendingAssistantGroup.kind !== "assistant") {
-      pendingAssistantGroup = null
+    if (!pendingAssistantGroup) {
+      pendingAssistantVisible = false
       return
     }
 
-    if (
-      pendingAssistantGroup.items.some((item) =>
-        assistantMessageHasVisibleBlocks({
-          item,
-          hideThinking: options.hideThinking,
-          hideToolBlocks: options.hideToolBlocks,
-        })
-      )
-    ) {
+    if (pendingAssistantVisible) {
       groups.push(pendingAssistantGroup)
     }
 
     pendingAssistantGroup = null
+    pendingAssistantVisible = false
   }
 
   options.items.forEach((item, index) => {
-    const key = item.itemKey || `message-row:${index}`
+    const key = conversationItemKey(item, index)
 
     if (item.kind === "assistant") {
-      if (
-        !pendingAssistantGroup ||
-        pendingAssistantGroup.kind !== "assistant"
-      ) {
+      if (!pendingAssistantGroup) {
         pendingAssistantGroup = {
           kind: "assistant",
           key,
-          items: [],
+          itemKeys: [],
         }
       }
 
-      pendingAssistantGroup.items.push(item)
+      pendingAssistantGroup.itemKeys.push(key)
+      pendingAssistantVisible ||= assistantMessageHasVisibleBlocks({
+        item,
+        hideThinking: options.hideThinking,
+        hideToolBlocks: options.hideToolBlocks,
+      })
       return
     }
 
@@ -1062,7 +1109,7 @@ function groupConversationItemsForRender(options: {
     groups.push({
       kind: "user",
       key,
-      item,
+      itemKey: key,
     })
   })
 
@@ -1070,15 +1117,69 @@ function groupConversationItemsForRender(options: {
   return groups
 }
 
+function sameRenderConversationGroupDescriptor(
+  left: RenderConversationGroupDescriptor,
+  right: RenderConversationGroupDescriptor
+) {
+  if (left.kind !== right.kind || left.key !== right.key) return false
+
+  if (left.kind === "user" && right.kind === "user") {
+    return left.itemKey === right.itemKey
+  }
+
+  if (left.kind !== "assistant" || right.kind !== "assistant") {
+    return false
+  }
+
+  if (left.itemKeys.length !== right.itemKeys.length) return false
+
+  for (let index = 0; index < left.itemKeys.length; index += 1) {
+    if (left.itemKeys[index] !== right.itemKeys[index]) return false
+  }
+
+  return true
+}
+
+function reconcileRenderConversationGroupDescriptors(
+  previousGroups: Array<RenderConversationGroupDescriptor>,
+  nextGroups: Array<RenderConversationGroupDescriptor>
+) {
+  if (previousGroups.length === 0) return nextGroups
+
+  let changed = previousGroups.length !== nextGroups.length
+  const groups: Array<RenderConversationGroupDescriptor> = []
+
+  for (let index = 0; index < nextGroups.length; index += 1) {
+    const nextGroup = nextGroups[index]
+    const previousGroup = previousGroups[index]
+
+    if (
+      previousGroup &&
+      sameRenderConversationGroupDescriptor(previousGroup, nextGroup)
+    ) {
+      groups.push(previousGroup)
+      continue
+    }
+
+    changed = true
+    groups.push(nextGroup)
+  }
+
+  return changed ? groups : previousGroups
+}
+
 type ConversationItemsSnapshot = {
   items: Array<ConversationItem>
+  itemByKey: Map<string, ConversationItem>
   revision: number
 }
 
 type ConversationItemsStore = {
   getSnapshot: () => ConversationItemsSnapshot
+  getItem: (key: string) => ConversationItem | undefined
   setItems: (items: Array<ConversationItem>) => void
   subscribe: (listener: () => void) => () => void
+  subscribeItems: (keys: Array<string>, listener: () => void) => () => void
 }
 
 type TextValueStore = {
@@ -1087,27 +1188,60 @@ type TextValueStore = {
   subscribe: (listener: () => void) => () => void
 }
 
+function buildConversationItemMap(items: Array<ConversationItem>) {
+  const itemByKey = new Map<string, ConversationItem>()
+  items.forEach((item, index) => {
+    itemByKey.set(conversationItemKey(item, index), item)
+  })
+  return itemByKey
+}
+
 function createConversationItemsStore(
   initialItems: Array<ConversationItem>
 ): ConversationItemsStore {
   let snapshot: ConversationItemsSnapshot = {
     items: initialItems,
+    itemByKey: buildConversationItemMap(initialItems),
     revision: 0,
   }
   const listeners = new Set<() => void>()
+  const itemListeners = new Map<string, Set<() => void>>()
+
+  const notifyItemListeners = (key: string) => {
+    const listenersForItem = itemListeners.get(key)
+    if (!listenersForItem) return
+
+    for (const listener of listenersForItem) listener()
+  }
 
   return {
     getSnapshot: () => snapshot,
+    getItem: (key) => snapshot.itemByKey.get(key),
     setItems: (items) => {
       if (snapshot.items === items) return
 
+      const previousItemByKey = snapshot.itemByKey
+      const nextItemByKey = buildConversationItemMap(items)
       snapshot = {
         items,
+        itemByKey: nextItemByKey,
         revision: snapshot.revision + 1,
       }
-      for (const listener of listeners) {
-        listener()
+
+      const changedItemKeys = new Set<string>()
+      for (const key of previousItemByKey.keys()) {
+        if (previousItemByKey.get(key) !== nextItemByKey.get(key)) {
+          changedItemKeys.add(key)
+        }
       }
+      for (const key of nextItemByKey.keys()) {
+        if (previousItemByKey.get(key) !== nextItemByKey.get(key)) {
+          changedItemKeys.add(key)
+        }
+      }
+
+      for (const listener of listeners) listener()
+      for (const key of changedItemKeys) notifyItemListeners(key)
     },
     subscribe: (listener) => {
       listeners.add(listener)
@@ -1115,15 +1249,26 @@ function createConversationItemsStore(
         listeners.delete(listener)
       }
     },
-  }
-}
+    subscribeItems: (keys, listener) => {
+      const uniqueKeys = [...new Set(keys)]
+      for (const key of uniqueKeys) {
+        const listenersForItem = itemListeners.get(key) ?? new Set<() => void>()
+        listenersForItem.add(listener)
+        itemListeners.set(key, listenersForItem)
+      }
 
-function useConversationItems(store: ConversationItemsStore) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    () => store.getSnapshot().items,
-    () => store.getSnapshot().items
-  )
+      return () => {
+        for (const key of uniqueKeys) {
+          const listenersForItem = itemListeners.get(key)
+          if (!listenersForItem) continue
+          listenersForItem.delete(listener)
+          if (listenersForItem.size === 0) {
+            itemListeners.delete(key)
+          }
+        }
+      }
+    },
+  }
 }
 
 function useConversationRevision(store: ConversationItemsStore) {
@@ -1163,6 +1308,118 @@ function useConversationHasAssistantOutput(store: ConversationItemsStore) {
   )
 }
 
+function useConversationGroupDescriptors({
+  hideThinking,
+  hideToolBlocks,
+  store,
+}: {
+  hideThinking: boolean
+  hideToolBlocks: boolean
+  store: ConversationItemsStore
+}) {
+  const cacheRef = React.useRef<{
+    hideThinking: boolean
+    hideToolBlocks: boolean
+    revision: number
+    groups: Array<RenderConversationGroupDescriptor>
+  }>({
+    hideThinking,
+    hideToolBlocks,
+    revision: -1,
+    groups: [],
+  })
+
+  const getSnapshot = () => {
+    const snapshot = store.getSnapshot()
+    const cache = cacheRef.current
+    if (
+      cache.revision === snapshot.revision &&
+      cache.hideThinking === hideThinking &&
+      cache.hideToolBlocks === hideToolBlocks
+    ) {
+      return cache.groups
+    }
+
+    const nextGroups = groupConversationItemsForRender({
+      items: snapshot.items,
+      hideThinking,
+      hideToolBlocks,
+    })
+    const groups =
+      cache.hideThinking === hideThinking &&
+      cache.hideToolBlocks === hideToolBlocks
+        ? reconcileRenderConversationGroupDescriptors(cache.groups, nextGroups)
+        : nextGroups
+
+    cacheRef.current = {
+      hideThinking,
+      hideToolBlocks,
+      revision: snapshot.revision,
+      groups,
+    }
+
+    return groups
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+}
+
+function useConversationItem(
+  store: ConversationItemsStore,
+  key: string
+): ConversationItem | undefined {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeItems([key], listener),
+      [key, store]
+    ),
+    () => store.getItem(key),
+    () => store.getItem(key)
+  )
+}
+
+function useConversationAssistantItems(
+  store: ConversationItemsStore,
+  itemKeys: Array<string>
+) {
+  const cacheRef = React.useRef<{
+    itemKeys: Array<string>
+    items: Array<AssistantConversationItem>
+  }>({ itemKeys: [], items: [] })
+
+  const getSnapshot = () => {
+    const nextItems = itemKeys
+      .map((key) => store.getItem(key))
+      .filter(
+        (item): item is AssistantConversationItem => item?.kind === "assistant"
+      )
+    const cache = cacheRef.current
+    if (
+      cache.itemKeys.length === itemKeys.length &&
+      cache.itemKeys.every((key, index) => key === itemKeys[index]) &&
+      cache.items.length === nextItems.length &&
+      cache.items.every((item, index) => item === nextItems[index])
+    ) {
+      return cache.items
+    }
+
+    cacheRef.current = {
+      itemKeys,
+      items: nextItems,
+    }
+    return nextItems
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeItems(itemKeys, listener),
+      [itemKeys, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
+}
+
 function createTextValueStore(initialValue = ""): TextValueStore {
   let value = initialValue
   const listeners = new Set<() => void>()
@@ -1192,96 +1449,6 @@ function useTextValueSnapshot(store: TextValueStore) {
     store.getSnapshot,
     store.getSnapshot
   )
-}
-
-function sameRenderConversationGroup(
-  left: RenderConversationGroup,
-  right: RenderConversationGroup
-) {
-  if (left.kind !== right.kind || left.key !== right.key) return false
-
-  if (left.kind === "user" && right.kind === "user") {
-    return left.item === right.item
-  }
-
-  if (left.kind !== "assistant" || right.kind !== "assistant") {
-    return false
-  }
-
-  if (left.items.length !== right.items.length) return false
-
-  for (let index = 0; index < left.items.length; index += 1) {
-    if (left.items[index] !== right.items[index]) return false
-  }
-
-  return true
-}
-
-function reconcileRenderConversationGroups(
-  previousGroups: Array<RenderConversationGroup>,
-  nextGroups: Array<RenderConversationGroup>
-) {
-  if (previousGroups.length === 0) return nextGroups
-
-  let changed = previousGroups.length !== nextGroups.length
-  const groups: Array<RenderConversationGroup> = []
-
-  for (let index = 0; index < nextGroups.length; index += 1) {
-    const nextGroup = nextGroups[index]
-    const previousGroup = previousGroups[index]
-
-    if (
-      previousGroup &&
-      sameRenderConversationGroup(previousGroup, nextGroup)
-    ) {
-      groups.push(previousGroup)
-      continue
-    }
-
-    changed = true
-    groups.push(nextGroup)
-  }
-
-  return changed ? groups : previousGroups
-}
-
-function useRenderConversationGroups({
-  hideThinking,
-  hideToolBlocks,
-  items,
-}: {
-  items: Array<ConversationItem>
-  hideThinking: boolean
-  hideToolBlocks: boolean
-}) {
-  const previousGroupsRef = React.useRef<Array<RenderConversationGroup>>([])
-  const previousVisibilityRef = React.useRef({
-    hideThinking,
-    hideToolBlocks,
-  })
-
-  return React.useMemo(() => {
-    const nextGroups = groupConversationItemsForRender({
-      items,
-      hideThinking,
-      hideToolBlocks,
-    })
-    const previousVisibility = previousVisibilityRef.current
-    const canReusePreviousGroups =
-      previousVisibility.hideThinking === hideThinking &&
-      previousVisibility.hideToolBlocks === hideToolBlocks
-    const groups = canReusePreviousGroups
-      ? reconcileRenderConversationGroups(previousGroupsRef.current, nextGroups)
-      : nextGroups
-
-    previousGroupsRef.current = groups
-    previousVisibilityRef.current = {
-      hideThinking,
-      hideToolBlocks,
-    }
-
-    return groups
-  }, [hideThinking, hideToolBlocks, items])
 }
 
 type AppShellConversationFrameHandle = {
@@ -1374,6 +1541,20 @@ type AppShellConversationSessionState = Pick<
   "cwd" | "draft" | "sessionFile" | "sessionId" | "streaming"
 >
 
+function useAppShellConversationSessionState(store: ValueStore<SessionState>) {
+  return useSelectedValueStore(
+    store,
+    (sessionState) => ({
+      cwd: sessionState.cwd,
+      draft: sessionState.draft,
+      sessionFile: sessionState.sessionFile,
+      sessionId: sessionState.sessionId,
+      streaming: sessionState.streaming,
+    }),
+    shallowRecordEqual
+  )
+}
+
 const AppShellConversationFrame = React.forwardRef<
   AppShellConversationFrameHandle,
   {
@@ -1462,6 +1643,17 @@ type AppShellWorkingState = {
   done?: boolean
 }
 
+function sameWorkingState(
+  left: AppShellWorkingState | null,
+  right: AppShellWorkingState | null
+) {
+  return (
+    left?.label === right?.label &&
+    left?.summary === right?.summary &&
+    left?.done === right?.done
+  )
+}
+
 function AppShellMessagesWorkingIndicator({
   hiddenThinkingPreviewStore,
   state,
@@ -1482,11 +1674,16 @@ function AppShellMessagesWorkingIndicator({
 
 function AppShellTabsList({
   viewerContextId,
-  cwd,
+  sessionStore,
 }: {
   viewerContextId: string
-  cwd?: string
+  sessionStore: ValueStore<SessionState>
 }) {
+  const cwd = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => sessionState.cwd
+  )
+
   return (
     <TabsList className="w-full rounded-none border-b border-border/70">
       <TabsTrigger value="session">Session</TabsTrigger>
@@ -1497,29 +1694,100 @@ function AppShellTabsList({
   )
 }
 
+const AppShellGitPanelController = React.memo(
+  function AppShellGitPanelController({
+    active,
+    sessionStore,
+    viewerContextId,
+  }: {
+    active: boolean
+    sessionStore: ValueStore<SessionState>
+    viewerContextId: string
+  }) {
+    const cwd = useSelectedValueStore(
+      sessionStore,
+      (sessionState) => sessionState.cwd
+    )
+
+    return (
+      <GitPanel viewerContextId={viewerContextId} cwd={cwd} active={active} />
+    )
+  }
+)
+
 function ConversationGroupView({
   className,
   group,
   hideThinking,
   hideToolBlocks,
+  store,
 }: {
   className: string
-  group: RenderConversationGroup
+  group: RenderConversationGroupDescriptor
   hideThinking: boolean
   hideToolBlocks: boolean
+  store: ConversationItemsStore
 }) {
   if (group.kind === "user") {
     return (
-      <div data-message-anchor="true" className={className}>
-        <UserMessageCard item={group.item} />
-      </div>
+      <ConversationUserGroupView
+        className={className}
+        itemKey={group.itemKey}
+        store={store}
+      />
     )
   }
 
   return (
+    <ConversationAssistantGroupView
+      className={className}
+      hideThinking={hideThinking}
+      hideToolBlocks={hideToolBlocks}
+      itemKeys={group.itemKeys}
+      store={store}
+    />
+  )
+}
+
+function ConversationUserGroupView({
+  className,
+  itemKey,
+  store,
+}: {
+  className: string
+  itemKey: string
+  store: ConversationItemsStore
+}) {
+  const item = useConversationItem(store, itemKey)
+  if (!item || item.kind !== "user") return null
+
+  return (
+    <div data-message-anchor="true" className={className}>
+      <UserMessageCard item={item} />
+    </div>
+  )
+}
+
+function ConversationAssistantGroupView({
+  className,
+  hideThinking,
+  hideToolBlocks,
+  itemKeys,
+  store,
+}: {
+  className: string
+  hideThinking: boolean
+  hideToolBlocks: boolean
+  itemKeys: Array<string>
+  store: ConversationItemsStore
+}) {
+  const items = useConversationAssistantItems(store, itemKeys)
+  if (items.length === 0) return null
+
+  return (
     <div data-message-anchor="true" className={className}>
       <AssistantMessagesCard
-        items={group.items}
+        items={items}
         hideThinking={hideThinking}
         hideToolBlocks={hideToolBlocks}
       />
@@ -1538,14 +1806,11 @@ function AppShellConversationItemGroups({
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  const displayedConversationItems = useConversationItems(
-    conversationItemsStore
-  )
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
     : "w-full"
-  const renderedConversationGroups = useRenderConversationGroups({
-    items: displayedConversationItems,
+  const renderedConversationGroups = useConversationGroupDescriptors({
+    store: conversationItemsStore,
     hideThinking,
     hideToolBlocks,
   })
@@ -1561,6 +1826,7 @@ function AppShellConversationItemGroups({
           group={group}
           hideThinking={hideThinking}
           hideToolBlocks={hideToolBlocks}
+          store={conversationItemsStore}
         />
       ))}
     </>
@@ -1577,7 +1843,7 @@ function AppShellConversationEmptyState({
   onCreateSession,
   streaming,
   viewerContextId,
-  workingState,
+  workingStateStore,
 }: {
   awaitingFirstTurn: boolean
   conversationItemsStore: ConversationItemsStore
@@ -1588,12 +1854,13 @@ function AppShellConversationEmptyState({
   onCreateSession: () => void
   streaming: boolean
   viewerContextId: string
-  workingState: AppShellWorkingState | null
+  workingStateStore: ValueStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
     conversationItemsStore
   )
+  const workingState = useValueStore(workingStateStore)
   const displayedWorkingState =
     workingState ||
     (hasAssistantOutput
@@ -1662,14 +1929,14 @@ function AppShellConversationWorkingFooter({
   hiddenThinkingPreviewStore,
   hideThinking,
   streaming,
-  workingState,
+  workingStateStore,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hiddenThinkingPreviewStore: TextValueStore
   hideThinking: boolean
   streaming: boolean
-  workingState: AppShellWorkingState | null
+  workingStateStore: ValueStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
@@ -1678,6 +1945,7 @@ function AppShellConversationWorkingFooter({
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
     : "w-full"
+  const workingState = useValueStore(workingStateStore)
   const displayedWorkingState =
     workingState ||
     (hasAssistantOutput
@@ -1726,71 +1994,74 @@ function AppShellConversationMessageStack({
   )
 }
 
-function AppShellSessionConversation({
-  awaitingFirstTurn,
-  centerMessages,
-  conversationFrameRef,
-  conversationItemsStore,
-  hideThinking,
-  hideToolBlocks,
-  hiddenThinkingPreviewStore,
-  isSessionViewLoading,
-  isSubmitting,
-  onCreateSession,
-  sessionState,
-  viewerContextId,
-  workingState,
-}: {
-  awaitingFirstTurn: boolean
-  centerMessages: boolean
-  conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
-  conversationItemsStore: ConversationItemsStore
-  hiddenThinkingPreviewStore: TextValueStore
-  hideThinking: boolean
-  hideToolBlocks: boolean
-  isSessionViewLoading: boolean
-  isSubmitting: boolean
-  onCreateSession: () => void
-  sessionState: AppShellConversationSessionState
-  viewerContextId: string
-  workingState: AppShellWorkingState | null
-}) {
-  return (
-    <AppShellConversationFrame
-      ref={conversationFrameRef}
-      conversationItemsStore={conversationItemsStore}
-      isSessionViewLoading={isSessionViewLoading}
-      sessionState={sessionState}
-    >
-      <AppShellConversationEmptyState
-        awaitingFirstTurn={awaitingFirstTurn}
+const AppShellSessionConversation = React.memo(
+  function AppShellSessionConversation({
+    awaitingFirstTurn,
+    centerMessages,
+    conversationFrameRef,
+    conversationItemsStore,
+    hideThinking,
+    hideToolBlocks,
+    hiddenThinkingPreviewStore,
+    isSessionViewLoading,
+    isSubmitting,
+    onCreateSession,
+    sessionStore,
+    viewerContextId,
+    workingStateStore,
+  }: {
+    awaitingFirstTurn: boolean
+    centerMessages: boolean
+    conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
+    conversationItemsStore: ConversationItemsStore
+    hiddenThinkingPreviewStore: TextValueStore
+    hideThinking: boolean
+    hideToolBlocks: boolean
+    isSessionViewLoading: boolean
+    isSubmitting: boolean
+    onCreateSession: () => void
+    sessionStore: ValueStore<SessionState>
+    viewerContextId: string
+    workingStateStore: ValueStore<AppShellWorkingState | null>
+  }) {
+    const sessionState = useAppShellConversationSessionState(sessionStore)
+    return (
+      <AppShellConversationFrame
+        ref={conversationFrameRef}
         conversationItemsStore={conversationItemsStore}
-        cwd={sessionState.cwd}
-        draft={sessionState.draft}
         isSessionViewLoading={isSessionViewLoading}
-        isSubmitting={isSubmitting}
-        onCreateSession={onCreateSession}
-        streaming={sessionState.streaming}
-        viewerContextId={viewerContextId}
-        workingState={workingState}
-      />
-      <AppShellConversationMessageStack
-        centerMessages={centerMessages}
-        conversationItemsStore={conversationItemsStore}
-        hideThinking={hideThinking}
-        hideToolBlocks={hideToolBlocks}
-      />
-      <AppShellConversationWorkingFooter
-        centerMessages={centerMessages}
-        conversationItemsStore={conversationItemsStore}
-        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-        hideThinking={hideThinking}
-        streaming={sessionState.streaming}
-        workingState={workingState}
-      />
-    </AppShellConversationFrame>
-  )
-}
+        sessionState={sessionState}
+      >
+        <AppShellConversationEmptyState
+          awaitingFirstTurn={awaitingFirstTurn}
+          conversationItemsStore={conversationItemsStore}
+          cwd={sessionState.cwd}
+          draft={sessionState.draft}
+          isSessionViewLoading={isSessionViewLoading}
+          isSubmitting={isSubmitting}
+          onCreateSession={onCreateSession}
+          streaming={sessionState.streaming}
+          viewerContextId={viewerContextId}
+          workingStateStore={workingStateStore}
+        />
+        <AppShellConversationMessageStack
+          centerMessages={centerMessages}
+          conversationItemsStore={conversationItemsStore}
+          hideThinking={hideThinking}
+          hideToolBlocks={hideToolBlocks}
+        />
+        <AppShellConversationWorkingFooter
+          centerMessages={centerMessages}
+          conversationItemsStore={conversationItemsStore}
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          hideThinking={hideThinking}
+          streaming={sessionState.streaming}
+          workingStateStore={workingStateStore}
+        />
+      </AppShellConversationFrame>
+    )
+  }
+)
 
 function useAppShellComposerSnapshot(
   store: ValueStore<AppShellComposerSnapshot>
@@ -1811,6 +2082,98 @@ const AppShellComposerController = React.memo(
     store: ValueStore<AppShellComposerSnapshot>
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
+    const snapshotRef = useLatestRef(snapshot)
+
+    const onComposerTextChange = useStableEvent((value: string) => {
+      if (snapshotRef.current.disabled) return
+      actionsRef.current.syncComposerDraft(value)
+    })
+    const onPickImages = useStableEvent(
+      (files: FileList | Array<File> | null) => {
+        if (snapshotRef.current.disabled) return
+        void actionsRef.current.onPickImages(files)
+      }
+    )
+    const onRemoveComposerImage = useStableEvent((index: number) => {
+      if (snapshotRef.current.disabled) return
+      actionsRef.current.onRemoveComposerImage(index)
+    })
+    const onSubmitPrompt = useStableEvent(
+      (streamingBehavior?: StreamingBehavior) => {
+        if (snapshotRef.current.disabled) return
+        void actionsRef.current.submitPrompt(streamingBehavior)
+      }
+    )
+    const onAbort = useStableEvent(() => {
+      if (snapshotRef.current.disabled) return
+      void actionsRef.current.abortSession()
+    })
+    const onRemovePendingMessage = useStableEvent((pendingId: string) => {
+      if (snapshotRef.current.disabled) return
+      if (actionsRef.current.removePendingDraftFollowUp(pendingId)) return
+      void actionsRef.current.removePendingMessage(pendingId)
+    })
+    const onReorderPending = useStableEvent(
+      (pendingId: string, direction: -1 | 1) => {
+        if (snapshotRef.current.disabled) return
+        if (
+          actionsRef.current.reorderPendingDraftFollowUp(pendingId, direction)
+        ) {
+          return
+        }
+        void actionsRef.current.reorderPending(pendingId, direction)
+      }
+    )
+    const onRunBuiltinSlashCommand = useStableEvent(
+      (name: string, args: string) => {
+        if (snapshotRef.current.disabled) return
+        void actionsRef.current.runBuiltinSlashCommand(name, args)
+      }
+    )
+    const onSelectModel = useStableEvent((value: string) => {
+      if (snapshotRef.current.disabled) return
+      void actionsRef.current.setModel(value)
+    })
+    const onSelectThinkingLevel = useStableEvent((level: string) => {
+      if (snapshotRef.current.disabled) return
+      void actionsRef.current.setThinkingLevel(level)
+    })
+    const requestPathCompletions = useStableEvent(async (prefix: string) => {
+      const currentSnapshot = snapshotRef.current
+      if (currentSnapshot.disabled) return []
+
+      const response = await fetchJson<PathCompletionsResponse>(
+        buildRequestUrl("/api/path-completions", {
+          contextId: currentSnapshot.viewerContextId,
+          sessionId: currentSnapshot.activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prefix }),
+        }
+      )
+      return isApiErrorResponse(response) ? [] : response.items
+    })
+    const requestFileCompletions = useStableEvent(
+      async (query: string, isQuotedPrefix: boolean) => {
+        const currentSnapshot = snapshotRef.current
+        if (currentSnapshot.disabled) return []
+
+        const response = await fetchJson<FileCompletionsResponse>(
+          buildRequestUrl("/api/file-completions", {
+            contextId: currentSnapshot.viewerContextId,
+            sessionId: currentSnapshot.activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ query, isQuotedPrefix }),
+          }
+        )
+        return isApiErrorResponse(response) ? [] : response.items
+      }
+    )
 
     return (
       <ComposerPanel
@@ -1832,84 +2195,18 @@ const AppShellComposerController = React.memo(
         disabled={snapshot.disabled}
         fileInputRef={fileInputRef}
         slashCommands={snapshot.slashCommands}
-        onComposerTextChange={(value) => {
-          if (snapshot.disabled) return
-          actionsRef.current.syncComposerDraft(value)
-        }}
-        onPickImages={(files) => {
-          if (snapshot.disabled) return
-          void actionsRef.current.onPickImages(files)
-        }}
-        onRemoveComposerImage={(index) => {
-          if (snapshot.disabled) return
-          actionsRef.current.onRemoveComposerImage(index)
-        }}
-        onSubmitPrompt={(streamingBehavior) => {
-          if (snapshot.disabled) return
-          void actionsRef.current.submitPrompt(streamingBehavior)
-        }}
-        onAbort={() => {
-          if (snapshot.disabled) return
-          void actionsRef.current.abortSession()
-        }}
-        onRemovePendingMessage={(pendingId) => {
-          if (snapshot.disabled) return
-          if (actionsRef.current.removePendingDraftFollowUp(pendingId)) return
-          void actionsRef.current.removePendingMessage(pendingId)
-        }}
-        onReorderPending={(pendingId, direction) => {
-          if (snapshot.disabled) return
-          if (
-            actionsRef.current.reorderPendingDraftFollowUp(pendingId, direction)
-          ) {
-            return
-          }
-          void actionsRef.current.reorderPending(pendingId, direction)
-        }}
-        onRunBuiltinSlashCommand={(name, args) => {
-          if (snapshot.disabled) return
-          void actionsRef.current.runBuiltinSlashCommand(name, args)
-        }}
-        onSelectModel={(value) => {
-          if (snapshot.disabled) return
-          void actionsRef.current.setModel(value)
-        }}
-        onSelectThinkingLevel={(level) => {
-          if (snapshot.disabled) return
-          void actionsRef.current.setThinkingLevel(level)
-        }}
-        requestPathCompletions={async (prefix) => {
-          if (snapshot.disabled) return []
-
-          const response = await fetchJson<PathCompletionsResponse>(
-            buildRequestUrl("/api/path-completions", {
-              contextId: snapshot.viewerContextId,
-              sessionId: snapshot.activeSessionId,
-            }),
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ prefix }),
-            }
-          )
-          return isApiErrorResponse(response) ? [] : response.items
-        }}
-        requestFileCompletions={async (query, isQuotedPrefix) => {
-          if (snapshot.disabled) return []
-
-          const response = await fetchJson<FileCompletionsResponse>(
-            buildRequestUrl("/api/file-completions", {
-              contextId: snapshot.viewerContextId,
-              sessionId: snapshot.activeSessionId,
-            }),
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ query, isQuotedPrefix }),
-            }
-          )
-          return isApiErrorResponse(response) ? [] : response.items
-        }}
+        onComposerTextChange={onComposerTextChange}
+        onPickImages={onPickImages}
+        onRemoveComposerImage={onRemoveComposerImage}
+        onSubmitPrompt={onSubmitPrompt}
+        onAbort={onAbort}
+        onRemovePendingMessage={onRemovePendingMessage}
+        onReorderPending={onReorderPending}
+        onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
+        onSelectModel={onSelectModel}
+        onSelectThinkingLevel={onSelectThinkingLevel}
+        requestPathCompletions={requestPathCompletions}
+        requestFileCompletions={requestFileCompletions}
       />
     )
   }
@@ -2253,9 +2550,18 @@ const AppShellSessionWorkspace = React.forwardRef<
   },
   ref
 ) {
-  const [sessionState, setSessionState] = React.useState<SessionState>(
-    createInitialSessionState()
+  const initialSessionStateRef = React.useRef<SessionState | null>(null)
+  if (!initialSessionStateRef.current) {
+    initialSessionStateRef.current = createInitialSessionState()
+  }
+  const [sessionState, setSessionStateState] = React.useState<SessionState>(
+    initialSessionStateRef.current
   )
+  const sessionStoreRef = React.useRef<ValueStore<SessionState> | null>(null)
+  if (!sessionStoreRef.current) {
+    sessionStoreRef.current = createValueStore(initialSessionStateRef.current)
+  }
+  const sessionStore = sessionStoreRef.current
   const [currentTab, setCurrentTab] = React.useState("session")
   const previousRouteSessionIdRef = React.useRef(sessionId)
   const [composerDraftSeed, setComposerDraftSeed] = React.useState<{
@@ -2354,6 +2660,23 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
   const sessionStateRef = React.useRef(sessionState)
+  const setSessionState = React.useCallback<
+    React.Dispatch<React.SetStateAction<SessionState>>
+  >(
+    (action) => {
+      const currentState = sessionStateRef.current
+      const nextState =
+        typeof action === "function"
+          ? (action as (current: SessionState) => SessionState)(currentState)
+          : action
+      if (Object.is(currentState, nextState)) return
+
+      sessionStateRef.current = nextState
+      sessionStore.setSnapshot(nextState)
+      setSessionStateState(nextState)
+    },
+    [sessionStore]
+  )
   const composerTextRef = React.useRef(composerDraftSeed.text)
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeed.skillName
@@ -2386,6 +2709,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const hiddenThinkingPreviewStore = hiddenThinkingPreviewStoreRef.current
+  const workingStateStoreRef =
+    React.useRef<ValueStore<AppShellWorkingState | null> | null>(null)
+  if (!workingStateStoreRef.current) {
+    workingStateStoreRef.current =
+      createValueStore<AppShellWorkingState | null>(null, sameWorkingState)
+  }
+  const workingStateStore = workingStateStoreRef.current
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       conversationItemsStore.setItems(items)
@@ -3372,6 +3702,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     return null
   })()
 
+  React.useLayoutEffect(() => {
+    workingStateStore.setSnapshot(workingState)
+  })
+
   const buildCommandPaletteCommands = () => {
     const commands: Array<AppCommand> = [
       {
@@ -3600,6 +3934,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionHasFile: Boolean(sessionState.sessionFile),
     sidebarSessionEntriesByKey,
   })
+  const sessionHeaderActionsRef = useLatestRef<AppShellSessionHeaderActions>({
+    createSession,
+    onDeleteCurrentSession: openDeleteDialogForCurrentSession,
+    onForkSession: openForkDialog,
+    onRenameSession: openRenameDialog,
+    onRunCompact: runCompact,
+    onToggleHideThinking: toggleHideThinking,
+    onToggleHideToolBlocks: toggleHideToolBlocks,
+    onTreeSession: openTreeDialog,
+  })
 
   useAppShellShortcuts({
     addDirectoryOpenRef,
@@ -3663,24 +4007,14 @@ const AppShellSessionWorkspace = React.forwardRef<
 
       <SidebarInset className="min-h-0 overflow-hidden">
         <AppShellSessionHeader
-          createSession={createSession}
+          actionsRef={sessionHeaderActionsRef}
           defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySessionCwd={displaySessionCwd}
           displaySessionTitle={displaySessionTitle}
-          hideThinkingBlock={sessionState.hideThinkingBlock}
           hideToolBlocks={hideToolBlocks}
           isSessionViewLoading={isSessionViewLoading}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
-          onDeleteCurrentSession={openDeleteDialogForCurrentSession}
-          onForkSession={openForkDialog}
-          onRenameSession={openRenameDialog}
-          onRunCompact={runCompact}
-          onToggleHideThinking={toggleHideThinking}
-          onToggleHideToolBlocks={toggleHideToolBlocks}
-          onTreeSession={openTreeDialog}
-          sessionDraft={sessionState.draft}
-          sessionHasFile={Boolean(sessionState.sessionFile)}
-          sessionStreaming={sessionState.streaming}
+          sessionStore={sessionStore}
           viewerContextId={viewerContextId}
         />
 
@@ -3691,7 +4025,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         >
           <AppShellTabsList
             viewerContextId={viewerContextId}
-            cwd={sessionState.cwd}
+            sessionStore={sessionStore}
           />
 
           <TabsContent
@@ -3712,9 +4046,9 @@ const AppShellSessionWorkspace = React.forwardRef<
               onCreateSession={() => {
                 void createSession()
               }}
-              sessionState={sessionState}
+              sessionStore={sessionStore}
               viewerContextId={viewerContextId}
-              workingState={workingState}
+              workingStateStore={workingStateStore}
             />
 
             <AppShellComposerController
@@ -3730,9 +4064,9 @@ const AppShellSessionWorkspace = React.forwardRef<
             keepMounted
             className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
           >
-            <GitPanel
+            <AppShellGitPanelController
               viewerContextId={viewerContextId}
-              cwd={sessionState.cwd}
+              sessionStore={sessionStore}
               active={currentTab === "git"}
             />
           </TabsContent>
@@ -3792,15 +4126,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
 })
 
-type AppShellSessionHeaderProps = {
+type AppShellSessionHeaderActions = {
   createSession: (cwdOverride?: string) => void | Promise<unknown>
-  defaultNewSessionDirectory: string
-  displaySessionCwd?: string
-  displaySessionTitle: string
-  hideThinkingBlock: boolean
-  hideToolBlocks: boolean
-  isSessionViewLoading: boolean
-  newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onDeleteCurrentSession: () => void
   onForkSession: () => void | Promise<unknown>
   onRenameSession: () => void
@@ -3808,33 +4135,42 @@ type AppShellSessionHeaderProps = {
   onToggleHideThinking: () => void | Promise<unknown>
   onToggleHideToolBlocks: () => void
   onTreeSession: () => void | Promise<unknown>
-  sessionDraft: boolean
-  sessionHasFile: boolean
-  sessionStreaming: boolean
+}
+
+type AppShellSessionHeaderProps = {
+  actionsRef: React.MutableRefObject<AppShellSessionHeaderActions>
+  defaultNewSessionDirectory: string
+  displaySessionCwd?: string
+  displaySessionTitle: string
+  hideToolBlocks: boolean
+  isSessionViewLoading: boolean
+  newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  sessionStore: ValueStore<SessionState>
   viewerContextId: string
 }
 
 const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
-  createSession,
+  actionsRef,
   defaultNewSessionDirectory,
   displaySessionCwd,
   displaySessionTitle,
-  hideThinkingBlock,
   hideToolBlocks,
   isSessionViewLoading,
   newSessionDirectoryOptions,
-  onDeleteCurrentSession,
-  onForkSession,
-  onRenameSession,
-  onRunCompact,
-  onToggleHideThinking,
-  onToggleHideToolBlocks,
-  onTreeSession,
-  sessionDraft,
-  sessionHasFile,
-  sessionStreaming,
+  sessionStore,
   viewerContextId,
 }: AppShellSessionHeaderProps) {
+  const sessionHeaderState = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => ({
+      hideThinkingBlock: sessionState.hideThinkingBlock,
+      sessionDraft: sessionState.draft,
+      sessionHasFile: Boolean(sessionState.sessionFile),
+      sessionStreaming: sessionState.streaming,
+    }),
+    shallowRecordEqual
+  )
+
   return (
     <div className="shrink-0 border-b border-border/70 p-4">
       <div className="flex items-start justify-between gap-4">
@@ -3842,7 +4178,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           <SidebarTrigger className="mt-0.5 shrink-0" />
           <div className="min-w-0 space-y-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              {!isSessionViewLoading && sessionStreaming ? (
+              {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
                 <Spinner
                   className="size-3.5 shrink-0 text-muted-foreground"
                   aria-label="Session streaming"
@@ -3854,7 +4190,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 {displaySessionTitle}
               </h2>
-              {!isSessionViewLoading && sessionDraft ? (
+              {!isSessionViewLoading && sessionHeaderState.sessionDraft ? (
                 <Badge variant="outline">Draft</Badge>
               ) : null}
             </div>
@@ -3887,7 +4223,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem
                 onClick={() => {
-                  void createSession()
+                  void actionsRef.current.createSession()
                 }}
               >
                 <span>Create new session</span>
@@ -3903,7 +4239,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                       <DropdownMenuItem
                         key={option.path}
                         onClick={() => {
-                          void createSession(option.path)
+                          void actionsRef.current.createSession(option.path)
                         }}
                       >
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -3923,43 +4259,65 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 </DropdownMenuSub>
               ) : null}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onRunCompact}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void actionsRef.current.onRunCompact()
+                }}
+              >
                 <span>Compact session</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onTreeSession}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void actionsRef.current.onTreeSession()
+                }}
+              >
                 <span>Tree</span>
                 <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onForkSession}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void actionsRef.current.onForkSession()
+                }}
+              >
                 <span>Fork</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => {
-                  void onToggleHideThinking()
+                  void actionsRef.current.onToggleHideThinking()
                 }}
               >
                 <span>
-                  {hideThinkingBlock ? "Show thinking" : "Hide thinking"}
+                  {sessionHeaderState.hideThinkingBlock
+                    ? "Show thinking"
+                    : "Hide thinking"}
                 </span>
                 <DropdownMenuShortcut>Ctrl+G</DropdownMenuShortcut>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onToggleHideToolBlocks}>
+              <DropdownMenuItem
+                onClick={() => {
+                  actionsRef.current.onToggleHideToolBlocks()
+                }}
+              >
                 <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
                 <DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                disabled={!sessionHasFile}
-                onClick={onRenameSession}
+                disabled={!sessionHeaderState.sessionHasFile}
+                onClick={() => {
+                  actionsRef.current.onRenameSession()
+                }}
               >
                 <span>Rename session</span>
                 <DropdownMenuShortcut>Ctrl+E</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                disabled={!sessionHasFile}
-                onClick={onDeleteCurrentSession}
+                disabled={!sessionHeaderState.sessionHasFile}
+                onClick={() => {
+                  actionsRef.current.onDeleteCurrentSession()
+                }}
               >
                 <span>Delete session</span>
                 <DropdownMenuShortcut>Ctrl+X</DropdownMenuShortcut>
@@ -3976,7 +4334,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 : "Create a new session"
             }
             onClick={() => {
-              void createSession()
+              void actionsRef.current.createSession()
             }}
           >
             <SquarePenIcon />

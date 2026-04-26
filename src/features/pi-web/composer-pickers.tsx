@@ -1,3 +1,4 @@
+import * as React from "react"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
 import type { ModelOption, SessionState } from "@/lib/pi-web"
@@ -58,7 +59,7 @@ type ComposerPickersProps = {
   onSelectThinkingLevel: (level: string) => void
 }
 
-export function ComposerPickers({
+export const ComposerPickers = React.memo(function ComposerPickers({
   modelPickerOpen,
   onModelPickerOpenChange,
   thinkingPickerOpen,
@@ -220,4 +221,4 @@ export function ComposerPickers({
       <ComposerContextUsageIndicator contextUsage={contextUsage} />
     </div>
   )
-}
+})

@@ -85,6 +85,12 @@ type ComposerPanelProps = {
   ) => Promise<Array<CompletionItem>>
 }
 
+type ComposerAttachmentsProps = {
+  images: Array<PromptImage>
+  disabled: boolean
+  onRemoveImage: (index: number) => void
+}
+
 type ComposerPromptEditorProps = {
   composerImages: Array<PromptImage>
   composerText: string
@@ -276,7 +282,39 @@ export const ComposerPanel = React.forwardRef<
   )
 })
 
-function ComposerPromptEditor({
+const ComposerAttachments = React.memo(function ComposerAttachments({
+  images,
+  disabled,
+  onRemoveImage,
+}: ComposerAttachmentsProps) {
+  if (images.length === 0) return null
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-3">
+      {images.map((image, index) => (
+        <div key={promptImageKey(image)} className="relative">
+          <img
+            src={image.previewUrl}
+            alt="Attachment preview"
+            className="h-20 w-20 rounded-lg border object-cover"
+          />
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={disabled}
+            onClick={() => onRemoveImage(index)}
+          >
+            <XIcon className="size-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  )
+})
+
+const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   composerImages,
   composerText,
   composerSkill,
@@ -714,27 +752,11 @@ function ComposerPromptEditor({
         ) : null}
       </div>
 
-      {composerImages.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-3">
-          {composerImages.map((image, index) => (
-            <div key={promptImageKey(image)} className="relative">
-              <img
-                src={image.previewUrl}
-                alt="Attachment preview"
-                className="h-20 w-20 rounded-lg border object-cover"
-              />
-              <button
-                type="button"
-                className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={disabled}
-                onClick={() => onRemoveComposerImage(index)}
-              >
-                <XIcon className="size-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <ComposerAttachments
+        images={composerImages}
+        disabled={disabled}
+        onRemoveImage={onRemoveComposerImage}
+      />
     </div>
   )
-}
+})
