@@ -455,7 +455,7 @@ Current behavior includes:
 - unpushed commit hashes
 - short-lived caches for status/changes
 
-The git panel renders one active heavy section at a time (`files`, `branches`, or `commits`). Keep queries and `useIsFetching()` subscriptions scoped to the active section unless there is a deliberate UX reason to mount/fetch everything.
+The git panel renders the files, branches, and commits sections together, but the panel itself only mounts while the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title.
 
 If you extend git UI, update:
 

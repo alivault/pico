@@ -31,8 +31,6 @@ type GitPanelProps = {
 
 type GitScopedProps = GitPanelProps
 
-type GitPanelSectionId = "files" | "branches" | "commits"
-
 type GitSectionProps = {
   title: string
   meta?: string
@@ -430,25 +428,37 @@ function GitSectionNote({
   )
 }
 
-function GitPanelErrorToasts({
-  active,
-  activeSection,
-  cwd,
-  viewerContextId,
-}: GitScopedProps & { activeSection: GitPanelSectionId }) {
+function GitPanelErrorToasts({ viewerContextId, cwd, active }: GitScopedProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const enabled = Boolean(active && viewerContextId && normalizedCwd)
-  const changesScope = activeSection === "files" ? "files" : activeSection
   const statusErrorQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
     enabled,
     notifyOnChangeProps: ["error", "errorUpdatedAt"],
   })
-  const changesErrorQuery = useQuery({
+  const filesErrorQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
       cwd: normalizedCwd,
-      scope: changesScope,
+      scope: "files",
+    }),
+    enabled,
+    notifyOnChangeProps: ["error", "errorUpdatedAt"],
+  })
+  const branchesErrorQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "branches",
+    }),
+    enabled,
+    notifyOnChangeProps: ["error", "errorUpdatedAt"],
+  })
+  const commitsErrorQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "commits",
     }),
     enabled,
     notifyOnChangeProps: ["error", "errorUpdatedAt"],
@@ -457,14 +467,22 @@ function GitPanelErrorToasts({
   React.useEffect(() => {
     if (!active) return
 
-    const error = changesErrorQuery.error || statusErrorQuery.error
+    const error =
+      filesErrorQuery.error ||
+      branchesErrorQuery.error ||
+      commitsErrorQuery.error ||
+      statusErrorQuery.error
     if (!error) return
 
     toast.error(getErrorMessage(error, "Failed to load git view"))
   }, [
     active,
-    changesErrorQuery.error,
-    changesErrorQuery.errorUpdatedAt,
+    branchesErrorQuery.error,
+    branchesErrorQuery.errorUpdatedAt,
+    commitsErrorQuery.error,
+    commitsErrorQuery.errorUpdatedAt,
+    filesErrorQuery.error,
+    filesErrorQuery.errorUpdatedAt,
     statusErrorQuery.error,
     statusErrorQuery.errorUpdatedAt,
   ])
@@ -556,28 +574,31 @@ function GitRepositorySummary({
   )
 }
 
-function GitPanelToolbar({
-  active,
-  activeSection,
-  cwd,
-  viewerContextId,
-}: GitScopedProps & { activeSection: GitPanelSectionId }) {
+function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
   const statusFetchCount = useIsFetching({
     queryKey: piWebQueryKeys.gitStatus(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const sectionFetchCount = useIsFetching({
-    queryKey:
-      activeSection === "files"
-        ? piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd)
-        : activeSection === "branches"
-          ? piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd)
-          : piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
+  const filesFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd),
     exact: true,
   })
-  const refreshing = statusFetchCount + sectionFetchCount > 0
+  const branchesFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd),
+    exact: true,
+  })
+  const commitsFetchCount = useIsFetching({
+    queryKey: piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
+    exact: true,
+  })
+  const refreshing =
+    statusFetchCount +
+      filesFetchCount +
+      branchesFetchCount +
+      commitsFetchCount >
+    0
 
   const refreshGit = async () => {
     if (!viewerContextId || !normalizedCwd) return
@@ -1136,79 +1157,8 @@ export function DraftGitStatusBadge({
   return <Badge variant="outline">{statusQuery.data.label}</Badge>
 }
 
-const GIT_PANEL_SECTIONS = [
-  { id: "files", label: "Files" },
-  { id: "branches", label: "Branches" },
-  { id: "commits", label: "Commits" },
-] satisfies Array<{ id: GitPanelSectionId; label: string }>
-
-function GitPanelSectionTabs({
-  activeSection,
-  onSectionChange,
-}: {
-  activeSection: GitPanelSectionId
-  onSectionChange: (section: GitPanelSectionId) => void
-}) {
-  return (
-    <div className="inline-flex items-center rounded-md border border-border/80 bg-background/70 p-0.5">
-      {GIT_PANEL_SECTIONS.map((section) => (
-        <button
-          key={section.id}
-          type="button"
-          aria-pressed={activeSection === section.id}
-          className={cn(
-            "min-h-7 rounded-[calc(var(--radius-sm)-1px)] px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground",
-            activeSection === section.id &&
-              "bg-muted text-foreground shadow-xs dark:bg-input/40"
-          )}
-          onClick={() => onSectionChange(section.id)}
-        >
-          {section.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function GitPanelActiveSection({
-  active,
-  activeSection,
-  cwd,
-  viewerContextId,
-}: GitScopedProps & { activeSection: GitPanelSectionId }) {
-  if (activeSection === "branches") {
-    return (
-      <GitBranchesSection
-        viewerContextId={viewerContextId}
-        cwd={cwd}
-        active={active}
-      />
-    )
-  }
-
-  if (activeSection === "commits") {
-    return (
-      <GitCommitsSection
-        viewerContextId={viewerContextId}
-        cwd={cwd}
-        active={active}
-      />
-    )
-  }
-
-  return (
-    <GitFilesSection
-      viewerContextId={viewerContextId}
-      cwd={cwd}
-      active={active}
-    />
-  )
-}
-
 export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
   const normalizedCwd = normalizeCwd(cwd)
-  const [activeSection, setActiveSection] =
-    React.useState<GitPanelSectionId>("files")
 
   return (
     <div className="mx-auto grid w-full max-w-[80ch] gap-3">
@@ -1216,25 +1166,26 @@ export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
         active={active}
-        activeSection={activeSection}
       />
       <GitPanelToolbar
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
         active={active}
-        activeSection={activeSection}
       />
-      <div className="flex justify-end">
-        <GitPanelSectionTabs
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-        />
-      </div>
-      <GitPanelActiveSection
+      <GitFilesSection
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
         active={active}
-        activeSection={activeSection}
+      />
+      <GitBranchesSection
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        active={active}
+      />
+      <GitCommitsSection
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        active={active}
       />
     </div>
   )
