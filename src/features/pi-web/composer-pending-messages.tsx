@@ -1,5 +1,3 @@
-import { HourglassIcon } from "lucide-react"
-
 import type { PromptImage } from "@/lib/pi-web"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -56,7 +54,6 @@ export function ComposerPendingMessages({
       <AccordionItem value="pending-prompts" className="border-0">
         <AccordionTrigger className="min-h-10 items-center gap-3 px-3 py-2 hover:no-underline">
           <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-            <HourglassIcon className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">Pending prompts</span>
             <Badge variant="outline" className="shrink-0">
               {currentPendingMessages.length}
