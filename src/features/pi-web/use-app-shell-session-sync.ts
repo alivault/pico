@@ -456,6 +456,7 @@ export function useAppShellSessionSync({
     () => sessionStore.getSnapshot().sessionId,
     () => sessionStore.getSnapshot().sessionId
   )
+  const syncedSessionIdRef = React.useRef(syncedSessionId)
   const syncedSessionDraft = React.useSyncExternalStore(
     sessionStore.subscribe,
     () => sessionStore.getSnapshot().draft,
@@ -805,10 +806,14 @@ export function useAppShellSessionSync({
   ])
 
   React.useEffect(() => {
+    syncedSessionIdRef.current = syncedSessionId
+  }, [syncedSessionId])
+
+  React.useEffect(() => {
     if (!viewerContextId || !sessionId) return
     if (draftSessionLoadingOwnerKey) return
     if (!hasReceivedStateSyncRef.current) return
-    if (sessionId === syncedSessionId) return
+    if (sessionId === syncedSessionIdRef.current) return
 
     const abortController = new AbortController()
 
@@ -831,7 +836,7 @@ export function useAppShellSessionSync({
     return () => {
       abortController.abort()
     }
-  }, [draftSessionLoadingOwnerKey, viewerContextId, sessionId, syncedSessionId])
+  }, [draftSessionLoadingOwnerKey, viewerContextId, sessionId])
 
   React.useEffect(() => {
     if (syncedSessionDraft || !syncedSessionId) return

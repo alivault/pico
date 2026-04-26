@@ -79,6 +79,29 @@ import {
 } from "@/lib/pi-web"
 import { cn } from "@/lib/utils"
 
+const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
+
+function useDelayedTrue(value: boolean, delayMs: number) {
+  const [delayedValue, setDelayedValue] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!value) {
+      setDelayedValue(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDelayedValue(true)
+    }, delayMs)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [delayMs, value])
+
+  return delayedValue
+}
+
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return (
     <span
@@ -833,7 +856,13 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     : Math.min(sessions.length, renderCount)
   const visibleSessions = sessions.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < sessions.length
+  const showLoadingSpinner = useDelayedTrue(
+    isLoadingSessions,
+    SIDEBAR_LOADING_SPINNER_DELAY_MS
+  )
   const showLoadingState = isLoadingSessions && sessions.length === 0
+  const showHeaderLoadingSpinner =
+    showLoadingSpinner && sessions.length === 0 && collapsed
 
   return (
     <SidebarGroup
@@ -874,7 +903,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <span className="min-w-0 flex-1">
             <DirectoryPathLabel path={directory} />
           </span>
-          {isLoadingSessions && !showLoadingState ? (
+          {showHeaderLoadingSpinner ? (
             <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />
           ) : null}
         </button>
@@ -911,7 +940,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         <SidebarGroupContent className="pt-1">
           {showLoadingState ? (
             <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
-              <Spinner />
+              {showLoadingSpinner ? (
+                <Spinner />
+              ) : (
+                <span className="size-4" aria-hidden="true" />
+              )}
               Loading sessions…
             </div>
           ) : sessions.length > 0 ? (

@@ -1069,12 +1069,17 @@ export class PiWebRuntime {
     const allSessions = await this.listSessionIndexEntries()
     const activeEntry = this.getActiveEntry(context)
     const directories = this.listKnownDirectories(allSessions)
+    const activeDirectory = activeEntry?.cwd?.trim() || ""
     const bootstrapDirectories = options?.includeBootstrapIndexes
       ? normalizeRequestedDirectories(context.sidebarBootstrapDirectories)
       : []
+    const payloadIndexDirectories = normalizeRequestedDirectories([
+      ...bootstrapDirectories,
+      activeDirectory,
+    ])
     const allDirectories = normalizeRequestedDirectories([
       ...directories,
-      ...bootstrapDirectories,
+      ...payloadIndexDirectories,
     ])
     const entriesByDirectory = await this.collectDirectoryEntries(
       allSessions,
@@ -1082,9 +1087,9 @@ export class PiWebRuntime {
     )
     const streamingPaths = this.buildStreamingPaths()
     const directoryIndexes =
-      bootstrapDirectories.length > 0
+      payloadIndexDirectories.length > 0
         ? Object.fromEntries(
-            bootstrapDirectories.map((directoryPath) => [
+            payloadIndexDirectories.map((directoryPath) => [
               directoryPath,
               this.createDirectoryIndexPayload(
                 directoryPath,

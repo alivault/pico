@@ -3739,23 +3739,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   React.useEffect(() => {
-    if (!loadingSessionId) return
-    if (sessionState.sessionId === loadingSessionId) {
-      setLoadingSessionId(null)
-    }
-  }, [loadingSessionId, sessionState.sessionId])
-
-  React.useEffect(() => {
-    if (!initialLoadingSessionId) return
-    if (
-      sessionState.sessionKey ||
-      sessionState.sessionId === initialLoadingSessionId
-    ) {
-      setInitialLoadingSessionId(null)
-    }
-  }, [initialLoadingSessionId, sessionState.sessionId, sessionState.sessionKey])
-
-  React.useEffect(() => {
     const nextDirectory = sessionState.cwd?.trim()
     if (!nextDirectory) return
     safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
@@ -5500,6 +5483,17 @@ function AppShellSidebarController({
         directoryIndexRequestIdsByPathRef.current[directory] === requestId
     )
 
+  const clearDirectoryIndexRequestDirectories = (
+    directories: Array<string>,
+    requestId: number
+  ) => {
+    for (const directory of directories) {
+      if (directoryIndexRequestIdsByPathRef.current[directory] === requestId) {
+        delete directoryIndexRequestIdsByPathRef.current[directory]
+      }
+    }
+  }
+
   React.useEffect(() => {
     let timeoutId = 0
     const frameId = window.requestAnimationFrame(() => {
@@ -5557,22 +5551,40 @@ function AppShellSidebarController({
     const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
 
-    sidebarStore.setDirectoryIndexDataByPath((current) => {
+    sidebarStore.setState((current) => {
       const merged = payloadDirectories.length
-        ? mergeDirectoryIndexData(current, payloadDirectoryIndexes)
-        : current
-
-      return clearUnreadForActiveSidebarSession(merged, {
-        sessionId: sessionsEvent.activeSessionId,
-        sessionPath: sessionsEvent.activeSessionPath,
-      })
-    })
-
-    if (payloadDirectories.length > 0) {
-      sidebarStore.setDirectoryIndexLoading((current) =>
-        updateDirectoryIndexLoadingState(current, payloadDirectories, false)
+        ? mergeDirectoryIndexData(
+            current.directoryIndexDataByPath,
+            payloadDirectoryIndexes
+          )
+        : current.directoryIndexDataByPath
+      const nextDirectoryIndexDataByPath = clearUnreadForActiveSidebarSession(
+        merged,
+        {
+          sessionId: sessionsEvent.activeSessionId,
+          sessionPath: sessionsEvent.activeSessionPath,
+        }
       )
-    }
+      const nextDirectoryIndexLoading = payloadDirectories.length
+        ? updateDirectoryIndexLoadingState(
+            current.directoryIndexLoading,
+            payloadDirectories,
+            false
+          )
+        : current.directoryIndexLoading
+
+      if (
+        nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
+        nextDirectoryIndexLoading === current.directoryIndexLoading
+      ) {
+        return current
+      }
+
+      return {
+        directoryIndexDataByPath: nextDirectoryIndexDataByPath,
+        directoryIndexLoading: nextDirectoryIndexLoading,
+      }
+    })
 
     const previousSnapshot = sidebarDirectorySessionsSnapshotRef.current
     const nextRevisions: Record<string, string> = {}
@@ -5596,7 +5608,10 @@ function AppShellSidebarController({
         continue
       }
 
-      if (directoryIndexLoading[directory]) {
+      if (
+        directoryIndexLoading[directory] ||
+        directoryIndexRequestIdsByPathRef.current[directory]
+      ) {
         continue
       }
 
@@ -5619,9 +5634,6 @@ function AppShellSidebarController({
     }
 
     const requestId = startDirectoryIndexRequest(directoriesToRefresh)
-    sidebarStore.setDirectoryIndexLoading((current) =>
-      updateDirectoryIndexLoadingState(current, directoriesToRefresh, true)
-    )
 
     void fetchDirectorySessionsIndexes({
       viewerContextId,
@@ -5633,6 +5645,7 @@ function AppShellSidebarController({
           requestId
         )
         if (activeDirectories.length === 0) return
+        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         const activeDirectoryIndexes = Object.fromEntries(
           activeDirectories
@@ -5643,14 +5656,32 @@ function AppShellSidebarController({
             .filter((entry) => Boolean(entry[1]))
         )
 
-        if (Object.keys(activeDirectoryIndexes).length > 0) {
-          sidebarStore.setDirectoryIndexDataByPath((current) =>
-            mergeDirectoryIndexData(current, activeDirectoryIndexes)
+        sidebarStore.setState((current) => {
+          const nextDirectoryIndexDataByPath =
+            Object.keys(activeDirectoryIndexes).length > 0
+              ? mergeDirectoryIndexData(
+                  current.directoryIndexDataByPath,
+                  activeDirectoryIndexes
+                )
+              : current.directoryIndexDataByPath
+          const nextDirectoryIndexLoading = updateDirectoryIndexLoadingState(
+            current.directoryIndexLoading,
+            activeDirectories,
+            false
           )
-        }
-        sidebarStore.setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, activeDirectories, false)
-        )
+
+          if (
+            nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
+            nextDirectoryIndexLoading === current.directoryIndexLoading
+          ) {
+            return current
+          }
+
+          return {
+            directoryIndexDataByPath: nextDirectoryIndexDataByPath,
+            directoryIndexLoading: nextDirectoryIndexLoading,
+          }
+        })
       })
       .catch((error) => {
         const activeDirectories = getActiveDirectoryIndexRequestDirectories(
@@ -5658,6 +5689,7 @@ function AppShellSidebarController({
           requestId
         )
         if (activeDirectories.length === 0) return
+        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
@@ -5705,7 +5737,9 @@ function AppShellSidebarController({
         !Object.prototype.hasOwnProperty.call(
           directoryIndexDataByPath,
           directory
-        ) && !directoryIndexLoading[directory]
+        ) &&
+        !directoryIndexLoading[directory] &&
+        !directoryIndexRequestIdsByPathRef.current[directory]
     )
 
     if (missingDirectories.length === 0) {
@@ -5727,6 +5761,7 @@ function AppShellSidebarController({
           requestId
         )
         if (activeDirectories.length === 0) return
+        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         const activeDirectoryIndexes = Object.fromEntries(
           activeDirectories
@@ -5737,14 +5772,32 @@ function AppShellSidebarController({
             .filter((entry) => Boolean(entry[1]))
         )
 
-        if (Object.keys(activeDirectoryIndexes).length > 0) {
-          sidebarStore.setDirectoryIndexDataByPath((current) =>
-            mergeDirectoryIndexData(current, activeDirectoryIndexes)
+        sidebarStore.setState((current) => {
+          const nextDirectoryIndexDataByPath =
+            Object.keys(activeDirectoryIndexes).length > 0
+              ? mergeDirectoryIndexData(
+                  current.directoryIndexDataByPath,
+                  activeDirectoryIndexes
+                )
+              : current.directoryIndexDataByPath
+          const nextDirectoryIndexLoading = updateDirectoryIndexLoadingState(
+            current.directoryIndexLoading,
+            activeDirectories,
+            false
           )
-        }
-        sidebarStore.setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, activeDirectories, false)
-        )
+
+          if (
+            nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
+            nextDirectoryIndexLoading === current.directoryIndexLoading
+          ) {
+            return current
+          }
+
+          return {
+            directoryIndexDataByPath: nextDirectoryIndexDataByPath,
+            directoryIndexLoading: nextDirectoryIndexLoading,
+          }
+        })
       })
       .catch((error) => {
         const activeDirectories = getActiveDirectoryIndexRequestDirectories(
@@ -5752,6 +5805,7 @@ function AppShellSidebarController({
           requestId
         )
         if (activeDirectories.length === 0) return
+        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
