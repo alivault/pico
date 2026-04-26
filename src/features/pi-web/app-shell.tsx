@@ -2580,6 +2580,76 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
+type PendingDraftFollowUp = {
+  message: string
+  images: Array<PromptImage>
+  streamingBehavior: "steer" | "followUp"
+  optimisticId?: string
+}
+
+function pendingDraftFollowUpId(
+  message: { optimisticId?: string },
+  index: number
+) {
+  return message.optimisticId || `pending-draft:${index}`
+}
+
+function movePendingDraftFollowUpMessage(
+  messages: Array<PendingDraftFollowUp>,
+  pendingId: string,
+  direction: -1 | 1
+) {
+  const index = messages.findIndex(
+    (message, messageIndex) =>
+      pendingDraftFollowUpId(message, messageIndex) === pendingId
+  )
+  if (index === -1) return null
+
+  const item = messages[index]
+  if (!item) return null
+
+  const next = [...messages]
+  const targetIndex = index + direction
+  const target = next[targetIndex]
+
+  if (direction === -1) {
+    if (item.streamingBehavior === "followUp" && !target) {
+      next[index] = { ...item, streamingBehavior: "steer" }
+      return next
+    }
+
+    if (
+      item.streamingBehavior === "followUp" &&
+      target.streamingBehavior === "steer"
+    ) {
+      next[index] = { ...item, streamingBehavior: "steer" }
+      return next
+    }
+  }
+
+  if (direction === 1) {
+    if (item.streamingBehavior === "steer" && !target) {
+      next[index] = { ...item, streamingBehavior: "followUp" }
+      return next
+    }
+
+    if (
+      item.streamingBehavior === "steer" &&
+      target.streamingBehavior === "followUp"
+    ) {
+      next[index] = { ...item, streamingBehavior: "followUp" }
+      return next
+    }
+  }
+
+  if (!target) return null
+
+  const [movedItem] = next.splice(index, 1)
+  if (!movedItem) return null
+  next.splice(targetIndex, 0, movedItem)
+  return next
+}
+
 type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
@@ -4003,7 +4073,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const composerImages = composerImagesStore.getSnapshot()
   const pendingDraftFollowUpMessages = pendingDraftFollowUps.map(
     (message, index) => ({
-      pendingId: message.optimisticId || `pending-draft:${index}`,
+      pendingId: pendingDraftFollowUpId(message, index),
       text: message.message,
       images: message.images,
       streamingBehavior: message.streamingBehavior,
@@ -4026,8 +4096,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const removePendingDraftFollowUp = (pendingId: string) => {
     if (
       !pendingDraftFollowUps.some(
-        (message, index) =>
-          (message.optimisticId || `pending-draft:${index}`) === pendingId
+        (message, index) => pendingDraftFollowUpId(message, index) === pendingId
       )
     ) {
       return false
@@ -4035,8 +4104,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     setPendingDraftFollowUps((current) =>
       current.filter(
-        (message, index) =>
-          (message.optimisticId || `pending-draft:${index}`) !== pendingId
+        (message, index) => pendingDraftFollowUpId(message, index) !== pendingId
       )
     )
     return true
@@ -4046,24 +4114,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     pendingId: string,
     direction: -1 | 1
   ) => {
-    const index = pendingDraftFollowUps.findIndex(
-      (message, messageIndex) =>
-        (message.optimisticId || `pending-draft:${messageIndex}`) === pendingId
+    const nextPendingDraftFollowUps = movePendingDraftFollowUpMessage(
+      pendingDraftFollowUps,
+      pendingId,
+      direction
     )
-    if (index === -1) return false
+    if (!nextPendingDraftFollowUps) return false
 
-    const targetIndex = index + direction
-    if (targetIndex < 0 || targetIndex >= pendingDraftFollowUps.length) {
-      return false
-    }
-
-    setPendingDraftFollowUps((current) => {
-      const next = [...current]
-      const [item] = next.splice(index, 1)
-      if (!item) return current
-      next.splice(targetIndex, 0, item)
-      return next
-    })
+    setPendingDraftFollowUps(nextPendingDraftFollowUps)
     return true
   }
 

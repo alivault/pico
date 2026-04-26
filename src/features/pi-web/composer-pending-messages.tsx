@@ -78,60 +78,75 @@ export const ComposerPendingMessages = React.memo(
 
                   <div className="flex flex-col gap-2 px-3 pb-3">
                     {section.items.length > 0 ? (
-                      section.items.map((message, index) => (
-                        <div
-                          key={message.pendingId}
-                          className="rounded-xl border bg-muted/25 p-2.5"
-                        >
-                          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="outline">
-                              {message.streamingBehavior === "steer"
-                                ? "Steer"
-                                : "Follow-up"}
-                            </Badge>
-                          </div>
-                          <div className="line-clamp-3 text-sm">
-                            {message.text || "Queued image prompt"}
-                          </div>
-                          {message.images.length > 0 ? (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {message.images.length} image
-                              {message.images.length === 1 ? "" : "s"}
+                      section.items.map((message, index) => {
+                        const isSteer = message.streamingBehavior === "steer"
+                        const moveUpDisabled = isSteer && index === 0
+                        const moveDownDisabled =
+                          !isSteer && index === section.items.length - 1
+
+                        return (
+                          <div
+                            key={message.pendingId}
+                            className="rounded-xl border bg-muted/25 p-2.5"
+                          >
+                            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">
+                                {isSteer ? "Steer" : "Follow-up"}
+                              </Badge>
                             </div>
-                          ) : null}
-                          <div className="mt-2 flex items-center gap-1">
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              disabled={index === 0}
-                              onClick={() =>
-                                onReorderPending(message.pendingId, -1)
-                              }
-                            >
-                              ↑
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              disabled={index === section.items.length - 1}
-                              onClick={() =>
-                                onReorderPending(message.pendingId, 1)
-                              }
-                            >
-                              ↓
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              onClick={() =>
-                                onRemovePendingMessage(message.pendingId)
-                              }
-                            >
-                              Remove
-                            </Button>
+                            <div className="line-clamp-3 text-sm">
+                              {message.text || "Queued image prompt"}
+                            </div>
+                            {message.images.length > 0 ? (
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                {message.images.length} image
+                                {message.images.length === 1 ? "" : "s"}
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex items-center gap-1">
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                disabled={moveUpDisabled}
+                                title={
+                                  isSteer
+                                    ? "Move up"
+                                    : "Move up or promote to steer"
+                                }
+                                onClick={() =>
+                                  onReorderPending(message.pendingId, -1)
+                                }
+                              >
+                                ↑
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                disabled={moveDownDisabled}
+                                title={
+                                  isSteer
+                                    ? "Move down or demote to queue"
+                                    : "Move down"
+                                }
+                                onClick={() =>
+                                  onReorderPending(message.pendingId, 1)
+                                }
+                              >
+                                ↓
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                onClick={() =>
+                                  onRemovePendingMessage(message.pendingId)
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        )
+                      })
                     ) : (
                       <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
                         {section.emptyLabel}

@@ -504,6 +504,12 @@ function sortPendingUserMessages(messages: Array<PendingUserMessage>) {
   ]
 }
 
+function normalizePendingStreamingBehavior(
+  value: unknown
+): "steer" | "followUp" | undefined {
+  return value === "steer" || value === "followUp" ? value : undefined
+}
+
 function createPendingUserMessage(
   text: string,
   images: Array<PromptImageInput>,
@@ -2149,17 +2155,17 @@ export class PiWebRuntime {
     const pendingMessages = entry.pendingUserMessages.map((message) =>
       clonePendingUserMessage(message)
     )
-    const normalizedUpdates = Array.isArray(pendingMessagesUpdate)
+    const normalizedUpdates: Array<{
+      pendingId: string
+      streamingBehavior?: "steer" | "followUp"
+    }> = Array.isArray(pendingMessagesUpdate)
       ? pendingMessagesUpdate
           .map((message) => ({
             pendingId:
               typeof message?.pendingId === "string" ? message.pendingId : "",
-            streamingBehavior:
-              message?.streamingBehavior === "steer"
-                ? "steer"
-                : message?.streamingBehavior === "followUp"
-                  ? "followUp"
-                  : undefined,
+            streamingBehavior: normalizePendingStreamingBehavior(
+              message?.streamingBehavior
+            ),
           }))
           .filter((message) => Boolean(message.pendingId))
       : []
@@ -2190,9 +2196,7 @@ export class PiWebRuntime {
       nextPendingMessages.push({
         ...existing,
         streamingBehavior:
-          update.streamingBehavior === "steer"
-            ? "steer"
-            : existing.streamingBehavior,
+          update.streamingBehavior ?? existing.streamingBehavior,
       })
       pendingMessagesById.delete(update.pendingId)
     }

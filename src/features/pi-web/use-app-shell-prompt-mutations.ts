@@ -179,6 +179,59 @@ function isPendingPromptNotFoundError(error: unknown) {
   )
 }
 
+function movePendingComposerMessage(
+  messages: Array<PendingComposerMessage>,
+  pendingId: string,
+  direction: -1 | 1
+) {
+  const index = messages.findIndex((entry) => entry.pendingId === pendingId)
+  if (index === -1) return null
+
+  const item = messages[index]
+  if (!item) return null
+
+  const next = [...messages]
+  const targetIndex = index + direction
+  const target = next[targetIndex]
+
+  if (direction === -1) {
+    if (item.streamingBehavior === "followUp" && !target) {
+      next[index] = { ...item, streamingBehavior: "steer" }
+      return next
+    }
+
+    if (
+      item.streamingBehavior === "followUp" &&
+      target.streamingBehavior === "steer"
+    ) {
+      next[index] = { ...item, streamingBehavior: "steer" }
+      return next
+    }
+  }
+
+  if (direction === 1) {
+    if (item.streamingBehavior === "steer" && !target) {
+      next[index] = { ...item, streamingBehavior: "followUp" }
+      return next
+    }
+
+    if (
+      item.streamingBehavior === "steer" &&
+      target.streamingBehavior === "followUp"
+    ) {
+      next[index] = { ...item, streamingBehavior: "followUp" }
+      return next
+    }
+  }
+
+  if (!target) return null
+
+  const [movedItem] = next.splice(index, 1)
+  if (!movedItem) return null
+  next.splice(targetIndex, 0, movedItem)
+  return next
+}
+
 export function useAppShellPromptMutations({
   viewerContextId,
   activeSessionId,
@@ -949,20 +1002,20 @@ export function useAppShellPromptMutations({
   const reorderPending = React.useCallback(
     async (pendingId: string, direction: -1 | 1) => {
       if (!viewerContextId) return
-      const next = [...pendingMessagesRef.current]
-      const index = next.findIndex((entry) => entry.pendingId === pendingId)
-      if (index === -1) return
-      const targetIndex = index + direction
-      if (targetIndex < 0 || targetIndex >= next.length) return
-      const [item] = next.splice(index, 1)
-      next.splice(targetIndex, 0, item)
+      const next = movePendingComposerMessage(
+        pendingMessagesRef.current,
+        pendingId,
+        direction
+      )
+      if (!next) return
+
       try {
         await reorderPendingMessagesMutation.mutateAsync(next)
       } catch (error) {
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to reorder pending prompts"
+            : "Failed to update pending prompts"
         )
       }
     },
