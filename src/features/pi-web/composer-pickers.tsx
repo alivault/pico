@@ -77,7 +77,9 @@ export const ComposerPickers = React.memo(function ComposerPickers({
 }: ComposerPickersProps) {
   const filteredModels = (() => {
     const normalizedQuery = modelQuery.trim().toLowerCase()
-    const nextModels = [...availableModels].sort(
+    const modelOptions =
+      availableModels.length > 0 ? availableModels : model ? [model] : []
+    const nextModels = [...modelOptions].sort(
       (left, right) =>
         (left.provider || "").localeCompare(right.provider || "") ||
         (left.name || left.id).localeCompare(right.name || right.id)
