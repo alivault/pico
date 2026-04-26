@@ -78,14 +78,17 @@ Notes:
   - keyboard shortcut handling for the shell
 - `src/features/pi-web/sidebar.tsx`
   - directory/session sidebar UI
+  - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
 - `src/features/pi-web/composer-panel.tsx`
   - prompt composer, slash commands, completions, model picker, thinking picker, queue/steer UX
 - `src/features/pi-web/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
+  - includes assistant block subscriptions and deferred syntax highlighting
 - `src/features/pi-web/app-shell-dialogs.tsx`
   - thin dialog coordinator for add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
 - `src/features/pi-web/git-panel.tsx`
   - git status and changes tab
+  - mounts active git sections lazily to avoid unnecessary query/render work
 - `src/features/pi-web/query-keys.ts`
   - TanStack Query cache keys
 - `src/features/pi-web/app-shell-utils.ts`
@@ -183,6 +186,8 @@ Important current behavior:
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
 - initial session bootstrap sends only the recent message window plus history metadata, not always the full conversation history
 - older conversation history is fetched separately from `/api/session/history` when the user scrolls upward
+- session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
+- if you update `sessionStateRef.current` directly, you must still publish the same state to `sessionStore` with `setSessionState()` or selector-driven UI such as the composer/model picker will stay stale
 
 If you change sync payload semantics, update the shared sync helpers instead of assuming every SSE event contains a complete session snapshot.
 
@@ -201,6 +206,28 @@ If you change a runtime payload or route response shape:
 - update relevant renderers and client handlers
 
 Do not change server payloads silently.
+
+### 6) Client state architecture is store/ref based
+
+The app shell has been refactored to minimize broad rerenders. Prefer narrow external stores, refs, and selector-driven host components over adding broad React state to `AppShellSessionWorkspace`.
+
+Current client-side state patterns:
+
+- `sessionStore` + `sessionStateRef` are the source of truth for session data.
+  - `setSessionState()` publishes to `sessionStore` and updates the ref.
+  - SSE sync may update the ref before publishing; do not add early-return logic that compares only against the ref.
+- `appUiStore` owns workspace UI state such as current tab and loading session ids.
+- `displaySettingsStore` owns display settings such as tool visibility and message centering.
+- `notificationStore` owns notification settings/permission and session-done events.
+- `draftFlowStore` owns draft-session loading owner state and stored draft directory.
+- `composerStore` holds the composer snapshot consumed by `AppShellComposerController`.
+- `conversationItemsStore` owns conversation items and supports per-item subscriptions.
+  - Streaming conversation item updates are batched to animation frames.
+  - The session-loading state intentionally hides the previous message stack while switching sessions.
+- `hiddenThinkingPreviewStore` and `workingStateStore` are narrow stores for footer/loading text.
+- `AppShellController` centralizes the active store/ref/action bundle used by imperative shell handles.
+
+When adding new workspace state, first decide whether it belongs in one of these stores or in a new narrow store. Use local React state only for truly local UI concerns.
 
 ## Route and endpoint conventions
 
@@ -278,6 +305,8 @@ The composer supports:
 - `@file` reference completions
 - queue/steer while streaming
 
+Composer data flows through `composerStore` as `AppShellComposerSnapshot`, with actions routed through `AppShellComposerController`. The model picker uses the shared `Command` UI and depends on `sessionStore` publishing `availableModels` from `state_sync`; if models look empty, verify the store publish path before changing picker UI.
+
 If you touch composer parsing or submission, inspect both:
 
 - `src/features/pi-web/composer-panel.tsx`
@@ -302,6 +331,14 @@ Be careful not to break the distinction between:
 - separately fetched older history pages
 - pending user messages and the current streaming assistant message
 
+Rendering/performance details:
+
+- `conversationItemsStore` supports global, group, and per-item subscriptions; avoid passing whole message arrays through broad React state.
+- Assistant rendering uses an assistant block store with per-block subscriptions inside `conversation-view.tsx`.
+- Long streaming markdown can temporarily render as plain text and switches back to markdown when streaming stops.
+- Code block syntax highlighting is deferred until code blocks are near the viewport and uses `/api/highlight` caching.
+- Do not bypass the loading-state path when switching sessions; previous messages should be hidden while `isSessionViewLoading` is true.
+
 ### Draft persistence
 
 Prompt drafts are stored in session storage and keyed by session/file/draft target.
@@ -316,6 +353,8 @@ Preserve existing key names when possible for backward compatibility, especially
 
 - `pi-web-hide-tools`
 - other existing `pi-web-*` keys
+
+Display and notification settings are mirrored through external stores in `app-shell.tsx`; persist changes via the storage helpers and publish to the relevant store instead of adding duplicate local state.
 
 ## Server/runtime conventions
 
@@ -416,6 +455,8 @@ Current behavior includes:
 - unpushed commit hashes
 - short-lived caches for status/changes
 
+The git panel renders one active heavy section at a time (`files`, `branches`, or `commits`). Keep queries and `useIsFetching()` subscriptions scoped to the active section unless there is a deliberate UX reason to mount/fetch everything.
+
 If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
@@ -487,6 +528,8 @@ Be especially careful around these:
 
 - forgetting `context` / `session` request params
 - changing shared payload shapes without updating client contracts
+- updating `sessionStateRef.current` without publishing to `sessionStore`
+- adding broad React state in `AppShellSessionWorkspace` instead of narrow stores/selectors
 - breaking draft-session behavior
 - assuming `state_sync` always contains the full conversation history instead of a recent window / patch
 - invalidating the wrong TanStack Query keys
