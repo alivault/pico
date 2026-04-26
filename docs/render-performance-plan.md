@@ -32,9 +32,9 @@ The previous render performance checklist was completed. This file now tracks th
   - [ ] Profile streaming markdown cost before changing UX.
   - [ ] Consider plain-text/high-frequency streaming fallback with markdown render after idle.
   - [ ] Keep code highlighting/cache behavior intact.
-- [ ] Git panel active-section splitting
-  - [ ] Split active git UI into lazy/section-specific render and query boundaries.
-  - [ ] Avoid mounting expensive git sections until they are visible or requested.
+- [x] Git panel active-section splitting
+  - [x] Split active git UI into lazy/section-specific render and query boundaries.
+  - [x] Avoid mounting expensive git sections until they are visible or requested.
 
 ## Validation
 
