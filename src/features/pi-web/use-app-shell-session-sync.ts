@@ -84,6 +84,7 @@ type UseAppShellSessionSyncOptions = {
   setConversationItems: (items: SessionState["items"]) => void
   setHiddenThinkingPreview: (value: string) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
+  setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSessionDoneEvents: React.Dispatch<
     React.SetStateAction<Array<SessionDoneEvent>>
@@ -369,7 +370,6 @@ function sameSessionStateExceptConversation(
     left.availableModels === right.availableModels &&
     left.availableSkills === right.availableSkills &&
     left.hideThinkingBlock === right.hideThinkingBlock &&
-    left.contextUsage === right.contextUsage &&
     left.uiRequest === right.uiRequest
   )
 }
@@ -413,6 +413,7 @@ export function useAppShellSessionSync({
   setConversationItems,
   setHiddenThinkingPreview,
   setWorkingState,
+  setComposerContextUsage,
   setSessionsEvent,
   setSessionDoneEvents,
   applySidebarSessionStatusRef,
@@ -622,6 +623,9 @@ export function useAppShellSessionSync({
 
         sessionStateRef.current = nextState
         setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "")
+        if (previousState.contextUsage !== nextState.contextUsage) {
+          setComposerContextUsage(nextState.contextUsage)
+        }
         if (previousState.streaming || nextState.streaming) {
           setWorkingState(
             nextState.streaming
@@ -795,6 +799,7 @@ export function useAppShellSessionSync({
     setComposerImages,
     setHiddenThinkingPreview,
     setWorkingState,
+    setComposerContextUsage,
     setConversationItems,
     setPendingMessages,
     pendingUiRequestHandlerRef,

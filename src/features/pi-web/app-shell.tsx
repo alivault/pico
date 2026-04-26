@@ -3046,6 +3046,18 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [composerImagesStore, composerStore]
   )
+  const setComposerContextUsage = React.useCallback(
+    (contextUsage: SessionState["contextUsage"]) => {
+      const currentComposerSnapshot = composerStore.getSnapshot()
+      composerStore.setSnapshot({
+        ...currentComposerSnapshot,
+        contextUsage: currentComposerSnapshot.disabled
+          ? undefined
+          : contextUsage,
+      })
+    },
+    [composerStore]
+  )
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
   )
@@ -3380,7 +3392,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       availableModels: currentSessionState.availableModels,
       availableSkills: currentSessionState.availableSkills,
       availableThinkingLevels: currentSessionState.availableThinkingLevels,
-      contextUsage: currentSessionState.contextUsage,
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       firstMessage: currentSessionState.firstMessage,
@@ -3729,6 +3740,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setConversationItems,
     setHiddenThinkingPreview,
     setWorkingState,
+    setComposerContextUsage,
     setSessionsEvent: sidebarStore.setSessionsEvent,
     setSessionDoneEvents,
     applySidebarSessionStatusRef,
@@ -4238,7 +4250,9 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerSkill: displayedComposerSkill,
     composerSyncNonce: composerDraftSeed.syncNonce,
     composerText: displayedComposerText,
-    contextUsage: composerDisabled ? undefined : sessionState.contextUsage,
+    contextUsage: composerDisabled
+      ? undefined
+      : sessionStateRef.current.contextUsage,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
     isStreaming: composerDisabled ? false : sessionState.streaming,
