@@ -2184,6 +2184,13 @@ const AppShellComposerController = React.memo(
       if (snapshotRef.current.disabled) return
       void actionsRef.current.abortSession()
     })
+    const onEditPendingMessage = useStableEvent(
+      (pendingId: string, text: string) => {
+        if (snapshotRef.current.disabled) return
+        if (actionsRef.current.editPendingDraftFollowUp(pendingId, text)) return
+        void actionsRef.current.editPendingMessage(pendingId, text)
+      }
+    )
     const onRemovePendingMessage = useStableEvent((pendingId: string) => {
       if (snapshotRef.current.disabled) return
       if (actionsRef.current.removePendingDraftFollowUp(pendingId)) return
@@ -2276,6 +2283,7 @@ const AppShellComposerController = React.memo(
         onRemoveComposerImage={onRemoveComposerImage}
         onSubmitPrompt={onSubmitPrompt}
         onAbort={onAbort}
+        onEditPendingMessage={onEditPendingMessage}
         onRemovePendingMessage={onRemovePendingMessage}
         onReorderPending={onReorderPending}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
@@ -2675,6 +2683,11 @@ type AppShellComposerActions = {
   abortSession: () => void | Promise<unknown>
   onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
   onRemoveComposerImage: (index: number) => void
+  editPendingDraftFollowUp: (pendingId: string, text: string) => boolean
+  editPendingMessage: (
+    pendingId: string,
+    text: string
+  ) => void | Promise<unknown>
   removePendingDraftFollowUp: (pendingId: string) => boolean
   removePendingMessage: (pendingId: string) => void | Promise<unknown>
   reorderPending: (
@@ -3968,6 +3981,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     abortSession,
     addDirectoryPath,
     createSession: requestCreateSession,
+    editPendingMessage,
     removePendingMessage,
     reorderPending,
     submitPrompt,
@@ -4096,6 +4110,27 @@ const AppShellSessionWorkspace = React.forwardRef<
   const displayedComposerSkill = composerDisabled
     ? undefined
     : composerDraftSeed.skillName
+
+  const editPendingDraftFollowUp = (pendingId: string, text: string) => {
+    const existing = pendingDraftFollowUps.find(
+      (message, index) => pendingDraftFollowUpId(message, index) === pendingId
+    )
+    if (!existing) return false
+
+    if (!text.trim() && existing.images.length === 0) {
+      toast.error("Enter a message or keep at least one image")
+      return true
+    }
+
+    setPendingDraftFollowUps((current) =>
+      current.map((message, index) =>
+        pendingDraftFollowUpId(message, index) === pendingId
+          ? { ...message, message: text }
+          : message
+      )
+    )
+    return true
+  }
 
   const removePendingDraftFollowUp = (pendingId: string) => {
     if (
@@ -4350,6 +4385,8 @@ const AppShellSessionWorkspace = React.forwardRef<
         current.filter((_, imageIndex) => imageIndex !== index)
       )
     },
+    editPendingDraftFollowUp,
+    editPendingMessage,
     removePendingDraftFollowUp,
     removePendingMessage,
     reorderPending,

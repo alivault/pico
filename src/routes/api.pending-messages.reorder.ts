@@ -17,7 +17,7 @@ export const Route = createFileRoute("/api/pending-messages/reorder")({
             await getPiWebRuntime().reorderPendingMessages(request, body)
           )
         } catch (error) {
-          return routeErrorResponse(error, "Failed to reorder pending prompts")
+          return routeErrorResponse(error, "Failed to update pending prompts")
         }
       },
     },

@@ -931,6 +931,67 @@ export function useAppShellPromptMutations({
     }
   }, [abortSessionMutation, viewerContextId])
 
+  const editPendingMessagesMutation = useMutation({
+    mutationFn: async (nextPendingMessages: Array<PendingComposerMessage>) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<PendingMessagesResponse>(
+        buildRequestUrl("/api/pending-messages/reorder", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pendingMessages: nextPendingMessages }),
+        }
+      )
+    },
+  })
+
+  const editPendingMessage = React.useCallback(
+    async (pendingId: string, text: string) => {
+      if (!viewerContextId) return
+
+      const previous = pendingMessagesRef.current
+      const existing = previous.find((entry) => entry.pendingId === pendingId)
+      if (!existing) return
+
+      if (!text.trim() && existing.images.length === 0) {
+        toast.error("Enter a message or keep at least one image")
+        return
+      }
+
+      const next = previous.map((entry) =>
+        entry.pendingId === pendingId ? { ...entry, text } : entry
+      )
+      updatePendingMessages((current) =>
+        current.map((entry) =>
+          entry.pendingId === pendingId ? { ...entry, text } : entry
+        )
+      )
+
+      try {
+        await editPendingMessagesMutation.mutateAsync(next)
+      } catch (error) {
+        updatePendingMessages(() => previous)
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to update pending prompt"
+        )
+      }
+    },
+    [
+      editPendingMessagesMutation,
+      pendingMessagesRef,
+      updatePendingMessages,
+      viewerContextId,
+    ]
+  )
+
   const removePendingMessageMutation = useMutation({
     mutationFn: async (pendingId: string) => {
       if (!viewerContextId) {
@@ -986,26 +1047,6 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  const reorderPendingMessagesMutation = useMutation({
-    mutationFn: async (nextPendingMessages: Array<PendingComposerMessage>) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<PendingMessagesResponse>(
-        buildRequestUrl("/api/pending-messages/reorder", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingMessages: nextPendingMessages }),
-        }
-      )
-    },
-  })
-
   const reorderPending = React.useCallback(
     async (pendingId: string, direction: -1 | 1) => {
       if (!viewerContextId) return
@@ -1017,7 +1058,7 @@ export function useAppShellPromptMutations({
       if (!next) return
 
       try {
-        await reorderPendingMessagesMutation.mutateAsync(next)
+        await editPendingMessagesMutation.mutateAsync(next)
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -1026,13 +1067,14 @@ export function useAppShellPromptMutations({
         )
       }
     },
-    [pendingMessagesRef, reorderPendingMessagesMutation, viewerContextId]
+    [editPendingMessagesMutation, pendingMessagesRef, viewerContextId]
   )
 
   return {
     abortSession,
     addDirectoryPath,
     createSession,
+    editPendingMessage,
     removePendingMessage,
     reorderPending,
     submitPrompt,

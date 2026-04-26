@@ -544,6 +544,14 @@ function normalizePendingStreamingBehavior(
   return value === "steer" || value === "followUp" ? value : undefined
 }
 
+function hasOwnProperty(value: unknown, key: string) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    Object.prototype.hasOwnProperty.call(value, key)
+  )
+}
+
 function createPendingUserMessage(
   text: string,
   images: Array<PromptImageInput>,
@@ -2584,16 +2592,31 @@ export class PiWebRuntime {
     )
     const normalizedUpdates: Array<{
       pendingId: string
+      hasImages: boolean
+      hasText: boolean
+      images: Array<PromptImageInput>
       streamingBehavior?: "steer" | "followUp"
+      text: string
     }> = Array.isArray(pendingMessagesUpdate)
       ? pendingMessagesUpdate
-          .map((message) => ({
-            pendingId:
-              typeof message?.pendingId === "string" ? message.pendingId : "",
-            streamingBehavior: normalizePendingStreamingBehavior(
-              message?.streamingBehavior
-            ),
-          }))
+          .map((message) => {
+            const hasImages = hasOwnProperty(message, "images")
+            const hasText = hasOwnProperty(message, "text")
+            return {
+              pendingId:
+                typeof message?.pendingId === "string" ? message.pendingId : "",
+              hasImages,
+              hasText,
+              images: hasImages ? normalizePromptImages(message?.images) : [],
+              streamingBehavior: normalizePendingStreamingBehavior(
+                message?.streamingBehavior
+              ),
+              text:
+                hasText && typeof message?.text === "string"
+                  ? message.text
+                  : "",
+            }
+          })
           .filter((message) => Boolean(message.pendingId))
       : []
 
@@ -2620,8 +2643,16 @@ export class PiWebRuntime {
           "pendingMessages must include every pending prompt exactly once."
         )
       }
+      const text = update.hasText ? update.text : existing.text
+      const images = update.hasImages ? update.images : existing.images
+      if (!text.trim() && images.length === 0) {
+        throw new Error("Pending prompt text or image is required.")
+      }
+
       nextPendingMessages.push({
         ...existing,
+        text,
+        images,
         streamingBehavior:
           update.streamingBehavior ?? existing.streamingBehavior,
       })
@@ -3427,6 +3458,8 @@ export class PiWebRuntime {
       ok: true,
       pendingMessages: nextPendingMessages.map((message) => ({
         pendingId: message.pendingId,
+        text: message.text,
+        images: message.images,
         streamingBehavior: message.streamingBehavior,
       })),
     }

@@ -69,6 +69,7 @@ type ComposerPanelProps = {
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
+  onEditPendingMessage: (pendingId: string, text: string) => void
   onRemovePendingMessage: (pendingId: string) => void
   onReorderPending: (pendingId: string, direction: -1 | 1) => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
@@ -161,6 +162,7 @@ export const ComposerPanel = React.forwardRef<
     onRemoveComposerImage,
     onSubmitPrompt,
     onAbort,
+    onEditPendingMessage,
     onRemovePendingMessage,
     onReorderPending,
     onRunBuiltinSlashCommand,
@@ -215,6 +217,7 @@ export const ComposerPanel = React.forwardRef<
       <div className={composerColumnClassName}>
         <ComposerPendingMessages
           currentPendingMessages={currentPendingMessages}
+          onEditPendingMessage={onEditPendingMessage}
           onRemovePendingMessage={onRemovePendingMessage}
           onReorderPending={onReorderPending}
         />

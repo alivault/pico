@@ -1,6 +1,7 @@
 import type {
   DirectoryState,
   MessagePayload,
+  PromptImage,
   SessionState,
   SessionsPayload,
   StateSyncPayload,
@@ -205,6 +206,8 @@ export type PendingMessagesResponse =
       ok: true
       pendingMessages: Array<{
         pendingId: string
+        text: string
+        images: Array<Pick<PromptImage, "type" | "mimeType" | "data">>
         streamingBehavior: "steer" | "followUp"
       }>
     }
