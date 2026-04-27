@@ -633,7 +633,7 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive}
       className={cn(
-        "h-auto min-w-0 items-start gap-2 py-2 pr-2",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-7",
         (isActive || isSelected) &&
           "bg-sidebar-accent text-sidebar-accent-foreground"
       )}
@@ -647,21 +647,25 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
         }
       }}
     >
+      {entry.streaming ? (
+        <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
+          <Spinner
+            className="size-3.5 text-sidebar-foreground/60"
+            aria-label="Session streaming"
+          />
+        </span>
+      ) : showUnread ? (
+        <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
+          <span
+            className="size-2 rounded-full bg-primary"
+            aria-label="Session done"
+          />
+        </span>
+      ) : null}
       <span className="flex min-w-0 flex-1 items-start gap-2">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="min-w-0 truncate font-medium">{entry.title}</span>
-            {entry.streaming ? (
-              <Spinner
-                className="size-3.5 shrink-0 text-sidebar-foreground/60"
-                aria-label="Session streaming"
-              />
-            ) : showUnread ? (
-              <span
-                className="size-2 shrink-0 rounded-full bg-primary"
-                aria-label="Session done"
-              />
-            ) : null}
           </span>
           {hasMetaLine ? (
             <span
