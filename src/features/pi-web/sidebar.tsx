@@ -633,7 +633,7 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive}
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-7",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-8",
         (isActive || isSelected) &&
           "bg-sidebar-accent text-sidebar-accent-foreground"
       )}
@@ -919,12 +919,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
       >
         {!searchActive ? (
           collapsed ? (
-            <ChevronRightIcon className="mt-0.5 size-4 shrink-0" />
+            <ChevronRightIcon className="size-4 shrink-0" />
           ) : (
-            <ChevronDownIcon className="mt-0.5 size-4 shrink-0" />
+            <ChevronDownIcon className="size-4 shrink-0" />
           )
         ) : null}
-        <FolderIcon className="mt-0.5 size-4 shrink-0" />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <DirectoryPathLabel path={directory} />
           <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
