@@ -22,14 +22,14 @@ The TUI avoids this by retaining mutable state:
 
 ## Implementation checklist
 
-- [ ] Add a retained conversation model on the server side.
-  - [ ] Initialize retained items from persisted session messages.
-  - [ ] Process `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, and `agent_end`.
-  - [ ] Preserve `renderKey` across streaming-to-finalized transitions.
-  - [ ] Preserve tool block `renderKey` and update blocks by `toolCallId`.
-- [ ] Make `state_sync` prefer retained `items` over raw `messages` for the active session.
-  - [ ] Keep history metadata and history endpoint unchanged.
-  - [ ] Stop emitting `streamingMessage` for active retained item rendering unless needed for legacy fallback.
+- [x] Add a retained conversation model on the server side.
+  - [x] Initialize retained items from persisted session messages.
+  - [x] Process `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, and `agent_end`.
+  - [x] Preserve `renderKey` across streaming-to-finalized transitions.
+  - [x] Preserve tool block `renderKey` and update blocks by `toolCallId`.
+- [x] Make `state_sync` prefer retained `items` over raw `messages` for the active session.
+  - [x] Keep history metadata and history endpoint unchanged.
+  - [x] Stop emitting `streamingMessage` for active retained item rendering unless needed for legacy fallback.
 - [ ] Simplify client-side streaming/tool reconciliation.
   - [ ] Keep generic item reconciliation and render-key preservation.
   - [ ] Remove defensive snapshot-overlap dedupe that becomes redundant.

@@ -5,6 +5,7 @@ import { basename, join, resolve as resolvePath } from "node:path"
 import { performance } from "node:perf_hooks"
 
 import type {
+  ConversationItem,
   DirectoryState,
   ModelOption,
   SessionUiState,
@@ -31,6 +32,10 @@ import {
   buildHighlightPayload,
   type HighlightPayload,
 } from "@/server/pi-web-runtime-highlight"
+import {
+  applyRetainedConversationEvent,
+  createRetainedConversationState,
+} from "@/server/pi-web-conversation-retainer"
 import {
   compareSessionListEntriesByLastUserMessage,
   countFullTurnUserAndAssistantMessages,
@@ -175,6 +180,7 @@ type SessionEntry = {
   session: AgentSessionLike
   draft: boolean
   streamingState: boolean
+  retainedConversationItems: Array<ConversationItem>
   pendingUserMessages: Array<PendingUserMessage>
   pendingQueueMutation: boolean
   canceledPendingUserMessageIds: Set<string>
@@ -986,14 +992,12 @@ export class PiWebRuntime {
       type: "state_sync",
       sessionKey: entry.key,
       messages: sanitizedMessages,
+      items: entry.retainedConversationItems,
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)
       ),
       draft,
       streaming: this.getEntryStreamingState(entry),
-      streamingMessage: this.getEntryStreamingState(entry)
-        ? sanitizeSessionMessage(entry.session.state.streamingMessage || {})
-        : undefined,
       historyOffset: 0,
       historyTotalCount,
       contextUsage:
@@ -2139,6 +2143,9 @@ export class PiWebRuntime {
       session,
       draft: Boolean(options?.draft),
       streamingState: Boolean(session.isStreaming),
+      retainedConversationItems: createRetainedConversationState(
+        session.messages.map((message) => sanitizeSessionMessage(message))
+      ).items,
       pendingUserMessages: [],
       pendingQueueMutation: false,
       canceledPendingUserMessageIds: new Set(),
@@ -2719,6 +2726,9 @@ export class PiWebRuntime {
       ...this.sessionDebugDetails(entry),
     })
     const session = entry.session
+    entry.retainedConversationItems = createRetainedConversationState(
+      session.messages.map((message) => sanitizeSessionMessage(message))
+    ).items
 
     const viewers = () =>
       [...this.contexts.values()].filter(
@@ -2996,11 +3006,28 @@ export class PiWebRuntime {
     }
   }
 
+  private applyRetainedConversationEvent(
+    entry: SessionEntry,
+    event: SessionEventLike
+  ) {
+    const retainedEvent = {
+      ...event,
+      ...(event.message
+        ? { message: sanitizeSessionMessage(event.message) }
+        : {}),
+    }
+    const state = { items: entry.retainedConversationItems }
+    applyRetainedConversationEvent(state, retainedEvent)
+    entry.retainedConversationItems = state.items
+  }
+
   private async handleSessionEvent(
     entry: SessionEntry,
     event: SessionEventLike
   ) {
     const type = typeof event.type === "string" ? event.type : ""
+
+    this.applyRetainedConversationEvent(entry, event)
 
     let statusChanged = false
 
