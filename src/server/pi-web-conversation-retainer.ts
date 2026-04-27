@@ -5,7 +5,13 @@ import type {
   MessagePayload,
   ToolBlock,
 } from "@/lib/pi-web"
-import { assistantBlocksFromMessage, extractToolText } from "@/lib/pi-web-sync"
+import {
+  assistantBlocksFromMessage,
+  buildItemsFromSync,
+  extractMessageImages,
+  extractMessageText,
+  extractToolText,
+} from "@/lib/pi-web-sync"
 
 type RetainedConversationState = {
   items: Array<ConversationItem>
@@ -252,18 +258,8 @@ function appendCommittedMessage(
       {
         kind: "user",
         itemKey,
-        text:
-          typeof message.content === "string"
-            ? message.content
-            : Array.isArray(message.content)
-              ? message.content
-                  .filter((part) => part?.type === "text")
-                  .map((part) =>
-                    typeof part.text === "string" ? part.text : ""
-                  )
-                  .join("\n")
-              : "",
-        images: [],
+        text: extractMessageText(message),
+        images: extractMessageImages(message),
       },
     ]
     return
@@ -300,9 +296,11 @@ function appendCommittedMessage(
 export function createRetainedConversationState(
   messages: Array<MessagePayload>
 ): RetainedConversationState {
-  const state: RetainedConversationState = { items: [] }
-  messages.forEach((message) => appendCommittedMessage(state, message))
-  return state
+  return buildItemsFromSync({
+    type: "state_sync",
+    messages,
+    streaming: false,
+  })
 }
 
 export function applyRetainedConversationEvent(
