@@ -222,6 +222,7 @@ export type SessionState = {
     tokens?: number
     contextWindow?: number
     percent?: number
+    [key: string]: unknown
   }
   uiState: SessionUiState
   uiRequest?: UiRequest

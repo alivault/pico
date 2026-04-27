@@ -40,6 +40,7 @@ export type SessionListInfoLike = {
     tokens?: number
     contextWindow?: number
     percent?: number
+    [key: string]: unknown
   }
   firstMessage?: string
 }

@@ -13,6 +13,7 @@ import { Route as EventsRouteImport } from './routes/events'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiThinkingRouteImport } from './routes/api.thinking'
 import { Route as ApiSlashCommandRouteImport } from './routes/api.slash-command'
+import { Route as ApiProviderUsageRouteImport } from './routes/api.provider-usage'
 import { Route as ApiPromptRouteImport } from './routes/api.prompt'
 import { Route as ApiPathCompletionsRouteImport } from './routes/api.path-completions'
 import { Route as ApiModelRouteImport } from './routes/api.model'
@@ -62,6 +63,11 @@ const ApiThinkingRoute = ApiThinkingRouteImport.update({
 const ApiSlashCommandRoute = ApiSlashCommandRouteImport.update({
   id: '/api/slash-command',
   path: '/api/slash-command',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProviderUsageRoute = ApiProviderUsageRouteImport.update({
+  id: '/api/provider-usage',
+  path: '/api/provider-usage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPromptRoute = ApiPromptRouteImport.update({
@@ -237,6 +243,7 @@ export interface FileRoutesByFullPath {
   '/api/model': typeof ApiModelRoute
   '/api/path-completions': typeof ApiPathCompletionsRoute
   '/api/prompt': typeof ApiPromptRoute
+  '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
@@ -273,6 +280,7 @@ export interface FileRoutesByTo {
   '/api/model': typeof ApiModelRoute
   '/api/path-completions': typeof ApiPathCompletionsRoute
   '/api/prompt': typeof ApiPromptRoute
+  '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/api/model': typeof ApiModelRoute
   '/api/path-completions': typeof ApiPathCompletionsRoute
   '/api/prompt': typeof ApiPromptRoute
+  '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
@@ -348,6 +357,7 @@ export interface FileRouteTypes {
     | '/api/model'
     | '/api/path-completions'
     | '/api/prompt'
+    | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
     | '/api/directory-sessions/cleanup'
@@ -384,6 +394,7 @@ export interface FileRouteTypes {
     | '/api/model'
     | '/api/path-completions'
     | '/api/prompt'
+    | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
     | '/api/directory-sessions/cleanup'
@@ -420,6 +431,7 @@ export interface FileRouteTypes {
     | '/api/model'
     | '/api/path-completions'
     | '/api/prompt'
+    | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
     | '/api/directory-sessions/cleanup'
@@ -457,6 +469,7 @@ export interface RootRouteChildren {
   ApiModelRoute: typeof ApiModelRoute
   ApiPathCompletionsRoute: typeof ApiPathCompletionsRoute
   ApiPromptRoute: typeof ApiPromptRoute
+  ApiProviderUsageRoute: typeof ApiProviderUsageRoute
   ApiSlashCommandRoute: typeof ApiSlashCommandRoute
   ApiThinkingRoute: typeof ApiThinkingRoute
   ApiDirectoryResolveRoute: typeof ApiDirectoryResolveRoute
@@ -502,6 +515,13 @@ declare module '@tanstack/react-router' {
       path: '/api/slash-command'
       fullPath: '/api/slash-command'
       preLoaderRoute: typeof ApiSlashCommandRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/provider-usage': {
+      id: '/api/provider-usage'
+      path: '/api/provider-usage'
+      fullPath: '/api/provider-usage'
+      preLoaderRoute: typeof ApiProviderUsageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/prompt': {
@@ -758,6 +778,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiModelRoute: ApiModelRoute,
   ApiPathCompletionsRoute: ApiPathCompletionsRoute,
   ApiPromptRoute: ApiPromptRoute,
+  ApiProviderUsageRoute: ApiProviderUsageRoute,
   ApiSlashCommandRoute: ApiSlashCommandRoute,
   ApiThinkingRoute: ApiThinkingRoute,
   ApiDirectoryResolveRoute: ApiDirectoryResolveRoute,

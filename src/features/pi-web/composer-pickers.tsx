@@ -226,6 +226,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
       <ComposerContextUsageIndicator
         contextUsageStore={contextUsageStore}
         disabled={disabled}
+        modelProvider={model?.provider}
       />
     </div>
   )

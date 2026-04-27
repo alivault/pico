@@ -9,16 +9,8 @@ import {
 } from "@/components/ui/tooltip"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
-const CONTEXT_USAGE_OVAL_PATH = [
-  "M 32 1.5",
-  "H 50",
-  "A 12.5 12.5 0 0 1 62.5 14",
-  "A 12.5 12.5 0 0 1 50 26.5",
-  "H 14",
-  "A 12.5 12.5 0 0 1 1.5 14",
-  "A 12.5 12.5 0 0 1 14 1.5",
-  "H 32",
-].join(" ")
+const CONTEXT_USAGE_CIRCLE_CENTER = 14
+const CONTEXT_USAGE_CIRCLE_RADIUS = 10.5
 
 function formatContextUsageNumber(value: number) {
   return contextUsageNumberFormatter.format(value)
@@ -44,6 +36,25 @@ function contextUsageStroke(percent: number) {
   return "var(--primary)"
 }
 
+type ComposerContextUsageQuotaSnapshot = {
+  label: string
+  used: number | null
+  limit: number | null
+  percent: number | null
+  timeLeft: string | null
+}
+
+type ComposerContextUsageSnapshot = {
+  contextWindow: number
+  tokens: number | null
+  percent: number
+  roundedPercent: number
+  fiveHourUsage: ComposerContextUsageQuotaSnapshot | null
+  weeklyUsage: ComposerContextUsageQuotaSnapshot | null
+}
+
+type ContextUsageRecord = NonNullable<SessionState["contextUsage"]>
+
 export type ComposerContextUsageStore = {
   getSnapshot: () => SessionState["contextUsage"]
   subscribe: (listener: () => void) => () => void
@@ -54,23 +65,144 @@ const emptyContextUsageStore: ComposerContextUsageStore = {
   subscribe: () => () => {},
 }
 
+type ProviderUsageWindow = {
+  label: string
+  usedPercent: number
+  resetsIn?: string
+}
+
 type ComposerContextUsageIndicatorProps = {
   contextUsageStore?: ComposerContextUsageStore
   disabled?: boolean
+  modelProvider?: string
 }
 
-export function ComposerContextUsageIndicator({
-  contextUsageStore = emptyContextUsageStore,
-  disabled = false,
-}: ComposerContextUsageIndicatorProps) {
-  const contextUsage = React.useSyncExternalStore(
-    contextUsageStore.subscribe,
-    contextUsageStore.getSnapshot,
-    contextUsageStore.getSnapshot
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object"
+}
+
+function getFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function getNumberProperty(
+  record: Record<string, unknown>,
+  keys: Array<string>
+) {
+  for (const key of keys) {
+    const value = getFiniteNumber(record[key])
+    if (value != null) return value
+  }
+  return null
+}
+
+function getStringProperty(
+  record: Record<string, unknown>,
+  keys: Array<string>
+) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  return null
+}
+
+function getRecordProperty(
+  record: Record<string, unknown>,
+  keys: Array<string>
+) {
+  for (const key of keys) {
+    const value = record[key]
+    if (isRecord(value)) return value
+  }
+  return null
+}
+
+function formatContextUsageDuration(milliseconds: number) {
+  const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60_000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`
+  if (hours > 0) return `${hours}h`
+  return `${minutes}m`
+}
+
+function getTimestampMilliseconds(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 10_000_000_000 ? value * 1000 : value
+  }
+  if (typeof value !== "string" || !value.trim()) return null
+
+  const numericValue = Number(value)
+  if (Number.isFinite(numericValue)) {
+    return numericValue < 10_000_000_000 ? numericValue * 1000 : numericValue
+  }
+
+  const timestamp = new Date(value).getTime()
+  return Number.isNaN(timestamp) ? null : timestamp
+}
+
+function getContextUsageQuotaTimeLeft(
+  source: Record<string, unknown>,
+  timeLeftKeys: Array<string>,
+  resetAtKeys: Array<string>
+) {
+  const explicitTimeLeft = getStringProperty(source, timeLeftKeys)
+  if (explicitTimeLeft) return explicitTimeLeft
+
+  const resetAtValue = resetAtKeys
+    .map((key) => getTimestampMilliseconds(source[key]))
+    .find((value) => value != null)
+  if (resetAtValue == null) return null
+
+  const remainingMs = resetAtValue - Date.now()
+  if (remainingMs <= 0) return "0m"
+  return formatContextUsageDuration(remainingMs)
+}
+
+function getContextUsageQuotaSnapshot(
+  contextUsage: ContextUsageRecord,
+  label: string,
+  recordKeys: Array<string>,
+  usedKeys: Array<string>,
+  limitKeys: Array<string>,
+  percentKeys: Array<string>,
+  timeLeftKeys: Array<string>,
+  resetAtKeys: Array<string>
+): ComposerContextUsageQuotaSnapshot | null {
+  const quotaRecord = getRecordProperty(contextUsage, recordKeys)
+  const source = quotaRecord ?? contextUsage
+  const used = getNumberProperty(source, usedKeys)
+  const limit = getNumberProperty(source, limitKeys)
+  const rawPercent = getNumberProperty(source, percentKeys)
+  const percent =
+    rawPercent ??
+    (used != null && limit != null && limit > 0 ? (used / limit) * 100 : null)
+
+  const timeLeft = getContextUsageQuotaTimeLeft(
+    source,
+    timeLeftKeys,
+    resetAtKeys
   )
 
-  if (disabled) return null
-  if (!contextUsage?.contextWindow) return null
+  if (used == null && limit == null && percent == null && timeLeft == null) {
+    return null
+  }
+
+  return {
+    label,
+    used,
+    limit,
+    percent: percent == null ? null : Math.max(0, Math.min(100, percent)),
+    timeLeft,
+  }
+}
+
+function getComposerContextUsageSnapshot(
+  contextUsage: SessionState["contextUsage"]
+): ComposerContextUsageSnapshot | undefined {
+  if (!contextUsage?.contextWindow) return undefined
 
   const tokens =
     typeof contextUsage.tokens === "number" ? contextUsage.tokens : null
@@ -81,27 +213,231 @@ export function ComposerContextUsageIndicator({
         ? (tokens / contextUsage.contextWindow) * 100
         : null
 
-  if (rawPercent == null) return null
+  if (rawPercent == null) return undefined
 
   const percent = Math.max(0, Math.min(100, rawPercent))
   const roundedPercent = Math.max(0, Math.min(100, Math.round(percent)))
-  const displayPercent = `${formatContextUsagePercent(roundedPercent)}%`
-  const compactContextWindow = formatContextUsageCompactNumber(
-    contextUsage.contextWindow
+
+  const fiveHourUsage = getContextUsageQuotaSnapshot(
+    contextUsage,
+    "5h usage",
+    ["fiveHourUsage", "fiveHour", "usage5h", "5h", "fiveHourLimit"],
+    ["used", "tokens", "usage", "fiveHourUsed", "fiveHourTokens", "usage5h"],
+    ["limit", "total", "max", "fiveHourLimit", "limit5h"],
+    ["percent", "percentage", "fiveHourPercent", "percent5h"],
+    ["timeLeft", "remaining", "fiveHourTimeLeft", "timeLeft5h"],
+    ["resetAt", "resetsAt", "expiresAt", "fiveHourResetAt", "resetAt5h"]
   )
+  const weeklyUsage = getContextUsageQuotaSnapshot(
+    contextUsage,
+    "Weekly usage",
+    ["weeklyUsage", "weekly", "usageWeekly", "week", "weeklyLimit"],
+    ["used", "tokens", "usage", "weeklyUsed", "weeklyTokens", "usageWeekly"],
+    ["limit", "total", "max", "weeklyLimit", "limitWeekly"],
+    ["percent", "percentage", "weeklyPercent", "percentWeekly"],
+    ["timeLeft", "remaining", "weeklyTimeLeft", "timeLeftWeekly"],
+    ["resetAt", "resetsAt", "expiresAt", "weeklyResetAt", "resetAtWeekly"]
+  )
+
+  return {
+    contextWindow: contextUsage.contextWindow,
+    tokens,
+    percent: roundedPercent,
+    roundedPercent,
+    fiveHourUsage,
+    weeklyUsage,
+  }
+}
+
+function sameContextUsageQuotaSnapshot(
+  left: ComposerContextUsageQuotaSnapshot | null | undefined,
+  right: ComposerContextUsageQuotaSnapshot | null | undefined
+) {
+  return (
+    left?.label === right?.label &&
+    left?.used === right?.used &&
+    left?.limit === right?.limit &&
+    left?.percent === right?.percent &&
+    left?.timeLeft === right?.timeLeft
+  )
+}
+
+function sameComposerContextUsageSnapshot(
+  left: ComposerContextUsageSnapshot | undefined,
+  right: ComposerContextUsageSnapshot | undefined
+) {
+  return (
+    left?.contextWindow === right?.contextWindow &&
+    left?.roundedPercent === right?.roundedPercent &&
+    sameContextUsageQuotaSnapshot(left?.fiveHourUsage, right?.fiveHourUsage) &&
+    sameContextUsageQuotaSnapshot(left?.weeklyUsage, right?.weeklyUsage)
+  )
+}
+
+function useComposerContextUsageSnapshot(
+  contextUsageStore: ComposerContextUsageStore
+) {
+  const snapshotRef = React.useRef<ComposerContextUsageSnapshot | undefined>(
+    undefined
+  )
+
+  return React.useSyncExternalStore(
+    contextUsageStore.subscribe,
+    () => {
+      const nextSnapshot = getComposerContextUsageSnapshot(
+        contextUsageStore.getSnapshot()
+      )
+      if (sameComposerContextUsageSnapshot(snapshotRef.current, nextSnapshot)) {
+        return snapshotRef.current
+      }
+      snapshotRef.current = nextSnapshot
+      return nextSnapshot
+    },
+    () => undefined
+  )
+}
+
+function formatContextUsageQuotaPercent(value: number | null) {
+  return value == null ? null : `${formatContextUsagePercent(value)}%`
+}
+
+function formatContextUsageQuotaValue(value: number | null) {
+  return value == null ? null : formatContextUsageCompactNumber(value)
+}
+
+function TooltipUsageProgress({ percent }: { percent: number }) {
+  const clampedPercent = Math.max(0, Math.min(100, percent))
+
+  return (
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background/15">
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${clampedPercent}%`,
+          backgroundColor: contextUsageStroke(clampedPercent),
+        }}
+      />
+    </div>
+  )
+}
+
+function ContextUsageQuotaTooltipLine({
+  quota,
+}: {
+  quota: ComposerContextUsageQuotaSnapshot
+}) {
+  const percent = formatContextUsageQuotaPercent(quota.percent)
+  const used = formatContextUsageQuotaValue(quota.used)
+  const limit = formatContextUsageQuotaValue(quota.limit)
+  const value =
+    used != null && limit != null
+      ? `${used} / ${limit}`
+      : (used ?? limit ?? "Available")
+  return (
+    <div className="rounded-lg bg-background/5 px-2.5 py-2">
+      <div className="flex items-center justify-between gap-6">
+        <span className="font-medium text-background/80">{quota.label}</span>
+        <span className="font-semibold text-background">
+          {percent ? `${percent} ` : null}
+          {value}
+        </span>
+      </div>
+      {quota.percent != null ? (
+        <TooltipUsageProgress percent={quota.percent} />
+      ) : null}
+      {quota.timeLeft ? (
+        <div className="mt-1 text-xs text-background/50">
+          Resets in {quota.timeLeft}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
+  const percent = `${formatContextUsagePercent(window.usedPercent)}%`
+
+  return (
+    <div className="rounded-lg bg-background/5 px-2.5 py-2">
+      <div className="flex items-center justify-between gap-6">
+        <span className="font-medium text-background/80">
+          {window.label === "Week" ? "Weekly usage" : `${window.label} usage`}
+        </span>
+        <span className="font-semibold text-background">{percent}</span>
+      </div>
+      <TooltipUsageProgress percent={window.usedPercent} />
+      {window.resetsIn ? (
+        <div className="mt-1 text-xs text-background/50">
+          Resets in {window.resetsIn}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function ComposerContextUsageIndicator({
+  contextUsageStore = emptyContextUsageStore,
+  disabled = false,
+  modelProvider,
+}: ComposerContextUsageIndicatorProps) {
+  const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
+  const [providerUsageWindows, setProviderUsageWindows] = React.useState<
+    Array<ProviderUsageWindow>
+  >([])
+
+  React.useEffect(() => {
+    if (!modelProvider) {
+      setProviderUsageWindows([])
+      return
+    }
+
+    let cancelled = false
+    const url = `/api/provider-usage?provider=${encodeURIComponent(modelProvider)}`
+
+    fetch(url)
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((data) => {
+        if (cancelled) return
+        const windows = Array.isArray(data?.usage?.windows)
+          ? data.usage.windows
+          : []
+        setProviderUsageWindows(windows)
+      })
+      .catch(() => {
+        if (!cancelled) setProviderUsageWindows([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [modelProvider])
+
+  if (disabled) return null
+  if (!contextUsage) return null
+
+  const {
+    contextWindow,
+    fiveHourUsage,
+    percent,
+    roundedPercent,
+    tokens,
+    weeklyUsage,
+  } = contextUsage
+  const displayPercent = `${formatContextUsagePercent(roundedPercent)}%`
+  const compactContextWindow = formatContextUsageCompactNumber(contextWindow)
   const compactTokens =
     tokens == null ? null : formatContextUsageCompactNumber(tokens)
   const tooltipAriaLabel =
     tokens == null
-      ? `Context window. ${compactContextWindow} tokens available.`
-      : `Context window. ${compactTokens} / ${compactContextWindow} tokens used.`
+      ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
+      : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <div
-            className="relative ml-auto inline-flex h-7 min-w-[56px] shrink-0 cursor-default items-center justify-center px-2.5 text-[11px] font-semibold tabular-nums"
+            className="relative ml-auto inline-flex size-7 shrink-0 cursor-default items-center justify-center"
             aria-label={tooltipAriaLabel}
             role="img"
           />
@@ -109,47 +445,70 @@ export function ComposerContextUsageIndicator({
       >
         <svg
           className="pointer-events-none absolute inset-0 size-full"
-          viewBox="0 0 64 28"
-          preserveAspectRatio="none"
+          viewBox="0 0 28 28"
           fill="none"
           aria-hidden="true"
         >
-          <path
-            d={CONTEXT_USAGE_OVAL_PATH}
+          <circle
+            cx={CONTEXT_USAGE_CIRCLE_CENTER}
+            cy={CONTEXT_USAGE_CIRCLE_CENTER}
+            r={CONTEXT_USAGE_CIRCLE_RADIUS}
             stroke="var(--border)"
             strokeWidth="3"
             strokeOpacity="0.9"
             vectorEffect="non-scaling-stroke"
           />
-          <path
-            d={CONTEXT_USAGE_OVAL_PATH}
+          <circle
+            cx={CONTEXT_USAGE_CIRCLE_CENTER}
+            cy={CONTEXT_USAGE_CIRCLE_CENTER}
+            r={CONTEXT_USAGE_CIRCLE_RADIUS}
             pathLength={100}
             stroke={contextUsageStroke(percent)}
             strokeWidth="3"
             strokeDasharray={`${percent.toFixed(1)} 100`}
             strokeLinecap="round"
-            strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
+            className="origin-center -rotate-90"
           />
         </svg>
-
-        <span className="relative">{displayPercent}</span>
       </TooltipTrigger>
 
       <TooltipContent
         side="top"
         align="end"
         sideOffset={8}
-        className="max-w-none flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-sm"
+        className="w-72 max-w-none flex-col items-stretch gap-2 rounded-xl px-3 py-3 text-sm"
       >
-        <div className="text-xs font-medium text-background/70">
-          Context window:
+        <div className="rounded-lg bg-background/5 px-2.5 py-2">
+          <div className="flex items-center justify-between gap-6">
+            <span className="font-medium text-background/80">
+              Context window
+            </span>
+            <span className="font-semibold text-background">
+              {displayPercent}
+            </span>
+          </div>
+          <TooltipUsageProgress percent={percent} />
+          <div className="mt-1 text-xs text-background/50">
+            {compactTokens == null
+              ? `${compactContextWindow} token window`
+              : `${compactTokens} / ${compactContextWindow} tokens used`}
+          </div>
         </div>
-        <div>
-          {compactTokens == null
-            ? `${compactContextWindow} token window`
-            : `${compactTokens} / ${compactContextWindow} tokens used`}
-        </div>
+        {providerUsageWindows.length > 0 ? (
+          providerUsageWindows.map((window) => (
+            <ProviderUsageTooltipLine key={window.label} window={window} />
+          ))
+        ) : (
+          <>
+            {fiveHourUsage ? (
+              <ContextUsageQuotaTooltipLine quota={fiveHourUsage} />
+            ) : null}
+            {weeklyUsage ? (
+              <ContextUsageQuotaTooltipLine quota={weeklyUsage} />
+            ) : null}
+          </>
+        )}
       </TooltipContent>
     </Tooltip>
   )
