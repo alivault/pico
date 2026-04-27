@@ -30,11 +30,11 @@ The TUI avoids this by retaining mutable state:
 - [x] Make `state_sync` prefer retained `items` over raw `messages` for the active session.
   - [x] Keep history metadata and history endpoint unchanged.
   - [x] Stop emitting `streamingMessage` for active retained item rendering unless needed for legacy fallback.
-- [ ] Simplify client-side streaming/tool reconciliation.
-  - [ ] Keep generic item reconciliation and render-key preservation.
-  - [ ] Remove defensive snapshot-overlap dedupe that becomes redundant.
+- [x] Simplify client-side streaming/tool reconciliation.
+  - [x] Keep generic item reconciliation and render-key preservation.
+  - [x] Remove defensive snapshot-overlap dedupe that becomes redundant.
 - [ ] Validate.
-  - [ ] Run `pnpm check:fix`.
+  - [x] Run `pnpm check:fix`.
   - [ ] Manually smoke-test a streaming session with repeated shell/edit tools.
 
 ## Commit strategy

@@ -213,16 +213,6 @@ function sameAssistantBlock(left: AssistantBlock, right: AssistantBlock) {
   )
 }
 
-function toolBlockSignature(block: Pick<ToolBlock, "name" | "args">) {
-  return `signature:${block.name || ""}:${stableJsonValue(block.args)}`
-}
-
-function toolBlockIdentityKeys(block: ToolBlock) {
-  const keys = [toolBlockSignature(block)]
-  if (block.callId) keys.push(`id:${block.callId}`)
-  return keys
-}
-
 function sameStateItem(left: ConversationItem, right: ConversationItem) {
   if (!left || !right || left.kind !== right.kind) return false
   if ((left.itemKey || "") !== (right.itemKey || "")) return false
@@ -438,7 +428,7 @@ export function assistantBlocksFromMessage(
   keyPrefix = "assistant"
 ) {
   const blocks: Array<AssistantBlock> = []
-  const toolBlockIndexByIdentityKey = new Map<string, number>()
+  const toolBlockIndexByCallId = new Map<string, number>()
   const content = Array.isArray(message?.content) ? message.content : []
 
   for (let index = 0; index < content.length; index += 1) {
@@ -481,9 +471,9 @@ export function assistantBlocksFromMessage(
         running: true,
       } satisfies ToolBlock
 
-      const existingIndex = toolBlockIdentityKeys(toolBlock)
-        .map((key) => toolBlockIndexByIdentityKey.get(key))
-        .find((value): value is number => value !== undefined)
+      const existingIndex = callId
+        ? toolBlockIndexByCallId.get(callId)
+        : undefined
       const existingBlock =
         existingIndex !== undefined ? blocks[existingIndex] : undefined
       if (existingIndex !== undefined && existingBlock?.type === "tool") {
@@ -496,8 +486,8 @@ export function assistantBlocksFromMessage(
         continue
       }
 
-      for (const key of toolBlockIdentityKeys(toolBlock)) {
-        toolBlockIndexByIdentityKey.set(key, blocks.length)
+      if (callId) {
+        toolBlockIndexByCallId.set(callId, blocks.length)
       }
       blocks.push(toolBlock)
     }
@@ -597,69 +587,16 @@ function applyToolResultsToBlocks(
   return changed ? nextBlocks : blocks
 }
 
-function addToolIdentityKeys(identities: Set<string>, block: AssistantBlock) {
-  if (block.type !== "tool") return
-  for (const key of toolBlockIdentityKeys(block)) identities.add(key)
-}
-
-function currentCommittedTurnToolIdentities(items: Array<ConversationItem>) {
-  const identities = new Set<string>()
-  let lastCommittedUserIndex = -1
-
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index]
-    if (
-      item?.kind === "user" &&
-      !isPendingConversationItem(item) &&
-      !isQueuedConversationItem(item)
-    ) {
-      lastCommittedUserIndex = index
-    }
-  }
-
-  for (
-    let index = lastCommittedUserIndex + 1;
-    index < items.length;
-    index += 1
-  ) {
-    const item = items[index]
-    if (item?.kind !== "assistant" || item.streaming) continue
-    item.blocks.forEach((block) => addToolIdentityKeys(identities, block))
-  }
-
-  return identities
-}
-
-function omitCommittedStreamingToolDuplicates(
-  blocks: Array<AssistantBlock>,
-  committedToolIdentities: Set<string>
-) {
-  if (committedToolIdentities.size === 0) return blocks
-
-  let changed = false
-  const nextBlocks = blocks.filter((block) => {
-    if (block.type !== "tool") return true
-    const duplicate = toolBlockIdentityKeys(block).some((key) =>
-      committedToolIdentities.has(key)
-    )
-    if (duplicate) changed = true
-    return !duplicate
-  })
-
-  return changed ? nextBlocks : blocks
-}
-
 function mergeStreamingAssistantBlocks(options: {
   previousStreamingItem: AssistantItem | null
   nextBlocks: Array<AssistantBlock>
   toolResultsByCallId: Map<string, ToolResultUpdate>
-  committedToolIdentities: Set<string>
 }) {
   const previousBlocks = options.previousStreamingItem?.blocks ?? []
   if (previousBlocks.length === 0) {
-    return omitCommittedStreamingToolDuplicates(
-      applyToolResultsToBlocks(options.nextBlocks, options.toolResultsByCallId),
-      options.committedToolIdentities
+    return applyToolResultsToBlocks(
+      options.nextBlocks,
+      options.toolResultsByCallId
     )
   }
 
@@ -694,16 +631,13 @@ function mergeStreamingAssistantBlocks(options: {
       (entry): entry is { block: ToolBlock; index: number } =>
         entry.block.type === "tool" &&
         Boolean(entry.block.callId) &&
-        !nextToolCallIds.has(entry.block.callId || "") &&
-        !toolBlockIdentityKeys(entry.block).some((key) =>
-          options.committedToolIdentities.has(key)
-        )
+        !nextToolCallIds.has(entry.block.callId || "")
     )
 
   if (missingPreviousTools.length === 0) {
-    return omitCommittedStreamingToolDuplicates(
-      applyToolResultsToBlocks(mergedNextBlocks, options.toolResultsByCallId),
-      options.committedToolIdentities
+    return applyToolResultsToBlocks(
+      mergedNextBlocks,
+      options.toolResultsByCallId
     )
   }
 
@@ -724,10 +658,7 @@ function mergeStreamingAssistantBlocks(options: {
     missingIndex += 1
   }
 
-  return omitCommittedStreamingToolDuplicates(
-    applyToolResultsToBlocks(blocks, options.toolResultsByCallId),
-    options.committedToolIdentities
-  )
+  return applyToolResultsToBlocks(blocks, options.toolResultsByCallId)
 }
 
 function appendAssistantItem(
@@ -1052,7 +983,6 @@ export function buildItemsFromSync(
     preserveOptimisticItems: Boolean(sync.draft) || shouldRenderStreaming,
   })
   items.push(...pendingItems)
-  const committedToolIdentities = currentCommittedTurnToolIdentities(items)
 
   if (shouldRenderStreaming) {
     if (sync.streamingMessage?.role === "assistant") {
@@ -1073,17 +1003,13 @@ export function buildItemsFromSync(
             renderKey
           ),
           toolResultsByCallId,
-          committedToolIdentities,
         }),
         streaming: true,
       })
     } else if (previousStreamingItem && !hasStreamingMessageUpdate) {
-      const blocks = omitCommittedStreamingToolDuplicates(
-        applyToolResultsToBlocks(
-          previousStreamingItem.blocks,
-          toolResultsByCallId
-        ),
-        committedToolIdentities
+      const blocks = applyToolResultsToBlocks(
+        previousStreamingItem.blocks,
+        toolResultsByCallId
       )
       items.push(
         blocks === previousStreamingItem.blocks
@@ -1105,7 +1031,6 @@ export function buildItemsFromSync(
           previousStreamingItem,
           nextBlocks: [],
           toolResultsByCallId,
-          committedToolIdentities,
         }),
         streaming: true,
       })
