@@ -30,6 +30,7 @@ import { Route as ApiDirectorySessionsRouteImport } from './routes/api.directory
 import { Route as ApiAbortRouteImport } from './routes/api.abort'
 import { Route as ApiUiIdRouteImport } from './routes/api.ui.$id'
 import { Route as ApiSettingsHideThinkingRouteImport } from './routes/api.settings.hide-thinking'
+import { Route as ApiSessionsDeleteRouteImport } from './routes/api.sessions.delete'
 import { Route as ApiSessionTreeRouteImport } from './routes/api.session.tree'
 import { Route as ApiSessionSelectRouteImport } from './routes/api.session.select'
 import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
@@ -150,6 +151,11 @@ const ApiSettingsHideThinkingRoute = ApiSettingsHideThinkingRouteImport.update({
   path: '/api/settings/hide-thinking',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionsDeleteRoute = ApiSessionsDeleteRouteImport.update({
+  id: '/api/sessions/delete',
+  path: '/api/sessions/delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionTreeRoute = ApiSessionTreeRouteImport.update({
   id: '/api/session/tree',
   path: '/api/session/tree',
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/sessions/delete': typeof ApiSessionsDeleteRoute
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
@@ -279,6 +286,7 @@ export interface FileRoutesByTo {
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/sessions/delete': typeof ApiSessionsDeleteRoute
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
@@ -315,6 +323,7 @@ export interface FileRoutesById {
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
+  '/api/sessions/delete': typeof ApiSessionsDeleteRoute
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
@@ -352,6 +361,7 @@ export interface FileRouteTypes {
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
+    | '/api/sessions/delete'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
+    | '/api/sessions/delete'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
@@ -422,6 +433,7 @@ export interface FileRouteTypes {
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
+    | '/api/sessions/delete'
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
@@ -457,6 +469,7 @@ export interface RootRouteChildren {
   ApiSessionRenameRoute: typeof ApiSessionRenameRoute
   ApiSessionSelectRoute: typeof ApiSessionSelectRoute
   ApiSessionTreeRoute: typeof ApiSessionTreeRouteWithChildren
+  ApiSessionsDeleteRoute: typeof ApiSessionsDeleteRoute
   ApiSettingsHideThinkingRoute: typeof ApiSettingsHideThinkingRoute
   ApiUiIdRoute: typeof ApiUiIdRoute
 }
@@ -610,6 +623,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSettingsHideThinkingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sessions/delete': {
+      id: '/api/sessions/delete'
+      path: '/api/sessions/delete'
+      fullPath: '/api/sessions/delete'
+      preLoaderRoute: typeof ApiSessionsDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/tree': {
       id: '/api/session/tree'
       path: '/api/session/tree'
@@ -750,6 +770,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSessionRenameRoute: ApiSessionRenameRoute,
   ApiSessionSelectRoute: ApiSessionSelectRoute,
   ApiSessionTreeRoute: ApiSessionTreeRouteWithChildren,
+  ApiSessionsDeleteRoute: ApiSessionsDeleteRoute,
   ApiSettingsHideThinkingRoute: ApiSettingsHideThinkingRoute,
   ApiUiIdRoute: ApiUiIdRoute,
 }

@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import type { ForkMessage } from "@/features/pi-web/app-shell-dialog-types"
 import type {
+  DeleteOldDirectorySessionsResponse,
   ForkSessionResponse,
   ForkableMessagesResponse,
   SessionListEntry,
@@ -40,6 +41,10 @@ import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
+type DeleteOldDirectorySessionsData = Extract<
+  DeleteOldDirectorySessionsResponse,
+  { ok: true }
+>
 
 type RenameSessionDialogProps = {
   open: boolean
@@ -251,6 +256,271 @@ export type DeleteSessionsDialogHandle = {
   open: (targets: Array<SessionListEntry>) => void
   close: () => void
   isOpen: () => boolean
+}
+
+type DeleteOldDirectorySessionsDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  directory: string
+  daysValue: string
+  preview: DeleteOldDirectorySessionsData | null
+  previewLoading: boolean
+  deleteLoading: boolean
+  onDaysValueChange: (value: string) => void
+  onPreview: () => void
+  onDelete: () => void
+}
+
+function DeleteOldDirectorySessionsDialog({
+  open,
+  onOpenChange,
+  directory,
+  daysValue,
+  preview,
+  previewLoading,
+  deleteLoading,
+  onDaysValueChange,
+  onPreview,
+  onDelete,
+}: DeleteOldDirectorySessionsDialogProps) {
+  const isMobile = useIsMobile()
+  const matchCount = preview?.matchingSessions.length ?? 0
+  const canDelete = Boolean(preview) && matchCount > 0 && !deleteLoading
+  const daysInput = (
+    <div className="space-y-2">
+      <label className="text-sm font-medium" htmlFor="old-session-days">
+        Older than days
+      </label>
+      <Input
+        id="old-session-days"
+        inputMode="numeric"
+        value={daysValue}
+        onChange={(event) => onDaysValueChange(event.target.value)}
+        placeholder="30"
+      />
+    </div>
+  )
+  const previewBody = preview ? (
+    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+      {matchCount > 0 ? (
+        <div className="space-y-2">
+          <p className="font-medium">
+            {matchCount} session{matchCount === 1 ? "" : "s"} will be deleted.
+          </p>
+          <div className="max-h-48 space-y-1 overflow-y-auto text-muted-foreground">
+            {preview.matchingSessions.slice(0, 20).map((session) => (
+              <div key={session.path || session.id} className="truncate">
+                {session.title}
+              </div>
+            ))}
+            {matchCount > 20 ? <div>…and {matchCount - 20} more</div> : null}
+          </div>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">No old sessions found.</p>
+      )}
+    </div>
+  ) : null
+  const body = (
+    <div className="space-y-4">
+      <p className="text-sm break-all text-muted-foreground">{directory}</p>
+      {daysInput}
+      {previewBody}
+    </div>
+  )
+  const footer = (
+    <>
+      <Button
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+        disabled={deleteLoading}
+      >
+        Cancel
+      </Button>
+      <Button variant="outline" onClick={onPreview} disabled={previewLoading}>
+        {previewLoading ? <Spinner /> : null}
+        Preview
+      </Button>
+      <Button variant="destructive" onClick={onDelete} disabled={!canDelete}>
+        {deleteLoading ? <Spinner /> : null}
+        Delete
+      </Button>
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Delete old sessions</DrawerTitle>
+            <DrawerDescription>
+              Preview and delete inactive sessions in this directory.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="px-4 pb-2">{body}</div>
+          <DrawerFooter className="border-t border-border/70">
+            {footer}
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete old sessions</DialogTitle>
+          <DialogDescription>
+            Preview and delete inactive sessions in this directory.
+          </DialogDescription>
+        </DialogHeader>
+        {body}
+        <DialogFooter>{footer}</DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export type DeleteOldDirectorySessionsDialogHandle = {
+  open: (directory: string) => void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type DeleteOldDirectorySessionsDialogControllerProps = {
+  ref?: React.Ref<DeleteOldDirectorySessionsDialogHandle>
+  openStateRef?: React.MutableRefObject<boolean>
+  viewerContextId: string
+}
+
+export function DeleteOldDirectorySessionsDialogController({
+  ref,
+  openStateRef,
+  viewerContextId,
+}: DeleteOldDirectorySessionsDialogControllerProps) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = React.useState(false)
+  const [directory, setDirectory] = React.useState("")
+  const [daysValue, setDaysValue] = React.useState("30")
+  const [preview, setPreview] =
+    React.useState<DeleteOldDirectorySessionsData | null>(null)
+  const openRef = React.useRef(open)
+
+  const setOpenState = (nextOpen: boolean) => {
+    openRef.current = nextOpen
+    if (openStateRef) {
+      openStateRef.current = nextOpen
+    }
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      setPreview(null)
+    }
+  }
+
+  const olderThanMs = () => {
+    const days = Number(daysValue)
+    if (!Number.isFinite(days) || days <= 0) {
+      throw new Error("Enter a positive number of days")
+    }
+    return days * 24 * 60 * 60 * 1000
+  }
+
+  const cleanupMutation = useMutation({
+    mutationFn: async (dryRun: boolean) => {
+      return await fetchJson<DeleteOldDirectorySessionsData>(
+        buildRequestUrl("/api/directory-sessions/cleanup", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            directory,
+            olderThanMs: olderThanMs(),
+            dryRun,
+          }),
+        }
+      )
+    },
+  })
+
+  const previewCleanup = async () => {
+    try {
+      setPreview(await cleanupMutation.mutateAsync(true))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to preview sessions"
+      )
+    }
+  }
+
+  const deleteCleanup = async () => {
+    try {
+      const result = await cleanupMutation.mutateAsync(false)
+      setPreview(result)
+      await queryClient.invalidateQueries({
+        queryKey: piWebQueryKeys.directorySessionsIndex(
+          viewerContextId,
+          directory
+        ),
+      })
+      toast.success(
+        `Deleted ${result.deletedSessionIds.length} old session${
+          result.deletedSessionIds.length === 1 ? "" : "s"
+        }`
+      )
+      setOpenState(false)
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete sessions"
+      )
+    }
+  }
+
+  const openDirectory = (nextDirectory: string) => {
+    const normalizedDirectory = nextDirectory.trim()
+    if (!normalizedDirectory) return
+    setDirectory(normalizedDirectory)
+    setDaysValue("30")
+    setPreview(null)
+    setOpenState(true)
+  }
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: openDirectory,
+      close: () => {
+        setOpenState(false)
+      },
+      isOpen: () => openRef.current,
+    }),
+    [daysValue, directory, viewerContextId]
+  )
+
+  return (
+    <DeleteOldDirectorySessionsDialog
+      open={open}
+      onOpenChange={setOpenState}
+      directory={directory}
+      daysValue={daysValue}
+      preview={preview}
+      previewLoading={cleanupMutation.isPending && !preview}
+      deleteLoading={cleanupMutation.isPending && Boolean(preview)}
+      onDaysValueChange={(value) => {
+        setDaysValue(value)
+        setPreview(null)
+      }}
+      onPreview={() => {
+        void previewCleanup()
+      }}
+      onDelete={() => {
+        void deleteCleanup()
+      }}
+    />
+  )
 }
 
 type DeleteSessionsDialogControllerProps = {

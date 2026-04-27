@@ -19,7 +19,6 @@ import type {
 } from "@/lib/pi-web"
 import type {
   DirectorySessionsIndexSnapshot,
-  DeleteOldDirectorySessionsResponse,
   DirectorySessionsIndexesResponse,
   ExtensionUiEvent,
   FileCompletionsResponse,
@@ -83,9 +82,11 @@ import {
   type AppShellUiRequestDialogHandle,
 } from "@/features/pi-web/app-shell-ui-request-dialog"
 import {
+  DeleteOldDirectorySessionsDialogController,
   DeleteSessionsDialogController,
   ForkSessionDialogController,
   RenameSessionDialogController,
+  type DeleteOldDirectorySessionsDialogHandle,
   type DeleteSessionsDialogHandle,
   type ForkSessionDialogHandle,
   type RenameSessionDialogHandle,
@@ -2741,6 +2742,7 @@ type AppShellSessionWorkspaceHandle = {
   openAddDirectoryDialog: () => void
   openCommandPalette: () => void
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
+  openDeleteOldDirectorySessionsDialog: (directory: string) => void
   openRenameDialogForEntry: (entry: SessionListEntry) => void
   openSettingsDialog: () => void
   selectSession: (
@@ -3155,6 +3157,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   const renameOpenRef = React.useRef(false)
   const deleteDialogRef = React.useRef<DeleteSessionsDialogHandle | null>(null)
   const deleteOpenRef = React.useRef(false)
+  const deleteOldDirectorySessionsDialogRef =
+    React.useRef<DeleteOldDirectorySessionsDialogHandle | null>(null)
+  const deleteOldDirectorySessionsOpenRef = React.useRef(false)
   const forkDialogRef = React.useRef<ForkSessionDialogHandle | null>(null)
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
@@ -3686,6 +3691,10 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const openDeleteDialog = (targets: Array<SessionListEntry>) => {
     deleteDialogRef.current?.open(targets)
+  }
+
+  const openDeleteOldDirectorySessionsDialog = (directory: string) => {
+    deleteOldDirectorySessionsDialogRef.current?.open(directory)
   }
 
   const openDeleteDialogForCurrentSession = () => {
@@ -4750,6 +4759,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       openAddDirectoryDialog,
       openCommandPalette,
       openDeleteDialog,
+      openDeleteOldDirectorySessionsDialog,
       openRenameDialogForEntry,
       openSettingsDialog,
       selectSession: handleSelectSession,
@@ -4764,6 +4774,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         actions?.openAddDirectoryDialog ?? openAddDirectoryDialog,
       openCommandPalette: actions?.openCommandPalette ?? openCommandPalette,
       openDeleteDialog: actions?.openDeleteDialog ?? openDeleteDialog,
+      openDeleteOldDirectorySessionsDialog:
+        actions?.openDeleteOldDirectorySessionsDialog ??
+        openDeleteOldDirectorySessionsDialog,
       openRenameDialogForEntry:
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
       openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
@@ -4775,6 +4788,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openAddDirectoryDialog,
     openCommandPalette,
     openDeleteDialog,
+    openDeleteOldDirectorySessionsDialog,
     openRenameDialogForEntry,
     openSettingsDialog,
   ])
@@ -4874,6 +4888,10 @@ const AppShellSessionWorkspace = React.forwardRef<
         deleteDialogRef={deleteDialogRef}
         deleteOpenRef={deleteOpenRef}
         deleteSessions={deleteSessions}
+        deleteOldDirectorySessionsDialogRef={
+          deleteOldDirectorySessionsDialogRef
+        }
+        deleteOldDirectorySessionsOpenRef={deleteOldDirectorySessionsOpenRef}
         desktopNotificationPermission={desktopNotificationPermission}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
@@ -5146,6 +5164,8 @@ type AppShellFloatingControllersProps = {
   deleteSessions: React.ComponentProps<
     typeof DeleteSessionsDialogController
   >["onDeleteSession"]
+  deleteOldDirectorySessionsDialogRef: React.RefObject<DeleteOldDirectorySessionsDialogHandle | null>
+  deleteOldDirectorySessionsOpenRef: React.MutableRefObject<boolean>
   desktopNotificationPermission: DesktopNotificationPermission
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.MutableRefObject<boolean>
@@ -5267,6 +5287,27 @@ const AppShellDeleteSessionsDialogHost = React.memo(
         ref={deleteDialogRef}
         openStateRef={deleteOpenRef}
         onDeleteSession={deleteSessions}
+      />
+    )
+  }
+)
+
+const AppShellDeleteOldDirectorySessionsDialogHost = React.memo(
+  function AppShellDeleteOldDirectorySessionsDialogHost({
+    deleteOldDirectorySessionsDialogRef,
+    deleteOldDirectorySessionsOpenRef,
+    viewerContextId,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "deleteOldDirectorySessionsDialogRef"
+    | "deleteOldDirectorySessionsOpenRef"
+    | "viewerContextId"
+  >) {
+    return (
+      <DeleteOldDirectorySessionsDialogController
+        ref={deleteOldDirectorySessionsDialogRef}
+        openStateRef={deleteOldDirectorySessionsOpenRef}
+        viewerContextId={viewerContextId}
       />
     )
   }
@@ -5428,6 +5469,8 @@ const AppShellFloatingControllers = React.memo(
     deleteDialogRef,
     deleteOpenRef,
     deleteSessions,
+    deleteOldDirectorySessionsDialogRef,
+    deleteOldDirectorySessionsOpenRef,
     desktopNotificationPermission,
     forkDialogRef,
     forkOpenRef,
@@ -5484,6 +5527,14 @@ const AppShellFloatingControllers = React.memo(
           deleteDialogRef={deleteDialogRef}
           deleteOpenRef={deleteOpenRef}
           deleteSessions={deleteSessions}
+        />
+
+        <AppShellDeleteOldDirectorySessionsDialogHost
+          deleteOldDirectorySessionsDialogRef={
+            deleteOldDirectorySessionsDialogRef
+          }
+          deleteOldDirectorySessionsOpenRef={deleteOldDirectorySessionsOpenRef}
+          viewerContextId={viewerContextId}
         />
 
         <AppShellForkSessionDialogHost
@@ -6132,68 +6183,9 @@ function AppShellSidebarController({
         })
       }}
       onDeleteOldSessionsInDirectory={(directory) => {
-        const daysText = window.prompt(
-          `Delete sessions in ${directory} older than how many days?`,
-          "30"
+        sessionWorkspaceRef.current?.openDeleteOldDirectorySessionsDialog(
+          directory
         )
-        if (daysText == null) return
-        const days = Number(daysText)
-        if (!Number.isFinite(days) || days <= 0) {
-          toast.error("Enter a positive number of days")
-          return
-        }
-        void (async () => {
-          const olderThanMs = days * 24 * 60 * 60 * 1000
-          const preview = await fetchJson<DeleteOldDirectorySessionsResponse>(
-            buildRequestUrl("/api/directory-sessions/cleanup", {
-              contextId: viewerContextId,
-            }),
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                directory,
-                olderThanMs,
-                dryRun: true,
-              }),
-            }
-          )
-          if (!preview.ok) return
-          if (preview.matchingSessions.length === 0) {
-            toast.info("No old sessions found")
-            return
-          }
-          const confirmed = window.confirm(
-            `Delete ${preview.matchingSessions.length} session${
-              preview.matchingSessions.length === 1 ? "" : "s"
-            } in ${directory} older than ${days} day${days === 1 ? "" : "s"}?`
-          )
-          if (!confirmed) return
-          const result = await fetchJson<DeleteOldDirectorySessionsResponse>(
-            buildRequestUrl("/api/directory-sessions/cleanup", {
-              contextId: viewerContextId,
-            }),
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                directory,
-                olderThanMs,
-                dryRun: false,
-              }),
-            }
-          )
-          if (!result.ok) return
-          toast.success(
-            `Deleted ${result.deletedSessionIds.length} old session${
-              result.deletedSessionIds.length === 1 ? "" : "s"
-            }`
-          )
-        })().catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to delete sessions"
-          )
-        })
       }}
       onRemoveDirectory={(directory) => {
         sidebarStore.setSidebarDirectories((current) => {

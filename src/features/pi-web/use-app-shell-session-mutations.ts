@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import type { SessionState } from "@/lib/pi-web"
 import type {
-  DeleteSessionResponse,
+  DeleteSessionsResponse,
   DirectorySessionsIndexSnapshot,
   RenameSessionResponse,
   SessionListEntry,
@@ -631,19 +631,17 @@ export function useAppShellSessionMutations({
         throw new Error("Viewer context unavailable")
       }
 
-      for (const path of paths) {
-        await fetchJson<DeleteSessionResponse>(
-          buildRequestUrl("/api/session/delete", {
-            contextId: viewerContextId,
-            sessionId: activeSessionId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ path }),
-          }
-        )
-      }
+      await fetchJson<DeleteSessionsResponse>(
+        buildRequestUrl("/api/sessions/delete", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ paths }),
+        }
+      )
     },
   })
 

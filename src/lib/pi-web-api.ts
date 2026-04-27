@@ -371,6 +371,19 @@ export type DeleteSessionResponse =
     }
   | ApiErrorResponse
 
+export type DeleteSessionsRequest = {
+  paths: Array<string>
+}
+
+export type DeleteSessionsResponse =
+  | {
+      ok: true
+      deletedPaths: Array<string>
+      sessionId?: string
+      sessionFile?: string
+    }
+  | ApiErrorResponse
+
 export type UiRequestResponse =
   | {
       ok: true

@@ -919,8 +919,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
             )
           ) : null}
           <FolderIcon className="mt-0.5 size-4 shrink-0" />
-          <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <DirectoryPathLabel path={directory} />
+            <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
+              {sessions.length} session{sessions.length === 1 ? "" : "s"}
+            </span>
           </span>
           {showHeaderLoadingSpinner ? (
             <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />

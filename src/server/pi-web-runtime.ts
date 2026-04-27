@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
-import { stat, unlink } from "node:fs/promises"
-import { resolve as resolvePath } from "node:path"
+import { mkdir, rename, stat, unlink } from "node:fs/promises"
+import { homedir } from "node:os"
+import { basename, join, resolve as resolvePath } from "node:path"
 import { performance } from "node:perf_hooks"
 
 import type {
@@ -3930,6 +3931,36 @@ export class PiWebRuntime {
     return { ok: true, name: nextName }
   }
 
+  private async trashOrDeleteSessionFile(sessionPath: string) {
+    if (process.platform === "darwin") {
+      const trashDirectory = join(homedir(), ".Trash")
+      await mkdir(trashDirectory, { recursive: true })
+      const targetPath = join(
+        trashDirectory,
+        `${basename(sessionPath)}.${Date.now()}-${randomUUID()}`
+      )
+      try {
+        await rename(sessionPath, targetPath)
+        return
+      } catch (error) {
+        const code = (error as { code?: string } | undefined)?.code
+        if (code === "ENOENT") return
+        if (code !== "EXDEV") {
+          throw error
+        }
+      }
+    }
+
+    try {
+      await unlink(sessionPath)
+    } catch (error) {
+      const code = (error as { code?: string } | undefined)?.code
+      if (code !== "ENOENT") {
+        throw error
+      }
+    }
+  }
+
   async deleteOldDirectorySessions(
     request: Request,
     body: {
@@ -3999,14 +4030,34 @@ export class PiWebRuntime {
       }
     }
 
-    const deletedSessionIds: Array<string> = []
-    for (const session of matchingSessions) {
-      if (!session.path) continue
-      await this.deleteSession(request, { path: session.path })
-      if (session.id) {
-        deletedSessionIds.push(session.id)
+    const deletedSessionIds = matchingSessions
+      .map((session) => session.id)
+      .filter((id): id is string => Boolean(id))
+    const matchingPaths = matchingSessions
+      .map((session) => session.path)
+      .filter((path): path is string => Boolean(path))
+    const matchingPathSet = new Set(matchingPaths)
+
+    await Promise.all(
+      [...this.sessionEntries.values()]
+        .filter((entry) => matchingPathSet.has(this.getSessionPath(entry)))
+        .map((entry) => this.disposeSessionEntry(entry))
+    )
+
+    for (const ctx of this.contexts.values()) {
+      for (const sessionPath of matchingPaths) {
+        ctx.unreadFinished.delete(sessionPath)
       }
     }
+
+    await Promise.all(
+      matchingPaths.map((sessionPath) =>
+        this.trashOrDeleteSessionFile(sessionPath)
+      )
+    )
+
+    this.invalidateSessionIndexCache()
+    await this.broadcastSessionsAll()
 
     return {
       ok: true,
@@ -4018,47 +4069,62 @@ export class PiWebRuntime {
     }
   }
 
-  async deleteSession(request: Request, body: { path?: unknown }) {
+  async deleteSessions(request: Request, body: { paths?: unknown }) {
     const { context } = await this.resolveRequest(request)
-    const sessionPath = typeof body.path === "string" ? body.path : ""
-    if (!sessionPath) {
-      throw new Error("path is required")
+    const paths = Array.isArray(body.paths)
+      ? body.paths
+          .filter((path): path is string => typeof path === "string")
+          .map((path) => path.trim())
+          .filter(Boolean)
+      : []
+    const sessionPaths = [...new Set(paths)]
+    if (sessionPaths.length === 0) {
+      throw new Error("paths are required")
     }
 
-    const loadedEntry = this.sessionEntries.get(sessionPath)
+    const sessionPathSet = new Set(sessionPaths)
+    const loadedEntries = [...this.sessionEntries.values()].filter((entry) =>
+      sessionPathSet.has(this.getSessionPath(entry))
+    )
     let replacementEntry: SessionEntry | undefined
-    if (loadedEntry) {
+
+    for (const loadedEntry of loadedEntries) {
       const affectedContexts = [...this.contexts.values()].filter(
         (ctx) => ctx.activeKey === loadedEntry.key
       )
       if (affectedContexts.length > 0) {
-        replacementEntry = await this.createNewSessionEntry(loadedEntry.cwd, {
-          draft: true,
-        })
+        const nextReplacementEntry = await this.createNewSessionEntry(
+          loadedEntry.cwd,
+          { draft: true }
+        )
+        replacementEntry = replacementEntry ?? nextReplacementEntry
         for (const affected of affectedContexts) {
-          affected.draftKey = replacementEntry.key
-          await this.activateContextSession(affected, replacementEntry)
+          affected.draftKey = nextReplacementEntry.key
+          await this.activateContextSession(affected, nextReplacementEntry)
         }
       }
-      for (const ctx of this.contexts.values()) {
-        ctx.unreadFinished.delete(sessionPath)
-      }
-      await this.disposeSessionEntry(loadedEntry)
     }
 
-    try {
-      await unlink(sessionPath)
-    } catch (error) {
-      const code = (error as { code?: string } | undefined)?.code
-      if (code !== "ENOENT") {
-        throw error
+    for (const ctx of this.contexts.values()) {
+      for (const sessionPath of sessionPaths) {
+        ctx.unreadFinished.delete(sessionPath)
       }
     }
+
+    await Promise.all(
+      loadedEntries.map((entry) => this.disposeSessionEntry(entry))
+    )
+    await Promise.all(
+      sessionPaths.map((sessionPath) =>
+        this.trashOrDeleteSessionFile(sessionPath)
+      )
+    )
 
     this.invalidateSessionIndexCache()
     await this.broadcastSessionsAll()
     return {
       ok: true,
+      deletedPaths: sessionPaths,
       sessionId:
         replacementEntry && !this.isDraftEntry(replacementEntry)
           ? replacementEntry.session.sessionId
@@ -4071,6 +4137,22 @@ export class PiWebRuntime {
           : context.activeKey === replacementEntry?.key
             ? replacementEntry?.session.sessionFile
             : undefined,
+    }
+  }
+
+  async deleteSession(request: Request, body: { path?: unknown }) {
+    const sessionPath = typeof body.path === "string" ? body.path : ""
+    if (!sessionPath) {
+      throw new Error("path is required")
+    }
+
+    const response = await this.deleteSessions(request, {
+      paths: [sessionPath],
+    })
+    return {
+      ok: true,
+      sessionId: response.sessionId,
+      sessionFile: response.sessionFile,
     }
   }
 
