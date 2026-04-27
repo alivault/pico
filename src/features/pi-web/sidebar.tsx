@@ -882,91 +882,108 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   const showLoadingState = isLoadingSessions && sessions.length === 0
   const showHeaderLoadingSpinner =
     showLoadingSpinner && sessions.length === 0 && collapsed
+  const hasDirectoryActions =
+    !overlay &&
+    Boolean(
+      onCreateSessionInDirectory ||
+      onDeleteOldSessionsInDirectory ||
+      onRemoveDirectory
+    )
+
+  const directoryHeader = (
+    <div className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent">
+      <button
+        type="button"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-sidebar-foreground",
+          directoryOrderingEnabled &&
+            !overlay &&
+            "cursor-grab active:cursor-grabbing",
+          searchActive && "cursor-default"
+        )}
+        aria-grabbed={
+          directoryOrderingEnabled && !overlay ? Boolean(isDragging) : undefined
+        }
+        onClick={() => {
+          if (!searchActive && !overlay) {
+            collapsedDirectoryStore.toggle(directory)
+          }
+        }}
+        title={directory}
+        {...(attributes ?? {})}
+        {...(listeners ?? {})}
+      >
+        {!searchActive ? (
+          collapsed ? (
+            <ChevronRightIcon className="mt-0.5 size-4 shrink-0" />
+          ) : (
+            <ChevronDownIcon className="mt-0.5 size-4 shrink-0" />
+          )
+        ) : null}
+        <FolderIcon className="mt-0.5 size-4 shrink-0" />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <DirectoryPathLabel path={directory} />
+          <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
+            {sessions.length} session{sessions.length === 1 ? "" : "s"}
+          </span>
+        </span>
+        {showHeaderLoadingSpinner ? (
+          <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />
+        ) : null}
+      </button>
+
+      {onCreateSessionInDirectory && !overlay ? (
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          title={`Create a session in ${directory}`}
+          onClick={() => onCreateSessionInDirectory(directory)}
+        >
+          <SquarePenIcon className="size-4" />
+        </Button>
+      ) : null}
+    </div>
+  )
 
   return (
     <SidebarGroup
       className={cn("rounded-lg py-1", isDragging && !overlay && "opacity-0")}
     >
-      <div className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/70">
-        <button
-          type="button"
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-sidebar-foreground",
-            directoryOrderingEnabled &&
-              !overlay &&
-              "cursor-grab active:cursor-grabbing",
-            searchActive && "cursor-default"
-          )}
-          aria-grabbed={
-            directoryOrderingEnabled && !overlay
-              ? Boolean(isDragging)
-              : undefined
-          }
-          onClick={() => {
-            if (!searchActive && !overlay) {
-              collapsedDirectoryStore.toggle(directory)
-            }
-          }}
-          title={directory}
-          {...(attributes ?? {})}
-          {...(listeners ?? {})}
-        >
-          {!searchActive ? (
-            collapsed ? (
-              <ChevronRightIcon className="mt-0.5 size-4 shrink-0" />
-            ) : (
-              <ChevronDownIcon className="mt-0.5 size-4 shrink-0" />
-            )
-          ) : null}
-          <FolderIcon className="mt-0.5 size-4 shrink-0" />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <DirectoryPathLabel path={directory} />
-            <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
-              {sessions.length} session{sessions.length === 1 ? "" : "s"}
-            </span>
-          </span>
-          {showHeaderLoadingSpinner ? (
-            <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />
-          ) : null}
-        </button>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {onCreateSessionInDirectory && !overlay ? (
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              title={`Create a session in ${directory}`}
-              onClick={() => onCreateSessionInDirectory(directory)}
-            >
-              <SquarePenIcon className="size-4" />
-            </Button>
-          ) : null}
-          {onRemoveDirectory && !overlay ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button size="icon-xs" variant="ghost" />}
+      {hasDirectoryActions ? (
+        <ContextMenu>
+          <ContextMenuTrigger render={directoryHeader} />
+          <ContextMenuContent className="w-48">
+            {onCreateSessionInDirectory ? (
+              <ContextMenuItem
+                onClick={() => onCreateSessionInDirectory(directory)}
               >
-                <EllipsisIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                {onDeleteOldSessionsInDirectory ? (
-                  <DropdownMenuItem
-                    onClick={() => onDeleteOldSessionsInDirectory(directory)}
-                  >
-                    Delete old sessions…
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem onClick={() => onRemoveDirectory(directory)}>
-                  Remove
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-        </div>
-      </div>
+                New session
+              </ContextMenuItem>
+            ) : null}
+            {onDeleteOldSessionsInDirectory ? (
+              <ContextMenuItem
+                onClick={() => onDeleteOldSessionsInDirectory(directory)}
+              >
+                Delete old sessions…
+              </ContextMenuItem>
+            ) : null}
+            {onRemoveDirectory ? (
+              <ContextMenuItem
+                variant="destructive"
+                onClick={() => onRemoveDirectory(directory)}
+              >
+                Remove from sidebar
+              </ContextMenuItem>
+            ) : null}
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        directoryHeader
+      )}
 
       {!collapsed ? (
-        <SidebarGroupContent className="pt-1">
+        <SidebarGroupContent>
           {showLoadingState ? (
             <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
               {showLoadingSpinner ? (
@@ -977,7 +994,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               Loading sessions…
             </div>
           ) : sessions.length > 0 ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col">
               <SidebarMenu>
                 {visibleSessions.map((entry) => {
                   const entryKey = sessionListEntryKey(entry)
@@ -1005,7 +1022,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="justify-start"
+                  className="h-8 justify-start text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => {
                     setRenderCount((current) =>
                       Math.min(
@@ -1055,7 +1072,7 @@ function DirectoryCollapseAllButton({
     <Button
       size="icon-sm"
       variant="ghost"
-      className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+      className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
       disabled={searchActive || visibleDirectories.length === 0}
       onClick={() => {
         collapsedDirectoryStore.setAll(
@@ -1147,7 +1164,7 @@ function SidebarSearchInput({
           type="button"
           variant="ghost"
           size="icon-xs"
-          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onMouseDown={(event) => event.preventDefault()}
           onClick={(event) => {
             setDraftValue("")
@@ -1216,7 +1233,7 @@ function AppSidebarHeader({
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    className="text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground"
                     disabled={directoryCount === 0}
                     aria-label="Directory actions"
                     title="Directory actions"
@@ -1234,7 +1251,7 @@ function AppSidebarHeader({
                     onRemoveAllDirectories()
                   }}
                 >
-                  Remove all
+                  Clear sidebar
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1242,6 +1259,7 @@ function AppSidebarHeader({
           <Button
             variant="secondary"
             size="icon-sm"
+            className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={onOpenAddDirectoryDialog}
             aria-label="Add directory"
             title="Add directory"
