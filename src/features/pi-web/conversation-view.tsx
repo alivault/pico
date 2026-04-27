@@ -700,6 +700,29 @@ type AssistantBlockStoreSnapshot = {
   revision: number
 }
 
+export type AssistantMessagesSnapshot = {
+  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}
+
+export type AssistantMessagesStore = {
+  getSnapshot: () => AssistantMessagesSnapshot
+  subscribe: (listener: () => void) => () => void
+}
+
+type AssistantMessagesShellSnapshot = {
+  anchorBlockKey?: string
+  hasBlocks: boolean
+  streaming: boolean
+}
+
+type AssistantMessagesShellStore = {
+  getSnapshot: () => AssistantMessagesShellSnapshot
+  setSnapshot: (snapshot: AssistantMessagesShellSnapshot) => void
+  subscribe: (listener: () => void) => () => void
+}
+
 type AssistantBlockStore = {
   getBlock: (key: string) => AssistantConversationBlock | undefined
   getBlocks: (keys: Array<string>) => Array<AssistantConversationBlock>
@@ -1097,6 +1120,76 @@ function buildAssistantBlockSnapshot(
         ? previousSnapshot.groups
         : groups,
     revision: (previousSnapshot?.revision ?? 0) + 1,
+  }
+}
+
+function sameAssistantMessagesShellSnapshot(
+  left: AssistantMessagesShellSnapshot,
+  right: AssistantMessagesShellSnapshot
+) {
+  return (
+    left.anchorBlockKey === right.anchorBlockKey &&
+    left.hasBlocks === right.hasBlocks &&
+    left.streaming === right.streaming
+  )
+}
+
+function createAssistantMessagesShellStore(
+  initialSnapshot: AssistantMessagesShellSnapshot
+): AssistantMessagesShellStore {
+  let snapshot = initialSnapshot
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => snapshot,
+    setSnapshot: (nextSnapshot) => {
+      if (sameAssistantMessagesShellSnapshot(snapshot, nextSnapshot)) return
+
+      snapshot = nextSnapshot
+      for (const listener of listeners) listener()
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+function visibleAssistantBlocksFromSnapshot(
+  snapshot: AssistantMessagesSnapshot
+) {
+  return snapshot.items.flatMap((item) =>
+    item.blocks.filter((block) =>
+      assistantBlockIsVisible({
+        block,
+        hideThinking: snapshot.hideThinking,
+        hideToolBlocks: snapshot.hideToolBlocks,
+      })
+    )
+  )
+}
+
+function assistantMessagesShellSnapshotFromBlocks(
+  snapshot: AssistantMessagesSnapshot,
+  blocks: Array<AssistantConversationBlock>
+): AssistantMessagesShellSnapshot {
+  const anchorBlockIndex = blocks.findIndex((block) => block.type !== "tool")
+  const anchorBlock =
+    anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
+
+  return {
+    ...(anchorBlock
+      ? {
+          anchorBlockKey: assistantBlockRenderKey(
+            anchorBlock,
+            anchorBlockIndex
+          ),
+        }
+      : {}),
+    hasBlocks: blocks.length > 0,
+    streaming: snapshot.items.some((item) => item.streaming),
   }
 }
 
@@ -2512,6 +2605,62 @@ function AssistantBlockGroupsView({
   )
 }
 
+export function AssistantMessagesStoreCard({
+  store,
+}: {
+  store: AssistantMessagesStore
+}) {
+  const initialSnapshot = store.getSnapshot()
+  const initialBlocks = visibleAssistantBlocksFromSnapshot(initialSnapshot)
+  const assistantBlockStoreRef = React.useRef<AssistantBlockStore | null>(null)
+  if (!assistantBlockStoreRef.current) {
+    assistantBlockStoreRef.current = createAssistantBlockStore(initialBlocks)
+  }
+  const assistantBlockStore = assistantBlockStoreRef.current
+
+  const shellStoreRef = React.useRef<AssistantMessagesShellStore | null>(null)
+  if (!shellStoreRef.current) {
+    shellStoreRef.current = createAssistantMessagesShellStore(
+      assistantMessagesShellSnapshotFromBlocks(initialSnapshot, initialBlocks)
+    )
+  }
+  const shellStore = shellStoreRef.current
+
+  React.useLayoutEffect(() => {
+    const applySnapshot = () => {
+      const snapshot = store.getSnapshot()
+      const blocks = visibleAssistantBlocksFromSnapshot(snapshot)
+      assistantBlockStore.setBlocks(blocks)
+      shellStore.setSnapshot(
+        assistantMessagesShellSnapshotFromBlocks(snapshot, blocks)
+      )
+    }
+
+    applySnapshot()
+    return store.subscribe(applySnapshot)
+  }, [assistantBlockStore, shellStore, store])
+
+  const shellSnapshot = React.useSyncExternalStore(
+    shellStore.subscribe,
+    shellStore.getSnapshot,
+    shellStore.getSnapshot
+  )
+
+  if (!shellSnapshot.hasBlocks) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <AssistantBlockGroupsView
+        anchorBlockKey={shellSnapshot.anchorBlockKey}
+        store={assistantBlockStore}
+        streaming={shellSnapshot.streaming}
+      />
+    </div>
+  )
+}
+
 export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   items,
   hideThinking,
@@ -2521,18 +2670,12 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
-  const streaming = items.some((item) => item.streaming)
-  const blocks = items.flatMap((item) =>
-    item.blocks.filter((block) =>
-      assistantBlockIsVisible({ block, hideThinking, hideToolBlocks })
-    )
-  )
-  const anchorBlockIndex = blocks.findIndex((block) => block.type !== "tool")
-  const anchorBlock =
-    anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
-  const anchorBlockKey = anchorBlock
-    ? assistantBlockRenderKey(anchorBlock, anchorBlockIndex)
-    : undefined
+  const snapshot = {
+    items,
+    hideThinking,
+    hideToolBlocks,
+  } satisfies AssistantMessagesSnapshot
+  const blocks = visibleAssistantBlocksFromSnapshot(snapshot)
 
   if (blocks.length === 0) {
     return null
@@ -2548,12 +2691,17 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
     assistantBlockStore.setBlocks(blocks)
   }, [assistantBlockStore, blocks])
 
+  const shellSnapshot = assistantMessagesShellSnapshotFromBlocks(
+    snapshot,
+    blocks
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <AssistantBlockGroupsView
-        anchorBlockKey={anchorBlockKey}
+        anchorBlockKey={shellSnapshot.anchorBlockKey}
         store={assistantBlockStore}
-        streaming={streaming}
+        streaming={shellSnapshot.streaming}
       />
     </div>
   )

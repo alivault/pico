@@ -105,10 +105,12 @@ import {
   showSessionDoneDesktopNotification,
 } from "@/features/pi-web/session-done-notifications"
 import {
-  AssistantMessagesCard,
+  AssistantMessagesStoreCard,
   MessagesWorkingIndicator,
   UserMessageCard,
   assistantMessageHasVisibleBlocks,
+  type AssistantMessagesSnapshot,
+  type AssistantMessagesStore,
 } from "@/features/pi-web/conversation-view"
 import {
   parseComposerSkillMessage,
@@ -1459,46 +1461,63 @@ function useConversationItem(
   )
 }
 
-function useConversationAssistantItems(
-  store: ConversationItemsStore,
+function assistantMessagesSnapshotFromStore(options: {
+  hideThinking: boolean
+  hideToolBlocks: boolean
   itemKeys: Array<string>
-) {
-  const cacheRef = React.useRef<{
-    itemKeys: Array<string>
-    items: Array<AssistantConversationItem>
-  }>({ itemKeys: [], items: [] })
-
-  const getSnapshot = () => {
-    const nextItems = itemKeys
-      .map((key) => store.getItem(key))
+  store: ConversationItemsStore
+}): AssistantMessagesSnapshot {
+  return {
+    hideThinking: options.hideThinking,
+    hideToolBlocks: options.hideToolBlocks,
+    items: options.itemKeys
+      .map((key) => options.store.getItem(key))
       .filter(
         (item): item is AssistantConversationItem => item?.kind === "assistant"
-      )
-    const cache = cacheRef.current
-    if (
-      cache.itemKeys.length === itemKeys.length &&
-      cache.itemKeys.every((key, index) => key === itemKeys[index]) &&
-      cache.items.length === nextItems.length &&
-      cache.items.every((item, index) => item === nextItems[index])
-    ) {
-      return cache.items
-    }
+      ),
+  }
+}
 
-    cacheRef.current = {
-      itemKeys,
-      items: nextItems,
-    }
-    return nextItems
+function sameAssistantMessagesSnapshot(
+  left: AssistantMessagesSnapshot,
+  right: AssistantMessagesSnapshot
+) {
+  if (left.hideThinking !== right.hideThinking) return false
+  if (left.hideToolBlocks !== right.hideToolBlocks) return false
+  if (left.items.length !== right.items.length) return false
+
+  for (let index = 0; index < left.items.length; index += 1) {
+    if (left.items[index] !== right.items[index]) return false
   }
 
-  return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeItems(itemKeys, listener),
-      [itemKeys, store]
-    ),
-    getSnapshot,
-    getSnapshot
-  )
+  return true
+}
+
+type MutableAssistantMessagesStore = AssistantMessagesStore & {
+  setSnapshot: (snapshot: AssistantMessagesSnapshot) => void
+}
+
+function createMutableAssistantMessagesStore(
+  initialSnapshot: AssistantMessagesSnapshot
+): MutableAssistantMessagesStore {
+  let snapshot = initialSnapshot
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => snapshot,
+    setSnapshot: (nextSnapshot) => {
+      if (sameAssistantMessagesSnapshot(snapshot, nextSnapshot)) return
+
+      snapshot = nextSnapshot
+      for (const listener of listeners) listener()
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
 }
 
 function createTextValueStore(initialValue = ""): TextValueStore {
@@ -1864,16 +1883,39 @@ function ConversationAssistantGroupView({
   itemKeys: Array<string>
   store: ConversationItemsStore
 }) {
-  const items = useConversationAssistantItems(store, itemKeys)
-  if (items.length === 0) return null
+  const assistantMessagesStoreRef =
+    React.useRef<MutableAssistantMessagesStore | null>(null)
+  if (!assistantMessagesStoreRef.current) {
+    assistantMessagesStoreRef.current = createMutableAssistantMessagesStore(
+      assistantMessagesSnapshotFromStore({
+        hideThinking,
+        hideToolBlocks,
+        itemKeys,
+        store,
+      })
+    )
+  }
+  const assistantMessagesStore = assistantMessagesStoreRef.current
+
+  React.useLayoutEffect(() => {
+    const updateSnapshot = () => {
+      assistantMessagesStore.setSnapshot(
+        assistantMessagesSnapshotFromStore({
+          hideThinking,
+          hideToolBlocks,
+          itemKeys,
+          store,
+        })
+      )
+    }
+
+    updateSnapshot()
+    return store.subscribeItems(itemKeys, updateSnapshot)
+  }, [assistantMessagesStore, hideThinking, hideToolBlocks, itemKeys, store])
 
   return (
     <div className={className}>
-      <AssistantMessagesCard
-        items={items}
-        hideThinking={hideThinking}
-        hideToolBlocks={hideToolBlocks}
-      />
+      <AssistantMessagesStoreCard store={assistantMessagesStore} />
     </div>
   )
 }
