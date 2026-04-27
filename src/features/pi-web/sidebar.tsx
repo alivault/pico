@@ -225,7 +225,7 @@ function SidebarSessionTime({ value }: { value?: string }) {
   const label = formatSidebarSessionTime(value, now)
   if (!label) return null
 
-  return <>{label}</>
+  return <span className="tabular-nums">{label}</span>
 }
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
