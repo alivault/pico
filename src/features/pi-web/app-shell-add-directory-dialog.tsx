@@ -27,11 +27,27 @@ import {
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 
+function formatDirectoryDisplayPath(value: string) {
+  const path = value.trim()
+  if (!path) return value
+
+  const displayPath = path
+    .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
+    .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
+
+  return displayPath === "~" ? "~/" : displayPath
+}
+
 function directoryMatchesQuery(directoryPath: string, query: string) {
   const normalizedQuery = query.trim().toLowerCase()
   if (!normalizedQuery) return true
 
-  return directoryPath.toLowerCase().includes(normalizedQuery)
+  return (
+    directoryPath.toLowerCase().includes(normalizedQuery) ||
+    formatDirectoryDisplayPath(directoryPath)
+      .toLowerCase()
+      .includes(normalizedQuery)
+  )
 }
 
 function directoryDialogHasExactMatch(
@@ -39,9 +55,17 @@ function directoryDialogHasExactMatch(
   normalizedQuery: string
 ) {
   if (!normalizedQuery) return false
-  return directoryPaths.some(
-    (directoryPath) => directoryPath.trim().toLowerCase() === normalizedQuery
-  )
+  return directoryPaths.some((directoryPath) => {
+    const normalizedPath = directoryPath.trim().toLowerCase()
+    const normalizedDisplayPath = formatDirectoryDisplayPath(directoryPath)
+      .trim()
+      .toLowerCase()
+
+    return (
+      normalizedPath === normalizedQuery ||
+      normalizedDisplayPath === normalizedQuery
+    )
+  })
 }
 
 export type AppShellAddDirectoryDialogHandle = {
@@ -142,7 +166,9 @@ export function AppShellAddDirectoryDialog({
               onSelect={() => onAddDirectoryPath(manualPath)}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">Add {manualPath}</span>
+                <span className="truncate font-medium">
+                  Add {formatDirectoryDisplayPath(manualPath)}
+                </span>
                 <span className="truncate text-xs text-muted-foreground">
                   Resolve and add this path to the sidebar.
                 </span>
@@ -159,7 +185,9 @@ export function AppShellAddDirectoryDialog({
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">{directoryPath}</span>
+                  <span className="truncate font-medium">
+                    {formatDirectoryDisplayPath(directoryPath)}
+                  </span>
                   <span className="truncate text-xs text-muted-foreground">
                     Expand and show it in the sidebar.
                   </span>
@@ -177,7 +205,9 @@ export function AppShellAddDirectoryDialog({
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">{directoryPath}</span>
+                  <span className="truncate font-medium">
+                    {formatDirectoryDisplayPath(directoryPath)}
+                  </span>
                   <span className="truncate text-xs text-muted-foreground">
                     Use the current Phi working directory.
                   </span>
@@ -194,7 +224,9 @@ export function AppShellAddDirectoryDialog({
                 value={`recent ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <span className="truncate">{directoryPath}</span>
+                <span className="truncate">
+                  {formatDirectoryDisplayPath(directoryPath)}
+                </span>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -211,7 +243,9 @@ export function AppShellAddDirectoryDialog({
                 value={`known ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <span className="truncate">{directoryPath}</span>
+                <span className="truncate">
+                  {formatDirectoryDisplayPath(directoryPath)}
+                </span>
               </CommandItem>
             ))}
           </CommandGroup>
