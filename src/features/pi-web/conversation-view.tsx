@@ -2383,10 +2383,12 @@ export function assistantMessageHasVisibleBlocks({
 }
 
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
+  anchorBlockKey,
   descriptor,
   store,
   streaming,
 }: {
+  anchorBlockKey?: string
   descriptor: AssistantBlockGroupDescriptor
   store: AssistantBlockStore
   streaming: boolean
@@ -2400,7 +2402,7 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
     )
   }
 
-  return (
+  const blockView = (
     <AssistantSingleBlockGroupView
       blockKey={descriptor.blockKey}
       blockType={descriptor.blockType}
@@ -2408,6 +2410,12 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
       streaming={streaming}
     />
   )
+
+  if (descriptor.blockKey !== anchorBlockKey) {
+    return blockView
+  }
+
+  return <div data-message-anchor="true">{blockView}</div>
 })
 
 function AssistantExploreBlockGroupView({
@@ -2476,9 +2484,11 @@ function AssistantSubscribedBlockView({
 }
 
 function AssistantBlockGroupsView({
+  anchorBlockKey,
   store,
   streaming,
 }: {
+  anchorBlockKey?: string
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2489,6 +2499,7 @@ function AssistantBlockGroupsView({
       {renderedBlocks.map((descriptor) => (
         <AssistantBlockGroupView
           key={descriptor.key}
+          anchorBlockKey={anchorBlockKey}
           descriptor={descriptor}
           store={store}
           streaming={streaming}
@@ -2513,6 +2524,12 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
       assistantBlockIsVisible({ block, hideThinking, hideToolBlocks })
     )
   )
+  const anchorBlockIndex = blocks.findIndex((block) => block.type !== "tool")
+  const anchorBlock =
+    anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
+  const anchorBlockKey = anchorBlock
+    ? assistantBlockRenderKey(anchorBlock, anchorBlockIndex)
+    : undefined
 
   if (blocks.length === 0) {
     return null
@@ -2531,6 +2548,7 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   return (
     <div className="flex flex-col gap-4">
       <AssistantBlockGroupsView
+        anchorBlockKey={anchorBlockKey}
         store={assistantBlockStore}
         streaming={streaming}
       />

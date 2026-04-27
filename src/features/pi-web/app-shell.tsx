@@ -1855,7 +1855,7 @@ function ConversationAssistantGroupView({
   if (items.length === 0) return null
 
   return (
-    <div data-message-anchor="true" className={className}>
+    <div className={className}>
       <AssistantMessagesCard
         items={items}
         hideThinking={hideThinking}
