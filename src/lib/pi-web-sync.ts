@@ -147,12 +147,11 @@ function samePromptImages(
   return true
 }
 
-function sameUserMessageContent(
+function sameUserMessageBody(
   left: Extract<ConversationItem, { kind: "user" }>,
   right: Extract<ConversationItem, { kind: "user" }>
 ) {
   return (
-    (left.itemKey || "") === (right.itemKey || "") &&
     left.text === right.text &&
     samePromptImages(left.images, right.images) &&
     Boolean(left.queued) === Boolean(right.queued) &&
@@ -160,9 +159,21 @@ function sameUserMessageContent(
   )
 }
 
-function sameAssistantBlock(left: AssistantBlock, right: AssistantBlock) {
+function sameUserMessageContent(
+  left: Extract<ConversationItem, { kind: "user" }>,
+  right: Extract<ConversationItem, { kind: "user" }>
+) {
+  return (
+    (left.itemKey || "") === (right.itemKey || "") &&
+    sameUserMessageBody(left, right)
+  )
+}
+
+function sameAssistantBlockPayload(
+  left: AssistantBlock,
+  right: AssistantBlock
+) {
   if (!left || !right || left.type !== right.type) return false
-  if ((left.blockKey || "") !== (right.blockKey || "")) return false
 
   switch (left.type) {
     case "text":
@@ -193,6 +204,13 @@ function sameAssistantBlock(left: AssistantBlock, right: AssistantBlock) {
     default:
       return false
   }
+}
+
+function sameAssistantBlock(left: AssistantBlock, right: AssistantBlock) {
+  return (
+    (left.blockKey || "") === (right.blockKey || "") &&
+    sameAssistantBlockPayload(left, right)
+  )
 }
 
 function sameStateItem(left: ConversationItem, right: ConversationItem) {
@@ -231,15 +249,40 @@ function previousAssistantBlockByKey(
   return blocks.find((block) => block.blockKey === blockKey)
 }
 
+function assistantBlockRenderKey(block: AssistantBlock | undefined) {
+  return block?.renderKey || block?.blockKey || ""
+}
+
+function withAssistantBlockRenderKey(
+  block: AssistantBlock,
+  previousBlock: AssistantBlock | undefined
+) {
+  const renderKey = assistantBlockRenderKey(previousBlock)
+  if (!renderKey || block.renderKey === renderKey) return block
+
+  return { ...block, renderKey } satisfies AssistantBlock
+}
+
+function sameAssistantBlockListPayload(
+  leftBlocks: Array<AssistantBlock>,
+  rightBlocks: Array<AssistantBlock>
+) {
+  if (leftBlocks.length !== rightBlocks.length) return false
+
+  for (let index = 0; index < leftBlocks.length; index += 1) {
+    if (!sameAssistantBlockPayload(leftBlocks[index], rightBlocks[index])) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function reconcileAssistantBlocks(
   previousBlocks: Array<AssistantBlock>,
   nextBlocks: Array<AssistantBlock>
 ) {
-  if (previousBlocks.length !== nextBlocks.length) {
-    return nextBlocks
-  }
-
-  let changed = false
+  let changed = previousBlocks.length !== nextBlocks.length
   const reconciled: Array<AssistantBlock> = []
 
   for (let index = 0; index < nextBlocks.length; index += 1) {
@@ -254,10 +297,33 @@ function reconcileAssistantBlocks(
     }
 
     changed = true
+    if (
+      previousBlock?.type === nextBlock.type &&
+      ((previousBlock.blockKey || "") === (nextBlock.blockKey || "") ||
+        sameAssistantBlockPayload(previousBlock, nextBlock))
+    ) {
+      reconciled.push(withAssistantBlockRenderKey(nextBlock, previousBlock))
+      continue
+    }
+
     reconciled.push(nextBlock)
   }
 
   return changed ? reconciled : previousBlocks
+}
+
+function conversationItemRenderKey(item: ConversationItem | undefined) {
+  return item?.renderKey || item?.itemKey || ""
+}
+
+function withConversationItemRenderKey<T extends ConversationItem>(
+  item: T,
+  previousItem: ConversationItem | undefined
+): T {
+  const renderKey = conversationItemRenderKey(previousItem)
+  if (!renderKey || item.renderKey === renderKey) return item
+
+  return { ...item, renderKey } as T
 }
 
 export function reconcileConversationItems(
@@ -267,9 +333,16 @@ export function reconcileConversationItems(
   if (previousItems.length === 0) return nextItems
 
   const previousItemsByKey = new Map<string, ConversationItem>()
+  const previousItemsByRenderKey = new Map<string, ConversationItem>()
   for (const item of previousItems) {
-    if (!item.itemKey || previousItemsByKey.has(item.itemKey)) continue
-    previousItemsByKey.set(item.itemKey, item)
+    if (item.itemKey && !previousItemsByKey.has(item.itemKey)) {
+      previousItemsByKey.set(item.itemKey, item)
+    }
+
+    const renderKey = conversationItemRenderKey(item)
+    if (renderKey && !previousItemsByRenderKey.has(renderKey)) {
+      previousItemsByRenderKey.set(renderKey, item)
+    }
   }
 
   let changed = previousItems.length !== nextItems.length
@@ -277,10 +350,15 @@ export function reconcileConversationItems(
 
   for (let index = 0; index < nextItems.length; index += 1) {
     const nextItem = nextItems[index]
+    const nextRenderKey = conversationItemRenderKey(nextItem)
     const previousItem =
       (nextItem.itemKey
         ? previousItemsByKey.get(nextItem.itemKey)
-        : undefined) || previousItems[index]
+        : undefined) ||
+      (nextRenderKey
+        ? previousItemsByRenderKey.get(nextRenderKey)
+        : undefined) ||
+      previousItems[index]
 
     if (!previousItem || previousItem.kind !== nextItem.kind) {
       changed = true
@@ -293,14 +371,35 @@ export function reconcileConversationItems(
       continue
     }
 
+    if (previousItem.kind === "user" && nextItem.kind === "user") {
+      if (sameUserMessageBody(previousItem, nextItem)) {
+        changed = true
+        reconciled.push(withConversationItemRenderKey(nextItem, previousItem))
+        continue
+      }
+    }
+
     if (previousItem.kind === "assistant" && nextItem.kind === "assistant") {
       const blocks = reconcileAssistantBlocks(
         previousItem.blocks,
         nextItem.blocks
       )
+      const sameLogicalItem =
+        (previousItem.itemKey || "") === (nextItem.itemKey || "")
+      const sameRenderItem =
+        conversationItemRenderKey(previousItem) ===
+        conversationItemRenderKey(nextItem)
+      const finalizingStreamingItem =
+        Boolean(previousItem.streaming) &&
+        !nextItem.streaming &&
+        sameAssistantBlockListPayload(previousItem.blocks, nextItem.blocks)
+      const itemWithStableRenderKey =
+        sameLogicalItem || sameRenderItem || finalizingStreamingItem
+          ? withConversationItemRenderKey(nextItem, previousItem)
+          : nextItem
 
       if (
-        (previousItem.itemKey || "") === (nextItem.itemKey || "") &&
+        sameLogicalItem &&
         blocks === previousItem.blocks &&
         Boolean(previousItem.streaming) === Boolean(nextItem.streaming)
       ) {
@@ -310,7 +409,9 @@ export function reconcileConversationItems(
 
       changed = true
       reconciled.push(
-        blocks === nextItem.blocks ? nextItem : { ...nextItem, blocks }
+        blocks === itemWithStableRenderKey.blocks
+          ? itemWithStableRenderKey
+          : { ...itemWithStableRenderKey, blocks }
       )
       continue
     }
@@ -327,6 +428,7 @@ export function assistantBlocksFromMessage(
   keyPrefix = "assistant"
 ) {
   const blocks: Array<AssistantBlock> = []
+  const toolBlockIndexByCallId = new Map<string, number>()
   const content = Array.isArray(message?.content) ? message.content : []
 
   for (let index = 0; index < content.length; index += 1) {
@@ -356,20 +458,38 @@ export function assistantBlocksFromMessage(
     }
 
     if (part?.type === "toolCall") {
-      blocks.push({
+      const callId = typeof part.id === "string" ? part.id.trim() : ""
+      const toolBlock = {
         type: "tool",
-        blockKey:
-          typeof part.id === "string" && part.id.trim()
-            ? `${keyPrefix}:tool:${part.id}`
-            : `${partKey}:tool`,
-        callId: part.id,
-        name: part.name,
+        blockKey: callId ? `${keyPrefix}:tool:${callId}` : `${partKey}:tool`,
+        ...(callId ? { callId } : {}),
+        ...(typeof part.name === "string" ? { name: part.name } : {}),
         args: part.arguments,
         output: "",
         details: undefined,
         isError: false,
         running: true,
-      })
+      } satisfies ToolBlock
+
+      const existingIndex = callId
+        ? toolBlockIndexByCallId.get(callId)
+        : undefined
+      const existingBlock =
+        existingIndex !== undefined ? blocks[existingIndex] : undefined
+      if (existingIndex !== undefined && existingBlock?.type === "tool") {
+        blocks[existingIndex] = {
+          ...existingBlock,
+          ...(toolBlock.name ? { name: toolBlock.name } : {}),
+          args: toolBlock.args,
+          running: true,
+        }
+        continue
+      }
+
+      if (callId) {
+        toolBlockIndexByCallId.set(callId, blocks.length)
+      }
+      blocks.push(toolBlock)
     }
   }
 
@@ -527,6 +647,65 @@ function isQueuedConversationItem(item: ConversationItem) {
   return item.kind === "user" && Boolean(item.queued)
 }
 
+function messageItemIndex(item: ConversationItem) {
+  const match = item.itemKey?.match(/^message:(\d+)$/)
+  if (!match) return -1
+  return Number(match[1])
+}
+
+function nextMessageItemIndex(items: Array<ConversationItem>) {
+  let maxIndex = -1
+  for (const item of items) {
+    maxIndex = Math.max(maxIndex, messageItemIndex(item))
+  }
+  return maxIndex + 1
+}
+
+function uniqueRenderKey(preferredKey: string, items: Array<ConversationItem>) {
+  const existingRenderKeys = new Set(
+    items.map((item) => conversationItemRenderKey(item)).filter(Boolean)
+  )
+  if (!existingRenderKeys.has(preferredKey)) return preferredKey
+
+  let suffix = 1
+  while (existingRenderKeys.has(`${preferredKey}:streaming:${suffix}`)) {
+    suffix += 1
+  }
+  return `${preferredKey}:streaming:${suffix}`
+}
+
+function streamingAssistantRenderKey(options: {
+  hasMessages: boolean
+  messages: Array<SyncMessage>
+  items: Array<ConversationItem>
+  previousStreamingItem: ConversationItem | null
+}) {
+  const previousRenderKey = conversationItemRenderKey(
+    options.previousStreamingItem || undefined
+  )
+  if (
+    previousRenderKey &&
+    !options.items.some(
+      (item) => conversationItemRenderKey(item) === previousRenderKey
+    )
+  ) {
+    return previousRenderKey
+  }
+
+  const optimisticUserCount = options.items.filter(
+    (item) => item.kind === "user" && isOptimisticPendingConversationItem(item)
+  ).length
+  const baseMessageIndex = options.hasMessages
+    ? options.messages.length
+    : nextMessageItemIndex(options.items)
+  const predictedAssistantIndex = baseMessageIndex + optimisticUserCount
+
+  return uniqueRenderKey(
+    `message:${Math.max(0, predictedAssistantIndex)}`,
+    options.items
+  )
+}
+
 function messageIsQueued(message: SyncMessage) {
   const metadata =
     message?.metadata && typeof message.metadata === "object"
@@ -652,28 +831,41 @@ export function buildItemsFromSync(
         ? true
         : Boolean(previousStreamingItem)
 
-  items.push(
-    ...mergePendingItemsForSync({
-      previousItems,
-      committedItems: items,
-      preserveOptimisticItems: Boolean(sync.draft) || shouldRenderStreaming,
-    })
-  )
+  const pendingItems = mergePendingItemsForSync({
+    previousItems,
+    committedItems: items,
+    preserveOptimisticItems: Boolean(sync.draft) || shouldRenderStreaming,
+  })
+  items.push(...pendingItems)
 
   if (shouldRenderStreaming) {
     if (sync.streamingMessage?.role === "assistant") {
+      const renderKey = streamingAssistantRenderKey({
+        hasMessages,
+        messages,
+        items,
+        previousStreamingItem,
+      })
       items.push({
         kind: "assistant",
         itemKey: "streaming",
-        blocks: assistantBlocksFromMessage(sync.streamingMessage, "streaming"),
+        renderKey,
+        blocks: assistantBlocksFromMessage(sync.streamingMessage, renderKey),
         streaming: true,
       })
     } else if (!hasStreamingUpdate && previousStreamingItem) {
       items.push(previousStreamingItem)
     } else {
+      const renderKey = streamingAssistantRenderKey({
+        hasMessages,
+        messages,
+        items,
+        previousStreamingItem,
+      })
       items.push({
         kind: "assistant",
         itemKey: "streaming",
+        renderKey,
         blocks: [],
         streaming: true,
       })

@@ -307,6 +307,10 @@ function visibleAssistantBlockKey(
   }
 }
 
+function visibleConversationItemKey(item: SessionState["items"][number]) {
+  return item.renderKey || item.itemKey || ""
+}
+
 function visibleConversationSignature(
   items: SessionState["items"],
   options: { hideThinking: boolean; hideToolBlocks: boolean }
@@ -314,11 +318,13 @@ function visibleConversationSignature(
   const parts: Array<string> = []
 
   for (const item of items) {
+    const itemKey = visibleConversationItemKey(item)
+
     if (item.kind === "user") {
       parts.push(
-        `user:${item.itemKey || ""}:${item.pendingId || ""}:${item.text}:${
-          item.queued ? "1" : "0"
-        }:${item.streamingBehavior || ""}:${item.images
+        `user:${itemKey}:${item.text}:${item.queued ? "1" : "0"}:${
+          item.streamingBehavior || ""
+        }:${item.images
           .map((image) => `${image.mimeType}:${image.data}`)
           .join(",")}`
       )
@@ -330,12 +336,12 @@ function visibleConversationSignature(
       .filter(Boolean)
     if (blockKeys.length === 0) {
       if (item.streaming) {
-        parts.push(`assistant:${item.itemKey || ""}:1`)
+        parts.push(`assistant:${itemKey}:1`)
       }
       continue
     }
     parts.push(
-      `assistant:${item.itemKey || ""}:${item.streaming ? "1" : "0"}:${blockKeys.join("|")}`
+      `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${blockKeys.join("|")}`
     )
   }
 

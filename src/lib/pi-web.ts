@@ -128,12 +128,14 @@ export type UiRequest = {
 export type TextBlock = {
   type: "text"
   blockKey?: string
+  renderKey?: string
   text: string
 }
 
 export type ThinkingBlock = {
   type: "thinking"
   blockKey?: string
+  renderKey?: string
   text: string
   summaryLabel?: string
 }
@@ -141,6 +143,7 @@ export type ThinkingBlock = {
 export type ToolBlock = {
   type: "tool"
   blockKey?: string
+  renderKey?: string
   callId?: string
   name?: string
   args?: unknown
@@ -153,6 +156,7 @@ export type ToolBlock = {
 export type CompactionBlock = {
   type: "compaction"
   blockKey?: string
+  renderKey?: string
   summary: string
   tokensBefore: number
 }
@@ -166,6 +170,7 @@ export type AssistantBlock =
 export type UserItem = {
   kind: "user"
   itemKey?: string
+  renderKey?: string
   pendingId?: string
   text: string
   images: Array<PromptImage>
@@ -176,6 +181,7 @@ export type UserItem = {
 export type AssistantItem = {
   kind: "assistant"
   itemKey?: string
+  renderKey?: string
   blocks: Array<AssistantBlock>
   streaming?: boolean
 }

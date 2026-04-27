@@ -403,15 +403,17 @@ function assistantBlockKey(
 }
 
 export function conversationItemSignature(item: ConversationItem) {
+  const itemKey = item.renderKey || item.itemKey || ""
+
   if (item.kind === "user") {
-    return `user:${item.pendingId || ""}:${item.text}:${item.images
+    return `user:${itemKey}:${item.pendingId || ""}:${item.text}:${item.images
       .map((image) => promptImageKey(image))
       .join(",")}:${item.streamingBehavior || ""}:${item.queued ? "1" : "0"}`
   }
 
-  return `assistant:${item.blocks.map((block) => assistantBlockKey(block)).join("|")}:${
-    item.streaming ? "1" : "0"
-  }`
+  return `assistant:${itemKey}:${item.blocks
+    .map((block) => block.renderKey || assistantBlockKey(block))
+    .join("|")}:${item.streaming ? "1" : "0"}`
 }
 
 function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
@@ -956,7 +958,8 @@ function assistantBlockRenderKey(
   block: AssistantConversationBlock,
   index: number
 ) {
-  return block.blockKey || `${assistantBlockKey(block)}:${index}`
+  const baseKey = block.renderKey || block.blockKey || assistantBlockKey(block)
+  return `${baseKey}:${index}`
 }
 
 function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {

@@ -1125,7 +1125,7 @@ type RenderConversationGroupDescriptor =
     }
 
 function conversationItemKey(item: ConversationItem, index: number) {
-  return item.itemKey || `message-row:${index}`
+  return item.renderKey || item.itemKey || `message-row:${index}`
 }
 
 function groupConversationItemsForRender(options: {
