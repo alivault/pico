@@ -1399,7 +1399,7 @@ function useConversationGroupDescriptors({
     groups: [],
   })
 
-  const getSnapshot = () => {
+  const getSnapshot = React.useCallback(() => {
     const snapshot = store.getSnapshot()
     const cache = cacheRef.current
     if (
@@ -1429,9 +1429,23 @@ function useConversationGroupDescriptors({
     }
 
     return groups
-  }
+  }, [hideThinking, hideToolBlocks, store])
 
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+  const subscribe = React.useCallback(
+    (listener: () => void) => {
+      let currentGroups = getSnapshot()
+      return store.subscribe(() => {
+        const nextGroups = getSnapshot()
+        if (nextGroups === currentGroups) return
+
+        currentGroups = nextGroups
+        listener()
+      })
+    },
+    [getSnapshot, store]
+  )
+
+  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 function useConversationItem(
@@ -1787,7 +1801,7 @@ const AppShellGitPanelController = React.memo(
   }
 )
 
-function ConversationGroupView({
+const ConversationGroupView = React.memo(function ConversationGroupView({
   className,
   group,
   hideThinking,
@@ -1819,7 +1833,7 @@ function ConversationGroupView({
       store={store}
     />
   )
-}
+})
 
 function ConversationUserGroupView({
   className,
@@ -1867,43 +1881,45 @@ function ConversationAssistantGroupView({
   )
 }
 
-function AppShellConversationItemGroups({
-  centerMessages,
-  conversationItemsStore,
-  hideThinking,
-  hideToolBlocks,
-}: {
-  centerMessages: boolean
-  conversationItemsStore: ConversationItemsStore
-  hideThinking: boolean
-  hideToolBlocks: boolean
-}) {
-  const conversationMessageColumnClassName = centerMessages
-    ? "mx-auto w-full max-w-[80ch]"
-    : "w-full"
-  const renderedConversationGroups = useConversationGroupDescriptors({
-    store: conversationItemsStore,
+const AppShellConversationItemGroups = React.memo(
+  function AppShellConversationItemGroups({
+    centerMessages,
+    conversationItemsStore,
     hideThinking,
     hideToolBlocks,
-  })
+  }: {
+    centerMessages: boolean
+    conversationItemsStore: ConversationItemsStore
+    hideThinking: boolean
+    hideToolBlocks: boolean
+  }) {
+    const conversationMessageColumnClassName = centerMessages
+      ? "mx-auto w-full max-w-[80ch]"
+      : "w-full"
+    const renderedConversationGroups = useConversationGroupDescriptors({
+      store: conversationItemsStore,
+      hideThinking,
+      hideToolBlocks,
+    })
 
-  if (renderedConversationGroups.length === 0) return null
+    if (renderedConversationGroups.length === 0) return null
 
-  return (
-    <>
-      {renderedConversationGroups.map((group) => (
-        <ConversationGroupView
-          key={group.key}
-          className={conversationMessageColumnClassName}
-          group={group}
-          hideThinking={hideThinking}
-          hideToolBlocks={hideToolBlocks}
-          store={conversationItemsStore}
-        />
-      ))}
-    </>
-  )
-}
+    return (
+      <>
+        {renderedConversationGroups.map((group) => (
+          <ConversationGroupView
+            key={group.key}
+            className={conversationMessageColumnClassName}
+            group={group}
+            hideThinking={hideThinking}
+            hideToolBlocks={hideToolBlocks}
+            store={conversationItemsStore}
+          />
+        ))}
+      </>
+    )
+  }
+)
 
 function AppShellConversationEmptyState({
   awaitingFirstTurn,
