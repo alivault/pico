@@ -3569,6 +3569,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     selectedSidebarSessions,
     sidebarSessionEntriesByKey,
   } = sidebarStore.getWorkspaceSnapshot()
+  const sessionsEventDirectories = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sessionsEvent?.directories || [],
+    sameStringArray
+  )
   const applySidebarSessionStatusRef = React.useRef(
     (status: SessionStatusEvent) => {
       sidebarStore.setSidebarSessionStatusByKey((current) =>
@@ -3989,6 +3994,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     () =>
       normalizeStoredDirectoryList([
         ...baseSidebarDirectories,
+        ...sessionsEventDirectories,
         sessionState.cwd || "",
         ...Array.from(directoryStateByPath.keys()),
         ...Object.values(directoryIndexes).flatMap((entries) =>
@@ -4000,6 +4006,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       directoryIndexes,
       directoryStateByPath,
       sessionState.cwd,
+      sessionsEventDirectories,
     ]
   )
 
