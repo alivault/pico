@@ -448,13 +448,14 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
   const blockInitialSubmit = isSubmitting && !acceptFollowUps
-  const composerGridClassName = acceptFollowUps
-    ? "relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-end gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto]"
-    : `relative grid min-w-0 items-end gap-2 ${
-        isStreaming
-          ? "grid-cols-[auto_minmax(0,1fr)]"
-          : "grid-cols-[auto_minmax(0,1fr)_auto]"
-      }`
+  const handleComposerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    if (target.closest("button, textarea, input, [role='button']")) return
+
+    event.preventDefault()
+    promptRef.current?.focus()
+  }
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
     if (disabled) return
@@ -619,8 +620,11 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   }
 
   return (
-    <div className="relative overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 py-3">
-      <div className={composerGridClassName}>
+    <div
+      className="relative min-h-[90px] cursor-text overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 pt-3 pb-14"
+      onMouseDown={handleComposerMouseDown}
+    >
+      <div className="relative min-w-0">
         <ComposerAssistMenu
           visibleCompletion={visibleCompletion}
           slashMenuState={slashMenuState}
@@ -631,22 +635,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
           onApplySlashSuggestion={applySlashSuggestion}
         />
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Add images"
-          aria-label="Add images"
-          className={
-            acceptFollowUps ? "row-span-2 self-end md:row-span-1" : undefined
-          }
-          disabled={disabled}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlusIcon />
-        </Button>
-
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-start gap-2">
             {draftSkill ? (
               <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
                 <span className="truncate">
@@ -688,14 +678,31 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                     : "Ask anything…"
               }
-              className="max-h-[min(40dvh,18rem)] min-h-[22px] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
+              className="max-h-[min(40dvh,18rem)] min-h-[22px] min-w-[min(240px,100%)] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />
           </div>
         </div>
+      </div>
 
+      <div className="absolute bottom-3 left-3 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Add images"
+          aria-label="Add images"
+          className="cursor-pointer"
+          disabled={disabled}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImagePlusIcon />
+        </Button>
+      </div>
+
+      <div className="absolute right-3 bottom-3 flex flex-nowrap items-center justify-end gap-2">
         {!acceptFollowUps ? (
           <Button
             size="icon-sm"
+            className="cursor-pointer"
             disabled={
               disabled ||
               blockInitialSubmit ||
@@ -716,10 +723,11 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         ) : null}
 
         {acceptFollowUps ? (
-          <div className="col-start-2 row-start-2 flex flex-nowrap items-center justify-end gap-2 md:col-start-3 md:row-start-1">
+          <>
             <Button
               variant="outline"
               size="sm"
+              className="cursor-pointer"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("followUp")}
             >
@@ -729,6 +737,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
             <Button
               variant="outline"
               size="sm"
+              className="cursor-pointer"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("steer")}
             >
@@ -739,6 +748,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               <Button
                 variant="destructive"
                 size="icon-sm"
+                className="cursor-pointer"
                 title="Abort"
                 aria-label="Abort"
                 disabled={disabled}
@@ -747,7 +757,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                 <SquareIcon />
               </Button>
             ) : null}
-          </div>
+          </>
         ) : null}
       </div>
 
