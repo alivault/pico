@@ -1399,7 +1399,7 @@ function useConversationGroupDescriptors({
     groups: [],
   })
 
-  const getSnapshot = React.useCallback(() => {
+  const getSnapshot = () => {
     const snapshot = store.getSnapshot()
     const cache = cacheRef.current
     if (
@@ -1429,21 +1429,18 @@ function useConversationGroupDescriptors({
     }
 
     return groups
-  }, [hideThinking, hideToolBlocks, store])
+  }
 
-  const subscribe = React.useCallback(
-    (listener: () => void) => {
-      let currentGroups = getSnapshot()
-      return store.subscribe(() => {
-        const nextGroups = getSnapshot()
-        if (nextGroups === currentGroups) return
+  const subscribe = (listener: () => void) => {
+    let currentGroups = getSnapshot()
+    return store.subscribe(() => {
+      const nextGroups = getSnapshot()
+      if (nextGroups === currentGroups) return
 
-        currentGroups = nextGroups
-        listener()
-      })
-    },
-    [getSnapshot, store]
-  )
+      currentGroups = nextGroups
+      listener()
+    })
+  }
 
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -1801,7 +1798,7 @@ const AppShellGitPanelController = React.memo(
   }
 )
 
-const ConversationGroupView = React.memo(function ConversationGroupView({
+function ConversationGroupView({
   className,
   group,
   hideThinking,
@@ -1833,7 +1830,7 @@ const ConversationGroupView = React.memo(function ConversationGroupView({
       store={store}
     />
   )
-})
+}
 
 function ConversationUserGroupView({
   className,
@@ -1881,45 +1878,43 @@ function ConversationAssistantGroupView({
   )
 }
 
-const AppShellConversationItemGroups = React.memo(
-  function AppShellConversationItemGroups({
-    centerMessages,
-    conversationItemsStore,
+function AppShellConversationItemGroups({
+  centerMessages,
+  conversationItemsStore,
+  hideThinking,
+  hideToolBlocks,
+}: {
+  centerMessages: boolean
+  conversationItemsStore: ConversationItemsStore
+  hideThinking: boolean
+  hideToolBlocks: boolean
+}) {
+  const conversationMessageColumnClassName = centerMessages
+    ? "mx-auto w-full max-w-[80ch]"
+    : "w-full"
+  const renderedConversationGroups = useConversationGroupDescriptors({
+    store: conversationItemsStore,
     hideThinking,
     hideToolBlocks,
-  }: {
-    centerMessages: boolean
-    conversationItemsStore: ConversationItemsStore
-    hideThinking: boolean
-    hideToolBlocks: boolean
-  }) {
-    const conversationMessageColumnClassName = centerMessages
-      ? "mx-auto w-full max-w-[80ch]"
-      : "w-full"
-    const renderedConversationGroups = useConversationGroupDescriptors({
-      store: conversationItemsStore,
-      hideThinking,
-      hideToolBlocks,
-    })
+  })
 
-    if (renderedConversationGroups.length === 0) return null
+  if (renderedConversationGroups.length === 0) return null
 
-    return (
-      <>
-        {renderedConversationGroups.map((group) => (
-          <ConversationGroupView
-            key={group.key}
-            className={conversationMessageColumnClassName}
-            group={group}
-            hideThinking={hideThinking}
-            hideToolBlocks={hideToolBlocks}
-            store={conversationItemsStore}
-          />
-        ))}
-      </>
-    )
-  }
-)
+  return (
+    <>
+      {renderedConversationGroups.map((group) => (
+        <ConversationGroupView
+          key={group.key}
+          className={conversationMessageColumnClassName}
+          group={group}
+          hideThinking={hideThinking}
+          hideToolBlocks={hideToolBlocks}
+          store={conversationItemsStore}
+        />
+      ))}
+    </>
+  )
+}
 
 function AppShellConversationEmptyState({
   awaitingFirstTurn,
