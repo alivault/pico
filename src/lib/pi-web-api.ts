@@ -109,6 +109,27 @@ export type GitChangesResponse =
     }
   | ApiErrorResponse
 
+export type GitActionResponse =
+  | {
+      ok: true
+      cwd: string
+      stdout: string
+      stderr: string
+    }
+  | ApiErrorResponse
+
+export type GitCommitResponse = GitActionResponse
+
+export type GitCommitMessageResponse =
+  | {
+      ok: true
+      cwd: string
+      message: string
+      source: "ai" | "heuristic"
+      reason?: string
+    }
+  | ApiErrorResponse
+
 export type DirectorySessionsResponse =
   | {
       ok: true

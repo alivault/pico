@@ -1,6 +1,12 @@
 import { spawn } from "node:child_process"
 import { isAbsolute, resolve } from "node:path"
 
+import { loadPiAi } from "@/server/pi-sdk"
+import type {
+  MessageContentPartLike,
+  ModelRegistryLike,
+} from "@/server/pi-sdk-types"
+
 export type GitStatusSummary = {
   branch?: string
   detached: boolean
@@ -74,9 +80,32 @@ export type GitRepositoryInfo = {
   gitCommonDir: string
 }
 
+export type GitActionResult = {
+  stdout: string
+  stderr: string
+}
+
+export type GitCommitMessageResult = {
+  message: string
+  source: "ai" | "heuristic"
+  reason?: string
+}
+
 const GIT_STATUS_CACHE_TTL_MS = 5_000
 const GIT_CHANGES_CACHE_TTL_MS = 5_000
 const GIT_COMMITS_LIMIT = 20
+const GIT_ACTION_TIMEOUT_MS = 120_000
+const GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS = 18_000
+const GIT_COMMIT_MESSAGE_SYSTEM_PROMPT = `You write concise Git commit messages.
+
+Return only the commit message text.
+
+Rules:
+- Use imperative mood.
+- First line must be 72 characters or less.
+- Prefer one line unless a body is genuinely useful.
+- No markdown, bullets, quotes, or code fences.
+- Describe the user-visible intent of the changes, not implementation trivia.`
 
 const gitStatusCache = new Map<
   string,
@@ -301,6 +330,103 @@ function parseCommandLines(
     .split(/\r?\n/)
     .map((entry) => (trim ? entry.trim() : entry))
     .filter((entry) => Boolean(trim ? entry : entry.length))
+}
+
+function gitCommandErrorMessage(
+  fallback: string,
+  result: Awaited<ReturnType<typeof runCommand>>
+) {
+  const details = [result.stderr, result.stdout]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n")
+  if (result.timedOut) return `${fallback}: command timed out`
+  if (details) return `${fallback}: ${details}`
+  return fallback
+}
+
+function cleanupCommitMessageCandidate(raw: unknown) {
+  const text = typeof raw === "string" ? raw.trim() : ""
+  if (!text) return ""
+
+  const cleaned = text
+    .replace(/^```(?:gitcommit|text)?\s*/i, "")
+    .replace(/```$/i, "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim()
+    .replace(/^commit message\s*:\s*/i, "")
+    .trim()
+
+  const [title = "", ...body] = cleaned.split(/\r?\n/)
+  const normalizedTitle = title
+    .replace(/^[\s>*`"'#[\]-]+/, "")
+    .replace(/[.!?…,:;\-–—\s]+$/g, "")
+    .trim()
+  if (!normalizedTitle) return ""
+
+  const truncatedTitle =
+    normalizedTitle.length <= 72
+      ? normalizedTitle
+      : normalizedTitle
+          .slice(0, 72)
+          .replace(/\s+\S*$/, "")
+          .trim() || normalizedTitle.slice(0, 72).trim()
+  const normalizedBody = body
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+
+  return normalizedBody
+    ? `${truncatedTitle}\n\n${normalizedBody}`
+    : truncatedTitle
+}
+
+function commitMessageLabelFromPath(path: string) {
+  const name = path.split("/").filter(Boolean).pop() || path
+  return name
+    .replace(/\.[^.]+$/g, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .trim()
+}
+
+function deriveHeuristicCommitMessage(files: Array<GitChangeFile>) {
+  if (!files.length) return "Update files"
+
+  const addedCount = files.filter((file) => file.status.includes("A")).length
+  const deletedCount = files.filter((file) => file.status.includes("D")).length
+  const modifiedCount = files.length - addedCount - deletedCount
+  const primary = files[0]
+  const label = primary ? commitMessageLabelFromPath(primary.path) : "files"
+
+  if (files.length === 1) {
+    if (addedCount === 1) return `Add ${label}`
+    if (deletedCount === 1) return `Remove ${label}`
+    return `Update ${label}`
+  }
+
+  if (addedCount > modifiedCount && addedCount >= deletedCount) {
+    return `Add ${files.length} files`
+  }
+  if (deletedCount > modifiedCount && deletedCount >= addedCount) {
+    return `Remove ${files.length} files`
+  }
+
+  const commonDirectory = files
+    .map((file) => file.path.split("/").slice(0, -1).join("/"))
+    .filter(Boolean)
+    .reduce<string | undefined>((common, directory) => {
+      if (common === undefined) return directory
+      return common === directory ? common : ""
+    }, undefined)
+
+  if (commonDirectory) {
+    return `Update ${commitMessageLabelFromPath(commonDirectory)}`
+  }
+
+  return `Update ${files.length} files`
 }
 
 function parseGitStatusEntries(output: string) {
@@ -901,6 +1027,242 @@ export async function readDirectoryGitChanges(
   })
 
   return value
+}
+
+export async function commitDirectoryGitChanges(
+  cwd: string,
+  message: string,
+  {
+    push = false,
+    includeUnstaged = true,
+  }: { push?: boolean; includeUnstaged?: boolean } = {}
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedMessage = cleanupCommitMessageCandidate(message)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!normalizedMessage) throw new Error("commit message is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const statusResult = await runCommand("git", ["status", "--porcelain"], {
+    cwd: normalizedCwd,
+    timeoutMs: 5_000,
+  })
+  if (statusResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to read git status", statusResult)
+    )
+  }
+  if (!statusResult.stdout.trim()) {
+    throw new Error("Working tree is clean")
+  }
+
+  if (includeUnstaged) {
+    const addResult = await runCommand("git", ["add", "-A"], {
+      cwd: normalizedCwd,
+      timeoutMs: GIT_ACTION_TIMEOUT_MS,
+    })
+    if (addResult.code !== 0) {
+      throw new Error(
+        gitCommandErrorMessage("Failed to stage changes", addResult)
+      )
+    }
+  }
+
+  const stagedResult = await runCommand(
+    "git",
+    ["diff", "--cached", "--quiet"],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: 5_000,
+    }
+  )
+  if (stagedResult.code === 0) {
+    throw new Error("No staged changes to commit")
+  }
+
+  const commitResult = await runCommand(
+    "git",
+    ["commit", "-m", normalizedMessage],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: GIT_ACTION_TIMEOUT_MS,
+    }
+  )
+  if (commitResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to commit changes", commitResult)
+    )
+  }
+
+  let stdout = commitResult.stdout
+  let stderr = commitResult.stderr
+  if (push) {
+    const pushResult = await pushDirectoryGitChanges(normalizedCwd)
+    stdout = [stdout, pushResult.stdout].filter(Boolean).join("\n")
+    stderr = [stderr, pushResult.stderr].filter(Boolean).join("\n")
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout, stderr }
+}
+
+export async function pushDirectoryGitChanges(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const result = await runCommand("git", ["push"], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to push changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+export async function pullDirectoryGitChanges(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const result = await runCommand("git", ["pull", "--ff-only"], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to pull changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+export async function generateDirectoryGitCommitMessage(
+  cwd: string,
+  modelRegistry: ModelRegistryLike
+): Promise<GitCommitMessageResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const files =
+    (await readDirectoryGitFiles(normalizedCwd, { force: true })) ?? []
+  const heuristic = deriveHeuristicCommitMessage(files)
+  if (!files.length) return { message: heuristic, source: "heuristic" }
+
+  const model = modelRegistry.find("openai-codex", "gpt-5.5")
+  if (!model) {
+    return {
+      message: heuristic,
+      source: "heuristic",
+      reason: "model openai-codex/gpt-5.5 is unavailable",
+    }
+  }
+
+  const auth = await modelRegistry.getApiKeyAndHeaders(model)
+  if (!auth?.ok) {
+    return {
+      message: heuristic,
+      source: "heuristic",
+      reason: auth?.error || "failed to authenticate openai-codex/gpt-5.5",
+    }
+  }
+
+  const [statusResult, statResult, diffResult] = await Promise.all([
+    runCommand("git", ["status", "--short"], {
+      cwd: normalizedCwd,
+      timeoutMs: 5_000,
+    }),
+    runCommand("git", ["diff", "--stat", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 10_000,
+    }),
+    runCommand("git", ["diff", "--no-color", "HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 10_000,
+    }),
+  ])
+
+  const diff = diffResult.stdout.slice(0, GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS)
+  const userPrompt = [
+    "Generate a Git commit message for these repository changes.",
+    "",
+    "Changed files:",
+    files.map((file) => `${file.status} ${file.path}`).join("\n"),
+    "",
+    "Git status:",
+    statusResult.stdout.trim(),
+    "",
+    "Diff stat:",
+    statResult.stdout.trim(),
+    "",
+    "Diff:",
+    diff,
+    diffResult.stdout.length > diff.length ? "\n[diff truncated]" : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+
+  try {
+    const piAi = await loadPiAi()
+    const response = await piAi.complete(
+      model,
+      {
+        systemPrompt: GIT_COMMIT_MESSAGE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: userPrompt }],
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        apiKey: auth.apiKey,
+        headers: auth.headers,
+        reasoningEffort: "low",
+      }
+    )
+
+    const raw = Array.isArray(response?.content)
+      ? response.content
+          .filter(
+            (block): block is MessageContentPartLike & { text: string } =>
+              block?.type === "text" && typeof block.text === "string"
+          )
+          .map((block) => block.text)
+          .join("\n")
+      : ""
+    const message = cleanupCommitMessageCandidate(raw)
+    if (message) return { message, source: "ai" }
+
+    return {
+      message: heuristic,
+      source: "heuristic",
+      reason: "model returned no usable commit message",
+    }
+  } catch (error) {
+    return {
+      message: heuristic,
+      source: "heuristic",
+      reason: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 export async function readDirectoryGitFingerprint(cwd: string) {

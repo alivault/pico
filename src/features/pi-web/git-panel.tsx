@@ -1,25 +1,58 @@
 import * as React from "react"
-import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckIcon, RefreshCwIcon } from "lucide-react"
+import {
+  useIsFetching,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+import {
+  CheckIcon,
+  DownloadIcon,
+  GitBranchIcon,
+  GitCommitIcon,
+  RefreshCwIcon,
+  UploadIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pi-web/app-shell-utils"
 import { piWebQueryKeys } from "@/features/pi-web/query-keys"
 import type {
+  GitActionResponse,
   GitChangeFile,
   GitChangesResponse,
+  GitCommitMessageResponse,
+  GitCommitResponse,
   GitLocalBranch,
   GitRemoteBranch,
   GitStatusResponse,
   GitStatusSummary,
 } from "@/lib/pi-web-api"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
+type GitCommitMessageData = Extract<GitCommitMessageResponse, { ok: true }>
 type GitStatusValue = GitStatusSummary | null
 type BranchScope = "local" | "remote"
 
@@ -145,6 +178,39 @@ function selectGitUnpushedCommitShortHashes(data: GitChangesData) {
   return data.unpushedCommitShortHashes
 }
 
+async function invalidateGitQueries({
+  queryClient,
+  viewerContextId,
+  cwd,
+}: {
+  queryClient: ReturnType<typeof useQueryClient>
+  viewerContextId: string
+  cwd: string
+}) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.gitStatus(viewerContextId, cwd),
+      exact: true,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.gitFiles(viewerContextId, cwd),
+      exact: true,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.gitBranches(viewerContextId, cwd),
+      exact: true,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: piWebQueryKeys.gitCommits(viewerContextId, cwd),
+      exact: true,
+      refetchType: "active",
+    }),
+  ])
+}
+
 function formatHeaderGitStatusText(gitStatus: GitStatusValue | undefined) {
   if (!gitStatus) return ""
 
@@ -218,6 +284,19 @@ function gitFileHasLineChanges(file: GitChangeFile) {
     gitFileLineChangeValue(file.linesAdded) > 0 ||
     gitFileLineChangeValue(file.linesDeleted) > 0
   )
+}
+
+function gitFilesLineSummary(files: Array<GitChangeFile>) {
+  let additions = 0
+  let deletions = 0
+
+  for (const file of files) {
+    additions += gitFileLineChangeValue(file.linesAdded)
+    deletions += gitFileLineChangeValue(file.linesDeleted)
+  }
+
+  if (additions === 0 && deletions === 0) return ""
+  return `+${additions} -${deletions}`
 }
 
 function gitFilesSummaryText(files: Array<GitChangeFile>) {
@@ -577,6 +656,23 @@ function GitRepositorySummary({
 function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
+  const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
+  const statusQuery = useQuery({
+    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: selectGitStatusSummary,
+    notifyOnChangeProps: ["data"],
+  })
+  const filesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: selectGitFiles,
+    notifyOnChangeProps: ["data"],
+  })
   const statusFetchCount = useIsFetching({
     queryKey: piWebQueryKeys.gitStatus(viewerContextId, normalizedCwd),
     exact: true,
@@ -600,36 +696,62 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
       commitsFetchCount >
     0
 
+  const gitStatus = statusQuery.data
+  const files = Array.isArray(filesQuery.data) ? filesQuery.data : []
+  const hasRepository = Boolean(gitStatus)
+  const hasChanges = Boolean(gitStatus?.dirty || files.length > 0)
+  const canPush = Boolean(
+    hasRepository && !gitStatus?.detached && (gitStatus?.ahead || 0) > 0
+  )
+  const canPull = Boolean(
+    hasRepository && !gitStatus?.detached && (gitStatus?.behind || 0) > 0
+  )
+
   const refreshGit = async () => {
     if (!viewerContextId || !normalizedCwd) return
 
     try {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitStatus(viewerContextId, normalizedCwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitFiles(viewerContextId, normalizedCwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitBranches(viewerContextId, normalizedCwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: piWebQueryKeys.gitCommits(viewerContextId, normalizedCwd),
-          exact: true,
-          refetchType: "active",
-        }),
-      ])
+      await invalidateGitQueries({
+        queryClient,
+        viewerContextId,
+        cwd: normalizedCwd,
+      })
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to load git view"))
     }
   }
+
+  const gitActionMutation = useMutation({
+    mutationFn: async (action: "push" | "pull") => {
+      const endpoint = action === "push" ? "/api/git-push" : "/api/git-pull"
+      return await fetchJson<GitActionResponse>(
+        buildRequestUrl(endpoint, { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd: normalizedCwd }),
+        }
+      )
+    },
+    onSuccess: async (_data, action) => {
+      toast.success(action === "push" ? "Pushed changes" : "Pulled changes")
+      await invalidateGitQueries({
+        queryClient,
+        viewerContextId,
+        cwd: normalizedCwd,
+      })
+    },
+    onError: (error, action) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          action === "push"
+            ? "Failed to push changes"
+            : "Failed to pull changes"
+        )
+      )
+    },
+  })
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -646,17 +768,341 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
         ) : null}
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!viewerContextId || !normalizedCwd || refreshing}
-        onClick={() => {
-          void refreshGit()
-        }}
-      >
-        <RefreshCwIcon className={cn(refreshing && "animate-spin")} /> Refresh
-      </Button>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!viewerContextId || !normalizedCwd || !hasChanges}
+          onClick={() => {
+            setCommitDialogOpen(true)
+          }}
+        >
+          <GitCommitIcon /> Commit…
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={
+            !viewerContextId ||
+            !normalizedCwd ||
+            !canPush ||
+            gitActionMutation.isPending
+          }
+          onClick={() => {
+            gitActionMutation.mutate("push")
+          }}
+        >
+          {gitActionMutation.isPending &&
+          gitActionMutation.variables === "push" ? (
+            <Spinner />
+          ) : (
+            <UploadIcon />
+          )}
+          Push
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={
+            !viewerContextId ||
+            !normalizedCwd ||
+            !canPull ||
+            gitActionMutation.isPending
+          }
+          onClick={() => {
+            gitActionMutation.mutate("pull")
+          }}
+        >
+          {gitActionMutation.isPending &&
+          gitActionMutation.variables === "pull" ? (
+            <Spinner />
+          ) : (
+            <DownloadIcon />
+          )}
+          Pull
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!viewerContextId || !normalizedCwd || refreshing}
+          onClick={() => {
+            void refreshGit()
+          }}
+        >
+          <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
+
+      <GitCommitDialog
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        files={files}
+        gitStatus={gitStatus}
+        open={commitDialogOpen}
+        onOpenChange={setCommitDialogOpen}
+      />
     </div>
+  )
+}
+
+function GitCommitDialog({
+  viewerContextId,
+  cwd,
+  files,
+  gitStatus,
+  open,
+  onOpenChange,
+}: {
+  viewerContextId: string
+  cwd: string
+  files: Array<GitChangeFile>
+  gitStatus: GitStatusValue | undefined
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
+  const [message, setMessage] = React.useState("")
+  const [includeUnstaged, setIncludeUnstaged] = React.useState(true)
+  const [nextStep, setNextStep] = React.useState<"commit" | "push">("commit")
+  const [generatedReason, setGeneratedReason] = React.useState("")
+  const fileSummary = `${files.length} file${files.length === 1 ? "" : "s"}`
+  const lineSummary = gitFilesLineSummary(files)
+  const branchName = gitStatus?.detached
+    ? `Detached ${gitStatus.revision || "HEAD"}`
+    : gitStatus?.branch || "Unknown branch"
+
+  const generateMutation = useMutation({
+    mutationFn: async () =>
+      await fetchJson<GitCommitMessageData>(
+        buildRequestUrl("/api/git-commit-message", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd }),
+        }
+      ),
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Failed to generate commit message"))
+    },
+  })
+
+  const commitMutation = useMutation({
+    mutationFn: async ({
+      push,
+      commitMessage,
+    }: {
+      push: boolean
+      commitMessage: string
+    }) =>
+      await fetchJson<GitCommitResponse>(
+        buildRequestUrl("/api/git-commit", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            cwd,
+            message: commitMessage,
+            push,
+            includeUnstaged,
+          }),
+        }
+      ),
+    onSuccess: async (_data, variables) => {
+      toast.success(
+        variables.push ? "Committed and pushed changes" : "Committed changes"
+      )
+      setMessage("")
+      setGeneratedReason("")
+      setNextStep("commit")
+      onOpenChange(false)
+      await invalidateGitQueries({ queryClient, viewerContextId, cwd })
+    },
+    onError: (error, variables) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          variables.push
+            ? "Failed to commit and push changes"
+            : "Failed to commit changes"
+        )
+      )
+    },
+  })
+
+  const committing = commitMutation.isPending
+  const generating = generateMutation.isPending
+  const busy = committing || generating
+
+  const continueCommit = async () => {
+    if (busy || files.length === 0) return
+
+    let commitMessage = message.trim()
+    if (!commitMessage) {
+      try {
+        const generated = await generateMutation.mutateAsync()
+        commitMessage = generated.message.trim()
+        setMessage(commitMessage)
+        setGeneratedReason(generated.reason || "")
+        if (generated.source !== "ai" && generated.reason) {
+          toast.info(`Using heuristic message: ${generated.reason}`)
+        }
+      } catch {
+        return
+      }
+    }
+
+    if (!commitMessage) return
+    commitMutation.mutate({
+      push: nextStep === "push",
+      commitMessage,
+    })
+  }
+
+  const body = (
+    <div className="grid gap-6 px-0">
+      <div className="grid gap-5">
+        <h2 className="font-heading text-3xl leading-tight font-semibold tracking-tight">
+          Commit your changes
+        </h2>
+
+        <div className="grid gap-4 text-base">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+            <div className="font-semibold">Branch</div>
+            <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
+              <GitBranchIcon className="size-5 shrink-0" />
+              <span className="max-w-52 truncate font-medium text-foreground">
+                {branchName}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+            <div className="font-semibold">Changes</div>
+            <div className="flex items-center gap-3 text-muted-foreground tabular-nums">
+              <span>{fileSummary}</span>
+              {lineSummary ? (
+                <span>
+                  <span className="text-emerald-500">
+                    {lineSummary.split(" ")[0]}
+                  </span>{" "}
+                  <span className="text-red-500">
+                    {lineSummary.split(" ")[1]}
+                  </span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-3 font-medium">
+            <Switch
+              checked={includeUnstaged}
+              onCheckedChange={setIncludeUnstaged}
+              disabled={busy}
+              className="scale-125"
+            />
+            Include unstaged
+          </label>
+        </div>
+
+        <div className="grid gap-2">
+          <label
+            htmlFor="git-commit-message"
+            className="text-base font-semibold"
+          >
+            Commit message
+          </label>
+          <Textarea
+            id="git-commit-message"
+            value={message}
+            onChange={(event) => {
+              setMessage(event.target.value)
+              setGeneratedReason("")
+            }}
+            placeholder="Leave blank to autogenerate a commit message"
+            className="min-h-28 resize-none rounded-2xl bg-muted/20 px-4 py-3 text-base"
+            disabled={busy}
+          />
+          {generatedReason ? (
+            <p className="text-xs text-muted-foreground">
+              AI message unavailable, using heuristic fallback:{" "}
+              {generatedReason}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3">
+          <div className="text-base font-semibold">Next steps</div>
+          <div className="overflow-hidden rounded-2xl bg-muted/40 ring-1 ring-border/60">
+            <button
+              type="button"
+              className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+              disabled={busy}
+              onClick={() => setNextStep("commit")}
+            >
+              <GitCommitIcon className="size-5" />
+              <span className="text-base font-medium">Commit</span>
+              {nextStep === "commit" ? <CheckIcon className="size-5" /> : null}
+            </button>
+            <button
+              type="button"
+              className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-t border-border/70 px-4 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
+              disabled={busy}
+              onClick={() => setNextStep("push")}
+            >
+              <UploadIcon className="size-5" />
+              <span className="text-base font-medium">Commit and push</span>
+              {nextStep === "push" ? <CheckIcon className="size-5" /> : null}
+            </button>
+          </div>
+        </div>
+
+        <Button
+          size="lg"
+          className="h-14 rounded-2xl text-base"
+          disabled={busy || files.length === 0}
+          onClick={() => {
+            void continueCommit()
+          }}
+        >
+          {busy ? <Spinner /> : null}
+          Continue
+        </Button>
+      </div>
+    </div>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[92svh] overflow-y-auto">
+          <DrawerHeader className="sr-only">
+            <DrawerTitle>Commit your changes</DrawerTitle>
+            <DrawerDescription>
+              Stage and commit changes in this repository.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="px-5 pt-3 pb-6">{body}</div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="gap-0 p-8 sm:max-w-lg">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Commit your changes</DialogTitle>
+          <DialogDescription>
+            Stage and commit changes in this repository.
+          </DialogDescription>
+        </DialogHeader>
+        {body}
+      </DialogContent>
+    </Dialog>
   )
 }
 
