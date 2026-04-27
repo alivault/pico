@@ -1088,6 +1088,7 @@ function TreeBrowsePanel({
   const treeSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const treeListRef = React.useRef<HTMLDivElement | null>(null)
   const treeItemRefs = React.useRef(new Map<string, HTMLDivElement>())
+  const treeMouseMovedSinceOpenRef = React.useRef(false)
 
   const cursorVisibleTreeNode =
     treeCursorNodeId != null
@@ -1149,6 +1150,19 @@ function TreeBrowsePanel({
       window.cancelAnimationFrame(frame)
     }
   }, [treeCursorNodeId])
+
+  const markTreeMouseMoved = (movementX: number, movementY: number) => {
+    if (movementX === 0 && movementY === 0) return false
+
+    treeMouseMovedSinceOpenRef.current = true
+    return true
+  }
+
+  const moveTreeCursorToNode = (nodeId: string) => {
+    if (treeCursorNodeId !== nodeId) {
+      setTreeCursorNodeId(nodeId)
+    }
+  }
 
   const moveTreeCursorBy = (step: number) => {
     const visibleNodes = treeViewModel.orderedVisibleNodes
@@ -1253,6 +1267,7 @@ function TreeBrowsePanel({
         onValueChange={(value) => {
           if (!value || value === treeCursorNodeId) return
           if (!treeViewModel.nodeById.has(value)) return
+          if (!treeMouseMovedSinceOpenRef.current) return
           setTreeCursorNodeId(value)
         }}
         onKeyDownCapture={(event) => {
@@ -1353,7 +1368,13 @@ function TreeBrowsePanel({
           placeholder="Search tree"
           className="text-base md:text-sm"
         />
-        <CommandList ref={treeListRef} className="max-h-none min-h-0 flex-1">
+        <CommandList
+          ref={treeListRef}
+          className="max-h-none min-h-0 flex-1"
+          onPointerMoveCapture={(event) => {
+            markTreeMouseMoved(event.movementX, event.movementY)
+          }}
+        >
           {treeLoading ? (
             <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
               <Spinner /> Loading tree…
@@ -1365,9 +1386,19 @@ function TreeBrowsePanel({
                 value={node.id}
                 disabled={treeSubmitting || node.id === treeLeafId}
                 onMouseEnter={() => {
-                  if (treeCursorNodeId !== node.id) {
-                    setTreeCursorNodeId(node.id)
+                  if (!treeMouseMovedSinceOpenRef.current) return
+
+                  moveTreeCursorToNode(node.id)
+                }}
+                onMouseMove={(event) => {
+                  if (
+                    !treeMouseMovedSinceOpenRef.current &&
+                    !markTreeMouseMoved(event.movementX, event.movementY)
+                  ) {
+                    return
                   }
+
+                  moveTreeCursorToNode(node.id)
                 }}
                 onClick={() => onSelectTreeNode(node.id)}
                 onSelect={() => onSelectTreeNode(node.id)}
@@ -1968,6 +1999,7 @@ export function AppShellTreeDialog({
   const treeDialogBody =
     treeStage === "browse" ? (
       <TreeBrowsePanel
+        key={open ? "open" : "closed"}
         isMobile={isMobile}
         treeFilterMode={treeFilterMode}
         onTreeFilterModeChange={setTreeFilterMode}
