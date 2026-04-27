@@ -12,6 +12,7 @@ import {
   GitCommitIcon,
   RefreshCwIcon,
   UploadIcon,
+  WandSparklesIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -1009,12 +1010,33 @@ function GitCommitDialog({
         </div>
 
         <div className="grid gap-2">
-          <label
-            htmlFor="git-commit-message"
-            className="text-base font-semibold"
-          >
-            Commit message
-          </label>
+          <div className="flex items-center justify-between gap-3">
+            <label
+              htmlFor="git-commit-message"
+              className="text-base font-semibold"
+            >
+              Commit message
+            </label>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || !cwd || files.length === 0}
+              onClick={() => {
+                generateMutation.mutate(undefined, {
+                  onSuccess: (generated) => {
+                    setMessage(generated.message)
+                    setGeneratedReason(generated.reason || "")
+                    if (generated.source !== "ai" && generated.reason) {
+                      toast.info(`Using heuristic message: ${generated.reason}`)
+                    }
+                  },
+                })
+              }}
+            >
+              {generating ? <Spinner /> : <WandSparklesIcon />}
+              Generate message
+            </Button>
+          </div>
           <Textarea
             id="git-commit-message"
             value={message}
