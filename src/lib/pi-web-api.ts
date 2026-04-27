@@ -162,6 +162,24 @@ export type DirectorySessionsIndexesResponse =
     }
   | ApiErrorResponse
 
+export type DeleteOldDirectorySessionsRequest = {
+  directory: string
+  olderThanMs: number
+  dryRun?: boolean
+  includeActiveSession?: boolean
+}
+
+export type DeleteOldDirectorySessionsResponse =
+  | {
+      ok: true
+      directory: string
+      cutoff: string
+      dryRun: boolean
+      deletedSessionIds: Array<string>
+      matchingSessions: Array<SessionListEntry & { activityAt?: string }>
+    }
+  | ApiErrorResponse
+
 export type SessionListEntry = {
   path?: string
   id?: string

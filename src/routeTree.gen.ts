@@ -40,6 +40,7 @@ import { Route as ApiSessionDeleteRouteImport } from './routes/api.session.delet
 import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pending-messages.reorder'
 import { Route as ApiPendingMessageRemoveRouteImport } from './routes/api.pending-message.remove'
 import { Route as ApiDirectoryResolveRouteImport } from './routes/api.directory.resolve'
+import { Route as ApiDirectorySessionsCleanupRouteImport } from './routes/api.directory-sessions.cleanup'
 import { Route as ApiSessionTreeLabelRouteImport } from './routes/api.session.tree.label'
 
 const EventsRoute = EventsRouteImport.update({
@@ -200,6 +201,12 @@ const ApiDirectoryResolveRoute = ApiDirectoryResolveRouteImport.update({
   path: '/api/directory/resolve',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDirectorySessionsCleanupRoute =
+  ApiDirectorySessionsCleanupRouteImport.update({
+    id: '/cleanup',
+    path: '/cleanup',
+    getParentRoute: () => ApiDirectorySessionsRoute,
+  } as any)
 const ApiSessionTreeLabelRoute = ApiSessionTreeLabelRouteImport.update({
   id: '/label',
   path: '/label',
@@ -210,7 +217,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
-  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/api/prompt': typeof ApiPromptRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
@@ -244,7 +252,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
-  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
@@ -260,6 +268,7 @@ export interface FileRoutesByTo {
   '/api/prompt': typeof ApiPromptRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
@@ -279,7 +288,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
-  '/api/directory-sessions': typeof ApiDirectorySessionsRoute
+  '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
@@ -295,6 +304,7 @@ export interface FileRoutesById {
   '/api/prompt': typeof ApiPromptRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
@@ -365,6 +376,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
@@ -399,6 +411,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
@@ -418,7 +431,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EventsRoute: typeof EventsRoute
   ApiAbortRoute: typeof ApiAbortRoute
-  ApiDirectorySessionsRoute: typeof ApiDirectorySessionsRoute
+  ApiDirectorySessionsRoute: typeof ApiDirectorySessionsRouteWithChildren
   ApiDirectorySessionsIndexRoute: typeof ApiDirectorySessionsIndexRoute
   ApiDirectorySessionsIndexesRoute: typeof ApiDirectorySessionsIndexesRoute
   ApiFileCompletionsRoute: typeof ApiFileCompletionsRoute
@@ -667,6 +680,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDirectoryResolveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/directory-sessions/cleanup': {
+      id: '/api/directory-sessions/cleanup'
+      path: '/cleanup'
+      fullPath: '/api/directory-sessions/cleanup'
+      preLoaderRoute: typeof ApiDirectorySessionsCleanupRouteImport
+      parentRoute: typeof ApiDirectorySessionsRoute
+    }
     '/api/session/tree/label': {
       id: '/api/session/tree/label'
       path: '/label'
@@ -676,6 +696,17 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface ApiDirectorySessionsRouteChildren {
+  ApiDirectorySessionsCleanupRoute: typeof ApiDirectorySessionsCleanupRoute
+}
+
+const ApiDirectorySessionsRouteChildren: ApiDirectorySessionsRouteChildren = {
+  ApiDirectorySessionsCleanupRoute: ApiDirectorySessionsCleanupRoute,
+}
+
+const ApiDirectorySessionsRouteWithChildren =
+  ApiDirectorySessionsRoute._addFileChildren(ApiDirectorySessionsRouteChildren)
 
 interface ApiSessionTreeRouteChildren {
   ApiSessionTreeLabelRoute: typeof ApiSessionTreeLabelRoute
@@ -693,7 +724,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EventsRoute: EventsRoute,
   ApiAbortRoute: ApiAbortRoute,
-  ApiDirectorySessionsRoute: ApiDirectorySessionsRoute,
+  ApiDirectorySessionsRoute: ApiDirectorySessionsRouteWithChildren,
   ApiDirectorySessionsIndexRoute: ApiDirectorySessionsIndexRoute,
   ApiDirectorySessionsIndexesRoute: ApiDirectorySessionsIndexesRoute,
   ApiFileCompletionsRoute: ApiFileCompletionsRoute,

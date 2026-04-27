@@ -377,6 +377,7 @@ type AppSidebarProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
+  onDeleteOldSessionsInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
   onRemoveAllDirectories?: () => void
   onReorderDirectories?: (nextDirectories: Array<string>) => void
@@ -832,6 +833,7 @@ type DirectorySessionGroupProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
+  onDeleteOldSessionsInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
 }
 
@@ -853,6 +855,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   onRenameSession,
   onDeleteSession,
   onCreateSessionInDirectory,
+  onDeleteOldSessionsInDirectory,
   onRemoveDirectory,
 }: DirectorySessionGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
@@ -942,7 +945,14 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               >
                 <EllipsisIcon className="size-4" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuContent align="end" className="w-48">
+                {onDeleteOldSessionsInDirectory ? (
+                  <DropdownMenuItem
+                    onClick={() => onDeleteOldSessionsInDirectory(directory)}
+                  >
+                    Delete old sessions…
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onClick={() => onRemoveDirectory(directory)}>
                   Remove
                 </DropdownMenuItem>
@@ -1261,6 +1271,7 @@ export function AppSidebar({
   onRenameSession,
   onDeleteSession,
   onCreateSessionInDirectory,
+  onDeleteOldSessionsInDirectory,
   onRemoveDirectory,
   onRemoveAllDirectories,
   onReorderDirectories,
@@ -1502,6 +1513,9 @@ export function AppSidebar({
                         onRenameSession={onRenameSession}
                         onDeleteSession={onDeleteSession}
                         onCreateSessionInDirectory={onCreateSessionInDirectory}
+                        onDeleteOldSessionsInDirectory={
+                          onDeleteOldSessionsInDirectory
+                        }
                         onRemoveDirectory={
                           onRemoveDirectory ? removeDirectory : undefined
                         }
@@ -1529,6 +1543,9 @@ export function AppSidebar({
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
                   onCreateSessionInDirectory={onCreateSessionInDirectory}
+                  onDeleteOldSessionsInDirectory={
+                    onDeleteOldSessionsInDirectory
+                  }
                   onRemoveDirectory={
                     onRemoveDirectory ? removeDirectory : undefined
                   }

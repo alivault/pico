@@ -19,6 +19,7 @@ import type {
 } from "@/lib/pi-web"
 import type {
   DirectorySessionsIndexSnapshot,
+  DeleteOldDirectorySessionsResponse,
   DirectorySessionsIndexesResponse,
   ExtensionUiEvent,
   FileCompletionsResponse,
@@ -6128,6 +6129,70 @@ function AppShellSidebarController({
       onCreateSessionInDirectory={(directory) => {
         void sessionWorkspaceRef.current?.createSession(directory, {
           closeMobileSidebar: true,
+        })
+      }}
+      onDeleteOldSessionsInDirectory={(directory) => {
+        const daysText = window.prompt(
+          `Delete sessions in ${directory} older than how many days?`,
+          "30"
+        )
+        if (daysText == null) return
+        const days = Number(daysText)
+        if (!Number.isFinite(days) || days <= 0) {
+          toast.error("Enter a positive number of days")
+          return
+        }
+        void (async () => {
+          const olderThanMs = days * 24 * 60 * 60 * 1000
+          const preview = await fetchJson<DeleteOldDirectorySessionsResponse>(
+            buildRequestUrl("/api/directory-sessions/cleanup", {
+              contextId: viewerContextId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                directory,
+                olderThanMs,
+                dryRun: true,
+              }),
+            }
+          )
+          if (!preview.ok) return
+          if (preview.matchingSessions.length === 0) {
+            toast.info("No old sessions found")
+            return
+          }
+          const confirmed = window.confirm(
+            `Delete ${preview.matchingSessions.length} session${
+              preview.matchingSessions.length === 1 ? "" : "s"
+            } in ${directory} older than ${days} day${days === 1 ? "" : "s"}?`
+          )
+          if (!confirmed) return
+          const result = await fetchJson<DeleteOldDirectorySessionsResponse>(
+            buildRequestUrl("/api/directory-sessions/cleanup", {
+              contextId: viewerContextId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                directory,
+                olderThanMs,
+                dryRun: false,
+              }),
+            }
+          )
+          if (!result.ok) return
+          toast.success(
+            `Deleted ${result.deletedSessionIds.length} old session${
+              result.deletedSessionIds.length === 1 ? "" : "s"
+            }`
+          )
+        })().catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to delete sessions"
+          )
         })
       }}
       onRemoveDirectory={(directory) => {

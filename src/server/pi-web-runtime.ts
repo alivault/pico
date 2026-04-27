@@ -38,6 +38,7 @@ import {
   laterModifiedTimestamp,
   listKnownDirectories,
   mergeSessionListEntry,
+  modifiedTimestampValue,
   normalizeModifiedTimestamp,
   normalizeSessionListContextUsage,
   normalizeSessionListTitle,
@@ -3927,6 +3928,94 @@ export class PiWebRuntime {
     this.invalidateSessionIndexCache()
     await this.broadcastSessionsAll()
     return { ok: true, name: nextName }
+  }
+
+  async deleteOldDirectorySessions(
+    request: Request,
+    body: {
+      directory?: unknown
+      olderThanMs?: unknown
+      dryRun?: unknown
+      includeActiveSession?: unknown
+    }
+  ) {
+    const { context } = await this.resolveRequest(request)
+    const directory =
+      typeof body.directory === "string" ? body.directory.trim() : ""
+    const olderThanMs =
+      typeof body.olderThanMs === "number" && Number.isFinite(body.olderThanMs)
+        ? body.olderThanMs
+        : 0
+    if (!directory) {
+      throw new Error("directory is required")
+    }
+    if (olderThanMs <= 0) {
+      throw new Error("olderThanMs must be greater than zero")
+    }
+
+    const cutoffTime = Date.now() - olderThanMs
+    const allSessions = await this.listSessionIndexEntries()
+    const directorySessions = await this.listEntriesForDirectory(
+      allSessions,
+      directory
+    )
+    const streamingPaths = this.buildStreamingPaths()
+    const activeKeys = new Set(
+      [...this.contexts.values()].map((ctx) => ctx.activeKey).filter(Boolean)
+    )
+    const activePaths = new Set(
+      [...this.sessionEntries.values()]
+        .filter((entry) => activeKeys.has(entry.key))
+        .map((entry) => this.getSessionPath(entry))
+    )
+    const includeActiveSession = body.includeActiveSession === true
+
+    const matchingSessions = directorySessions
+      .map((entry) => {
+        const activityAt =
+          normalizeModifiedTimestamp(entry.lastUserMessageAt) ||
+          normalizeModifiedTimestamp(entry.modified)
+        return {
+          ...this.serializeSessionListEntry(entry, context, streamingPaths),
+          activityAt,
+        }
+      })
+      .filter((entry) => {
+        if (!entry.path) return false
+        if (streamingPaths.has(entry.path)) return false
+        if (!includeActiveSession && activePaths.has(entry.path)) return false
+        const activityTime = modifiedTimestampValue(entry.activityAt)
+        return activityTime > 0 && activityTime < cutoffTime
+      })
+
+    if (body.dryRun !== false) {
+      return {
+        ok: true,
+        directory,
+        cutoff: new Date(cutoffTime).toISOString(),
+        dryRun: true,
+        deletedSessionIds: [],
+        matchingSessions,
+      }
+    }
+
+    const deletedSessionIds: Array<string> = []
+    for (const session of matchingSessions) {
+      if (!session.path) continue
+      await this.deleteSession(request, { path: session.path })
+      if (session.id) {
+        deletedSessionIds.push(session.id)
+      }
+    }
+
+    return {
+      ok: true,
+      directory,
+      cutoff: new Date(cutoffTime).toISOString(),
+      dryRun: false,
+      deletedSessionIds,
+      matchingSessions,
+    }
   }
 
   async deleteSession(request: Request, body: { path?: unknown }) {
