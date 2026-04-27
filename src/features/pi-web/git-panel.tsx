@@ -734,8 +734,7 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
         }
       )
     },
-    onSuccess: async (_data, action) => {
-      toast.success(action === "push" ? "Pushed changes" : "Pulled changes")
+    onSuccess: async () => {
       await invalidateGitQueries({
         queryClient,
         viewerContextId,
@@ -912,10 +911,7 @@ function GitCommitDialog({
           }),
         }
       ),
-    onSuccess: async (_data, variables) => {
-      toast.success(
-        variables.push ? "Committed and pushed changes" : "Committed changes"
-      )
+    onSuccess: async () => {
       setMessage("")
       setGeneratedReason("")
       setNextStep("commit")
