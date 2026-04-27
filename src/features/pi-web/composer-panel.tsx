@@ -748,13 +748,13 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               <Button
                 variant="destructive"
                 size="icon-sm"
-                className="cursor-pointer"
+                className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
                 title="Abort"
                 aria-label="Abort"
                 disabled={disabled}
                 onClick={onAbort}
               >
-                <SquareIcon />
+                <SquareIcon className="fill-current text-white" />
               </Button>
             ) : null}
           </>
