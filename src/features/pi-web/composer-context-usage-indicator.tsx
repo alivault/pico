@@ -32,8 +32,8 @@ function formatContextUsagePercent(value: number) {
 }
 
 function contextUsageStroke(percent: number) {
-  if (percent >= 80) return "var(--destructive)"
-  if (percent >= 70) return "var(--warning)"
+  if (percent >= 90) return "var(--destructive)"
+  if (percent >= 80) return "var(--warning)"
   return "var(--primary)"
 }
 
