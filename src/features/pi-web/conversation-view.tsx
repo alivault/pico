@@ -1946,7 +1946,7 @@ function EditDiffBlock({
   const highlightedLines = highlightedHtml ? highlightedHtml.split("\n") : []
 
   return (
-    <div className="overflow-hidden rounded-md border bg-muted/20 py-1 font-mono text-xs leading-5">
+    <div className="overflow-x-auto overflow-y-hidden rounded-md border bg-muted/20 py-1 font-mono text-xs leading-5">
       <div className="w-max min-w-full">
         {parsed.lines.map((line, index) => {
           const highlightedLine = highlightedLines[index]
