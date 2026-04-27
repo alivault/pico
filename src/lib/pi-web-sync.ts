@@ -540,6 +540,127 @@ function mutateToolBlockInItems(
   }
 }
 
+type ToolResultUpdate = Pick<ToolBlock, "output" | "details" | "isError">
+
+function applyToolResultToBlock(
+  block: ToolBlock,
+  update: ToolResultUpdate | undefined
+): ToolBlock {
+  if (!update) return block
+
+  if (
+    block.output === update.output &&
+    block.details === update.details &&
+    block.isError === update.isError &&
+    !block.running
+  ) {
+    return block
+  }
+
+  return {
+    ...block,
+    output: update.output,
+    details: update.details,
+    isError: update.isError,
+    running: false,
+  }
+}
+
+function applyToolResultsToBlocks(
+  blocks: Array<AssistantBlock>,
+  toolResultsByCallId: Map<string, ToolResultUpdate>
+) {
+  if (toolResultsByCallId.size === 0) return blocks
+
+  let changed = false
+  const nextBlocks = blocks.map((block) => {
+    if (block.type !== "tool" || !block.callId) return block
+
+    const nextBlock = applyToolResultToBlock(
+      block,
+      toolResultsByCallId.get(block.callId)
+    )
+    if (nextBlock !== block) changed = true
+    return nextBlock
+  })
+
+  return changed ? nextBlocks : blocks
+}
+
+function mergeStreamingAssistantBlocks(options: {
+  previousStreamingItem: AssistantItem | null
+  nextBlocks: Array<AssistantBlock>
+  toolResultsByCallId: Map<string, ToolResultUpdate>
+}) {
+  const previousBlocks = options.previousStreamingItem?.blocks ?? []
+  if (previousBlocks.length === 0) {
+    return applyToolResultsToBlocks(
+      options.nextBlocks,
+      options.toolResultsByCallId
+    )
+  }
+
+  const previousToolByCallId = new Map<string, ToolBlock>()
+  previousBlocks.forEach((block) => {
+    if (block.type === "tool" && block.callId) {
+      previousToolByCallId.set(block.callId, block)
+    }
+  })
+
+  const nextToolCallIds = new Set<string>()
+  const mergedNextBlocks = options.nextBlocks.map((block) => {
+    if (block.type !== "tool" || !block.callId) return block
+
+    nextToolCallIds.add(block.callId)
+    const previousTool = previousToolByCallId.get(block.callId)
+    if (!previousTool) return block
+
+    return {
+      ...block,
+      renderKey: assistantBlockRenderKey(previousTool),
+      output: previousTool.output || block.output,
+      details: previousTool.details ?? block.details,
+      isError: previousTool.isError || block.isError,
+      running: previousTool.running === false ? false : block.running,
+    } satisfies ToolBlock
+  })
+
+  const missingPreviousTools = previousBlocks
+    .map((block, index) => ({ block, index }))
+    .filter(
+      (entry): entry is { block: ToolBlock; index: number } =>
+        entry.block.type === "tool" &&
+        Boolean(entry.block.callId) &&
+        !nextToolCallIds.has(entry.block.callId || "")
+    )
+
+  if (missingPreviousTools.length === 0) {
+    return applyToolResultsToBlocks(
+      mergedNextBlocks,
+      options.toolResultsByCallId
+    )
+  }
+
+  const blocks: Array<AssistantBlock> = []
+  let missingIndex = 0
+  for (let index = 0; index < mergedNextBlocks.length; index += 1) {
+    while (
+      missingIndex < missingPreviousTools.length &&
+      missingPreviousTools[missingIndex].index <= index
+    ) {
+      blocks.push(missingPreviousTools[missingIndex].block)
+      missingIndex += 1
+    }
+    blocks.push(mergedNextBlocks[index])
+  }
+  while (missingIndex < missingPreviousTools.length) {
+    blocks.push(missingPreviousTools[missingIndex].block)
+    missingIndex += 1
+  }
+
+  return applyToolResultsToBlocks(blocks, options.toolResultsByCallId)
+}
+
 function appendAssistantItem(
   items: Array<ConversationItem>,
   item: AssistantItem
@@ -736,9 +857,12 @@ export function buildItemsFromSync(
   const hasCommittedItems = Array.isArray(nextCommittedItems)
   const hasMessages = Array.isArray(sync.messages)
   const hasPendingUserMessages = Array.isArray(sync.pendingUserMessages)
+  const hasStreamingMessageUpdate = Object.prototype.hasOwnProperty.call(
+    sync,
+    "streamingMessage"
+  )
   const hasStreamingUpdate =
-    typeof sync.streaming === "boolean" ||
-    Object.prototype.hasOwnProperty.call(sync, "streamingMessage")
+    typeof sync.streaming === "boolean" || hasStreamingMessageUpdate
 
   if (
     !hasCommittedItems &&
@@ -761,6 +885,7 @@ export function buildItemsFromSync(
     items.push(...nextCommittedItems)
   }
 
+  const toolResultsByCallId = new Map<string, ToolResultUpdate>()
   const messages = Array.isArray(sync.messages) ? sync.messages : []
   for (
     let index = 0;
@@ -810,16 +935,23 @@ export function buildItemsFromSync(
     }
 
     if (message.role === "toolResult") {
-      mutateToolBlockInItems(
-        items,
-        typeof message.toolCallId === "string" ? message.toolCallId : undefined,
-        (block) => {
-          block.output = extractMessageText(message)
-          block.details = message.details
-          block.isError = Boolean(message.isError)
-          block.running = false
-        }
-      )
+      const callId =
+        typeof message.toolCallId === "string" ? message.toolCallId.trim() : ""
+      const update = {
+        output: extractMessageText(message),
+        details: message.details,
+        isError: Boolean(message.isError),
+      } satisfies ToolResultUpdate
+
+      if (callId) {
+        toolResultsByCallId.set(callId, update)
+      }
+      mutateToolBlockInItems(items, callId, (block) => {
+        block.output = update.output
+        block.details = update.details
+        block.isError = update.isError
+        block.running = false
+      })
     }
   }
 
@@ -850,11 +982,26 @@ export function buildItemsFromSync(
         kind: "assistant",
         itemKey: "streaming",
         renderKey,
-        blocks: assistantBlocksFromMessage(sync.streamingMessage, renderKey),
+        blocks: mergeStreamingAssistantBlocks({
+          previousStreamingItem,
+          nextBlocks: assistantBlocksFromMessage(
+            sync.streamingMessage,
+            renderKey
+          ),
+          toolResultsByCallId,
+        }),
         streaming: true,
       })
-    } else if (!hasStreamingUpdate && previousStreamingItem) {
-      items.push(previousStreamingItem)
+    } else if (previousStreamingItem && !hasStreamingMessageUpdate) {
+      const blocks = applyToolResultsToBlocks(
+        previousStreamingItem.blocks,
+        toolResultsByCallId
+      )
+      items.push(
+        blocks === previousStreamingItem.blocks
+          ? previousStreamingItem
+          : { ...previousStreamingItem, blocks }
+      )
     } else {
       const renderKey = streamingAssistantRenderKey({
         hasMessages,
@@ -866,7 +1013,11 @@ export function buildItemsFromSync(
         kind: "assistant",
         itemKey: "streaming",
         renderKey,
-        blocks: [],
+        blocks: mergeStreamingAssistantBlocks({
+          previousStreamingItem,
+          nextBlocks: [],
+          toolResultsByCallId,
+        }),
         streaming: true,
       })
     }
