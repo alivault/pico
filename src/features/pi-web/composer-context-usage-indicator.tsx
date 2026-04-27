@@ -3,12 +3,18 @@ import * as React from "react"
 import type { SessionState } from "@/lib/pi-web"
 
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
+const CONTEXT_USAGE_MOBILE_QUERY = "(hover: none), (pointer: coarse)"
 const CONTEXT_USAGE_CIRCLE_CENTER = 14
 const CONTEXT_USAGE_CIRCLE_RADIUS = 10.5
 
@@ -28,6 +34,21 @@ function formatContextUsageCompactNumber(value: number) {
 
 function formatContextUsagePercent(value: number) {
   return String(Math.round(value))
+}
+
+function useContextUsageMobilePopover() {
+  const [isMobilePopover, setIsMobilePopover] = React.useState(false)
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia(CONTEXT_USAGE_MOBILE_QUERY)
+    const update = () => setIsMobilePopover(mediaQuery.matches)
+
+    update()
+    mediaQuery.addEventListener("change", update)
+    return () => mediaQuery.removeEventListener("change", update)
+  }, [])
+
+  return isMobilePopover
 }
 
 function contextUsageStroke(percent: number) {
@@ -381,6 +402,7 @@ export function ComposerContextUsageIndicator({
   modelProvider,
 }: ComposerContextUsageIndicatorProps) {
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
+  const useMobilePopover = useContextUsageMobilePopover()
   const [providerUsageWindows, setProviderUsageWindows] = React.useState<
     Array<ProviderUsageWindow>
   >([])
@@ -432,83 +454,101 @@ export function ComposerContextUsageIndicator({
       ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
       : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
 
+  const trigger = (
+    <div
+      className="relative ml-auto inline-flex size-7 shrink-0 cursor-default items-center justify-center"
+      aria-label={tooltipAriaLabel}
+      role="img"
+    >
+      <svg
+        className="pointer-events-none absolute inset-0 size-full"
+        viewBox="0 0 28 28"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle
+          cx={CONTEXT_USAGE_CIRCLE_CENTER}
+          cy={CONTEXT_USAGE_CIRCLE_CENTER}
+          r={CONTEXT_USAGE_CIRCLE_RADIUS}
+          stroke="var(--border)"
+          strokeWidth="3"
+          strokeOpacity="0.9"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          cx={CONTEXT_USAGE_CIRCLE_CENTER}
+          cy={CONTEXT_USAGE_CIRCLE_CENTER}
+          r={CONTEXT_USAGE_CIRCLE_RADIUS}
+          pathLength={100}
+          stroke={contextUsageStroke(percent)}
+          strokeWidth="3"
+          strokeDasharray={`${percent.toFixed(1)} 100`}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          className="origin-center -rotate-90"
+        />
+      </svg>
+    </div>
+  )
+  const content = (
+    <>
+      <div className="rounded-lg bg-background/5 px-2.5 py-2">
+        <div className="flex items-center justify-between gap-6">
+          <span className="font-medium text-background/80">Context window</span>
+          <span className="font-semibold text-background">
+            {displayPercent}
+          </span>
+        </div>
+        <TooltipUsageProgress percent={percent} />
+        <div className="mt-1 text-xs text-background/50">
+          {compactTokens == null
+            ? `${compactContextWindow} token window`
+            : `${compactTokens} / ${compactContextWindow} tokens used`}
+        </div>
+      </div>
+      {providerUsageWindows.length > 0 ? (
+        providerUsageWindows.map((window) => (
+          <ProviderUsageTooltipLine key={window.label} window={window} />
+        ))
+      ) : (
+        <>
+          {fiveHourUsage ? (
+            <ContextUsageQuotaTooltipLine quota={fiveHourUsage} />
+          ) : null}
+          {weeklyUsage ? (
+            <ContextUsageQuotaTooltipLine quota={weeklyUsage} />
+          ) : null}
+        </>
+      )}
+    </>
+  )
+
+  if (useMobilePopover) {
+    return (
+      <Popover>
+        <PopoverTrigger render={trigger} />
+        <PopoverContent
+          side="top"
+          align="end"
+          sideOffset={8}
+          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-foreground px-3 py-3 text-sm text-background"
+        >
+          {content}
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            className="relative ml-auto inline-flex size-7 shrink-0 cursor-default items-center justify-center"
-            aria-label={tooltipAriaLabel}
-            role="img"
-          />
-        }
-      >
-        <svg
-          className="pointer-events-none absolute inset-0 size-full"
-          viewBox="0 0 28 28"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx={CONTEXT_USAGE_CIRCLE_CENTER}
-            cy={CONTEXT_USAGE_CIRCLE_CENTER}
-            r={CONTEXT_USAGE_CIRCLE_RADIUS}
-            stroke="var(--border)"
-            strokeWidth="3"
-            strokeOpacity="0.9"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            cx={CONTEXT_USAGE_CIRCLE_CENTER}
-            cy={CONTEXT_USAGE_CIRCLE_CENTER}
-            r={CONTEXT_USAGE_CIRCLE_RADIUS}
-            pathLength={100}
-            stroke={contextUsageStroke(percent)}
-            strokeWidth="3"
-            strokeDasharray={`${percent.toFixed(1)} 100`}
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-            className="origin-center -rotate-90"
-          />
-        </svg>
-      </TooltipTrigger>
-
+      <TooltipTrigger render={trigger} />
       <TooltipContent
         side="top"
         align="end"
         sideOffset={8}
         className="w-72 max-w-none flex-col items-stretch gap-2 rounded-xl px-3 py-3 text-sm"
       >
-        <div className="rounded-lg bg-background/5 px-2.5 py-2">
-          <div className="flex items-center justify-between gap-6">
-            <span className="font-medium text-background/80">
-              Context window
-            </span>
-            <span className="font-semibold text-background">
-              {displayPercent}
-            </span>
-          </div>
-          <TooltipUsageProgress percent={percent} />
-          <div className="mt-1 text-xs text-background/50">
-            {compactTokens == null
-              ? `${compactContextWindow} token window`
-              : `${compactTokens} / ${compactContextWindow} tokens used`}
-          </div>
-        </div>
-        {providerUsageWindows.length > 0 ? (
-          providerUsageWindows.map((window) => (
-            <ProviderUsageTooltipLine key={window.label} window={window} />
-          ))
-        ) : (
-          <>
-            {fiveHourUsage ? (
-              <ContextUsageQuotaTooltipLine quota={fiveHourUsage} />
-            ) : null}
-            {weeklyUsage ? (
-              <ContextUsageQuotaTooltipLine quota={weeklyUsage} />
-            ) : null}
-          </>
-        )}
+        {content}
       </TooltipContent>
     </Tooltip>
   )
