@@ -2605,11 +2605,20 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
     />
   )
 
-  if (descriptor.blockKey !== anchorBlockKey) {
-    return blockView
+  const blockProps = {
+    "data-conversation-assistant-block": "true",
+    "data-conversation-assistant-block-type": descriptor.blockType,
   }
 
-  return <div data-message-anchor="true">{blockView}</div>
+  if (descriptor.blockKey !== anchorBlockKey) {
+    return <div {...blockProps}>{blockView}</div>
+  }
+
+  return (
+    <div data-message-anchor="true" {...blockProps}>
+      {blockView}
+    </div>
+  )
 })
 
 function AssistantExploreBlockGroupView({
@@ -2619,7 +2628,14 @@ function AssistantExploreBlockGroupView({
   blockKeys: Array<string>
   store: AssistantBlockStore
 }) {
-  return <ExploreToolGroupCard blockKeys={blockKeys} store={store} />
+  return (
+    <div
+      data-conversation-assistant-block="true"
+      data-conversation-assistant-block-type="tool"
+    >
+      <ExploreToolGroupCard blockKeys={blockKeys} store={store} />
+    </div>
+  )
 }
 
 function AssistantSingleBlockGroupView({
@@ -2749,7 +2765,11 @@ export function AssistantMessagesStoreCard({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      data-conversation-assistant-group="true"
+      data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
+    >
       <AssistantBlockGroupsView
         anchorBlockKey={shellSnapshot.anchorBlockKey}
         store={assistantBlockStore}
@@ -2795,7 +2815,11 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4"
+      data-conversation-assistant-group="true"
+      data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
+    >
       <AssistantBlockGroupsView
         anchorBlockKey={shellSnapshot.anchorBlockKey}
         store={assistantBlockStore}
