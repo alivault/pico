@@ -1179,16 +1179,6 @@ function TreeBrowsePanel({
     setTreeCursorNodeId(nextNode.id)
   }
 
-  const moveTreeCursorToBoundary = (toEnd: boolean) => {
-    const visibleNodes = treeViewModel.orderedVisibleNodes
-    if (visibleNodes.length === 0) return
-
-    const nextNode = visibleNodes[toEnd ? visibleNodes.length - 1 : 0]
-    if (!nextNode) return
-
-    setTreeCursorNodeId(nextNode.id)
-  }
-
   const toggleTreeNodeFold = (open: boolean) => {
     if (!cursorVisibleTreeNode) return
 
@@ -1272,12 +1262,6 @@ function TreeBrowsePanel({
         }}
         onKeyDownCapture={(event) => {
           const key = event.key.toLowerCase()
-          const target = event.target
-          const editingText =
-            target instanceof HTMLInputElement ||
-            target instanceof HTMLTextAreaElement ||
-            (target instanceof HTMLElement && target.isContentEditable)
-
           if (
             event.shiftKey &&
             !event.ctrlKey &&
@@ -1306,34 +1290,10 @@ function TreeBrowsePanel({
               return
             }
 
-            if (
-              !editingText &&
-              (event.key === "ArrowLeft" || event.key === "ArrowRight")
-            ) {
-              event.preventDefault()
-              event.stopPropagation()
-              toggleTreeNodeFold(event.key === "ArrowRight")
-              return
-            }
-          }
-
-          if (
-            event.altKey &&
-            !event.shiftKey &&
-            !event.ctrlKey &&
-            !event.metaKey
-          ) {
-            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-              event.preventDefault()
-              event.stopPropagation()
-              moveTreeCursorByPage(event.key === "ArrowDown" ? 1 : -1, "half")
-              return
-            }
-
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
               event.preventDefault()
               event.stopPropagation()
-              moveTreeCursorToBoundary(event.key === "ArrowRight")
+              moveTreeCursorByPage(event.key === "ArrowRight" ? 1 : -1, "full")
               return
             }
           }
@@ -1344,17 +1304,11 @@ function TreeBrowsePanel({
             !event.metaKey &&
             !event.altKey
           ) {
-            if (key === "u" || key === "d") {
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
               event.preventDefault()
               event.stopPropagation()
-              moveTreeCursorByPage(key === "d" ? 1 : -1, "half")
+              toggleTreeNodeFold(event.key === "ArrowRight")
               return
-            }
-
-            if (key === "b" || key === "f") {
-              event.preventDefault()
-              event.stopPropagation()
-              moveTreeCursorByPage(key === "f" ? 1 : -1, "full")
             }
           }
         }}
@@ -1459,24 +1413,14 @@ function TreeBrowsePanel({
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
           <span>Move</span>
           <TreeShortcutKeys keys={["↑", "↓"]} />
-          <span className="text-muted-foreground/70">/</span>
-          <TreeShortcutKeys keys={["Ctrl", "J/K"]} />
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Half page</span>
-          <TreeShortcutKeys keys={["Option", "↑/↓"]} />
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Full page</span>
-          <TreeShortcutKeys keys={["Ctrl", "B/F"]} />
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Start/end</span>
-          <TreeShortcutKeys keys={["Option", "←/→"]} />
+          <span>Page</span>
+          <TreeShortcutKeys keys={["←", "→"]} />
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
           <span>Fold/branch</span>
-          <TreeShortcutKeys keys={["←", "→"]} />
+          <TreeShortcutKeys keys={["Ctrl", "←/→"]} />
         </span>
         {TREE_FILTER_OPTIONS.map((option) => (
           <span
@@ -1647,15 +1591,12 @@ function TreeContinueActionsPanel({
             !event.metaKey &&
             !event.altKey &&
             !event.shiftKey &&
-            ((event.ctrlKey && (event.key === "j" || event.key === "k")) ||
-              (!event.ctrlKey &&
-                (event.key === "ArrowDown" || event.key === "ArrowUp")))
+            !event.ctrlKey &&
+            (event.key === "ArrowDown" || event.key === "ArrowUp")
           ) {
             event.preventDefault()
             event.stopPropagation()
-            moveSelectedAction(
-              event.key === "j" || event.key === "ArrowDown" ? 1 : -1
-            )
+            moveSelectedAction(event.key === "ArrowDown" ? 1 : -1)
           }
         }}
         className="rounded-lg border"
@@ -1723,8 +1664,6 @@ function TreeContinueActionsPanel({
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
           <TreeShortcutKeys keys={["↑", "↓"]} />
-          <span className="text-muted-foreground/70">/</span>
-          <TreeShortcutKeys keys={["Ctrl", "J/K"]} />
           <span>Navigate</span>
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
