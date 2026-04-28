@@ -242,7 +242,7 @@ export function AppShellSettingsDialog({
       loop
       value={selectedCommandId}
       onValueChange={setSelectedCommandId}
-      className="min-h-0 flex-1 rounded-lg border"
+      className="min-h-0 flex-1"
     >
       <CommandInput
         autoFocus={!isMobile}

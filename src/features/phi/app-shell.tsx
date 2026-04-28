@@ -4124,6 +4124,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerPanelRef.current?.openModelPicker()
   }
   const focusPromptRef = useLatestRef(focusPrompt)
+  const [promptFocusRequest, setPromptFocusRequest] = React.useState({
+    sessionId: "",
+    nonce: 0,
+  })
   const lastAutoFocusedSessionKeyRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
@@ -4159,6 +4163,29 @@ const AppShellSessionWorkspace = React.forwardRef<
     isSessionViewLoading,
     sessionState.sessionId,
     sessionState.sessionKey,
+  ])
+
+  React.useEffect(() => {
+    if (!promptFocusRequest.nonce || isSessionViewLoading) return
+    if (
+      promptFocusRequest.sessionId &&
+      sessionState.sessionId !== promptFocusRequest.sessionId
+    ) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      focusPromptRef.current()
+    }, 50)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [
+    focusPromptRef,
+    isSessionViewLoading,
+    promptFocusRequest,
+    sessionState.sessionId,
   ])
 
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
@@ -4205,6 +4232,12 @@ const AppShellSessionWorkspace = React.forwardRef<
       pendingRouteSessionIdRef.current = nextSessionId
       pendingRouteSessionPathRef.current =
         options?.sessionPath?.trim() || undefined
+      if (nextSessionId) {
+        setPromptFocusRequest((current) => ({
+          sessionId: nextSessionId,
+          nonce: current.nonce + 1,
+        }))
+      }
       setLoadingSessionId((current) => {
         if (!nextSessionId) {
           return null

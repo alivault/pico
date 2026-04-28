@@ -493,7 +493,7 @@ function AppShellSessionsDialog({
       return
     }
 
-    if (key === "x") {
+    if (key === "d") {
       event.preventDefault()
       deleteSelectedSession()
     }
@@ -507,7 +507,7 @@ function AppShellSessionsDialog({
       value={selectedSessionKey}
       onValueChange={setSelectedSessionKey}
       onKeyDown={handleKeyDown}
-      className="min-h-0 flex-1 rounded-lg border"
+      className="min-h-0 flex-1"
     >
       <CommandInput
         autoFocus={!isMobile}
@@ -603,7 +603,7 @@ function AppShellSessionsDialog({
           <FooterKbd>Ctrl+R</FooterKbd> Rename
         </span>
         <span className="inline-flex items-center gap-1">
-          <FooterKbd>Ctrl+X</FooterKbd> Delete
+          <FooterKbd>Ctrl+D</FooterKbd> Delete
         </span>
         <span className="inline-flex items-center gap-1">
           <FooterKbd>Esc</FooterKbd> Close
@@ -613,7 +613,7 @@ function AppShellSessionsDialog({
   )
 
   const sessionsRenameBody = (
-    <div className="flex min-h-0 flex-1 flex-col rounded-lg border bg-popover text-popover-foreground">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <Button
           type="button"
@@ -665,7 +665,7 @@ function AppShellSessionsDialog({
 
   const sessionsDeleteBody = (
     <div
-      className="flex min-h-0 flex-1 flex-col rounded-lg border bg-popover text-popover-foreground"
+      className="flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault()

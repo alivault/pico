@@ -105,7 +105,7 @@ function AppShellCommandPalette({
       shouldFilter
       filter={commandPaletteFilter}
       loop
-      className="min-h-0 flex-1 rounded-lg border"
+      className="min-h-0 flex-1"
     >
       <CommandInput
         autoFocus={!isMobile}
