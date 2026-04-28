@@ -198,11 +198,7 @@ export function AppShellAddDirectoryDialog({
     knownMatching.length > 0
 
   const directoryPicker = (
-    <Command
-      shouldFilter={false}
-      loop
-      className="min-h-0 flex-1 rounded-lg border"
-    >
+    <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
       <CommandInput
         autoFocus={!isMobile}
         value={directoryInput}
