@@ -2286,10 +2286,9 @@ function AppShellConversationMessageStack({
 const AppShellSessionConversation = React.memo(
   function AppShellSessionConversation({
     awaitingFirstTurn,
-    centerMessages,
     conversationFrameRef,
     conversationItemsStore,
-    hideToolBlocks,
+    displaySettingsStore,
     hiddenThinkingPreviewStore,
     isSessionViewLoading,
     isSubmitting,
@@ -2299,11 +2298,10 @@ const AppShellSessionConversation = React.memo(
     workingStateStore,
   }: {
     awaitingFirstTurn: boolean
-    centerMessages: boolean
     conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
     conversationItemsStore: ConversationItemsStore
+    displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
     hiddenThinkingPreviewStore: TextValueStore
-    hideToolBlocks: boolean
     isSessionViewLoading: boolean
     isSubmitting: boolean
     onCreateSession: () => void
@@ -2312,6 +2310,8 @@ const AppShellSessionConversation = React.memo(
     workingStateStore: ValueStore<AppShellWorkingState | null>
   }) {
     const sessionState = useAppShellConversationSessionState(sessionStore)
+    const { centerMessages, hideToolBlocks } =
+      useValueStore(displaySettingsStore)
     const hideThinking = useSelectedValueStore(
       sessionStore,
       (currentSessionState) => currentSessionState.hideThinkingBlock
@@ -2388,6 +2388,10 @@ const AppShellComposerController = React.memo(
     store: ValueStore<AppShellComposerSnapshot>
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
+    const centerMessages = useSelectedValueStore(
+      displaySettingsStore,
+      (settings) => settings.centerMessages
+    )
     const snapshotRef = useLatestRef(snapshot)
 
     const onComposerTextChange = useStableEvent((value: string) => {
@@ -2496,7 +2500,7 @@ const AppShellComposerController = React.memo(
         composerText={snapshot.composerText}
         composerSkill={snapshot.composerSkill}
         composerSyncNonce={snapshot.composerSyncNonce}
-        centerMessages={snapshot.centerMessages}
+        centerMessages={centerMessages}
         contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
         sessionStore={sessionStore}
@@ -3121,11 +3125,24 @@ const AppShellSessionWorkspace = React.forwardRef<
       )
   }
   const displaySettingsStore = displaySettingsStoreRef.current!
+  const displaySettingsRef = React.useRef(displaySettingsStore.getSnapshot())
+  const hideToolBlocksRef = React.useRef(
+    displaySettingsStore.getSnapshot().hideToolBlocks
+  )
   const setHideToolBlocks = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setValueStoreField(displaySettingsStore, "hideToolBlocks", action)
+      const current = displaySettingsStore.getSnapshot()
+      const nextHideToolBlocks = applySidebarStateAction(
+        current.hideToolBlocks,
+        action
+      )
+      if (nextHideToolBlocks === current.hideToolBlocks) return
+      const next = { ...current, hideToolBlocks: nextHideToolBlocks }
+      displaySettingsRef.current = next
+      hideToolBlocksRef.current = next.hideToolBlocks
+      displaySettingsStore.setSnapshot(next)
     },
     [displaySettingsStore]
   )
@@ -3133,7 +3150,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setValueStoreField(displaySettingsStore, "centerMessages", action)
+      const current = displaySettingsStore.getSnapshot()
+      const nextCenterMessages = applySidebarStateAction(
+        current.centerMessages,
+        action
+      )
+      if (nextCenterMessages === current.centerMessages) return
+      const next = { ...current, centerMessages: nextCenterMessages }
+      displaySettingsRef.current = next
+      displaySettingsStore.setSnapshot(next)
     },
     [displaySettingsStore]
   )
@@ -3683,7 +3708,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const currentTheme = normalizeThemeMode(theme)
   const { currentTab, initialLoadingSessionId, loadingSessionId } =
     useValueStore(appUiStore)
-  const { centerMessages, hideToolBlocks } = useValueStore(displaySettingsStore)
   const {
     desktopNotificationPermission,
     sessionDoneDesktopNotificationsEnabled,
@@ -4060,7 +4084,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     draftSessionLoadingOwnerKey,
     bootstrapSidebarDirectories:
       sidebarStore.getSnapshot().state.initialSidebarBootstrapDirectories,
-    hideToolBlocks,
+    hideToolBlocksRef,
     sessionStore,
     sessionStateRef,
     setConnected: sidebarStore.setConnected,
@@ -4480,8 +4504,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const toggleHideToolBlocks = () => {
-    setToolBlocksHidden(!hideToolBlocks)
-    toast.info(hideToolBlocks ? "Tools shown" : "Tools hidden")
+    const currentHidden = displaySettingsRef.current.hideToolBlocks
+    setToolBlocksHidden(!currentHidden)
+    toast.info(currentHidden ? "Tools shown" : "Tools hidden")
   }
 
   const setMessagesCentered = (centered: boolean) => {
@@ -4578,7 +4603,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const composerSnapshot = {
     activeSessionId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
-    centerMessages,
+    centerMessages: displaySettingsRef.current.centerMessages,
     composerImages: displayedComposerImages,
     composerSkill: displayedComposerSkill,
     composerSyncNonce: composerDraftSeed.syncNonce,
@@ -4617,7 +4642,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const commandPaletteStateRef = useLatestRef({
     hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
-    hideToolBlocks,
     selectedSidebarSessions,
     sessionFile: sessionState.sessionFile,
   })
@@ -4750,10 +4774,10 @@ const AppShellSessionWorkspace = React.forwardRef<
       {
         id: "toggle-tools",
         group: "Assistant",
-        title: commandState.hideToolBlocks
+        title: displaySettingsRef.current.hideToolBlocks
           ? "Show tool calls"
           : "Hide tool calls",
-        description: commandState.hideToolBlocks
+        description: displaySettingsRef.current.hideToolBlocks
           ? "Show assistant tool calls"
           : "Hide assistant tool calls",
         shortcut: "Ctrl+O",
@@ -4966,7 +4990,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySessionCwd={displaySessionCwd}
           loadingDisplaySessionTitle={loadingDisplaySessionTitle}
-          hideToolBlocks={hideToolBlocks}
+          displaySettingsStore={displaySettingsStore}
           isSessionViewLoading={isSessionViewLoading}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
           sessionStore={sessionStore}
@@ -4990,11 +5014,10 @@ const AppShellSessionWorkspace = React.forwardRef<
           >
             <AppShellSessionConversation
               awaitingFirstTurn={awaitingFirstTurn}
-              centerMessages={centerMessages}
               conversationFrameRef={conversationFrameRef}
               conversationItemsStore={conversationItemsStore}
+              displaySettingsStore={displaySettingsStore}
               hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-              hideToolBlocks={hideToolBlocks}
               isSessionViewLoading={isSessionViewLoading}
               isSubmitting={isSubmitting}
               onCreateSession={() => {
@@ -5035,7 +5058,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         addDirectoryOpenRef={addDirectoryOpenRef}
         addDirectoryPath={addDirectoryPath}
         baseSidebarDirectories={baseSidebarDirectories}
-        centerMessages={centerMessages}
         commandPaletteCommandsRef={commandPaletteCommandsRef}
         commandPaletteOpenRef={commandPaletteOpenRef}
         commandPaletteRef={commandPaletteRef}
@@ -5051,7 +5073,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         desktopNotificationPermission={desktopNotificationPermission}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
-        hideToolBlocks={hideToolBlocks}
+        displaySettingsStore={displaySettingsStore}
         knownDirectories={knownDirectories}
         onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {
@@ -5101,7 +5123,7 @@ type AppShellSessionHeaderProps = {
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
   loadingDisplaySessionTitle: string
-  hideToolBlocks: boolean
+  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   sessionStore: ValueStore<SessionState>
@@ -5113,7 +5135,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   defaultNewSessionDirectory,
   displaySessionCwd,
   loadingDisplaySessionTitle,
-  hideToolBlocks,
+  displaySettingsStore,
   isSessionViewLoading,
   newSessionDirectoryOptions,
   sessionStore,
@@ -5129,6 +5151,10 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
       sessionStreaming: sessionState.streaming,
     }),
     shallowRecordEqual
+  )
+  const hideToolBlocks = useSelectedValueStore(
+    displaySettingsStore,
+    (settings) => settings.hideToolBlocks
   )
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
@@ -5313,7 +5339,6 @@ type AppShellFloatingControllersProps = {
     typeof AppShellAddDirectoryDialogController
   >["onAddDirectoryPath"]
   baseSidebarDirectories: Array<string>
-  centerMessages: boolean
   commandPaletteCommandsRef: React.MutableRefObject<() => Array<AppCommand>>
   commandPaletteOpenRef: React.MutableRefObject<boolean>
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
@@ -5329,7 +5354,7 @@ type AppShellFloatingControllersProps = {
   desktopNotificationPermission: DesktopNotificationPermission
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.MutableRefObject<boolean>
-  hideToolBlocks: boolean
+  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
   onCenterMessagesChange: (centered: boolean) => void
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -5534,10 +5559,9 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
 
 const AppShellSettingsDialogHost = React.memo(
   function AppShellSettingsDialogHost({
-    centerMessages,
     currentTheme,
     desktopNotificationPermission,
-    hideToolBlocks,
+    displaySettingsStore,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
@@ -5551,10 +5575,9 @@ const AppShellSettingsDialogHost = React.memo(
     settingsOpenRef,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "centerMessages"
     | "currentTheme"
     | "desktopNotificationPermission"
-    | "hideToolBlocks"
+    | "displaySettingsStore"
     | "onCenterMessagesChange"
     | "onHideThinkingBlocksChange"
     | "onHideToolBlocksChange"
@@ -5571,6 +5594,8 @@ const AppShellSettingsDialogHost = React.memo(
       sessionStore,
       (sessionState) => sessionState.hideThinkingBlock
     )
+    const { centerMessages, hideToolBlocks } =
+      useValueStore(displaySettingsStore)
 
     return (
       <AppShellSettingsDialogController
@@ -5629,7 +5654,6 @@ const AppShellFloatingControllers = React.memo(
     addDirectoryOpenRef,
     addDirectoryPath,
     baseSidebarDirectories,
-    centerMessages,
     commandPaletteCommandsRef,
     commandPaletteOpenRef,
     commandPaletteRef,
@@ -5643,7 +5667,7 @@ const AppShellFloatingControllers = React.memo(
     desktopNotificationPermission,
     forkDialogRef,
     forkOpenRef,
-    hideToolBlocks,
+    displaySettingsStore,
     knownDirectories,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
@@ -5723,10 +5747,9 @@ const AppShellFloatingControllers = React.memo(
         />
 
         <AppShellSettingsDialogHost
-          centerMessages={centerMessages}
           currentTheme={currentTheme}
           desktopNotificationPermission={desktopNotificationPermission}
-          hideToolBlocks={hideToolBlocks}
+          displaySettingsStore={displaySettingsStore}
           onCenterMessagesChange={onCenterMessagesChange}
           onHideThinkingBlocksChange={onHideThinkingBlocksChange}
           onHideToolBlocksChange={onHideToolBlocksChange}

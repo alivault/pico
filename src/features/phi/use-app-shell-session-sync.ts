@@ -61,7 +61,7 @@ type UseAppShellSessionSyncOptions = {
   sessionId?: string
   draftSessionLoadingOwnerKey: string | null
   bootstrapSidebarDirectories: Array<string>
-  hideToolBlocks: boolean
+  hideToolBlocksRef: React.MutableRefObject<boolean>
   sessionStore: SessionStateStore
   sessionStateRef: React.MutableRefObject<SessionState>
   setConnected?: React.Dispatch<React.SetStateAction<boolean>>
@@ -418,7 +418,7 @@ export function useAppShellSessionSync({
   sessionId,
   draftSessionLoadingOwnerKey,
   bootstrapSidebarDirectories,
-  hideToolBlocks,
+  hideToolBlocksRef,
   sessionStore,
   sessionStateRef,
   setConnected,
@@ -448,7 +448,6 @@ export function useAppShellSessionSync({
   const draftSessionLoadingOwnerKeyRef = React.useRef(
     draftSessionLoadingOwnerKey
   )
-  const hideToolBlocksRef = React.useRef(hideToolBlocks)
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
   const backgroundedAtRef = React.useRef<number | null>(null)
@@ -462,10 +461,6 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
   }, [draftSessionLoadingOwnerKey])
-
-  React.useEffect(() => {
-    hideToolBlocksRef.current = hideToolBlocks
-  }, [hideToolBlocks])
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
