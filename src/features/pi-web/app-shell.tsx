@@ -2095,14 +2095,18 @@ function AppShellConversationWorkingFooter({
 function AppShellConversationMessageStack({
   centerMessages,
   conversationItemsStore,
-  hideThinking,
   hideToolBlocks,
+  sessionStore,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
-  hideThinking: boolean
   hideToolBlocks: boolean
+  sessionStore: ValueStore<SessionState>
 }) {
+  const hideThinking = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => sessionState.hideThinkingBlock
+  )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   if (!hasMessages) return null
 
@@ -2124,7 +2128,6 @@ const AppShellSessionConversation = React.memo(
     centerMessages,
     conversationFrameRef,
     conversationItemsStore,
-    hideThinking,
     hideToolBlocks,
     hiddenThinkingPreviewStore,
     isSessionViewLoading,
@@ -2139,7 +2142,6 @@ const AppShellSessionConversation = React.memo(
     conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
     conversationItemsStore: ConversationItemsStore
     hiddenThinkingPreviewStore: TextValueStore
-    hideThinking: boolean
     hideToolBlocks: boolean
     isSessionViewLoading: boolean
     isSubmitting: boolean
@@ -2149,6 +2151,15 @@ const AppShellSessionConversation = React.memo(
     workingStateStore: ValueStore<AppShellWorkingState | null>
   }) {
     const sessionState = useAppShellConversationSessionState(sessionStore)
+    const hideThinking = useSelectedValueStore(
+      sessionStore,
+      (currentSessionState) => currentSessionState.hideThinkingBlock
+    )
+
+    React.useLayoutEffect(() => {
+      conversationItemsStore.setItems(sessionStore.getSnapshot().items)
+    }, [conversationItemsStore, hideThinking, hideToolBlocks, sessionStore])
+
     return (
       <AppShellConversationFrame
         ref={conversationFrameRef}
@@ -2173,8 +2184,8 @@ const AppShellSessionConversation = React.memo(
             <AppShellConversationMessageStack
               centerMessages={centerMessages}
               conversationItemsStore={conversationItemsStore}
-              hideThinking={hideThinking}
               hideToolBlocks={hideToolBlocks}
+              sessionStore={sessionStore}
             />
             <AppShellConversationWorkingFooter
               centerMessages={centerMessages}
@@ -3534,7 +3545,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       firstMessage: currentSessionState.firstMessage,
-      hideThinkingBlock: currentSessionState.hideThinkingBlock,
       sessionFile: currentSessionState.sessionFile,
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
@@ -3626,10 +3636,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       setLoadingSessionId(sessionId)
     }
   }, [sessionId])
-
-  React.useLayoutEffect(() => {
-    conversationItemsStore.setItems(sessionStateRef.current.items)
-  }, [conversationItemsStore, hideToolBlocks, sessionState.hideThinkingBlock])
 
   const syncComposerDraft = (
     value: string,
@@ -4350,14 +4356,14 @@ const AppShellSessionWorkspace = React.forwardRef<
       }
       case "hide-thinking": {
         replaceComposerDraft("")
-        if (!sessionState.hideThinkingBlock) {
+        if (!sessionStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
       }
       case "show-thinking": {
         replaceComposerDraft("")
-        if (sessionState.hideThinkingBlock) {
+        if (sessionStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
@@ -4435,7 +4441,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const commandPaletteStateRef = useLatestRef({
     currentSessionTitle,
     hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
-    hideThinkingBlock: sessionState.hideThinkingBlock,
     hideToolBlocks,
     selectedSidebarSessions,
     sessionFile: sessionState.sessionFile,
@@ -4443,6 +4448,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const buildCommandPaletteCommands = () => {
     const commandState = commandPaletteStateRef.current
+    const currentHideThinkingBlock = sessionStateRef.current.hideThinkingBlock
     const currentThinkingLevel = sessionStateRef.current.thinkingLevel
     const commands: Array<AppCommand> = [
       {
@@ -4526,10 +4532,10 @@ const AppShellSessionWorkspace = React.forwardRef<
       {
         id: "toggle-thinking",
         group: "Assistant",
-        title: commandState.hideThinkingBlock
+        title: currentHideThinkingBlock
           ? "Show thinking blocks"
           : "Hide thinking blocks",
-        description: commandState.hideThinkingBlock
+        description: currentHideThinkingBlock
           ? "Show assistant thinking blocks"
           : "Hide assistant thinking blocks",
         shortcut: "Ctrl+G",
@@ -4811,7 +4817,6 @@ const AppShellSessionWorkspace = React.forwardRef<
               conversationFrameRef={conversationFrameRef}
               conversationItemsStore={conversationItemsStore}
               hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-              hideThinking={sessionState.hideThinkingBlock}
               hideToolBlocks={hideToolBlocks}
               isSessionViewLoading={isSessionViewLoading}
               isSubmitting={isSubmitting}
@@ -4869,7 +4874,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         desktopNotificationPermission={desktopNotificationPermission}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
-        hideThinkingBlocks={sessionState.hideThinkingBlock}
         hideToolBlocks={hideToolBlocks}
         knownDirectories={knownDirectories}
         onCenterMessagesChange={setMessagesCentered}
@@ -5143,7 +5147,6 @@ type AppShellFloatingControllersProps = {
   desktopNotificationPermission: DesktopNotificationPermission
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.MutableRefObject<boolean>
-  hideThinkingBlocks: boolean
   hideToolBlocks: boolean
   knownDirectories: Array<string>
   onCenterMessagesChange: (centered: boolean) => void
@@ -5352,7 +5355,6 @@ const AppShellSettingsDialogHost = React.memo(
     centerMessages,
     currentTheme,
     desktopNotificationPermission,
-    hideThinkingBlocks,
     hideToolBlocks,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
@@ -5362,6 +5364,7 @@ const AppShellSettingsDialogHost = React.memo(
     onThemeChange,
     sessionDoneDesktopNotificationsEnabled,
     sessionDoneSoundEnabled,
+    sessionStore,
     settingsDialogRef,
     settingsOpenRef,
   }: Pick<
@@ -5369,7 +5372,6 @@ const AppShellSettingsDialogHost = React.memo(
     | "centerMessages"
     | "currentTheme"
     | "desktopNotificationPermission"
-    | "hideThinkingBlocks"
     | "hideToolBlocks"
     | "onCenterMessagesChange"
     | "onHideThinkingBlocksChange"
@@ -5379,9 +5381,15 @@ const AppShellSettingsDialogHost = React.memo(
     | "onThemeChange"
     | "sessionDoneDesktopNotificationsEnabled"
     | "sessionDoneSoundEnabled"
+    | "sessionStore"
     | "settingsDialogRef"
     | "settingsOpenRef"
   >) {
+    const hideThinkingBlocks = useSelectedValueStore(
+      sessionStore,
+      (sessionState) => sessionState.hideThinkingBlock
+    )
+
     return (
       <AppShellSettingsDialogController
         ref={settingsDialogRef}
@@ -5453,7 +5461,6 @@ const AppShellFloatingControllers = React.memo(
     desktopNotificationPermission,
     forkDialogRef,
     forkOpenRef,
-    hideThinkingBlocks,
     hideToolBlocks,
     knownDirectories,
     onCenterMessagesChange,
@@ -5537,7 +5544,6 @@ const AppShellFloatingControllers = React.memo(
           centerMessages={centerMessages}
           currentTheme={currentTheme}
           desktopNotificationPermission={desktopNotificationPermission}
-          hideThinkingBlocks={hideThinkingBlocks}
           hideToolBlocks={hideToolBlocks}
           onCenterMessagesChange={onCenterMessagesChange}
           onHideThinkingBlocksChange={onHideThinkingBlocksChange}
@@ -5551,6 +5557,7 @@ const AppShellFloatingControllers = React.memo(
             sessionDoneDesktopNotificationsEnabled
           }
           sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+          sessionStore={sessionStore}
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}
         />
