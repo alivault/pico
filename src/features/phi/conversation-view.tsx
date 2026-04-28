@@ -244,39 +244,8 @@ const CodeBlock = React.memo(function CodeBlock({
   code: string
   language?: string
 }) {
-  const containerRef = React.useRef<HTMLDivElement | null>(null)
   const [highlighted, setHighlighted] =
     React.useState<HighlightResponse | null>(null)
-  const [isNearViewport, setIsNearViewport] = React.useState(
-    () => typeof IntersectionObserver === "undefined"
-  )
-
-  React.useEffect(() => {
-    if (!language) return
-    if (isNearViewport) return
-    if (typeof IntersectionObserver === "undefined") {
-      setIsNearViewport(true)
-      return
-    }
-
-    const element = containerRef.current
-    if (!element) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setIsNearViewport(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "600px 0px" }
-    )
-    observer.observe(element)
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [isNearViewport, language])
 
   React.useEffect(() => {
     let cancelled = false
@@ -285,8 +254,6 @@ const CodeBlock = React.memo(function CodeBlock({
       setHighlighted(null)
       return
     }
-
-    if (!isNearViewport) return
 
     setHighlighted(null)
     void getHighlightedCode(code, language)
@@ -304,7 +271,7 @@ const CodeBlock = React.memo(function CodeBlock({
     return () => {
       cancelled = true
     }
-  }, [code, isNearViewport, language])
+  }, [code, language])
 
   const renderedLanguage =
     highlighted && "language" in highlighted && highlighted.language
@@ -326,10 +293,7 @@ const CodeBlock = React.memo(function CodeBlock({
   ) : null
 
   return (
-    <div
-      ref={containerRef}
-      className="not-prose overflow-hidden rounded-xl border bg-muted/40"
-    >
+    <div className="not-prose overflow-hidden rounded-xl border bg-muted/40">
       <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 text-xs text-muted-foreground">
         <div className="truncate font-medium tracking-wide uppercase">
           {renderedLanguage || "code"}
