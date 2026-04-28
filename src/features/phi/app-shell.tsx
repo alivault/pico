@@ -2559,6 +2559,22 @@ function AppShellWindowEffectsHost({
     shallowRecordEqual
   )
   const notificationState = useValueStore(notificationStore)
+  React.useEffect(() => {
+    if (!notificationState.sessionDoneSoundEnabled) return
+
+    const handleInteraction = () => {
+      void primeSessionDoneSound()
+    }
+
+    window.addEventListener("pointerdown", handleInteraction, true)
+    window.addEventListener("keydown", handleInteraction, true)
+
+    return () => {
+      window.removeEventListener("pointerdown", handleInteraction, true)
+      window.removeEventListener("keydown", handleInteraction, true)
+    }
+  }, [notificationState.sessionDoneSoundEnabled])
+
   const currentSessionTitle =
     getCurrentSessionTitleFromState(sessionWindowState)
   const currentPageTitle = isSessionViewLoading
@@ -3708,20 +3724,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const currentTheme = normalizeThemeMode(theme)
   const { currentTab, initialLoadingSessionId, loadingSessionId } =
     useValueStore(appUiStore)
-  const {
-    desktopNotificationPermission,
-    sessionDoneDesktopNotificationsEnabled,
-    sessionDoneSoundEnabled,
-  } = useSelectedValueStore(
-    notificationStore,
-    (state) => ({
-      desktopNotificationPermission: state.desktopNotificationPermission,
-      sessionDoneDesktopNotificationsEnabled:
-        state.sessionDoneDesktopNotificationsEnabled,
-      sessionDoneSoundEnabled: state.sessionDoneSoundEnabled,
-    }),
-    shallowRecordEqual
-  )
   const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
     useValueStore(draftFlowStore)
   const sessionState = useSelectedValueStore(
@@ -3875,22 +3877,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     setRecentDirectories(readStoredRecentDirectories())
     setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
-
-  React.useEffect(() => {
-    if (!sessionDoneSoundEnabled) return
-
-    const handleInteraction = () => {
-      void primeSessionDoneSound()
-    }
-
-    window.addEventListener("pointerdown", handleInteraction, true)
-    window.addEventListener("keydown", handleInteraction, true)
-
-    return () => {
-      window.removeEventListener("pointerdown", handleInteraction, true)
-      window.removeEventListener("keydown", handleInteraction, true)
-    }
-  }, [sessionDoneSoundEnabled])
 
   const openCommandPalette = () => {
     settingsDialogRef.current?.close()
@@ -5070,7 +5056,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           deleteOldDirectorySessionsDialogRef
         }
         deleteOldDirectorySessionsOpenRef={deleteOldDirectorySessionsOpenRef}
-        desktopNotificationPermission={desktopNotificationPermission}
+        notificationStore={notificationStore}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
         displaySettingsStore={displaySettingsStore}
@@ -5090,10 +5076,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         renameOpenRef={renameOpenRef}
         renameSessionPath={renameSessionPath}
         sessionCwd={sessionState.cwd}
-        sessionDoneDesktopNotificationsEnabled={
-          sessionDoneDesktopNotificationsEnabled
-        }
-        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
         sessionStore={sessionStore}
         settingsDialogRef={settingsDialogRef}
         settingsOpenRef={settingsOpenRef}
@@ -5351,7 +5333,7 @@ type AppShellFloatingControllersProps = {
   >["onDeleteSession"]
   deleteOldDirectorySessionsDialogRef: React.RefObject<DeleteOldDirectorySessionsDialogHandle | null>
   deleteOldDirectorySessionsOpenRef: React.MutableRefObject<boolean>
-  desktopNotificationPermission: DesktopNotificationPermission
+  notificationStore: ValueStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.MutableRefObject<boolean>
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
@@ -5369,8 +5351,6 @@ type AppShellFloatingControllersProps = {
     typeof RenameSessionDialogController
   >["onRenameSession"]
   sessionCwd?: string
-  sessionDoneDesktopNotificationsEnabled: boolean
-  sessionDoneSoundEnabled: boolean
   sessionStore: ValueStore<SessionState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.MutableRefObject<boolean>
@@ -5560,32 +5540,28 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
 const AppShellSettingsDialogHost = React.memo(
   function AppShellSettingsDialogHost({
     currentTheme,
-    desktopNotificationPermission,
     displaySettingsStore,
+    notificationStore,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
     onSessionDoneDesktopNotificationsEnabledChange,
     onSessionDoneSoundEnabledChange,
     onThemeChange,
-    sessionDoneDesktopNotificationsEnabled,
-    sessionDoneSoundEnabled,
     sessionStore,
     settingsDialogRef,
     settingsOpenRef,
   }: Pick<
     AppShellFloatingControllersProps,
     | "currentTheme"
-    | "desktopNotificationPermission"
     | "displaySettingsStore"
+    | "notificationStore"
     | "onCenterMessagesChange"
     | "onHideThinkingBlocksChange"
     | "onHideToolBlocksChange"
     | "onSessionDoneDesktopNotificationsEnabledChange"
     | "onSessionDoneSoundEnabledChange"
     | "onThemeChange"
-    | "sessionDoneDesktopNotificationsEnabled"
-    | "sessionDoneSoundEnabled"
     | "sessionStore"
     | "settingsDialogRef"
     | "settingsOpenRef"
@@ -5596,6 +5572,20 @@ const AppShellSettingsDialogHost = React.memo(
     )
     const { centerMessages, hideToolBlocks } =
       useValueStore(displaySettingsStore)
+    const {
+      desktopNotificationPermission,
+      sessionDoneDesktopNotificationsEnabled,
+      sessionDoneSoundEnabled,
+    } = useSelectedValueStore(
+      notificationStore,
+      (state) => ({
+        desktopNotificationPermission: state.desktopNotificationPermission,
+        sessionDoneDesktopNotificationsEnabled:
+          state.sessionDoneDesktopNotificationsEnabled,
+        sessionDoneSoundEnabled: state.sessionDoneSoundEnabled,
+      }),
+      shallowRecordEqual
+    )
 
     return (
       <AppShellSettingsDialogController
@@ -5664,7 +5654,7 @@ const AppShellFloatingControllers = React.memo(
     deleteSessions,
     deleteOldDirectorySessionsDialogRef,
     deleteOldDirectorySessionsOpenRef,
-    desktopNotificationPermission,
+    notificationStore,
     forkDialogRef,
     forkOpenRef,
     displaySettingsStore,
@@ -5680,8 +5670,6 @@ const AppShellFloatingControllers = React.memo(
     renameOpenRef,
     renameSessionPath,
     sessionCwd,
-    sessionDoneDesktopNotificationsEnabled,
-    sessionDoneSoundEnabled,
     sessionStore,
     settingsDialogRef,
     settingsOpenRef,
@@ -5748,8 +5736,8 @@ const AppShellFloatingControllers = React.memo(
 
         <AppShellSettingsDialogHost
           currentTheme={currentTheme}
-          desktopNotificationPermission={desktopNotificationPermission}
           displaySettingsStore={displaySettingsStore}
+          notificationStore={notificationStore}
           onCenterMessagesChange={onCenterMessagesChange}
           onHideThinkingBlocksChange={onHideThinkingBlocksChange}
           onHideToolBlocksChange={onHideToolBlocksChange}
@@ -5758,10 +5746,6 @@ const AppShellFloatingControllers = React.memo(
           }
           onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
           onThemeChange={onThemeChange}
-          sessionDoneDesktopNotificationsEnabled={
-            sessionDoneDesktopNotificationsEnabled
-          }
-          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
           sessionStore={sessionStore}
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}
