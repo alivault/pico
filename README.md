@@ -145,7 +145,7 @@ pnpm update:pi
 
 Default dev port from `vite.config.ts`:
 
-- `3141`
+- `1618`
 
 ### Build
 

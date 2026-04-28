@@ -55,7 +55,7 @@ pnpm check:fix
 
 Notes:
 
-- Dev server port is `3141` from `vite.config.ts`.
+- Dev server port is `1618` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline validation command.
 - If you need to start, restart, or test a dev server / preview build, use the `zellij` `pi` session instead of creating an ad hoc long-lived server process.
 
@@ -543,7 +543,7 @@ Be especially careful around these:
 Keep repo docs aligned with reality:
 
 - legacy app path is `~/code/pi-web-legacy`
-- dev port is `3141`
+- dev port is `1618`
 - there is currently no separate `parity-checklist.md` in this repo
 
 If README or future docs drift from the code, update them as part of the same change.
