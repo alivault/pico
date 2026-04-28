@@ -12,6 +12,22 @@ import {
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
 const CONTEXT_USAGE_CIRCLE_CENTER = 14
 const CONTEXT_USAGE_CIRCLE_RADIUS = 10.5
+const CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH = 2.2
+const CONTEXT_USAGE_RING_GEOMETRY = {
+  1: [{ radius: CONTEXT_USAGE_CIRCLE_RADIUS, strokeWidth: 3 }],
+  2: [
+    { radius: 11, strokeWidth: 2.6 },
+    { radius: 7.2, strokeWidth: 2.6 },
+  ],
+  3: [
+    {
+      radius: 11.5,
+      strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH,
+    },
+    { radius: 8, strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH },
+    { radius: 4.5, strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH },
+  ],
+} satisfies Record<number, Array<{ radius: number; strokeWidth: number }>>
 
 function formatContextUsageNumber(value: number) {
   return contextUsageNumberFormatter.format(value)
@@ -70,6 +86,12 @@ type ProviderUsageWindow = {
   label: string
   usedPercent: number
   resetsIn?: string
+}
+
+type ContextUsageRing = {
+  key: string
+  label: string
+  percent: number
 }
 
 type ComposerContextUsageIndicatorProps = {
@@ -376,6 +398,81 @@ function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
   )
 }
 
+function clampContextUsageRingPercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function isFiveHourProviderUsageWindow(window: ProviderUsageWindow) {
+  const label = window.label.trim().toLowerCase().replace(/\s+/g, "")
+  return label === "5h" || label === "5hr" || label.includes("five")
+}
+
+function isWeeklyProviderUsageWindow(window: ProviderUsageWindow) {
+  const label = window.label.trim().toLowerCase().replace(/\s+/g, "")
+  return (
+    label === "week" ||
+    label === "weekly" ||
+    label === "7d" ||
+    label.includes("seven")
+  )
+}
+
+function getContextUsageRings(
+  contextPercent: number,
+  fiveHourUsage: ComposerContextUsageQuotaSnapshot | null,
+  weeklyUsage: ComposerContextUsageQuotaSnapshot | null,
+  providerUsageWindows: Array<ProviderUsageWindow>
+): Array<ContextUsageRing> {
+  const fiveHourProviderUsage = providerUsageWindows.find(
+    isFiveHourProviderUsageWindow
+  )
+  const weeklyProviderUsage = providerUsageWindows.find(
+    isWeeklyProviderUsageWindow
+  )
+  const fiveHourPercent =
+    fiveHourProviderUsage?.usedPercent ?? fiveHourUsage?.percent ?? null
+  const weeklyPercent =
+    weeklyProviderUsage?.usedPercent ?? weeklyUsage?.percent ?? null
+  const rings: Array<ContextUsageRing> = [
+    {
+      key: "context",
+      label: "Context window",
+      percent: clampContextUsageRingPercent(contextPercent),
+    },
+  ]
+
+  if (fiveHourPercent != null) {
+    rings.push({
+      key: "five-hour",
+      label: fiveHourProviderUsage
+        ? `${fiveHourProviderUsage.label} usage`
+        : (fiveHourUsage?.label ?? "5h usage"),
+      percent: clampContextUsageRingPercent(fiveHourPercent),
+    })
+  }
+
+  if (weeklyPercent != null) {
+    rings.push({
+      key: "weekly",
+      label:
+        weeklyProviderUsage?.label === "Week"
+          ? "Weekly usage"
+          : weeklyProviderUsage
+            ? `${weeklyProviderUsage.label} usage`
+            : (weeklyUsage?.label ?? "Weekly usage"),
+      percent: clampContextUsageRingPercent(weeklyPercent),
+    })
+  }
+
+  return rings.slice(0, 3)
+}
+
+function getContextUsageRingGeometry(ringCount: number) {
+  if (ringCount >= 3) return CONTEXT_USAGE_RING_GEOMETRY[3]
+  if (ringCount === 2) return CONTEXT_USAGE_RING_GEOMETRY[2]
+  return CONTEXT_USAGE_RING_GEOMETRY[1]
+}
+
 export function ComposerContextUsageIndicator({
   contextUsageStore = emptyContextUsageStore,
   disabled = false,
@@ -428,10 +525,25 @@ export function ComposerContextUsageIndicator({
   const compactContextWindow = formatContextUsageCompactNumber(contextWindow)
   const compactTokens =
     tokens == null ? null : formatContextUsageCompactNumber(tokens)
-  const tooltipAriaLabel =
+  const usageRings = getContextUsageRings(
+    percent,
+    fiveHourUsage,
+    weeklyUsage,
+    providerUsageWindows
+  )
+  const ringGeometry = getContextUsageRingGeometry(usageRings.length)
+  const usageRingAriaText = usageRings
+    .slice(1)
+    .map(
+      (ring) =>
+        `${ring.label}. ${formatContextUsagePercent(ring.percent)}% used.`
+    )
+    .join(" ")
+  const tooltipAriaLabel = `${
     tokens == null
       ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
       : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
+  }${usageRingAriaText ? ` ${usageRingAriaText}` : ""}`
 
   const trigger = (
     <Button
@@ -447,27 +559,43 @@ export function ComposerContextUsageIndicator({
         fill="none"
         aria-hidden="true"
       >
-        <circle
-          cx={CONTEXT_USAGE_CIRCLE_CENTER}
-          cy={CONTEXT_USAGE_CIRCLE_CENTER}
-          r={CONTEXT_USAGE_CIRCLE_RADIUS}
-          stroke="var(--border)"
-          strokeWidth="3"
-          strokeOpacity="0.9"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle
-          cx={CONTEXT_USAGE_CIRCLE_CENTER}
-          cy={CONTEXT_USAGE_CIRCLE_CENTER}
-          r={CONTEXT_USAGE_CIRCLE_RADIUS}
-          pathLength={100}
-          stroke={contextUsageStroke(percent)}
-          strokeWidth="3"
-          strokeDasharray={`${percent.toFixed(1)} 100`}
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-          className="origin-center -rotate-90"
-        />
+        {usageRings.map((ring, index) => {
+          const geometry = ringGeometry[index]
+          if (!geometry) return null
+
+          return (
+            <circle
+              key={`${ring.key}-track`}
+              cx={CONTEXT_USAGE_CIRCLE_CENTER}
+              cy={CONTEXT_USAGE_CIRCLE_CENTER}
+              r={geometry.radius}
+              stroke="var(--border)"
+              strokeWidth={geometry.strokeWidth}
+              strokeOpacity="0.75"
+              vectorEffect="non-scaling-stroke"
+            />
+          )
+        })}
+        {usageRings.map((ring, index) => {
+          const geometry = ringGeometry[index]
+          if (!geometry) return null
+
+          return (
+            <circle
+              key={ring.key}
+              cx={CONTEXT_USAGE_CIRCLE_CENTER}
+              cy={CONTEXT_USAGE_CIRCLE_CENTER}
+              r={geometry.radius}
+              pathLength={100}
+              stroke={contextUsageStroke(ring.percent)}
+              strokeWidth={geometry.strokeWidth}
+              strokeDasharray={`${ring.percent.toFixed(1)} 100`}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              className="origin-center -rotate-90"
+            />
+          )
+        })}
       </svg>
     </Button>
   )
