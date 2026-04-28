@@ -44,6 +44,35 @@ type MutableRef<T> = {
   current: T
 }
 
+export type ComposerAssistSelectionStore = {
+  getSnapshot: () => number
+  subscribe: (listener: () => void) => () => void
+}
+
+type MutableSelectionStore = ComposerAssistSelectionStore & {
+  set: (next: number) => void
+}
+
+function createSelectionStore(initialValue = 0): MutableSelectionStore {
+  let value = initialValue
+  const listeners = new Set<() => void>()
+
+  return {
+    getSnapshot: () => value,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    set: (next) => {
+      if (Object.is(value, next)) return
+      value = next
+      listeners.forEach((listener) => listener())
+    },
+  }
+}
+
 type UseComposerAssistOptions = {
   draftTextRef: MutableRef<string>
   draftSkillRef: MutableRef<string | undefined>
@@ -184,7 +213,12 @@ export function useComposerAssist({
   const [slashMenuState, setSlashMenuState] =
     React.useState<ComposerSlashMenuState | null>(null)
   const slashMenuStateRef = React.useRef<ComposerSlashMenuState | null>(null)
-  const [slashSelectionIndex, setSlashSelectionIndex] = React.useState(0)
+  const slashSelectionIndexRef = React.useRef(0)
+  const slashSelectionStoreRef = React.useRef(createSelectionStore())
+  const setSlashSelectionIndex = React.useCallback((next: number) => {
+    slashSelectionIndexRef.current = next
+    slashSelectionStoreRef.current.set(next)
+  }, [])
 
   const refreshAssistState = React.useCallback(() => {
     const draftText = draftTextRef.current
@@ -221,11 +255,13 @@ export function useComposerAssist({
   }, [refreshAssistState])
 
   React.useEffect(() => {
-    setSlashSelectionIndex((current) => {
-      if (!slashMenuState) return current === 0 ? current : 0
-      return Math.max(0, Math.min(slashMenuState.commands.length - 1, current))
-    })
-  }, [slashMenuState])
+    const current = slashSelectionIndexRef.current
+    const next = slashMenuState
+      ? Math.max(0, Math.min(slashMenuState.commands.length - 1, current))
+      : 0
+
+    setSlashSelectionIndex(next)
+  }, [setSlashSelectionIndex, slashMenuState])
 
   React.useEffect(() => {
     if (!completionQuery) {
@@ -291,8 +327,8 @@ export function useComposerAssist({
     setCompletionQuery((current) => (current ? null : current))
     setCompletionState((current) => (current ? null : current))
     setSlashMenuState((current) => (current ? null : current))
-    setSlashSelectionIndex((current) => (current === 0 ? current : 0))
-  }, [])
+    setSlashSelectionIndex(0)
+  }, [setSlashSelectionIndex])
 
   const visibleCompletion = completionState?.items.length
     ? completionState
@@ -301,9 +337,15 @@ export function useComposerAssist({
     ? visibleCompletion.items[visibleCompletion.selectedIndex] ||
       visibleCompletion.items[0]
     : null
-  const selectedSlashCommand = slashMenuState
-    ? slashMenuState.commands[slashSelectionIndex] || slashMenuState.commands[0]
-    : null
+  const getSelectedSlashCommand = React.useCallback(() => {
+    const current = slashMenuStateRef.current
+    if (!current) return null
+    return (
+      current.commands[slashSelectionIndexRef.current] ||
+      current.commands[0] ||
+      null
+    )
+  }, [])
 
   const syncSelection = React.useCallback(() => {
     const textarea = promptRef.current
@@ -415,21 +457,25 @@ export function useComposerAssist({
 
   const moveSlashSelection = React.useCallback(
     (direction: -1 | 1) => {
-      setSlashSelectionIndex((current) => {
-        const total = slashMenuState?.commands.length || 0
-        if (total === 0) return 0
-        return (current + direction + total) % total
-      })
+      const total = slashMenuStateRef.current?.commands.length || 0
+      if (total === 0) {
+        setSlashSelectionIndex(0)
+        return
+      }
+
+      setSlashSelectionIndex(
+        (slashSelectionIndexRef.current + direction + total) % total
+      )
     },
-    [slashMenuState]
+    [setSlashSelectionIndex]
   )
 
   return {
     visibleCompletion,
     selectedCompletionItem,
     slashMenuState,
-    slashSelectionIndex,
-    selectedSlashCommand,
+    slashSelectionStore: slashSelectionStoreRef.current,
+    getSelectedSlashCommand,
     syncSelection,
     applyCompletion,
     applySlashSuggestion,

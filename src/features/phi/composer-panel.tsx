@@ -539,8 +539,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     visibleCompletion,
     selectedCompletionItem,
     slashMenuState,
-    slashSelectionIndex,
-    selectedSlashCommand,
+    slashSelectionStore,
+    getSelectedSlashCommand,
     syncSelection,
     applyCompletion,
     applySlashSuggestion,
@@ -616,6 +616,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       }
     }
 
+    const selectedSlashCommand = getSelectedSlashCommand()
     if (slashMenuState && selectedSlashCommand) {
       dismissMenus()
       if (selectedSlashCommand.kind === "builtin") {
@@ -717,6 +718,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         applyCompletion(selectedCompletionItem)
         return
       }
+      const selectedSlashCommand = getSelectedSlashCommand()
       if (slashMenuState && selectedSlashCommand) {
         event.preventDefault()
         applySlashSuggestion(selectedSlashCommand)
@@ -770,7 +772,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         <ComposerAssistMenu
           visibleCompletion={visibleCompletion}
           slashMenuState={slashMenuState}
-          slashSelectionIndex={slashSelectionIndex}
+          slashSelectionStore={slashSelectionStore}
           onHoverCompletion={selectCompletionIndex}
           onApplyCompletion={applyCompletion}
           onHoverSlashCommand={selectSlashIndex}

@@ -1,9 +1,12 @@
+import * as React from "react"
+
 import { CheckIcon } from "lucide-react"
 
 import type { CompletionItem } from "@/lib/phi/api"
 
 import type { SlashCommandDescriptor } from "@/features/phi/composer-utils"
 import type {
+  ComposerAssistSelectionStore,
   ComposerSlashMenuState,
   ComposerVisibleCompletion,
 } from "@/features/phi/use-composer-assist"
@@ -18,7 +21,7 @@ function visibleCompletionLabel(item: CompletionItem) {
 type ComposerAssistMenuProps = {
   visibleCompletion: ComposerVisibleCompletion | null
   slashMenuState: ComposerSlashMenuState | null
-  slashSelectionIndex: number
+  slashSelectionStore: ComposerAssistSelectionStore
   onHoverCompletion: (index: number) => void
   onApplyCompletion: (item: CompletionItem) => void
   onHoverSlashCommand: (index: number) => void
@@ -28,19 +31,38 @@ type ComposerAssistMenuProps = {
 export function ComposerAssistMenu({
   visibleCompletion,
   slashMenuState,
-  slashSelectionIndex,
+  slashSelectionStore,
   onHoverCompletion,
   onApplyCompletion,
   onHoverSlashCommand,
   onApplySlashSuggestion,
 }: ComposerAssistMenuProps) {
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null)
+  const slashSelectionIndex = React.useSyncExternalStore(
+    slashSelectionStore.subscribe,
+    slashSelectionStore.getSnapshot,
+    slashSelectionStore.getSnapshot
+  )
+  const selectedIndex = visibleCompletion
+    ? visibleCompletion.selectedIndex
+    : slashSelectionIndex
+
+  React.useEffect(() => {
+    const scrollArea = scrollAreaRef.current
+    const selectedItem = scrollArea?.querySelector<HTMLElement>(
+      "[data-composer-assist-selected='true']"
+    )
+
+    selectedItem?.scrollIntoView({ block: "nearest" })
+  }, [selectedIndex, visibleCompletion, slashMenuState])
+
   if (!visibleCompletion && !slashMenuState) {
     return null
   }
 
   return (
     <div className="absolute inset-x-0 bottom-full z-20 mb-2 rounded-lg border bg-popover p-1 shadow-lg ring-1 ring-foreground/10">
-      <div className="max-h-64 overflow-y-auto">
+      <div ref={scrollAreaRef} className="max-h-64 overflow-y-auto">
         {visibleCompletion ? (
           <div className="flex flex-col gap-1">
             {visibleCompletion.items.map((item, index) => {
@@ -49,6 +71,7 @@ export function ComposerAssistMenu({
                 <button
                   key={`${item.value}:${item.description || item.label}`}
                   type="button"
+                  data-composer-assist-selected={selected ? "true" : undefined}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
                     selected ? "bg-muted" : "hover:bg-muted/70"
@@ -89,6 +112,7 @@ export function ComposerAssistMenu({
                 <button
                   key={command.name}
                   type="button"
+                  data-composer-assist-selected={selected ? "true" : undefined}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
                     selected ? "bg-muted" : "hover:bg-muted/70"
