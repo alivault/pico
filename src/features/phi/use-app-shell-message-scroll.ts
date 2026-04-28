@@ -85,15 +85,27 @@ function findMessageViewport(root: HTMLElement | null) {
   )
 }
 
-function isViewportNearTop(viewport: HTMLDivElement, threshold = 48) {
+const SCROLL_STICKY_THRESHOLD_PX = 48
+
+function viewportBottomDistance(viewport: HTMLDivElement) {
+  return Math.max(
+    0,
+    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+  )
+}
+
+function isViewportNearTop(
+  viewport: HTMLDivElement,
+  threshold = SCROLL_STICKY_THRESHOLD_PX
+) {
   return viewport.scrollTop < threshold
 }
 
-function isViewportNearBottom(viewport: HTMLDivElement, threshold = 48) {
-  return (
-    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
-    threshold
-  )
+function isViewportNearBottom(
+  viewport: HTMLDivElement,
+  threshold = SCROLL_STICKY_THRESHOLD_PX
+) {
+  return viewportBottomDistance(viewport) < threshold
 }
 
 function messageAnchors(viewport: HTMLDivElement) {
@@ -202,6 +214,7 @@ export function useAppShellMessageScroll({
   const followMessagesRef = React.useRef(true)
   const userScrollIntentUntilRef = React.useRef(0)
   const previousStreamingRef = React.useRef(sessionState.streaming)
+  const followScrollFrameRef = React.useRef(0)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
   const syncViewportState = React.useCallback((viewport: HTMLDivElement) => {
@@ -228,6 +241,27 @@ export function useAppShellMessageScroll({
     [rememberViewportLayout, syncViewportState]
   )
 
+  const scheduleFollowScrollIfFollowing = React.useCallback(
+    (viewport: HTMLDivElement) => {
+      if (!followMessagesRef.current) return
+
+      window.cancelAnimationFrame(followScrollFrameRef.current)
+      followScrollFrameRef.current = window.requestAnimationFrame(() => {
+        followScrollFrameRef.current = 0
+        if (!viewport.isConnected) return
+
+        scrollViewportToBottomIfFollowing(viewport)
+        followScrollFrameRef.current = window.requestAnimationFrame(() => {
+          followScrollFrameRef.current = 0
+          if (!viewport.isConnected) return
+
+          scrollViewportToBottomIfFollowing(viewport)
+        })
+      })
+    },
+    [scrollViewportToBottomIfFollowing]
+  )
+
   const scrollConversationToTop = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
@@ -242,7 +276,12 @@ export function useAppShellMessageScroll({
     scrollViewportToBottom(viewport)
     rememberViewportLayout(viewport)
     syncViewportState(viewport)
-  }, [rememberViewportLayout, syncViewportState])
+    scheduleFollowScrollIfFollowing(viewport)
+  }, [
+    rememberViewportLayout,
+    scheduleFollowScrollIfFollowing,
+    syncViewportState,
+  ])
 
   const jumpToPreviousMessage = React.useCallback(() => {
     const viewport = messageViewportRef.current
@@ -285,7 +324,11 @@ export function useAppShellMessageScroll({
       const movedUp = currentScrollTop < lastMessagesScrollTopRef.current - 1
       const movedDown = currentScrollTop > lastMessagesScrollTopRef.current + 1
 
-      if (movedUp && hasRecentUserScrollIntent()) {
+      if (
+        movedUp &&
+        hasRecentUserScrollIntent() &&
+        !isViewportNearBottom(viewport)
+      ) {
         followMessagesRef.current = false
       } else if (movedDown && isViewportNearBottom(viewport)) {
         followMessagesRef.current = true
@@ -295,11 +338,8 @@ export function useAppShellMessageScroll({
       syncViewportState(viewport)
     }
 
-    const handleWheel = (event: WheelEvent) => {
+    const handleWheel = () => {
       markUserScrollIntent()
-      if (event.deltaY < 0) {
-        followMessagesRef.current = false
-      }
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -343,6 +383,12 @@ export function useAppShellMessageScroll({
     }
   }, [rememberViewportLayout, syncViewportState])
 
+  React.useEffect(() => {
+    return () => {
+      window.cancelAnimationFrame(followScrollFrameRef.current)
+    }
+  }, [])
+
   const syncAfterConversationChange = React.useCallback(() => {
     if (isSessionViewLoading) return
 
@@ -353,7 +399,12 @@ export function useAppShellMessageScroll({
 
     messageViewportRef.current = viewport
     scrollViewportToBottomIfFollowing(viewport)
-  }, [isSessionViewLoading, scrollViewportToBottomIfFollowing])
+    scheduleFollowScrollIfFollowing(viewport)
+  }, [
+    isSessionViewLoading,
+    scheduleFollowScrollIfFollowing,
+    scrollViewportToBottomIfFollowing,
+  ])
 
   React.useLayoutEffect(() => {
     const wasStreaming = previousStreamingRef.current
@@ -382,6 +433,7 @@ export function useAppShellMessageScroll({
       animationFrame = window.requestAnimationFrame(() => {
         if (!viewport.isConnected) return
         scrollViewportToBottomIfFollowing(viewport)
+        scheduleFollowScrollIfFollowing(viewport)
       })
     }
     const resizeObserver = new ResizeObserver(handleResize)
@@ -392,7 +444,7 @@ export function useAppShellMessageScroll({
       window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
     }
-  }, [scrollViewportToBottomIfFollowing])
+  }, [scheduleFollowScrollIfFollowing, scrollViewportToBottomIfFollowing])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -413,6 +465,7 @@ export function useAppShellMessageScroll({
     scrollViewportToBottom(viewport)
     rememberViewportLayout(viewport)
     syncViewportState(viewport)
+    scheduleFollowScrollIfFollowing(viewport)
   }, [
     isSessionViewLoading,
     sessionState.cwd,
@@ -420,6 +473,7 @@ export function useAppShellMessageScroll({
     sessionState.sessionFile,
     sessionState.sessionId,
     rememberViewportLayout,
+    scheduleFollowScrollIfFollowing,
     syncViewportState,
   ])
 

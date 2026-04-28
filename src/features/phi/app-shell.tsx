@@ -1746,6 +1746,10 @@ type AppShellConversationSessionState = Pick<
   "cwd" | "draft" | "sessionFile" | "sessionId" | "streaming"
 >
 
+const ConversationContentChangeContext = React.createContext<
+  (() => void) | null
+>(null)
+
 function useAppShellConversationSessionState(store: ValueStore<SessionState>) {
   return useSelectedValueStore(
     store,
@@ -1819,7 +1823,11 @@ const AppShellConversationFrame = React.forwardRef<
             disabled={isSessionViewLoading}
             onRevisionChange={syncAfterConversationChange}
           />
-          {children}
+          <ConversationContentChangeContext.Provider
+            value={syncAfterConversationChange}
+          >
+            {children}
+          </ConversationContentChangeContext.Provider>
           <div ref={bottomRef} />
         </div>
       </div>
@@ -2043,6 +2051,9 @@ function ConversationAssistantGroupView({
   store: ConversationItemsStore
 }) {
   const itemKeys = useConversationAssistantGroupItemKeys(store, groupKey)
+  const syncAfterConversationContentChange = React.useContext(
+    ConversationContentChangeContext
+  )
   const assistantMessagesStoreRef =
     React.useRef<MutableAssistantMessagesStore | null>(null)
   if (!assistantMessagesStoreRef.current) {
@@ -2067,11 +2078,19 @@ function ConversationAssistantGroupView({
           store,
         })
       )
+      syncAfterConversationContentChange?.()
     }
 
     updateSnapshot()
     return store.subscribeItems(itemKeys, updateSnapshot)
-  }, [assistantMessagesStore, hideThinking, hideToolBlocks, itemKeys, store])
+  }, [
+    assistantMessagesStore,
+    hideThinking,
+    hideToolBlocks,
+    itemKeys,
+    store,
+    syncAfterConversationContentChange,
+  ])
 
   return (
     <div className={className}>
