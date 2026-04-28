@@ -2981,9 +2981,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     awaitingFirstTurnStoreRef.current = createValueStore(false)
   }
   const awaitingFirstTurnStore = awaitingFirstTurnStoreRef.current
-  const [runningSlashCommand, setRunningSlashCommand] = React.useState<
-    string | null
-  >(null)
   const pendingDraftPromptStoreRef = React.useRef<ValueStore<{
     ownerKey: string
     message: string
@@ -4224,6 +4221,20 @@ const AppShellSessionWorkspace = React.forwardRef<
     return true
   }
 
+  const setCompactWorkingState = React.useCallback(
+    (running: boolean) => {
+      if (running) {
+        workingStateStore.setSnapshot({ label: "Compacting context…" })
+        return
+      }
+
+      if (workingStateStore.getSnapshot()?.label === "Compacting context…") {
+        workingStateStore.setSnapshot(null)
+      }
+    },
+    [workingStateStore]
+  )
+
   const {
     cycleThinkingLevel,
     deleteSessions,
@@ -4283,7 +4294,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
     setSidebarSessionSelectionAnchor:
       sidebarStore.setSidebarSessionSelectionAnchor,
-    setRunningSlashCommand,
+    setCompactWorkingState,
   })
 
   const setToolBlocksHidden = (hidden: boolean) => {
@@ -4426,17 +4437,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     submitPrompt,
     syncComposerDraft,
   })
-
-  React.useLayoutEffect(() => {
-    if (runningSlashCommand === "compact") {
-      workingStateStore.setSnapshot({ label: "Compacting context…" })
-      return
-    }
-
-    if (workingStateStore.getSnapshot()?.label === "Compacting context…") {
-      workingStateStore.setSnapshot(null)
-    }
-  }, [runningSlashCommand, workingStateStore])
 
   const commandPaletteStateRef = useLatestRef({
     currentSessionTitle,

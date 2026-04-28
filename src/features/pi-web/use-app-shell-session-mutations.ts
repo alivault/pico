@@ -220,7 +220,7 @@ type UseAppShellSessionMutationsOptions = {
     React.SetStateAction<Array<string>>
   >
   setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
-  setRunningSlashCommand: React.Dispatch<React.SetStateAction<string | null>>
+  setCompactWorkingState: (running: boolean) => void
 }
 
 export function useAppShellSessionMutations({
@@ -236,7 +236,7 @@ export function useAppShellSessionMutations({
   optimisticallyClearActiveDeletedSession,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
-  setRunningSlashCommand,
+  setCompactWorkingState,
 }: UseAppShellSessionMutationsOptions) {
   const thinkingLevelRequestIdRef = React.useRef(0)
   const thinkingLevelSyncTimerRef = React.useRef<ReturnType<
@@ -448,7 +448,7 @@ export function useAppShellSessionMutations({
 
   const runCompact = React.useCallback(async () => {
     if (!viewerContextId) return
-    setRunningSlashCommand("compact")
+    setCompactWorkingState(true)
     try {
       await compactMutation.mutateAsync()
     } catch (error) {
@@ -456,9 +456,9 @@ export function useAppShellSessionMutations({
         error instanceof Error ? error.message : "Failed to compact session"
       )
     } finally {
-      setRunningSlashCommand(null)
+      setCompactWorkingState(false)
     }
-  }, [compactMutation, setRunningSlashCommand, viewerContextId])
+  }, [compactMutation, setCompactWorkingState, viewerContextId])
 
   const renameSessionMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
