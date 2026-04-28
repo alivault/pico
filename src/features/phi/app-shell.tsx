@@ -3836,6 +3836,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerPanelRef.current?.openModelPicker()
   }
   const focusPromptRef = useLatestRef(focusPrompt)
+  const lastAutoFocusedSessionKeyRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     if (
@@ -3855,6 +3856,22 @@ const AppShellSessionWorkspace = React.forwardRef<
       window.clearTimeout(timeoutId)
     }
   }, [focusPromptRef, openMobile, openMobileSettled])
+
+  React.useEffect(() => {
+    if (isSessionViewLoading) return
+
+    const sessionFocusKey =
+      sessionState.sessionKey || sessionState.sessionId || "draft"
+    if (lastAutoFocusedSessionKeyRef.current === sessionFocusKey) return
+
+    lastAutoFocusedSessionKeyRef.current = sessionFocusKey
+    focusPromptRef.current()
+  }, [
+    focusPromptRef,
+    isSessionViewLoading,
+    sessionState.sessionId,
+    sessionState.sessionKey,
+  ])
 
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
     setSessionDoneSoundEnabled(enabled)
