@@ -2204,12 +2204,14 @@ const AppShellComposerController = React.memo(
     composerPanelRef,
     contextUsageStore,
     fileInputRef,
+    sessionStore,
     store,
   }: {
     actionsRef: React.MutableRefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
     contextUsageStore: ComposerContextUsageStore
     fileInputRef: React.RefObject<HTMLInputElement | null>
+    sessionStore: ValueStore<SessionState>
     store: ValueStore<AppShellComposerSnapshot>
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
@@ -2324,9 +2326,8 @@ const AppShellComposerController = React.memo(
         centerMessages={snapshot.centerMessages}
         availableModels={snapshot.availableModels}
         model={snapshot.model}
-        thinkingLevel={snapshot.thinkingLevel}
-        availableThinkingLevels={snapshot.availableThinkingLevels}
         contextUsageStore={contextUsageStore}
+        sessionStore={sessionStore}
         isSubmitting={snapshot.isSubmitting}
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
@@ -2718,7 +2719,6 @@ type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
   availableModels: SessionState["availableModels"]
-  availableThinkingLevels: SessionState["availableThinkingLevels"]
   centerMessages: boolean
   composerImages: Array<PromptImage>
   composerSkill?: string
@@ -2730,7 +2730,6 @@ type AppShellComposerSnapshot = {
   isSubmitting: boolean
   model: SessionState["model"]
   slashCommands: Array<SlashCommandDescriptor>
-  thinkingLevel: SessionState["thinkingLevel"]
   viewerContextId: string
 }
 
@@ -2770,7 +2769,6 @@ function createInitialAppShellComposerSnapshot(
     activeSessionId: undefined,
     awaitingFirstTurn: false,
     availableModels: initialSessionState.availableModels,
-    availableThinkingLevels: initialSessionState.availableThinkingLevels,
     centerMessages: false,
     composerImages: [],
     composerSkill: undefined,
@@ -2782,7 +2780,6 @@ function createInitialAppShellComposerSnapshot(
     isSubmitting: false,
     model: initialSessionState.model,
     slashCommands: [],
-    thinkingLevel: initialSessionState.thinkingLevel,
     viewerContextId,
   }
 }
@@ -3544,7 +3541,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     (currentSessionState) => ({
       availableModels: currentSessionState.availableModels,
       availableSkills: currentSessionState.availableSkills,
-      availableThinkingLevels: currentSessionState.availableThinkingLevels,
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       firstMessage: currentSessionState.firstMessage,
@@ -3554,7 +3550,6 @@ const AppShellSessionWorkspace = React.forwardRef<
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
       sessionName: currentSessionState.sessionName,
-      thinkingLevel: currentSessionState.thinkingLevel,
     }),
     shallowRecordEqual
   )
@@ -4469,7 +4464,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     activeSessionId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
     availableModels: sessionState.availableModels,
-    availableThinkingLevels: sessionState.availableThinkingLevels,
     centerMessages,
     composerImages: displayedComposerImages,
     composerSkill: displayedComposerSkill,
@@ -4481,7 +4475,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     isSubmitting: composerDisabled ? false : isSubmitting,
     model: sessionState.model,
     slashCommands,
-    thinkingLevel: sessionState.thinkingLevel,
     viewerContextId,
   } satisfies AppShellComposerSnapshot
 
@@ -4528,11 +4521,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     hideToolBlocks,
     selectedSidebarSessions,
     sessionFile: sessionState.sessionFile,
-    thinkingLevel: sessionState.thinkingLevel,
   })
 
   const buildCommandPaletteCommands = () => {
     const commandState = commandPaletteStateRef.current
+    const currentThinkingLevel = sessionStateRef.current.thinkingLevel
     const commands: Array<AppCommand> = [
       {
         id: "new-session",
@@ -4629,7 +4622,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "cycle-reasoning",
         group: "Assistant",
         title: "Next reasoning level",
-        description: `Current level: ${commandState.thinkingLevel}`,
+        description: `Current level: ${currentThinkingLevel}`,
         shortcut: "Ctrl+R",
         keywords: ["thinking", "reasoning", "level", "cycle", "next"],
         onSelect: () => {
@@ -4640,7 +4633,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "previous-reasoning",
         group: "Assistant",
         title: "Previous reasoning level",
-        description: `Current level: ${commandState.thinkingLevel}`,
+        description: `Current level: ${currentThinkingLevel}`,
         shortcut: "Ctrl+Shift+R",
         keywords: [
           "thinking",
@@ -4916,6 +4909,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               composerPanelRef={composerPanelRef}
               contextUsageStore={contextUsageStore}
               fileInputRef={fileInputRef}
+              sessionStore={sessionStore}
               store={composerStore}
             />
           </TabsContent>

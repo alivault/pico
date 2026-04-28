@@ -9,7 +9,12 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type { ModelOption, PromptImage, StreamingBehavior } from "@/lib/pi-web"
+import type {
+  ModelOption,
+  PromptImage,
+  SessionState,
+  StreamingBehavior,
+} from "@/lib/pi-web"
 import type { CompletionItem } from "@/lib/pi-web-api"
 
 import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
@@ -55,9 +60,11 @@ type ComposerPanelProps = {
   centerMessages: boolean
   availableModels: Array<ModelOption>
   model?: ModelOption
-  thinkingLevel: string
-  availableThinkingLevels: Array<string>
   contextUsageStore: ComposerContextUsageStore
+  sessionStore: {
+    getSnapshot: () => SessionState
+    subscribe: (listener: () => void) => () => void
+  }
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
@@ -148,9 +155,8 @@ export const ComposerPanel = React.forwardRef<
     centerMessages,
     availableModels,
     model,
-    thinkingLevel,
-    availableThinkingLevels,
     contextUsageStore,
+    sessionStore,
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
@@ -254,9 +260,8 @@ export const ComposerPanel = React.forwardRef<
             onModelQueryChange={setModelQuery}
             availableModels={availableModels}
             model={model}
-            thinkingLevel={thinkingLevel}
-            availableThinkingLevels={availableThinkingLevels}
             contextUsageStore={contextUsageStore}
+            sessionStore={sessionStore}
             disabled={disabled}
             onSelectModel={onSelectModel}
             onSelectThinkingLevel={onSelectThinkingLevel}

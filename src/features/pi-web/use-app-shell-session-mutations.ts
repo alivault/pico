@@ -293,26 +293,6 @@ export function useAppShellSessionMutations({
     [setModelMutation, viewerContextId]
   )
 
-  const setThinkingLevelMutation = useMutation({
-    mutationFn: async (level: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<ThinkingResponseData>(
-        buildRequestUrl("/api/thinking", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ level }),
-        }
-      )
-    },
-  })
-
   const setThinkingLevel = React.useCallback(
     async (level: string) => {
       if (!viewerContextId) return
@@ -343,7 +323,17 @@ export function useAppShellSessionMutations({
         thinkingLevelSyncTimerRef.current = null
         void (async () => {
           try {
-            const response = await setThinkingLevelMutation.mutateAsync(level)
+            const response = await fetchJson<ThinkingResponseData>(
+              buildRequestUrl("/api/thinking", {
+                contextId: viewerContextId,
+                sessionId: activeSessionId,
+              }),
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ level }),
+              }
+            )
             if (thinkingLevelRequestIdRef.current !== requestId) return
 
             const currentState = sessionStateRef.current
@@ -392,12 +382,7 @@ export function useAppShellSessionMutations({
         })()
       }, 100)
     },
-    [
-      sessionStateRef,
-      setSessionState,
-      setThinkingLevelMutation,
-      viewerContextId,
-    ]
+    [sessionStateRef, activeSessionId, setSessionState, viewerContextId]
   )
 
   const cycleThinkingLevel = React.useCallback(

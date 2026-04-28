@@ -1,7 +1,7 @@
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
-import type { ModelOption } from "@/lib/pi-web"
+import type { ModelOption, SessionState } from "@/lib/pi-web"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -45,6 +45,16 @@ function currentModelValue(model?: ModelOption) {
   return model ? `${model.provider}/${model.id}` : ""
 }
 
+type ComposerPickerSessionStore = {
+  getSnapshot: () => SessionState
+  subscribe: (listener: () => void) => () => void
+}
+
+type ThinkingPickerState = {
+  availableThinkingLevels: Array<string>
+  thinkingLevel: string
+}
+
 type ComposerPickersProps = {
   modelPickerOpen: boolean
   onModelPickerOpenChange: (open: boolean) => void
@@ -54,13 +64,106 @@ type ComposerPickersProps = {
   onModelQueryChange: (value: string) => void
   availableModels: Array<ModelOption>
   model?: ModelOption
-  thinkingLevel: string
-  availableThinkingLevels: Array<string>
   contextUsageStore: ComposerContextUsageStore
+  sessionStore: ComposerPickerSessionStore
   disabled?: boolean
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
 }
+
+function sameThinkingPickerState(
+  left: ThinkingPickerState,
+  right: ThinkingPickerState
+) {
+  return (
+    left.thinkingLevel === right.thinkingLevel &&
+    left.availableThinkingLevels === right.availableThinkingLevels
+  )
+}
+
+function useThinkingPickerState(store: ComposerPickerSessionStore) {
+  const cacheRef = React.useRef<{
+    selected?: ThinkingPickerState
+    source?: SessionState
+  }>({})
+
+  const getSnapshot = () => {
+    const source = store.getSnapshot()
+    const cache = cacheRef.current
+    if (cache.source === source && cache.selected) return cache.selected
+
+    const selected = {
+      availableThinkingLevels: source.availableThinkingLevels,
+      thinkingLevel: source.thinkingLevel,
+    }
+    if (cache.selected && sameThinkingPickerState(cache.selected, selected)) {
+      cacheRef.current = { source, selected: cache.selected }
+      return cache.selected
+    }
+
+    cacheRef.current = { source, selected }
+    return selected
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+}
+
+const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
+  disabled,
+  onOpenChange,
+  onSelectThinkingLevel,
+  open,
+  sessionStore,
+}: {
+  disabled: boolean
+  onOpenChange: (open: boolean) => void
+  onSelectThinkingLevel: (level: string) => void
+  open: boolean
+  sessionStore: ComposerPickerSessionStore
+}) {
+  const { availableThinkingLevels, thinkingLevel } =
+    useThinkingPickerState(sessionStore)
+
+  return (
+    <Popover open={!disabled && open} onOpenChange={onOpenChange}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="max-w-full"
+            disabled={disabled}
+          />
+        }
+      >
+        <span className="truncate">{thinkingLabel(thinkingLevel)}</span>
+        <ChevronDownIcon data-icon="inline-end" />
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" side="top" align="start">
+        <Command>
+          <CommandList>
+            <CommandGroup heading="Reasoning">
+              {availableThinkingLevels.map((level) => (
+                <CommandItem
+                  key={level}
+                  value={level}
+                  onSelect={() => {
+                    if (disabled) return
+                    onSelectThinkingLevel(level)
+                    onOpenChange(false)
+                  }}
+                >
+                  <span className="flex-1">{thinkingLabel(level)}</span>
+                  {thinkingLevel === level ? <CheckIcon /> : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+})
 
 export const ComposerPickers = React.memo(function ComposerPickers({
   modelPickerOpen,
@@ -71,9 +174,8 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   onModelQueryChange,
   availableModels,
   model,
-  thinkingLevel,
-  availableThinkingLevels,
   contextUsageStore,
+  sessionStore,
   disabled = false,
   onSelectModel,
   onSelectThinkingLevel,
@@ -181,46 +283,13 @@ export const ComposerPickers = React.memo(function ComposerPickers({
           </PopoverContent>
         </Popover>
 
-        <Popover
-          open={!disabled && thinkingPickerOpen}
+        <ComposerThinkingPicker
+          disabled={disabled}
           onOpenChange={handleThinkingPickerOpenChange}
-        >
-          <PopoverTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="max-w-full"
-                disabled={disabled}
-              />
-            }
-          >
-            <span className="truncate">{thinkingLabel(thinkingLevel)}</span>
-            <ChevronDownIcon data-icon="inline-end" />
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" side="top" align="start">
-            <Command>
-              <CommandList>
-                <CommandGroup heading="Reasoning">
-                  {availableThinkingLevels.map((level) => (
-                    <CommandItem
-                      key={level}
-                      value={level}
-                      onSelect={() => {
-                        if (disabled) return
-                        onSelectThinkingLevel(level)
-                        onThinkingPickerOpenChange(false)
-                      }}
-                    >
-                      <span className="flex-1">{thinkingLabel(level)}</span>
-                      {thinkingLevel === level ? <CheckIcon /> : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+          onSelectThinkingLevel={onSelectThinkingLevel}
+          open={thinkingPickerOpen}
+          sessionStore={sessionStore}
+        />
       </div>
 
       <ComposerContextUsageIndicator
