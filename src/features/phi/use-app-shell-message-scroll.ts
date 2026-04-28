@@ -156,116 +156,8 @@ function viewportStateSnapshot(
   }
 }
 
-const MESSAGE_VIEWPORT_TOP_PADDING = 8
-
-type StreamingScrollMode = "bottom" | "assistant-message-cap" | "tool-reveal"
-type FollowScrollPreference = "auto" | "bottom"
-
-function scrollViewportToBottom(
-  viewport: HTMLDivElement,
-  behavior: ScrollBehavior
-) {
-  viewport.scrollTo({ top: viewport.scrollHeight, behavior })
-}
-
-function latestElement<T extends HTMLElement>(elements: Iterable<T>) {
-  const list = [...elements]
-  return list[list.length - 1] || null
-}
-
-function latestAssistantGroup(viewport: HTMLDivElement) {
-  return latestElement(
-    viewport.querySelectorAll<HTMLElement>(
-      '[data-conversation-assistant-group="true"]'
-    )
-  )
-}
-
-function latestStreamingAssistantGroup(viewport: HTMLDivElement) {
-  return latestElement(
-    viewport.querySelectorAll<HTMLElement>(
-      '[data-conversation-assistant-group="true"][data-conversation-streaming="true"]'
-    )
-  )
-}
-
-function assistantBlocks(group: HTMLElement) {
-  return [
-    ...group.querySelectorAll<HTMLElement>(
-      '[data-conversation-assistant-block="true"]'
-    ),
-  ]
-}
-
-function latestAssistantBlock(group: HTMLElement) {
-  return latestElement(assistantBlocks(group))
-}
-
-function latestAssistantTextBlock(group: HTMLElement) {
-  return latestElement(
-    assistantBlocks(group).filter(
-      (block) => block.dataset.conversationAssistantBlockType === "text"
-    )
-  )
-}
-
-function cappedAssistantMessageScrollTop(
-  viewport: HTMLDivElement,
-  textBlock: HTMLElement
-) {
-  const maxScrollTop = Math.max(
-    0,
-    viewport.scrollHeight - viewport.clientHeight
-  )
-  const capScrollTop = Math.max(
-    0,
-    textBlock.offsetTop - MESSAGE_VIEWPORT_TOP_PADDING
-  )
-
-  return Math.min(maxScrollTop, capScrollTop)
-}
-
-function scrollViewportToAssistantMessageCap(
-  viewport: HTMLDivElement,
-  textBlock: HTMLElement
-) {
-  viewport.scrollTo({
-    top: cappedAssistantMessageScrollTop(viewport, textBlock),
-    behavior: "auto",
-  })
-}
-
-function scrollViewportToRevealElement(
-  viewport: HTMLDivElement,
-  element: HTMLElement
-) {
-  const viewportTop = viewport.scrollTop
-  const viewportBottom = viewportTop + viewport.clientHeight
-  const elementTop = element.offsetTop
-  const elementBottom = elementTop + element.offsetHeight
-  const bottomPadding = 16
-  const maxScrollTop = Math.max(
-    0,
-    viewport.scrollHeight - viewport.clientHeight
-  )
-
-  if (elementBottom > viewportBottom - bottomPadding) {
-    viewport.scrollTo({
-      top: Math.min(
-        maxScrollTop,
-        elementBottom - viewport.clientHeight + bottomPadding
-      ),
-      behavior: "auto",
-    })
-    return
-  }
-
-  if (elementTop < viewportTop + MESSAGE_VIEWPORT_TOP_PADDING) {
-    viewport.scrollTo({
-      top: Math.max(0, elementTop - MESSAGE_VIEWPORT_TOP_PADDING),
-      behavior: "auto",
-    })
-  }
+function scrollViewportToBottom(viewport: HTMLDivElement) {
+  viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" })
 }
 
 function isScrollUpKey(event: KeyboardEvent) {
@@ -308,9 +200,6 @@ export function useAppShellMessageScroll({
   const lastMessagesScrollHeightRef = React.useRef(0)
   const lastMessagesClientHeightRef = React.useRef(0)
   const followMessagesRef = React.useRef(true)
-  const followScrollPreferenceRef = React.useRef<FollowScrollPreference>("auto")
-  const streamingScrollModeRef = React.useRef<StreamingScrollMode>("bottom")
-  const lastRevealedToolBlockKeyRef = React.useRef("")
   const previousStreamingRef = React.useRef(sessionState.streaming)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
@@ -327,70 +216,10 @@ export function useAppShellMessageScroll({
     []
   )
 
-  const scrollViewportIfFollowing = React.useCallback(
+  const scrollViewportToBottomIfFollowing = React.useCallback(
     (viewport: HTMLDivElement) => {
-      if (!followMessagesRef.current) {
-        rememberViewportLayout(viewport)
-        syncViewportState(viewport)
-        return
-      }
-
-      const shouldForceBottom = followScrollPreferenceRef.current === "bottom"
-      const streamingAssistantGroup = latestStreamingAssistantGroup(viewport)
-
-      if (!shouldForceBottom && streamingAssistantGroup) {
-        const latestBlock = latestAssistantBlock(streamingAssistantGroup)
-        const latestBlockType =
-          latestBlock?.dataset.conversationAssistantBlockType
-
-        if (latestBlockType === "text") {
-          const textBlock = latestAssistantTextBlock(streamingAssistantGroup)
-          if (textBlock) {
-            streamingScrollModeRef.current = "assistant-message-cap"
-            scrollViewportToAssistantMessageCap(viewport, textBlock)
-            rememberViewportLayout(viewport)
-            syncViewportState(viewport)
-            return
-          }
-        }
-
-        if (latestBlockType === "tool" && latestBlock) {
-          const blockKey =
-            latestBlock.dataset.conversationAssistantBlockKey || ""
-          if (blockKey && blockKey !== lastRevealedToolBlockKeyRef.current) {
-            lastRevealedToolBlockKeyRef.current = blockKey
-            streamingScrollModeRef.current = "tool-reveal"
-            scrollViewportToRevealElement(viewport, latestBlock)
-          }
-          rememberViewportLayout(viewport)
-          syncViewportState(viewport)
-          return
-        }
-
-        rememberViewportLayout(viewport)
-        syncViewportState(viewport)
-        return
-      }
-
-      if (
-        !shouldForceBottom &&
-        streamingScrollModeRef.current === "assistant-message-cap"
-      ) {
-        const assistantGroup = latestAssistantGroup(viewport)
-        const textBlock = assistantGroup
-          ? latestAssistantTextBlock(assistantGroup)
-          : null
-        if (textBlock) {
-          scrollViewportToAssistantMessageCap(viewport, textBlock)
-          rememberViewportLayout(viewport)
-          syncViewportState(viewport)
-          return
-        }
-      }
-
-      if (shouldForceBottom) {
-        streamingScrollModeRef.current = "bottom"
-        scrollViewportToBottom(viewport, "auto")
+      if (followMessagesRef.current) {
+        scrollViewportToBottom(viewport)
       }
       rememberViewportLayout(viewport)
       syncViewportState(viewport)
@@ -402,19 +231,17 @@ export function useAppShellMessageScroll({
     const viewport = messageViewportRef.current
     if (!viewport) return
     followMessagesRef.current = false
-    followScrollPreferenceRef.current = "auto"
-    viewport.scrollTo({ top: 0, behavior: "smooth" })
+    viewport.scrollTo({ top: 0, behavior: "auto" })
   }, [])
 
   const scrollConversationToBottom = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
     followMessagesRef.current = true
-    followScrollPreferenceRef.current = "bottom"
-    streamingScrollModeRef.current = "bottom"
-    lastRevealedToolBlockKeyRef.current = ""
-    scrollViewportToBottom(viewport, "smooth")
-  }, [])
+    scrollViewportToBottom(viewport)
+    rememberViewportLayout(viewport)
+    syncViewportState(viewport)
+  }, [rememberViewportLayout, syncViewportState])
 
   const jumpToPreviousMessage = React.useCallback(() => {
     const viewport = messageViewportRef.current
@@ -422,10 +249,9 @@ export function useAppShellMessageScroll({
     const target = previousMessageJumpTarget(viewport)
     if (!target) return
     followMessagesRef.current = false
-    followScrollPreferenceRef.current = "auto"
     viewport.scrollTo({
       top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
+      behavior: "auto",
     })
   }, [])
 
@@ -435,10 +261,9 @@ export function useAppShellMessageScroll({
     const target = nextMessageJumpTarget(viewport)
     if (!target) return
     followMessagesRef.current = false
-    followScrollPreferenceRef.current = "auto"
     viewport.scrollTo({
       top: Math.max(0, target.offsetTop - 8),
-      behavior: "smooth",
+      behavior: "auto",
     })
   }, [])
 
@@ -449,17 +274,12 @@ export function useAppShellMessageScroll({
 
     const handleScroll = () => {
       const currentScrollTop = viewport.scrollTop
-      const currentScrollHeight = viewport.scrollHeight
-      const currentClientHeight = viewport.clientHeight
       const movedUp = currentScrollTop < lastMessagesScrollTopRef.current - 1
-      const layoutChanged =
-        currentScrollHeight !== lastMessagesScrollHeightRef.current ||
-        currentClientHeight !== lastMessagesClientHeightRef.current
+      const movedDown = currentScrollTop > lastMessagesScrollTopRef.current + 1
 
-      if (movedUp && !layoutChanged && !isViewportNearBottom(viewport)) {
+      if (movedUp) {
         followMessagesRef.current = false
-        followScrollPreferenceRef.current = "auto"
-      } else if (isViewportNearBottom(viewport)) {
+      } else if (movedDown && isViewportNearBottom(viewport)) {
         followMessagesRef.current = true
       }
 
@@ -470,14 +290,12 @@ export function useAppShellMessageScroll({
     const handleWheel = (event: WheelEvent) => {
       if (event.deltaY < 0) {
         followMessagesRef.current = false
-        followScrollPreferenceRef.current = "auto"
       }
     }
 
     const handlePointerDown = (event: PointerEvent) => {
       if (findOpeningToolAccordionTrigger(event.target, viewport)) {
         followMessagesRef.current = false
-        followScrollPreferenceRef.current = "auto"
       }
     }
 
@@ -488,13 +306,11 @@ export function useAppShellMessageScroll({
       )
       if (openingToolAccordionTrigger && isToolAccordionToggleKey(event)) {
         followMessagesRef.current = false
-        followScrollPreferenceRef.current = "auto"
         return
       }
 
       if (isScrollUpKey(event)) {
         followMessagesRef.current = false
-        followScrollPreferenceRef.current = "auto"
       }
     }
 
@@ -525,15 +341,13 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     messageViewportRef.current = viewport
-    scrollViewportIfFollowing(viewport)
-  }, [isSessionViewLoading, scrollViewportIfFollowing])
+    scrollViewportToBottomIfFollowing(viewport)
+  }, [isSessionViewLoading, scrollViewportToBottomIfFollowing])
 
   React.useLayoutEffect(() => {
     const wasStreaming = previousStreamingRef.current
     if (!wasStreaming && sessionState.streaming) {
-      followScrollPreferenceRef.current = "auto"
-      streamingScrollModeRef.current = "bottom"
-      lastRevealedToolBlockKeyRef.current = ""
+      followMessagesRef.current = true
     }
     previousStreamingRef.current = sessionState.streaming
 
@@ -556,7 +370,7 @@ export function useAppShellMessageScroll({
       window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(() => {
         if (!viewport.isConnected) return
-        scrollViewportIfFollowing(viewport)
+        scrollViewportToBottomIfFollowing(viewport)
       })
     }
     const resizeObserver = new ResizeObserver(handleResize)
@@ -567,7 +381,7 @@ export function useAppShellMessageScroll({
       window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
     }
-  }, [scrollViewportIfFollowing])
+  }, [scrollViewportToBottomIfFollowing])
 
   React.useLayoutEffect(() => {
     if (isSessionViewLoading) return
@@ -584,11 +398,8 @@ export function useAppShellMessageScroll({
     messageViewportRef.current = viewport
     lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
     followMessagesRef.current = true
-    followScrollPreferenceRef.current = "auto"
-    streamingScrollModeRef.current = "bottom"
-    lastRevealedToolBlockKeyRef.current = ""
     previousStreamingRef.current = sessionState.streaming
-    viewport.scrollTop = viewport.scrollHeight
+    scrollViewportToBottom(viewport)
     rememberViewportLayout(viewport)
     syncViewportState(viewport)
   }, [

@@ -29,6 +29,17 @@ const highlightCache = new Map<
 const MemoizedReactMarkdown = React.memo(ReactMarkdown)
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 const MARKDOWN_COMPONENTS = {
+  a({ href, children, ...props }) {
+    return (
+      <a
+        href={href}
+        onClick={(event) => handleMarkdownAnchorClick(event, href)}
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  },
   code({ className, children, ...props }) {
     return (
       <code
@@ -61,6 +72,56 @@ const MARKDOWN_COMPONENTS = {
 function parseCodeLanguage(className?: string) {
   const match = className?.match(/language-([A-Za-z0-9_+#.-]+)/)
   return match?.[1]
+}
+
+function handleMarkdownAnchorClick(
+  event: React.MouseEvent<HTMLAnchorElement>,
+  href?: string
+) {
+  if (!href?.startsWith("#user-content-fn")) return
+
+  const targetId = decodeURIComponent(href.slice(1))
+  const root = event.currentTarget.closest(".prose")
+  const target = root?.querySelector<HTMLElement>(`#${CSS.escape(targetId)}`)
+  if (!target) return
+
+  event.preventDefault()
+
+  const scrollParent = getScrollParent(event.currentTarget)
+  if (!scrollParent) {
+    target.scrollIntoView({ block: "center" })
+    return
+  }
+
+  const parentRect = scrollParent.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  const targetTop =
+    scrollParent.scrollTop +
+    targetRect.top -
+    parentRect.top -
+    scrollParent.clientHeight / 3
+
+  scrollParent.scrollTo({ top: Math.max(0, targetTop) })
+}
+
+function getScrollParent(element: HTMLElement) {
+  let parent = element.parentElement
+
+  while (parent && parent !== document.body) {
+    const style = window.getComputedStyle(parent)
+    const overflowY = style.overflowY
+
+    if (
+      /(auto|scroll|overlay)/.test(overflowY) &&
+      parent.scrollHeight > parent.clientHeight
+    ) {
+      return parent
+    }
+
+    parent = parent.parentElement
+  }
+
+  return null
 }
 
 const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -140,6 +201,42 @@ async function getHighlightedCode(code: string, language?: string) {
   return payload
 }
 
+const CodeBlockCopyButton = React.memo(function CodeBlockCopyButton({
+  code,
+}: {
+  code: string
+}) {
+  const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
+    "idle"
+  )
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopyState("copied")
+      window.setTimeout(() => setCopyState("idle"), 1400)
+    } catch {
+      setCopyState("error")
+      window.setTimeout(() => setCopyState("idle"), 1400)
+    }
+  }
+
+  return (
+    <Button variant="ghost" size="xs" onClick={copyCode}>
+      {copyState === "copied" ? (
+        <CheckIcon data-icon="inline-start" />
+      ) : (
+        <CopyIcon data-icon="inline-start" />
+      )}
+      {copyState === "copied"
+        ? "Copied"
+        : copyState === "error"
+          ? "Retry"
+          : "Copy"}
+    </Button>
+  )
+})
+
 const CodeBlock = React.memo(function CodeBlock({
   code,
   language,
@@ -152,9 +249,6 @@ const CodeBlock = React.memo(function CodeBlock({
     React.useState<HighlightResponse | null>(null)
   const [isNearViewport, setIsNearViewport] = React.useState(
     () => typeof IntersectionObserver === "undefined"
-  )
-  const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
-    "idle"
   )
 
   React.useEffect(() => {
@@ -217,17 +311,6 @@ const CodeBlock = React.memo(function CodeBlock({
       ? highlighted.language
       : language
 
-  const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopyState("copied")
-      window.setTimeout(() => setCopyState("idle"), 1400)
-    } catch {
-      setCopyState("error")
-      window.setTimeout(() => setCopyState("idle"), 1400)
-    }
-  }
-
   const highlightedHtml = hasHighlightHtml(highlighted)
     ? highlighted.html
     : null
@@ -251,18 +334,7 @@ const CodeBlock = React.memo(function CodeBlock({
         <div className="truncate font-medium tracking-wide uppercase">
           {renderedLanguage || "code"}
         </div>
-        <Button variant="ghost" size="xs" onClick={copyCode}>
-          {copyState === "copied" ? (
-            <CheckIcon data-icon="inline-start" />
-          ) : (
-            <CopyIcon data-icon="inline-start" />
-          )}
-          {copyState === "copied"
-            ? "Copied"
-            : copyState === "error"
-              ? "Retry"
-              : "Copy"}
-        </Button>
+        <CodeBlockCopyButton code={code} />
       </div>
       <pre className="overflow-x-auto bg-transparent px-4 py-3 text-[13px] leading-6 text-foreground">
         {highlightedContent || <code>{code}</code>}
@@ -314,119 +386,6 @@ function getCodeBlockChild(children: React.ReactNode) {
   return child
 }
 
-const STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS = 16
-
-type StreamingMarkdownChunk = {
-  key: string
-  text: string
-}
-
-function markdownFenceInfo(line: string) {
-  const match = line.match(/^ {0,3}(`{3,}|~{3,})/)
-  if (!match) return null
-
-  const marker = match[1] || ""
-  return {
-    char: marker[0] || "`",
-    length: marker.length,
-  }
-}
-
-function closesMarkdownFence(
-  line: string,
-  fence: { char: string; length: number }
-) {
-  const escaped = fence.char === "`" ? "`" : "~"
-  const pattern = new RegExp(`^ {0,3}${escaped}{${fence.length},}\\s*$`)
-  return pattern.test(line)
-}
-
-function isSafeStreamingMarkdownBoundaryLine(line: string) {
-  const trimmed = line.trim()
-  if (!trimmed) return true
-  if (/^#{1,6}(\s|$)/.test(trimmed)) return true
-  if (/^(?:\*\s*){3,}$/.test(trimmed)) return true
-  if (/^(?:-\s*){3,}$/.test(trimmed)) return true
-  if (/^(?:_\s*){3,}$/.test(trimmed)) return true
-
-  return false
-}
-
-function splitStreamingMarkdownText(
-  text: string
-): Array<StreamingMarkdownChunk> {
-  const chunks: Array<StreamingMarkdownChunk> = []
-  let chunkStart = 0
-  let lineStart = 0
-  let fence: { char: string; length: number } | null = null
-
-  const pushChunk = (end: number) => {
-    if (end <= chunkStart) return
-
-    const chunkText = text.slice(chunkStart, end)
-    if (chunkText.length === 0) return
-
-    chunks.push({
-      key: `stable:${chunks.length}`,
-      text: chunkText,
-    })
-    chunkStart = end
-  }
-
-  while (lineStart < text.length) {
-    const newlineIndex = text.indexOf("\n", lineStart)
-    const lineEnd = newlineIndex === -1 ? text.length : newlineIndex + 1
-    const line = text.slice(lineStart, lineEnd)
-    const lineWithoutNewline = line.replace(/\n$/, "")
-
-    if (fence) {
-      if (closesMarkdownFence(lineWithoutNewline, fence)) {
-        fence = null
-        pushChunk(lineEnd)
-      }
-    } else {
-      const nextFence = markdownFenceInfo(lineWithoutNewline)
-      if (nextFence) {
-        fence = nextFence
-      } else if (isSafeStreamingMarkdownBoundaryLine(lineWithoutNewline)) {
-        pushChunk(lineEnd)
-      }
-    }
-
-    if (newlineIndex === -1) break
-    lineStart = lineEnd
-  }
-
-  if (chunkStart < text.length) {
-    chunks.push({
-      key: `active:${chunks.length}`,
-      text: text.slice(chunkStart),
-    })
-  }
-
-  return chunks
-}
-
-const MarkdownChunk = React.memo(function MarkdownChunk({
-  text,
-}: {
-  text: string
-}) {
-  return (
-    <MemoizedReactMarkdown
-      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-      components={MARKDOWN_COMPONENTS}
-    >
-      {text}
-    </MemoizedReactMarkdown>
-  )
-})
-
-function shouldLogMarkdownProfile() {
-  if (typeof window === "undefined") return false
-  return window.localStorage.getItem("phi-profile-markdown") === "1"
-}
-
 const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming = false,
   text,
@@ -434,34 +393,22 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming?: boolean
   text: string
 }) {
-  const renderStartedAt =
-    typeof performance !== "undefined" ? performance.now() : 0
-  const chunks = streaming ? splitStreamingMarkdownText(text) : null
-
-  React.useLayoutEffect(() => {
-    if (!streaming || !shouldLogMarkdownProfile()) {
-      return
-    }
-
-    const duration = performance.now() - renderStartedAt
-    if (duration < STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS) return
-
-    console.debug("[phi] streaming markdown render", {
-      chunks: chunks?.length ?? 1,
-      durationMs: Math.round(duration),
-      length: text.length,
-    })
-  })
+  if (streaming) {
+    return (
+      <div className="text-sm leading-6 wrap-break-word whitespace-pre-wrap">
+        {text}
+      </div>
+    )
+  }
 
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
-      {chunks ? (
-        chunks.map((chunk) => (
-          <MarkdownChunk key={chunk.key} text={chunk.text} />
-        ))
-      ) : (
-        <MarkdownChunk text={text} />
-      )}
+      <MemoizedReactMarkdown
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {text}
+      </MemoizedReactMarkdown>
     </div>
   )
 })
