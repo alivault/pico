@@ -83,7 +83,10 @@ type UseAppShellSessionSyncOptions = {
   pendingRouteSessionPathRef: React.MutableRefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
-  setHiddenThinkingPreview: (value: string) => void
+  setHiddenThinkingPreview: (
+    value: string,
+    options?: { preserveExisting?: boolean }
+  ) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
   setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
   setComposerStreaming: (streaming: boolean) => void
@@ -656,7 +659,13 @@ export function useAppShellSessionSync({
             "")
 
         sessionStateRef.current = nextState
-        setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "")
+        setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
+          preserveExisting: Boolean(
+            previousState.streaming &&
+            nextState.streaming &&
+            !nextState.hiddenThinkingPreview
+          ),
+        })
         if (previousState.contextUsage !== nextState.contextUsage) {
           setComposerContextUsage(nextState.contextUsage)
         }

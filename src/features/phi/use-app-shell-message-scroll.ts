@@ -158,7 +158,7 @@ function viewportStateSnapshot(
 
 const MESSAGE_VIEWPORT_TOP_PADDING = 8
 
-type StreamingScrollMode = "bottom" | "assistant-message-cap"
+type StreamingScrollMode = "bottom" | "assistant-message-cap" | "tool-reveal"
 type FollowScrollPreference = "auto" | "bottom"
 
 function scrollViewportToBottom(
@@ -235,6 +235,39 @@ function scrollViewportToAssistantMessageCap(
   })
 }
 
+function scrollViewportToRevealElement(
+  viewport: HTMLDivElement,
+  element: HTMLElement
+) {
+  const viewportTop = viewport.scrollTop
+  const viewportBottom = viewportTop + viewport.clientHeight
+  const elementTop = element.offsetTop
+  const elementBottom = elementTop + element.offsetHeight
+  const bottomPadding = 16
+  const maxScrollTop = Math.max(
+    0,
+    viewport.scrollHeight - viewport.clientHeight
+  )
+
+  if (elementBottom > viewportBottom - bottomPadding) {
+    viewport.scrollTo({
+      top: Math.min(
+        maxScrollTop,
+        elementBottom - viewport.clientHeight + bottomPadding
+      ),
+      behavior: "auto",
+    })
+    return
+  }
+
+  if (elementTop < viewportTop + MESSAGE_VIEWPORT_TOP_PADDING) {
+    viewport.scrollTo({
+      top: Math.max(0, elementTop - MESSAGE_VIEWPORT_TOP_PADDING),
+      behavior: "auto",
+    })
+  }
+}
+
 function isScrollUpKey(event: KeyboardEvent) {
   return (
     event.key === "ArrowUp" ||
@@ -277,6 +310,7 @@ export function useAppShellMessageScroll({
   const followMessagesRef = React.useRef(true)
   const followScrollPreferenceRef = React.useRef<FollowScrollPreference>("auto")
   const streamingScrollModeRef = React.useRef<StreamingScrollMode>("bottom")
+  const lastRevealedToolBlockKeyRef = React.useRef("")
   const previousStreamingRef = React.useRef(sessionState.streaming)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
@@ -320,8 +354,19 @@ export function useAppShellMessageScroll({
           }
         }
 
-        streamingScrollModeRef.current = "bottom"
-        scrollViewportToBottom(viewport, "auto")
+        if (latestBlockType === "tool" && latestBlock) {
+          const blockKey =
+            latestBlock.dataset.conversationAssistantBlockKey || ""
+          if (blockKey && blockKey !== lastRevealedToolBlockKeyRef.current) {
+            lastRevealedToolBlockKeyRef.current = blockKey
+            streamingScrollModeRef.current = "tool-reveal"
+            scrollViewportToRevealElement(viewport, latestBlock)
+          }
+          rememberViewportLayout(viewport)
+          syncViewportState(viewport)
+          return
+        }
+
         rememberViewportLayout(viewport)
         syncViewportState(viewport)
         return
@@ -343,8 +388,10 @@ export function useAppShellMessageScroll({
         }
       }
 
-      streamingScrollModeRef.current = "bottom"
-      scrollViewportToBottom(viewport, "auto")
+      if (shouldForceBottom) {
+        streamingScrollModeRef.current = "bottom"
+        scrollViewportToBottom(viewport, "auto")
+      }
       rememberViewportLayout(viewport)
       syncViewportState(viewport)
     },
@@ -365,6 +412,7 @@ export function useAppShellMessageScroll({
     followMessagesRef.current = true
     followScrollPreferenceRef.current = "bottom"
     streamingScrollModeRef.current = "bottom"
+    lastRevealedToolBlockKeyRef.current = ""
     scrollViewportToBottom(viewport, "smooth")
   }, [])
 
@@ -485,6 +533,7 @@ export function useAppShellMessageScroll({
     if (!wasStreaming && sessionState.streaming) {
       followScrollPreferenceRef.current = "auto"
       streamingScrollModeRef.current = "bottom"
+      lastRevealedToolBlockKeyRef.current = ""
     }
     previousStreamingRef.current = sessionState.streaming
 
@@ -537,6 +586,7 @@ export function useAppShellMessageScroll({
     followMessagesRef.current = true
     followScrollPreferenceRef.current = "auto"
     streamingScrollModeRef.current = "bottom"
+    lastRevealedToolBlockKeyRef.current = ""
     previousStreamingRef.current = sessionState.streaming
     viewport.scrollTop = viewport.scrollHeight
     rememberViewportLayout(viewport)

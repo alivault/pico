@@ -2607,6 +2607,7 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
 
   const blockProps = {
     "data-conversation-assistant-block": "true",
+    "data-conversation-assistant-block-key": descriptor.blockKey,
     "data-conversation-assistant-block-type": descriptor.blockType,
   }
 
@@ -2631,6 +2632,7 @@ function AssistantExploreBlockGroupView({
   return (
     <div
       data-conversation-assistant-block="true"
+      data-conversation-assistant-block-key={`explore:${blockKeys.join("|")}`}
       data-conversation-assistant-block-type="tool"
     >
       <ExploreToolGroupCard blockKeys={blockKeys} store={store} />

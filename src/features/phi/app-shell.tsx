@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ArrowDownIcon,
   ArrowUpToLineIcon,
+  CheckIcon,
   EllipsisIcon,
   SquarePenIcon,
 } from "lucide-react"
@@ -105,7 +106,6 @@ import {
 } from "@/features/phi/session-done-notifications"
 import {
   AssistantMessagesStoreCard,
-  MessagesWorkingIndicator,
   UserMessageCard,
   assistantMessageHasVisibleBlocks,
   type AssistantMessagesSnapshot,
@@ -1753,6 +1753,24 @@ function sameWorkingState(
   )
 }
 
+function AppShellWorkingIndicatorLabel({
+  fallbackLabel,
+  hiddenThinkingPreviewStore,
+  useHiddenThinkingPreview,
+}: {
+  fallbackLabel: string
+  hiddenThinkingPreviewStore: TextValueStore
+  useHiddenThinkingPreview: boolean
+}) {
+  const hiddenThinkingPreview = useTextValueSnapshot(hiddenThinkingPreviewStore)
+  const visibleLabel =
+    useHiddenThinkingPreview && hiddenThinkingPreview
+      ? hiddenThinkingPreview
+      : fallbackLabel
+
+  return <div className="font-medium text-foreground">{visibleLabel}</div>
+}
+
 function AppShellMessagesWorkingIndicator({
   hiddenThinkingPreviewStore,
   state,
@@ -1762,13 +1780,35 @@ function AppShellMessagesWorkingIndicator({
   state: AppShellWorkingState
   useHiddenThinkingPreview: boolean
 }) {
-  const hiddenThinkingPreview = useTextValueSnapshot(hiddenThinkingPreviewStore)
-  const displayedState =
-    useHiddenThinkingPreview && hiddenThinkingPreview
-      ? { ...state, label: hiddenThinkingPreview }
-      : state
-
-  return <MessagesWorkingIndicator state={displayedState} />
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex w-full items-start gap-3 rounded-xl px-1 py-1 text-sm text-muted-foreground"
+    >
+      <span className="mt-0.5 inline-flex items-center justify-center">
+        {state.done ? (
+          <CheckIcon className="size-4 text-emerald-600" />
+        ) : (
+          <Spinner />
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        {state.done ? (
+          <div className="font-medium text-foreground">Done</div>
+        ) : (
+          <AppShellWorkingIndicatorLabel
+            fallbackLabel={state.label}
+            hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+            useHiddenThinkingPreview={useHiddenThinkingPreview}
+          />
+        )}
+        {state.summary ? (
+          <div className="truncate text-muted-foreground">{state.summary}</div>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 function AppShellTabsList({
@@ -3457,7 +3497,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     []
   )
   const setHiddenThinkingPreview = React.useCallback(
-    (value: string) => {
+    (value: string, options?: { preserveExisting?: boolean }) => {
+      if (options?.preserveExisting && !value) return
       hiddenThinkingPreviewStore.setValue(value)
     },
     [hiddenThinkingPreviewStore]
