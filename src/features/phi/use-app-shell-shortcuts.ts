@@ -15,6 +15,7 @@ type ShortcutActions = {
   openDeleteDialogForCurrentSession: () => void
   openForkDialog: () => void | Promise<unknown>
   openRenameDialog: () => void
+  openSessionsDialog: () => void
   openSettingsDialog: () => void
   openTreeDialog: () => void | Promise<unknown>
   runCompact: () => void | Promise<unknown>
@@ -42,6 +43,7 @@ type UseAppShellShortcutsOptions = {
   lastEscapePressedAtRef: React.MutableRefObject<number>
   renameOpenRef: React.MutableRefObject<boolean>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
+  sessionsOpenRef: React.MutableRefObject<boolean>
   settingsOpenRef: React.MutableRefObject<boolean>
   shortcutActionsRef: React.MutableRefObject<ShortcutActions>
   shortcutStateRef: React.MutableRefObject<AppShellShortcutState>
@@ -88,6 +90,7 @@ export function useAppShellShortcuts({
   lastEscapePressedAtRef,
   renameOpenRef,
   sessionSearchInputRef,
+  sessionsOpenRef,
   settingsOpenRef,
   shortcutActionsRef,
   shortcutStateRef,
@@ -110,6 +113,7 @@ export function useAppShellShortcuts({
         deleteOpenRef.current ||
         forkOpenRef.current ||
         treeOpenRef.current ||
+        sessionsOpenRef.current ||
         settingsOpenRef.current ||
         pendingUiRequestOpenRef.current
       const modalOpen = blockingModalOpen || commandPaletteOpen
@@ -308,7 +312,7 @@ export function useAppShellShortcuts({
 
       if (key === "s" && !event.shiftKey) {
         event.preventDefault()
-        shortcutActionsRef.current.focusSessionSearch()
+        shortcutActionsRef.current.openSessionsDialog()
         return
       }
 
@@ -398,6 +402,7 @@ export function useAppShellShortcuts({
     lastEscapePressedAtRef,
     renameOpenRef,
     sessionSearchInputRef,
+    sessionsOpenRef,
     settingsOpenRef,
     shortcutActionsRef,
     shortcutStateRef,

@@ -66,6 +66,10 @@ import {
   type AppShellCommandPaletteHandle,
 } from "@/features/phi/app-shell-command-palette"
 import {
+  AppShellSessionsDialogController,
+  type AppShellSessionsDialogHandle,
+} from "@/features/phi/app-shell-sessions-dialog"
+import {
   AppShellSettingsDialogController,
   type AppShellSettingsDialogHandle,
 } from "@/features/phi/app-shell-settings-dialog"
@@ -3098,6 +3102,7 @@ type AppShellSessionWorkspaceHandle = {
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteOldDirectorySessionsDialog: (directory: string) => void
   openRenameDialogForEntry: (entry: SessionListEntry) => void
+  openSessionsDialog: () => void
   openSettingsDialog: () => void
   selectSession: (
     nextSessionId?: string,
@@ -3554,6 +3559,10 @@ const AppShellSessionWorkspace = React.forwardRef<
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
   const treeOpenRef = React.useRef(false)
+  const sessionsDialogRef = React.useRef<AppShellSessionsDialogHandle | null>(
+    null
+  )
+  const sessionsOpenRef = React.useRef(false)
   const settingsDialogRef = React.useRef<AppShellSettingsDialogHandle | null>(
     null
   )
@@ -4021,12 +4030,20 @@ const AppShellSessionWorkspace = React.forwardRef<
   }, [])
 
   const openCommandPalette = () => {
+    sessionsDialogRef.current?.close()
     settingsDialogRef.current?.close()
     commandPaletteRef.current?.open()
   }
 
+  const openSessionsDialog = () => {
+    commandPaletteRef.current?.close()
+    settingsDialogRef.current?.close()
+    sessionsDialogRef.current?.open()
+  }
+
   const openSettingsDialog = () => {
     commandPaletteRef.current?.close()
+    sessionsDialogRef.current?.close()
     settingsDialogRef.current?.open()
   }
 
@@ -4312,6 +4329,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         ...baseSidebarDirectories,
         ...sessionsEventDirectories,
         sessionState.cwd || "",
+        storedDraftDirectory,
         ...Array.from(directoryStateByPath.keys()),
         ...Object.values(directoryIndexes).flatMap((entries) =>
           entries.map((entry) => entry.cwd || "")
@@ -4323,8 +4341,16 @@ const AppShellSessionWorkspace = React.forwardRef<
       directoryStateByPath,
       sessionState.cwd,
       sessionsEventDirectories,
+      storedDraftDirectory,
     ]
   )
+
+  const sessionsDialogDirectory =
+    sessionState.cwd?.trim() ||
+    (baseSidebarDirectories.length > 0
+      ? (baseSidebarDirectories[0] ?? "")
+      : storedDraftDirectory) ||
+    defaultNewSessionDirectory
 
   const rememberRecentDirectory = (directory: string) => {
     const normalizedDirectory = directory.trim()
@@ -4789,13 +4815,13 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSelect: createSession,
       },
       {
-        id: "search-sessions",
-        group: "Sidebar",
-        title: "Search sessions",
-        description: "Search and jump through sessions in the sidebar",
+        id: "open-sessions",
+        group: "Sessions",
+        title: "Open sessions",
+        description: "Search and switch sessions",
         shortcut: "Ctrl+S",
-        keywords: ["sidebar", "filter", "search", "switch"],
-        onSelect: focusSessionSearch,
+        keywords: ["session", "search", "switch", "jump"],
+        onSelect: openSessionsDialog,
       },
       {
         id: "focus-prompt",
@@ -4990,6 +5016,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openDeleteDialogForCurrentSession,
     openForkDialog,
     openRenameDialog,
+    openSessionsDialog,
     openSettingsDialog,
     openTreeDialog,
     runCompact,
@@ -5032,6 +5059,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     lastEscapePressedAtRef,
     renameOpenRef,
     sessionSearchInputRef,
+    sessionsOpenRef,
     settingsOpenRef,
     shortcutActionsRef,
     shortcutStateRef,
@@ -5069,6 +5097,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       openDeleteDialog,
       openDeleteOldDirectorySessionsDialog,
       openRenameDialogForEntry,
+      openSessionsDialog,
       openSettingsDialog,
       selectSession: handleSelectSession,
     },
@@ -5087,6 +5116,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         openDeleteOldDirectorySessionsDialog,
       openRenameDialogForEntry:
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
+      openSessionsDialog: actions?.openSessionsDialog ?? openSessionsDialog,
       openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
       selectSession: actions?.selectSession ?? handleSelectSession,
     }
@@ -5098,6 +5128,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openDeleteDialog,
     openDeleteOldDirectorySessionsDialog,
     openRenameDialogForEntry,
+    openSessionsDialog,
     openSettingsDialog,
   ])
 
@@ -5181,15 +5212,20 @@ const AppShellSessionWorkspace = React.forwardRef<
           handleSessionDoneDesktopNotificationsEnabledChange
         }
         onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
+        onSessionDialogSelect={handleSelectSession}
         onThemeChange={handleThemeChange}
         recentDirectoriesStore={recentDirectoriesStore}
         renameDialogRef={renameDialogRef}
         renameOpenRef={renameOpenRef}
         renameSessionPath={renameSessionPath}
         sessionCwd={sessionState.cwd}
+        sessionsDialogDirectory={sessionsDialogDirectory}
+        sessionsDialogRef={sessionsDialogRef}
+        sessionsOpenRef={sessionsOpenRef}
         sessionStore={sessionStore}
         settingsDialogRef={settingsDialogRef}
         settingsOpenRef={settingsOpenRef}
+        sidebarStore={sidebarStore}
         treeDialogRef={treeDialogRef}
         treeOpenRef={treeOpenRef}
         uiRequestDialogRef={uiRequestDialogRef}
@@ -5454,6 +5490,10 @@ type AppShellFloatingControllersProps = {
   onHideToolBlocksChange: (hidden: boolean) => void
   onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
   onSessionDoneSoundEnabledChange: (enabled: boolean) => void
+  onSessionDialogSelect: (
+    sessionId?: string,
+    options?: SelectSessionNavigationOptions
+  ) => void
   onThemeChange: (value: ThemeMode) => void
   recentDirectoriesStore: ValueStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
@@ -5462,9 +5502,13 @@ type AppShellFloatingControllersProps = {
     typeof RenameSessionDialogController
   >["onRenameSession"]
   sessionCwd?: string
+  sessionsDialogDirectory: string
+  sessionsDialogRef: React.RefObject<AppShellSessionsDialogHandle | null>
+  sessionsOpenRef: React.MutableRefObject<boolean>
   sessionStore: ValueStore<SessionState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.MutableRefObject<boolean>
+  sidebarStore: AppShellSidebarStore
   treeDialogRef: React.RefObject<AppShellTreeDialogHandle | null>
   treeOpenRef: React.MutableRefObject<boolean>
   uiRequestDialogRef: React.RefObject<AppShellUiRequestDialogHandle | null>
@@ -5489,6 +5533,67 @@ const AppShellCommandPaletteHost = React.memo(
         onCommandError={(error) => {
           toast.error(
             error instanceof Error ? error.message : "Failed to run command"
+          )
+        }}
+      />
+    )
+  }
+)
+
+const AppShellSessionsDialogHost = React.memo(
+  function AppShellSessionsDialogHost({
+    activeSessionId,
+    knownDirectories,
+    sessionsDialogDirectory,
+    sessionsDialogRef,
+    sessionsOpenRef,
+    sidebarStore,
+    viewerContextId,
+    deleteSessions,
+    onSessionDialogSelect,
+    renameSessionPath,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "activeSessionId"
+    | "knownDirectories"
+    | "sessionsDialogDirectory"
+    | "sessionsDialogRef"
+    | "sessionsOpenRef"
+    | "sidebarStore"
+    | "viewerContextId"
+    | "deleteSessions"
+    | "onSessionDialogSelect"
+    | "renameSessionPath"
+  >) {
+    const sessionsDialogSnapshot = useAppShellSidebarValue(
+      sidebarStore,
+      (snapshot) => ({
+        activeSessionId:
+          snapshot.state.sessionsEvent?.activeSessionId || activeSessionId,
+        activeSessionPath:
+          snapshot.state.sessionsEvent?.activeSessionPath || "",
+        directorySessionsByPath: snapshot.derived.sidebarDirectoryIndexes,
+        sessionStatusByKey: snapshot.state.sidebarSessionStatusByKey,
+      })
+    )
+
+    return (
+      <AppShellSessionsDialogController
+        ref={sessionsDialogRef}
+        openStateRef={sessionsOpenRef}
+        viewerContextId={viewerContextId}
+        currentDirectory={sessionsDialogDirectory}
+        knownDirectories={knownDirectories}
+        directorySessionsByPath={sessionsDialogSnapshot.directorySessionsByPath}
+        sessionStatusByKey={sessionsDialogSnapshot.sessionStatusByKey}
+        activeSessionId={sessionsDialogSnapshot.activeSessionId}
+        activeSessionPath={sessionsDialogSnapshot.activeSessionPath}
+        onSelectSession={onSessionDialogSelect}
+        onRenameSession={renameSessionPath}
+        onDeleteSession={deleteSessions}
+        onError={(error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to load sessions"
           )
         }}
       />
@@ -5776,15 +5881,20 @@ const AppShellFloatingControllers = React.memo(
     onHideToolBlocksChange,
     onSessionDoneDesktopNotificationsEnabledChange,
     onSessionDoneSoundEnabledChange,
+    onSessionDialogSelect,
     onThemeChange,
     recentDirectoriesStore,
     renameDialogRef,
     renameOpenRef,
     renameSessionPath,
     sessionCwd,
+    sessionsDialogDirectory,
+    sessionsDialogRef,
+    sessionsOpenRef,
     sessionStore,
     settingsDialogRef,
     settingsOpenRef,
+    sidebarStore,
     treeDialogRef,
     treeOpenRef,
     uiRequestDialogRef,
@@ -5797,6 +5907,19 @@ const AppShellFloatingControllers = React.memo(
           commandPaletteCommandsRef={commandPaletteCommandsRef}
           commandPaletteOpenRef={commandPaletteOpenRef}
           commandPaletteRef={commandPaletteRef}
+        />
+
+        <AppShellSessionsDialogHost
+          activeSessionId={activeSessionId}
+          knownDirectories={knownDirectories}
+          sessionsDialogDirectory={sessionsDialogDirectory}
+          sessionsDialogRef={sessionsDialogRef}
+          sessionsOpenRef={sessionsOpenRef}
+          sidebarStore={sidebarStore}
+          viewerContextId={viewerContextId}
+          deleteSessions={deleteSessions}
+          onSessionDialogSelect={onSessionDialogSelect}
+          renameSessionPath={renameSessionPath}
         />
 
         <AppShellAddDirectoryDialogHost
