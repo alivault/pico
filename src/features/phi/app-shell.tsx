@@ -1202,12 +1202,6 @@ function sameRenderConversationGroupDescriptor(
     return false
   }
 
-  if (left.itemKeys.length !== right.itemKeys.length) return false
-
-  for (let index = 0; index < left.itemKeys.length; index += 1) {
-    if (left.itemKeys[index] !== right.itemKeys[index]) return false
-  }
-
   return true
 }
 
@@ -1245,11 +1239,35 @@ type ConversationItemsSnapshot = {
   revision: number
 }
 
+type ConversationGroupSubscription = {
+  hideThinking: boolean
+  hideToolBlocks: boolean
+  groups: Array<RenderConversationGroupDescriptor>
+  listener: () => void
+}
+
+type ConversationAssistantGroupItemsSubscription = {
+  groupKey: string
+  itemKeys: Array<string>
+  listener: () => void
+}
+
 type ConversationItemsStore = {
   getSnapshot: () => ConversationItemsSnapshot
+  getAssistantGroupItemKeys: (groupKey: string) => Array<string>
   getItem: (key: string) => ConversationItem | undefined
   setItems: (items: Array<ConversationItem>) => void
   subscribe: (listener: () => void) => () => void
+  subscribeGroups: (options: {
+    hideThinking: boolean
+    hideToolBlocks: boolean
+    groups: Array<RenderConversationGroupDescriptor>
+    listener: () => void
+  }) => () => void
+  subscribeAssistantGroupItems: (
+    groupKey: string,
+    listener: () => void
+  ) => () => void
   subscribeItems: (keys: Array<string>, listener: () => void) => () => void
 }
 
@@ -1277,6 +1295,10 @@ function createConversationItemsStore(
   }
   const listeners = new Set<() => void>()
   const itemListeners = new Map<string, Set<() => void>>()
+  const groupSubscriptions = new Set<ConversationGroupSubscription>()
+  const assistantGroupItemsSubscriptions =
+    new Set<ConversationAssistantGroupItemsSubscription>()
+  const assistantGroupItemKeysByGroup = new Map<string, Array<string>>()
 
   const notifyItemListeners = (key: string) => {
     const listenersForItem = itemListeners.get(key)
@@ -1285,8 +1307,34 @@ function createConversationItemsStore(
     for (const listener of listenersForItem) listener()
   }
 
+  const computeAssistantGroupItemKeys = (groupKey: string) => {
+    const itemKeys: Array<string> = []
+    const startIndex = snapshot.items.findIndex(
+      (item, index) => conversationItemKey(item, index) === groupKey
+    )
+    if (startIndex < 0) return itemKeys
+
+    for (let index = startIndex; index < snapshot.items.length; index += 1) {
+      const item = snapshot.items[index]
+      if (!item || item.kind !== "assistant") break
+      itemKeys.push(conversationItemKey(item, index))
+    }
+
+    return itemKeys
+  }
+
+  const getAssistantGroupItemKeys = (groupKey: string) => {
+    const cached = assistantGroupItemKeysByGroup.get(groupKey)
+    const nextItemKeys = computeAssistantGroupItemKeys(groupKey)
+    if (cached && sameStringArray(cached, nextItemKeys)) return cached
+
+    assistantGroupItemKeysByGroup.set(groupKey, nextItemKeys)
+    return nextItemKeys
+  }
+
   return {
     getSnapshot: () => snapshot,
+    getAssistantGroupItemKeys,
     getItem: (key) => snapshot.itemByKey.get(key),
     setItems: (items) => {
       if (snapshot.items === items) return
@@ -1311,6 +1359,31 @@ function createConversationItemsStore(
         }
       }
 
+      for (const subscription of groupSubscriptions) {
+        const nextGroups = groupConversationItemsForRender({
+          items,
+          hideThinking: subscription.hideThinking,
+          hideToolBlocks: subscription.hideToolBlocks,
+        })
+        const groups = reconcileRenderConversationGroupDescriptors(
+          subscription.groups,
+          nextGroups
+        )
+
+        if (groups !== subscription.groups) {
+          subscription.groups = groups
+          subscription.listener()
+        }
+      }
+
+      for (const subscription of assistantGroupItemsSubscriptions) {
+        const nextItemKeys = getAssistantGroupItemKeys(subscription.groupKey)
+        if (sameStringArray(subscription.itemKeys, nextItemKeys)) continue
+
+        subscription.itemKeys = nextItemKeys
+        subscription.listener()
+      }
+
       for (const listener of listeners) listener()
       for (const key of changedItemKeys) notifyItemListeners(key)
     },
@@ -1318,6 +1391,29 @@ function createConversationItemsStore(
       listeners.add(listener)
       return () => {
         listeners.delete(listener)
+      }
+    },
+    subscribeGroups: ({ hideThinking, hideToolBlocks, groups, listener }) => {
+      const subscription: ConversationGroupSubscription = {
+        hideThinking,
+        hideToolBlocks,
+        groups,
+        listener,
+      }
+      groupSubscriptions.add(subscription)
+      return () => {
+        groupSubscriptions.delete(subscription)
+      }
+    },
+    subscribeAssistantGroupItems: (groupKey, listener) => {
+      const subscription: ConversationAssistantGroupItemsSubscription = {
+        groupKey,
+        itemKeys: getAssistantGroupItemKeys(groupKey),
+        listener,
+      }
+      assistantGroupItemsSubscriptions.add(subscription)
+      return () => {
+        assistantGroupItemsSubscriptions.delete(subscription)
       }
     },
     subscribeItems: (keys, listener) => {
@@ -1432,16 +1528,13 @@ function useConversationGroupDescriptors({
     return groups
   }
 
-  const subscribe = (listener: () => void) => {
-    let currentGroups = getSnapshot()
-    return store.subscribe(() => {
-      const nextGroups = getSnapshot()
-      if (nextGroups === currentGroups) return
-
-      currentGroups = nextGroups
-      listener()
+  const subscribe = (listener: () => void) =>
+    store.subscribeGroups({
+      hideThinking,
+      hideToolBlocks,
+      groups: getSnapshot(),
+      listener,
     })
-  }
 
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -1882,9 +1975,9 @@ function ConversationGroupView({
   return (
     <ConversationAssistantGroupView
       className={className}
+      groupKey={group.key}
       hideThinking={hideThinking}
       hideToolBlocks={hideToolBlocks}
-      itemKeys={group.itemKeys}
       store={store}
     />
   )
@@ -1909,19 +2002,34 @@ function ConversationUserGroupView({
   )
 }
 
+function useConversationAssistantGroupItemKeys(
+  store: ConversationItemsStore,
+  groupKey: string
+) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeAssistantGroupItems(groupKey, listener),
+      [groupKey, store]
+    ),
+    () => store.getAssistantGroupItemKeys(groupKey),
+    () => store.getAssistantGroupItemKeys(groupKey)
+  )
+}
+
 function ConversationAssistantGroupView({
   className,
+  groupKey,
   hideThinking,
   hideToolBlocks,
-  itemKeys,
   store,
 }: {
   className: string
+  groupKey: string
   hideThinking: boolean
   hideToolBlocks: boolean
-  itemKeys: Array<string>
   store: ConversationItemsStore
 }) {
+  const itemKeys = useConversationAssistantGroupItemKeys(store, groupKey)
   const assistantMessagesStoreRef =
     React.useRef<MutableAssistantMessagesStore | null>(null)
   if (!assistantMessagesStoreRef.current) {
