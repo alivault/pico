@@ -31,7 +31,6 @@ import type {
 import type { AppCommand } from "@/features/pi-web/app-shell-command-palette"
 import type { ComposerContextUsageStore } from "@/features/pi-web/composer-context-usage-indicator"
 import type { ComposerPanelHandle } from "@/features/pi-web/composer-panel"
-import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -2203,6 +2202,7 @@ const AppShellComposerController = React.memo(
     actionsRef,
     composerPanelRef,
     contextUsageStore,
+    displaySettingsStore,
     fileInputRef,
     sessionStore,
     store,
@@ -2210,6 +2210,7 @@ const AppShellComposerController = React.memo(
     actionsRef: React.MutableRefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
     contextUsageStore: ComposerContextUsageStore
+    displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
     fileInputRef: React.RefObject<HTMLInputElement | null>
     sessionStore: ValueStore<SessionState>
     store: ValueStore<AppShellComposerSnapshot>
@@ -2325,13 +2326,13 @@ const AppShellComposerController = React.memo(
         composerSyncNonce={snapshot.composerSyncNonce}
         centerMessages={snapshot.centerMessages}
         contextUsageStore={contextUsageStore}
+        displaySettingsStore={displaySettingsStore}
         sessionStore={sessionStore}
         isSubmitting={snapshot.isSubmitting}
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
         disabled={snapshot.disabled}
         fileInputRef={fileInputRef}
-        slashCommands={snapshot.slashCommands}
         onComposerTextChange={onComposerTextChange}
         onPickImages={onPickImages}
         onRemoveComposerImage={onRemoveComposerImage}
@@ -2725,7 +2726,6 @@ type AppShellComposerSnapshot = {
   disabled: boolean
   isStreaming: boolean
   isSubmitting: boolean
-  slashCommands: Array<SlashCommandDescriptor>
   viewerContextId: string
 }
 
@@ -2772,7 +2772,6 @@ function createInitialAppShellComposerSnapshot(
     disabled: false,
     isStreaming: false,
     isSubmitting: false,
-    slashCommands: [],
     viewerContextId,
   }
 }
@@ -3532,7 +3531,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const sessionState = useSelectedValueStore(
     sessionStore,
     (currentSessionState) => ({
-      availableSkills: currentSessionState.availableSkills,
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       firstMessage: currentSessionState.firstMessage,
@@ -4383,72 +4381,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     setTheme(value)
   }
 
-  const slashCommands: Array<SlashCommandDescriptor> = (() => [
-    {
-      kind: "builtin",
-      name: "compact",
-      description: "Summarize the session to reduce context size",
-    },
-    {
-      kind: "builtin",
-      name: "delete",
-      description: "Delete the current session",
-    },
-    {
-      kind: "builtin",
-      name: "fork",
-      description: "Create a new session from a previous message",
-    },
-    {
-      kind: "builtin",
-      name: "tree",
-      description: "Navigate to an earlier point in the current session tree",
-    },
-    {
-      kind: "builtin",
-      name: "rename",
-      description: "Rename the current session",
-    },
-    ...(sessionState.hideThinkingBlock
-      ? [
-          {
-            kind: "builtin" as const,
-            name: "show-thinking",
-            description: "Show assistant thinking blocks",
-          },
-        ]
-      : [
-          {
-            kind: "builtin" as const,
-            name: "hide-thinking",
-            description: "Hide assistant thinking blocks",
-          },
-        ]),
-    ...(hideToolBlocks
-      ? [
-          {
-            kind: "builtin" as const,
-            name: "show-tools",
-            description: "Show assistant tool calls",
-          },
-        ]
-      : [
-          {
-            kind: "builtin" as const,
-            name: "hide-tools",
-            description: "Hide assistant tool calls",
-          },
-        ]),
-    ...sessionState.availableSkills.map((skill) => ({
-      kind: "skill" as const,
-      name: `skill:${skill.name}` as const,
-      skillName: skill.name,
-      description: skill.description || "Use this skill",
-      scope: skill.scope,
-      source: skill.source,
-    })),
-  ])()
-
   const composerSnapshot = {
     activeSessionId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
@@ -4461,7 +4393,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     disabled: composerDisabled,
     isStreaming: composerDisabled ? false : sessionStateRef.current.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
-    slashCommands,
     viewerContextId,
   } satisfies AppShellComposerSnapshot
 
@@ -4896,6 +4827,7 @@ const AppShellSessionWorkspace = React.forwardRef<
               actionsRef={composerActionsRef}
               composerPanelRef={composerPanelRef}
               contextUsageStore={contextUsageStore}
+              displaySettingsStore={displaySettingsStore}
               fileInputRef={fileInputRef}
               sessionStore={sessionStore}
               store={composerStore}

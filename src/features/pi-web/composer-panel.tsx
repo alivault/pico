@@ -46,6 +46,16 @@ export type ComposerPanelHandle = {
 
 type ImageFileSelection = FileList | Array<File> | null
 
+type ComposerSessionStore = {
+  getSnapshot: () => SessionState
+  subscribe: (listener: () => void) => () => void
+}
+
+type ComposerDisplaySettingsStore = {
+  getSnapshot: () => { hideToolBlocks: boolean }
+  subscribe: (listener: () => void) => () => void
+}
+
 type ComposerPanelProps = {
   currentPendingMessages: Array<PendingComposerMessage>
   composerImages: Array<PromptImage>
@@ -54,16 +64,13 @@ type ComposerPanelProps = {
   composerSyncNonce: number
   centerMessages: boolean
   contextUsageStore: ComposerContextUsageStore
-  sessionStore: {
-    getSnapshot: () => SessionState
-    subscribe: (listener: () => void) => () => void
-  }
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
   isSubmitting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
   disabled?: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
-  slashCommands: Array<SlashCommandDescriptor>
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
   onRemoveComposerImage: (index: number) => void
@@ -99,7 +106,8 @@ type ComposerPromptEditorProps = {
   disabled?: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
   promptRef: React.RefObject<HTMLTextAreaElement | null>
-  slashCommands: Array<SlashCommandDescriptor>
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
   onRemoveComposerImage: (index: number) => void
@@ -118,6 +126,137 @@ function selectionIsAtStart(textarea: HTMLTextAreaElement | null) {
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
   return start === 0 && end === 0
+}
+
+function buildComposerSlashCommands({
+  availableSkills,
+  hideThinkingBlock,
+  hideToolBlocks,
+}: {
+  availableSkills: SessionState["availableSkills"]
+  hideThinkingBlock: boolean
+  hideToolBlocks: boolean
+}) {
+  return [
+    {
+      kind: "builtin" as const,
+      name: "compact",
+      description: "Summarize the session to reduce context size",
+    },
+    {
+      kind: "builtin" as const,
+      name: "delete",
+      description: "Delete the current session",
+    },
+    {
+      kind: "builtin" as const,
+      name: "fork",
+      description: "Create a new session from a previous message",
+    },
+    {
+      kind: "builtin" as const,
+      name: "tree",
+      description: "Navigate to an earlier point in the current session tree",
+    },
+    {
+      kind: "builtin" as const,
+      name: "rename",
+      description: "Rename the current session",
+    },
+    ...(hideThinkingBlock
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "show-thinking",
+            description: "Show assistant thinking blocks",
+          },
+        ]
+      : [
+          {
+            kind: "builtin" as const,
+            name: "hide-thinking",
+            description: "Hide assistant thinking blocks",
+          },
+        ]),
+    ...(hideToolBlocks
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "show-tools",
+            description: "Show assistant tool calls",
+          },
+        ]
+      : [
+          {
+            kind: "builtin" as const,
+            name: "hide-tools",
+            description: "Hide assistant tool calls",
+          },
+        ]),
+    ...availableSkills.map((skill) => ({
+      kind: "skill" as const,
+      name: `skill:${skill.name}` as const,
+      skillName: skill.name,
+      description: skill.description || "Use this skill",
+      scope: skill.scope,
+      source: skill.source,
+    })),
+  ] satisfies Array<SlashCommandDescriptor>
+}
+
+function useComposerSlashCommands({
+  displaySettingsStore,
+  sessionStore,
+}: {
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
+}) {
+  const cacheRef = React.useRef<{
+    availableSkills?: SessionState["availableSkills"]
+    commands?: Array<SlashCommandDescriptor>
+    hideThinkingBlock?: boolean
+    hideToolBlocks?: boolean
+  }>({})
+  const subscribe = React.useCallback(
+    (listener: () => void) => {
+      const unsubscribeSession = sessionStore.subscribe(listener)
+      const unsubscribeDisplaySettings =
+        displaySettingsStore.subscribe(listener)
+      return () => {
+        unsubscribeSession()
+        unsubscribeDisplaySettings()
+      }
+    },
+    [displaySettingsStore, sessionStore]
+  )
+  const getSnapshot = () => {
+    const sessionState = sessionStore.getSnapshot()
+    const displaySettings = displaySettingsStore.getSnapshot()
+    const cache = cacheRef.current
+    if (
+      cache.commands &&
+      cache.availableSkills === sessionState.availableSkills &&
+      cache.hideThinkingBlock === sessionState.hideThinkingBlock &&
+      cache.hideToolBlocks === displaySettings.hideToolBlocks
+    ) {
+      return cache.commands
+    }
+
+    const commands = buildComposerSlashCommands({
+      availableSkills: sessionState.availableSkills,
+      hideThinkingBlock: sessionState.hideThinkingBlock,
+      hideToolBlocks: displaySettings.hideToolBlocks,
+    })
+    cacheRef.current = {
+      availableSkills: sessionState.availableSkills,
+      commands,
+      hideThinkingBlock: sessionState.hideThinkingBlock,
+      hideToolBlocks: displaySettings.hideToolBlocks,
+    }
+    return commands
+  }
+
+  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 function getClipboardImageFiles(data: DataTransfer) {
@@ -147,13 +286,13 @@ export const ComposerPanel = React.forwardRef<
     composerSyncNonce,
     centerMessages,
     contextUsageStore,
+    displaySettingsStore,
     sessionStore,
     isSubmitting,
     isStreaming,
     awaitingFirstTurn,
     disabled = false,
     fileInputRef,
-    slashCommands,
     onComposerTextChange,
     onPickImages,
     onRemoveComposerImage,
@@ -231,7 +370,8 @@ export const ComposerPanel = React.forwardRef<
             disabled={disabled}
             fileInputRef={fileInputRef}
             promptRef={promptRef}
-            slashCommands={slashCommands}
+            displaySettingsStore={displaySettingsStore}
+            sessionStore={sessionStore}
             onComposerTextChange={onComposerTextChange}
             onPickImages={onPickImages}
             onRemoveComposerImage={onRemoveComposerImage}
@@ -318,7 +458,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   disabled = false,
   fileInputRef,
   promptRef,
-  slashCommands,
+  displaySettingsStore,
+  sessionStore,
   onComposerTextChange,
   onPickImages,
   onRemoveComposerImage,
@@ -328,6 +469,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   requestPathCompletions,
   requestFileCompletions,
 }: ComposerPromptEditorProps) {
+  const slashCommands = useComposerSlashCommands({
+    displaySettingsStore,
+    sessionStore,
+  })
   const draftTextRef = React.useRef(composerText)
   const draftSkillRef = React.useRef<string | undefined>(composerSkill)
   const selectionRef = React.useRef({
