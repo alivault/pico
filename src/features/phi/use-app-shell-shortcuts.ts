@@ -382,7 +382,12 @@ export function useAppShellShortcuts({
       }
 
       if (key === "x" && !event.shiftKey) {
-        if (isEditableTarget(event.target)) return
+        if (
+          isEditableTarget(event.target) &&
+          !isPromptTextareaTarget(event.target)
+        ) {
+          return
+        }
         if (!sessionHasFile) return
         event.preventDefault()
         shortcutActionsRef.current.openDeleteDialogForCurrentSession()
