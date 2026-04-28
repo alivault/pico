@@ -4035,6 +4035,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     commandPaletteRef.current?.open()
   }
 
+  const closeCommandPalette = () => {
+    commandPaletteRef.current?.close()
+  }
+
   const openSessionsDialog = () => {
     commandPaletteRef.current?.close()
     settingsDialogRef.current?.close()
@@ -5034,6 +5038,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const shortcutActionsRef = useLatestRef({
     createSession,
+    closeCommandPalette,
     focusModelSelector,
     focusPrompt,
     focusSessionSearch,

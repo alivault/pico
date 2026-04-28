@@ -11,6 +11,7 @@ type ShortcutActions = {
   jumpToPreviousMessage: () => void
   openAddDirectoryDialog: () => void
   openCommandPalette: () => void
+  closeCommandPalette: () => void
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteDialogForCurrentSession: () => void
   openForkDialog: () => void | Promise<unknown>
@@ -117,6 +118,11 @@ export function useAppShellShortcuts({
         settingsOpenRef.current ||
         pendingUiRequestOpenRef.current
       const modalOpen = blockingModalOpen || commandPaletteOpen
+      const closeCommandPaletteForShortcut = () => {
+        if (commandPaletteOpen) {
+          shortcutActionsRef.current.closeCommandPalette()
+        }
+      }
 
       const activeElement = document.activeElement
       const activeElementIsConversationViewport =
@@ -240,9 +246,10 @@ export function useAppShellShortcuts({
         !event.shiftKey &&
         key === "enter"
       ) {
-        if (modalOpen || event.defaultPrevented) return
+        if (blockingModalOpen || event.defaultPrevented) return
 
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.focusPrompt()
         return
       }
@@ -285,18 +292,7 @@ export function useAppShellShortcuts({
 
       if (!event.ctrlKey || event.metaKey || event.altKey) return
 
-      if (
-        commandPaletteOpen &&
-        !blockingModalOpen &&
-        key === "," &&
-        !event.shiftKey
-      ) {
-        event.preventDefault()
-        shortcutActionsRef.current.openSettingsDialog()
-        return
-      }
-
-      if (modalOpen) return
+      if (blockingModalOpen) return
 
       if (key === "p" && !event.shiftKey) {
         event.preventDefault()
@@ -306,12 +302,14 @@ export function useAppShellShortcuts({
 
       if (key === "n" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.createSession()
         return
       }
 
       if (key === "s" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.openSessionsDialog()
         return
       }
@@ -319,49 +317,57 @@ export function useAppShellShortcuts({
       if (key === "e" && !event.shiftKey) {
         if (!sessionHasFile) return
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.openRenameDialog()
         return
       }
 
       if (key === "f" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.openForkDialog()
         return
       }
 
       if (key === "d" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.openAddDirectoryDialog()
         return
       }
 
       if (key === "," && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.openSettingsDialog()
         return
       }
 
       if (key === "m" && !event.shiftKey) {
-        if (!sessionHasAvailableModels) return
+        if (!sessionHasAvailableModels && !commandPaletteOpen) return
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.focusModelSelector()
         return
       }
 
       if (key === "t" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.openTreeDialog()
         return
       }
 
       if (key === "g" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.toggleHideThinking()
         return
       }
 
       if (key === "r") {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.cycleThinkingLevel(
           event.shiftKey ? -1 : 1
         )
@@ -370,13 +376,15 @@ export function useAppShellShortcuts({
 
       if (key === "o" && !event.shiftKey) {
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.toggleHideToolBlocks()
         return
       }
 
       if (key === "c" && !event.shiftKey) {
-        if (hasSelectedText(event.target)) return
+        if (!commandPaletteOpen && hasSelectedText(event.target)) return
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         void shortcutActionsRef.current.runCompact()
         return
       }
@@ -390,6 +398,7 @@ export function useAppShellShortcuts({
         }
         if (!sessionHasFile) return
         event.preventDefault()
+        closeCommandPaletteForShortcut()
         shortcutActionsRef.current.openDeleteDialogForCurrentSession()
       }
     }
