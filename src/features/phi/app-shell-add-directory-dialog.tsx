@@ -1,8 +1,8 @@
 import * as React from "react"
 
-import { Button } from "@/components/ui/button"
 import {
   Command,
+  CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,
@@ -10,18 +10,9 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Drawer,
   DrawerContent,
   DrawerDescription,
-  DrawerFooter,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
@@ -68,6 +59,59 @@ function directoryDialogHasExactMatch(
   })
 }
 
+function splitDisplayPath(value: string) {
+  if (!value) return { leading: "", trailing: "" }
+
+  const trimmed = value.replace(/[\\/]+$/, "")
+  if (!trimmed) {
+    return { leading: "", trailing: value }
+  }
+
+  const suffix = value.slice(trimmed.length)
+  const separatorIndex = Math.max(
+    trimmed.lastIndexOf("/"),
+    trimmed.lastIndexOf("\\")
+  )
+
+  if (separatorIndex < 0 || separatorIndex === trimmed.length - 1) {
+    return { leading: "", trailing: `${trimmed}${suffix}` }
+  }
+
+  return {
+    leading: trimmed.slice(0, separatorIndex + 1),
+    trailing: `${trimmed.slice(separatorIndex + 1)}${suffix}`,
+  }
+}
+
+function DirectoryPathLabel({
+  path,
+  prefix,
+}: {
+  path: string
+  prefix?: string
+}) {
+  const displayPath = formatDirectoryDisplayPath(path)
+  const { leading, trailing } = splitDisplayPath(displayPath)
+
+  return (
+    <span className="flex min-w-0 items-center text-foreground">
+      {prefix ? <span className="shrink-0 font-medium">{prefix}</span> : null}
+      {leading ? (
+        <span className="truncate text-muted-foreground">{leading}</span>
+      ) : null}
+      <span className="shrink-0 font-medium">{trailing || displayPath}</span>
+    </span>
+  )
+}
+
+function FooterKbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+      {children}
+    </kbd>
+  )
+}
+
 export type AppShellAddDirectoryDialogHandle = {
   open: () => void
   close: () => void
@@ -83,7 +127,6 @@ type AppShellAddDirectoryDialogProps = {
   currentDirectory?: string
   recentDirectories: Array<string>
   knownDirectories: Array<string>
-  onAddDirectory: () => void
   onAddDirectoryPath: (path: string) => void
 }
 
@@ -96,7 +139,6 @@ export function AppShellAddDirectoryDialog({
   currentDirectory,
   recentDirectories,
   knownDirectories,
-  onAddDirectory,
   onAddDirectoryPath,
 }: AppShellAddDirectoryDialogProps) {
   const isMobile = useIsMobile()
@@ -143,7 +185,11 @@ export function AppShellAddDirectoryDialog({
     knownMatching.length > 0
 
   const directoryPicker = (
-    <Command shouldFilter={false} className="rounded-lg border">
+    <Command
+      shouldFilter={false}
+      loop
+      className="min-h-0 flex-1 rounded-lg border"
+    >
       <CommandInput
         autoFocus={!isMobile}
         value={directoryInput}
@@ -151,11 +197,11 @@ export function AppShellAddDirectoryDialog({
         placeholder="Search or paste a path"
         className="text-base md:text-sm"
       />
-      <CommandList className="max-h-[50vh]">
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
         {!hasDirectoryResults ? (
           <CommandEmpty>
             {directoryQuery
-              ? "No directories found. Press Add to use the typed path."
+              ? "No directories found. Type or paste a path to add it."
               : "No recent or discovered directories yet."}
           </CommandEmpty>
         ) : null}
@@ -166,9 +212,7 @@ export function AppShellAddDirectoryDialog({
               onSelect={() => onAddDirectoryPath(manualPath)}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">
-                  Add {formatDirectoryDisplayPath(manualPath)}
-                </span>
+                <DirectoryPathLabel path={manualPath} prefix="Add " />
                 <span className="truncate text-xs text-muted-foreground">
                   Resolve and add this path to the sidebar.
                 </span>
@@ -185,9 +229,7 @@ export function AppShellAddDirectoryDialog({
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">
-                    {formatDirectoryDisplayPath(directoryPath)}
-                  </span>
+                  <DirectoryPathLabel path={directoryPath} />
                   <span className="truncate text-xs text-muted-foreground">
                     Expand and show it in the sidebar.
                   </span>
@@ -205,9 +247,7 @@ export function AppShellAddDirectoryDialog({
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">
-                    {formatDirectoryDisplayPath(directoryPath)}
-                  </span>
+                  <DirectoryPathLabel path={directoryPath} />
                   <span className="truncate text-xs text-muted-foreground">
                     Use the current Phi working directory.
                   </span>
@@ -224,9 +264,7 @@ export function AppShellAddDirectoryDialog({
                 value={`recent ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <span className="truncate">
-                  {formatDirectoryDisplayPath(directoryPath)}
-                </span>
+                <DirectoryPathLabel path={directoryPath} />
               </CommandItem>
             ))}
           </CommandGroup>
@@ -243,14 +281,23 @@ export function AppShellAddDirectoryDialog({
                 value={`known ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <span className="truncate">
-                  {formatDirectoryDisplayPath(directoryPath)}
-                </span>
+                <DirectoryPathLabel path={directoryPath} />
               </CommandItem>
             ))}
           </CommandGroup>
         ) : null}
       </CommandList>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>↑↓</FooterKbd> Navigate
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>Enter</FooterKbd> Select
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>Esc</FooterKbd> Close
+        </span>
+      </div>
     </Command>
   )
 
@@ -265,43 +312,25 @@ export function AppShellAddDirectoryDialog({
               sidebar.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {directoryPicker}
           </div>
-          <DrawerFooter className="border-t border-border/70">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={onAddDirectory} disabled={!directoryQuery}>
-              Add
-            </Button>
-          </DrawerFooter>
         </DrawerContent>
       </Drawer>
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add directory</DialogTitle>
-          <DialogDescription>
-            Search recent and known directories or add a new path to the
-            sidebar.
-          </DialogDescription>
-        </DialogHeader>
-        {directoryPicker}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={onAddDirectory} disabled={!directoryQuery}>
-            Add
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Add directory"
+      description="Search recent and known directories or add a new path to the sidebar."
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {directoryPicker}
+    </CommandDialog>
   )
 }
 type AppShellAddDirectoryDialogControllerProps = {
@@ -368,9 +397,6 @@ export function AppShellAddDirectoryDialogController({
       currentDirectory={currentDirectory}
       recentDirectories={recentDirectories}
       knownDirectories={knownDirectories}
-      onAddDirectory={() => {
-        void addDirectoryPath(directoryInput)
-      }}
       onAddDirectoryPath={(path) => {
         void addDirectoryPath(path)
       }}
