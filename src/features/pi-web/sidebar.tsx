@@ -1099,7 +1099,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 justify-start text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   onClick={() => {
                     setRenderCount((current) =>
                       Math.min(
