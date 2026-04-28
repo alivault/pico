@@ -7,7 +7,7 @@ import {
   readDirectoryGitCommits,
   readDirectoryGitFiles,
 } from "@/server/git"
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { routeErrorResponse } from "@/server/route-helpers"
 
@@ -24,8 +24,8 @@ export const Route = createFileRoute("/api/git-changes")({
 
         try {
           const { context, activeEntry } =
-            await getPiWebRuntime().resolveRequest(request)
-          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+            await getPhiRuntime().resolveRequest(request)
+          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           if (scope === "files") {
             const files = await readDirectoryGitFiles(cwd)

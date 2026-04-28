@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import type { GitActionResponse } from "@/lib/pi-web-api"
+import type { GitActionResponse } from "@/lib/phi/api"
 import { jsonResponse } from "@/server/http"
 import { pushDirectoryGitChanges } from "@/server/git"
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
@@ -17,8 +17,8 @@ export const Route = createFileRoute("/api/git-push")({
           if (!requestedCwd.trim()) throw new Error("cwd is required")
 
           const { context, activeEntry } =
-            await getPiWebRuntime().resolveRequest(request)
-          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+            await getPhiRuntime().resolveRequest(request)
+          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const result = await pushDirectoryGitChanges(cwd)
           return jsonResponse({

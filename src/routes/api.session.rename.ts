@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/session/rename")({
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/session/rename")({
             path?: unknown
             name?: unknown
           }>(request)
-          return jsonResponse(await getPiWebRuntime().renameSession(body))
+          return jsonResponse(await getPhiRuntime().renameSession(body))
         } catch (error) {
           return routeErrorResponse(error, "Failed to rename session")
         }

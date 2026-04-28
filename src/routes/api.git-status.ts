@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
 import { readDirectoryGitStatus } from "@/server/git"
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { routeErrorResponse } from "@/server/route-helpers"
 
@@ -18,8 +18,8 @@ export const Route = createFileRoute("/api/git-status")({
 
         try {
           const { context, activeEntry } =
-            await getPiWebRuntime().resolveRequest(request)
-          const baseCwd = getPiWebRuntime().getBaseCwd(activeEntry, context)
+            await getPhiRuntime().resolveRequest(request)
+          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           return jsonResponse({
             ok: true,

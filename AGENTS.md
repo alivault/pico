@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file is the repo-specific guide for coding agents working in `pi-web`.
+This file is the repo-specific guide for coding agents working in Phi.
 
 ## What this repo is
 
-This repo contains the current TanStack Start rewrite of the legacy `pi-web` browser app.
+This repo contains the current TanStack Start rewrite of the legacy browser app, now branded as Phi.
 
 Important parity/reference note:
 
@@ -63,51 +63,51 @@ Notes:
 
 ### Main app code
 
-- `src/features/pi-web/app-shell.tsx`
+- `src/features/phi/app-shell.tsx`
   - main application shell coordinator
   - composes most UI orchestration, tabs, command palette actions, and focused hooks/dialog coordinators
-- `src/features/pi-web/use-app-shell-session-sync.ts`
+- `src/features/phi/use-app-shell-session-sync.ts`
   - SSE wiring and session/state sync behavior for the shell
-- `src/features/pi-web/use-app-shell-prompt-mutations.ts`
+- `src/features/phi/use-app-shell-prompt-mutations.ts`
   - prompt submission / abort / queue-related mutations
-- `src/features/pi-web/use-app-shell-session-mutations.ts`
+- `src/features/phi/use-app-shell-session-mutations.ts`
   - session creation, selection-adjacent mutations, and session action flows
-- `src/features/pi-web/use-app-shell-message-scroll.ts`
+- `src/features/phi/use-app-shell-message-scroll.ts`
   - scroll/jump behavior for the conversation pane
-- `src/features/pi-web/use-app-shell-shortcuts.ts`
+- `src/features/phi/use-app-shell-shortcuts.ts`
   - keyboard shortcut handling for the shell
-- `src/features/pi-web/sidebar.tsx`
+- `src/features/phi/sidebar.tsx`
   - directory/session sidebar UI
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
-- `src/features/pi-web/composer-panel.tsx`
+- `src/features/phi/composer-panel.tsx`
   - prompt composer, slash commands, completions, model picker, thinking picker, queue/steer UX
-- `src/features/pi-web/conversation-view.tsx`
+- `src/features/phi/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
-- `src/features/pi-web/app-shell-dialogs.tsx`
+- `src/features/phi/app-shell-dialogs.tsx`
   - thin dialog coordinator for add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
-- `src/features/pi-web/git-panel.tsx`
+- `src/features/phi/git-panel.tsx`
   - git status and changes tab
   - mounts active git sections lazily to avoid unnecessary query/render work
-- `src/features/pi-web/query-keys.ts`
+- `src/features/phi/query-keys.ts`
   - TanStack Query cache keys
-- `src/features/pi-web/app-shell-utils.ts`
+- `src/features/phi/app-shell-utils.ts`
   - request URL builder, fetch helper, image conversion, sync-state helpers
-- `src/features/pi-web/composer-utils.ts`
+- `src/features/phi/composer-utils.ts`
   - slash-command matching and completion parsing logic
 
 ### Shared types/contracts
 
-- `src/lib/pi-web.ts`
+- `src/lib/phi/index.ts`
   - domain types
   - thin barrel that re-exports shared storage/sync/tree helpers
-- `src/lib/pi-web-storage.ts`
+- `src/lib/phi/storage.ts`
   - storage keys, prompt draft persistence, and settings storage helpers
-- `src/lib/pi-web-sync.ts`
+- `src/lib/phi/sync.ts`
   - state-sync item construction and sync/message normalization helpers
-- `src/lib/pi-web-tree.ts`
+- `src/lib/phi/tree.ts`
   - session/tree flattening and filtering helpers
-- `src/lib/pi-web-api.ts`
+- `src/lib/phi/api.ts`
   - API response types
   - SSE event types
   - shared client/server payload contracts
@@ -124,18 +124,18 @@ Notes:
 
 ### Server/runtime
 
-- `src/server/pi-web-runtime.ts`
+- `src/server/phi-runtime/index.ts`
   - the core server-side runtime coordinator and bridge to the Pi SDK
   - owns the main state machine while delegating focused logic to runtime helper modules
-- `src/server/pi-web-runtime-contexts.ts`
+- `src/server/phi-runtime/contexts.ts`
   - SSE payload/client utilities and context/session activation helpers
-- `src/server/pi-web-runtime-session-list.ts`
+- `src/server/phi-runtime/session-list.ts`
   - session list/index merging, sorting, serialization, and directory revision helpers
-- `src/server/pi-web-runtime-tree-fork.ts`
+- `src/server/phi-runtime/tree-fork.ts`
   - session tree serialization and fork helper logic
-- `src/server/pi-web-runtime-ui-requests.ts`
+- `src/server/phi-runtime/ui-requests.ts`
   - pending UI request bridge helpers
-- `src/server/pi-web-runtime-highlight.ts`
+- `src/server/phi-runtime/highlight.ts`
   - syntax highlight payload helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
@@ -160,9 +160,9 @@ The user-facing app is the `/` route. Most interaction happens inside the single
 
 ### 2) Viewer context is required
 
-The app uses a viewer context id stored in local storage (`pi-web-context-id`).
+The app uses a viewer context id stored in local storage (`phi-context-id`).
 
-Client requests should usually be built with `buildRequestUrl()` from `src/features/pi-web/app-shell-utils.ts`, which appends:
+Client requests should usually be built with `buildRequestUrl()` from `src/features/phi/app-shell-utils.ts`, which appends:
 
 - `context`
 - optionally `session`
@@ -193,16 +193,16 @@ If you change sync payload semantics, update the shared sync helpers instead of 
 
 ### 4) Runtime singleton owns server-side app behavior
 
-Most server routes are intentionally thin. They delegate to `getPiWebRuntime()`.
+Most server routes are intentionally thin. They delegate to `getPhiRuntime()`.
 
-If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/pi-web-runtime.ts` or one of its focused helper modules.
+If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/phi-runtime/index.ts` or one of its focused helper modules.
 
 ### 5) Shared contracts are important
 
 If you change a runtime payload or route response shape:
 
-- update `src/lib/pi-web-api.ts`
-- update `src/lib/pi-web.ts` if domain/state helpers depend on it
+- update `src/lib/phi/api.ts`
+- update `src/lib/phi/index.ts` if domain/state helpers depend on it
 - update relevant renderers and client handlers
 
 Do not change server payloads silently.
@@ -238,7 +238,7 @@ When adding or editing a route:
 3. parse request JSON with `readRequestJson()` when needed
 4. return results with `jsonResponse()`
 5. handle failures with `routeErrorResponse()`
-6. delegate real logic to `getPiWebRuntime()` or another server helper
+6. delegate real logic to `getPhiRuntime()` or another server helper
 
 Existing notable endpoints:
 
@@ -281,7 +281,7 @@ Prefer these existing helpers/patterns:
 - TanStack Query for cached server data
 - local React state for transient UI-only state
 
-Use query keys from `src/features/pi-web/query-keys.ts` when extending cached data.
+Use query keys from `src/features/phi/query-keys.ts` when extending cached data.
 
 ### Session selection
 
@@ -290,7 +290,7 @@ The selected session is route-linked via `?session=`.
 If you add a flow that creates/selects a session, make sure it stays compatible with:
 
 - route navigation in `src/routes/index.tsx`
-- `onSelectSession` in `PiWebAppShell`
+- `onSelectSession` in `PhiAppShell`
 - runtime request resolution based on `context` + `session`
 
 ### Composer behavior
@@ -309,8 +309,8 @@ Composer data flows through `composerStore` as `AppShellComposerSnapshot`, with 
 
 If you touch composer parsing or submission, inspect both:
 
-- `src/features/pi-web/composer-panel.tsx`
-- `src/features/pi-web/composer-utils.ts`
+- `src/features/phi/composer-panel.tsx`
+- `src/features/phi/composer-utils.ts`
 
 ### Conversation history loading
 
@@ -318,11 +318,11 @@ The main conversation view now uses a recent-history bootstrap plus lazy loading
 
 If you touch conversation/session sync behavior, inspect all of:
 
-- `src/features/pi-web/app-shell.tsx`
-- `src/features/pi-web/use-app-shell-session-sync.ts`
-- `src/features/pi-web/app-shell-utils.ts`
-- `src/lib/pi-web-sync.ts`
-- `src/server/pi-web-runtime.ts`
+- `src/features/phi/app-shell.tsx`
+- `src/features/phi/use-app-shell-session-sync.ts`
+- `src/features/phi/app-shell-utils.ts`
+- `src/lib/phi/sync.ts`
+- `src/server/phi-runtime/index.ts`
 - `src/routes/api.session.history.ts`
 
 Be careful not to break the distinction between:
@@ -343,16 +343,16 @@ Rendering/performance details:
 
 Prompt drafts are stored in session storage and keyed by session/file/draft target.
 
-If you change draft behavior, update helper logic in `src/lib/pi-web-storage.ts` (re-exported via `src/lib/pi-web.ts`) instead of adding duplicate storage code.
+If you change draft behavior, update helper logic in `src/lib/phi/storage.ts` (re-exported via `src/lib/phi/index.ts`) instead of adding duplicate storage code.
 
 ### Settings/state persistence
 
-Storage keys live in `src/lib/pi-web-storage.ts` and are re-exported via `src/lib/pi-web.ts`.
+Storage keys live in `src/lib/phi/storage.ts` and are re-exported via `src/lib/phi/index.ts`.
 
 Preserve existing key names when possible for backward compatibility, especially:
 
-- `pi-web-hide-tools`
-- other existing `pi-web-*` keys
+- `phi-hide-tools`
+- other existing `phi-*` keys
 
 Display and notification settings are mirrored through external stores in `app-shell.tsx`; persist changes via the storage helpers and publish to the relevant store instead of adding duplicate local state.
 
@@ -375,8 +375,8 @@ Do not create parallel global state for sessions in routes. The runtime already 
 
 If a route needs the current app context/session or base cwd, use:
 
-- `getPiWebRuntime().resolveRequest(request)`
-- `getPiWebRuntime().getBaseCwd(activeEntry, context)`
+- `getPhiRuntime().resolveRequest(request)`
+- `getPhiRuntime().getBaseCwd(activeEntry, context)`
 
 Do not manually reconstruct this logic.
 
@@ -390,9 +390,9 @@ If changing tree or fork behavior, review:
 - `navigateSessionTree`
 - `getForkableMessages`
 - `forkSession`
-- helpers in `src/server/pi-web-runtime-tree-fork.ts`
+- helpers in `src/server/phi-runtime/tree-fork.ts`
 
-with `src/server/pi-web-runtime.ts` remaining the coordinator.
+with `src/server/phi-runtime/index.ts` remaining the coordinator.
 
 ### Slash commands
 
@@ -406,7 +406,7 @@ If you add or change a slash command, update both sides:
 
 ### Generic UI requests
 
-Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/pi-web-runtime-ui-requests.ts`, and the pending UI request dialog in `app-shell-dialogs.tsx`.
+Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/phi-runtime/ui-requests.ts`, and the pending UI request dialog in `app-shell-dialogs.tsx`.
 
 If you touch extension/UI request flows, update both runtime and dialog handling.
 
@@ -460,23 +460,23 @@ The git panel renders the files, branches, and commits sections together, but th
 If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
-- shared response types in `src/lib/pi-web-api.ts`
-- rendering in `src/features/pi-web/git-panel.tsx`
+- shared response types in `src/lib/phi/api.ts`
+- rendering in `src/features/phi/git-panel.tsx`
 
 ## Common change recipes
 
 ### Add a new API-backed action
 
-1. add/update runtime logic in `src/server/pi-web-runtime.ts` or a focused server helper
+1. add/update runtime logic in `src/server/phi-runtime/index.ts` or a focused server helper
 2. expose it through a route in `src/routes/api.*.ts`
-3. add/update response types in `src/lib/pi-web-api.ts`
+3. add/update response types in `src/lib/phi/api.ts`
 4. call it from the client with `buildRequestUrl()` + `fetchJson()`
 5. invalidate/query-refresh as needed
 6. run `pnpm check:fix`
 
 ### Add a new cached query
 
-1. add a key in `src/features/pi-web/query-keys.ts`
+1. add a key in `src/features/phi/query-keys.ts`
 2. fetch through `fetchJson()`
 3. include `viewerContextId` and relevant scope keys in the query key
 4. invalidate the query when mutations change underlying data
@@ -490,7 +490,7 @@ If you extend git UI, update:
 
 ### Add a new persistent setting
 
-1. define storage key + read helper in `src/lib/pi-web-storage.ts`
+1. define storage key + read helper in `src/lib/phi/storage.ts`
 2. wire state in `app-shell.tsx`
 3. expose controls in `app-shell-dialogs.tsx` if user-facing
 4. preserve existing keys when changing behavior rather than renaming casually

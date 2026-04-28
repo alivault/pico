@@ -1,0 +1,31 @@
+export function phiSessionScopeKey(sessionLike: {
+  draft?: boolean
+  sessionFile?: string
+  sessionId?: string
+  cwd?: string
+}) {
+  if (sessionLike.draft) {
+    return `draft:${sessionLike.cwd || ""}`
+  }
+
+  return sessionLike.sessionFile || sessionLike.sessionId || ""
+}
+
+export const phiQueryKeys = {
+  directorySessionsIndex: (viewerContextId: string, directory: string) =>
+    ["phi", "directory-sessions-index", viewerContextId, directory] as const,
+  gitStatus: (viewerContextId: string, cwd: string) =>
+    ["phi", "git-status", viewerContextId, cwd] as const,
+  gitChanges: (viewerContextId: string, cwd: string) =>
+    ["phi", "git-changes", viewerContextId, cwd] as const,
+  gitFiles: (viewerContextId: string, cwd: string) =>
+    ["phi", "git-files", viewerContextId, cwd] as const,
+  gitBranches: (viewerContextId: string, cwd: string) =>
+    ["phi", "git-branches", viewerContextId, cwd] as const,
+  gitCommits: (viewerContextId: string, cwd: string) =>
+    ["phi", "git-commits", viewerContextId, cwd] as const,
+  sessionTree: (viewerContextId: string, sessionScopeKey: string) =>
+    ["phi", "session-tree", viewerContextId, sessionScopeKey] as const,
+  forkableMessages: (viewerContextId: string, sessionScopeKey: string) =>
+    ["phi", "forkable-messages", viewerContextId, sessionScopeKey] as const,
+} as const

@@ -63,7 +63,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 ### App shell and UI
 
-Main feature code lives in `src/features/pi-web`:
+Main feature code lives in `src/features/phi`:
 
 - `app-shell.tsx` — top-level shell orchestration, SSE sync, mutations, commands, tabs, notifications, and shortcuts
 - `sidebar.tsx` — directory/session sidebar UI
@@ -76,8 +76,8 @@ Main feature code lives in `src/features/pi-web`:
 
 ### Shared client/server contracts
 
-- `src/lib/pi-web.ts` — UI domain types, storage helpers, prompt draft utilities, tree flattening helpers, and shared constants
-- `src/lib/pi-web-api.ts` — API request/response types and SSE payload contracts
+- `src/lib/phi/index.ts` — UI domain types, storage helpers, prompt draft utilities, tree flattening helpers, and shared constants
+- `src/lib/phi/api.ts` — API request/response types and SSE payload contracts
 
 ### Routing and providers
 
@@ -90,7 +90,7 @@ Main feature code lives in `src/features/pi-web`:
 
 - `src/routes/events.ts` — SSE event stream endpoint
 - `src/routes/api.*.ts` — server endpoints for prompts, sessions, tree actions, git, completions, settings, highlighting, and UI callbacks
-- `src/server/pi-web-runtime.ts` — runtime bridge between TanStack Start routes and the SDK session model
+- `src/server/phi-runtime/index.ts` — runtime bridge between TanStack Start routes and the SDK session model
 - `src/server/pi-sdk.ts` — SDK loading and settings-manager adaptation
 - `src/server/git.ts` — git status/change inspection helpers
 
@@ -198,5 +198,5 @@ Repo snapshot verified on 2026-04-22:
 
 ## Notes
 
-- Storage keys intentionally preserve old `pi-web` naming where useful, including `pi-web-hide-tools`.
+- Storage keys use the `phi-*` prefix, including `phi-hide-tools`.
 - This repo currently does not include a separate `parity-checklist.md`; use the source layout above plus `~/code/pi-web-legacy` when auditing parity.

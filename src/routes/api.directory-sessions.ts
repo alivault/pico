@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/directory-sessions")({
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/directory-sessions")({
 
         try {
           return jsonResponse(
-            await getPiWebRuntime().listDirectorySessions(request, directory, {
+            await getPhiRuntime().listDirectorySessions(request, directory, {
               offset: Number.isNaN(offset) ? 0 : offset,
               limit: Number.isNaN(limit) ? 5 : limit,
             })

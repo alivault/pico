@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import { getPiWebRuntime } from "@/server/pi-web-runtime"
+import { getPhiRuntime } from "@/server/phi-runtime"
 
 export const Route = createFileRoute("/events")({
   server: {
     handlers: {
-      GET: ({ request }) => getPiWebRuntime().createEventsResponse(request),
+      GET: ({ request }) => getPhiRuntime().createEventsResponse(request),
     },
   },
 })

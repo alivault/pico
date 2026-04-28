@@ -3,7 +3,7 @@ import { ThemeProvider } from "next-themes"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { THEME_STORAGE_KEY } from "@/lib/pi-web"
+import { THEME_STORAGE_KEY } from "@/lib/phi"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
