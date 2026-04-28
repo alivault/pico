@@ -80,6 +80,22 @@ function settingsCommandKeywords(command: SettingsCommand) {
   ]
 }
 
+function settingsCommandFilter(
+  value: string,
+  search: string,
+  keywords?: Array<string>
+) {
+  const query = search.trim().toLowerCase()
+
+  if (!query) {
+    return 1
+  }
+
+  const searchableText = [value, ...(keywords ?? [])].join(" ").toLowerCase()
+
+  return searchableText.includes(query) ? 1 : 0
+}
+
 export type AppShellSettingsDialogHandle = {
   open: () => void
   close: () => void
@@ -222,6 +238,7 @@ export function AppShellSettingsDialog({
   const settingsCommandBody = (
     <Command
       shouldFilter
+      filter={settingsCommandFilter}
       loop
       value={selectedCommandId}
       onValueChange={setSelectedCommandId}
