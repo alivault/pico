@@ -29,15 +29,28 @@ function formatDirectoryDisplayPath(value: string) {
   return displayPath === "~" ? "~/" : displayPath
 }
 
+function normalizeDirectorySearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+}
+
 function directoryMatchesQuery(directoryPath: string, query: string) {
   const normalizedQuery = query.trim().toLowerCase()
   if (!normalizedQuery) return true
 
+  const displayPath = formatDirectoryDisplayPath(directoryPath)
+  const normalizedSearchQuery = normalizeDirectorySearchText(query)
+
   return (
     directoryPath.toLowerCase().includes(normalizedQuery) ||
-    formatDirectoryDisplayPath(directoryPath)
-      .toLowerCase()
-      .includes(normalizedQuery)
+    displayPath.toLowerCase().includes(normalizedQuery) ||
+    normalizeDirectorySearchText(directoryPath).includes(
+      normalizedSearchQuery
+    ) ||
+    normalizeDirectorySearchText(displayPath).includes(normalizedSearchQuery)
   )
 }
 
