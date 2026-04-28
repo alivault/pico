@@ -244,8 +244,11 @@ Notable current client-side state patterns:
 - `draftFlowStore`, `composerDraftSeedStore`, `composerImagesStore`, `awaitingFirstTurnStore`, `pendingDraftPromptStore`, and `pendingDraftFollowUpsStore` own draft/composer setup state.
 - `composerStore`, `isSubmittingStore`, and `pendingMessagesStore` hold the composer snapshot, submit status, and queued prompt state consumed by `AppShellComposerController`.
 - `contextUsageStore` feeds the composer context/provider usage indicator.
-- `conversationItemsStore` owns conversation items and supports per-item subscriptions.
+- `conversationItemsStore` owns the render-optimized projection of `SessionState.items`.
+  - `sessionStore`/`sessionStateRef` still hold the canonical session snapshot, including `items`; the conversation store exists to avoid broad rerenders.
+  - It supports global revision subscriptions, render-group subscriptions, assistant-group item-key subscriptions, and per-item subscriptions.
   - Streaming conversation item updates are batched to animation frames.
+  - Assistant rendering bridges through a per-assistant-group `AssistantMessagesStore`, then an `AssistantBlockStore` in `conversation-view.tsx` with per-block and tool-derived subscriptions.
   - The session-loading state intentionally hides the previous message stack while switching sessions.
 - `hiddenThinkingPreviewStore` and `workingStateStore` are narrow stores for footer/loading text.
 - `sidebarStore` keeps directory-keyed sidebar snapshots independent of the main workspace renders.
@@ -364,8 +367,11 @@ Be careful not to break the distinction between:
 
 Rendering/performance details:
 
-- `conversationItemsStore` supports global, group, and per-item subscriptions; avoid passing whole message arrays through broad React state.
-- Assistant rendering uses an assistant block store with per-block subscriptions inside `conversation-view.tsx`.
+- Treat `sessionStore`/`sessionStateRef` as the canonical session snapshot, but use `conversationItemsStore` as the render-optimized projection of `SessionState.items`.
+- `conversationItemsStore` supports global revision subscriptions, render-group subscriptions, assistant-group item-key subscriptions, and per-item subscriptions; avoid passing whole message arrays through broad React state.
+- Conversation rendering is layered: `ConversationItemsStore` → per-assistant-group `AssistantMessagesStore` → `AssistantBlockStore` in `conversation-view.tsx` → per-block and tool-derived subscriptions.
+- Streaming conversation item updates are batched to animation frames before publishing to the conversation store.
+- Assistant block rendering subscribes narrowly: text/thinking/compaction blocks subscribe by block key, while tool cards derive separate header/body snapshots so collapsed bodies do not subscribe to full tool payloads.
 - Long streaming markdown can temporarily render as plain text and switches back to markdown when streaming stops.
 - Code block syntax highlighting is deferred until code blocks are near the viewport and uses `/api/highlight` caching.
 - Do not bypass the loading-state path when switching sessions; previous messages should be hidden while `isSessionViewLoading` is true.
