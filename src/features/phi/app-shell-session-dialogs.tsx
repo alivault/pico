@@ -66,6 +66,11 @@ export function RenameSessionDialog({
     <Input
       value={renameValue}
       onChange={(event) => onRenameValueChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+        event.preventDefault()
+        onRenameSession()
+      }}
       placeholder="Session name"
     />
   )
