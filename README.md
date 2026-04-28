@@ -22,6 +22,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Route-linked session selection via `?session=`
 - Session lifecycle actions: new, rename, delete, and fork
 - Multi-select sidebar session deletion
+- Delete-old-sessions cleanup flow for sidebar directories
 - Unread/live badges and title-bar unread counts
 - Recent/current/known directory discovery when adding sidebar directories
 
@@ -30,7 +31,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Prompt drafting with per-session draft persistence
 - Image attachments
 - Path completions and `@file` reference completions
-- Model picker and reasoning/thinking level picker
+- Model picker, reasoning/thinking level picker, and context/provider usage indicator
 - Streaming controls: submit, abort, steer, and queued follow-ups
 - Pending prompt inspection, removal, and reordering while a response is active
 - Slash commands for built-ins like `/compact`, `/delete`, `/fork`, `/tree`, `/rename`, thinking/tool visibility, plus skill shortcuts when skills are available
@@ -56,8 +57,10 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 ### Git
 
-- Git tab for repository status and changed-file summaries for the active session directory
-- Native backend git inspection in `src/server/git.ts`
+- Git tab for repository status, changed files, local/remote branches, recent commits, and unpushed commit highlighting for the active session directory
+- Commit dialog with AI/heuristic message generation, include-unstaged toggle, commit, and commit-and-push flows
+- Push, pull, and refresh controls in the Git tab
+- Native backend git inspection/actions in `src/server/git.ts`, with filesystem watching in `src/server/git-watch.ts`
 
 ## Project layout
 
@@ -65,18 +68,25 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 Main feature code lives in `src/features/phi`:
 
-- `app-shell.tsx` — top-level shell orchestration, SSE sync, mutations, commands, tabs, notifications, and shortcuts
+- `app-shell.tsx` — top-level shell orchestration, store/controller wiring, commands, tabs, notifications, and focused hook/dialog composition
+- `use-app-shell-session-sync.ts` — SSE session/state sync behavior
+- `use-app-shell-prompt-mutations.ts` and `use-app-shell-session-mutations.ts` — prompt/session action flows
 - `sidebar.tsx` — directory/session sidebar UI
-- `composer-panel.tsx` — composer, slash commands, completions, model/thinking pickers, and pending prompt controls
-- `conversation-view.tsx` — message rendering, markdown/code blocks, tool cards, and compaction UI
-- `app-shell-dialogs.tsx` — add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
+- `composer-panel.tsx` — composer, slash commands, completions, model/thinking pickers, context usage, and pending prompt controls
+- `composer-assist-menu.tsx`, `composer-context-usage-indicator.tsx`, `composer-pending-messages.tsx`, `composer-pickers.tsx`, and `use-composer-assist.ts` — focused composer subcomponents and assist logic
+- `conversation-view.tsx` — message rendering, markdown/code blocks, tool cards, compaction UI, assistant block subscriptions, and deferred highlighting
+- `app-shell-dialogs.tsx` — dialog coordinator
+- `app-shell-add-directory-dialog.tsx`, `app-shell-session-dialogs.tsx`, `app-shell-settings-dialog.tsx`, `app-shell-tree-dialog.tsx`, and `app-shell-ui-request-dialog.tsx` — focused dialog implementations
 - `app-shell-command-palette.tsx` — command palette
-- `git-panel.tsx` — git status/changes tab
+- `git-panel.tsx` — git status/files/branches/commits tab plus commit, push, and pull actions
 - `session-done-notifications.ts` — sound and desktop notification helpers
 
 ### Shared client/server contracts
 
-- `src/lib/phi/index.ts` — UI domain types, storage helpers, prompt draft utilities, tree flattening helpers, and shared constants
+- `src/lib/phi/index.ts` — UI domain types plus a barrel for storage, sync, and tree helpers
+- `src/lib/phi/storage.ts` — storage keys, prompt draft persistence, and settings storage helpers
+- `src/lib/phi/sync.ts` — state-sync item construction and message normalization helpers
+- `src/lib/phi/tree.ts` — session tree flattening and filtering helpers
 - `src/lib/phi/api.ts` — API request/response types and SSE payload contracts
 
 ### Routing and providers
@@ -91,8 +101,11 @@ Main feature code lives in `src/features/phi`:
 - `src/routes/events.ts` — SSE event stream endpoint
 - `src/routes/api.*.ts` — server endpoints for prompts, sessions, tree actions, git, completions, settings, highlighting, and UI callbacks
 - `src/server/phi-runtime/index.ts` — runtime bridge between TanStack Start routes and the SDK session model
-- `src/server/pi-sdk.ts` — SDK loading and settings-manager adaptation
-- `src/server/git.ts` — git status/change inspection helpers
+- `src/server/phi-runtime/*` — focused runtime helpers for contexts, retained conversation windows, session lists, tree/fork, UI requests, and highlighting
+- `src/server/pi-sdk.ts`, `src/server/pi-sdk-path.ts`, and `src/server/pi-sdk-types.ts` — SDK loading, package resolution, settings-manager adaptation, and local adapter types
+- `src/server/session-naming.ts` — heuristic/LLM-backed automatic session naming helpers
+- `src/server/provider-usage.ts` — provider usage lookup for composer context/limit display
+- `src/server/git.ts` and `src/server/git-watch.ts` — git inspection/actions, short-lived caches, and filesystem watch notifications
 
 ## Key HTTP/SSE endpoints
 
@@ -100,8 +113,11 @@ Main feature code lives in `src/features/phi`:
 - `POST /api/prompt`
 - `POST /api/abort`
 - `POST /api/session/new`
+- `POST /api/session/select`
 - `POST /api/session/rename`
 - `POST /api/session/delete`
+- `POST /api/sessions/delete`
+- `GET /api/session/history`
 - `GET|POST /api/session/fork`
 - `GET|POST /api/session/tree`
 - `POST /api/session/tree/label`
@@ -112,10 +128,17 @@ Main feature code lives in `src/features/phi`:
 - `POST /api/path-completions`
 - `POST /api/file-completions`
 - `GET /api/directory-sessions-index`
+- `GET /api/directory-sessions-indexes`
 - `GET /api/directory-sessions`
+- `POST /api/directory-sessions/cleanup`
 - `POST /api/directory/resolve`
 - `GET /api/git-status`
 - `GET /api/git-changes`
+- `POST /api/git-commit-message`
+- `POST /api/git-commit`
+- `POST /api/git-push`
+- `POST /api/git-pull`
+- `GET /api/provider-usage`
 - `POST /api/pending-message/remove`
 - `POST /api/pending-messages/reorder`
 - `POST /api/highlight`
@@ -189,10 +212,9 @@ pnpm check:fix
 
 ## Status
 
-Repo snapshot verified on 2026-04-22:
+Repo snapshot reviewed on 2026-04-27:
 
-- `pnpm build` passing
-- `pnpm check` passing
+- `pnpm check:fix` passing
 - legacy parity reference is still `~/code/pi-web-legacy`
 - final manual parity sign-off is not recorded in this repo yet
 

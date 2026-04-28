@@ -64,8 +64,8 @@ Notes:
 ### Main app code
 
 - `src/features/phi/app-shell.tsx`
-  - main application shell coordinator
-  - composes most UI orchestration, tabs, command palette actions, and focused hooks/dialog coordinators
+  - main application shell coordinator and store/controller wiring
+  - composes tabs, command palette actions, focused hooks, and dialog controllers
 - `src/features/phi/use-app-shell-session-sync.ts`
   - SSE wiring and session/state sync behavior for the shell
 - `src/features/phi/use-app-shell-prompt-mutations.ts`
@@ -80,15 +80,23 @@ Notes:
   - directory/session sidebar UI
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
 - `src/features/phi/composer-panel.tsx`
-  - prompt composer, slash commands, completions, model picker, thinking picker, queue/steer UX
+  - prompt composer, slash commands, completions, model/thinking pickers, queue/steer UX
+- `src/features/phi/composer-assist-menu.tsx` and `src/features/phi/use-composer-assist.ts`
+  - slash command, path, and `@file` assist menu behavior
+- `src/features/phi/composer-context-usage-indicator.tsx`, `src/features/phi/composer-pending-messages.tsx`, and `src/features/phi/composer-pickers.tsx`
+  - context/provider usage display, queued prompt controls, and picker subcomponents
 - `src/features/phi/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
 - `src/features/phi/app-shell-dialogs.tsx`
   - thin dialog coordinator for add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
+- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
+  - focused dialog implementations used by the coordinator
+- `src/features/phi/app-shell-command-palette.tsx`
+  - command palette UI
 - `src/features/phi/git-panel.tsx`
-  - git status and changes tab
-  - mounts active git sections lazily to avoid unnecessary query/render work
+  - git status/files/branches/commits tab plus commit, push, and pull actions
+  - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
 - `src/features/phi/query-keys.ts`
   - TanStack Query cache keys
 - `src/features/phi/app-shell-utils.ts`
@@ -137,10 +145,20 @@ Notes:
   - pending UI request bridge helpers
 - `src/server/phi-runtime/highlight.ts`
   - syntax highlight payload helpers
+- `src/server/phi-runtime/conversation-retainer.ts`
+  - retained recent-history window and streaming conversation item helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
+- `src/server/pi-sdk-path.ts` and `src/server/pi-sdk-types.ts`
+  - SDK package resolution and local SDK adapter types
+- `src/server/session-naming.ts`
+  - heuristic/LLM-backed automatic session naming helpers
+- `src/server/provider-usage.ts`
+  - provider usage lookup for composer context/limit display
 - `src/server/git.ts`
-  - native git inspection helpers with short-lived caching
+  - native git inspection and git action helpers with short-lived caching
+- `src/server/git-watch.ts`
+  - filesystem watcher that emits git refresh events for active directories
 - `src/server/http.ts`
   - JSON/error response helpers
 - `src/server/route-helpers.ts`
@@ -175,8 +193,12 @@ The `/events` endpoint streams:
 
 - `state_sync`
 - `sessions`
+- `session_status` and `session_done`
+- `user_message`
 - request/extension error events
 - extension UI request events
+- auto session naming errors
+- `git_changed` refresh notifications
 - other runtime events
 
 `app-shell.tsx` and its session-sync hook listen to SSE and update session state from streamed payloads. Do not duplicate this logic with ad hoc polling unless there is a very specific reason.
@@ -211,7 +233,7 @@ Do not change server payloads silently.
 
 The app shell has been refactored to minimize broad rerenders. Prefer narrow external stores, refs, and selector-driven host components over adding broad React state to `AppShellSessionWorkspace`.
 
-Current client-side state patterns:
+Notable current client-side state patterns:
 
 - `sessionStore` + `sessionStateRef` are the source of truth for session data.
   - `setSessionState()` publishes to `sessionStore` and updates the ref.
@@ -219,12 +241,14 @@ Current client-side state patterns:
 - `appUiStore` owns workspace UI state such as current tab and loading session ids.
 - `displaySettingsStore` owns display settings such as tool visibility and message centering.
 - `notificationStore` owns notification settings/permission and session-done events.
-- `draftFlowStore` owns draft-session loading owner state and stored draft directory.
-- `composerStore` holds the composer snapshot consumed by `AppShellComposerController`.
+- `draftFlowStore`, `composerDraftSeedStore`, `composerImagesStore`, `awaitingFirstTurnStore`, `pendingDraftPromptStore`, and `pendingDraftFollowUpsStore` own draft/composer setup state.
+- `composerStore`, `isSubmittingStore`, and `pendingMessagesStore` hold the composer snapshot, submit status, and queued prompt state consumed by `AppShellComposerController`.
+- `contextUsageStore` feeds the composer context/provider usage indicator.
 - `conversationItemsStore` owns conversation items and supports per-item subscriptions.
   - Streaming conversation item updates are batched to animation frames.
   - The session-loading state intentionally hides the previous message stack while switching sessions.
 - `hiddenThinkingPreviewStore` and `workingStateStore` are narrow stores for footer/loading text.
+- `sidebarStore` keeps directory-keyed sidebar snapshots independent of the main workspace renders.
 - `AppShellController` centralizes the active store/ref/action bundle used by imperative shell handles.
 
 When adding new workspace state, first decide whether it belongs in one of these stores or in a new narrow store. Use local React state only for truly local UI concerns.
@@ -249,6 +273,7 @@ Existing notable endpoints:
 - `/api/session/select`
 - `/api/session/rename`
 - `/api/session/delete`
+- `/api/sessions/delete`
 - `/api/session/fork`
 - `/api/session/tree`
 - `/api/session/tree/label`
@@ -261,10 +286,16 @@ Existing notable endpoints:
 - `/api/file-completions`
 - `/api/directory/resolve`
 - `/api/directory-sessions`
+- `/api/directory-sessions/cleanup`
 - `/api/directory-sessions-index`
 - `/api/directory-sessions-indexes`
 - `/api/git-status`
 - `/api/git-changes`
+- `/api/git-commit-message`
+- `/api/git-commit`
+- `/api/git-push`
+- `/api/git-pull`
+- `/api/provider-usage`
 - `/api/pending-message/remove`
 - `/api/pending-messages/reorder`
 - `/api/highlight`
@@ -370,6 +401,8 @@ Do not create parallel global state for sessions in routes. The runtime already 
 - session naming
 - session tree navigation
 - slash command execution
+- directory session cleanup / bulk deletion flows
+- git watch notifications for active directories
 
 ### Resolve requests correctly
 
@@ -453,9 +486,12 @@ Current behavior includes:
 - remote branch info
 - recent commits
 - unpushed commit hashes
-- short-lived caches for status/changes
+- AI/heuristic commit message generation
+- commit, optional commit-and-push, push, and pull actions
+- short-lived caches for status/files/branches/commits
+- filesystem git watching that emits `git_changed` SSE notifications
 
-The git panel renders the files, branches, and commits sections together, but the panel itself only mounts while the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title.
+The git panel renders files, branches, and commits sections together when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title.
 
 If you extend git UI, update:
 
