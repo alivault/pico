@@ -193,22 +193,6 @@ function sessionSearchKeywords(entry: SessionListEntry, directory: string) {
   ].filter(Boolean) as Array<string>
 }
 
-function sessionsDialogFilter(
-  value: string,
-  search: string,
-  keywords?: Array<string>
-) {
-  const query = search.trim().toLowerCase()
-
-  if (!query) {
-    return 1
-  }
-
-  const searchableText = [value, ...(keywords ?? [])].join(" ").toLowerCase()
-
-  return searchableText.includes(query) ? 1 : 0
-}
-
 function isActiveSession(
   entry: SessionListEntry,
   activeSessionId?: string,
@@ -502,7 +486,6 @@ function AppShellSessionsDialog({
   const sessionsBrowseBody = (
     <Command
       shouldFilter
-      filter={sessionsDialogFilter}
       loop
       value={selectedSessionKey}
       onValueChange={setSelectedSessionKey}
@@ -518,7 +501,7 @@ function AppShellSessionsDialog({
         }
         className="text-base md:text-sm"
       />
-      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+      <CommandList className="max-h-none min-h-0 flex-1 scroll-pt-8 md:max-h-[min(70vh,32rem)]">
         <CommandEmpty>
           {loading ? "Loading sessions…" : "No sessions found."}
         </CommandEmpty>

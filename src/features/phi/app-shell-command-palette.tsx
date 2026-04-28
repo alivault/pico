@@ -48,22 +48,6 @@ function commandValue(command: AppCommand) {
   )
 }
 
-function commandPaletteFilter(
-  value: string,
-  search: string,
-  keywords?: Array<string>
-) {
-  const query = search.trim().toLowerCase()
-
-  if (!query) {
-    return 1
-  }
-
-  const searchableText = [value, ...(keywords ?? [])].join(" ").toLowerCase()
-
-  return searchableText.includes(query) ? 1 : 0
-}
-
 function AppShellCommandPalette({
   open,
   onOpenChange,
@@ -101,12 +85,7 @@ function AppShellCommandPalette({
   }
 
   const commandPaletteBody = (
-    <Command
-      shouldFilter
-      filter={commandPaletteFilter}
-      loop
-      className="min-h-0 flex-1"
-    >
+    <Command shouldFilter loop className="min-h-0 flex-1">
       <CommandInput
         autoFocus={!isMobile}
         value={query}
