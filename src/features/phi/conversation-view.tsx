@@ -314,8 +314,113 @@ function getCodeBlockChild(children: React.ReactNode) {
   return child
 }
 
-const STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD = 1200
 const STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS = 16
+
+type StreamingMarkdownChunk = {
+  key: string
+  text: string
+}
+
+function markdownFenceInfo(line: string) {
+  const match = line.match(/^ {0,3}(`{3,}|~{3,})/)
+  if (!match) return null
+
+  const marker = match[1] || ""
+  return {
+    char: marker[0] || "`",
+    length: marker.length,
+  }
+}
+
+function closesMarkdownFence(
+  line: string,
+  fence: { char: string; length: number }
+) {
+  const escaped = fence.char === "`" ? "`" : "~"
+  const pattern = new RegExp(`^ {0,3}${escaped}{${fence.length},}\\s*$`)
+  return pattern.test(line)
+}
+
+function isSafeStreamingMarkdownBoundaryLine(line: string) {
+  const trimmed = line.trim()
+  if (!trimmed) return true
+  if (/^#{1,6}(\s|$)/.test(trimmed)) return true
+  if (/^(?:\*\s*){3,}$/.test(trimmed)) return true
+  if (/^(?:-\s*){3,}$/.test(trimmed)) return true
+  if (/^(?:_\s*){3,}$/.test(trimmed)) return true
+
+  return false
+}
+
+function splitStreamingMarkdownText(
+  text: string
+): Array<StreamingMarkdownChunk> {
+  const chunks: Array<StreamingMarkdownChunk> = []
+  let chunkStart = 0
+  let lineStart = 0
+  let fence: { char: string; length: number } | null = null
+
+  const pushChunk = (end: number) => {
+    if (end <= chunkStart) return
+
+    const chunkText = text.slice(chunkStart, end)
+    if (chunkText.length === 0) return
+
+    chunks.push({
+      key: `stable:${chunks.length}`,
+      text: chunkText,
+    })
+    chunkStart = end
+  }
+
+  while (lineStart < text.length) {
+    const newlineIndex = text.indexOf("\n", lineStart)
+    const lineEnd = newlineIndex === -1 ? text.length : newlineIndex + 1
+    const line = text.slice(lineStart, lineEnd)
+    const lineWithoutNewline = line.replace(/\n$/, "")
+
+    if (fence) {
+      if (closesMarkdownFence(lineWithoutNewline, fence)) {
+        fence = null
+        pushChunk(lineEnd)
+      }
+    } else {
+      const nextFence = markdownFenceInfo(lineWithoutNewline)
+      if (nextFence) {
+        fence = nextFence
+      } else if (isSafeStreamingMarkdownBoundaryLine(lineWithoutNewline)) {
+        pushChunk(lineEnd)
+      }
+    }
+
+    if (newlineIndex === -1) break
+    lineStart = lineEnd
+  }
+
+  if (chunkStart < text.length) {
+    chunks.push({
+      key: `active:${chunks.length}`,
+      text: text.slice(chunkStart),
+    })
+  }
+
+  return chunks
+}
+
+const MarkdownChunk = React.memo(function MarkdownChunk({
+  text,
+}: {
+  text: string
+}) {
+  return (
+    <MemoizedReactMarkdown
+      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+      components={MARKDOWN_COMPONENTS}
+    >
+      {text}
+    </MemoizedReactMarkdown>
+  )
+})
 
 function shouldLogMarkdownProfile() {
   if (typeof window === "undefined") return false
@@ -329,13 +434,12 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming?: boolean
   text: string
 }) {
-  const useStreamingPlainText =
-    streaming && text.length >= STREAMING_MARKDOWN_PLAIN_TEXT_THRESHOLD
   const renderStartedAt =
     typeof performance !== "undefined" ? performance.now() : 0
+  const chunks = streaming ? splitStreamingMarkdownText(text) : null
 
   React.useLayoutEffect(() => {
-    if (!streaming || useStreamingPlainText || !shouldLogMarkdownProfile()) {
+    if (!streaming || !shouldLogMarkdownProfile()) {
       return
     }
 
@@ -343,27 +447,21 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
     if (duration < STREAMING_MARKDOWN_PROFILE_THRESHOLD_MS) return
 
     console.debug("[phi] streaming markdown render", {
+      chunks: chunks?.length ?? 1,
       durationMs: Math.round(duration),
       length: text.length,
     })
   })
 
-  if (useStreamingPlainText) {
-    return (
-      <div className="text-sm leading-6 wrap-break-word whitespace-pre-wrap">
-        {text}
-      </div>
-    )
-  }
-
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
-      <MemoizedReactMarkdown
-        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-        components={MARKDOWN_COMPONENTS}
-      >
-        {text}
-      </MemoizedReactMarkdown>
+      {chunks ? (
+        chunks.map((chunk) => (
+          <MarkdownChunk key={chunk.key} text={chunk.text} />
+        ))
+      ) : (
+        <MarkdownChunk text={text} />
+      )}
     </div>
   )
 })
