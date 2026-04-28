@@ -200,6 +200,7 @@ export function useAppShellMessageScroll({
   const lastMessagesScrollHeightRef = React.useRef(0)
   const lastMessagesClientHeightRef = React.useRef(0)
   const followMessagesRef = React.useRef(true)
+  const userScrollIntentUntilRef = React.useRef(0)
   const previousStreamingRef = React.useRef(sessionState.streaming)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
@@ -272,12 +273,19 @@ export function useAppShellMessageScroll({
     messageViewportRef.current = viewport
     if (!viewport) return
 
+    const markUserScrollIntent = () => {
+      userScrollIntentUntilRef.current = window.performance.now() + 500
+    }
+
+    const hasRecentUserScrollIntent = () =>
+      window.performance.now() < userScrollIntentUntilRef.current
+
     const handleScroll = () => {
       const currentScrollTop = viewport.scrollTop
       const movedUp = currentScrollTop < lastMessagesScrollTopRef.current - 1
       const movedDown = currentScrollTop > lastMessagesScrollTopRef.current + 1
 
-      if (movedUp) {
+      if (movedUp && hasRecentUserScrollIntent()) {
         followMessagesRef.current = false
       } else if (movedDown && isViewportNearBottom(viewport)) {
         followMessagesRef.current = true
@@ -288,12 +296,14 @@ export function useAppShellMessageScroll({
     }
 
     const handleWheel = (event: WheelEvent) => {
+      markUserScrollIntent()
       if (event.deltaY < 0) {
         followMessagesRef.current = false
       }
     }
 
     const handlePointerDown = (event: PointerEvent) => {
+      markUserScrollIntent()
       if (findOpeningToolAccordionTrigger(event.target, viewport)) {
         followMessagesRef.current = false
       }
@@ -309,6 +319,7 @@ export function useAppShellMessageScroll({
         return
       }
 
+      markUserScrollIntent()
       if (isScrollUpKey(event)) {
         followMessagesRef.current = false
       }
