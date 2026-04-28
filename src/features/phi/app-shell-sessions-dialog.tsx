@@ -130,6 +130,14 @@ function formatSessionMessageCount(value?: number) {
   return `${count.toLocaleString()} msg${count === 1 ? "" : "s"}`
 }
 
+function sessionActivityTime(entry: SessionListEntry) {
+  const timestamp = entry.lastUserMessageAt || entry.modified
+  if (!timestamp) return 0
+
+  const time = new Date(timestamp).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
 function sessionStatusForEntry(
   entry: SessionListEntry,
   statuses: SessionStatusByKey
@@ -294,6 +302,10 @@ function AppShellSessionsDialog({
       entry,
       key: sessionListEntryKey(entry),
     }))
+  )
+  const sortedSessionItems = [...flatSessions].sort(
+    (left, right) =>
+      sessionActivityTime(right.entry) - sessionActivityTime(left.entry)
   )
   const selectedSession = selectedSessionKey
     ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
@@ -501,78 +513,77 @@ function AppShellSessionsDialog({
         }
         className="text-base md:text-sm"
       />
-      <CommandList className="max-h-none min-h-0 flex-1 scroll-pt-8 md:max-h-[min(70vh,32rem)]">
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
         <CommandEmpty>
           {loading ? "Loading sessions…" : "No sessions found."}
         </CommandEmpty>
-        {visibleGroups.map((group) => (
-          <CommandGroup
-            key={group.directory}
-            heading={`${scope === "all" ? tildePath(group.directory) : `Current directory · ${tildePath(group.directory)}`}${group.loading ? " · loading" : ""}`}
-            className="overflow-visible **:[[cmdk-group-heading]]:sticky **:[[cmdk-group-heading]]:top-[-1px] **:[[cmdk-group-heading]]:z-10 **:[[cmdk-group-heading]]:bg-popover"
-          >
-            {group.loading && group.sessions.length === 0 ? (
-              <CommandItem value={`loading:${group.directory}`} disabled>
-                <Spinner className="size-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Loading sessions…</span>
-              </CommandItem>
-            ) : null}
-            {group.sessions.map((entry) => {
-              const entryKey = sessionListEntryKey(entry)
-              const timestamp = entry.lastUserMessageAt || entry.modified
-              const sessionTime = formatSessionTime(timestamp)
-              const messageCount = formatSessionMessageCount(entry.messageCount)
-              const active = isActiveSession(
-                entry,
-                activeSessionId,
-                activeSessionPath
-              )
-              const showUnread = Boolean(entry.unread) && !entry.streaming
+        <CommandGroup
+          heading={`${scope === "all" ? "All sessions" : `Current directory · ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`}
+        >
+          {loading && sortedSessionItems.length === 0 ? (
+            <CommandItem value="loading:sessions" disabled>
+              <Spinner className="size-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Loading sessions…</span>
+            </CommandItem>
+          ) : null}
+          {sortedSessionItems.map(({ directory, entry }) => {
+            const entryKey = sessionListEntryKey(entry)
+            const timestamp = entry.lastUserMessageAt || entry.modified
+            const sessionTime = formatSessionTime(timestamp)
+            const messageCount = formatSessionMessageCount(entry.messageCount)
+            const active = isActiveSession(
+              entry,
+              activeSessionId,
+              activeSessionPath
+            )
+            const showUnread = Boolean(entry.unread) && !entry.streaming
 
-              return (
-                <CommandItem
-                  key={entryKey}
-                  value={entryKey}
-                  keywords={sessionSearchKeywords(entry, group.directory)}
-                  onSelect={() => selectSession(entry)}
-                  className="items-start py-2"
-                >
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                    {entry.streaming ? (
-                      <Spinner
-                        className="size-3.5 text-muted-foreground"
-                        aria-label="Session streaming"
-                      />
-                    ) : showUnread ? (
-                      <span
-                        className="size-2 rounded-full bg-primary"
-                        aria-label="Session done"
-                      />
-                    ) : null}
+            return (
+              <CommandItem
+                key={entryKey}
+                value={entryKey}
+                keywords={sessionSearchKeywords(entry, directory)}
+                onSelect={() => selectSession(entry)}
+                className="items-start py-2"
+              >
+                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                  {entry.streaming ? (
+                    <Spinner
+                      className="size-3.5 text-muted-foreground"
+                      aria-label="Session streaming"
+                    />
+                  ) : showUnread ? (
+                    <span
+                      className="size-2 rounded-full bg-primary"
+                      aria-label="Session done"
+                    />
+                  ) : null}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{entry.title}</span>
+                  <span className="line-clamp-1 text-xs text-muted-foreground">
+                    {tildePath(entry.cwd || directory)}
                   </span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-medium">{entry.title}</span>
-                    {sessionTime || messageCount ? (
-                      <span className="truncate text-[11px] text-muted-foreground/70">
-                        {sessionTime}
-                        {sessionTime && messageCount ? " · " : null}
-                        {messageCount}
-                      </span>
-                    ) : null}
-                  </div>
-                  <CommandShortcut
-                    className={cn(
-                      "shrink-0 tracking-normal normal-case",
-                      !active && "opacity-0"
-                    )}
-                  >
-                    Current
-                  </CommandShortcut>
-                </CommandItem>
-              )
-            })}
-          </CommandGroup>
-        ))}
+                  {sessionTime || messageCount ? (
+                    <span className="truncate text-[11px] text-muted-foreground/70">
+                      {sessionTime}
+                      {sessionTime && messageCount ? " · " : null}
+                      {messageCount}
+                    </span>
+                  ) : null}
+                </div>
+                <CommandShortcut
+                  className={cn(
+                    "shrink-0 tracking-normal normal-case",
+                    !active && "opacity-0"
+                  )}
+                >
+                  Current
+                </CommandShortcut>
+              </CommandItem>
+            )
+          })}
+        </CommandGroup>
       </CommandList>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
