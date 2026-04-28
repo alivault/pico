@@ -12,18 +12,12 @@ import type {
 import { Button } from "@/components/ui/button"
 import {
   Command,
+  CommandDialog,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Drawer,
   DrawerContent,
@@ -104,17 +98,38 @@ function toggleTreeFilterMode(
   return currentMode === requestedMode ? "default" : requestedMode
 }
 
-function TreeShortcutKeys({ keys }: { keys: Array<string> }) {
+function TreeFooterKbd({
+  children,
+  active = false,
+}: {
+  children: React.ReactNode
+  active?: boolean
+}) {
+  return (
+    <kbd
+      className={cn(
+        "rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground",
+        active && "border-primary/40 bg-primary text-primary-foreground"
+      )}
+    >
+      {children}
+    </kbd>
+  )
+}
+
+function TreeFooterHint({
+  kbd,
+  active,
+  children,
+}: {
+  kbd: React.ReactNode
+  active?: boolean
+  children: React.ReactNode
+}) {
   return (
     <span className="inline-flex items-center gap-1">
-      {keys.map((key) => (
-        <kbd
-          key={`${keys.join("-")}-${key}`}
-          className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-        >
-          {key}
-        </kbd>
-      ))}
+      <TreeFooterKbd active={active}>{kbd}</TreeFooterKbd>
+      {children}
     </span>
   )
 }
@@ -1052,7 +1067,6 @@ function TreeEntryLine({ node }: { node: FlatTreeNode }) {
 type TreeBrowsePanelProps = {
   isMobile: boolean
   treeFilterMode: TreeFilterMode
-  onTreeFilterModeChange: (value: TreeFilterMode) => void
   treeLoading: boolean
   treeSubmitting: boolean
   treeLeafId: string | null
@@ -1069,7 +1083,6 @@ type TreeBrowsePanelProps = {
 function TreeBrowsePanel({
   isMobile,
   treeFilterMode,
-  onTreeFilterModeChange,
   treeLoading,
   treeSubmitting,
   treeLeafId,
@@ -1236,20 +1249,7 @@ function TreeBrowsePanel({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2">
-        {TREE_FILTER_OPTIONS.map((option) => (
-          <Button
-            key={option.mode}
-            size="sm"
-            variant={treeFilterMode === option.mode ? "default" : "outline"}
-            onClick={() => onTreeFilterModeChange(option.mode)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </div>
-
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <Command
         shouldFilter={false}
         loop
@@ -1312,7 +1312,7 @@ function TreeBrowsePanel({
             }
           }
         }}
-        className="min-h-0 w-full max-w-full min-w-0 flex-1 rounded-lg border"
+        className="min-h-0 w-full max-w-full min-w-0 flex-1"
       >
         <CommandInput
           ref={treeSearchInputRef}
@@ -1324,7 +1324,7 @@ function TreeBrowsePanel({
         />
         <CommandList
           ref={treeListRef}
-          className="max-h-none min-h-0 flex-1"
+          className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]"
           onPointerMoveCapture={(event) => {
             markTreeMouseMoved(event.movementX, event.movementY)
           }}
@@ -1402,42 +1402,28 @@ function TreeBrowsePanel({
             </div>
           )}
         </CommandList>
-      </Command>
-
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className="tabular-nums">
-          {treeLoading
-            ? "Loading tree…"
-            : `(${cursorTreePositionText}/${visibleTreeCount})`}
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Move</span>
-          <TreeShortcutKeys keys={["↑", "↓"]} />
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Page</span>
-          <TreeShortcutKeys keys={["←", "→"]} />
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Fold/branch</span>
-          <TreeShortcutKeys keys={["Ctrl", "←/→"]} />
-        </span>
-        {TREE_FILTER_OPTIONS.map((option) => (
-          <span
-            key={option.mode}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1"
-          >
-            <span>{option.label}</span>
-            {option.shortcut.length > 0 ? (
-              <TreeShortcutKeys keys={option.shortcut} />
-            ) : null}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <span className="tabular-nums">
+            {treeLoading
+              ? "Loading tree…"
+              : `${cursorTreePositionText}/${visibleTreeCount}`}
           </span>
-        ))}
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <span>Add Label</span>
-          <TreeShortcutKeys keys={["Shift", "L"]} />
-        </span>
-      </div>
+          <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
+          <TreeFooterHint kbd="←/→">Page</TreeFooterHint>
+          <TreeFooterHint kbd="Ctrl+←/→">Fold</TreeFooterHint>
+          {TREE_FILTER_OPTIONS.map((option) => (
+            <TreeFooterHint
+              key={option.mode}
+              kbd={option.shortcut.join("+")}
+              active={treeFilterMode === option.mode}
+            >
+              {option.label}
+            </TreeFooterHint>
+          ))}
+          <TreeFooterHint kbd="Shift+L">Label</TreeFooterHint>
+          <TreeFooterHint kbd="Esc">Close</TreeFooterHint>
+        </div>
+      </Command>
     </div>
   )
 }
@@ -1578,110 +1564,93 @@ function TreeContinueActionsPanel({
   ])
 
   return (
-    <>
-      <Command
-        loop
-        value={selectedAction}
-        onValueChange={(value) => {
-          if (!actions.some((action) => action.value === value)) return
-          setSelectedAction(value as TreeContinueActionValue)
-        }}
-        onKeyDownCapture={(event) => {
-          if (
-            !event.metaKey &&
-            !event.altKey &&
-            !event.shiftKey &&
-            !event.ctrlKey &&
-            (event.key === "ArrowDown" || event.key === "ArrowUp")
-          ) {
-            event.preventDefault()
-            event.stopPropagation()
-            moveSelectedAction(event.key === "ArrowDown" ? 1 : -1)
-          }
-        }}
-        className="rounded-lg border"
-      >
-        <CommandList>
-          <CommandGroup>
-            <CommandItem
-              value="No summary"
-              disabled={!canNavigateSelectedNode || treeSubmitting}
-              onSelect={() => {
-                if (!selectedTreeNodeId) return
-                void onNavigateTreeNode(selectedTreeNodeId)
-              }}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-medium">No summary</span>
-                <span className="text-xs text-muted-foreground">
-                  Continue from this point immediately.
-                </span>
-              </div>
-            </CommandItem>
-            <CommandItem
-              value="Summarize"
-              disabled={
-                !canNavigateSelectedNode ||
-                !treeSummaryAvailable ||
-                treeSubmitting
-              }
-              onSelect={() => {
-                if (!selectedTreeNodeId) return
-                void onNavigateTreeNode(selectedTreeNodeId, {
-                  summarize: true,
-                })
-              }}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-medium">Summarize</span>
-                <span className="text-xs text-muted-foreground">
-                  Summarize the branch you are leaving first.
-                </span>
-              </div>
-            </CommandItem>
-            <CommandItem
-              value="Summarize with custom prompt"
-              disabled={
-                !canNavigateSelectedNode ||
-                !treeSummaryAvailable ||
-                treeSubmitting
-              }
-              onSelect={onCustomPrompt}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-medium">
-                  Summarize with custom prompt
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Add extra instructions before continuing.
-                </span>
-              </div>
-            </CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
-
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <TreeShortcutKeys keys={["↑", "↓"]} />
-          <span>Navigate</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <TreeShortcutKeys keys={["Enter"]} />
-          <span>Select</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <TreeShortcutKeys keys={["Esc"]} />
-          <span>Cancel</span>
-        </span>
+    <Command
+      loop
+      value={selectedAction}
+      onValueChange={(value) => {
+        if (!actions.some((action) => action.value === value)) return
+        setSelectedAction(value as TreeContinueActionValue)
+      }}
+      onKeyDownCapture={(event) => {
+        if (
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          !event.ctrlKey &&
+          (event.key === "ArrowDown" || event.key === "ArrowUp")
+        ) {
+          event.preventDefault()
+          event.stopPropagation()
+          moveSelectedAction(event.key === "ArrowDown" ? 1 : -1)
+        }
+      }}
+      className="min-h-0 flex-1"
+    >
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+        <CommandGroup>
+          <CommandItem
+            value="No summary"
+            disabled={!canNavigateSelectedNode || treeSubmitting}
+            onSelect={() => {
+              if (!selectedTreeNodeId) return
+              void onNavigateTreeNode(selectedTreeNodeId)
+            }}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="font-medium">No summary</span>
+              <span className="text-xs text-muted-foreground">
+                Continue from this point immediately.
+              </span>
+            </div>
+          </CommandItem>
+          <CommandItem
+            value="Summarize"
+            disabled={
+              !canNavigateSelectedNode ||
+              !treeSummaryAvailable ||
+              treeSubmitting
+            }
+            onSelect={() => {
+              if (!selectedTreeNodeId) return
+              void onNavigateTreeNode(selectedTreeNodeId, {
+                summarize: true,
+              })
+            }}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="font-medium">Summarize</span>
+              <span className="text-xs text-muted-foreground">
+                Summarize the branch you are leaving first.
+              </span>
+            </div>
+          </CommandItem>
+          <CommandItem
+            value="Summarize with custom prompt"
+            disabled={
+              !canNavigateSelectedNode ||
+              !treeSummaryAvailable ||
+              treeSubmitting
+            }
+            onSelect={onCustomPrompt}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="font-medium">Summarize with custom prompt</span>
+              <span className="text-xs text-muted-foreground">
+                Add extra instructions before continuing.
+              </span>
+            </div>
+          </CommandItem>
+        </CommandGroup>
+      </CommandList>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
+        <TreeFooterHint kbd="Enter">Select</TreeFooterHint>
+        <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
+        {!treeSummaryAvailable ? (
+          <span>Summary actions require a selected model.</span>
+        ) : null}
       </div>
-
-      {!treeSummaryAvailable ? (
-        <p className="text-xs text-muted-foreground">
-          Summary actions are only available when a model is selected.
-        </p>
-      ) : null}
-    </>
+    </Command>
   )
 }
 
@@ -1699,42 +1668,26 @@ function TreeLabelPanel({
   const inputRef = React.useRef<HTMLInputElement | null>(null)
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Label (empty to remove)</div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            key={defaultLabel}
-            ref={inputRef}
-            defaultValue={defaultLabel}
-            placeholder="Optional label"
-            disabled={disabled}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return
-              event.preventDefault()
-              void onSave(event.currentTarget.value)
-            }}
-            autoFocus
-          />
-          <Button
-            disabled={disabled}
-            onClick={() => {
-              void onSave(inputRef.current?.value ?? "")
-            }}
-          >
-            Save label
-          </Button>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 items-center p-3">
+        <Input
+          key={defaultLabel}
+          ref={inputRef}
+          defaultValue={defaultLabel}
+          placeholder="Optional label (empty to remove)"
+          disabled={disabled}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return
+            event.preventDefault()
+            void onSave(event.currentTarget.value)
+          }}
+          autoFocus
+          className="min-w-0 flex-1"
+        />
       </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <TreeShortcutKeys keys={["Enter"]} />
-          <span>Save</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 px-2 py-1">
-          <TreeShortcutKeys keys={["Esc"]} />
-          <span>Cancel</span>
-        </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <TreeFooterHint kbd="Enter">Save</TreeFooterHint>
+        <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
       </div>
     </div>
   )
@@ -1980,7 +1933,6 @@ export function AppShellTreeDialog({
         key={open ? "open" : "closed"}
         isMobile={isMobile}
         treeFilterMode={treeFilterMode}
-        onTreeFilterModeChange={setTreeFilterMode}
         treeLoading={treeLoading}
         treeSubmitting={treeSubmitting}
         treeLeafId={treeLeafId}
@@ -1994,8 +1946,8 @@ export function AppShellTreeDialog({
         onLabelTreeNode={labelTreeNode}
       />
     ) : selectedTreeNode ? (
-      <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto">
-        <div className="flex items-center gap-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
           <Button
             size="icon-sm"
             variant="ghost"
@@ -2007,12 +1959,17 @@ export function AppShellTreeDialog({
           >
             <ArrowLeftIcon />
           </Button>
-          <div className="text-sm font-medium text-muted-foreground">
-            {treeStage === "custom"
-              ? "Summarize with custom prompt"
-              : treeStage === "label"
-                ? "Label selected node"
-                : "Summarize branch?"}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">
+              {treeStage === "custom"
+                ? "Summarize with custom prompt"
+                : treeStage === "label"
+                  ? "Label selected node"
+                  : "Summarize branch?"}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {treeDialogPlainText(selectedTreeNode)}
+            </div>
           </div>
         </div>
 
@@ -2037,38 +1994,19 @@ export function AppShellTreeDialog({
             }}
           />
         ) : (
-          <div className="space-y-3 rounded-lg border p-4">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Custom prompt</div>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 p-3">
               <Textarea
                 ref={treeCustomSummaryRef}
                 placeholder="Add summary instructions before continuing"
-                className="min-h-32"
+                className="min-h-32 resize-none"
                 disabled={!canNavigateSelectedNode || treeSubmitting}
                 autoFocus
               />
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setTreeStage("actions")}
-                disabled={treeSubmitting}
-              >
-                Back
-              </Button>
-              <Button
-                disabled={!canNavigateSelectedNode || treeSubmitting}
-                onClick={() => {
-                  if (!selectedTreeNodeId) return
-                  void onNavigateTreeNode(selectedTreeNodeId, {
-                    summarize: true,
-                    customInstructions:
-                      treeCustomSummaryRef.current?.value ?? "",
-                  })
-                }}
-              >
-                Summarize & continue
-              </Button>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+              <TreeFooterHint kbd="Ctrl/⌘+Enter">Summarize</TreeFooterHint>
+              <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
             </div>
           </div>
         )}
@@ -2098,22 +2036,16 @@ export function AppShellTreeDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          "flex min-h-0 flex-col overflow-hidden sm:max-h-[90vh]",
-          treeStage === "browse" ? "sm:h-[90vh] sm:max-w-5xl" : "sm:max-w-2xl"
-        )}
-      >
-        <DialogHeader
-          className={treeStage === "browse" ? undefined : "sr-only"}
-        >
-          <DialogTitle>{treeDialogTitle}</DialogTitle>
-          <DialogDescription>{treeDialogDescription}</DialogDescription>
-        </DialogHeader>
-        {treeDialogBody}
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={treeDialogTitle}
+      description={treeDialogDescription}
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {treeDialogBody}
+    </CommandDialog>
   )
 }
 export type AppShellTreeDialogHandle = {
