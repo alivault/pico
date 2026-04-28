@@ -59,6 +59,10 @@ function isEditableTarget(target: EventTarget | null) {
   )
 }
 
+function isPromptTextareaTarget(target: EventTarget | null) {
+  return target instanceof HTMLTextAreaElement && target.name === "prompt"
+}
+
 function hasSelectedText(target: EventTarget | null) {
   if (
     target instanceof HTMLInputElement ||
@@ -245,7 +249,8 @@ export function useAppShellShortcuts({
         !event.altKey &&
         !event.shiftKey &&
         currentTab === "session" &&
-        !isEditableTarget(event.target)
+        (!isEditableTarget(event.target) ||
+          isPromptTextareaTarget(event.target))
       ) {
         if (modalOpen || event.defaultPrevented) return
 
