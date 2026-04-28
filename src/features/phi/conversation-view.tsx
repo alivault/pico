@@ -201,6 +201,76 @@ async function getHighlightedCode(code: string, language?: string) {
   return payload
 }
 
+async function copyTextToClipboard(text: string) {
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Fall through to the textarea fallback below. The async clipboard API
+      // can be denied even on secure origins.
+    }
+  }
+
+  if (copyTextWithTextarea(text)) {
+    return
+  }
+
+  throw new Error("Unable to copy text")
+}
+
+function copyTextWithTextarea(text: string) {
+  const activeElement =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  const selection = document.getSelection()
+  const ranges: Range[] = []
+
+  if (selection) {
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      ranges.push(selection.getRangeAt(index).cloneRange())
+    }
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.readOnly = true
+  textarea.setAttribute("aria-hidden", "true")
+  textarea.style.position = "fixed"
+  textarea.style.top = "0"
+  textarea.style.left = "0"
+  textarea.style.width = "1px"
+  textarea.style.height = "1px"
+  textarea.style.padding = "0"
+  textarea.style.border = "0"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+
+  document.body.append(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+
+  let copied = false
+  try {
+    copied = document.execCommand("copy")
+  } finally {
+    textarea.remove()
+
+    if (selection) {
+      selection.removeAllRanges()
+      for (const range of ranges) {
+        selection.addRange(range)
+      }
+    }
+
+    activeElement?.focus({ preventScroll: true })
+  }
+
+  return copied
+}
+
 const CodeBlockCopyButton = React.memo(function CodeBlockCopyButton({
   code,
 }: {
@@ -212,7 +282,7 @@ const CodeBlockCopyButton = React.memo(function CodeBlockCopyButton({
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(code)
+      await copyTextToClipboard(code)
       setCopyState("copied")
       window.setTimeout(() => setCopyState("idle"), 1400)
     } catch {
