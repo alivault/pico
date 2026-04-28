@@ -5043,6 +5043,21 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="icon-sm"
+            variant="outline"
+            aria-label="Create a new session"
+            title={
+              defaultNewSessionDirectory
+                ? `Create a new session in ${defaultNewSessionDirectory}`
+                : "Create a new session"
+            }
+            onClick={() => {
+              void actionsRef.current.createSession()
+            }}
+          >
+            <SquarePenIcon />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -5160,21 +5175,6 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label="Create a new session"
-            title={
-              defaultNewSessionDirectory
-                ? `Create a new session in ${defaultNewSessionDirectory}`
-                : "Create a new session"
-            }
-            onClick={() => {
-              void actionsRef.current.createSession()
-            }}
-          >
-            <SquarePenIcon />
-          </Button>
         </div>
       </div>
     </div>
