@@ -122,7 +122,10 @@ import {
   HeaderGitStatusText,
 } from "@/features/phi/git-panel"
 import { phiSessionScopeKey } from "@/features/phi/query-keys"
-import { AppSidebar } from "@/features/phi/sidebar"
+import {
+  AppSidebar,
+  createDirectorySessionsStore,
+} from "@/features/phi/sidebar"
 import {
   useAppShellMessageScroll,
   useMessageScrollValue,
@@ -1055,6 +1058,16 @@ function shallowRecordEqual<T extends Record<string, unknown>>(
   }
 
   return true
+}
+
+function getCurrentSessionTitleFromState(
+  sessionState: Pick<SessionState, "firstMessage" | "sessionName">
+) {
+  return getSessionTitle({
+    title:
+      sessionState.sessionName || sessionState.firstMessage || "New session",
+    name: sessionState.sessionName,
+  })
 }
 
 type UserConversationItem = Extract<ConversationItem, { kind: "user" }>
@@ -2511,17 +2524,15 @@ const AppShellComposerController = React.memo(
 )
 
 function AppShellWindowEffectsHost({
-  currentSessionTitle,
-  displaySessionTitle,
   isSessionViewLoading,
+  loadingDisplaySessionTitle,
   notificationStore,
   onSelectSession,
   sessionStore,
   sidebarStore,
 }: {
-  currentSessionTitle: string
-  displaySessionTitle: string
   isSessionViewLoading: boolean
+  loadingDisplaySessionTitle: string
   notificationStore: ValueStore<AppShellNotificationState>
   onSelectSession: (nextSessionId?: string) => void
   sessionStore: ValueStore<SessionState>
@@ -2536,14 +2547,18 @@ function AppShellWindowEffectsHost({
         sessionFile: sessionState.sessionFile,
       }),
       sessionCwd: sessionState.cwd,
+      sessionName: sessionState.sessionName,
       sessionStreaming: sessionState.streaming,
+      firstMessage: sessionState.firstMessage,
       uiTitle: sessionState.uiState.title?.trim() || "",
     }),
     shallowRecordEqual
   )
   const notificationState = useValueStore(notificationStore)
+  const currentSessionTitle =
+    getCurrentSessionTitleFromState(sessionWindowState)
   const currentPageTitle = isSessionViewLoading
-    ? displaySessionTitle
+    ? loadingDisplaySessionTitle
     : sessionWindowState.uiTitle ||
       (currentSessionTitle !== "New session" ? currentSessionTitle : "Phi")
   const onConsumeSessionDoneEvents = (ids: Array<string>) => {
@@ -3690,11 +3705,9 @@ const AppShellSessionWorkspace = React.forwardRef<
     (currentSessionState) => ({
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
-      firstMessage: currentSessionState.firstMessage,
       sessionFile: currentSessionState.sessionFile,
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
-      sessionName: currentSessionState.sessionName,
     }),
     shallowRecordEqual
   )
@@ -3750,17 +3763,11 @@ const AppShellSessionWorkspace = React.forwardRef<
   const loadingSessionSummary = activeLoadingSessionId
     ? sidebarSessions.find((session) => session.id === activeLoadingSessionId)
     : undefined
-  const currentSessionTitle = getSessionTitle({
-    title:
-      sessionState.sessionName || sessionState.firstMessage || "New session",
-    name: sessionState.sessionName,
-  })
   const loadingSessionTitle = getSessionTitle(loadingSessionSummary)
-  const displaySessionTitle = isSessionViewLoading
-    ? loadingSessionTitle !== "New session"
+  const loadingDisplaySessionTitle =
+    loadingSessionTitle !== "New session"
       ? loadingSessionTitle
       : "Loading session…"
-    : currentSessionTitle
   const displaySessionCwd = isSessionViewLoading
     ? loadingSessionSummary?.cwd
     : sessionState.cwd
@@ -3872,10 +3879,13 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const openRenameDialog = () => {
-    if (!sessionState.sessionFile) return
+    const currentState = sessionStateRef.current
+    if (!currentState.sessionFile) return
     renameDialogRef.current?.open({
-      path: sessionState.sessionFile,
-      title: sessionState.sessionName || currentSessionTitle,
+      path: currentState.sessionFile,
+      title:
+        currentState.sessionName ||
+        getCurrentSessionTitleFromState(currentState),
     })
   }
 
@@ -3892,15 +3902,16 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const openDeleteDialogForCurrentSession = () => {
-    if (!sessionState.sessionFile) return
+    const currentState = sessionStateRef.current
+    if (!currentState.sessionFile) return
 
     openDeleteDialog([
       {
-        path: sessionState.sessionFile,
-        id: sessionState.sessionId,
-        title: currentSessionTitle,
-        name: sessionState.sessionName,
-        modified: sessionStateRef.current.modified,
+        path: currentState.sessionFile,
+        id: currentState.sessionId,
+        title: getCurrentSessionTitleFromState(currentState),
+        name: currentState.sessionName,
+        modified: currentState.modified,
       },
     ])
   }
@@ -4605,7 +4616,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const commandPaletteStateRef = useLatestRef({
-    currentSessionTitle,
     hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
     hideToolBlocks,
     selectedSidebarSessions,
@@ -4775,7 +4785,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "delete-session",
         group: "Sessions",
         title: "Delete session",
-        description: `Delete ${commandState.currentSessionTitle}`,
+        description: `Delete ${getCurrentSessionTitleFromState(
+          sessionStateRef.current
+        )}`,
         shortcut: "Ctrl+X",
         keywords: ["delete", "remove", "session"],
         onSelect: openDeleteDialogForCurrentSession,
@@ -4940,9 +4952,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   return (
     <>
       <AppShellWindowEffectsHost
-        currentSessionTitle={currentSessionTitle}
-        displaySessionTitle={displaySessionTitle}
         isSessionViewLoading={isSessionViewLoading}
+        loadingDisplaySessionTitle={loadingDisplaySessionTitle}
         notificationStore={notificationStore}
         sessionStore={sessionStore}
         sidebarStore={sidebarStore}
@@ -4954,7 +4965,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           actionsRef={sessionHeaderActionsRef}
           defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySessionCwd={displaySessionCwd}
-          displaySessionTitle={displaySessionTitle}
+          loadingDisplaySessionTitle={loadingDisplaySessionTitle}
           hideToolBlocks={hideToolBlocks}
           isSessionViewLoading={isSessionViewLoading}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
@@ -5089,7 +5100,7 @@ type AppShellSessionHeaderProps = {
   actionsRef: React.MutableRefObject<AppShellSessionHeaderActions>
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
-  displaySessionTitle: string
+  loadingDisplaySessionTitle: string
   hideToolBlocks: boolean
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
@@ -5101,7 +5112,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   actionsRef,
   defaultNewSessionDirectory,
   displaySessionCwd,
-  displaySessionTitle,
+  loadingDisplaySessionTitle,
   hideToolBlocks,
   isSessionViewLoading,
   newSessionDirectoryOptions,
@@ -5111,12 +5122,17 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const sessionHeaderState = useSelectedValueStore(
     sessionStore,
     (sessionState) => ({
+      firstMessage: sessionState.firstMessage,
       hideThinkingBlock: sessionState.hideThinkingBlock,
       sessionHasFile: Boolean(sessionState.sessionFile),
+      sessionName: sessionState.sessionName,
       sessionStreaming: sessionState.streaming,
     }),
     shallowRecordEqual
   )
+  const displaySessionTitle = isSessionViewLoading
+    ? loadingDisplaySessionTitle
+    : getCurrentSessionTitleFromState(sessionHeaderState)
 
   return (
     <div className="shrink-0 border-b border-border/70 p-4">
@@ -5750,6 +5766,9 @@ function AppShellSidebarController({
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
 }) {
+  const [directorySessionsStore] = React.useState(() =>
+    createDirectorySessionsStore({}, {})
+  )
   const baseSidebarDirectories = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.baseSidebarDirectories,
@@ -5818,25 +5837,27 @@ function AppShellSidebarController({
         activeStreaming: Boolean(status?.streaming),
       }
     },
-    (left, right) => {
-      if (!left.activeStreaming || !right.activeStreaming) {
-        return left.event === right.event
-      }
-
-      return (
-        left.event?.activeSessionId === right.event?.activeSessionId &&
-        left.event?.activeSessionKey === right.event?.activeSessionKey &&
-        left.event?.activeSessionPath === right.event?.activeSessionPath &&
-        sameStringArray(
-          left.event?.directories || [],
-          right.event?.directories || []
-        )
+    (left, right) =>
+      left.activeStreaming === right.activeStreaming &&
+      left.event?.activeSessionId === right.event?.activeSessionId &&
+      left.event?.activeSessionKey === right.event?.activeSessionKey &&
+      left.event?.activeSessionPath === right.event?.activeSessionPath &&
+      sameStringArray(
+        left.event?.directories || [],
+        right.event?.directories || []
       )
-    }
   )
-  const sessionsEvent = sidebarSessionsEventSnapshot.event
+  const sessionsEvent = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.state.sessionsEvent
+  )
   const activeSidebarSessionStreaming =
     sidebarSessionsEventSnapshot.activeStreaming
+  const matchingSessionCount = visibleDirectories.reduce(
+    (total, directory) =>
+      total + (filteredDirectorySessions[directory]?.length ?? 0),
+    0
+  )
   const sessionSearch = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.state.sessionSearch
@@ -5890,6 +5911,13 @@ function AppShellSidebarController({
       }
     }
   }
+
+  React.useLayoutEffect(() => {
+    directorySessionsStore.setData(
+      filteredDirectorySessions,
+      directoryIndexLoading
+    )
+  }, [directoryIndexLoading, directorySessionsStore, filteredDirectorySessions])
 
   React.useEffect(() => {
     let timeoutId = 0
@@ -6348,8 +6376,8 @@ function AppShellSidebarController({
       onSessionSearchChange={sidebarStore.setSessionSearch}
       sessionSearchInputRef={sessionSearchInputRef}
       visibleDirectories={visibleDirectories}
-      filteredDirectorySessions={filteredDirectorySessions}
-      directoryIndexLoading={directoryIndexLoading}
+      directorySessionsStore={directorySessionsStore}
+      matchingSessionCount={matchingSessionCount}
       selectedSessionKeys={selectedSidebarSessionKeys}
       activeSessionId={sessionsEvent?.activeSessionId}
       activeSessionKey={sessionsEvent?.activeSessionKey}

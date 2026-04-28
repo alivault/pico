@@ -167,7 +167,7 @@ type SessionClickModifiers = {
   shiftKey: boolean
 }
 
-const EMPTY_DIRECTORY_SESSIONS: Array<SessionListEntry> = []
+const EMPTY_DIRECTORY_SESSION_KEYS: Array<string> = []
 const SIDEBAR_SEARCH_COMMIT_DELAY_MS = 150
 
 function formatSidebarSessionTime(value?: string, now = Date.now()) {
@@ -420,8 +420,8 @@ type AppSidebarProps = {
   onSessionSearchChange: (value: string) => void
   sessionSearchInputRef?: React.Ref<HTMLInputElement>
   visibleDirectories: Array<string>
-  filteredDirectorySessions: Record<string, Array<SessionListEntry>>
-  directoryIndexLoading: Record<string, boolean>
+  directorySessionsStore: DirectorySessionsStore
+  matchingSessionCount: number
   selectedSessionKeys: Array<string>
   activeSessionId?: string
   activeSessionKey?: string
@@ -638,8 +638,8 @@ function useSidebarSessionActive(
 }
 
 type SidebarSessionItemProps = {
-  entry: SessionListEntry
   entryKey: string
+  directorySessionsStore: DirectorySessionsStore
   activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
   isMobile: boolean
@@ -653,9 +653,9 @@ type SidebarSessionItemProps = {
   onDeleteSession?: (entry: SessionListEntry) => void
 }
 
-const SidebarSessionItem = React.memo(function SidebarSessionItem({
-  entry,
+function SidebarSessionItem({
   entryKey,
+  directorySessionsStore,
   activeSessionStore,
   selectedSessionKeyStore,
   isMobile,
@@ -665,6 +665,7 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
   onRenameSession,
   onDeleteSession,
 }: SidebarSessionItemProps) {
+  const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
     entryKey
@@ -672,8 +673,10 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
   const isActive = useSidebarSessionActive(
     activeSessionStore,
     entryKey,
-    entry.id
+    entry?.id
   )
+
+  if (!entry) return null
   const timestamp = entry.lastUserMessageAt || entry.modified
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
   const messageCount = formatSessionMessageCount(entry.messageCount)
@@ -766,36 +769,101 @@ const SidebarSessionItem = React.memo(function SidebarSessionItem({
       )}
     </SidebarMenuItem>
   )
-})
+}
 
 type DirectorySessionsSnapshot = {
-  sessions: Array<SessionListEntry>
+  sessionKeys: Array<string>
   isLoadingSessions: boolean
 }
 
-type DirectorySessionsStore = {
+export type DirectorySessionsStore = {
   getSnapshot: (directory: string) => DirectorySessionsSnapshot
+  getEntrySnapshot: (entryKey: string) => SessionListEntry | undefined
   setData: (
     sessionsByDirectory: Record<string, Array<SessionListEntry>>,
     loadingByDirectory: Record<string, boolean>
   ) => void
   subscribeDirectory: (directory: string, listener: () => void) => () => void
+  subscribeEntry: (entryKey: string, listener: () => void) => () => void
 }
 
-function createDirectorySessionsStore(
+function sameDirectorySessionEntry(
+  left: SessionListEntry | undefined,
+  right: SessionListEntry | undefined
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+
+  return (
+    left.path === right.path &&
+    left.id === right.id &&
+    left.cwd === right.cwd &&
+    left.name === right.name &&
+    left.title === right.title &&
+    left.modified === right.modified &&
+    left.lastUserMessageAt === right.lastUserMessageAt &&
+    left.messageCount === right.messageCount &&
+    JSON.stringify(left.contextUsage ?? null) ===
+      JSON.stringify(right.contextUsage ?? null) &&
+    Boolean(left.streaming) === Boolean(right.streaming) &&
+    Boolean(left.unread) === Boolean(right.unread)
+  )
+}
+
+function buildDirectorySessionEntryMap(
+  sessionsByDirectory: Record<string, Array<SessionListEntry>>
+) {
+  const entriesByKey = new Map<string, SessionListEntry>()
+
+  for (const sessions of Object.values(sessionsByDirectory)) {
+    for (const entry of sessions) {
+      const entryKey = sessionListEntryKey(entry)
+      if (!entryKey || entriesByKey.has(entryKey)) continue
+      entriesByKey.set(entryKey, entry)
+    }
+  }
+
+  return entriesByKey
+}
+
+function buildDirectorySessionKeys(
+  sessionsByDirectory: Record<string, Array<SessionListEntry>>
+) {
+  const sessionKeysByDirectory: Record<string, Array<string>> = {}
+
+  for (const [directory, sessions] of Object.entries(sessionsByDirectory)) {
+    sessionKeysByDirectory[directory] = sessions
+      .map((entry) => sessionListEntryKey(entry))
+      .filter(Boolean)
+  }
+
+  return sessionKeysByDirectory
+}
+
+export function createDirectorySessionsStore(
   sessionsByDirectory: Record<string, Array<SessionListEntry>>,
   loadingByDirectory: Record<string, boolean>
 ): DirectorySessionsStore {
+  let sessionKeysByDirectory = buildDirectorySessionKeys(sessionsByDirectory)
+  let entriesByKey = buildDirectorySessionEntryMap(sessionsByDirectory)
   let snapshots = new Map<string, DirectorySessionsSnapshot>()
   const listenersByDirectory = new Map<string, Set<() => void>>()
+  const listenersByEntry = new Map<string, Set<() => void>>()
 
   const readSnapshot = (directory: string) => ({
-    sessions: sessionsByDirectory[directory] ?? EMPTY_DIRECTORY_SESSIONS,
+    sessionKeys:
+      sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
     isLoadingSessions: Boolean(loadingByDirectory[directory]),
   })
 
   const notifyDirectory = (directory: string) => {
     const listeners = listenersByDirectory.get(directory)
+    if (!listeners) return
+    for (const listener of listeners) listener()
+  }
+
+  const notifyEntry = (entryKey: string) => {
+    const listeners = listenersByEntry.get(entryKey)
     if (!listeners) return
     for (const listener of listeners) listener()
   }
@@ -810,7 +878,7 @@ function createDirectorySessionsStore(
   }
 
   for (const directory of new Set([
-    ...Object.keys(sessionsByDirectory),
+    ...Object.keys(sessionKeysByDirectory),
     ...Object.keys(loadingByDirectory),
   ])) {
     snapshots.set(directory, readSnapshot(directory))
@@ -820,24 +888,53 @@ function createDirectorySessionsStore(
     getSnapshot(directory) {
       return getCachedSnapshot(directory)
     },
+    getEntrySnapshot(entryKey) {
+      return entriesByKey.get(entryKey)
+    },
     setData(nextSessionsByDirectory, nextLoadingByDirectory) {
+      const nextSessionKeysByDirectory = buildDirectorySessionKeys(
+        nextSessionsByDirectory
+      )
+      const nextEntriesByKey = buildDirectorySessionEntryMap(
+        nextSessionsByDirectory
+      )
       const directories = new Set([
-        ...Object.keys(sessionsByDirectory),
+        ...Object.keys(sessionKeysByDirectory),
         ...Object.keys(loadingByDirectory),
-        ...Object.keys(nextSessionsByDirectory),
+        ...Object.keys(nextSessionKeysByDirectory),
         ...Object.keys(nextLoadingByDirectory),
       ])
-      sessionsByDirectory = nextSessionsByDirectory
+      const previousEntriesByKey = entriesByKey
+      const entryKeys = new Set([
+        ...previousEntriesByKey.keys(),
+        ...nextEntriesByKey.keys(),
+      ])
+
+      sessionKeysByDirectory = nextSessionKeysByDirectory
+      entriesByKey = nextEntriesByKey
       loadingByDirectory = nextLoadingByDirectory
+
+      for (const entryKey of entryKeys) {
+        if (
+          sameDirectorySessionEntry(
+            previousEntriesByKey.get(entryKey),
+            nextEntriesByKey.get(entryKey)
+          )
+        ) {
+          continue
+        }
+        notifyEntry(entryKey)
+      }
 
       for (const directory of directories) {
         const previous = snapshots.get(directory)
         const next = readSnapshot(directory)
         if (
           previous &&
-          previous.sessions === next.sessions &&
+          directoryOrderEqual(previous.sessionKeys, next.sessionKeys) &&
           previous.isLoadingSessions === next.isLoadingSessions
         ) {
+          snapshots.set(directory, previous)
           continue
         }
 
@@ -857,6 +954,19 @@ function createDirectorySessionsStore(
         }
       }
     },
+    subscribeEntry(entryKey, listener) {
+      if (!entryKey) return () => {}
+      const listeners = listenersByEntry.get(entryKey) ?? new Set()
+      listeners.add(listener)
+      listenersByEntry.set(entryKey, listeners)
+
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) {
+          listenersByEntry.delete(entryKey)
+        }
+      }
+    },
   }
 }
 
@@ -871,6 +981,20 @@ function useDirectorySessions(
     ),
     () => store.getSnapshot(directory),
     () => store.getSnapshot(directory)
+  )
+}
+
+function useDirectorySessionEntry(
+  store: DirectorySessionsStore,
+  entryKey: string
+) {
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeEntry(entryKey, listener),
+      [entryKey, store]
+    ),
+    () => store.getEntrySnapshot(entryKey),
+    () => store.getEntrySnapshot(entryKey)
   )
 }
 
@@ -923,7 +1047,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_DIRECTORY_SESSION_RENDER_COUNT
   )
-  const { isLoadingSessions, sessions } = useDirectorySessions(
+  const { isLoadingSessions, sessionKeys } = useDirectorySessions(
     directorySessionsStore,
     directory
   )
@@ -933,17 +1057,17 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     searchActive
   )
   const visibleCount = searchActive
-    ? sessions.length
-    : Math.min(sessions.length, renderCount)
-  const visibleSessions = sessions.slice(0, visibleCount)
-  const hasMoreSessions = visibleCount < sessions.length
+    ? sessionKeys.length
+    : Math.min(sessionKeys.length, renderCount)
+  const visibleSessionKeys = sessionKeys.slice(0, visibleCount)
+  const hasMoreSessions = visibleCount < sessionKeys.length
   const showLoadingSpinner = useDelayedTrue(
     isLoadingSessions,
     SIDEBAR_LOADING_SPINNER_DELAY_MS
   )
-  const showLoadingState = isLoadingSessions && sessions.length === 0
+  const showLoadingState = isLoadingSessions && sessionKeys.length === 0
   const showHeaderLoadingSpinner =
-    showLoadingSpinner && sessions.length === 0 && collapsed
+    showLoadingSpinner && sessionKeys.length === 0 && collapsed
   const hasDirectoryActions =
     !overlay &&
     Boolean(
@@ -985,7 +1109,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <DirectoryPathLabel path={directory} />
           <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
+            {sessionKeys.length} session{sessionKeys.length === 1 ? "" : "s"}
           </span>
         </span>
         {showHeaderLoadingSpinner ? (
@@ -1054,29 +1178,24 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               )}
               Loading sessions…
             </div>
-          ) : sessions.length > 0 ? (
+          ) : sessionKeys.length > 0 ? (
             <div className="flex flex-col">
               <SidebarMenu>
-                {visibleSessions.map((entry) => {
-                  const entryKey = sessionListEntryKey(entry)
-                  return (
-                    <SidebarSessionItem
-                      key={
-                        entryKey || `${directory}-${entry.path || entry.title}`
-                      }
-                      entry={entry}
-                      entryKey={entryKey}
-                      activeSessionStore={activeSessionStore}
-                      selectedSessionKeyStore={selectedSessionKeyStore}
-                      isMobile={isMobile}
-                      overlay={overlay}
-                      setOpenMobile={setOpenMobile}
-                      onSessionClick={onSessionClick}
-                      onRenameSession={onRenameSession}
-                      onDeleteSession={onDeleteSession}
-                    />
-                  )
-                })}
+                {visibleSessionKeys.map((entryKey) => (
+                  <SidebarSessionItem
+                    key={entryKey}
+                    entryKey={entryKey}
+                    directorySessionsStore={directorySessionsStore}
+                    activeSessionStore={activeSessionStore}
+                    selectedSessionKeyStore={selectedSessionKeyStore}
+                    isMobile={isMobile}
+                    overlay={overlay}
+                    setOpenMobile={setOpenMobile}
+                    onSessionClick={onSessionClick}
+                    onRenameSession={onRenameSession}
+                    onDeleteSession={onDeleteSession}
+                  />
+                ))}
               </SidebarMenu>
 
               {hasMoreSessions && !overlay ? (
@@ -1087,7 +1206,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   onClick={() => {
                     setRenderCount((current) =>
                       Math.min(
-                        sessions.length,
+                        sessionKeys.length,
                         current + DIRECTORY_SESSION_LOAD_MORE_COUNT
                       )
                     )
@@ -1096,7 +1215,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   Show{" "}
                   {Math.min(
                     DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                    sessions.length - visibleCount
+                    sessionKeys.length - visibleCount
                   )}{" "}
                   more
                 </Button>
@@ -1305,8 +1424,8 @@ export function AppSidebar({
   onSessionSearchChange,
   sessionSearchInputRef,
   visibleDirectories,
-  filteredDirectorySessions,
-  directoryIndexLoading,
+  directorySessionsStore,
+  matchingSessionCount,
   selectedSessionKeys,
   activeSessionId,
   activeSessionKey,
@@ -1338,19 +1457,6 @@ export function AppSidebar({
     createSelectedSessionKeyStore
   )
   const [activeSessionStore] = React.useState(createActiveSidebarSessionStore)
-  const [directorySessionsStore] = React.useState(() =>
-    createDirectorySessionsStore(
-      filteredDirectorySessions,
-      directoryIndexLoading
-    )
-  )
-
-  React.useLayoutEffect(() => {
-    directorySessionsStore.setData(
-      filteredDirectorySessions,
-      directoryIndexLoading
-    )
-  }, [directoryIndexLoading, directorySessionsStore, filteredDirectorySessions])
 
   React.useLayoutEffect(() => {
     selectedSessionKeyStore.setKeys(selectedSessionKeys)
@@ -1406,28 +1512,10 @@ export function AppSidebar({
     setPreviewDirectoryOrder(null)
   }, [orderedVisibleDirectories, previewDirectoryOrder, visibleDirectories])
 
-  const getDirectorySessions = (directory: string) => {
-    if (
-      !Object.prototype.hasOwnProperty.call(
-        filteredDirectorySessions,
-        directory
-      )
-    ) {
-      return EMPTY_DIRECTORY_SESSIONS
-    }
-
-    return filteredDirectorySessions[directory] ?? EMPTY_DIRECTORY_SESSIONS
-  }
-
   const removeDirectory = (directory: string) => {
     collapsedDirectoryStore.remove(directory)
     onRemoveDirectory?.(directory)
   }
-
-  const matchingSessionCount = visibleDirectories.reduce(
-    (total, directory) => total + getDirectorySessions(directory).length,
-    0
-  )
 
   const movePreviewDirectory = (activeId: string, overId: string) => {
     setPreviewDirectoryOrder((current) => {
