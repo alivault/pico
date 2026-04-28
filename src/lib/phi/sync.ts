@@ -430,6 +430,8 @@ export function assistantBlocksFromMessage(
   const blocks: Array<AssistantBlock> = []
   const toolBlockIndexByCallId = new Map<string, number>()
   const content = Array.isArray(message?.content) ? message.content : []
+  const stopReason =
+    typeof message?.stopReason === "string" ? message.stopReason : ""
 
   for (let index = 0; index < content.length; index += 1) {
     const part = content[index]
@@ -491,6 +493,19 @@ export function assistantBlocksFromMessage(
       }
       blocks.push(toolBlock)
     }
+  }
+
+  if (
+    stopReason === "aborted" &&
+    !blocks.some(
+      (block) => block.type === "text" && block.text.trim().length > 0
+    )
+  ) {
+    blocks.push({
+      type: "text",
+      blockKey: `${keyPrefix}:aborted`,
+      text: "Operation aborted",
+    })
   }
 
   return blocks

@@ -20,6 +20,7 @@ type RetainedConversationState = {
 type RetainedSessionEvent = {
   type?: unknown
   message?: MessagePayload
+  messages?: Array<MessagePayload>
   toolCallId?: unknown
   toolName?: unknown
   args?: unknown
@@ -57,6 +58,21 @@ function streamingAssistantItem(items: Array<ConversationItem>) {
   }
 
   return undefined
+}
+
+function eventHasAbortedAssistantMessage(event: RetainedSessionEvent) {
+  const messages = Array.isArray(event.messages) ? event.messages : []
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message?.role !== "assistant") continue
+    return message.stopReason === "aborted"
+  }
+
+  return (
+    event.message?.role === "assistant" &&
+    event.message.stopReason === "aborted"
+  )
 }
 
 function blockRenderKey(block: AssistantBlock | undefined) {
@@ -353,7 +369,32 @@ export function applyRetainedConversationEvent(
 
   if (type === "agent_end") {
     const item = streamingAssistantItem(state.items)
-    if (item && item.blocks.length === 0) {
+    if (!item) return
+
+    if (eventHasAbortedAssistantMessage(event)) {
+      const itemKey = nextMessageItemKey(state.items)
+      const renderKey = item.renderKey || itemKey
+      state.items = [
+        ...removeStreamingAssistantItem(state.items),
+        {
+          kind: "assistant",
+          itemKey,
+          renderKey,
+          blocks: [
+            ...item.blocks,
+            {
+              type: "text",
+              blockKey: `${renderKey}:aborted`,
+              text: "Operation aborted",
+            },
+          ],
+          streaming: false,
+        },
+      ]
+      return
+    }
+
+    if (item.blocks.length === 0) {
       state.items = removeStreamingAssistantItem(state.items)
     }
   }
