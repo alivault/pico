@@ -1570,6 +1570,23 @@ function TreeContinueActionsPanel({
     setSelectedAction(nextAction.value)
   }
 
+  const runSelectedAction = () => {
+    if (!selectedTreeNodeId) return
+
+    const action = actions.find((item) => item.value === selectedAction)
+    if (!action || action.disabled) return
+
+    if (selectedAction === "Summarize with custom prompt") {
+      onCustomPrompt()
+      return
+    }
+
+    void onNavigateTreeNode(
+      selectedTreeNodeId,
+      selectedAction === "Summarize" ? { summarize: true } : undefined
+    )
+  }
+
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
@@ -1585,6 +1602,19 @@ function TreeContinueActionsPanel({
         moveSelectedAction(
           event.key === "j" || event.key === "ArrowDown" ? 1 : -1
         )
+        return
+      }
+
+      if (
+        event.key === "Enter" &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        runSelectedAction()
       }
     }
 
@@ -1592,7 +1622,16 @@ function TreeContinueActionsPanel({
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true)
     }
-  }, [enabledActions, selectedAction])
+  }, [
+    canNavigateSelectedNode,
+    enabledActions,
+    onCustomPrompt,
+    onNavigateTreeNode,
+    selectedAction,
+    selectedTreeNodeId,
+    treeSubmitting,
+    treeSummaryAvailable,
+  ])
 
   return (
     <>
