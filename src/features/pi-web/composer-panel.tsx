@@ -604,17 +604,20 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     const exact = findExactSlashCommand(draftText, slashCommands)
     if (exact) {
       if (exact.command.kind === "builtin") {
+        dismissMenus()
         onRunBuiltinSlashCommand(exact.command.name, exact.args)
         return
       }
 
       if (!exact.args) {
+        dismissMenus()
         applyDraft("", exact.command.skillName, { immediate: true })
         return
       }
     }
 
     if (slashMenuState && selectedSlashCommand) {
+      dismissMenus()
       if (selectedSlashCommand.kind === "builtin") {
         onRunBuiltinSlashCommand(selectedSlashCommand.name, "")
         return
