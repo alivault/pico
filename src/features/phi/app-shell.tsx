@@ -5796,10 +5796,47 @@ function AppShellSidebarController({
     (snapshot) => snapshot.state.selectedSidebarSessionKeys,
     sameStringArray
   )
-  const sessionsEvent = useAppShellSidebarValue(
+  const sidebarSessionsEventSnapshot = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sessionsEvent
+    (snapshot) => {
+      const event = snapshot.state.sessionsEvent
+      const statuses = snapshot.state.sidebarSessionStatusByKey
+      const status = event
+        ? (event.activeSessionPath
+            ? statuses[`path:${event.activeSessionPath}`]
+            : undefined) ||
+          (event.activeSessionId
+            ? statuses[`id:${event.activeSessionId}`]
+            : undefined) ||
+          (event.activeSessionKey
+            ? statuses[`key:${event.activeSessionKey}`]
+            : undefined)
+        : undefined
+
+      return {
+        event,
+        activeStreaming: Boolean(status?.streaming),
+      }
+    },
+    (left, right) => {
+      if (!left.activeStreaming || !right.activeStreaming) {
+        return left.event === right.event
+      }
+
+      return (
+        left.event?.activeSessionId === right.event?.activeSessionId &&
+        left.event?.activeSessionKey === right.event?.activeSessionKey &&
+        left.event?.activeSessionPath === right.event?.activeSessionPath &&
+        sameStringArray(
+          left.event?.directories || [],
+          right.event?.directories || []
+        )
+      )
+    }
   )
+  const sessionsEvent = sidebarSessionsEventSnapshot.event
+  const activeSidebarSessionStreaming =
+    sidebarSessionsEventSnapshot.activeStreaming
   const sessionSearch = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.state.sessionSearch
@@ -5979,6 +6016,10 @@ function AppShellSidebarController({
         continue
       }
 
+      if (activeSidebarSessionStreaming) {
+        continue
+      }
+
       directoriesToRefresh.push(directory)
     }
 
@@ -6064,6 +6105,7 @@ function AppShellSidebarController({
     baseSidebarDirectories,
     directoryIndexDataByPath,
     directoryIndexLoading,
+    activeSidebarSessionStreaming,
     directoryStateByPath,
     sessionsEvent,
     sidebarStore,
