@@ -12,6 +12,7 @@ import type {
 import { Button } from "@/components/ui/button"
 import {
   Command,
+  CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,
@@ -45,6 +46,14 @@ type DeleteOldDirectorySessionsData = Extract<
   DeleteOldDirectorySessionsResponse,
   { ok: true }
 >
+
+function FooterKbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+      {children}
+    </kbd>
+  )
+}
 
 type RenameSessionDialogProps = {
   open: boolean
@@ -645,12 +654,8 @@ export function ForkSessionDialog({
     message.text.toLowerCase().includes(forkQuery.trim().toLowerCase())
   )
 
-  const forkDialogBody = forkLoading ? (
-    <div className="flex items-center gap-2 text-muted-foreground">
-      <Spinner /> Loading fork points…
-    </div>
-  ) : (
-    <Command shouldFilter={false} className="rounded-lg border">
+  const forkDialogBody = (
+    <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
       <CommandInput
         autoFocus={!isMobile}
         value={forkQuery}
@@ -658,30 +663,49 @@ export function ForkSessionDialog({
         placeholder="Search fork points"
         className="text-base md:text-sm"
       />
-      <CommandList className="max-h-[60vh]">
-        <CommandEmpty>
-          {forkMessages && forkMessages.length > 0
-            ? "No fork points match your search."
-            : "No forkable prompts found."}
-        </CommandEmpty>
-        {filteredForkMessages.length > 0 ? (
-          <CommandGroup heading="Fork points">
-            {filteredForkMessages.map((message) => (
-              <CommandItem
-                key={message.entryId}
-                value={message.text}
-                onSelect={() => onForkFromMessage(message.entryId)}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="line-clamp-3 text-sm whitespace-pre-wrap text-foreground">
-                    {message.text}
-                  </div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+        {forkLoading ? (
+          <div className="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground">
+            <Spinner /> Loading fork points…
+          </div>
+        ) : (
+          <>
+            <CommandEmpty>
+              {forkMessages && forkMessages.length > 0
+                ? "No fork points match your search."
+                : "No forkable prompts found."}
+            </CommandEmpty>
+            {filteredForkMessages.length > 0 ? (
+              <CommandGroup heading="Fork points">
+                {filteredForkMessages.map((message) => (
+                  <CommandItem
+                    key={message.entryId}
+                    value={message.text}
+                    onSelect={() => onForkFromMessage(message.entryId)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-3 text-sm whitespace-pre-wrap text-foreground">
+                        {message.text}
+                      </div>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+          </>
+        )}
       </CommandList>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>↑↓</FooterKbd> Navigate
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>Enter</FooterKbd> Fork
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <FooterKbd>Esc</FooterKbd> Close
+        </span>
+      </div>
     </Command>
   )
 
@@ -695,7 +719,7 @@ export function ForkSessionDialog({
               Search earlier user prompts and branch from a specific point.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {forkDialogBody}
           </div>
         </DrawerContent>
@@ -704,17 +728,16 @@ export function ForkSessionDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Fork session</DialogTitle>
-          <DialogDescription>
-            Search earlier user prompts and branch from a specific point.
-          </DialogDescription>
-        </DialogHeader>
-        {forkDialogBody}
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Fork session"
+      description="Search earlier user prompts and branch from a specific point."
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {forkDialogBody}
+    </CommandDialog>
   )
 }
 export type ForkSessionDialogHandle = {
