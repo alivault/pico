@@ -385,31 +385,21 @@ export function useAppShellSessionMutations({
     [sessionStateRef, setThinkingLevel]
   )
 
-  const setThinkingBlocksHiddenMutation = useMutation({
-    mutationFn: async (hidden: boolean) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/settings/hide-thinking", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ hide: hidden }),
-        }
-      )
-    },
-  })
-
   const setThinkingBlocksHidden = React.useCallback(
     async (hidden: boolean) => {
       if (!viewerContextId) return
       try {
-        await setThinkingBlocksHiddenMutation.mutateAsync(hidden)
+        await fetchJson(
+          buildRequestUrl("/api/settings/hide-thinking", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ hide: hidden }),
+          }
+        )
         toast.info(hidden ? "Thinking hidden" : "Thinking shown")
       } catch (error) {
         toast.error(
@@ -419,20 +409,18 @@ export function useAppShellSessionMutations({
         )
       }
     },
-    [setThinkingBlocksHiddenMutation, viewerContextId]
+    [activeSessionId, viewerContextId]
   )
 
   const toggleHideThinking = React.useCallback(async () => {
     await setThinkingBlocksHidden(!sessionStateRef.current.hideThinkingBlock)
   }, [sessionStateRef, setThinkingBlocksHidden])
 
-  const compactMutation = useMutation({
-    mutationFn: async () => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
+  const runCompact = React.useCallback(async () => {
+    if (!viewerContextId) return
+    setCompactWorkingState(true)
+    try {
+      await fetchJson(
         buildRequestUrl("/api/slash-command", {
           contextId: viewerContextId,
           sessionId: activeSessionId,
@@ -443,14 +431,6 @@ export function useAppShellSessionMutations({
           body: JSON.stringify({ name: "compact", args: "" }),
         }
       )
-    },
-  })
-
-  const runCompact = React.useCallback(async () => {
-    if (!viewerContextId) return
-    setCompactWorkingState(true)
-    try {
-      await compactMutation.mutateAsync()
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to compact session"
@@ -458,7 +438,7 @@ export function useAppShellSessionMutations({
     } finally {
       setCompactWorkingState(false)
     }
-  }, [compactMutation, setCompactWorkingState, viewerContextId])
+  }, [activeSessionId, setCompactWorkingState, viewerContextId])
 
   const renameSessionMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
