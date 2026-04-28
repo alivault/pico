@@ -2527,6 +2527,105 @@ const AppShellComposerController = React.memo(
   }
 )
 
+function AppShellTabsController({
+  actionsRef,
+  appUiStore,
+  awaitingFirstTurn,
+  composerPanelRef,
+  contextUsageStore,
+  conversationFrameRef,
+  conversationItemsStore,
+  displaySettingsStore,
+  fileInputRef,
+  hiddenThinkingPreviewStore,
+  isSessionViewLoading,
+  isSubmitting,
+  onCreateSession,
+  onValueChange,
+  sessionStore,
+  store,
+  viewerContextId,
+  workingStateStore,
+}: {
+  actionsRef: React.MutableRefObject<AppShellComposerActions>
+  appUiStore: ValueStore<AppShellUiState>
+  awaitingFirstTurn: boolean
+  composerPanelRef: React.RefObject<ComposerPanelHandle | null>
+  contextUsageStore: ComposerContextUsageStore
+  conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
+  conversationItemsStore: ConversationItemsStore
+  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  hiddenThinkingPreviewStore: TextValueStore
+  isSessionViewLoading: boolean
+  isSubmitting: boolean
+  onCreateSession: () => void
+  onValueChange: (value: string) => void
+  sessionStore: ValueStore<SessionState>
+  store: ValueStore<AppShellComposerSnapshot>
+  viewerContextId: string
+  workingStateStore: ValueStore<AppShellWorkingState | null>
+}) {
+  const currentTab = useSelectedValueStore(
+    appUiStore,
+    (state) => state.currentTab
+  )
+
+  return (
+    <Tabs
+      value={currentTab}
+      onValueChange={onValueChange}
+      className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
+    >
+      <AppShellTabsList
+        viewerContextId={viewerContextId}
+        sessionStore={sessionStore}
+      />
+
+      <TabsContent
+        value="session"
+        keepMounted
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <AppShellSessionConversation
+          awaitingFirstTurn={awaitingFirstTurn}
+          conversationFrameRef={conversationFrameRef}
+          conversationItemsStore={conversationItemsStore}
+          displaySettingsStore={displaySettingsStore}
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          isSessionViewLoading={isSessionViewLoading}
+          isSubmitting={isSubmitting}
+          onCreateSession={onCreateSession}
+          sessionStore={sessionStore}
+          viewerContextId={viewerContextId}
+          workingStateStore={workingStateStore}
+        />
+
+        <AppShellComposerController
+          actionsRef={actionsRef}
+          composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
+          displaySettingsStore={displaySettingsStore}
+          fileInputRef={fileInputRef}
+          sessionStore={sessionStore}
+          store={store}
+        />
+      </TabsContent>
+
+      <TabsContent
+        value="git"
+        className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
+      >
+        <AppShellGitPanelController
+          viewerContextId={viewerContextId}
+          sessionStore={sessionStore}
+          active={currentTab === "git"}
+        />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
 function AppShellWindowEffectsHost({
   isSessionViewLoading,
   loadingDisplaySessionTitle,
@@ -3722,8 +3821,14 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
-  const { currentTab, initialLoadingSessionId, loadingSessionId } =
-    useValueStore(appUiStore)
+  const { initialLoadingSessionId, loadingSessionId } = useSelectedValueStore(
+    appUiStore,
+    (state) => ({
+      initialLoadingSessionId: state.initialLoadingSessionId,
+      loadingSessionId: state.loadingSessionId,
+    }),
+    shallowRecordEqual
+  )
   const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
     useValueStore(draftFlowStore)
   const sessionState = useSelectedValueStore(
@@ -3944,7 +4049,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const focusPrompt = () => {
-    if (currentTab !== "session") {
+    if (appUiStore.getSnapshot().currentTab !== "session") {
       setCurrentTab("session")
     }
 
@@ -4863,7 +4968,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
-    currentTab,
+    currentTab: appUiStore.getSnapshot().currentTab,
     selectedSidebarSessions,
     sessionHasAvailableModels:
       sessionStateRef.current.availableModels.length > 0,
@@ -4983,59 +5088,28 @@ const AppShellSessionWorkspace = React.forwardRef<
           viewerContextId={viewerContextId}
         />
 
-        <Tabs
-          value={currentTab}
+        <AppShellTabsController
+          actionsRef={composerActionsRef}
+          appUiStore={appUiStore}
+          composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
+          conversationFrameRef={conversationFrameRef}
+          conversationItemsStore={conversationItemsStore}
+          displaySettingsStore={displaySettingsStore}
+          fileInputRef={fileInputRef}
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          isSessionViewLoading={isSessionViewLoading}
+          isSubmitting={isSubmitting}
+          onCreateSession={() => {
+            void createSession()
+          }}
+          sessionStore={sessionStore}
+          store={composerStore}
+          viewerContextId={viewerContextId}
+          workingStateStore={workingStateStore}
+          awaitingFirstTurn={awaitingFirstTurn}
           onValueChange={setCurrentTab}
-          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
-        >
-          <AppShellTabsList
-            viewerContextId={viewerContextId}
-            sessionStore={sessionStore}
-          />
-
-          <TabsContent
-            value="session"
-            keepMounted
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <AppShellSessionConversation
-              awaitingFirstTurn={awaitingFirstTurn}
-              conversationFrameRef={conversationFrameRef}
-              conversationItemsStore={conversationItemsStore}
-              displaySettingsStore={displaySettingsStore}
-              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-              isSessionViewLoading={isSessionViewLoading}
-              isSubmitting={isSubmitting}
-              onCreateSession={() => {
-                void createSession()
-              }}
-              sessionStore={sessionStore}
-              viewerContextId={viewerContextId}
-              workingStateStore={workingStateStore}
-            />
-
-            <AppShellComposerController
-              actionsRef={composerActionsRef}
-              composerPanelRef={composerPanelRef}
-              contextUsageStore={contextUsageStore}
-              displaySettingsStore={displaySettingsStore}
-              fileInputRef={fileInputRef}
-              sessionStore={sessionStore}
-              store={composerStore}
-            />
-          </TabsContent>
-
-          <TabsContent
-            value="git"
-            className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
-          >
-            <AppShellGitPanelController
-              viewerContextId={viewerContextId}
-              sessionStore={sessionStore}
-              active={currentTab === "git"}
-            />
-          </TabsContent>
-        </Tabs>
+        />
       </SidebarInset>
 
       <AppShellFloatingControllers
