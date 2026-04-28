@@ -50,6 +50,11 @@ type ComposerPickerSessionStore = {
   subscribe: (listener: () => void) => () => void
 }
 
+type ModelPickerState = {
+  availableModels: Array<ModelOption>
+  model?: ModelOption
+}
+
 type ThinkingPickerState = {
   availableThinkingLevels: Array<string>
   thinkingLevel: string
@@ -62,13 +67,17 @@ type ComposerPickersProps = {
   onThinkingPickerOpenChange: (open: boolean) => void
   modelQuery: string
   onModelQueryChange: (value: string) => void
-  availableModels: Array<ModelOption>
-  model?: ModelOption
   contextUsageStore: ComposerContextUsageStore
   sessionStore: ComposerPickerSessionStore
   disabled?: boolean
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
+}
+
+function sameModelPickerState(left: ModelPickerState, right: ModelPickerState) {
+  return (
+    left.model === right.model && left.availableModels === right.availableModels
+  )
 }
 
 function sameThinkingPickerState(
@@ -79,6 +88,33 @@ function sameThinkingPickerState(
     left.thinkingLevel === right.thinkingLevel &&
     left.availableThinkingLevels === right.availableThinkingLevels
   )
+}
+
+function useModelPickerState(store: ComposerPickerSessionStore) {
+  const cacheRef = React.useRef<{
+    selected?: ModelPickerState
+    source?: SessionState
+  }>({})
+
+  const getSnapshot = () => {
+    const source = store.getSnapshot()
+    const cache = cacheRef.current
+    if (cache.source === source && cache.selected) return cache.selected
+
+    const selected = {
+      availableModels: source.availableModels,
+      model: source.model,
+    }
+    if (cache.selected && sameModelPickerState(cache.selected, selected)) {
+      cacheRef.current = { source, selected: cache.selected }
+      return cache.selected
+    }
+
+    cacheRef.current = { source, selected }
+    return selected
+  }
+
+  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
 }
 
 function useThinkingPickerState(store: ComposerPickerSessionStore) {
@@ -107,6 +143,140 @@ function useThinkingPickerState(store: ComposerPickerSessionStore) {
 
   return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
 }
+
+const ComposerModelPicker = React.memo(function ComposerModelPicker({
+  disabled,
+  modelQuery,
+  onModelQueryChange,
+  onOpenChange,
+  onSelectModel,
+  open,
+  sessionStore,
+}: {
+  disabled: boolean
+  modelQuery: string
+  onModelQueryChange: (value: string) => void
+  onOpenChange: (open: boolean) => void
+  onSelectModel: (value: string) => void
+  open: boolean
+  sessionStore: ComposerPickerSessionStore
+}) {
+  const { availableModels, model } = useModelPickerState(sessionStore)
+  const filteredModels = (() => {
+    const normalizedQuery = modelQuery.trim().toLowerCase()
+    const modelOptions =
+      availableModels.length > 0 ? availableModels : model ? [model] : []
+    const nextModels = [...modelOptions].sort(
+      (left, right) =>
+        (left.provider || "").localeCompare(right.provider || "") ||
+        (left.name || left.id).localeCompare(right.name || right.id)
+    )
+
+    if (!normalizedQuery) return nextModels
+
+    return nextModels.filter((entry) => {
+      const haystack =
+        `${entry.provider || ""} ${entry.name || ""} ${entry.id}`.toLowerCase()
+      return haystack.includes(normalizedQuery)
+    })
+  })()
+
+  const groupedModels = (() => {
+    const groups = new Map<string, Array<ModelOption>>()
+    for (const entry of filteredModels) {
+      const provider = entry.provider || "Models"
+      const current = groups.get(provider) ?? []
+      current.push(entry)
+      groups.set(provider, current)
+    }
+    return [...groups.entries()]
+  })()
+
+  return (
+    <Popover open={!disabled && open} onOpenChange={onOpenChange}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="max-w-full"
+            disabled={disabled}
+          />
+        }
+      >
+        <span className="truncate">{model?.name || "Select model"}</span>
+        <ChevronDownIcon data-icon="inline-end" />
+      </PopoverTrigger>
+      <PopoverContent className="w-88 p-0" side="top" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={modelQuery}
+            onValueChange={onModelQueryChange}
+            placeholder="Search models"
+          />
+          <CommandList>
+            <CommandEmpty>No models match your search.</CommandEmpty>
+            {groupedModels.map(([provider, items]) => (
+              <CommandGroup key={provider} heading={provider}>
+                {items.map((entry) => {
+                  const value = `${entry.provider}/${entry.id}`
+                  const active = value === currentModelValue(model)
+                  return (
+                    <CommandItem
+                      key={value}
+                      value={`${entry.provider || ""} ${entry.name || entry.id} ${entry.id}`}
+                      onSelect={() => {
+                        if (disabled) return
+                        onSelectModel(value)
+                        onOpenChange(false)
+                      }}
+                    >
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate font-medium">
+                          {entry.name || entry.id}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {entry.provider}/{entry.id}
+                        </span>
+                      </div>
+                      {active ? <CheckIcon /> : null}
+                    </CommandItem>
+                  )
+                })}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+})
+
+const ComposerContextUsageIndicatorHost = React.memo(
+  function ComposerContextUsageIndicatorHost({
+    contextUsageStore,
+    disabled,
+    sessionStore,
+  }: {
+    contextUsageStore: ComposerContextUsageStore
+    disabled: boolean
+    sessionStore: ComposerPickerSessionStore
+  }) {
+    const modelProvider = React.useSyncExternalStore(
+      sessionStore.subscribe,
+      () => sessionStore.getSnapshot().model?.provider,
+      () => sessionStore.getSnapshot().model?.provider
+    )
+
+    return (
+      <ComposerContextUsageIndicator
+        contextUsageStore={contextUsageStore}
+        disabled={disabled}
+        modelProvider={modelProvider}
+      />
+    )
+  }
+)
 
 const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
   disabled,
@@ -172,44 +342,12 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   onThinkingPickerOpenChange,
   modelQuery,
   onModelQueryChange,
-  availableModels,
-  model,
   contextUsageStore,
   sessionStore,
   disabled = false,
   onSelectModel,
   onSelectThinkingLevel,
 }: ComposerPickersProps) {
-  const filteredModels = (() => {
-    const normalizedQuery = modelQuery.trim().toLowerCase()
-    const modelOptions =
-      availableModels.length > 0 ? availableModels : model ? [model] : []
-    const nextModels = [...modelOptions].sort(
-      (left, right) =>
-        (left.provider || "").localeCompare(right.provider || "") ||
-        (left.name || left.id).localeCompare(right.name || right.id)
-    )
-
-    if (!normalizedQuery) return nextModels
-
-    return nextModels.filter((entry) => {
-      const haystack =
-        `${entry.provider || ""} ${entry.name || ""} ${entry.id}`.toLowerCase()
-      return haystack.includes(normalizedQuery)
-    })
-  })()
-
-  const groupedModels = (() => {
-    const groups = new Map<string, Array<ModelOption>>()
-    for (const entry of filteredModels) {
-      const provider = entry.provider || "Models"
-      const current = groups.get(provider) ?? []
-      current.push(entry)
-      groups.set(provider, current)
-    }
-    return [...groups.entries()]
-  })()
-
   const handleModelPickerOpenChange = (open: boolean) => {
     if (disabled && open) return
     onModelPickerOpenChange(open)
@@ -223,65 +361,15 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Popover
-          open={!disabled && modelPickerOpen}
+        <ComposerModelPicker
+          disabled={disabled}
+          modelQuery={modelQuery}
+          onModelQueryChange={onModelQueryChange}
           onOpenChange={handleModelPickerOpenChange}
-        >
-          <PopoverTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="max-w-full"
-                disabled={disabled}
-              />
-            }
-          >
-            <span className="truncate">{model?.name || "Select model"}</span>
-            <ChevronDownIcon data-icon="inline-end" />
-          </PopoverTrigger>
-          <PopoverContent className="w-88 p-0" side="top" align="start">
-            <Command shouldFilter={false}>
-              <CommandInput
-                value={modelQuery}
-                onValueChange={onModelQueryChange}
-                placeholder="Search models"
-              />
-              <CommandList>
-                <CommandEmpty>No models match your search.</CommandEmpty>
-                {groupedModels.map(([provider, items]) => (
-                  <CommandGroup key={provider} heading={provider}>
-                    {items.map((entry) => {
-                      const value = `${entry.provider}/${entry.id}`
-                      const active = value === currentModelValue(model)
-                      return (
-                        <CommandItem
-                          key={value}
-                          value={`${entry.provider || ""} ${entry.name || entry.id} ${entry.id}`}
-                          onSelect={() => {
-                            if (disabled) return
-                            onSelectModel(value)
-                            onModelPickerOpenChange(false)
-                          }}
-                        >
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <span className="truncate font-medium">
-                              {entry.name || entry.id}
-                            </span>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {entry.provider}/{entry.id}
-                            </span>
-                          </div>
-                          {active ? <CheckIcon /> : null}
-                        </CommandItem>
-                      )
-                    })}
-                  </CommandGroup>
-                ))}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+          onSelectModel={onSelectModel}
+          open={modelPickerOpen}
+          sessionStore={sessionStore}
+        />
 
         <ComposerThinkingPicker
           disabled={disabled}
@@ -292,10 +380,10 @@ export const ComposerPickers = React.memo(function ComposerPickers({
         />
       </div>
 
-      <ComposerContextUsageIndicator
+      <ComposerContextUsageIndicatorHost
         contextUsageStore={contextUsageStore}
         disabled={disabled}
-        modelProvider={model?.provider}
+        sessionStore={sessionStore}
       />
     </div>
   )

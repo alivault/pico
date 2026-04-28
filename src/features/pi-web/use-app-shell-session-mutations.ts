@@ -251,46 +251,30 @@ export function useAppShellSessionMutations({
     }
   }, [])
 
-  const setModelMutation = useMutation({
-    mutationFn: async ({
-      provider,
-      modelId,
-    }: {
-      provider: string
-      modelId: string
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson(
-        buildRequestUrl("/api/model", {
-          contextId: viewerContextId,
-          sessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ provider, modelId }),
-        }
-      )
-    },
-  })
-
   const setModel = React.useCallback(
     async (value: string) => {
       if (!viewerContextId) return
       const [provider, modelId] = value.split("/")
       if (!provider || !modelId) return
       try {
-        await setModelMutation.mutateAsync({ provider, modelId })
+        await fetchJson(
+          buildRequestUrl("/api/model", {
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ provider, modelId }),
+          }
+        )
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to update model"
         )
       }
     },
-    [setModelMutation, viewerContextId]
+    [activeSessionId, viewerContextId]
   )
 
   const setThinkingLevel = React.useCallback(

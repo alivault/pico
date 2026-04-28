@@ -2324,8 +2324,6 @@ const AppShellComposerController = React.memo(
         composerSkill={snapshot.composerSkill}
         composerSyncNonce={snapshot.composerSyncNonce}
         centerMessages={snapshot.centerMessages}
-        availableModels={snapshot.availableModels}
-        model={snapshot.model}
         contextUsageStore={contextUsageStore}
         sessionStore={sessionStore}
         isSubmitting={snapshot.isSubmitting}
@@ -2718,7 +2716,6 @@ function movePendingDraftFollowUpMessage(
 type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
-  availableModels: SessionState["availableModels"]
   centerMessages: boolean
   composerImages: Array<PromptImage>
   composerSkill?: string
@@ -2728,7 +2725,6 @@ type AppShellComposerSnapshot = {
   disabled: boolean
   isStreaming: boolean
   isSubmitting: boolean
-  model: SessionState["model"]
   slashCommands: Array<SlashCommandDescriptor>
   viewerContextId: string
 }
@@ -2764,11 +2760,9 @@ type AppShellComposerActions = {
 function createInitialAppShellComposerSnapshot(
   viewerContextId: string
 ): AppShellComposerSnapshot {
-  const initialSessionState = createInitialSessionState()
   return {
     activeSessionId: undefined,
     awaitingFirstTurn: false,
-    availableModels: initialSessionState.availableModels,
     centerMessages: false,
     composerImages: [],
     composerSkill: undefined,
@@ -2778,7 +2772,6 @@ function createInitialAppShellComposerSnapshot(
     disabled: false,
     isStreaming: false,
     isSubmitting: false,
-    model: initialSessionState.model,
     slashCommands: [],
     viewerContextId,
   }
@@ -3539,13 +3532,11 @@ const AppShellSessionWorkspace = React.forwardRef<
   const sessionState = useSelectedValueStore(
     sessionStore,
     (currentSessionState) => ({
-      availableModels: currentSessionState.availableModels,
       availableSkills: currentSessionState.availableSkills,
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       firstMessage: currentSessionState.firstMessage,
       hideThinkingBlock: currentSessionState.hideThinkingBlock,
-      model: currentSessionState.model,
       sessionFile: currentSessionState.sessionFile,
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
@@ -4388,8 +4379,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
-  const treeSummaryAvailable = sessionState.availableModels.length > 0
-
   const handleThemeChange = (value: ThemeMode) => {
     setTheme(value)
   }
@@ -4463,7 +4452,6 @@ const AppShellSessionWorkspace = React.forwardRef<
   const composerSnapshot = {
     activeSessionId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
-    availableModels: sessionState.availableModels,
     centerMessages,
     composerImages: displayedComposerImages,
     composerSkill: displayedComposerSkill,
@@ -4473,7 +4461,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     disabled: composerDisabled,
     isStreaming: composerDisabled ? false : sessionStateRef.current.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
-    model: sessionState.model,
     slashCommands,
     viewerContextId,
   } satisfies AppShellComposerSnapshot
@@ -4516,7 +4503,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const commandPaletteStateRef = useLatestRef({
     currentSessionTitle,
-    hasAvailableModels: sessionState.availableModels.length > 0,
+    hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
     hideThinkingBlock: sessionState.hideThinkingBlock,
     hideToolBlocks,
     selectedSidebarSessions,
@@ -4753,7 +4740,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
     currentTab,
     selectedSidebarSessions,
-    sessionHasAvailableModels: sessionState.availableModels.length > 0,
+    sessionHasAvailableModels:
+      sessionStateRef.current.availableModels.length > 0,
     sessionHasFile: Boolean(sessionState.sessionFile),
     sidebarSessionEntriesByKey,
   })
@@ -4971,11 +4959,11 @@ const AppShellSessionWorkspace = React.forwardRef<
           sessionDoneDesktopNotificationsEnabled
         }
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+        sessionStore={sessionStore}
         settingsDialogRef={settingsDialogRef}
         settingsOpenRef={settingsOpenRef}
         treeDialogRef={treeDialogRef}
         treeOpenRef={treeOpenRef}
-        treeSummaryAvailable={treeSummaryAvailable}
         uiRequestDialogRef={uiRequestDialogRef}
         uiRequestOpenRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
@@ -5241,11 +5229,11 @@ type AppShellFloatingControllersProps = {
   sessionCwd?: string
   sessionDoneDesktopNotificationsEnabled: boolean
   sessionDoneSoundEnabled: boolean
+  sessionStore: ValueStore<SessionState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.MutableRefObject<boolean>
   treeDialogRef: React.RefObject<AppShellTreeDialogHandle | null>
   treeOpenRef: React.MutableRefObject<boolean>
-  treeSummaryAvailable: boolean
   uiRequestDialogRef: React.RefObject<AppShellUiRequestDialogHandle | null>
   uiRequestOpenRef: React.MutableRefObject<boolean>
   viewerContextId: string
@@ -5397,19 +5385,24 @@ const AppShellForkSessionDialogHost = React.memo(
 const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
   activeSessionId,
   currentSessionQueryScope,
+  sessionStore,
   treeDialogRef,
   treeOpenRef,
-  treeSummaryAvailable,
   viewerContextId,
 }: Pick<
   AppShellFloatingControllersProps,
   | "activeSessionId"
   | "currentSessionQueryScope"
+  | "sessionStore"
   | "treeDialogRef"
   | "treeOpenRef"
-  | "treeSummaryAvailable"
   | "viewerContextId"
 >) {
+  const treeSummaryAvailable = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => sessionState.availableModels.length > 0
+  )
+
   return (
     <AppShellTreeDialogController
       ref={treeDialogRef}
@@ -5544,11 +5537,11 @@ const AppShellFloatingControllers = React.memo(
     sessionCwd,
     sessionDoneDesktopNotificationsEnabled,
     sessionDoneSoundEnabled,
+    sessionStore,
     settingsDialogRef,
     settingsOpenRef,
     treeDialogRef,
     treeOpenRef,
-    treeSummaryAvailable,
     uiRequestDialogRef,
     uiRequestOpenRef,
     viewerContextId,
@@ -5602,9 +5595,9 @@ const AppShellFloatingControllers = React.memo(
         <AppShellTreeDialogHost
           activeSessionId={activeSessionId}
           currentSessionQueryScope={currentSessionQueryScope}
+          sessionStore={sessionStore}
           treeDialogRef={treeDialogRef}
           treeOpenRef={treeOpenRef}
-          treeSummaryAvailable={treeSummaryAvailable}
           viewerContextId={viewerContextId}
         />
 

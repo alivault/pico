@@ -9,12 +9,7 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type {
-  ModelOption,
-  PromptImage,
-  SessionState,
-  StreamingBehavior,
-} from "@/lib/pi-web"
+import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pi-web"
 import type { CompletionItem } from "@/lib/pi-web-api"
 
 import type { SlashCommandDescriptor } from "@/features/pi-web/composer-utils"
@@ -58,8 +53,6 @@ type ComposerPanelProps = {
   composerSkill?: string
   composerSyncNonce: number
   centerMessages: boolean
-  availableModels: Array<ModelOption>
-  model?: ModelOption
   contextUsageStore: ComposerContextUsageStore
   sessionStore: {
     getSnapshot: () => SessionState
@@ -153,8 +146,6 @@ export const ComposerPanel = React.forwardRef<
     composerSkill,
     composerSyncNonce,
     centerMessages,
-    availableModels,
-    model,
     contextUsageStore,
     sessionStore,
     isSubmitting,
@@ -258,8 +249,6 @@ export const ComposerPanel = React.forwardRef<
             onThinkingPickerOpenChange={setThinkingPickerOpen}
             modelQuery={modelQuery}
             onModelQueryChange={setModelQuery}
-            availableModels={availableModels}
-            model={model}
             contextUsageStore={contextUsageStore}
             sessionStore={sessionStore}
             disabled={disabled}
