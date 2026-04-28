@@ -6348,7 +6348,6 @@ function AppShellSidebarController({
       onSessionSearchChange={sidebarStore.setSessionSearch}
       sessionSearchInputRef={sessionSearchInputRef}
       visibleDirectories={visibleDirectories}
-      directoryCount={baseSidebarDirectories.length}
       filteredDirectorySessions={filteredDirectorySessions}
       directoryIndexLoading={directoryIndexLoading}
       selectedSessionKeys={selectedSidebarSessionKeys}
@@ -6389,18 +6388,6 @@ function AppShellSidebarController({
             JSON.stringify(next)
           )
           return next
-        })
-      }}
-      onRemoveAllDirectories={() => {
-        sidebarStore.setSidebarDirectories((current) => {
-          if (current.length === 0) {
-            return current
-          }
-          safeLocalStorageSetItem(
-            SIDEBAR_DIRECTORIES_STORAGE_KEY,
-            JSON.stringify([])
-          )
-          return []
         })
       }}
       onReorderDirectories={reorderSidebarDirectories}
