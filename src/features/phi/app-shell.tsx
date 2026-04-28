@@ -3416,9 +3416,27 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [draftFlowStore]
   )
-  const [recentDirectories, setRecentDirectories] = React.useState<
+  const recentDirectoriesStoreRef = React.useRef<ValueStore<
     Array<string>
-  >([])
+  > | null>(null)
+  if (!recentDirectoriesStoreRef.current) {
+    recentDirectoriesStoreRef.current = createValueStore<Array<string>>(
+      [],
+      sameStringArray
+    )
+  }
+  const recentDirectoriesStore = recentDirectoriesStoreRef.current
+  const setRecentDirectories = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<string>>>
+  >(
+    (action) => {
+      const current = recentDirectoriesStore.getSnapshot()
+      const next = applySidebarStateAction(current, action)
+      if (next === current) return
+      recentDirectoriesStore.setSnapshot(next)
+    },
+    [recentDirectoriesStore]
+  )
   const { isMobile, openMobile, openMobileSettled, setOpenMobile } =
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -5145,7 +5163,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
         onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
         onThemeChange={handleThemeChange}
-        recentDirectories={recentDirectories}
+        recentDirectoriesStore={recentDirectoriesStore}
         renameDialogRef={renameDialogRef}
         renameOpenRef={renameOpenRef}
         renameSessionPath={renameSessionPath}
@@ -5418,7 +5436,7 @@ type AppShellFloatingControllersProps = {
   onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
   onSessionDoneSoundEnabledChange: (enabled: boolean) => void
   onThemeChange: (value: ThemeMode) => void
-  recentDirectories: Array<string>
+  recentDirectoriesStore: ValueStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
   renameOpenRef: React.MutableRefObject<boolean>
   renameSessionPath: React.ComponentProps<
@@ -5466,7 +5484,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
     addDirectoryPath,
     baseSidebarDirectories,
     knownDirectories,
-    recentDirectories,
+    recentDirectoriesStore,
     sessionCwd,
   }: Pick<
     AppShellFloatingControllersProps,
@@ -5475,9 +5493,10 @@ const AppShellAddDirectoryDialogHost = React.memo(
     | "addDirectoryPath"
     | "baseSidebarDirectories"
     | "knownDirectories"
-    | "recentDirectories"
+    | "recentDirectoriesStore"
     | "sessionCwd"
   >) {
+    const recentDirectories = useValueStore(recentDirectoriesStore)
     return (
       <AppShellAddDirectoryDialogController
         ref={addDirectoryDialogRef}
@@ -5739,7 +5758,7 @@ const AppShellFloatingControllers = React.memo(
     onSessionDoneDesktopNotificationsEnabledChange,
     onSessionDoneSoundEnabledChange,
     onThemeChange,
-    recentDirectories,
+    recentDirectoriesStore,
     renameDialogRef,
     renameOpenRef,
     renameSessionPath,
@@ -5767,7 +5786,7 @@ const AppShellFloatingControllers = React.memo(
           addDirectoryPath={addDirectoryPath}
           baseSidebarDirectories={baseSidebarDirectories}
           knownDirectories={knownDirectories}
-          recentDirectories={recentDirectories}
+          recentDirectoriesStore={recentDirectoriesStore}
           sessionCwd={sessionCwd}
         />
 
