@@ -1067,6 +1067,7 @@ function TreeEntryLine({ node }: { node: FlatTreeNode }) {
 type TreeBrowsePanelProps = {
   isMobile: boolean
   treeFilterMode: TreeFilterMode
+  onTreeFilterModeChange: (value: TreeFilterMode) => void
   treeLoading: boolean
   treeSubmitting: boolean
   treeLeafId: string | null
@@ -1083,6 +1084,7 @@ type TreeBrowsePanelProps = {
 function TreeBrowsePanel({
   isMobile,
   treeFilterMode,
+  onTreeFilterModeChange,
   treeLoading,
   treeSubmitting,
   treeLeafId,
@@ -1250,6 +1252,21 @@ function TreeBrowsePanel({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {isMobile ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-1 pb-3">
+          {TREE_FILTER_OPTIONS.map((option) => (
+            <Button
+              key={option.mode}
+              size="sm"
+              variant={treeFilterMode === option.mode ? "default" : "outline"}
+              onClick={() => onTreeFilterModeChange(option.mode)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
       <Command
         shouldFilter={false}
         loop
@@ -1402,27 +1419,29 @@ function TreeBrowsePanel({
             </div>
           )}
         </CommandList>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-          <span className="tabular-nums">
-            {treeLoading
-              ? "Loading tree…"
-              : `${cursorTreePositionText}/${visibleTreeCount}`}
-          </span>
-          <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
-          <TreeFooterHint kbd="←/→">Page</TreeFooterHint>
-          <TreeFooterHint kbd="Ctrl+←/→">Fold</TreeFooterHint>
-          {TREE_FILTER_OPTIONS.map((option) => (
-            <TreeFooterHint
-              key={option.mode}
-              kbd={option.shortcut.join("+")}
-              active={treeFilterMode === option.mode}
-            >
-              {option.label}
-            </TreeFooterHint>
-          ))}
-          <TreeFooterHint kbd="Shift+L">Label</TreeFooterHint>
-          <TreeFooterHint kbd="Esc">Close</TreeFooterHint>
-        </div>
+        {!isMobile ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            <span className="tabular-nums">
+              {treeLoading
+                ? "Loading tree…"
+                : `${cursorTreePositionText}/${visibleTreeCount}`}
+            </span>
+            <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
+            <TreeFooterHint kbd="←/→">Page</TreeFooterHint>
+            <TreeFooterHint kbd="Ctrl+←/→">Fold</TreeFooterHint>
+            {TREE_FILTER_OPTIONS.map((option) => (
+              <TreeFooterHint
+                key={option.mode}
+                kbd={option.shortcut.join("+")}
+                active={treeFilterMode === option.mode}
+              >
+                {option.label}
+              </TreeFooterHint>
+            ))}
+            <TreeFooterHint kbd="Shift+L">Label</TreeFooterHint>
+            <TreeFooterHint kbd="Esc">Close</TreeFooterHint>
+          </div>
+        ) : null}
       </Command>
     </div>
   )
@@ -1434,6 +1453,7 @@ type TreeContinueActionValue =
   | "Summarize with custom prompt"
 
 type TreeContinueActionsPanelProps = {
+  isMobile: boolean
   canNavigateSelectedNode: boolean
   treeSummaryAvailable: boolean
   treeSubmitting: boolean
@@ -1446,6 +1466,7 @@ type TreeContinueActionsPanelProps = {
 }
 
 function TreeContinueActionsPanel({
+  isMobile,
   canNavigateSelectedNode,
   treeSummaryAvailable,
   treeSubmitting,
@@ -1642,25 +1663,29 @@ function TreeContinueActionsPanel({
           </CommandItem>
         </CommandGroup>
       </CommandList>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-        <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
-        <TreeFooterHint kbd="Enter">Select</TreeFooterHint>
-        <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
-        {!treeSummaryAvailable ? (
-          <span>Summary actions require a selected model.</span>
-        ) : null}
-      </div>
+      {!isMobile ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
+          <TreeFooterHint kbd="Enter">Select</TreeFooterHint>
+          <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
+          {!treeSummaryAvailable ? (
+            <span>Summary actions require a selected model.</span>
+          ) : null}
+        </div>
+      ) : null}
     </Command>
   )
 }
 
 type TreeLabelPanelProps = {
+  isMobile: boolean
   defaultLabel: string
   disabled: boolean
   onSave: (label: string) => Promise<void> | void
 }
 
 function TreeLabelPanel({
+  isMobile,
   defaultLabel,
   disabled,
   onSave,
@@ -1685,10 +1710,12 @@ function TreeLabelPanel({
           className="min-w-0 flex-1"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-        <TreeFooterHint kbd="Enter">Save</TreeFooterHint>
-        <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
-      </div>
+      {!isMobile ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <TreeFooterHint kbd="Enter">Save</TreeFooterHint>
+          <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1910,6 +1937,14 @@ export function AppShellTreeDialog({
   const canNavigateSelectedNode = Boolean(
     selectedTreeNodeId && selectedTreeNodeId !== treeLeafId && selectedTreeNode
   )
+  const submitCustomSummary = () => {
+    if (!selectedTreeNodeId) return
+
+    void onNavigateTreeNode(selectedTreeNodeId, {
+      summarize: true,
+      customInstructions: treeCustomSummaryRef.current?.value ?? "",
+    })
+  }
   const treeDialogTitle =
     treeStage === "custom"
       ? "Summarize with custom prompt"
@@ -1933,6 +1968,7 @@ export function AppShellTreeDialog({
         key={open ? "open" : "closed"}
         isMobile={isMobile}
         treeFilterMode={treeFilterMode}
+        onTreeFilterModeChange={setTreeFilterMode}
         treeLoading={treeLoading}
         treeSubmitting={treeSubmitting}
         treeLeafId={treeLeafId}
@@ -1975,6 +2011,7 @@ export function AppShellTreeDialog({
 
         {treeStage === "actions" ? (
           <TreeContinueActionsPanel
+            isMobile={isMobile}
             canNavigateSelectedNode={canNavigateSelectedNode}
             treeSummaryAvailable={treeSummaryAvailable}
             treeSubmitting={treeSubmitting}
@@ -1984,6 +2021,7 @@ export function AppShellTreeDialog({
           />
         ) : treeStage === "label" ? (
           <TreeLabelPanel
+            isMobile={isMobile}
             defaultLabel={selectedTreeNodeLabel}
             disabled={!selectedTreeNodeId || treeSubmitting}
             onSave={(label) => {
@@ -2004,10 +2042,29 @@ export function AppShellTreeDialog({
                 autoFocus
               />
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-              <TreeFooterHint kbd="Ctrl/⌘+Enter">Summarize</TreeFooterHint>
-              <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
-            </div>
+            {isMobile ? (
+              <div className="flex flex-col-reverse gap-2 border-t border-border/70 px-3 py-3 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setTreeStage("actions")}
+                  disabled={treeSubmitting}
+                >
+                  Back
+                </Button>
+                <Button
+                  disabled={!canNavigateSelectedNode || treeSubmitting}
+                  onClick={submitCustomSummary}
+                >
+                  {treeSubmitting ? <Spinner /> : null}
+                  Summarize & continue
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                <TreeFooterHint kbd="Ctrl/⌘+Enter">Summarize</TreeFooterHint>
+                <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
+              </div>
+            )}
           </div>
         )}
       </div>

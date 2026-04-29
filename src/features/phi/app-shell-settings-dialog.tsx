@@ -277,7 +277,7 @@ export function AppShellSettingsDialog({
           </CommandGroup>
         ))}
       </CommandList>
-      <div className="border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+      <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
         Use ↑/↓ to select, Enter to cycle or toggle, and Esc to close.
       </div>
     </Command>
@@ -289,9 +289,7 @@ export function AppShellSettingsDialog({
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Settings</DrawerTitle>
-            <DrawerDescription>
-              Search settings. Press Enter on a setting to cycle or toggle it.
-            </DrawerDescription>
+            <DrawerDescription>Search and update settings.</DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {settingsCommandBody}

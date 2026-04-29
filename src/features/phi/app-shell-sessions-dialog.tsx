@@ -585,24 +585,26 @@ function AppShellSessionsDialog({
           })}
         </CommandGroup>
       </CommandList>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Tab</FooterKbd>
-          {scope === "all" ? "Current directory" : "All sessions"}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Enter</FooterKbd> Switch
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Ctrl+R</FooterKbd> Rename
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Ctrl+D</FooterKbd> Delete
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Esc</FooterKbd> Close
-        </span>
-      </div>
+      {!isMobile ? (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Tab</FooterKbd>
+            {scope === "all" ? "Current directory" : "All sessions"}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Enter</FooterKbd> Switch
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Ctrl+R</FooterKbd> Rename
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Ctrl+D</FooterKbd> Delete
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Esc</FooterKbd> Close
+          </span>
+        </div>
+      ) : null}
     </Command>
   )
 
@@ -646,14 +648,16 @@ function AppShellSessionsDialog({
           className="min-w-0 flex-1"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Enter</FooterKbd> Save
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Esc</FooterKbd> Back
-        </span>
-      </div>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Enter</FooterKbd> Save
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Esc</FooterKbd> Back
+          </span>
+        </div>
+      )}
     </div>
   )
 
@@ -695,14 +699,16 @@ function AppShellSessionsDialog({
           Delete "{selectedSession?.title || "New session"}" from disk?
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Enter</FooterKbd> Delete
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <FooterKbd>Esc</FooterKbd> Back
-        </span>
-      </div>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Enter</FooterKbd> Delete
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Esc</FooterKbd> Back
+          </span>
+        </div>
+      )}
     </div>
   )
 
@@ -719,10 +725,7 @@ function AppShellSessionsDialog({
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Sessions</DrawerTitle>
-            <DrawerDescription>
-              Search and switch sessions. Press Tab to toggle current directory
-              and all sessions.
-            </DrawerDescription>
+            <DrawerDescription>Search and switch sessions.</DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {sessionsCommandBody}

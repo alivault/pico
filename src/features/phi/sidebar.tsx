@@ -1694,7 +1694,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
               <CommandIcon />
               <span>Commands</span>
-              <kbd className="ml-auto rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70">
+              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
                 Ctrl+P
               </kbd>
             </SidebarMenuButton>
@@ -1703,7 +1703,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenSettings}>
               <Settings2Icon />
               <span>Settings</span>
-              <kbd className="ml-auto rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70">
+              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
                 Ctrl+,
               </kbd>
             </SidebarMenuButton>
