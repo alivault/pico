@@ -233,6 +233,8 @@ type UnknownRecord = Record<string, unknown>
 export type MessagePayload = UnknownRecord & {
   role?: unknown
   content?: unknown
+  stopReason?: unknown
+  errorMessage?: unknown
   queued?: unknown
   metadata?: UnknownRecord
   streamingBehavior?: unknown

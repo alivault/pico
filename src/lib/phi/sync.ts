@@ -423,15 +423,52 @@ export function reconcileConversationItems(
   return changed ? reconciled : previousItems
 }
 
+function assistantStopMessage(message: SyncMessage | undefined) {
+  const stopReason =
+    typeof message?.stopReason === "string" ? message.stopReason : ""
+  const errorMessage =
+    typeof message?.errorMessage === "string" ? message.errorMessage.trim() : ""
+
+  if (stopReason === "aborted") {
+    return errorMessage && errorMessage !== "Request was aborted"
+      ? errorMessage
+      : "Operation aborted"
+  }
+
+  if (stopReason === "error") {
+    return `Error: ${errorMessage || "Unknown error"}`
+  }
+
+  return ""
+}
+
+function applyAssistantStopToToolBlocks(
+  blocks: Array<AssistantBlock>,
+  stopMessage: string
+) {
+  let changed = false
+  const nextBlocks = blocks.map((block) => {
+    if (block.type !== "tool" || block.output.trim()) return block
+    changed = true
+    return {
+      ...block,
+      output: stopMessage,
+      isError: true,
+      running: false,
+    } satisfies ToolBlock
+  })
+
+  return changed ? nextBlocks : blocks
+}
+
 export function assistantBlocksFromMessage(
   message: SyncMessage | undefined,
   keyPrefix = "assistant"
 ) {
-  const blocks: Array<AssistantBlock> = []
+  let blocks: Array<AssistantBlock> = []
   const toolBlockIndexByCallId = new Map<string, number>()
   const content = Array.isArray(message?.content) ? message.content : []
-  const stopReason =
-    typeof message?.stopReason === "string" ? message.stopReason : ""
+  const stopMessage = assistantStopMessage(message)
 
   for (let index = 0; index < content.length; index += 1) {
     const part = content[index]
@@ -495,17 +532,16 @@ export function assistantBlocksFromMessage(
     }
   }
 
-  if (
-    stopReason === "aborted" &&
-    !blocks.some(
-      (block) => block.type === "text" && block.text.trim().length > 0
-    )
-  ) {
-    blocks.push({
-      type: "text",
-      blockKey: `${keyPrefix}:aborted`,
-      text: "Operation aborted",
-    })
+  if (stopMessage) {
+    if (blocks.some((block) => block.type === "tool")) {
+      blocks = applyAssistantStopToToolBlocks(blocks, stopMessage)
+    } else {
+      blocks.push({
+        type: "text",
+        blockKey: `${keyPrefix}:stop`,
+        text: stopMessage,
+      })
+    }
   }
 
   return blocks

@@ -60,19 +60,62 @@ function streamingAssistantItem(items: Array<ConversationItem>) {
   return undefined
 }
 
-function eventHasAbortedAssistantMessage(event: RetainedSessionEvent) {
+function abortedAssistantMessage(event: RetainedSessionEvent) {
   const messages = Array.isArray(event.messages) ? event.messages : []
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message?.role !== "assistant") continue
-    return message.stopReason === "aborted"
+    return message.stopReason === "aborted" ? message : undefined
   }
 
-  return (
-    event.message?.role === "assistant" &&
+  return event.message?.role === "assistant" &&
     event.message.stopReason === "aborted"
-  )
+    ? event.message
+    : undefined
+}
+
+function abortedAssistantStopMessage(message: MessagePayload | undefined) {
+  const errorMessage =
+    typeof message?.errorMessage === "string" ? message.errorMessage.trim() : ""
+  return errorMessage && errorMessage !== "Request was aborted"
+    ? errorMessage
+    : "Operation aborted"
+}
+
+function applyAbortedStopToBlocks(
+  blocks: Array<AssistantBlock>,
+  renderKey: string,
+  stopMessage: string
+) {
+  if (blocks.some((block) => block.type === "tool")) {
+    return blocks.map((block) => {
+      if (block.type !== "tool" || block.output.trim()) return block
+      return {
+        ...block,
+        output: stopMessage,
+        isError: true,
+        running: false,
+      } satisfies ToolBlock
+    })
+  }
+
+  if (
+    blocks.some(
+      (block) => block.type === "text" && block.text.trim() === stopMessage
+    )
+  ) {
+    return blocks
+  }
+
+  return [
+    ...blocks,
+    {
+      type: "text",
+      blockKey: `${renderKey}:aborted`,
+      text: stopMessage,
+    } satisfies AssistantBlock,
+  ]
 }
 
 function blockRenderKey(block: AssistantBlock | undefined) {
@@ -371,7 +414,8 @@ export function applyRetainedConversationEvent(
     const item = streamingAssistantItem(state.items)
     if (!item) return
 
-    if (eventHasAbortedAssistantMessage(event)) {
+    const abortedMessage = abortedAssistantMessage(event)
+    if (abortedMessage) {
       const itemKey = nextMessageItemKey(state.items)
       const renderKey = item.renderKey || itemKey
       state.items = [
@@ -380,14 +424,11 @@ export function applyRetainedConversationEvent(
           kind: "assistant",
           itemKey,
           renderKey,
-          blocks: [
-            ...item.blocks,
-            {
-              type: "text",
-              blockKey: `${renderKey}:aborted`,
-              text: "Operation aborted",
-            },
-          ],
+          blocks: applyAbortedStopToBlocks(
+            item.blocks,
+            renderKey,
+            abortedAssistantStopMessage(abortedMessage)
+          ),
           streaming: false,
         },
       ]

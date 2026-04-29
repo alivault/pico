@@ -383,6 +383,12 @@ function sanitizeSessionMessage(message: MessageLike) {
   return {
     ...(role ? { role } : {}),
     ...(sanitizedContent !== undefined ? { content: sanitizedContent } : {}),
+    ...(typeof message?.stopReason === "string"
+      ? { stopReason: message.stopReason }
+      : {}),
+    ...(typeof message?.errorMessage === "string"
+      ? { errorMessage: message.errorMessage }
+      : {}),
     ...(message?.queued || metadata?.queued ? { queued: true } : {}),
     ...(message?.streamingBehavior === "steer" ||
     message?.streamingBehavior === "followUp"
