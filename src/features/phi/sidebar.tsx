@@ -24,6 +24,7 @@ import {
   ChevronsDownUpIcon,
   ChevronsUpDown,
   CommandIcon,
+  EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
   SearchIcon,
@@ -46,6 +47,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Sidebar,
@@ -1117,7 +1124,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         ) : null}
       </button>
 
-      {onCreateSessionInDirectory && !overlay ? (
+      {onCreateSessionInDirectory && !overlay && !isMobile ? (
         <Button
           size="icon-xs"
           variant="ghost"
@@ -1128,6 +1135,48 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <SquarePenIcon className="size-4" />
         </Button>
       ) : null}
+
+      {hasDirectoryActions && isMobile ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                aria-label={`Directory actions for ${directory}`}
+                title="Directory actions"
+              />
+            }
+          >
+            <EllipsisVerticalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {onCreateSessionInDirectory ? (
+              <DropdownMenuItem
+                onClick={() => onCreateSessionInDirectory(directory)}
+              >
+                New session
+              </DropdownMenuItem>
+            ) : null}
+            {onDeleteOldSessionsInDirectory ? (
+              <DropdownMenuItem
+                onClick={() => onDeleteOldSessionsInDirectory(directory)}
+              >
+                Delete old sessions…
+              </DropdownMenuItem>
+            ) : null}
+            {onRemoveDirectory ? (
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => onRemoveDirectory(directory)}
+              >
+                Remove from sidebar
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   )
 
@@ -1135,7 +1184,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     <SidebarGroup
       className={cn("rounded-lg py-1", isDragging && !overlay && "opacity-0")}
     >
-      {hasDirectoryActions ? (
+      {hasDirectoryActions && !isMobile ? (
         <ContextMenu>
           <ContextMenuTrigger render={directoryHeader} />
           <ContextMenuContent className="w-48">

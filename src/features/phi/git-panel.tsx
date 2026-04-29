@@ -10,7 +10,6 @@ import {
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
-  RefreshCwIcon,
   UploadIcon,
   WandSparklesIcon,
 } from "lucide-react"
@@ -61,6 +60,7 @@ type GitPanelProps = {
   viewerContextId: string
   cwd?: string
   active: boolean
+  showToolbar?: boolean
 }
 
 type GitScopedProps = GitPanelProps
@@ -420,23 +420,9 @@ function gitCommitEntryCount(commits: Array<string>) {
   )
 }
 
-function gitCommitsSummaryText(
-  gitStatus: GitStatusValue | undefined,
-  commits: Array<string>
-) {
-  const parts = []
-  if (gitStatus?.detached) {
-    parts.push(`detached ${gitStatus.revision || "HEAD"}`.trim())
-  } else if (gitStatus?.branch) {
-    parts.push(gitStatus.branch)
-  }
-
+function gitCommitsSummaryText(commits: Array<string>) {
   const count = gitCommitEntryCount(commits)
-  if (count > 0) {
-    parts.push(`${count} commit${count === 1 ? "" : "s"}`)
-  }
-
-  return parts.join(" · ")
+  return count > 0 ? `${count} commit${count === 1 ? "" : "s"}` : ""
 }
 
 function parseGitCommitGraphLine(line: string) {
@@ -625,36 +611,42 @@ function GitRepositorySummary({
 
   return (
     <div
-      className="flex min-w-0 items-center gap-2 text-lg leading-7"
+      className="flex min-w-0 items-center gap-1.5 text-xs leading-5"
       title={title}
     >
       {synced ? (
-        <CheckIcon className="size-4 shrink-0 text-emerald-500" />
+        <CheckIcon className="size-3 shrink-0 text-emerald-500" />
       ) : null}
       {gitStatus.behind > 0 ? (
-        <span className="shrink-0 font-semibold text-sky-500 tabular-nums">
+        <span className="shrink-0 font-medium text-sky-500 tabular-nums">
           ↓{gitStatus.behind}
         </span>
       ) : null}
       {gitStatus.ahead > 0 ? (
-        <span className="shrink-0 font-semibold text-amber-500 tabular-nums">
+        <span className="shrink-0 font-medium text-amber-500 tabular-nums">
           ↑{gitStatus.ahead}
         </span>
       ) : null}
-      <span className="min-w-0 truncate font-semibold">
+      <span className="min-w-0 truncate font-medium">
         {folderName || "No cwd"}
       </span>
       {branchLabel ? (
         <>
           <span className="shrink-0 text-muted-foreground">→</span>
-          <span className="min-w-0 truncate">{branchLabel}</span>
+          <span className="min-w-0 truncate text-muted-foreground">
+            {branchLabel}
+          </span>
         </>
       ) : null}
     </div>
   )
 }
 
-function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
+export function GitPanelToolbar({
+  viewerContextId,
+  cwd,
+  active,
+}: GitScopedProps) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
@@ -708,20 +700,6 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
     hasRepository && !gitStatus?.detached && (gitStatus?.behind || 0) > 0
   )
 
-  const refreshGit = async () => {
-    if (!viewerContextId || !normalizedCwd) return
-
-    try {
-      await invalidateGitQueries({
-        queryClient,
-        viewerContextId,
-        cwd: normalizedCwd,
-      })
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to load git view"))
-    }
-  }
-
   const gitActionMutation = useMutation({
     mutationFn: async (action: "push" | "pull") => {
       const endpoint = action === "push" ? "/api/git-push" : "/api/git-pull"
@@ -754,8 +732,8 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
   })
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
         <GitRepositorySummary
           viewerContextId={viewerContextId}
           cwd={normalizedCwd}
@@ -771,7 +749,7 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           disabled={!viewerContextId || !normalizedCwd || !hasChanges}
           onClick={() => {
             setCommitDialogOpen(true)
@@ -781,7 +759,7 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           disabled={
             !viewerContextId ||
             !normalizedCwd ||
@@ -802,7 +780,7 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           disabled={
             !viewerContextId ||
             !normalizedCwd ||
@@ -820,17 +798,6 @@ function GitPanelToolbar({ viewerContextId, cwd, active }: GitScopedProps) {
             <DownloadIcon />
           )}
           Pull
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!viewerContextId || !normalizedCwd || refreshing}
-          onClick={() => {
-            void refreshGit()
-          }}
-        >
-          <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
-          Refresh
         </Button>
       </div>
 
@@ -1511,16 +1478,8 @@ function GitCommitsSection({ viewerContextId, cwd, active }: GitScopedProps) {
     select: selectGitUnpushedCommitShortHashes,
     notifyOnChangeProps: ["data"],
   })
-  const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
-    enabled: Boolean(active && viewerContextId && normalizedCwd),
-    select: selectGitStatusSummary,
-    notifyOnChangeProps: ["data"],
-  })
   const commits = commitsQuery.data
-  const meta = Array.isArray(commits)
-    ? gitCommitsSummaryText(statusQuery.data, commits)
-    : ""
+  const meta = Array.isArray(commits) ? gitCommitsSummaryText(commits) : ""
   const unpushedCommitShortHashes = new Set(unpushedQuery.data ?? [])
 
   return (
@@ -1598,7 +1557,15 @@ export function HeaderGitStatusText({
 
   if (!text) return null
 
-  return <span title={statusQuery.data?.title || text}>• {text}</span>
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+      title={statusQuery.data?.title || text}
+    >
+      <GitBranchIcon className="size-3 shrink-0" aria-hidden="true" />
+      <span>{text}</span>
+    </span>
+  )
 }
 
 export function DraftGitStatusBadge({
@@ -1621,7 +1588,12 @@ export function DraftGitStatusBadge({
   return <Badge variant="outline">{statusQuery.data.label}</Badge>
 }
 
-export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
+export function GitPanel({
+  viewerContextId,
+  cwd,
+  active,
+  showToolbar = true,
+}: GitPanelProps) {
   const normalizedCwd = normalizeCwd(cwd)
 
   return (
@@ -1631,11 +1603,13 @@ export function GitPanel({ viewerContextId, cwd, active }: GitPanelProps) {
         cwd={normalizedCwd}
         active={active}
       />
-      <GitPanelToolbar
-        viewerContextId={viewerContextId}
-        cwd={normalizedCwd}
-        active={active}
-      />
+      {showToolbar ? (
+        <GitPanelToolbar
+          viewerContextId={viewerContextId}
+          cwd={normalizedCwd}
+          active={active}
+        />
+      ) : null}
       <GitFilesSection
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}

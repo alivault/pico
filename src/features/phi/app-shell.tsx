@@ -4,7 +4,10 @@ import {
   ArrowUpToLineIcon,
   CheckIcon,
   EllipsisIcon,
+  FolderIcon,
+  GitBranchIcon,
   SquarePenIcon,
+  XIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { toast } from "sonner"
@@ -53,6 +56,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import {
   SidebarInset,
@@ -60,7 +64,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AppShellCommandPaletteController,
   type AppShellCommandPaletteHandle,
@@ -122,6 +126,7 @@ import {
 import {
   DraftGitStatusBadge,
   GitPanel,
+  GitPanelToolbar,
   GitTabStatusText,
   HeaderGitStatusText,
 } from "@/features/phi/git-panel"
@@ -1942,7 +1947,7 @@ function AppShellTabsList({
   )
 
   return (
-    <TabsList className="w-full rounded-none border-b border-border/70">
+    <TabsList className="w-full rounded-none border-b border-border/70 md:hidden">
       <TabsTrigger value="session">Session</TabsTrigger>
       <TabsTrigger value="git">
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
@@ -2550,28 +2555,8 @@ const AppShellComposerController = React.memo(
   }
 )
 
-function AppShellTabsController({
-  actionsRef,
-  appUiStore,
-  awaitingFirstTurn,
-  composerPanelRef,
-  contextUsageStore,
-  conversationFrameRef,
-  conversationItemsStore,
-  displaySettingsStore,
-  fileInputRef,
-  hiddenThinkingPreviewStore,
-  isSessionViewLoading,
-  isSubmitting,
-  onCreateSession,
-  onValueChange,
-  sessionStore,
-  store,
-  viewerContextId,
-  workingStateStore,
-}: {
+type AppShellSessionContentProps = {
   actionsRef: React.MutableRefObject<AppShellComposerActions>
-  appUiStore: ValueStore<AppShellUiState>
   awaitingFirstTurn: boolean
   composerPanelRef: React.RefObject<ComposerPanelHandle | null>
   contextUsageStore: ComposerContextUsageStore
@@ -2583,15 +2568,185 @@ function AppShellTabsController({
   isSessionViewLoading: boolean
   isSubmitting: boolean
   onCreateSession: () => void
-  onValueChange: (value: string) => void
   sessionStore: ValueStore<SessionState>
   store: ValueStore<AppShellComposerSnapshot>
   viewerContextId: string
   workingStateStore: ValueStore<AppShellWorkingState | null>
+}
+
+function AppShellSessionContent({
+  actionsRef,
+  awaitingFirstTurn,
+  composerPanelRef,
+  contextUsageStore,
+  conversationFrameRef,
+  conversationItemsStore,
+  displaySettingsStore,
+  fileInputRef,
+  hiddenThinkingPreviewStore,
+  isSessionViewLoading,
+  isSubmitting,
+  onCreateSession,
+  sessionStore,
+  store,
+  viewerContextId,
+  workingStateStore,
+}: AppShellSessionContentProps) {
+  return (
+    <>
+      <AppShellSessionConversation
+        awaitingFirstTurn={awaitingFirstTurn}
+        conversationFrameRef={conversationFrameRef}
+        conversationItemsStore={conversationItemsStore}
+        displaySettingsStore={displaySettingsStore}
+        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        isSessionViewLoading={isSessionViewLoading}
+        isSubmitting={isSubmitting}
+        onCreateSession={onCreateSession}
+        sessionStore={sessionStore}
+        viewerContextId={viewerContextId}
+        workingStateStore={workingStateStore}
+      />
+
+      <AppShellComposerController
+        actionsRef={actionsRef}
+        composerPanelRef={composerPanelRef}
+        contextUsageStore={contextUsageStore}
+        displaySettingsStore={displaySettingsStore}
+        fileInputRef={fileInputRef}
+        sessionStore={sessionStore}
+        store={store}
+      />
+    </>
+  )
+}
+
+function AppShellDesktopGitPanel({
+  active,
+  onClose,
+  sessionStore,
+  viewerContextId,
+}: {
+  active: boolean
+  onClose: () => void
+  sessionStore: ValueStore<SessionState>
+  viewerContextId: string
+}) {
+  const cwd = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => sessionState.cwd
+  )
+
+  if (!active) return null
+
+  return (
+    <aside
+      aria-label="Git panel"
+      className="flex h-full min-h-0 min-w-0 flex-col border-l border-border/70 bg-background"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 p-2">
+        <div className="min-w-0 flex-1">
+          <GitPanelToolbar
+            viewerContextId={viewerContextId}
+            cwd={cwd}
+            active={active}
+          />
+        </div>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Close Git panel"
+          onClick={onClose}
+        >
+          <XIcon />
+          <span className="sr-only">Close Git panel</span>
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <GitPanel
+          viewerContextId={viewerContextId}
+          cwd={cwd}
+          active={active}
+          showToolbar={false}
+        />
+      </div>
+    </aside>
+  )
+}
+
+function AppShellTabsController({
+  actionsRef,
+  appUiStore,
+  awaitingFirstTurn,
+  composerPanelRef,
+  contextUsageStore,
+  conversationFrameRef,
+  conversationItemsStore,
+  displaySettingsStore,
+  fileInputRef,
+  gitPanelOpen,
+  hiddenThinkingPreviewStore,
+  isSessionViewLoading,
+  isSubmitting,
+  isMobile,
+  onCreateSession,
+  onGitPanelOpenChange,
+  onValueChange,
+  sessionStore,
+  store,
+  viewerContextId,
+  workingStateStore,
+}: AppShellSessionContentProps & {
+  appUiStore: ValueStore<AppShellUiState>
+  gitPanelOpen: boolean
+  isMobile: boolean
+  onGitPanelOpenChange: React.Dispatch<React.SetStateAction<boolean>>
+  onValueChange: (value: string) => void
 }) {
   const currentTab = useSelectedValueStore(
     appUiStore,
     (state) => state.currentTab
+  )
+  const sessionVisibleClassName =
+    currentTab === "git"
+      ? "hidden min-h-0 flex-1 flex-col md:flex"
+      : "flex min-h-0 flex-1 flex-col"
+  const mobileGitClassName =
+    currentTab === "git"
+      ? "min-h-0 flex-1 space-y-4 overflow-auto p-6 md:hidden"
+      : "hidden"
+  const desktopGitPanelOpen = !isMobile && gitPanelOpen
+  const sessionPane = (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className={sessionVisibleClassName}>
+        <AppShellSessionContent
+          actionsRef={actionsRef}
+          awaitingFirstTurn={awaitingFirstTurn}
+          composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
+          conversationFrameRef={conversationFrameRef}
+          conversationItemsStore={conversationItemsStore}
+          displaySettingsStore={displaySettingsStore}
+          fileInputRef={fileInputRef}
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          isSessionViewLoading={isSessionViewLoading}
+          isSubmitting={isSubmitting}
+          onCreateSession={onCreateSession}
+          sessionStore={sessionStore}
+          store={store}
+          viewerContextId={viewerContextId}
+          workingStateStore={workingStateStore}
+        />
+      </div>
+
+      <div className={mobileGitClassName}>
+        <AppShellGitPanelController
+          viewerContextId={viewerContextId}
+          sessionStore={sessionStore}
+          active={isMobile && currentTab === "git"}
+        />
+      </div>
+    </div>
   )
 
   return (
@@ -2605,46 +2760,36 @@ function AppShellTabsController({
         sessionStore={sessionStore}
       />
 
-      <TabsContent
-        value="session"
-        keepMounted
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <AppShellSessionConversation
-          awaitingFirstTurn={awaitingFirstTurn}
-          conversationFrameRef={conversationFrameRef}
-          conversationItemsStore={conversationItemsStore}
-          displaySettingsStore={displaySettingsStore}
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-          isSessionViewLoading={isSessionViewLoading}
-          isSubmitting={isSubmitting}
-          onCreateSession={onCreateSession}
-          sessionStore={sessionStore}
-          viewerContextId={viewerContextId}
-          workingStateStore={workingStateStore}
-        />
-
-        <AppShellComposerController
-          actionsRef={actionsRef}
-          composerPanelRef={composerPanelRef}
-          contextUsageStore={contextUsageStore}
-          displaySettingsStore={displaySettingsStore}
-          fileInputRef={fileInputRef}
-          sessionStore={sessionStore}
-          store={store}
-        />
-      </TabsContent>
-
-      <TabsContent
-        value="git"
-        className="min-h-0 flex-1 space-y-4 overflow-auto p-6"
-      >
-        <AppShellGitPanelController
-          viewerContextId={viewerContextId}
-          sessionStore={sessionStore}
-          active={currentTab === "git"}
-        />
-      </TabsContent>
+      {desktopGitPanelOpen ? (
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="min-h-0 flex-1 overflow-hidden"
+        >
+          <ResizablePanel
+            id="session"
+            defaultSize="50%"
+            minSize="20rem"
+            className="h-full min-h-0 min-w-0"
+          >
+            {sessionPane}
+          </ResizablePanel>
+          <ResizablePanel
+            id="git"
+            defaultSize="50%"
+            minSize="20rem"
+            className="h-full min-h-0 min-w-0"
+          >
+            <AppShellDesktopGitPanel
+              viewerContextId={viewerContextId}
+              sessionStore={sessionStore}
+              active={desktopGitPanelOpen}
+              onClose={() => onGitPanelOpenChange(false)}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
+      )}
     </Tabs>
   )
 }
@@ -3112,6 +3257,7 @@ type AppShellSessionWorkspaceHandle = {
 
 type AppShellUiState = {
   currentTab: string
+  gitPanelOpen: boolean
   initialLoadingSessionId: string | null
   loadingSessionId: string | null
 }
@@ -3199,6 +3345,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     appUiStoreRef.current = createValueStore<AppShellUiState>(
       {
         currentTab: "session",
+        gitPanelOpen: false,
         initialLoadingSessionId: sessionId || null,
         loadingSessionId: null,
       },
@@ -3211,6 +3358,14 @@ const AppShellSessionWorkspace = React.forwardRef<
   >(
     (action) => {
       setValueStoreField(appUiStore, "currentTab", action)
+    },
+    [appUiStore]
+  )
+  const setGitPanelOpen = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      setValueStoreField(appUiStore, "gitPanelOpen", action)
     },
     [appUiStore]
   )
@@ -3888,6 +4043,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     }),
     shallowRecordEqual
   )
+  const gitPanelOpen = useSelectedValueStore(
+    appUiStore,
+    (state) => state.gitPanelOpen
+  )
   const sidebarWorkspaceVersion =
     useAppShellSidebarWorkspaceVersion(sidebarStore)
   void sidebarWorkspaceVersion
@@ -3966,6 +4125,11 @@ const AppShellSessionWorkspace = React.forwardRef<
       setLoadingSessionId(sessionId)
     }
   }, [sessionId])
+
+  React.useEffect(() => {
+    if (isMobile) return
+    setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+  }, [isMobile, setCurrentTab])
 
   const syncComposerDraft = (
     value: string,
@@ -4049,6 +4213,19 @@ const AppShellSessionWorkspace = React.forwardRef<
     commandPaletteRef.current?.close()
     sessionsDialogRef.current?.close()
     settingsDialogRef.current?.open()
+  }
+
+  const openGitView = () => {
+    if (isMobile) {
+      setCurrentTab("git")
+      return
+    }
+
+    setGitPanelOpen(true)
+  }
+
+  const toggleGitPanel = () => {
+    setGitPanelOpen((open) => !open)
   }
 
   const openRenameDialog = () => {
@@ -4832,7 +5009,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const commandPaletteStateRef = useLatestRef({
+    gitPanelOpen,
     hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
+    isMobile,
     selectedSidebarSessions,
     sessionFile: sessionState.sessionFile,
   })
@@ -4859,6 +5038,20 @@ const AppShellSessionWorkspace = React.forwardRef<
         shortcut: "Ctrl+S",
         keywords: ["session", "search", "switch", "jump"],
         onSelect: openSessionsDialog,
+      },
+      {
+        id: "open-git-view",
+        group: "Git",
+        title: commandState.isMobile
+          ? "Open Git tab"
+          : commandState.gitPanelOpen
+            ? "Show Git panel"
+            : "Open Git panel",
+        description: commandState.isMobile
+          ? "Switch to the mobile Git tab"
+          : "Open the right-side Git panel",
+        keywords: ["git", "changes", "branch", "commit", "panel"],
+        onSelect: openGitView,
       },
       {
         id: "focus-prompt",
@@ -5070,7 +5263,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
-    currentTab: appUiStore.getSnapshot().currentTab,
+    currentTab: isMobile ? appUiStore.getSnapshot().currentTab : "session",
     selectedSidebarSessions,
     sessionHasAvailableModels:
       sessionStateRef.current.availableModels.length > 0,
@@ -5186,10 +5379,12 @@ const AppShellSessionWorkspace = React.forwardRef<
           actionsRef={sessionHeaderActionsRef}
           defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySessionCwd={displaySessionCwd}
+          gitPanelOpen={gitPanelOpen}
           loadingDisplaySessionTitle={loadingDisplaySessionTitle}
           displaySettingsStore={displaySettingsStore}
           isSessionViewLoading={isSessionViewLoading}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
+          onToggleGitPanel={toggleGitPanel}
           sessionStore={sessionStore}
           viewerContextId={viewerContextId}
         />
@@ -5203,12 +5398,15 @@ const AppShellSessionWorkspace = React.forwardRef<
           conversationItemsStore={conversationItemsStore}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
+          gitPanelOpen={gitPanelOpen}
           hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
+          isMobile={isMobile}
           onCreateSession={() => {
             void createSession()
           }}
+          onGitPanelOpenChange={setGitPanelOpen}
           sessionStore={sessionStore}
           store={composerStore}
           viewerContextId={viewerContextId}
@@ -5289,10 +5487,12 @@ type AppShellSessionHeaderProps = {
   actionsRef: React.MutableRefObject<AppShellSessionHeaderActions>
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
+  gitPanelOpen: boolean
   loadingDisplaySessionTitle: string
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  onToggleGitPanel: () => void
   sessionStore: ValueStore<SessionState>
   viewerContextId: string
 }
@@ -5301,10 +5501,12 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   actionsRef,
   defaultNewSessionDirectory,
   displaySessionCwd,
+  gitPanelOpen,
   loadingDisplaySessionTitle,
   displaySettingsStore,
   isSessionViewLoading,
   newSessionDirectoryOptions,
+  onToggleGitPanel,
   sessionStore,
   viewerContextId,
 }: AppShellSessionHeaderProps) {
@@ -5329,37 +5531,48 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
 
   return (
     <div className="shrink-0 border-b border-border/70 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <SidebarTrigger className="mt-0.5 shrink-0" />
-          <div className="min-w-0 space-y-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <h2
-                className="min-w-0 truncate text-[15px] leading-tight font-semibold"
-                title={displaySessionTitle}
-              >
-                {displaySessionTitle}
-              </h2>
-              {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-                <Spinner
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                  aria-label="Session streaming"
-                />
-              ) : null}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              {displaySessionCwd ? (
-                <span>{formatDisplayPath(displaySessionCwd)}</span>
-              ) : null}
-              <HeaderGitStatusText
-                viewerContextId={viewerContextId}
-                cwd={displaySessionCwd}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <SidebarTrigger className="shrink-0" />
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2
+              className="max-w-full min-w-0 truncate text-[15px] leading-tight font-semibold"
+              title={displaySessionTitle}
+            >
+              {displaySessionTitle}
+            </h2>
+            {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
+              <Spinner
+                className="size-3.5 shrink-0 text-muted-foreground"
+                aria-label="Session streaming"
               />
-            </div>
+            ) : null}
+            {displaySessionCwd ? (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
+                <span>{formatDisplayPath(displaySessionCwd)}</span>
+              </span>
+            ) : null}
+            <HeaderGitStatusText
+              viewerContextId={viewerContextId}
+              cwd={displaySessionCwd}
+            />
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant={gitPanelOpen ? "secondary" : "outline"}
+            className="hidden md:inline-flex"
+            aria-pressed={gitPanelOpen}
+            aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            title={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            onClick={onToggleGitPanel}
+          >
+            <GitBranchIcon />
+            Git
+          </Button>
           <Button
             size="icon-sm"
             variant="outline"
