@@ -3489,6 +3489,75 @@ type AppShellComposerSnapshot = {
   viewerContextId: string
 }
 
+const EMPTY_COMPOSER_IMAGES: Array<PromptImage> = []
+const EMPTY_COMPOSER_PENDING_MESSAGES: Array<PendingComposerMessage> = []
+
+function sameComposerPromptImages(
+  left: Array<PromptImage>,
+  right: Array<PromptImage>
+) {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftImage = left[index]
+    const rightImage = right[index]
+    if (!leftImage || !rightImage) return false
+    if (leftImage.mimeType !== rightImage.mimeType) return false
+    if (leftImage.data !== rightImage.data) return false
+    if (leftImage.previewUrl !== rightImage.previewUrl) return false
+  }
+
+  return true
+}
+
+function sameComposerPendingMessages(
+  left: Array<PendingComposerMessage>,
+  right: Array<PendingComposerMessage>
+) {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftMessage = left[index]
+    const rightMessage = right[index]
+    if (!leftMessage || !rightMessage) return false
+    if (leftMessage.pendingId !== rightMessage.pendingId) return false
+    if (leftMessage.text !== rightMessage.text) return false
+    if (leftMessage.streamingBehavior !== rightMessage.streamingBehavior) {
+      return false
+    }
+    if (!sameComposerPromptImages(leftMessage.images, rightMessage.images)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function sameAppShellComposerSnapshot(
+  left: AppShellComposerSnapshot,
+  right: AppShellComposerSnapshot
+) {
+  return (
+    left.activeSessionId === right.activeSessionId &&
+    left.awaitingFirstTurn === right.awaitingFirstTurn &&
+    left.centerMessages === right.centerMessages &&
+    left.composerSkill === right.composerSkill &&
+    left.composerSyncNonce === right.composerSyncNonce &&
+    left.composerText === right.composerText &&
+    left.disabled === right.disabled &&
+    left.isStreaming === right.isStreaming &&
+    left.isSubmitting === right.isSubmitting &&
+    left.viewerContextId === right.viewerContextId &&
+    sameComposerPromptImages(left.composerImages, right.composerImages) &&
+    sameComposerPendingMessages(
+      left.currentPendingMessages,
+      right.currentPendingMessages
+    )
+  )
+}
+
 type AppShellComposerActions = {
   abortSession: () => void | Promise<unknown>
   onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
@@ -3524,11 +3593,11 @@ function createInitialAppShellComposerSnapshot(
     activeSessionId: undefined,
     awaitingFirstTurn: false,
     centerMessages: false,
-    composerImages: [],
+    composerImages: EMPTY_COMPOSER_IMAGES,
     composerSkill: undefined,
     composerSyncNonce: 0,
     composerText: "",
-    currentPendingMessages: [],
+    currentPendingMessages: EMPTY_COMPOSER_PENDING_MESSAGES,
     disabled: false,
     isStreaming: false,
     isSubmitting: false,
@@ -3926,7 +3995,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   if (!composerStoreRef.current) {
     composerStoreRef.current = createValueStore(
       createInitialAppShellComposerSnapshot(viewerContextId),
-      shallowRecordEqual
+      sameAppShellComposerSnapshot
     )
   }
   const composerStore = composerStoreRef.current
@@ -5038,15 +5107,17 @@ const AppShellSessionWorkspace = React.forwardRef<
       streamingBehavior: message.streamingBehavior,
     })
   )
-  const currentPendingMessages = [
-    ...pendingDraftFollowUpMessages,
-    ...pendingMessages,
-  ]
+  const currentPendingMessages =
+    pendingDraftFollowUpMessages.length > 0 || pendingMessages.length > 0
+      ? [...pendingDraftFollowUpMessages, ...pendingMessages]
+      : EMPTY_COMPOSER_PENDING_MESSAGES
   const composerDisabled = isSessionViewLoading
   const displayedPendingMessages = composerDisabled
-    ? []
+    ? EMPTY_COMPOSER_PENDING_MESSAGES
     : currentPendingMessages
-  const displayedComposerImages = composerDisabled ? [] : composerImages
+  const displayedComposerImages = composerDisabled
+    ? EMPTY_COMPOSER_IMAGES
+    : composerImages
   const displayedComposerText = composerDisabled ? "" : composerDraftSeed.text
   const displayedComposerSkill = composerDisabled
     ? undefined
