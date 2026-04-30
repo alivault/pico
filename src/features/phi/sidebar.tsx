@@ -1076,9 +1076,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
             "cursor-grab active:cursor-grabbing",
           searchActive && "cursor-default"
         )}
-        aria-grabbed={
-          directoryOrderingEnabled && !overlay ? Boolean(isDragging) : undefined
-        }
         onClick={() => {
           if (!searchActive && !overlay) {
             collapsedDirectoryStore.toggle(directory)
