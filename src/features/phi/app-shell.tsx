@@ -431,6 +431,21 @@ function mergeDirectoryIndexData(
   return changed ? merged : current
 }
 
+function sameDirectoryIndexDataRecord(
+  left: Record<string, DirectorySessionsIndexData>,
+  right: Record<string, DirectorySessionsIndexData>
+) {
+  const leftKeys = Object.keys(left).sort()
+  const rightKeys = Object.keys(right).sort()
+  if (!sameStringArray(leftKeys, rightKeys)) return false
+
+  for (const key of leftKeys) {
+    if (JSON.stringify(left[key]) !== JSON.stringify(right[key])) return false
+  }
+
+  return true
+}
+
 function updateDirectoryIndexLoadingState(
   current: Record<string, boolean>,
   directories: Array<string>,
@@ -6945,15 +6960,22 @@ function AppShellSidebarController({
           )
         : current.directoryIndexLoading
 
+      const directoryIndexDataChanged = !sameDirectoryIndexDataRecord(
+        current.directoryIndexDataByPath,
+        nextDirectoryIndexDataByPath
+      )
+
       if (
-        nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
+        !directoryIndexDataChanged &&
         nextDirectoryIndexLoading === current.directoryIndexLoading
       ) {
         return current
       }
 
       return {
-        directoryIndexDataByPath: nextDirectoryIndexDataByPath,
+        directoryIndexDataByPath: directoryIndexDataChanged
+          ? nextDirectoryIndexDataByPath
+          : current.directoryIndexDataByPath,
         directoryIndexLoading: nextDirectoryIndexLoading,
       }
     })
