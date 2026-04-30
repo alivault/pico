@@ -1540,7 +1540,7 @@ export function AppSidebar({
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-sidebar-border/70"
+      className="top-(--header-height) !h-[calc(100svh-var(--header-height))] border-r border-sidebar-border/70"
     >
       <AppSidebarHeader
         sessionSearch={sessionSearch}

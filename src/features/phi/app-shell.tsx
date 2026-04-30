@@ -7,6 +7,7 @@ import {
   EllipsisIcon,
   FolderIcon,
   GitBranchIcon,
+  PanelRightIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react"
@@ -134,7 +135,6 @@ import {
   GitPanel,
   GitPanelToolbar,
   GitTabStatusText,
-  HeaderGitStatusText,
 } from "@/features/phi/git-panel"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
@@ -3628,6 +3628,7 @@ type AppShellSessionWorkspaceProps = {
     sessionId?: string,
     options?: SelectSessionNavigationOptions
   ) => void
+  sidebar: React.ReactNode
   sidebarStore: AppShellSidebarStore
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
 }
@@ -3640,6 +3641,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     viewerContextId,
     sessionId,
     onSelectSession,
+    sidebar,
     sidebarStore,
     sessionSearchInputRef,
   },
@@ -4362,6 +4364,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     appUiStore,
     (state) => state.gitPanelOpen
   )
+
+  React.useEffect(() => {
+    if (!sessionState.draft) return
+    setGitPanelOpen(false)
+  }, [sessionState.draft, setGitPanelOpen])
+
   const sidebarWorkspaceVersion =
     useAppShellSidebarWorkspaceVersion(sidebarStore)
   void sidebarWorkspaceVersion
@@ -5687,49 +5695,51 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSelectSession={handleSelectSession}
       />
 
-      <SidebarInset className="min-h-0 overflow-hidden">
-        <AppShellSessionHeader
-          actionsRef={sessionHeaderActionsRef}
-          defaultNewSessionDirectory={defaultNewSessionDirectory}
-          displaySessionCwd={displaySessionCwd}
-          gitPanelOpen={gitPanelOpen}
-          loadingDisplaySessionTitle={loadingDisplaySessionTitle}
-          displaySettingsStore={displaySettingsStore}
-          isSessionViewLoading={isSessionViewLoading}
-          newSessionDirectoryOptions={newSessionDirectoryOptions}
-          onToggleGitPanel={toggleGitPanel}
-          sessionStore={sessionStore}
-          viewerContextId={viewerContextId}
-        />
+      <AppShellSessionHeader
+        actionsRef={sessionHeaderActionsRef}
+        defaultNewSessionDirectory={defaultNewSessionDirectory}
+        displaySessionCwd={displaySessionCwd}
+        gitPanelOpen={gitPanelOpen}
+        loadingDisplaySessionTitle={loadingDisplaySessionTitle}
+        displaySettingsStore={displaySettingsStore}
+        isSessionViewLoading={isSessionViewLoading}
+        newSessionDirectoryOptions={newSessionDirectoryOptions}
+        onToggleGitPanel={toggleGitPanel}
+        sessionStore={sessionStore}
+      />
 
-        <AppShellTabsController
-          actionsRef={composerActionsRef}
-          appUiStore={appUiStore}
-          composerPanelRef={composerPanelRef}
-          contextUsageStore={contextUsageStore}
-          conversationFrameRef={conversationFrameRef}
-          conversationItemsStore={conversationItemsStore}
-          defaultNewSessionDirectory={defaultNewSessionDirectory}
-          displaySettingsStore={displaySettingsStore}
-          fileInputRef={fileInputRef}
-          gitPanelOpen={gitPanelOpen}
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-          isSessionViewLoading={isSessionViewLoading}
-          isSubmitting={isSubmitting}
-          isMobile={isMobile}
-          newSessionDirectoryOptions={newSessionDirectoryOptions}
-          onCreateSession={(cwdOverride) => {
-            void createSession(cwdOverride)
-          }}
-          onGitPanelOpenChange={setGitPanelOpen}
-          sessionStore={sessionStore}
-          store={composerStore}
-          viewerContextId={viewerContextId}
-          workingStateStore={workingStateStore}
-          awaitingFirstTurn={awaitingFirstTurn}
-          onValueChange={setCurrentTab}
-        />
-      </SidebarInset>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {sidebar}
+        <SidebarInset className="min-h-0 overflow-hidden">
+          <AppShellTabsController
+            actionsRef={composerActionsRef}
+            appUiStore={appUiStore}
+            composerPanelRef={composerPanelRef}
+            contextUsageStore={contextUsageStore}
+            conversationFrameRef={conversationFrameRef}
+            conversationItemsStore={conversationItemsStore}
+            defaultNewSessionDirectory={defaultNewSessionDirectory}
+            displaySettingsStore={displaySettingsStore}
+            fileInputRef={fileInputRef}
+            gitPanelOpen={gitPanelOpen}
+            hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+            isSessionViewLoading={isSessionViewLoading}
+            isSubmitting={isSubmitting}
+            isMobile={isMobile}
+            newSessionDirectoryOptions={newSessionDirectoryOptions}
+            onCreateSession={(cwdOverride) => {
+              void createSession(cwdOverride)
+            }}
+            onGitPanelOpenChange={setGitPanelOpen}
+            sessionStore={sessionStore}
+            store={composerStore}
+            viewerContextId={viewerContextId}
+            workingStateStore={workingStateStore}
+            awaitingFirstTurn={awaitingFirstTurn}
+            onValueChange={setCurrentTab}
+          />
+        </SidebarInset>
+      </div>
 
       <AppShellFloatingControllers
         activeSessionId={activeSessionId}
@@ -5809,7 +5819,6 @@ type AppShellSessionHeaderProps = {
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
   sessionStore: ValueStore<SessionState>
-  viewerContextId: string
 }
 
 const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
@@ -5823,12 +5832,10 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   newSessionDirectoryOptions,
   onToggleGitPanel,
   sessionStore,
-  viewerContextId,
 }: AppShellSessionHeaderProps) {
   const sessionHeaderState = useSelectedValueStore(
     sessionStore,
     (sessionState) => ({
-      draft: sessionState.draft,
       firstMessage: sessionState.firstMessage,
       hideThinkingBlock: sessionState.hideThinkingBlock,
       sessionHasFile: Boolean(sessionState.sessionFile),
@@ -5841,59 +5848,21 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
   )
+  const { state: sidebarState } = useSidebar()
+  const showCollapsedNewSessionButton = sidebarState === "collapsed"
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
 
-  if (!isSessionViewLoading && sessionHeaderState.draft) return null
-
   return (
-    <div className="shrink-0 border-b border-border/70 p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <SidebarTrigger className="shrink-0" />
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <h2
-              className="max-w-full min-w-0 truncate text-[15px] leading-tight font-semibold"
-              title={displaySessionTitle}
-            >
-              {displaySessionTitle}
-            </h2>
-            {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-              <Spinner
-                className="size-3.5 shrink-0 text-muted-foreground"
-                aria-label="Session streaming"
-              />
-            ) : null}
-            {displaySessionCwd ? (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
-                <span>{formatDisplayPath(displaySessionCwd)}</span>
-              </span>
-            ) : null}
-            <HeaderGitStatusText
-              viewerContextId={viewerContextId}
-              cwd={displaySessionCwd}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={gitPanelOpen ? "secondary" : "outline"}
-            className="hidden md:inline-flex"
-            aria-pressed={gitPanelOpen}
-            aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
-            title={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
-            onClick={onToggleGitPanel}
-          >
-            <GitBranchIcon />
-            Git
-          </Button>
+    <div className="sticky top-0 z-50 flex min-h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
+      <div className="relative flex w-full items-center gap-1">
+        <SidebarTrigger className="shrink-0" />
+        {showCollapsedNewSessionButton ? (
           <Button
             size="icon-sm"
-            variant="outline"
+            variant="ghost"
+            className="shrink-0"
             aria-label="Create a new session"
             title={
               defaultNewSessionDirectory
@@ -5906,12 +5875,36 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           >
             <SquarePenIcon />
           </Button>
+        ) : null}
+        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-12rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+          <h2
+            className="max-w-full min-w-0 truncate text-sm leading-tight font-semibold"
+            title={displaySessionTitle}
+          >
+            {displaySessionTitle}
+          </h2>
+          {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
+            <Spinner
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-label="Session streaming"
+            />
+          ) : null}
+          {displaySessionCwd ? (
+            <span className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {formatFolderName(displaySessionCwd)}
+              </span>
+            </span>
+          ) : null}
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
                   size="icon-sm"
-                  variant="outline"
+                  variant="ghost"
                   aria-label="Session menu"
                   title="Session menu"
                 />
@@ -6023,6 +6016,17 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="hidden md:inline-flex"
+            aria-pressed={gitPanelOpen}
+            aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            title={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            onClick={onToggleGitPanel}
+          >
+            <PanelRightIcon />
+          </Button>
         </div>
       </div>
     </div>
@@ -7288,18 +7292,19 @@ export function PhiAppShell({
   }, [sidebarStore])
 
   return (
-    <SidebarProvider className="h-full overflow-hidden bg-background">
-      <AppShellSidebarController
-        viewerContextId={viewerContextId}
-        sidebarStore={sidebarStore}
-        sessionWorkspaceRef={sessionWorkspaceRef}
-      />
-
+    <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:2.75rem]">
       <AppShellSessionWorkspace
         ref={sessionWorkspaceRef}
         viewerContextId={viewerContextId}
         sessionId={sessionId}
         onSelectSession={onSelectSession}
+        sidebar={
+          <AppShellSidebarController
+            viewerContextId={viewerContextId}
+            sidebarStore={sidebarStore}
+            sessionWorkspaceRef={sessionWorkspaceRef}
+          />
+        }
         sidebarStore={sidebarStore}
         sessionSearchInputRef={sessionSearchInputRef}
       />
