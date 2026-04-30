@@ -754,7 +754,7 @@ type AppShellSessionsDialogControllerProps = Omit<
   "open" | "onOpenChange"
 > & {
   ref?: React.Ref<AppShellSessionsDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
 }
 
 export function AppShellSessionsDialogController({

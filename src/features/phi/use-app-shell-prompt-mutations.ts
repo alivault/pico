@@ -55,15 +55,15 @@ type UseAppShellPromptMutationsOptions = {
   activeSessionId?: string
   defaultNewSessionDirectory?: string
   sessionStore: SessionStateStore
-  sessionStateRef: React.MutableRefObject<SessionState>
+  sessionStateRef: React.RefObject<SessionState>
   draftSessionLoadingOwnerKey: string | null
   pendingDraftPrompt: PendingDraftPrompt | null
   pendingDraftFollowUps: Array<PendingDraftFollowUp>
   awaitingFirstTurn: boolean
   pendingMessages: Array<PendingComposerMessage>
-  composerImagesRef: React.MutableRefObject<Array<PromptImage>>
-  composerTextRef: React.MutableRefObject<string>
-  composerSkillRef: React.MutableRefObject<string | undefined>
+  composerImagesRef: React.RefObject<Array<PromptImage>>
+  composerTextRef: React.RefObject<string>
+  composerSkillRef: React.RefObject<string | undefined>
   replaceComposerDraft: (
     value: string,
     target?: SessionState,
@@ -71,7 +71,7 @@ type UseAppShellPromptMutationsOptions = {
       forceSync?: boolean
     }
   ) => void
-  lastSyncedEditorTextRef: React.MutableRefObject<string>
+  lastSyncedEditorTextRef: React.RefObject<string>
   rememberRecentDirectory: (directory: string) => void
   prefetchDirectorySessionsIndex: (directory: string) => void
   addOptimisticUserMessage: (options: {

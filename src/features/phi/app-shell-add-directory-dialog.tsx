@@ -344,7 +344,7 @@ export function AppShellAddDirectoryDialog({
 }
 type AppShellAddDirectoryDialogControllerProps = {
   ref?: React.Ref<AppShellAddDirectoryDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   openedDirectories: Array<string>
   currentDirectory?: string
   recentDirectories: Array<string>

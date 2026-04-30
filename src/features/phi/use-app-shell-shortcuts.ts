@@ -39,19 +39,19 @@ export type AppShellShortcutState = {
 }
 
 type UseAppShellShortcutsOptions = {
-  addDirectoryOpenRef: React.MutableRefObject<boolean>
-  commandPaletteOpenRef: React.MutableRefObject<boolean>
-  deleteOpenRef: React.MutableRefObject<boolean>
-  forkOpenRef: React.MutableRefObject<boolean>
-  pendingUiRequestOpenRef: React.MutableRefObject<boolean>
-  lastEscapePressedAtRef: React.MutableRefObject<number>
-  renameOpenRef: React.MutableRefObject<boolean>
+  addDirectoryOpenRef: React.RefObject<boolean>
+  commandPaletteOpenRef: React.RefObject<boolean>
+  deleteOpenRef: React.RefObject<boolean>
+  forkOpenRef: React.RefObject<boolean>
+  pendingUiRequestOpenRef: React.RefObject<boolean>
+  lastEscapePressedAtRef: React.RefObject<number>
+  renameOpenRef: React.RefObject<boolean>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
-  sessionsOpenRef: React.MutableRefObject<boolean>
-  settingsOpenRef: React.MutableRefObject<boolean>
-  shortcutActionsRef: React.MutableRefObject<ShortcutActions>
-  shortcutStateRef: React.MutableRefObject<AppShellShortcutState>
-  treeOpenRef: React.MutableRefObject<boolean>
+  sessionsOpenRef: React.RefObject<boolean>
+  settingsOpenRef: React.RefObject<boolean>
+  shortcutActionsRef: React.RefObject<ShortcutActions>
+  shortcutStateRef: React.RefObject<AppShellShortcutState>
+  treeOpenRef: React.RefObject<boolean>
 }
 
 function isEditableTarget(target: EventTarget | null) {

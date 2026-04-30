@@ -61,12 +61,12 @@ type UseAppShellSessionSyncOptions = {
   sessionId?: string
   draftSessionLoadingOwnerKey: string | null
   bootstrapSidebarDirectories: Array<string>
-  hideToolBlocksRef: React.MutableRefObject<boolean>
+  hideToolBlocksRef: React.RefObject<boolean>
   sessionStore: SessionStateStore
-  sessionStateRef: React.MutableRefObject<SessionState>
-  composerTextRef: React.MutableRefObject<string>
-  composerSkillRef: React.MutableRefObject<string | undefined>
-  replaceComposerDraftRef: React.MutableRefObject<
+  sessionStateRef: React.RefObject<SessionState>
+  composerTextRef: React.RefObject<string>
+  composerSkillRef: React.RefObject<string | undefined>
+  replaceComposerDraftRef: React.RefObject<
     (
       value: string,
       target?: SessionState,
@@ -75,11 +75,11 @@ type UseAppShellSessionSyncOptions = {
       }
     ) => void
   >
-  handleSelectSessionRef: React.MutableRefObject<
+  handleSelectSessionRef: React.RefObject<
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => void
   >
-  pendingRouteSessionIdRef: React.MutableRefObject<string | undefined>
-  pendingRouteSessionPathRef: React.MutableRefObject<string | undefined>
+  pendingRouteSessionIdRef: React.RefObject<string | undefined>
+  pendingRouteSessionPathRef: React.RefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
   setHiddenThinkingPreview: (
@@ -93,17 +93,17 @@ type UseAppShellSessionSyncOptions = {
   setSessionDoneEvents: React.Dispatch<
     React.SetStateAction<Array<SessionDoneEvent>>
   >
-  applySidebarSessionStatusRef: React.MutableRefObject<
+  applySidebarSessionStatusRef: React.RefObject<
     (status: SessionStatusEvent) => void
   >
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   setPendingMessages: React.Dispatch<
     React.SetStateAction<Array<PendingComposerMessage>>
   >
-  pendingUiRequestHandlerRef: React.MutableRefObject<
+  pendingUiRequestHandlerRef: React.RefObject<
     (request: ExtensionUiEvent) => void
   >
-  lastSyncedEditorTextRef: React.MutableRefObject<string>
+  lastSyncedEditorTextRef: React.RefObject<string>
 }
 
 function normalizePendingMessages(

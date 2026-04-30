@@ -2113,7 +2113,7 @@ export type AppShellTreeDialogHandle = {
 
 type AppShellTreeDialogControllerProps = {
   ref?: React.Ref<AppShellTreeDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   viewerContextId: string
   sessionScopeKey: string
   sessionId?: string

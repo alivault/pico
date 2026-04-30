@@ -115,7 +115,7 @@ export type AppShellUiRequestDialogHandle = {
 
 type AppShellUiRequestDialogControllerProps = {
   ref?: React.Ref<AppShellUiRequestDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   viewerContextId: string
   sessionId?: string
 }

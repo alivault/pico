@@ -317,7 +317,7 @@ type AppShellSettingsDialogControllerProps = Omit<
   "open" | "onOpenChange"
 > & {
   ref?: React.Ref<AppShellSettingsDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
 }
 
 export function AppShellSettingsDialogController({

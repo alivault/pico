@@ -136,7 +136,7 @@ export type RenameSessionDialogHandle = {
 
 type RenameSessionDialogControllerProps = {
   ref?: React.Ref<RenameSessionDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   onRenameSession: (
     path: string,
     name: string
@@ -405,7 +405,7 @@ export type DeleteOldDirectorySessionsDialogHandle = {
 
 type DeleteOldDirectorySessionsDialogControllerProps = {
   ref?: React.Ref<DeleteOldDirectorySessionsDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   viewerContextId: string
 }
 
@@ -539,7 +539,7 @@ export function DeleteOldDirectorySessionsDialogController({
 
 type DeleteSessionsDialogControllerProps = {
   ref?: React.Ref<DeleteSessionsDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   onDeleteSession: (
     targets: Array<SessionListEntry>
   ) => Promise<boolean> | boolean | void
@@ -748,7 +748,7 @@ export type ForkSessionDialogHandle = {
 
 type ForkSessionDialogControllerProps = {
   ref?: React.Ref<ForkSessionDialogHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   viewerContextId: string
   sessionScopeKey: string
   sessionId?: string

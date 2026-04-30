@@ -157,9 +157,9 @@ type AppShellCommandPaletteControllerProps = Omit<
   "open" | "onOpenChange" | "commands"
 > & {
   ref?: React.Ref<AppShellCommandPaletteHandle>
-  openStateRef?: React.MutableRefObject<boolean>
+  openStateRef?: React.RefObject<boolean>
   commands?: Array<AppCommand>
-  getCommandsRef?: React.MutableRefObject<() => Array<AppCommand>>
+  getCommandsRef?: React.RefObject<() => Array<AppCommand>>
 }
 
 export function AppShellCommandPaletteController({

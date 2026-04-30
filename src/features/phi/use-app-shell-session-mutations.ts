@@ -204,7 +204,7 @@ function optimisticSelectionAfterDelete(
 type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
-  sessionStateRef: React.MutableRefObject<SessionState>
+  sessionStateRef: React.RefObject<SessionState>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   getDirectoryIndexDataByPath: () => DirectoryIndexDataByPath
   setDirectoryIndexDataByPath: React.Dispatch<

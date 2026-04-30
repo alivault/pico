@@ -2665,7 +2665,7 @@ const AppShellComposerController = React.memo(
     store,
     topContent,
   }: {
-    actionsRef: React.MutableRefObject<AppShellComposerActions>
+    actionsRef: React.RefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
     contextUsageStore: ComposerContextUsageStore
     displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
@@ -2817,7 +2817,7 @@ const AppShellComposerController = React.memo(
 )
 
 type AppShellSessionContentProps = {
-  actionsRef: React.MutableRefObject<AppShellComposerActions>
+  actionsRef: React.RefObject<AppShellComposerActions>
   awaitingFirstTurn: boolean
   composerPanelRef: React.RefObject<ComposerPanelHandle | null>
   contextUsageStore: ComposerContextUsageStore
@@ -3660,12 +3660,12 @@ type AppShellController = {
     sidebar: AppShellSidebarStore
   }
   refs: {
-    composerImages: React.MutableRefObject<Array<PromptImage>>
+    composerImages: React.RefObject<Array<PromptImage>>
     composerPanel: React.RefObject<ComposerPanelHandle | null>
-    composerSkill: React.MutableRefObject<string | undefined>
-    composerText: React.MutableRefObject<string>
+    composerSkill: React.RefObject<string | undefined>
+    composerText: React.RefObject<string>
     conversationFrame: React.RefObject<AppShellConversationFrameHandle | null>
-    sessionState: React.MutableRefObject<SessionState>
+    sessionState: React.RefObject<SessionState>
   }
   actions: AppShellSessionWorkspaceHandle & {
     focusModelSelector: () => void
@@ -5870,7 +5870,7 @@ type AppShellSessionHeaderActions = {
 }
 
 type AppShellSessionHeaderProps = {
-  actionsRef: React.MutableRefObject<AppShellSessionHeaderActions>
+  actionsRef: React.RefObject<AppShellSessionHeaderActions>
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
   gitPanelOpen: boolean
@@ -6120,26 +6120,26 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
 type AppShellFloatingControllersProps = {
   activeSessionId?: string
   addDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
-  addDirectoryOpenRef: React.MutableRefObject<boolean>
+  addDirectoryOpenRef: React.RefObject<boolean>
   addDirectoryPath: React.ComponentProps<
     typeof AppShellAddDirectoryDialogController
   >["onAddDirectoryPath"]
   baseSidebarDirectories: Array<string>
-  commandPaletteCommandsRef: React.MutableRefObject<() => Array<AppCommand>>
-  commandPaletteOpenRef: React.MutableRefObject<boolean>
+  commandPaletteCommandsRef: React.RefObject<() => Array<AppCommand>>
+  commandPaletteOpenRef: React.RefObject<boolean>
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
   currentSessionQueryScope: string
   currentTheme: ThemeMode
   deleteDialogRef: React.RefObject<DeleteSessionsDialogHandle | null>
-  deleteOpenRef: React.MutableRefObject<boolean>
+  deleteOpenRef: React.RefObject<boolean>
   deleteSessions: React.ComponentProps<
     typeof DeleteSessionsDialogController
   >["onDeleteSession"]
   deleteOldDirectorySessionsDialogRef: React.RefObject<DeleteOldDirectorySessionsDialogHandle | null>
-  deleteOldDirectorySessionsOpenRef: React.MutableRefObject<boolean>
+  deleteOldDirectorySessionsOpenRef: React.RefObject<boolean>
   notificationStore: ValueStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
-  forkOpenRef: React.MutableRefObject<boolean>
+  forkOpenRef: React.RefObject<boolean>
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
   onCenterMessagesChange: (centered: boolean) => void
@@ -6154,22 +6154,22 @@ type AppShellFloatingControllersProps = {
   onThemeChange: (value: ThemeMode) => void
   recentDirectoriesStore: ValueStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
-  renameOpenRef: React.MutableRefObject<boolean>
+  renameOpenRef: React.RefObject<boolean>
   renameSessionPath: React.ComponentProps<
     typeof RenameSessionDialogController
   >["onRenameSession"]
   sessionCwd?: string
   sessionsDialogDirectory: string
   sessionsDialogRef: React.RefObject<AppShellSessionsDialogHandle | null>
-  sessionsOpenRef: React.MutableRefObject<boolean>
+  sessionsOpenRef: React.RefObject<boolean>
   sessionStore: ValueStore<SessionState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
-  settingsOpenRef: React.MutableRefObject<boolean>
+  settingsOpenRef: React.RefObject<boolean>
   sidebarStore: AppShellSidebarStore
   treeDialogRef: React.RefObject<AppShellTreeDialogHandle | null>
-  treeOpenRef: React.MutableRefObject<boolean>
+  treeOpenRef: React.RefObject<boolean>
   uiRequestDialogRef: React.RefObject<AppShellUiRequestDialogHandle | null>
-  uiRequestOpenRef: React.MutableRefObject<boolean>
+  uiRequestOpenRef: React.RefObject<boolean>
   viewerContextId: string
 }
 
