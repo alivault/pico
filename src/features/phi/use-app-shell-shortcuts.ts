@@ -15,7 +15,6 @@ type ShortcutActions = {
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteDialogForCurrentSession: () => void
   openForkDialog: () => void | Promise<unknown>
-  openGitView: () => void
   openRenameDialog: () => void
   openSessionsDialog: () => void
   openSettingsDialog: () => void
@@ -23,6 +22,7 @@ type ShortcutActions = {
   runCompact: () => void | Promise<unknown>
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
+  toggleGitPanel: () => void
   toggleHideThinking: () => void | Promise<unknown>
   toggleHideToolBlocks: () => void
   cycleThinkingLevel: (direction: -1 | 1) => void | Promise<unknown>
@@ -291,24 +291,16 @@ export function useAppShellShortcuts({
         }
       }
 
-      if (
-        event.metaKey &&
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.shiftKey &&
-        key === "b"
-      ) {
-        if (blockingModalOpen || event.defaultPrevented) return
-
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openGitView()
-        return
-      }
-
       if (!event.ctrlKey || event.metaKey || event.altKey) return
 
       if (blockingModalOpen) return
+
+      if (!event.shiftKey && (key === "\\" || event.code === "Backslash")) {
+        event.preventDefault()
+        closeCommandPaletteForShortcut()
+        shortcutActionsRef.current.toggleGitPanel()
+        return
+      }
 
       if (key === "p" && !event.shiftKey) {
         event.preventDefault()

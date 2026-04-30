@@ -4535,16 +4535,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     settingsDialogRef.current?.open()
   }
 
-  const openGitView = () => {
+  const toggleGitPanel = () => {
     if (isMobile) {
-      setCurrentTab("git")
+      setCurrentTab((tab) => (tab === "git" ? "session" : "git"))
       return
     }
 
-    setGitPanelOpen(true)
-  }
-
-  const toggleGitPanel = () => {
     setGitPanelOpen((open) => !open)
   }
 
@@ -5361,16 +5357,16 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "open-git-view",
         group: "Git",
         title: commandState.isMobile
-          ? "Open Git tab"
+          ? "Toggle Git tab"
           : commandState.gitPanelOpen
-            ? "Show Git panel"
+            ? "Close Git panel"
             : "Open Git panel",
         description: commandState.isMobile
-          ? "Switch to the mobile Git tab"
-          : "Open the right-side Git panel",
-        shortcut: "Option+Cmd+B",
+          ? "Switch the mobile Git tab on or off"
+          : "Toggle the right-side Git panel",
+        shortcut: "Ctrl+\\",
         keywords: ["git", "changes", "branch", "commit", "panel"],
-        onSelect: openGitView,
+        onSelect: toggleGitPanel,
       },
       {
         id: "focus-prompt",
@@ -5557,7 +5553,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     openDeleteDialog,
     openDeleteDialogForCurrentSession,
     openForkDialog,
-    openGitView,
     openRenameDialog,
     openSessionsDialog,
     openSettingsDialog,
@@ -5569,6 +5564,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     scrollConversationToTop: () => {
       conversationFrameRef.current?.scrollConversationToTop()
     },
+    toggleGitPanel,
     toggleHideThinking,
     toggleHideToolBlocks,
     cycleThinkingLevel,
@@ -6026,7 +6022,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             aria-pressed={gitPanelOpen}
             aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
             title={
-              gitPanelOpen ? "Close Git panel" : "Open Git panel (Option+Cmd+B)"
+              gitPanelOpen ? "Close Git panel" : "Open Git panel (Ctrl+\\)"
             }
             onClick={onToggleGitPanel}
           >
