@@ -1341,7 +1341,7 @@ function TreeBrowsePanel({
         />
         <CommandList
           ref={treeListRef}
-          className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]"
+          className="max-h-none min-h-0 flex-1 md:max-h-[min(calc(80vh_-_9rem),32rem)]"
           onPointerMoveCapture={(event) => {
             markTreeMouseMoved(event.movementX, event.movementY)
           }}
@@ -1607,7 +1607,7 @@ function TreeContinueActionsPanel({
       }}
       className="min-h-0 flex-1"
     >
-      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(calc(80vh_-_7rem),32rem)]">
         <CommandGroup>
           <CommandItem
             value="No summary"
@@ -2098,7 +2098,7 @@ export function AppShellTreeDialog({
       onOpenChange={onOpenChange}
       title={treeDialogTitle}
       description={treeDialogDescription}
-      className="sm:max-w-2xl"
+      className="flex! flex-col sm:max-w-2xl"
       initialFocus
     >
       {treeDialogBody}
