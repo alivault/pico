@@ -5508,14 +5508,6 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     if (commandState.selectedSidebarSessions.length > 0) {
       commands.push({
-        id: "clear-selected-sessions",
-        group: "Sidebar",
-        title: "Clear selected sidebar sessions",
-        description: `Clear ${commandState.selectedSidebarSessions.length} selected sidebar ${commandState.selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
-        keywords: ["clear", "selected", "sidebar", "sessions"],
-        onSelect: clearSelectedSidebarSelection,
-      })
-      commands.push({
         id: "delete-selected-sessions",
         group: "Sidebar",
         title: "Delete selected sidebar sessions",
