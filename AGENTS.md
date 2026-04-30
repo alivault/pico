@@ -79,6 +79,7 @@ Notes:
 - `src/features/phi/sidebar.tsx`
   - directory/session sidebar UI
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
+  - inline sidebar search has been removed; the sidebar search affordance opens the sessions dialog
 - `src/features/phi/composer-panel.tsx`
   - prompt composer, slash commands, completions, model/thinking pickers, queue/steer UX
 - `src/features/phi/composer-assist-menu.tsx` and `src/features/phi/use-composer-assist.ts`
@@ -88,10 +89,10 @@ Notes:
 - `src/features/phi/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
+- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-sessions-dialog.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
+  - focused dialog implementations hosted by the floating controller section in `app-shell.tsx`
 - `src/features/phi/app-shell-dialogs.tsx`
-  - thin dialog coordinator for add-directory, rename/delete, fork, tree, settings, and generic UI request dialogs
-- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
-  - focused dialog implementations used by the coordinator
+  - legacy/minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
 - `src/features/phi/app-shell-command-palette.tsx`
   - command palette UI
 - `src/features/phi/git-panel.tsx`
@@ -146,7 +147,7 @@ Notes:
 - `src/server/phi-runtime/highlight.ts`
   - syntax highlight payload helpers
 - `src/server/phi-runtime/conversation-retainer.ts`
-  - retained recent-history window and streaming conversation item helpers
+  - render-optimized conversation item construction plus streaming conversation item helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
 - `src/server/pi-sdk-path.ts` and `src/server/pi-sdk-types.ts`
@@ -206,8 +207,8 @@ The `/events` endpoint streams:
 Important current behavior:
 
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
-- initial session bootstrap sends only the recent message window plus history metadata, not always the full conversation history
-- older conversation history is fetched separately from `/api/session/history` when the user scrolls upward
+- initial session sync currently sends the full sanitized message list plus render-ready conversation items; do not assume a recent-history bootstrap unless that behavior is deliberately reintroduced
+- `/api/session/history` still exists as a paginated history endpoint, but the current conversation UI does not lazy-load older messages on scroll
 - session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
 - if you update `sessionStateRef.current` directly, you must still publish the same state to `sessionStore` with `setSessionState()` or selector-driven UI such as the composer/model picker will stay stale
 
@@ -296,6 +297,7 @@ Existing notable endpoints:
 - `/api/git-changes`
 - `/api/git-commit-message`
 - `/api/git-commit`
+- `/api/git-checkout`
 - `/api/git-push`
 - `/api/git-pull`
 - `/api/provider-usage`
@@ -346,9 +348,9 @@ If you touch composer parsing or submission, inspect both:
 - `src/features/phi/composer-panel.tsx`
 - `src/features/phi/composer-utils.ts`
 
-### Conversation history loading
+### Conversation history and rendering
 
-The main conversation view now uses a recent-history bootstrap plus lazy loading for older history.
+The main conversation view currently receives full session history through `state_sync` and renders from the `SessionState.items` projection. A paginated `/api/session/history` endpoint exists, but older-history lazy loading is not currently wired into the UI.
 
 If you touch conversation/session sync behavior, inspect all of:
 
@@ -361,8 +363,9 @@ If you touch conversation/session sync behavior, inspect all of:
 
 Be careful not to break the distinction between:
 
-- recent session messages delivered over `state_sync`
-- separately fetched older history pages
+- full session messages/items delivered over the initial `state_sync`
+- patch-friendly follow-up `state_sync` events that may omit unchanged fields
+- the still-available paginated `/api/session/history` endpoint
 - pending user messages and the current streaming assistant message
 
 Rendering/performance details:
@@ -445,7 +448,7 @@ If you add or change a slash command, update both sides:
 
 ### Generic UI requests
 
-Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/phi-runtime/ui-requests.ts`, and the pending UI request dialog in `app-shell-dialogs.tsx`.
+Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/phi-runtime/ui-requests.ts`, and the pending UI request dialog/controller in `src/features/phi/app-shell-ui-request-dialog.tsx`.
 
 If you touch extension/UI request flows, update both runtime and dialog handling.
 
@@ -534,7 +537,7 @@ If you extend git UI, update:
 
 1. define storage key + read helper in `src/lib/phi/storage.ts`
 2. wire state in `app-shell.tsx`
-3. expose controls in `app-shell-dialogs.tsx` if user-facing
+3. expose controls in `app-shell-settings-dialog.tsx` if user-facing
 4. preserve existing keys when changing behavior rather than renaming casually
 
 ### Add a new slash command
@@ -557,7 +560,8 @@ Manual smoke tests are recommended for the touched area. Useful flows:
 - create/select a session
 - submit a prompt
 - abort/queue/steer while streaming
-- add/remove/search sidebar directories
+- add/remove/reorder sidebar directories
+- search/select sessions through the sessions dialog
 - open tree and navigate
 - fork from an older message
 - rename/delete a session
@@ -573,7 +577,7 @@ Be especially careful around these:
 - updating `sessionStateRef.current` without publishing to `sessionStore`
 - adding broad React state in `AppShellSessionWorkspace` instead of narrow stores/selectors
 - breaking draft-session behavior
-- assuming `state_sync` always contains the full conversation history instead of a recent window / patch
+- assuming every `state_sync` event is complete; initial sync currently includes full history, but follow-up patch events may omit unchanged fields
 - invalidating the wrong TanStack Query keys
 - changing storage keys unnecessarily
 - bypassing the runtime singleton with ad hoc server state
