@@ -3,6 +3,7 @@ import * as React from "react"
 import type { SessionListEntry } from "@/lib/phi/api"
 
 type ShortcutActions = {
+  abortSession: () => void | Promise<unknown>
   createSession: () => void | Promise<unknown>
   focusModelSelector: () => void
   focusPrompt: () => void
@@ -33,6 +34,7 @@ export type AppShellShortcutState = {
   selectedSidebarSessions: Array<SessionListEntry>
   sessionHasAvailableModels: boolean
   sessionHasFile: boolean
+  sessionIsStreaming: boolean
   sidebarSessionEntriesByKey: Map<string, SessionListEntry>
 }
 
@@ -106,6 +108,7 @@ export function useAppShellShortcuts({
         selectedSidebarSessions,
         sessionHasAvailableModels,
         sessionHasFile,
+        sessionIsStreaming,
         sidebarSessionEntriesByKey,
       } = shortcutStateRef.current
       const commandPaletteOpen = commandPaletteOpenRef.current
@@ -139,6 +142,24 @@ export function useAppShellShortcuts({
       const targetIsSessionSearch =
         event.target instanceof HTMLInputElement &&
         event.target === sessionSearchInputRef.current
+
+      if (
+        key === "escape" &&
+        !event.repeat &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !modalOpen &&
+        !event.defaultPrevented &&
+        sessionIsStreaming &&
+        !isEditableTarget(event.target)
+      ) {
+        event.preventDefault()
+        lastEscapePressedAtRef.current = 0
+        void shortcutActionsRef.current.abortSession()
+        return
+      }
 
       if (
         !modalOpen &&

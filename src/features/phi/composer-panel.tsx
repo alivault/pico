@@ -757,9 +757,24 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       return
     }
 
-    if (event.key === "Escape") {
+    if (
+      event.key === "Escape" &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
       if (visibleCompletion || slashMenuState) {
+        event.preventDefault()
+        event.stopPropagation()
         dismissMenus()
+        return
+      }
+
+      if (isStreaming && !event.repeat) {
+        event.preventDefault()
+        event.stopPropagation()
+        onAbort()
         return
       }
     }
@@ -910,7 +925,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                 variant="destructive"
                 size="icon-sm"
                 className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
-                title="Abort"
+                title="Abort (Esc)"
                 aria-label="Abort"
                 disabled={disabled}
                 onClick={onAbort}

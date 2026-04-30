@@ -5537,6 +5537,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const commandPaletteCommandsRef = useLatestRef(buildCommandPaletteCommands)
 
   const shortcutActionsRef = useLatestRef({
+    abortSession,
     createSession,
     closeCommandPalette,
     focusModelSelector,
@@ -5576,6 +5577,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionHasAvailableModels:
       sessionStateRef.current.availableModels.length > 0,
     sessionHasFile: Boolean(sessionState.sessionFile),
+    sessionIsStreaming: sessionStateRef.current.streaming,
     sidebarSessionEntriesByKey,
   })
   const sessionHeaderActionsRef = useLatestRef<AppShellSessionHeaderActions>({
