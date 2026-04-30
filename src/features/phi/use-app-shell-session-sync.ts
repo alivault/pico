@@ -64,7 +64,6 @@ type UseAppShellSessionSyncOptions = {
   hideToolBlocksRef: React.MutableRefObject<boolean>
   sessionStore: SessionStateStore
   sessionStateRef: React.MutableRefObject<SessionState>
-  setConnected?: React.Dispatch<React.SetStateAction<boolean>>
   composerTextRef: React.MutableRefObject<string>
   composerSkillRef: React.MutableRefObject<string | undefined>
   replaceComposerDraftRef: React.MutableRefObject<
@@ -421,7 +420,6 @@ export function useAppShellSessionSync({
   hideToolBlocksRef,
   sessionStore,
   sessionStateRef,
-  setConnected,
   composerTextRef,
   composerSkillRef,
   replaceComposerDraftRef,
@@ -588,7 +586,6 @@ export function useAppShellSessionSync({
 
     source.onopen = () => {
       if (currentSourceRef.current !== source) return
-      setConnected?.(true)
       const currentState = sessionStateRef.current
       if (currentState.connected) return
       const nextState = { ...currentState, connected: true }
@@ -599,7 +596,6 @@ export function useAppShellSessionSync({
 
     source.onerror = () => {
       if (currentSourceRef.current !== source) return
-      setConnected?.(false)
       const currentState = sessionStateRef.current
       if (!currentState.connected) return
       const nextState = { ...currentState, connected: false }
@@ -851,7 +847,6 @@ export function useAppShellSessionSync({
     queryClient,
     replaceComposerDraftRef,
     sessionStateRef,
-    setConnected,
     setComposerImages,
     setHiddenThinkingPreview,
     setWorkingState,

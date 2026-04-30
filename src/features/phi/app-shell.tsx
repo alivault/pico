@@ -267,7 +267,6 @@ type AppShellSidebarSnapshot = {
 }
 
 type AppShellSidebarState = {
-  connected: boolean
   sessionsEvent: SessionsEvent | null
   sidebarDirectories: Array<string>
   initialSidebarBootstrapDirectories: Array<string>
@@ -306,7 +305,6 @@ type AppShellSidebarStore = {
   getWorkspaceVersion: () => string
   subscribe: (listener: () => void) => () => void
   setState: (update: AppShellSidebarStateUpdate) => void
-  setConnected: React.Dispatch<React.SetStateAction<boolean>>
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setDirectoryIndexDataByPath: React.Dispatch<
@@ -647,7 +645,6 @@ function applySidebarSessionStatusOverlay(
 
 function createInitialSidebarState(): AppShellSidebarState {
   return {
-    connected: false,
     sessionsEvent: null,
     sidebarDirectories: [],
     initialSidebarBootstrapDirectories: [],
@@ -844,11 +841,6 @@ function createAppShellSidebarStore(): AppShellSidebarStore {
       }
     },
     setState,
-    setConnected: (action) => {
-      const connected = applySidebarStateAction(state.connected, action)
-      if (connected === state.connected) return
-      setState({ connected })
-    },
     setSessionsEvent: (action) => {
       const sessionsEvent = applySidebarStateAction(state.sessionsEvent, action)
       if (sessionsEvent === state.sessionsEvent) return
@@ -4769,7 +4761,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     hideToolBlocksRef,
     sessionStore,
     sessionStateRef,
-    setConnected: sidebarStore.setConnected,
     composerTextRef,
     composerSkillRef,
     replaceComposerDraftRef,
@@ -6619,10 +6610,6 @@ function AppShellSidebarController({
     (snapshot) => snapshot.derived.visibleDirectories,
     sameStringArray
   )
-  const connected = useAppShellSidebarValue(
-    sidebarStore,
-    (snapshot) => snapshot.state.connected
-  )
   const directoryIndexDataByPath = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.state.directoryIndexDataByPath
@@ -7192,7 +7179,6 @@ function AppShellSidebarController({
 
   return (
     <AppSidebar
-      connected={connected}
       sessionSearch={sessionSearch}
       onSessionSearchChange={sidebarStore.setSessionSearch}
       sessionSearchInputRef={sessionSearchInputRef}

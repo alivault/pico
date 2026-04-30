@@ -109,20 +109,6 @@ function useDelayedTrue(value: boolean, delayMs: number) {
   return delayedValue
 }
 
-function ConnectionBadge({ connected }: { connected: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex size-2.5 shrink-0 rounded-full",
-        connected ? "bg-emerald-500" : "bg-red-500"
-      )}
-      role="status"
-      aria-label={connected ? "Connected" : "Disconnected"}
-      title={connected ? "Connected" : "Disconnected"}
-    />
-  )
-}
-
 function tildePath(value: string) {
   return value
     .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
@@ -422,7 +408,6 @@ function useAllDirectoriesCollapsed(
 }
 
 type AppSidebarProps = {
-  connected: boolean
   sessionSearch: string
   onSessionSearchChange: (value: string) => void
   sessionSearchInputRef?: React.Ref<HTMLInputElement>
@@ -1333,7 +1318,6 @@ type SidebarSearchInputProps = {
 }
 
 type AppSidebarHeaderProps = {
-  connected: boolean
   sessionSearch: string
   onSessionSearchChange: (value: string) => void
   sessionSearchInputRef?: React.Ref<HTMLInputElement>
@@ -1413,7 +1397,6 @@ function SidebarSearchInput({
 }
 
 function AppSidebarHeader({
-  connected,
   sessionSearch,
   onSessionSearchChange,
   sessionSearchInputRef,
@@ -1426,11 +1409,7 @@ function AppSidebarHeader({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-4">
-      <div className="flex items-start justify-start">
-        <ConnectionBadge connected={connected} />
-      </div>
-
+    <SidebarHeader className="gap-2 border-b border-sidebar-border/70 px-4 pt-4 pb-2">
       <SidebarSearchInput
         value={sessionSearch}
         onValueChange={onSessionSearchChange}
@@ -1479,7 +1458,6 @@ function AppSidebarHeader({
 }
 
 export function AppSidebar({
-  connected,
   sessionSearch,
   onSessionSearchChange,
   sessionSearchInputRef,
@@ -1644,7 +1622,6 @@ export function AppSidebar({
       className="border-r border-sidebar-border/70"
     >
       <AppSidebarHeader
-        connected={connected}
         sessionSearch={sessionSearch}
         onSessionSearchChange={onSessionSearchChange}
         sessionSearchInputRef={sessionSearchInputRef}
