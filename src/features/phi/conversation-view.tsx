@@ -28,46 +28,55 @@ const highlightCache = new Map<
 
 const MemoizedReactMarkdown = React.memo(ReactMarkdown)
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
-const MARKDOWN_COMPONENTS = {
-  a({ href, children, ...props }) {
-    return (
-      <a
-        href={href}
-        onClick={(event) => handleMarkdownAnchorClick(event, href)}
-        {...props}
-      >
-        {children}
-      </a>
-    )
-  },
-  code({ className, children, ...props }) {
-    return (
-      <code
-        className={cn(
-          "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </code>
-    )
-  },
-  pre({ children }) {
-    const codeElement = getCodeBlockChild(children)
 
-    if (!codeElement) {
-      return <pre>{children}</pre>
-    }
+function createMarkdownComponents(streaming: boolean) {
+  return {
+    a({ href, children, ...props }) {
+      return (
+        <a
+          href={href}
+          onClick={(event) => handleMarkdownAnchorClick(event, href)}
+          {...props}
+        >
+          {children}
+        </a>
+      )
+    },
+    code({ className, children, ...props }) {
+      return (
+        <code
+          className={cn(
+            "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
+            className
+          )}
+          {...props}
+        >
+          {children}
+        </code>
+      )
+    },
+    pre({ children }) {
+      const codeElement = getCodeBlockChild(children)
 
-    const code = markdownNodeText(codeElement.props.children).replace(/\n$/, "")
-    const language = parseCodeLanguage(codeElement.props.className)
+      if (!codeElement) {
+        return <pre>{children}</pre>
+      }
 
-    return <CodeBlock code={code} language={language} />
-  },
-} satisfies NonNullable<
-  React.ComponentProps<typeof ReactMarkdown>["components"]
->
+      const code = markdownNodeText(codeElement.props.children).replace(
+        /\n$/,
+        ""
+      )
+      const language = parseCodeLanguage(codeElement.props.className)
+
+      return <CodeBlock code={code} language={language} streaming={streaming} />
+    },
+  } satisfies NonNullable<
+    React.ComponentProps<typeof ReactMarkdown>["components"]
+  >
+}
+
+const MARKDOWN_COMPONENTS = createMarkdownComponents(false)
+const STREAMING_MARKDOWN_COMPONENTS = createMarkdownComponents(true)
 
 function parseCodeLanguage(className?: string) {
   const match = className?.match(/language-([A-Za-z0-9_+#.-]+)/)
@@ -310,9 +319,11 @@ const CodeBlockCopyButton = React.memo(function CodeBlockCopyButton({
 const CodeBlock = React.memo(function CodeBlock({
   code,
   language,
+  streaming = false,
 }: {
   code: string
   language?: string
+  streaming?: boolean
 }) {
   const [highlighted, setHighlighted] =
     React.useState<HighlightResponse | null>(null)
@@ -320,7 +331,7 @@ const CodeBlock = React.memo(function CodeBlock({
   React.useEffect(() => {
     let cancelled = false
 
-    if (!language) {
+    if (!language || streaming) {
       setHighlighted(null)
       return
     }
@@ -341,7 +352,7 @@ const CodeBlock = React.memo(function CodeBlock({
     return () => {
       cancelled = true
     }
-  }, [code, language])
+  }, [code, language, streaming])
 
   const renderedLanguage =
     highlighted && "language" in highlighted && highlighted.language
@@ -427,19 +438,13 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming?: boolean
   text: string
 }) {
-  if (streaming) {
-    return (
-      <div className="text-sm leading-6 wrap-break-word whitespace-pre-wrap">
-        {text}
-      </div>
-    )
-  }
-
   return (
     <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
       <MemoizedReactMarkdown
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-        components={MARKDOWN_COMPONENTS}
+        components={
+          streaming ? STREAMING_MARKDOWN_COMPONENTS : MARKDOWN_COMPONENTS
+        }
       >
         {text}
       </MemoizedReactMarkdown>
@@ -1089,6 +1094,80 @@ function assistantBlockRenderKey(
   return `${baseKey}:${index}`
 }
 
+function sameUnknownValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true
+  if (typeof left !== typeof right) return false
+  if (!left || !right || typeof left !== "object") return false
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false
+    if (left.length !== right.length) return false
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (!sameUnknownValue(left[index], right[index])) return false
+    }
+
+    return true
+  }
+
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord)
+  const rightKeys = Object.keys(rightRecord)
+  if (leftKeys.length !== rightKeys.length) return false
+
+  for (const key of leftKeys) {
+    if (!Object.hasOwn(rightRecord, key)) return false
+    if (!sameUnknownValue(leftRecord[key], rightRecord[key])) return false
+  }
+
+  return true
+}
+
+function sameAssistantBlock(
+  left: AssistantConversationBlock,
+  right: AssistantConversationBlock
+) {
+  if (left === right) return true
+  if (left.type !== right.type) return false
+  if (left.blockKey !== right.blockKey) return false
+  if (left.renderKey !== right.renderKey) return false
+
+  switch (left.type) {
+    case "text":
+      if (right.type !== "text") return false
+      return (
+        left.text === right.text &&
+        Boolean(left.isError) === Boolean(right.isError)
+      )
+    case "thinking":
+      if (right.type !== "thinking") return false
+      return (
+        left.text === right.text && left.summaryLabel === right.summaryLabel
+      )
+    case "tool":
+      if (right.type !== "tool") return false
+      return (
+        left.callId === right.callId &&
+        left.name === right.name &&
+        left.category === right.category &&
+        left.output === right.output &&
+        left.isError === right.isError &&
+        left.running === right.running &&
+        sameUnknownValue(left.args, right.args) &&
+        sameUnknownValue(left.details, right.details)
+      )
+    case "compaction":
+      if (right.type !== "compaction") return false
+      return (
+        left.summary === right.summary &&
+        left.tokensBefore === right.tokensBefore
+      )
+    default:
+      return false
+  }
+}
+
 function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
   const result: Array<AssistantBlockGroup> = []
   let start = -1
@@ -1194,7 +1273,14 @@ function buildAssistantBlockSnapshot(
   const fullGroups = groupAssistantBlocks(blocks)
 
   blocks.forEach((block, index) => {
-    blockByKey.set(assistantBlockRenderKey(block, index), block)
+    const key = assistantBlockRenderKey(block, index)
+    const previousBlock = previousSnapshot?.blockByKey.get(key)
+    blockByKey.set(
+      key,
+      previousBlock && sameAssistantBlock(previousBlock, block)
+        ? previousBlock
+        : block
+    )
   })
 
   const groups = fullGroups.map((group): AssistantBlockGroupDescriptor => {
