@@ -132,11 +132,13 @@ import {
 } from "@/features/phi/composer-utils"
 import {
   DraftGitStatusBadge,
+  GitCommitDialogController,
   GitPanel,
   GitPanelToolbar,
   GitTabStatusText,
   HeaderGitActions,
   HeaderGitStatusText,
+  type GitCommitDialogControllerHandle,
 } from "@/features/phi/git-panel"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
@@ -3828,6 +3830,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   },
   ref
 ) {
+  const queryClient = useQueryClient()
   const initialSessionStateRef = React.useRef<SessionState | null>(null)
   if (!initialSessionStateRef.current) {
     initialSessionStateRef.current = createInitialSessionState()
@@ -4229,6 +4232,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
   const treeOpenRef = React.useRef(false)
+  const gitCommitDialogRef =
+    React.useRef<GitCommitDialogControllerHandle | null>(null)
+  const gitCommitOpenRef = React.useRef(false)
   const sessionsDialogRef = React.useRef<AppShellSessionsDialogHandle | null>(
     null
   )
@@ -4750,6 +4756,57 @@ const AppShellSessionWorkspace = React.forwardRef<
     commandPaletteRef.current?.close()
     sessionsDialogRef.current?.close()
     settingsDialogRef.current?.open()
+  }
+
+  const openCommitDialog = () => {
+    commandPaletteRef.current?.close()
+    sessionsDialogRef.current?.close()
+    settingsDialogRef.current?.close()
+    gitCommitDialogRef.current?.open()
+  }
+
+  const pushGitChanges = async () => {
+    const cwd = sessionStateRef.current.cwd?.trim() || ""
+    if (!cwd) {
+      toast.error("Open a session in a repository before pushing.")
+      return
+    }
+
+    try {
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-push", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd }),
+        }
+      )
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
+          exact: true,
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
+          exact: true,
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
+          exact: true,
+          refetchType: "active",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
+          exact: true,
+          refetchType: "active",
+        }),
+      ])
+      toast.success("Pushed changes")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to push")
+    }
   }
 
   const toggleGitPanel = () => {
@@ -5638,6 +5695,24 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSelect: toggleGitPanel,
       },
       {
+        id: "commit-changes",
+        group: "Git",
+        title: "Commit changes",
+        description: "Open the Git commit dialog",
+        shortcut: "Ctrl+C",
+        keywords: ["git", "commit", "changes", "stage"],
+        onSelect: openCommitDialog,
+      },
+      {
+        id: "push-changes",
+        group: "Git",
+        title: "Push changes",
+        description: "Push local commits to the remote",
+        shortcut: "Ctrl+U",
+        keywords: ["git", "push", "remote", "upstream"],
+        onSelect: pushGitChanges,
+      },
+      {
         id: "focus-prompt",
         group: "Assistant",
         title: "Focus prompt",
@@ -5692,8 +5767,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         id: "compact-session",
         group: "Sessions",
         title: "Compact",
-        description: "Manually compact the session context",
-        shortcut: "Ctrl+C",
+        description: "Manually compact the session context with /compact",
         keywords: ["compact", "context", "compress", "summarize"],
         onSelect: runCompact,
       },
@@ -5827,6 +5901,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     openAddDirectoryDialog,
     openCommandPalette,
+    openCommitDialog,
     openDeleteDialog,
     openDeleteDialogForCurrentSession,
     openForkDialog,
@@ -5834,7 +5909,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openSessionsDialog,
     openSettingsDialog,
     openTreeDialog,
-    runCompact,
+    pushGitChanges,
     scrollConversationToBottom: () => {
       conversationFrameRef.current?.scrollConversationToBottom()
     },
@@ -5873,6 +5948,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     compactRunningRef,
     deleteOpenRef,
     forkOpenRef,
+    gitCommitOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     renameOpenRef,
     sessionSearchInputRef,
@@ -6027,6 +6103,8 @@ const AppShellSessionWorkspace = React.forwardRef<
         notificationStore={notificationStore}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
+        gitCommitDialogRef={gitCommitDialogRef}
+        gitCommitOpenRef={gitCommitOpenRef}
         displaySettingsStore={displaySettingsStore}
         knownDirectories={knownDirectories}
         onAutoScrollEnabledChange={setAutoScroll}
@@ -6246,7 +6324,6 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Compact session</span>
-                <DropdownMenuShortcut>Ctrl+C</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
@@ -6349,6 +6426,8 @@ type AppShellFloatingControllersProps = {
   notificationStore: ValueStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.RefObject<boolean>
+  gitCommitDialogRef: React.RefObject<GitCommitDialogControllerHandle | null>
+  gitCommitOpenRef: React.RefObject<boolean>
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
   onAutoScrollEnabledChange: (enabled: boolean) => void
@@ -6745,6 +6824,8 @@ const AppShellFloatingControllers = React.memo(
     notificationStore,
     forkDialogRef,
     forkOpenRef,
+    gitCommitDialogRef,
+    gitCommitOpenRef,
     displaySettingsStore,
     knownDirectories,
     onAutoScrollEnabledChange,
@@ -6779,6 +6860,13 @@ const AppShellFloatingControllers = React.memo(
           commandPaletteCommandsRef={commandPaletteCommandsRef}
           commandPaletteOpenRef={commandPaletteOpenRef}
           commandPaletteRef={commandPaletteRef}
+        />
+
+        <GitCommitDialogController
+          ref={gitCommitDialogRef}
+          openStateRef={gitCommitOpenRef}
+          viewerContextId={viewerContextId}
+          cwd={sessionCwd}
         />
 
         <AppShellSessionsDialogHost

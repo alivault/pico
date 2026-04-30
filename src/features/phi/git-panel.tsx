@@ -65,6 +65,12 @@ type GitPanelProps = {
 
 type GitScopedProps = GitPanelProps
 
+export type GitCommitDialogControllerHandle = {
+  open: () => void
+  close: () => void
+  isOpen: () => boolean
+}
+
 type GitSectionProps = {
   title: string
   meta?: string
@@ -1101,6 +1107,80 @@ function GitCommitDialog({
     </Dialog>
   )
 }
+
+export const GitCommitDialogController = React.forwardRef<
+  GitCommitDialogControllerHandle,
+  {
+    viewerContextId: string
+    cwd?: string
+    openStateRef: React.RefObject<boolean>
+  }
+>(function GitCommitDialogControllerImpl(
+  { viewerContextId, cwd, openStateRef },
+  ref
+) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const [open, setOpen] = React.useState(false)
+  const statusQuery = useQuery({
+    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    enabled: Boolean(open && viewerContextId && normalizedCwd),
+    select: selectGitStatusSummary,
+    notifyOnChangeProps: ["data"],
+  })
+  const filesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
+    enabled: Boolean(open && viewerContextId && normalizedCwd),
+    select: selectGitFiles,
+    notifyOnChangeProps: ["data"],
+  })
+  const files = Array.isArray(filesQuery.data) ? filesQuery.data : []
+
+  const setDialogOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      openStateRef.current = nextOpen
+      setOpen(nextOpen)
+    },
+    [openStateRef]
+  )
+
+  React.useEffect(() => {
+    openStateRef.current = open
+  }, [open, openStateRef])
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        if (!viewerContextId || !normalizedCwd) {
+          toast.error("Open a session in a repository before committing.")
+          return
+        }
+
+        setDialogOpen(true)
+      },
+      close: () => {
+        setDialogOpen(false)
+      },
+      isOpen: () => openStateRef.current,
+    }),
+    [normalizedCwd, openStateRef, setDialogOpen, viewerContextId]
+  )
+
+  return (
+    <GitCommitDialog
+      viewerContextId={viewerContextId}
+      cwd={normalizedCwd}
+      files={files}
+      gitStatus={statusQuery.data}
+      open={open}
+      onOpenChange={setDialogOpen}
+    />
+  )
+})
 
 function GitFileStatus({ status }: { status: string | undefined }) {
   const [indexCharacter, worktreeCharacter] = gitFileStatusCharacters(status)

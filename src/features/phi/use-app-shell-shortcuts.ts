@@ -14,6 +14,7 @@ type ShortcutActions = {
   openAddDirectoryDialog: () => void
   openCommandPalette: () => void
   closeCommandPalette: () => void
+  openCommitDialog: () => void
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteDialogForCurrentSession: () => void
   openForkDialog: () => void | Promise<unknown>
@@ -21,7 +22,7 @@ type ShortcutActions = {
   openSessionsDialog: () => void
   openSettingsDialog: () => void
   openTreeDialog: () => void | Promise<unknown>
-  runCompact: () => void | Promise<unknown>
+  pushGitChanges: () => void | Promise<unknown>
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
   toggleGitPanel: () => void
@@ -45,6 +46,7 @@ type UseAppShellShortcutsOptions = {
   compactRunningRef: React.RefObject<boolean>
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
+  gitCommitOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
   renameOpenRef: React.RefObject<boolean>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
@@ -92,6 +94,7 @@ export function useAppShellShortcuts({
   compactRunningRef,
   deleteOpenRef,
   forkOpenRef,
+  gitCommitOpenRef,
   pendingUiRequestOpenRef,
   renameOpenRef,
   sessionSearchInputRef,
@@ -118,6 +121,7 @@ export function useAppShellShortcuts({
         renameOpenRef.current ||
         deleteOpenRef.current ||
         forkOpenRef.current ||
+        gitCommitOpenRef.current ||
         treeOpenRef.current ||
         sessionsOpenRef.current ||
         settingsOpenRef.current ||
@@ -375,6 +379,13 @@ export function useAppShellShortcuts({
         return
       }
 
+      if (key === "u" && !event.shiftKey) {
+        event.preventDefault()
+        closeCommandPaletteForShortcut()
+        void shortcutActionsRef.current.pushGitChanges()
+        return
+      }
+
       if (key === "r") {
         event.preventDefault()
         closeCommandPaletteForShortcut()
@@ -395,7 +406,7 @@ export function useAppShellShortcuts({
         if (!commandPaletteOpen && hasSelectedText(event.target)) return
         event.preventDefault()
         closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.runCompact()
+        shortcutActionsRef.current.openCommitDialog()
         return
       }
 
@@ -423,6 +434,7 @@ export function useAppShellShortcuts({
     compactRunningRef,
     deleteOpenRef,
     forkOpenRef,
+    gitCommitOpenRef,
     pendingUiRequestOpenRef,
     renameOpenRef,
     sessionSearchInputRef,
