@@ -17,6 +17,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 export type AppCommand = {
@@ -56,6 +57,7 @@ function AppShellCommandPalette({
 }: AppShellCommandPaletteProps) {
   const [query, setQuery] = React.useState("")
   const isMobile = useIsMobile()
+  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
   const commandGroups = React.useMemo(() => {
     const groups = new Map<string, Array<AppCommand>>()
 
@@ -87,7 +89,7 @@ function AppShellCommandPalette({
   const commandPaletteBody = (
     <Command shouldFilter loop className="min-h-0 flex-1">
       <CommandInput
-        autoFocus={!isMobile}
+        autoFocus={shouldAutoFocus}
         value={query}
         onValueChange={setQuery}
         placeholder="Search commands"
@@ -122,7 +124,11 @@ function AppShellCommandPalette({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        autoFocus={shouldAutoFocus}
+      >
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Command palette</DrawerTitle>

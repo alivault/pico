@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/phi"
 import { cn } from "@/lib/utils"
@@ -250,6 +251,7 @@ function AppShellSessionsDialog({
   onError,
 }: AppShellSessionsDialogProps) {
   const isMobile = useIsMobile()
+  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
   const [query, setQuery] = React.useState("")
   const [scope, setScope] = React.useState<SessionsDialogScope>("current")
   const [stage, setStage] = React.useState<SessionsDialogStage>("browse")
@@ -505,7 +507,7 @@ function AppShellSessionsDialog({
       className="min-h-0 flex-1"
     >
       <CommandInput
-        autoFocus={!isMobile}
+        autoFocus={shouldAutoFocus}
         value={query}
         onValueChange={setQuery}
         placeholder={
@@ -629,7 +631,7 @@ function AppShellSessionsDialog({
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <Input
-          autoFocus={!isMobile}
+          autoFocus={shouldAutoFocus}
           value={renameValue}
           onChange={(event) => setRenameValue(event.target.value)}
           onKeyDown={(event) => {
@@ -721,7 +723,11 @@ function AppShellSessionsDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        autoFocus={shouldAutoFocus}
+      >
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Sessions</DrawerTitle>

@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { phiQueryKeys } from "@/features/phi/query-keys"
+import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
@@ -643,6 +644,7 @@ export function ForkSessionDialog({
 }: ForkSessionDialogProps) {
   const [forkQuery, setForkQuery] = React.useState("")
   const isMobile = useIsMobile()
+  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
 
   React.useEffect(() => {
     if (!open && forkQuery) {
@@ -657,7 +659,7 @@ export function ForkSessionDialog({
   const forkDialogBody = (
     <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
       <CommandInput
-        autoFocus={!isMobile}
+        autoFocus={shouldAutoFocus}
         value={forkQuery}
         onValueChange={setForkQuery}
         placeholder="Search fork points"
@@ -711,7 +713,11 @@ export function ForkSessionDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        autoFocus={shouldAutoFocus}
+      >
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Fork session</DrawerTitle>
