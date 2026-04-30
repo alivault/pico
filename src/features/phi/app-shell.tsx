@@ -188,11 +188,11 @@ const TITLE_STREAMING_INTERVAL_MS = 500
 const INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT = 6
 
 function sessionNotificationKey(sessionLike: {
-  sessionFile?: string
-  sessionPath?: string
-  path?: string
-  sessionId?: string
-  id?: string
+  sessionFile?: string | undefined
+  sessionPath?: string | undefined
+  path?: string | undefined
+  sessionId?: string | undefined
+  id?: string | undefined
 }) {
   const sessionFile = (
     sessionLike.sessionFile ||
@@ -204,6 +204,38 @@ function sessionNotificationKey(sessionLike: {
 
   const sessionId = (sessionLike.sessionId || sessionLike.id || "").trim()
   if (sessionId) return `id:${sessionId}`
+
+  return ""
+}
+
+function findSidebarSessionSelectionKey(
+  entriesByKey: Map<string, SessionListEntry>,
+  sessionLike: {
+    sessionId?: string | undefined
+    sessionPath?: string | undefined
+  }
+) {
+  const sessionPath = sessionLike.sessionPath?.trim() || ""
+  const sessionId = sessionLike.sessionId?.trim() || ""
+
+  if (sessionPath) {
+    const pathKey = sessionListEntryKey({ path: sessionPath })
+    if (entriesByKey.has(pathKey)) return pathKey
+  }
+
+  if (sessionId) {
+    const idKey = sessionListEntryKey({ id: sessionId })
+    if (entriesByKey.has(idKey)) return idKey
+  }
+
+  for (const [key, entry] of entriesByKey) {
+    if (
+      (sessionPath && entry.path === sessionPath) ||
+      (sessionId && entry.id === sessionId)
+    ) {
+      return key
+    }
+  }
 
   return ""
 }
@@ -4790,9 +4822,33 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
+  const syncSidebarSelectionForSession = React.useCallback(
+    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
+      const nextKey = nextSessionId
+        ? findSidebarSessionSelectionKey(
+            sidebarStore.getSnapshot().derived.sidebarSessionEntriesByKey,
+            {
+              sessionId: nextSessionId,
+              sessionPath: options?.sessionPath,
+            }
+          )
+        : ""
+
+      sidebarStore.setSelectedSidebarSessionKeys((current) => {
+        if (!nextKey) return current.length === 0 ? current : []
+        return sameStringArray(current, [nextKey]) ? current : [nextKey]
+      })
+      sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+        current === nextKey ? current : nextKey
+      )
+    },
+    [sidebarStore]
+  )
+
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+      syncSidebarSelectionForSession(nextSessionId, options)
 
       pendingRouteSessionIdRef.current = nextSessionId
       pendingRouteSessionPathRef.current =
@@ -4817,7 +4873,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       })
       onSelectSession?.(nextSessionId, options)
     },
-    [onSelectSession, sessionStateRef]
+    [onSelectSession, sessionStateRef, syncSidebarSelectionForSession]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
@@ -7271,7 +7327,12 @@ function AppShellSidebarController({
       matchingSessionCount={matchingSessionCount}
       selectedSessionKeys={selectedSidebarSessionKeys}
       activeSessionId={sessionsEvent?.activeSessionId}
-      activeSessionKey={sessionsEvent?.activeSessionKey}
+      activeSessionKey={
+        sessionNotificationKey({
+          sessionId: sessionsEvent?.activeSessionId,
+          sessionPath: sessionsEvent?.activeSessionPath,
+        }) || sessionsEvent?.activeSessionKey
+      }
       emptyStateText={emptySidebarStateText}
       onCreateSession={() => {
         void sessionWorkspaceRef.current?.createSession(undefined, {

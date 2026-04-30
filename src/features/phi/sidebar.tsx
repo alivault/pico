@@ -529,6 +529,16 @@ function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
   }
 }
 
+function normalizeActiveSidebarSessionKey(sessionKey: string | undefined) {
+  const key = sessionKey?.trim() || ""
+  if (!key) return ""
+  if (key.startsWith("path:") || key.startsWith("id:")) return key
+  if (key.includes("/") || key.includes("\\")) {
+    return sessionListEntryKey({ path: key })
+  }
+  return key
+}
+
 function createActiveSidebarSessionStore(): ActiveSidebarSessionStore {
   let activeSessionId = ""
   let activeSessionKey = ""
@@ -569,12 +579,12 @@ function createActiveSidebarSessionStore(): ActiveSidebarSessionStore {
       }
     },
     isActive(entryKey, sessionId) {
-      if (activeSessionKey) return entryKey === activeSessionKey
+      if (activeSessionKey && entryKey === activeSessionKey) return true
       return Boolean(activeSessionId && sessionId === activeSessionId)
     },
     setActive(active) {
       const nextSessionId = active.sessionId || ""
-      const nextSessionKey = active.sessionKey || ""
+      const nextSessionKey = normalizeActiveSidebarSessionKey(active.sessionKey)
       if (
         activeSessionId === nextSessionId &&
         activeSessionKey === nextSessionKey
