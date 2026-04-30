@@ -27,11 +27,23 @@ function audioContextConstructor() {
   )
 }
 
-function getSharedAudioContext() {
+function hasTransientUserActivation() {
+  if (typeof navigator === "undefined") return false
+
+  const userActivation = navigator.userActivation
+  return userActivation ? userActivation.isActive : true
+}
+
+function getSharedAudioContext({
+  requireUserActivation = false,
+}: {
+  requireUserActivation?: boolean
+} = {}) {
   const AudioContextConstructor = audioContextConstructor()
   if (!AudioContextConstructor) return null
 
   if (!sharedAudioContext) {
+    if (requireUserActivation && !hasTransientUserActivation()) return null
     sharedAudioContext = new AudioContextConstructor()
   }
 
@@ -40,7 +52,13 @@ function getSharedAudioContext() {
 
 async function ensureAudioContextRunning(audioContext: AudioContext) {
   if (audioContext.state === "suspended") {
-    await audioContext.resume()
+    if (!hasTransientUserActivation()) return false
+
+    try {
+      await audioContext.resume()
+    } catch {
+      return false
+    }
   }
 
   return audioContext.state === "running"
@@ -99,7 +117,7 @@ function playGeneratedSessionDoneSound(audioContext: AudioContext) {
 }
 
 export async function primeSessionDoneSound() {
-  const audioContext = getSharedAudioContext()
+  const audioContext = getSharedAudioContext({ requireUserActivation: true })
   if (!audioContext) return false
 
   const running = await ensureAudioContextRunning(audioContext)
@@ -110,7 +128,7 @@ export async function primeSessionDoneSound() {
 }
 
 export async function playSessionDoneSound() {
-  const audioContext = getSharedAudioContext()
+  const audioContext = getSharedAudioContext({ requireUserActivation: true })
   if (!audioContext) return false
 
   const running = await ensureAudioContextRunning(audioContext)

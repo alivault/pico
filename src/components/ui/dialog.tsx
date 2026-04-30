@@ -7,8 +7,28 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function blurFocusedElementOutsideDialog() {
+  if (typeof document === "undefined") return
+
+  const activeElement = document.activeElement
+  if (!(activeElement instanceof HTMLElement)) return
+  if (activeElement.closest('[data-slot="dialog-content"]')) return
+
+  activeElement.blur()
+}
+
+function Dialog({ open, ...props }: DialogPrimitive.Root.Props) {
+  const wasOpenRef = React.useRef(open === true)
+
+  React.useLayoutEffect(() => {
+    const nextOpen = open === true
+    if (nextOpen && !wasOpenRef.current) {
+      blurFocusedElementOutsideDialog()
+    }
+    wasOpenRef.current = nextOpen
+  }, [open])
+
+  return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
