@@ -70,6 +70,7 @@ type ComposerPanelProps = {
   isStreaming: boolean
   awaitingFirstTurn: boolean
   disabled?: boolean
+  flush?: boolean
   topContent?: React.ReactNode
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onComposerTextChange: (value: string) => void
@@ -293,6 +294,7 @@ export const ComposerPanel = React.forwardRef<
     isStreaming,
     awaitingFirstTurn,
     disabled = false,
+    flush = false,
     topContent,
     fileInputRef,
     onComposerTextChange,
@@ -346,12 +348,15 @@ export const ComposerPanel = React.forwardRef<
     }
   }, [disabled, modelPickerOpen])
 
-  const composerColumnClassName = centerMessages
-    ? "mx-auto flex w-full max-w-[80ch] flex-col gap-1.5"
-    : "flex w-full flex-col gap-3"
+  const composerColumnClassName =
+    centerMessages || flush
+      ? `mx-auto flex w-full max-w-[80ch] flex-col ${
+          centerMessages ? "gap-1.5" : "gap-3"
+        }`
+      : "flex w-full flex-col gap-3"
 
-  return (
-    <div className="p-4">
+  const content = (
+    <>
       <div className={composerColumnClassName}>
         {topContent}
 
@@ -415,8 +420,12 @@ export const ComposerPanel = React.forwardRef<
           onPickImages(event.target.files)
         }}
       />
-    </div>
+    </>
   )
+
+  if (flush) return content
+
+  return <div className="p-4">{content}</div>
 })
 
 const ComposerAttachments = React.memo(function ComposerAttachments({
@@ -811,6 +820,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               ref={promptRef}
               name="prompt"
               rows={1}
+              autoComplete="off"
+              data-1p-ignore="true"
+              data-form-type="other"
+              data-lpignore="true"
               defaultValue={composerText}
               onChange={handleTextChange}
               onClick={syncSelection}
@@ -824,7 +837,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                   ? "Add a message to the queue..."
                   : draftSkill
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                    : "Ask anything… / for commands, @ to mention files"
+                    : "Ask anything…"
               }
               className="max-h-[min(40dvh,18rem)] min-h-[22px] min-w-[min(240px,100%)] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />

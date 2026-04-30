@@ -9,7 +9,6 @@ import {
   GitBranchIcon,
   PanelRightIcon,
   SquarePenIcon,
-  XIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
@@ -2795,6 +2794,7 @@ const AppShellComposerController = React.memo(
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
         disabled={snapshot.disabled}
+        flush={Boolean(topContent)}
         topContent={topContent}
         fileInputRef={fileInputRef}
         onComposerTextChange={onComposerTextChange}
@@ -2870,28 +2870,25 @@ function AppShellSessionContent({
 
   if (showNewSessionComposer) {
     return (
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto px-4 py-10">
-        <SidebarTrigger className="absolute top-4 left-4 md:hidden" />
-        <div className="w-full -translate-y-[6vh]">
-          <AppShellComposerController
-            actionsRef={actionsRef}
-            composerPanelRef={composerPanelRef}
-            contextUsageStore={contextUsageStore}
-            displaySettingsStore={displaySettingsStore}
-            fileInputRef={fileInputRef}
-            sessionStore={sessionStore}
-            store={store}
-            topContent={
-              <NewSessionComposerSelectors
-                cwd={sessionState.cwd}
-                defaultNewSessionDirectory={defaultNewSessionDirectory}
-                directoryOptions={newSessionDirectoryOptions}
-                onCreateSession={onCreateSession}
-                viewerContextId={viewerContextId}
-              />
-            }
-          />
-        </div>
+      <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-4">
+        <AppShellComposerController
+          actionsRef={actionsRef}
+          composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
+          displaySettingsStore={displaySettingsStore}
+          fileInputRef={fileInputRef}
+          sessionStore={sessionStore}
+          store={store}
+          topContent={
+            <NewSessionComposerSelectors
+              cwd={sessionState.cwd}
+              defaultNewSessionDirectory={defaultNewSessionDirectory}
+              directoryOptions={newSessionDirectoryOptions}
+              onCreateSession={onCreateSession}
+              viewerContextId={viewerContextId}
+            />
+          }
+        />
       </div>
     )
   }
@@ -2927,12 +2924,10 @@ function AppShellSessionContent({
 
 function AppShellDesktopGitPanel({
   active,
-  onClose,
   sessionStore,
   viewerContextId,
 }: {
   active: boolean
-  onClose: () => void
   sessionStore: ValueStore<SessionState>
   viewerContextId: string
 }) {
@@ -2948,7 +2943,7 @@ function AppShellDesktopGitPanel({
       aria-label="Git panel"
       className="flex h-full min-h-0 min-w-0 flex-col border-l border-border/70 bg-background"
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 p-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/70 p-2">
         <div className="min-w-0 flex-1">
           <GitPanelToolbar
             viewerContextId={viewerContextId}
@@ -2956,15 +2951,6 @@ function AppShellDesktopGitPanel({
             active={active}
           />
         </div>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Close Git panel"
-          onClick={onClose}
-        >
-          <XIcon />
-          <span className="sr-only">Close Git panel</span>
-        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <GitPanel
@@ -2996,7 +2982,6 @@ function AppShellTabsController({
   isMobile,
   newSessionDirectoryOptions,
   onCreateSession,
-  onGitPanelOpenChange,
   onValueChange,
   sessionStore,
   store,
@@ -3006,7 +2991,6 @@ function AppShellTabsController({
   appUiStore: ValueStore<AppShellUiState>
   gitPanelOpen: boolean
   isMobile: boolean
-  onGitPanelOpenChange: React.Dispatch<React.SetStateAction<boolean>>
   onValueChange: (value: string) => void
 }) {
   const currentTab = useSelectedValueStore(
@@ -3098,7 +3082,6 @@ function AppShellTabsController({
               viewerContextId={viewerContextId}
               sessionStore={sessionStore}
               active={desktopGitPanelOpen}
-              onClose={() => onGitPanelOpenChange(false)}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -5730,7 +5713,6 @@ const AppShellSessionWorkspace = React.forwardRef<
             onCreateSession={(cwdOverride) => {
               void createSession(cwdOverride)
             }}
-            onGitPanelOpenChange={setGitPanelOpen}
             sessionStore={sessionStore}
             store={composerStore}
             viewerContextId={viewerContextId}
@@ -5848,7 +5830,14 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
   )
-  const { state: sidebarState } = useSidebar()
+  const {
+    isMobile: sidebarIsMobile,
+    openMobile: sidebarOpenMobile,
+    state: sidebarState,
+  } = useSidebar()
+  const sidebarOpen = sidebarIsMobile
+    ? sidebarOpenMobile
+    : sidebarState === "expanded"
   const showCollapsedNewSessionButton = sidebarState === "collapsed"
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
@@ -5857,7 +5846,10 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   return (
     <div className="sticky top-0 z-50 flex min-h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
       <div className="relative flex w-full items-center gap-1">
-        <SidebarTrigger className="shrink-0" />
+        <SidebarTrigger
+          variant={sidebarOpen ? "secondary" : "ghost"}
+          className="shrink-0"
+        />
         {showCollapsedNewSessionButton ? (
           <Button
             size="icon-sm"
@@ -5876,7 +5868,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <SquarePenIcon />
           </Button>
         ) : null}
-        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-12rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 text-center">
           <h2
             className="max-w-full min-w-0 truncate text-sm leading-tight font-semibold"
             title={displaySessionTitle}
@@ -6018,7 +6010,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </DropdownMenu>
           <Button
             size="icon-sm"
-            variant="ghost"
+            variant={gitPanelOpen ? "secondary" : "ghost"}
             className="hidden md:inline-flex"
             aria-pressed={gitPanelOpen}
             aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
