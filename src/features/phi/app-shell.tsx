@@ -5949,6 +5949,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Compact session</span>
+                <DropdownMenuShortcut>Ctrl+C</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
@@ -5964,6 +5965,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Fork</span>
+                <DropdownMenuShortcut>Ctrl+F</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
