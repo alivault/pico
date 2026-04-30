@@ -3,12 +3,14 @@ import {
   ArrowDownIcon,
   ArrowUpToLineIcon,
   CheckIcon,
+  ChevronDownIcon,
   EllipsisIcon,
   FolderIcon,
   GitBranchIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
@@ -26,6 +28,10 @@ import type {
   DirectorySessionsIndexesResponse,
   ExtensionUiEvent,
   FileCompletionsResponse,
+  GitActionResponse,
+  GitChangesResponse,
+  GitLocalBranch,
+  GitStatusResponse,
   PathCompletionsResponse,
   SessionDoneEvent,
   SessionListEntry,
@@ -130,7 +136,7 @@ import {
   GitTabStatusText,
   HeaderGitStatusText,
 } from "@/features/phi/git-panel"
-import { phiSessionScopeKey } from "@/features/phi/query-keys"
+import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
   AppSidebar,
   createDirectorySessionsStore,
@@ -211,6 +217,15 @@ function formatDisplayPath(value: string | undefined) {
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
 }
 
+function formatFolderName(value: string | undefined) {
+  const path = value?.trim().replace(/\/+$/, "") || ""
+  if (!path) return ""
+  if (path === "/") return "/"
+
+  const parts = path.split("/").filter(Boolean)
+  return parts[parts.length - 1] || path
+}
+
 function finishedSessionLabel(title: string) {
   return title !== "New session"
     ? `Session finished: ${title}`
@@ -239,6 +254,8 @@ type DirectorySessionsIndexesData = Extract<
   DirectorySessionsIndexesResponse,
   { ok: true }
 >
+type GitStatusData = Extract<GitStatusResponse, { ok: true }>
+type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 
 type AppShellSidebarSnapshot = {
   baseSidebarDirectories: Array<string>
@@ -2397,6 +2414,254 @@ function useAppShellComposerSnapshot(
   return useValueStore(store)
 }
 
+function gitStatusQueryOptions({
+  cwd,
+  viewerContextId,
+}: {
+  cwd: string
+  viewerContextId: string
+}) {
+  return {
+    queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
+    queryFn: () =>
+      fetchJson<GitStatusData>(
+        buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
+          contextId: viewerContextId,
+        })
+      ),
+    staleTime: 30_000,
+    gcTime: 600_000,
+  }
+}
+
+function gitBranchesQueryOptions({
+  cwd,
+  viewerContextId,
+}: {
+  cwd: string
+  viewerContextId: string
+}) {
+  return {
+    queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
+    queryFn: () =>
+      fetchJson<GitChangesData>(
+        buildRequestUrl(
+          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=branches`,
+          {
+            contextId: viewerContextId,
+          }
+        )
+      ),
+    staleTime: 30_000,
+    gcTime: 600_000,
+  }
+}
+
+function currentBranchLabel(value: {
+  branch?: string
+  detached: boolean
+  revision?: string
+}) {
+  if (value.detached)
+    return value.revision ? `detached ${value.revision}` : "detached"
+  return value.branch?.trim() || ""
+}
+
+function localBranchTrackText(branch: GitLocalBranch) {
+  if (!branch.upstream) return ""
+  if (branch.upstreamGone) return "gone"
+  const ahead = Number.isInteger(branch.ahead) ? branch.ahead : 0
+  const behind = Number.isInteger(branch.behind) ? branch.behind : 0
+  if (ahead > 0 && behind > 0) return `ahead ${ahead}, behind ${behind}`
+  if (ahead > 0) return `ahead ${ahead}`
+  if (behind > 0) return `behind ${behind}`
+  return "synced"
+}
+
+function NewSessionComposerSelectors({
+  cwd,
+  defaultNewSessionDirectory,
+  directoryOptions,
+  onCreateSession,
+  viewerContextId,
+}: {
+  cwd?: string
+  defaultNewSessionDirectory: string
+  directoryOptions: Array<{ path: string; label: string }>
+  onCreateSession: (cwdOverride?: string) => void
+  viewerContextId: string
+}) {
+  const queryClient = useQueryClient()
+  const selectedDirectory = cwd?.trim() || defaultNewSessionDirectory.trim()
+  const directoryMenuOptions = (() => {
+    const seen = new Set<string>()
+    const options: Array<{ path: string; label: string }> = []
+    const pushOption = (path: string, label: string) => {
+      const normalizedPath = path.trim()
+      if (!normalizedPath || seen.has(normalizedPath)) return
+      seen.add(normalizedPath)
+      options.push({ path: normalizedPath, label })
+    }
+
+    pushOption(selectedDirectory, "Selected directory")
+    for (const option of directoryOptions) {
+      pushOption(option.path, option.label)
+    }
+    return options
+  })()
+  const selectedDirectoryLabel =
+    formatFolderName(selectedDirectory) || "Select directory"
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions({ cwd: selectedDirectory, viewerContextId }),
+    enabled: Boolean(selectedDirectory && viewerContextId),
+    select: (data) => data.gitStatus,
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const gitStatus = gitStatusQuery.data
+  const branchLabel = gitStatus ? currentBranchLabel(gitStatus) : ""
+  const branchQuery = useQuery({
+    ...gitBranchesQueryOptions({ cwd: selectedDirectory, viewerContextId }),
+    enabled: Boolean(selectedDirectory && viewerContextId && gitStatus),
+    select: (data) => data.localBranches,
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const localBranches = branchQuery.data || []
+  const checkoutBranchMutation = useMutation({
+    mutationFn: async (branch: string) =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-checkout", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd: selectedDirectory, branch }),
+        }
+      ),
+    onSuccess: (_result, branch) => {
+      void queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitStatus(viewerContextId, selectedDirectory),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitBranches(viewerContextId, selectedDirectory),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitFiles(viewerContextId, selectedDirectory),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitCommits(viewerContextId, selectedDirectory),
+      })
+      toast.success(`Switched to ${branch}`)
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to switch branch"
+      )
+    },
+  })
+
+  return (
+    <div className="flex min-w-0 items-center justify-start gap-1.5 text-muted-foreground">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label="Select new session directory"
+            />
+          }
+        >
+          <FolderIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{selectedDirectoryLabel}</span>
+          <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-80">
+          {directoryMenuOptions.map((option) => (
+            <DropdownMenuItem
+              key={option.path}
+              onClick={() => onCreateSession(option.path)}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">
+                  {option.label}
+                </span>
+                <span className="truncate">
+                  {formatDisplayPath(option.path)}
+                </span>
+              </div>
+              {option.path === selectedDirectory ? (
+                <CheckIcon className="ml-2 size-4 shrink-0" />
+              ) : null}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {gitStatus && branchLabel ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="Select git branch"
+                disabled={checkoutBranchMutation.isPending}
+              />
+            }
+          >
+            <GitBranchIcon className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{branchLabel}</span>
+            {checkoutBranchMutation.isPending ? (
+              <Spinner className="size-4 shrink-0" />
+            ) : (
+              <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-80">
+            {branchQuery.isPending ? (
+              <DropdownMenuItem disabled>
+                <Spinner />
+                Loading branches…
+              </DropdownMenuItem>
+            ) : localBranches.length > 0 ? (
+              localBranches.map((branch) => {
+                const trackText = localBranchTrackText(branch)
+                return (
+                  <DropdownMenuItem
+                    key={branch.name}
+                    disabled={checkoutBranchMutation.isPending}
+                    onClick={() => {
+                      if (branch.current) return
+                      checkoutBranchMutation.mutate(branch.name)
+                    }}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate">{branch.name}</span>
+                      {trackText || branch.subject ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {[trackText, branch.subject]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      ) : null}
+                    </div>
+                    {branch.current ? (
+                      <CheckIcon className="ml-2 size-4 shrink-0" />
+                    ) : null}
+                  </DropdownMenuItem>
+                )
+              })
+            ) : (
+              <DropdownMenuItem disabled>No local branches.</DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
+}
+
 const AppShellComposerController = React.memo(
   function AppShellComposerController({
     actionsRef,
@@ -2406,6 +2671,7 @@ const AppShellComposerController = React.memo(
     fileInputRef,
     sessionStore,
     store,
+    topContent,
   }: {
     actionsRef: React.MutableRefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
@@ -2414,6 +2680,7 @@ const AppShellComposerController = React.memo(
     fileInputRef: React.RefObject<HTMLInputElement | null>
     sessionStore: ValueStore<SessionState>
     store: ValueStore<AppShellComposerSnapshot>
+    topContent?: React.ReactNode
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
     const centerMessages = useSelectedValueStore(
@@ -2536,6 +2803,7 @@ const AppShellComposerController = React.memo(
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
         disabled={snapshot.disabled}
+        topContent={topContent}
         fileInputRef={fileInputRef}
         onComposerTextChange={onComposerTextChange}
         onPickImages={onPickImages}
@@ -2562,12 +2830,14 @@ type AppShellSessionContentProps = {
   contextUsageStore: ComposerContextUsageStore
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
+  defaultNewSessionDirectory: string
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
   hiddenThinkingPreviewStore: TextValueStore
   isSessionViewLoading: boolean
   isSubmitting: boolean
-  onCreateSession: () => void
+  newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  onCreateSession: (cwdOverride?: string) => void
   sessionStore: ValueStore<SessionState>
   store: ValueStore<AppShellComposerSnapshot>
   viewerContextId: string
@@ -2581,17 +2851,59 @@ function AppShellSessionContent({
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
+  defaultNewSessionDirectory,
   displaySettingsStore,
   fileInputRef,
   hiddenThinkingPreviewStore,
   isSessionViewLoading,
   isSubmitting,
+  newSessionDirectoryOptions,
   onCreateSession,
   sessionStore,
   store,
   viewerContextId,
   workingStateStore,
 }: AppShellSessionContentProps) {
+  const sessionState = useSelectedValueStore(
+    sessionStore,
+    (currentSessionState) => ({
+      cwd: currentSessionState.cwd,
+      draft: currentSessionState.draft,
+    }),
+    shallowRecordEqual
+  )
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const showNewSessionComposer =
+    sessionState.draft && !hasMessages && !isSessionViewLoading
+
+  if (showNewSessionComposer) {
+    return (
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto px-4 py-10">
+        <SidebarTrigger className="absolute top-4 left-4 md:hidden" />
+        <div className="w-full -translate-y-[6vh]">
+          <AppShellComposerController
+            actionsRef={actionsRef}
+            composerPanelRef={composerPanelRef}
+            contextUsageStore={contextUsageStore}
+            displaySettingsStore={displaySettingsStore}
+            fileInputRef={fileInputRef}
+            sessionStore={sessionStore}
+            store={store}
+            topContent={
+              <NewSessionComposerSelectors
+                cwd={sessionState.cwd}
+                defaultNewSessionDirectory={defaultNewSessionDirectory}
+                directoryOptions={newSessionDirectoryOptions}
+                onCreateSession={onCreateSession}
+                viewerContextId={viewerContextId}
+              />
+            }
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <AppShellSessionConversation
@@ -2682,6 +2994,7 @@ function AppShellTabsController({
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
+  defaultNewSessionDirectory,
   displaySettingsStore,
   fileInputRef,
   gitPanelOpen,
@@ -2689,6 +3002,7 @@ function AppShellTabsController({
   isSessionViewLoading,
   isSubmitting,
   isMobile,
+  newSessionDirectoryOptions,
   onCreateSession,
   onGitPanelOpenChange,
   onValueChange,
@@ -2707,6 +3021,11 @@ function AppShellTabsController({
     appUiStore,
     (state) => state.currentTab
   )
+  const isDraftSession = useSelectedValueStore(
+    sessionStore,
+    (sessionState) => sessionState.draft
+  )
+  const showTabsList = !isDraftSession || isSessionViewLoading
   const sessionVisibleClassName =
     currentTab === "git"
       ? "hidden min-h-0 flex-1 flex-col md:flex"
@@ -2726,11 +3045,13 @@ function AppShellTabsController({
           contextUsageStore={contextUsageStore}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
+          defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
+          newSessionDirectoryOptions={newSessionDirectoryOptions}
           onCreateSession={onCreateSession}
           sessionStore={sessionStore}
           store={store}
@@ -2755,10 +3076,12 @@ function AppShellTabsController({
       onValueChange={onValueChange}
       className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
     >
-      <AppShellTabsList
-        viewerContextId={viewerContextId}
-        sessionStore={sessionStore}
-      />
+      {showTabsList ? (
+        <AppShellTabsList
+          viewerContextId={viewerContextId}
+          sessionStore={sessionStore}
+        />
+      ) : null}
 
       {desktopGitPanelOpen ? (
         <ResizablePanelGroup
@@ -5396,6 +5719,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           contextUsageStore={contextUsageStore}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
+          defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           gitPanelOpen={gitPanelOpen}
@@ -5403,8 +5727,9 @@ const AppShellSessionWorkspace = React.forwardRef<
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
           isMobile={isMobile}
-          onCreateSession={() => {
-            void createSession()
+          newSessionDirectoryOptions={newSessionDirectoryOptions}
+          onCreateSession={(cwdOverride) => {
+            void createSession(cwdOverride)
           }}
           onGitPanelOpenChange={setGitPanelOpen}
           sessionStore={sessionStore}
@@ -5513,6 +5838,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const sessionHeaderState = useSelectedValueStore(
     sessionStore,
     (sessionState) => ({
+      draft: sessionState.draft,
       firstMessage: sessionState.firstMessage,
       hideThinkingBlock: sessionState.hideThinkingBlock,
       sessionHasFile: Boolean(sessionState.sessionFile),
@@ -5528,6 +5854,8 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
+
+  if (!isSessionViewLoading && sessionHeaderState.draft) return null
 
   return (
     <div className="shrink-0 border-b border-border/70 p-4">
@@ -6875,6 +7203,11 @@ function AppShellSidebarController({
       activeSessionId={sessionsEvent?.activeSessionId}
       activeSessionKey={sessionsEvent?.activeSessionKey}
       emptyStateText={emptySidebarStateText}
+      onCreateSession={() => {
+        void sessionWorkspaceRef.current?.createSession(undefined, {
+          closeMobileSidebar: true,
+        })
+      }}
       onOpenAddDirectoryDialog={() => {
         sessionWorkspaceRef.current?.openAddDirectoryDialog()
       }}

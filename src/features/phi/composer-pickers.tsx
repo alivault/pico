@@ -359,7 +359,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 px-2.5 py-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-b-[18px] bg-muted/15 p-1.5">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <ComposerModelPicker
           disabled={disabled}

@@ -23,6 +23,7 @@ import { Route as ApiGitPushRouteImport } from './routes/api.git-push'
 import { Route as ApiGitPullRouteImport } from './routes/api.git-pull'
 import { Route as ApiGitCommitMessageRouteImport } from './routes/api.git-commit-message'
 import { Route as ApiGitCommitRouteImport } from './routes/api.git-commit'
+import { Route as ApiGitCheckoutRouteImport } from './routes/api.git-checkout'
 import { Route as ApiGitChangesRouteImport } from './routes/api.git-changes'
 import { Route as ApiFileCompletionsRouteImport } from './routes/api.file-completions'
 import { Route as ApiDirectorySessionsIndexesRouteImport } from './routes/api.directory-sessions-indexes'
@@ -113,6 +114,11 @@ const ApiGitCommitMessageRoute = ApiGitCommitMessageRouteImport.update({
 const ApiGitCommitRoute = ApiGitCommitRouteImport.update({
   id: '/api/git-commit',
   path: '/api/git-commit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitCheckoutRoute = ApiGitCheckoutRouteImport.update({
+  id: '/api/git-checkout',
+  path: '/api/git-checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGitChangesRoute = ApiGitChangesRouteImport.update({
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -271,6 +278,7 @@ export interface FileRoutesByTo {
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -309,6 +317,7 @@ export interface FileRoutesById {
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
   '/api/file-completions': typeof ApiFileCompletionsRoute
   '/api/git-changes': typeof ApiGitChangesRoute
+  '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -348,6 +357,7 @@ export interface FileRouteTypes {
     | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
+    | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-pull'
@@ -385,6 +395,7 @@ export interface FileRouteTypes {
     | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
+    | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-pull'
@@ -422,6 +433,7 @@ export interface FileRouteTypes {
     | '/api/directory-sessions-indexes'
     | '/api/file-completions'
     | '/api/git-changes'
+    | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-pull'
@@ -460,6 +472,7 @@ export interface RootRouteChildren {
   ApiDirectorySessionsIndexesRoute: typeof ApiDirectorySessionsIndexesRoute
   ApiFileCompletionsRoute: typeof ApiFileCompletionsRoute
   ApiGitChangesRoute: typeof ApiGitChangesRoute
+  ApiGitCheckoutRoute: typeof ApiGitCheckoutRoute
   ApiGitCommitRoute: typeof ApiGitCommitRoute
   ApiGitCommitMessageRoute: typeof ApiGitCommitMessageRoute
   ApiGitPullRoute: typeof ApiGitPullRoute
@@ -585,6 +598,13 @@ declare module '@tanstack/react-router' {
       path: '/api/git-commit'
       fullPath: '/api/git-commit'
       preLoaderRoute: typeof ApiGitCommitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-checkout': {
+      id: '/api/git-checkout'
+      path: '/api/git-checkout'
+      fullPath: '/api/git-checkout'
+      preLoaderRoute: typeof ApiGitCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/git-changes': {
@@ -769,6 +789,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDirectorySessionsIndexesRoute: ApiDirectorySessionsIndexesRoute,
   ApiFileCompletionsRoute: ApiFileCompletionsRoute,
   ApiGitChangesRoute: ApiGitChangesRoute,
+  ApiGitCheckoutRoute: ApiGitCheckoutRoute,
   ApiGitCommitRoute: ApiGitCommitRoute,
   ApiGitCommitMessageRoute: ApiGitCommitMessageRoute,
   ApiGitPullRoute: ApiGitPullRoute,

@@ -1150,6 +1150,31 @@ export async function pullDirectoryGitChanges(
   return { stdout: result.stdout, stderr: result.stderr }
 }
 
+export async function checkoutDirectoryGitBranch(
+  cwd: string,
+  branch: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedBranch = typeof branch === "string" ? branch.trim() : ""
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!normalizedBranch) throw new Error("branch is required")
+  if (normalizedBranch.startsWith("-")) throw new Error("Invalid branch name")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const result = await runCommand("git", ["switch", normalizedBranch], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to switch branch", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
 export async function generateDirectoryGitCommitMessage(
   cwd: string,
   modelRegistry: ModelRegistryLike

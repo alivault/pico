@@ -433,6 +433,7 @@ type AppSidebarProps = {
   activeSessionId?: string
   activeSessionKey?: string
   emptyStateText: string
+  onCreateSession: () => void
   onOpenAddDirectoryDialog: () => void
   onOpenCommandPalette: () => void
   onOpenSettings: () => void
@@ -1339,6 +1340,7 @@ type AppSidebarHeaderProps = {
   visibleDirectories: Array<string>
   matchingSessionCount: number
   collapsedDirectoryStore: CollapsedDirectoryStore
+  onCreateSession: () => void
   onOpenAddDirectoryDialog: () => void
 }
 
@@ -1418,18 +1420,14 @@ function AppSidebarHeader({
   visibleDirectories,
   matchingSessionCount,
   collapsedDirectoryStore,
+  onCreateSession,
   onOpenAddDirectoryDialog,
 }: AppSidebarHeaderProps) {
   const searchActive = sessionSearch.trim().length > 0
 
   return (
     <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-sidebar-foreground">
-            Phi
-          </h1>
-        </div>
+      <div className="flex items-start justify-start">
         <ConnectionBadge connected={connected} />
       </div>
 
@@ -1438,6 +1436,19 @@ function AppSidebarHeader({
         onValueChange={onSessionSearchChange}
         inputRef={sessionSearchInputRef}
       />
+
+      <Button
+        type="button"
+        variant="secondary"
+        className="w-full justify-start gap-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        onClick={onCreateSession}
+      >
+        <SquarePenIcon className="size-4" />
+        <span>New session</span>
+        <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+          Ctrl+N
+        </kbd>
+      </Button>
 
       <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/70">
         <span>
@@ -1479,6 +1490,7 @@ export function AppSidebar({
   activeSessionId,
   activeSessionKey,
   emptyStateText,
+  onCreateSession,
   onOpenAddDirectoryDialog,
   onOpenCommandPalette,
   onOpenSettings,
@@ -1639,6 +1651,7 @@ export function AppSidebar({
         visibleDirectories={visibleDirectories}
         matchingSessionCount={matchingSessionCount}
         collapsedDirectoryStore={collapsedDirectoryStore}
+        onCreateSession={onCreateSession}
         onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
       />
 

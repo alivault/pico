@@ -70,6 +70,7 @@ type ComposerPanelProps = {
   isStreaming: boolean
   awaitingFirstTurn: boolean
   disabled?: boolean
+  topContent?: React.ReactNode
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
@@ -292,6 +293,7 @@ export const ComposerPanel = React.forwardRef<
     isStreaming,
     awaitingFirstTurn,
     disabled = false,
+    topContent,
     fileInputRef,
     onComposerTextChange,
     onPickImages,
@@ -345,12 +347,14 @@ export const ComposerPanel = React.forwardRef<
   }, [disabled, modelPickerOpen])
 
   const composerColumnClassName = centerMessages
-    ? "mx-auto flex w-full max-w-[80ch] flex-col gap-3"
+    ? "mx-auto flex w-full max-w-[80ch] flex-col gap-1.5"
     : "flex w-full flex-col gap-3"
 
   return (
     <div className="p-4">
       <div className={composerColumnClassName}>
+        {topContent}
+
         <ComposerPendingMessages
           currentPendingMessages={currentPendingMessages}
           onEditPendingMessage={onEditPendingMessage}
@@ -820,7 +824,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                   ? "Add a message to the queue..."
                   : draftSkill
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                    : "Ask anything…"
+                    : "Ask anything… / for commands, @ to mention files"
               }
               className="max-h-[min(40dvh,18rem)] min-h-[22px] min-w-[min(240px,100%)] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />
