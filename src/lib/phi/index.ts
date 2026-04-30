@@ -1,6 +1,7 @@
 import { normalizeStoredDirectoryList } from "@/lib/phi/storage"
 
 export {
+  AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
   DRAFT_DIRECTORY_STORAGE_KEY,
@@ -19,6 +20,7 @@ export {
   normalizeStoredDirectoryList,
   normalizeThemeMode,
   promptDraftKey,
+  readStoredAutoScrollEnabled,
   readStoredCenterMessages,
   readStoredCollapsedDirectories,
   readStoredDraftDirectory,

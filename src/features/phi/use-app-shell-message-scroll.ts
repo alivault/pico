@@ -11,6 +11,7 @@ type ScrollSessionState = {
 }
 
 type UseAppShellMessageScrollOptions = {
+  autoScrollEnabled: boolean
   isSessionViewLoading: boolean
   sessionState: ScrollSessionState
 }
@@ -200,6 +201,7 @@ function findOpeningToolAccordionTrigger(
 }
 
 export function useAppShellMessageScroll({
+  autoScrollEnabled,
   isSessionViewLoading,
   sessionState,
 }: UseAppShellMessageScrollOptions) {
@@ -232,18 +234,18 @@ export function useAppShellMessageScroll({
 
   const scrollViewportToBottomIfFollowing = React.useCallback(
     (viewport: HTMLDivElement) => {
-      if (followMessagesRef.current) {
+      if (autoScrollEnabled && followMessagesRef.current) {
         scrollViewportToBottom(viewport)
       }
       rememberViewportLayout(viewport)
       syncViewportState(viewport)
     },
-    [rememberViewportLayout, syncViewportState]
+    [autoScrollEnabled, rememberViewportLayout, syncViewportState]
   )
 
   const scheduleFollowScrollIfFollowing = React.useCallback(
     (viewport: HTMLDivElement) => {
-      if (!followMessagesRef.current) return
+      if (!autoScrollEnabled || !followMessagesRef.current) return
 
       window.cancelAnimationFrame(followScrollFrameRef.current)
       followScrollFrameRef.current = window.requestAnimationFrame(() => {
@@ -259,7 +261,7 @@ export function useAppShellMessageScroll({
         })
       })
     },
-    [scrollViewportToBottomIfFollowing]
+    [autoScrollEnabled, scrollViewportToBottomIfFollowing]
   )
 
   const scrollConversationToTop = React.useCallback(() => {
@@ -272,12 +274,13 @@ export function useAppShellMessageScroll({
   const scrollConversationToBottom = React.useCallback(() => {
     const viewport = messageViewportRef.current
     if (!viewport) return
-    followMessagesRef.current = true
+    followMessagesRef.current = autoScrollEnabled
     scrollViewportToBottom(viewport)
     rememberViewportLayout(viewport)
     syncViewportState(viewport)
     scheduleFollowScrollIfFollowing(viewport)
   }, [
+    autoScrollEnabled,
     rememberViewportLayout,
     scheduleFollowScrollIfFollowing,
     syncViewportState,
@@ -331,7 +334,7 @@ export function useAppShellMessageScroll({
       ) {
         followMessagesRef.current = false
       } else if (movedDown && isViewportNearBottom(viewport)) {
-        followMessagesRef.current = true
+        followMessagesRef.current = autoScrollEnabled
       }
 
       rememberViewportLayout(viewport)
@@ -381,7 +384,21 @@ export function useAppShellMessageScroll({
       })
       viewport.removeEventListener("keydown", handleKeyDown, { capture: true })
     }
-  }, [rememberViewportLayout, syncViewportState])
+  }, [autoScrollEnabled, rememberViewportLayout, syncViewportState])
+
+  React.useEffect(() => {
+    if (!autoScrollEnabled) {
+      followMessagesRef.current = false
+      window.cancelAnimationFrame(followScrollFrameRef.current)
+      followScrollFrameRef.current = 0
+      return
+    }
+
+    const viewport = messageViewportRef.current
+    if (!viewport || !isViewportNearBottom(viewport)) return
+    followMessagesRef.current = true
+    scheduleFollowScrollIfFollowing(viewport)
+  }, [autoScrollEnabled, scheduleFollowScrollIfFollowing])
 
   React.useEffect(() => {
     return () => {
@@ -408,13 +425,13 @@ export function useAppShellMessageScroll({
 
   React.useLayoutEffect(() => {
     const wasStreaming = previousStreamingRef.current
-    if (!wasStreaming && sessionState.streaming) {
+    if (!wasStreaming && sessionState.streaming && autoScrollEnabled) {
       followMessagesRef.current = true
     }
     previousStreamingRef.current = sessionState.streaming
 
     syncAfterConversationChange()
-  }, [sessionState.streaming, syncAfterConversationChange])
+  }, [autoScrollEnabled, sessionState.streaming, syncAfterConversationChange])
 
   React.useLayoutEffect(() => {
     if (typeof ResizeObserver === "undefined") return
@@ -460,13 +477,14 @@ export function useAppShellMessageScroll({
 
     messageViewportRef.current = viewport
     lastLoadedSessionScrollKeyRef.current = nextSessionScrollKey
-    followMessagesRef.current = true
+    followMessagesRef.current = autoScrollEnabled
     previousStreamingRef.current = sessionState.streaming
     scrollViewportToBottom(viewport)
     rememberViewportLayout(viewport)
     syncViewportState(viewport)
     scheduleFollowScrollIfFollowing(viewport)
   }, [
+    autoScrollEnabled,
     isSessionViewLoading,
     sessionState.cwd,
     sessionState.draft,

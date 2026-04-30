@@ -113,6 +113,8 @@ type AppShellSettingsDialogProps = {
   onHideToolBlocksChange: (hidden: boolean) => void
   centerMessages: boolean
   onCenterMessagesChange: (centered: boolean) => void
+  autoScrollEnabled: boolean
+  onAutoScrollEnabledChange: (enabled: boolean) => void
   sessionDoneSoundEnabled: boolean
   onSessionDoneSoundEnabledChange: (enabled: boolean) => void
   sessionDoneDesktopNotificationsEnabled: boolean
@@ -131,6 +133,8 @@ export function AppShellSettingsDialog({
   onHideToolBlocksChange,
   centerMessages,
   onCenterMessagesChange,
+  autoScrollEnabled,
+  onAutoScrollEnabledChange,
   sessionDoneSoundEnabled,
   onSessionDoneSoundEnabledChange,
   sessionDoneDesktopNotificationsEnabled,
@@ -186,6 +190,15 @@ export function AppShellSettingsDialog({
           valueLabel: formatToggleValue(centerMessages),
           keywords: ["center", "messages", "width", "80", "column"],
           onSelect: () => onCenterMessagesChange(!centerMessages),
+        },
+        {
+          id: "auto-scroll-latest",
+          title: "Auto-scroll to latest messages",
+          description:
+            "Follow new messages and streaming output automatically.",
+          valueLabel: formatToggleValue(autoScrollEnabled),
+          keywords: ["auto", "scroll", "latest", "follow", "streaming"],
+          onSelect: () => onAutoScrollEnabledChange(!autoScrollEnabled),
         },
       ],
     },

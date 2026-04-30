@@ -157,6 +157,7 @@ import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
+  AUTO_SCROLL_ENABLED_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
@@ -172,6 +173,7 @@ import {
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
   readStoredCenterMessages,
+  readStoredAutoScrollEnabled,
   readStoredRecentDirectories,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
@@ -1832,13 +1834,20 @@ function useAppShellConversationSessionState(store: ValueStore<SessionState>) {
 const AppShellConversationFrame = React.forwardRef<
   AppShellConversationFrameHandle,
   {
+    autoScrollEnabled: boolean
     children: React.ReactNode
     conversationItemsStore: ConversationItemsStore
     isSessionViewLoading: boolean
     sessionState: AppShellConversationSessionState
   }
 >(function AppShellConversationFrameImpl(
-  { children, conversationItemsStore, isSessionViewLoading, sessionState },
+  {
+    autoScrollEnabled,
+    children,
+    conversationItemsStore,
+    isSessionViewLoading,
+    sessionState,
+  },
   ref
 ) {
   const {
@@ -1852,6 +1861,7 @@ const AppShellConversationFrame = React.forwardRef<
     scrollStateStore,
     syncAfterConversationChange,
   } = useAppShellMessageScroll({
+    autoScrollEnabled,
     isSessionViewLoading,
     sessionState,
   })
@@ -2394,7 +2404,7 @@ const AppShellSessionConversation = React.memo(
     workingStateStore: ValueStore<AppShellWorkingState | null>
   }) {
     const sessionState = useAppShellConversationSessionState(sessionStore)
-    const { centerMessages, hideToolBlocks } =
+    const { autoScrollEnabled, centerMessages, hideToolBlocks } =
       useValueStore(displaySettingsStore)
     const hideThinking = useSelectedValueStore(
       sessionStore,
@@ -2408,6 +2418,7 @@ const AppShellSessionConversation = React.memo(
     return (
       <AppShellConversationFrame
         ref={conversationFrameRef}
+        autoScrollEnabled={autoScrollEnabled}
         conversationItemsStore={conversationItemsStore}
         isSessionViewLoading={isSessionViewLoading}
         sessionState={sessionState}
@@ -3678,6 +3689,7 @@ type AppShellUiState = {
 }
 
 type AppShellDisplaySettingsState = {
+  autoScrollEnabled: boolean
   centerMessages: boolean
   hideToolBlocks: boolean
 }
@@ -3829,6 +3841,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     displaySettingsStoreRef.current =
       createValueStore<AppShellDisplaySettingsState>(
         {
+          autoScrollEnabled: true,
           centerMessages: false,
           hideToolBlocks: false,
         },
@@ -3868,6 +3881,22 @@ const AppShellSessionWorkspace = React.forwardRef<
       )
       if (nextCenterMessages === current.centerMessages) return
       const next = { ...current, centerMessages: nextCenterMessages }
+      displaySettingsRef.current = next
+      displaySettingsStore.setSnapshot(next)
+    },
+    [displaySettingsStore]
+  )
+  const setAutoScrollEnabled = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      const current = displaySettingsStore.getSnapshot()
+      const nextAutoScrollEnabled = applySidebarStateAction(
+        current.autoScrollEnabled,
+        action
+      )
+      if (nextAutoScrollEnabled === current.autoScrollEnabled) return
+      const next = { ...current, autoScrollEnabled: nextAutoScrollEnabled }
       displaySettingsRef.current = next
       displaySettingsStore.setSnapshot(next)
     },
@@ -4625,6 +4654,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
     setHideToolBlocks(readStoredHideToolBlocks())
     setCenterMessages(readStoredCenterMessages())
+    setAutoScrollEnabled(readStoredAutoScrollEnabled())
     setRecentDirectories(readStoredRecentDirectories())
     setDesktopNotificationPermission(getDesktopNotificationPermission())
   }, [])
@@ -5338,6 +5368,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     safeLocalStorageSetItem(CENTER_MESSAGES_STORAGE_KEY, centered ? "1" : "0")
   }
 
+  const setAutoScroll = (enabled: boolean) => {
+    setAutoScrollEnabled(enabled)
+    safeLocalStorageSetItem(
+      AUTO_SCROLL_ENABLED_STORAGE_KEY,
+      enabled ? "1" : "0"
+    )
+  }
+
   const runBuiltinSlashCommand = async (name: string, args: string) => {
     const trimmedArgs = args.trim()
 
@@ -5894,6 +5932,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         forkOpenRef={forkOpenRef}
         displaySettingsStore={displaySettingsStore}
         knownDirectories={knownDirectories}
+        onAutoScrollEnabledChange={setAutoScroll}
         onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {
           void setThinkingBlocksHidden(hidden)
@@ -6211,6 +6250,7 @@ type AppShellFloatingControllersProps = {
   forkOpenRef: React.RefObject<boolean>
   displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
+  onAutoScrollEnabledChange: (enabled: boolean) => void
   onCenterMessagesChange: (centered: boolean) => void
   onHideThinkingBlocksChange: (hidden: boolean) => void
   onHideToolBlocksChange: (hidden: boolean) => void
@@ -6485,6 +6525,7 @@ const AppShellSettingsDialogHost = React.memo(
     currentTheme,
     displaySettingsStore,
     notificationStore,
+    onAutoScrollEnabledChange,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
@@ -6499,6 +6540,7 @@ const AppShellSettingsDialogHost = React.memo(
     | "currentTheme"
     | "displaySettingsStore"
     | "notificationStore"
+    | "onAutoScrollEnabledChange"
     | "onCenterMessagesChange"
     | "onHideThinkingBlocksChange"
     | "onHideToolBlocksChange"
@@ -6513,7 +6555,7 @@ const AppShellSettingsDialogHost = React.memo(
       sessionStore,
       (sessionState) => sessionState.hideThinkingBlock
     )
-    const { centerMessages, hideToolBlocks } =
+    const { autoScrollEnabled, centerMessages, hideToolBlocks } =
       useValueStore(displaySettingsStore)
     const {
       desktopNotificationPermission,
@@ -6542,6 +6584,8 @@ const AppShellSettingsDialogHost = React.memo(
         onHideToolBlocksChange={onHideToolBlocksChange}
         centerMessages={centerMessages}
         onCenterMessagesChange={onCenterMessagesChange}
+        autoScrollEnabled={autoScrollEnabled}
+        onAutoScrollEnabledChange={onAutoScrollEnabledChange}
         sessionDoneSoundEnabled={sessionDoneSoundEnabled}
         onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
         sessionDoneDesktopNotificationsEnabled={
@@ -6602,6 +6646,7 @@ const AppShellFloatingControllers = React.memo(
     forkOpenRef,
     displaySettingsStore,
     knownDirectories,
+    onAutoScrollEnabledChange,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
@@ -6699,6 +6744,7 @@ const AppShellFloatingControllers = React.memo(
           currentTheme={currentTheme}
           displaySettingsStore={displaySettingsStore}
           notificationStore={notificationStore}
+          onAutoScrollEnabledChange={onAutoScrollEnabledChange}
           onCenterMessagesChange={onCenterMessagesChange}
           onHideThinkingBlocksChange={onHideThinkingBlocksChange}
           onHideToolBlocksChange={onHideToolBlocksChange}
