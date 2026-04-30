@@ -649,6 +649,7 @@ export function GitPanelToolbar({
 }: GitScopedProps) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
+  const isMobile = useIsMobile()
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
   const statusQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
@@ -731,6 +732,29 @@ export function GitPanelToolbar({
     },
   })
 
+  const pushing =
+    gitActionMutation.isPending && gitActionMutation.variables === "push"
+  const pulling =
+    gitActionMutation.isPending && gitActionMutation.variables === "pull"
+  const showCommitAction = Boolean(
+    isMobile && viewerContextId && normalizedCwd && hasChanges
+  )
+  const showPushAction = Boolean(
+    isMobile &&
+    viewerContextId &&
+    normalizedCwd &&
+    canPush &&
+    (!gitActionMutation.isPending || pushing)
+  )
+  const showPullAction = Boolean(
+    isMobile &&
+    viewerContextId &&
+    normalizedCwd &&
+    canPull &&
+    (!gitActionMutation.isPending || pulling)
+  )
+  const showActions = showCommitAction || showPushAction || showPullAction
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-1.5">
@@ -746,60 +770,47 @@ export function GitPanelToolbar({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={!viewerContextId || !normalizedCwd || !hasChanges}
-          onClick={() => {
-            setCommitDialogOpen(true)
-          }}
-        >
-          <GitCommitIcon /> Commit…
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={
-            !viewerContextId ||
-            !normalizedCwd ||
-            !canPush ||
-            gitActionMutation.isPending
-          }
-          onClick={() => {
-            gitActionMutation.mutate("push")
-          }}
-        >
-          {gitActionMutation.isPending &&
-          gitActionMutation.variables === "push" ? (
-            <Spinner />
-          ) : (
-            <UploadIcon />
-          )}
-          Push
-        </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={
-            !viewerContextId ||
-            !normalizedCwd ||
-            !canPull ||
-            gitActionMutation.isPending
-          }
-          onClick={() => {
-            gitActionMutation.mutate("pull")
-          }}
-        >
-          {gitActionMutation.isPending &&
-          gitActionMutation.variables === "pull" ? (
-            <Spinner />
-          ) : (
-            <DownloadIcon />
-          )}
-          Pull
-        </Button>
-      </div>
+      {showActions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2 md:hidden">
+          {showCommitAction ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setCommitDialogOpen(true)
+              }}
+            >
+              <GitCommitIcon /> Commit…
+            </Button>
+          ) : null}
+          {showPushAction ? (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={gitActionMutation.isPending}
+              onClick={() => {
+                gitActionMutation.mutate("push")
+              }}
+            >
+              {pushing ? <Spinner /> : <UploadIcon />}
+              Push
+            </Button>
+          ) : null}
+          {showPullAction ? (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={gitActionMutation.isPending}
+              onClick={() => {
+                gitActionMutation.mutate("pull")
+              }}
+            >
+              {pulling ? <Spinner /> : <DownloadIcon />}
+              Pull
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <GitCommitDialog
         viewerContextId={viewerContextId}
@@ -1564,6 +1575,142 @@ export function HeaderGitStatusText({
     >
       <span>{text}</span>
     </span>
+  )
+}
+
+export function HeaderGitActions({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd?: string
+}) {
+  const queryClient = useQueryClient()
+  const normalizedCwd = normalizeCwd(cwd)
+  const isMobile = useIsMobile()
+  const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
+  const statusQuery = useQuery({
+    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    enabled: Boolean(!isMobile && viewerContextId && normalizedCwd),
+    select: selectGitStatusSummary,
+    notifyOnChangeProps: ["data"],
+  })
+  const gitStatus = statusQuery.data
+  const hasRepository = Boolean(gitStatus)
+  const canCommit = Boolean(
+    viewerContextId && normalizedCwd && gitStatus?.dirty
+  )
+  const canPush = Boolean(
+    viewerContextId &&
+    normalizedCwd &&
+    hasRepository &&
+    !gitStatus?.detached &&
+    (gitStatus?.ahead || 0) > 0
+  )
+  const canPull = Boolean(
+    viewerContextId &&
+    normalizedCwd &&
+    hasRepository &&
+    !gitStatus?.detached &&
+    (gitStatus?.behind || 0) > 0
+  )
+  const filesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
+    enabled: Boolean(!isMobile && canCommit),
+    select: selectGitFiles,
+    notifyOnChangeProps: ["data"],
+  })
+  const files = Array.isArray(filesQuery.data) ? filesQuery.data : []
+
+  const gitActionMutation = useMutation({
+    mutationFn: async (action: "push" | "pull") => {
+      const endpoint = action === "push" ? "/api/git-push" : "/api/git-pull"
+      return await fetchJson<GitActionResponse>(
+        buildRequestUrl(endpoint, { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd: normalizedCwd }),
+        }
+      )
+    },
+    onSuccess: async () => {
+      await invalidateGitQueries({
+        queryClient,
+        viewerContextId,
+        cwd: normalizedCwd,
+      })
+    },
+    onError: (error, action) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          action === "push"
+            ? "Failed to push changes"
+            : "Failed to pull changes"
+        )
+      )
+    },
+  })
+
+  const showPush = canPush && !gitActionMutation.isPending
+  const showPull = canPull && !gitActionMutation.isPending
+  const showActions = !isMobile && (canCommit || showPush || showPull)
+
+  if (!showActions && !commitDialogOpen) return null
+
+  return (
+    <>
+      {showActions ? (
+        <div className="hidden items-center gap-1 md:flex">
+          {canCommit ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setCommitDialogOpen(true)
+              }}
+            >
+              <GitCommitIcon /> Commit…
+            </Button>
+          ) : null}
+          {showPush ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                gitActionMutation.mutate("push")
+              }}
+            >
+              <UploadIcon /> Push
+            </Button>
+          ) : null}
+          {showPull ? (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                gitActionMutation.mutate("pull")
+              }}
+            >
+              <DownloadIcon /> Pull
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      <GitCommitDialog
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        files={files}
+        gitStatus={gitStatus}
+        open={commitDialogOpen}
+        onOpenChange={setCommitDialogOpen}
+      />
+    </>
   )
 }
 

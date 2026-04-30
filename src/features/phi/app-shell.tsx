@@ -135,6 +135,7 @@ import {
   GitPanel,
   GitPanelToolbar,
   GitTabStatusText,
+  HeaderGitActions,
   HeaderGitStatusText,
 } from "@/features/phi/git-panel"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
@@ -6183,6 +6184,10 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1">
+          <HeaderGitActions
+            viewerContextId={viewerContextId}
+            cwd={displaySessionCwd}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
