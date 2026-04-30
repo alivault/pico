@@ -5876,8 +5876,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             </h2>
           </div>
           {displaySessionCwd ? (
-            <span className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-              <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
+            <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
               <span className="truncate">
                 {formatFolderName(displaySessionCwd)}
               </span>
