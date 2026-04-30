@@ -4136,7 +4136,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     uiRequestDialogRef.current?.open(request)
   }
   const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
-  const lastEscapePressedAtRef = React.useRef(0)
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
   const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
     null
@@ -5669,7 +5668,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
-    lastEscapePressedAtRef,
     renameOpenRef,
     sessionSearchInputRef,
     sessionsOpenRef,

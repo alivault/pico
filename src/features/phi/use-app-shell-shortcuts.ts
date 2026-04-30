@@ -44,7 +44,6 @@ type UseAppShellShortcutsOptions = {
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
-  lastEscapePressedAtRef: React.RefObject<number>
   renameOpenRef: React.RefObject<boolean>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   sessionsOpenRef: React.RefObject<boolean>
@@ -91,7 +90,6 @@ export function useAppShellShortcuts({
   deleteOpenRef,
   forkOpenRef,
   pendingUiRequestOpenRef,
-  lastEscapePressedAtRef,
   renameOpenRef,
   sessionSearchInputRef,
   sessionsOpenRef,
@@ -156,7 +154,6 @@ export function useAppShellShortcuts({
         !isEditableTarget(event.target)
       ) {
         event.preventDefault()
-        lastEscapePressedAtRef.current = 0
         void shortcutActionsRef.current.abortSession()
         return
       }
@@ -168,31 +165,6 @@ export function useAppShellShortcuts({
         !event.metaKey &&
         (!isEditableTarget(event.target) || targetIsSessionSearch)
       ) {
-        if (
-          key === "escape" &&
-          !event.repeat &&
-          !isEditableTarget(event.target)
-        ) {
-          const now = Date.now()
-          if (now - lastEscapePressedAtRef.current <= 600) {
-            event.preventDefault()
-            lastEscapePressedAtRef.current = 0
-            void shortcutActionsRef.current.openTreeDialog()
-            return
-          }
-
-          lastEscapePressedAtRef.current = now
-          return
-        }
-
-        if (
-          key !== "shift" &&
-          key !== "control" &&
-          key !== "meta" &&
-          key !== "alt"
-        ) {
-          lastEscapePressedAtRef.current = 0
-        }
         if (
           !activeElementIsConversationViewport &&
           (key === "arrowdown" ||
@@ -442,7 +414,6 @@ export function useAppShellShortcuts({
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef,
-    lastEscapePressedAtRef,
     renameOpenRef,
     sessionSearchInputRef,
     sessionsOpenRef,

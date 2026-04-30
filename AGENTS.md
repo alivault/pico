@@ -529,7 +529,7 @@ If you extend git UI, update:
 ### Add a new command palette action or shortcut
 
 1. update the command list in `app-shell.tsx`
-2. update keyboard handling in `app-shell.tsx` if a shortcut is needed
+2. update keyboard handling in `src/features/phi/use-app-shell-shortcuts.ts` if a shortcut is needed
 3. wire to existing mutations/actions or add the necessary behavior
 4. keep naming/description consistent with the rest of the app
 
