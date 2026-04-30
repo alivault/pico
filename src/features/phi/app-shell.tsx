@@ -5861,18 +5861,20 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </Button>
         ) : null}
         <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 text-center">
-          <h2
-            className="max-w-full min-w-0 truncate text-sm leading-tight font-semibold"
-            title={displaySessionTitle}
-          >
-            {displaySessionTitle}
-          </h2>
-          {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-            <Spinner
-              className="size-3.5 shrink-0 text-muted-foreground"
-              aria-label="Session streaming"
-            />
-          ) : null}
+          <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
+            {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
+              <Spinner
+                className="size-3.5 shrink-0 text-muted-foreground"
+                aria-label="Session streaming"
+              />
+            ) : null}
+            <h2
+              className="min-w-0 truncate text-sm leading-tight font-semibold"
+              title={displaySessionTitle}
+            >
+              {displaySessionTitle}
+            </h2>
+          </div>
           {displaySessionCwd ? (
             <span className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
