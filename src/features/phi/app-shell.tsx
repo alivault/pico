@@ -4447,6 +4447,19 @@ const AppShellSessionWorkspace = React.forwardRef<
 
     composerTextRef.current = nextText
     composerSkillRef.current = nextSkill
+
+    const currentDraftSeed = composerDraftSeedStore.getSnapshot()
+    if (
+      currentDraftSeed.text !== nextText ||
+      currentDraftSeed.skillName !== nextSkill
+    ) {
+      composerDraftSeedStore.setSnapshot({
+        ...currentDraftSeed,
+        text: nextText,
+        skillName: nextSkill,
+      })
+    }
+
     rememberStoredPromptDraft(
       target,
       serializeComposerDraft({ text: nextText, skillName: nextSkill })
