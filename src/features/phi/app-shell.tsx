@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
+import type { PanelImperativeHandle } from "react-resizable-panels"
 import { toast } from "sonner"
 
 import type { DesktopNotificationPermission } from "@/features/phi/session-done-notifications"
@@ -3004,12 +3005,12 @@ function AppShellDesktopGitPanel({
     (sessionState) => sessionState.cwd
   )
 
-  if (!active) return null
-
   return (
     <aside
       aria-label="Git panel"
-      className="flex h-full min-h-0 min-w-0 flex-col border-l border-border/70 bg-background"
+      aria-hidden={!active}
+      data-state={active ? "open" : "closed"}
+      className="flex h-full min-h-0 min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-border/70 p-2">
         <div className="min-w-0 flex-1">
@@ -3079,6 +3080,12 @@ function AppShellTabsController({
       ? "min-h-0 flex-1 space-y-4 overflow-auto p-6 md:hidden"
       : "hidden"
   const desktopGitPanelOpen = !isMobile && gitPanelOpen
+  const gitPanelRef = React.useRef<PanelImperativeHandle | null>(null)
+  const lastGitPanelSizeRef = React.useRef(50)
+  const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
+    React.useState(desktopGitPanelOpen)
+  const [desktopGitPanelAnimating, setDesktopGitPanelAnimating] =
+    React.useState(false)
   const sessionPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className={sessionVisibleClassName}>
@@ -3114,6 +3121,49 @@ function AppShellTabsController({
     </div>
   )
 
+  React.useLayoutEffect(() => {
+    if (isMobile) {
+      setDesktopGitPanelAnimating(false)
+      setDesktopGitPanelMounted(false)
+      return
+    }
+
+    setDesktopGitPanelAnimating(true)
+    if (desktopGitPanelOpen) {
+      setDesktopGitPanelMounted(true)
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDesktopGitPanelAnimating(false)
+      if (!desktopGitPanelOpen) {
+        setDesktopGitPanelMounted(false)
+      }
+    }, 220)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [desktopGitPanelOpen, isMobile])
+
+  React.useEffect(() => {
+    if (isMobile) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      const gitPanel = gitPanelRef.current
+      if (!gitPanel) return
+
+      if (desktopGitPanelOpen) {
+        gitPanel.resize(`${lastGitPanelSizeRef.current}%`)
+      } else {
+        gitPanel.resize("0%")
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [desktopGitPanelOpen, isMobile])
+
+  const desktopPanelGroupClassName = desktopGitPanelAnimating
+    ? "min-h-0 flex-1 overflow-hidden [&>[data-panel]]:transition-[flex-grow] [&>[data-panel]]:duration-200 [&>[data-panel]]:ease-linear"
+    : "min-h-0 flex-1 overflow-hidden"
+
   return (
     <Tabs
       value={currentTab}
@@ -3127,14 +3177,16 @@ function AppShellTabsController({
         />
       ) : null}
 
-      {desktopGitPanelOpen ? (
+      {isMobile ? (
+        <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
+      ) : (
         <ResizablePanelGroup
           orientation="horizontal"
-          className="min-h-0 flex-1 overflow-hidden"
+          className={desktopPanelGroupClassName}
         >
           <ResizablePanel
             id="session"
-            defaultSize="50%"
+            defaultSize={desktopGitPanelOpen ? "50%" : "100%"}
             minSize="20rem"
             className="h-full min-h-0 min-w-0"
           >
@@ -3142,19 +3194,26 @@ function AppShellTabsController({
           </ResizablePanel>
           <ResizablePanel
             id="git"
-            defaultSize="50%"
+            panelRef={gitPanelRef}
+            defaultSize={desktopGitPanelOpen ? "50%" : "0%"}
             minSize="20rem"
+            collapsedSize="0%"
+            collapsible
             className="h-full min-h-0 min-w-0"
+            onResize={(size) => {
+              if (!desktopGitPanelOpen || size.asPercentage <= 0) return
+              lastGitPanelSizeRef.current = size.asPercentage
+            }}
           >
-            <AppShellDesktopGitPanel
-              viewerContextId={viewerContextId}
-              sessionStore={sessionStore}
-              active={desktopGitPanelOpen}
-            />
+            {desktopGitPanelMounted || desktopGitPanelOpen ? (
+              <AppShellDesktopGitPanel
+                viewerContextId={viewerContextId}
+                sessionStore={sessionStore}
+                active={desktopGitPanelOpen}
+              />
+            ) : null}
           </ResizablePanel>
         </ResizablePanelGroup>
-      ) : (
-        <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
       )}
     </Tabs>
   )
