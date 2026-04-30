@@ -854,7 +854,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                     : "Ask anything…"
               }
-              className="max-h-[min(40dvh,18rem)] min-h-[22px] min-w-[min(240px,100%)] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
+              className="max-h-[min(40dvh,18rem)] min-h-[22px] max-w-full min-w-0 flex-1 basis-[min(240px,100%)] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />
           </div>
         </div>
