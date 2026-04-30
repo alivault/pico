@@ -1925,10 +1925,14 @@ const AppShellConversationFrame = React.forwardRef<
   )
 })
 
+const COMPACT_WORKING_LABEL = "Compacting context... (escape to cancel)"
+const COMPACT_CANCELLED_LABEL = "Error: Compaction cancelled"
+
 type AppShellWorkingState = {
   label: string
   summary?: string
   done?: boolean
+  error?: boolean
 }
 
 function sameWorkingState(
@@ -1938,7 +1942,8 @@ function sameWorkingState(
   return (
     left?.label === right?.label &&
     left?.summary === right?.summary &&
-    left?.done === right?.done
+    left?.done === right?.done &&
+    left?.error === right?.error
   )
 }
 
@@ -1978,6 +1983,8 @@ function AppShellMessagesWorkingIndicator({
       <span className="mt-0.5 inline-flex items-center justify-center">
         {state.done ? (
           <CheckIcon className="size-4 text-emerald-600" />
+        ) : state.error ? (
+          <span className="text-destructive">!</span>
         ) : (
           <Spinner />
         )}
@@ -1985,6 +1992,8 @@ function AppShellMessagesWorkingIndicator({
       <div className="min-w-0 flex-1">
         {state.done ? (
           <div className="font-medium text-foreground">Done</div>
+        ) : state.error ? (
+          <div className="font-medium text-destructive">{state.label}</div>
         ) : (
           <AppShellWorkingIndicatorLabel
             fallbackLabel={state.label}
@@ -4238,6 +4247,8 @@ const AppShellSessionWorkspace = React.forwardRef<
       createValueStore<AppShellWorkingState | null>(null, sameWorkingState)
   }
   const workingStateStore = workingStateStoreRef.current
+  const compactRunningRef = React.useRef(false)
+  const compactAbortRequestedRef = React.useRef(false)
   const setAwaitingFirstTurn = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
@@ -5279,15 +5290,32 @@ const AppShellSessionWorkspace = React.forwardRef<
   const setCompactWorkingState = React.useCallback(
     (running: boolean) => {
       if (running) {
-        workingStateStore.setSnapshot({ label: "Compacting context…" })
+        compactRunningRef.current = true
+        compactAbortRequestedRef.current = false
+        workingStateStore.setSnapshot({ label: COMPACT_WORKING_LABEL })
         return
       }
 
-      if (workingStateStore.getSnapshot()?.label === "Compacting context…") {
+      compactRunningRef.current = false
+      if (compactAbortRequestedRef.current) {
+        compactAbortRequestedRef.current = false
+        workingStateStore.setSnapshot({
+          label: COMPACT_CANCELLED_LABEL,
+          error: true,
+        })
+        return
+      }
+
+      if (workingStateStore.getSnapshot()?.label === COMPACT_WORKING_LABEL) {
         workingStateStore.setSnapshot(null)
       }
     },
     [workingStateStore]
+  )
+
+  const isCompactAbortRequested = React.useCallback(
+    () => compactAbortRequestedRef.current,
+    []
   )
 
   const {
@@ -5350,6 +5378,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setSidebarSessionSelectionAnchor:
       sidebarStore.setSidebarSessionSelectionAnchor,
     setCompactWorkingState,
+    isCompactAbortRequested,
   })
 
   const setToolBlocksHidden = (hidden: boolean) => {
@@ -5716,7 +5745,14 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
   const commandPaletteCommandsRef = useLatestRef(buildCommandPaletteCommands)
 
+  const abortCompact = React.useCallback(async () => {
+    if (!compactRunningRef.current) return
+    compactAbortRequestedRef.current = true
+    await abortSession()
+  }, [abortSession])
+
   const shortcutActionsRef = useLatestRef({
+    abortCompact,
     abortSession,
     createSession,
     closeCommandPalette,
@@ -5774,6 +5810,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   useAppShellShortcuts({
     addDirectoryOpenRef,
     commandPaletteOpenRef,
+    compactRunningRef,
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,

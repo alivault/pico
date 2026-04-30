@@ -3,6 +3,7 @@ import * as React from "react"
 import type { SessionListEntry } from "@/lib/phi/api"
 
 type ShortcutActions = {
+  abortCompact: () => void | Promise<unknown>
   abortSession: () => void | Promise<unknown>
   createSession: () => void | Promise<unknown>
   focusModelSelector: () => void
@@ -41,6 +42,7 @@ export type AppShellShortcutState = {
 type UseAppShellShortcutsOptions = {
   addDirectoryOpenRef: React.RefObject<boolean>
   commandPaletteOpenRef: React.RefObject<boolean>
+  compactRunningRef: React.RefObject<boolean>
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
@@ -87,6 +89,7 @@ function hasSelectedText(target: EventTarget | null) {
 export function useAppShellShortcuts({
   addDirectoryOpenRef,
   commandPaletteOpenRef,
+  compactRunningRef,
   deleteOpenRef,
   forkOpenRef,
   pendingUiRequestOpenRef,
@@ -149,13 +152,19 @@ export function useAppShellShortcuts({
         !event.metaKey &&
         !event.shiftKey &&
         !modalOpen &&
-        !event.defaultPrevented &&
-        sessionIsStreaming &&
-        !isEditableTarget(event.target)
+        !event.defaultPrevented
       ) {
-        event.preventDefault()
-        void shortcutActionsRef.current.abortSession()
-        return
+        if (compactRunningRef.current) {
+          event.preventDefault()
+          void shortcutActionsRef.current.abortCompact()
+          return
+        }
+
+        if (sessionIsStreaming && !isEditableTarget(event.target)) {
+          event.preventDefault()
+          void shortcutActionsRef.current.abortSession()
+          return
+        }
       }
 
       if (
@@ -411,6 +420,7 @@ export function useAppShellShortcuts({
   }, [
     addDirectoryOpenRef,
     commandPaletteOpenRef,
+    compactRunningRef,
     deleteOpenRef,
     forkOpenRef,
     pendingUiRequestOpenRef,
