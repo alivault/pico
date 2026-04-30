@@ -130,6 +130,7 @@ export type TextBlock = {
   blockKey?: string
   renderKey?: string
   text: string
+  isError?: boolean
 }
 
 export type ThinkingBlock = {

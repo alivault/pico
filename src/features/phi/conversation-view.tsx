@@ -2174,18 +2174,31 @@ function EditDiffBlock({
   )
 }
 
-function PlainToolOutput({ text }: { text: string }) {
+function PlainToolOutput({
+  isError = false,
+  text,
+}: {
+  isError?: boolean
+  text: string
+}) {
   return (
-    <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+    <pre
+      className={cn(
+        "overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap",
+        isError && "text-destructive"
+      )}
+    >
       {text}
     </pre>
   )
 }
 
 const ToolBlockSection = React.memo(function ToolBlockSection({
+  isError = false,
   label,
   text,
 }: {
+  isError?: boolean
   label: string
   text: string
 }) {
@@ -2194,7 +2207,7 @@ const ToolBlockSection = React.memo(function ToolBlockSection({
       <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </div>
-      <PlainToolOutput text={text} />
+      <PlainToolOutput isError={isError} text={text} />
     </section>
   )
 })
@@ -2225,13 +2238,20 @@ function EditToolOutput({
   const language = codeLanguageFromPath(toolFilePath(block))
 
   if (!diff) {
-    return <PlainToolOutput text={fallbackOutput || "No output available."} />
+    return (
+      <PlainToolOutput
+        isError={block.isError}
+        text={fallbackOutput || "No output available."}
+      />
+    )
   }
 
   return (
     <div className="space-y-3">
       <EditDiffBlock diff={diff} language={language} />
-      {extraOutput ? <PlainToolOutput text={extraOutput} /> : null}
+      {extraOutput ? (
+        <PlainToolOutput isError={block.isError} text={extraOutput} />
+      ) : null}
     </div>
   )
 }
@@ -2250,7 +2270,12 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
     <div className="border-t pt-3">
       <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
         {block.name === "bash" ? (
-          <pre className="overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap">
+          <pre
+            className={cn(
+              "overflow-x-auto font-mono text-xs leading-5 break-words whitespace-pre-wrap",
+              block.isError && "text-destructive"
+            )}
+          >
             <AnsiText text={shellBodyText} />
           </pre>
         ) : block.name === "edit" ? (
@@ -2261,6 +2286,7 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
               <ToolBlockSection label="Call" text={callText} />
             ) : null}
             <ToolBlockSection
+              isError={block.isError}
               label={block.running ? "Output (streaming)" : "Output"}
               text={outputText}
             />
@@ -2662,7 +2688,13 @@ function AssistantSubscribedBlockView({
 
   switch (block.type) {
     case "text":
-      return <MarkdownBlock text={block.text} streaming={streaming} />
+      return block.isError ? (
+        <div className="text-sm leading-6 wrap-break-word whitespace-pre-wrap text-destructive">
+          {block.text}
+        </div>
+      ) : (
+        <MarkdownBlock text={block.text} streaming={streaming} />
+      )
     case "thinking":
       return (
         <section className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground">

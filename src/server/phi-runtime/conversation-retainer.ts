@@ -100,12 +100,22 @@ function applyAbortedStopToBlocks(
     })
   }
 
-  if (
-    blocks.some(
-      (block) => block.type === "text" && block.text.trim() === stopMessage
-    )
-  ) {
-    return blocks
+  let changed = false
+  let matched = false
+  const nextBlocks = blocks.map((block) => {
+    if (block.type !== "text" || block.text.trim() !== stopMessage) {
+      return block
+    }
+
+    matched = true
+    if (block.isError) return block
+
+    changed = true
+    return { ...block, isError: true } satisfies AssistantBlock
+  })
+
+  if (matched) {
+    return changed ? nextBlocks : blocks
   }
 
   return [
@@ -114,6 +124,7 @@ function applyAbortedStopToBlocks(
       type: "text",
       blockKey: `${renderKey}:aborted`,
       text: stopMessage,
+      isError: true,
     } satisfies AssistantBlock,
   ]
 }

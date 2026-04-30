@@ -177,7 +177,11 @@ function sameAssistantBlockPayload(
 
   switch (left.type) {
     case "text":
-      return right.type === "text" && left.text === right.text
+      return (
+        right.type === "text" &&
+        left.text === right.text &&
+        Boolean(left.isError) === Boolean(right.isError)
+      )
     case "thinking":
       return (
         right.type === "thinking" &&
@@ -442,6 +446,12 @@ function assistantStopMessage(message: SyncMessage | undefined) {
   return ""
 }
 
+function assistantStopIsError(message: SyncMessage | undefined) {
+  const stopReason =
+    typeof message?.stopReason === "string" ? message.stopReason : ""
+  return stopReason === "aborted" || stopReason === "error"
+}
+
 function applyAssistantStopToToolBlocks(
   blocks: Array<AssistantBlock>,
   stopMessage: string
@@ -469,6 +479,7 @@ export function assistantBlocksFromMessage(
   const toolBlockIndexByCallId = new Map<string, number>()
   const content = Array.isArray(message?.content) ? message.content : []
   const stopMessage = assistantStopMessage(message)
+  const stopIsError = assistantStopIsError(message)
 
   for (let index = 0; index < content.length; index += 1) {
     const part = content[index]
@@ -540,6 +551,7 @@ export function assistantBlocksFromMessage(
         type: "text",
         blockKey: `${keyPrefix}:stop`,
         text: stopMessage,
+        ...(stopIsError ? { isError: true } : {}),
       })
     }
   }
