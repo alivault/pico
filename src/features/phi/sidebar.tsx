@@ -30,7 +30,6 @@ import {
   SearchIcon,
   SquarePenIcon,
   Settings2Icon,
-  XIcon,
 } from "lucide-react"
 
 import type { SessionListEntry } from "@/lib/phi/api"
@@ -53,7 +52,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
   Sidebar,
   SidebarContent,
@@ -161,7 +159,6 @@ type SessionClickModifiers = {
 }
 
 const EMPTY_DIRECTORY_SESSION_KEYS: Array<string> = []
-const SIDEBAR_SEARCH_COMMIT_DELAY_MS = 150
 
 function formatSidebarSessionTime(value?: string, now = Date.now()) {
   if (!value) return ""
@@ -409,8 +406,7 @@ function useAllDirectoriesCollapsed(
 
 type AppSidebarProps = {
   sessionSearch: string
-  onSessionSearchChange: (value: string) => void
-  sessionSearchInputRef?: React.Ref<HTMLInputElement>
+  onOpenSessionsDialog: () => void
   visibleDirectories: Array<string>
   directorySessionsStore: DirectorySessionsStore
   matchingSessionCount: number
@@ -1311,16 +1307,9 @@ function DirectoryCollapseAllButton({
   )
 }
 
-type SidebarSearchInputProps = {
-  value: string
-  onValueChange: (value: string) => void
-  inputRef?: React.Ref<HTMLInputElement>
-}
-
 type AppSidebarHeaderProps = {
   sessionSearch: string
-  onSessionSearchChange: (value: string) => void
-  sessionSearchInputRef?: React.Ref<HTMLInputElement>
+  onOpenSessionsDialog: () => void
   visibleDirectories: Array<string>
   matchingSessionCount: number
   collapsedDirectoryStore: CollapsedDirectoryStore
@@ -1328,78 +1317,9 @@ type AppSidebarHeaderProps = {
   onOpenAddDirectoryDialog: () => void
 }
 
-function SidebarSearchInput({
-  inputRef,
-  onValueChange,
-  value,
-}: SidebarSearchInputProps) {
-  const [draftValue, setDraftValue] = React.useState(value)
-  const hasSearchValue = draftValue.length > 0
-
-  React.useEffect(() => {
-    setDraftValue((current) => (current === value ? current : value))
-  }, [value])
-
-  React.useEffect(() => {
-    if (draftValue === value) return
-
-    const timeoutId = window.setTimeout(() => {
-      React.startTransition(() => {
-        onValueChange(draftValue)
-      })
-    }, SIDEBAR_SEARCH_COMMIT_DELAY_MS)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [draftValue, onValueChange, value])
-
-  return (
-    <div className="relative">
-      <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/50" />
-      <Input
-        ref={inputRef}
-        value={draftValue}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setDraftValue(nextValue)
-          if (!nextValue) {
-            React.startTransition(() => {
-              onValueChange("")
-            })
-          }
-        }}
-        placeholder="Search sessions..."
-        className="border-sidebar-border/70 bg-sidebar-accent/20 pr-9 pl-9"
-      />
-      {hasSearchValue ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="absolute top-1/2 right-1.5 -translate-y-1/2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={(event) => {
-            setDraftValue("")
-            React.startTransition(() => {
-              onValueChange("")
-            })
-            event.currentTarget.parentElement?.querySelector("input")?.focus()
-          }}
-          aria-label="Clear session search"
-          title="Clear session search"
-        >
-          <XIcon />
-        </Button>
-      ) : null}
-    </div>
-  )
-}
-
 function AppSidebarHeader({
   sessionSearch,
-  onSessionSearchChange,
-  sessionSearchInputRef,
+  onOpenSessionsDialog,
   visibleDirectories,
   matchingSessionCount,
   collapsedDirectoryStore,
@@ -1409,25 +1329,27 @@ function AppSidebarHeader({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    <SidebarHeader className="gap-2 border-b border-sidebar-border/70 px-4 pt-4 pb-2">
-      <SidebarSearchInput
-        value={sessionSearch}
-        onValueChange={onSessionSearchChange}
-        inputRef={sessionSearchInputRef}
-      />
-
-      <Button
-        type="button"
-        variant="secondary"
-        className="w-full justify-start gap-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        onClick={onCreateSession}
-      >
-        <SquarePenIcon className="size-4" />
-        <span>New session</span>
-        <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
-          Ctrl+N
-        </kbd>
-      </Button>
+    <SidebarHeader className="gap-2 border-b border-sidebar-border/70">
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
+            <SearchIcon />
+            <span>Search sessions...</span>
+            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+              Ctrl+S
+            </kbd>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton type="button" onClick={onCreateSession}>
+            <SquarePenIcon />
+            <span>New session</span>
+            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+              Ctrl+N
+            </kbd>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
 
       <div className="flex items-center justify-between gap-3 text-xs text-sidebar-foreground/70">
         <span>
@@ -1459,8 +1381,7 @@ function AppSidebarHeader({
 
 export function AppSidebar({
   sessionSearch,
-  onSessionSearchChange,
-  sessionSearchInputRef,
+  onOpenSessionsDialog,
   visibleDirectories,
   directorySessionsStore,
   matchingSessionCount,
@@ -1623,8 +1544,7 @@ export function AppSidebar({
     >
       <AppSidebarHeader
         sessionSearch={sessionSearch}
-        onSessionSearchChange={onSessionSearchChange}
-        sessionSearchInputRef={sessionSearchInputRef}
+        onOpenSessionsDialog={onOpenSessionsDialog}
         visibleDirectories={visibleDirectories}
         matchingSessionCount={matchingSessionCount}
         collapsedDirectoryStore={collapsedDirectoryStore}
@@ -1632,7 +1552,7 @@ export function AppSidebar({
         onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
       />
 
-      <SidebarContent className="px-2 py-3">
+      <SidebarContent>
         {visibleDirectories.length === 0 ? (
           <SidebarGroup className="px-2 py-2">
             <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
@@ -1727,7 +1647,7 @@ export function AppSidebar({
         )}
       </SidebarContent>
 
-      <SidebarFooter className="gap-2 border-t border-sidebar-border/70 p-3">
+      <SidebarFooter className="gap-2 border-t border-sidebar-border/70">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>

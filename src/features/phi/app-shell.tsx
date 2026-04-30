@@ -4594,8 +4594,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const focusSessionSearch = () => {
-    sessionSearchInputRef.current?.focus()
-    sessionSearchInputRef.current?.select()
+    openSessionsDialog()
   }
 
   const focusPrompt = () => {
@@ -6570,12 +6569,10 @@ const AppShellFloatingControllers = React.memo(
 function AppShellSidebarController({
   viewerContextId,
   sidebarStore,
-  sessionSearchInputRef,
   sessionWorkspaceRef,
 }: {
   viewerContextId: string
   sidebarStore: AppShellSidebarStore
-  sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
   sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
 }) {
   const [directorySessionsStore] = React.useState(() =>
@@ -7180,8 +7177,9 @@ function AppShellSidebarController({
   return (
     <AppSidebar
       sessionSearch={sessionSearch}
-      onSessionSearchChange={sidebarStore.setSessionSearch}
-      sessionSearchInputRef={sessionSearchInputRef}
+      onOpenSessionsDialog={() => {
+        sessionWorkspaceRef.current?.openSessionsDialog()
+      }}
       visibleDirectories={visibleDirectories}
       directorySessionsStore={directorySessionsStore}
       matchingSessionCount={matchingSessionCount}
@@ -7294,7 +7292,6 @@ export function PhiAppShell({
       <AppShellSidebarController
         viewerContextId={viewerContextId}
         sidebarStore={sidebarStore}
-        sessionSearchInputRef={sessionSearchInputRef}
         sessionWorkspaceRef={sessionWorkspaceRef}
       />
 
