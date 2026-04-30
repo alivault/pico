@@ -4482,15 +4482,16 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerDraftSeed((current) => {
       const draftUnchanged =
         current.text === nextText && current.skillName === nextSkill
+      const forceSync = options?.forceSync === true
 
-      if (draftUnchanged && !options?.forceSync) {
+      if (draftUnchanged && !forceSync) {
         return current
       }
 
       return {
         text: nextText,
         skillName: nextSkill,
-        syncNonce: draftUnchanged ? current.syncNonce + 1 : current.syncNonce,
+        syncNonce: forceSync ? current.syncNonce + 1 : current.syncNonce,
       }
     })
     rememberStoredPromptDraft(
