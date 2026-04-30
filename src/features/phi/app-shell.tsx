@@ -5949,7 +5949,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <SquarePenIcon />
           </Button>
         ) : null}
-        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0.5 text-center">
+        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0 text-center">
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
               <Spinner
@@ -5958,13 +5958,13 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               />
             ) : null}
             <h2
-              className="min-w-0 truncate text-sm leading-tight font-semibold"
+              className="min-w-0 truncate text-[13px] leading-tight font-semibold"
               title={displaySessionTitle}
             >
               {displaySessionTitle}
             </h2>
           </div>
-          <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+          <div className="flex max-w-full min-w-0 items-center justify-center gap-x-3">
             {displaySessionCwd ? (
               <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
                 <span className="truncate">
