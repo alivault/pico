@@ -2333,7 +2333,9 @@ export class PhiRuntime {
     manager.appendSessionInfo = ((...args: [string]) => {
       const result = originalAppendSessionInfo(...args)
       void this.broadcastEntryState(entry)
-      void this.broadcastSessionsAll()
+      if (!this.getEntryStreamingState(entry)) {
+        void this.broadcastSessionsAll()
+      }
       return result
     }) satisfies typeof manager.appendSessionInfo
 
