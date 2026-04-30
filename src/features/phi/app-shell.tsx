@@ -5354,6 +5354,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         description: commandState.isMobile
           ? "Switch to the mobile Git tab"
           : "Open the right-side Git panel",
+        shortcut: "Option+Cmd+B",
         keywords: ["git", "changes", "branch", "commit", "panel"],
         onSelect: openGitView,
       },
@@ -5542,6 +5543,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openDeleteDialog,
     openDeleteDialogForCurrentSession,
     openForkDialog,
+    openGitView,
     openRenameDialog,
     openSessionsDialog,
     openSettingsDialog,
@@ -6009,7 +6011,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             className="hidden md:inline-flex"
             aria-pressed={gitPanelOpen}
             aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
-            title={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            title={
+              gitPanelOpen ? "Close Git panel" : "Open Git panel (Option+Cmd+B)"
+            }
             onClick={onToggleGitPanel}
           >
             <PanelRightIcon />

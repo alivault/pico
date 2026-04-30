@@ -15,6 +15,7 @@ type ShortcutActions = {
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteDialogForCurrentSession: () => void
   openForkDialog: () => void | Promise<unknown>
+  openGitView: () => void
   openRenameDialog: () => void
   openSessionsDialog: () => void
   openSettingsDialog: () => void
@@ -288,6 +289,21 @@ export function useAppShellShortcuts({
           shortcutActionsRef.current.scrollConversationToBottom()
           return
         }
+      }
+
+      if (
+        event.metaKey &&
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        key === "b"
+      ) {
+        if (blockingModalOpen || event.defaultPrevented) return
+
+        event.preventDefault()
+        closeCommandPaletteForShortcut()
+        shortcutActionsRef.current.openGitView()
+        return
       }
 
       if (!event.ctrlKey || event.metaKey || event.altKey) return
