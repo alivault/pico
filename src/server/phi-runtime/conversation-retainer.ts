@@ -12,6 +12,7 @@ import {
   extractMessageText,
   extractToolText,
 } from "@/lib/phi/sync"
+import { toolCategoryFromTool } from "@/lib/phi/tool-classification"
 
 type RetainedConversationState = {
   items: Array<ConversationItem>
@@ -151,6 +152,7 @@ function mergeRetainedBlocks(
         return {
           ...block,
           renderKey: blockRenderKey(previousTool),
+          category: block.category || previousTool.category,
           output: previousTool.output || block.output,
           details: previousTool.details ?? block.details,
           isError: previousTool.isError || block.isError,
@@ -252,9 +254,15 @@ function upsertToolBlock(state: RetainedConversationState, block: ToolBlock) {
     let updated = false
     updateToolBlock(state, block.callId, (previous) => {
       updated = true
+      const name = block.name || previous.name
+      const category =
+        block.category ||
+        previous.category ||
+        toolCategoryFromTool(name, block.args)
       return {
         ...previous,
-        name: block.name || previous.name,
+        name,
+        ...(category ? { category } : {}),
         args: block.args,
         running: true,
       }
@@ -274,12 +282,17 @@ function retainedToolBlockFromEvent(
 
   const renderKey =
     streamingAssistantItem(state.items)?.renderKey || "streaming"
+  const toolName =
+    typeof event.toolName === "string" ? event.toolName : undefined
+  const category = toolCategoryFromTool(toolName, event.args)
+
   return {
     type: "tool",
     blockKey: `${renderKey}:tool:${callId}`,
     renderKey: `${renderKey}:tool:${callId}`,
     callId,
-    ...(typeof event.toolName === "string" ? { name: event.toolName } : {}),
+    ...(toolName ? { name: toolName } : {}),
+    ...(category ? { category } : {}),
     args: event.args,
     output: "",
     details: undefined,

@@ -857,14 +857,39 @@ function exploreShellCommandName(
   return ""
 }
 
-function isExploreToolBlock(
-  block: AssistantConversationBlock
-): block is AssistantToolBlock {
+function matchesExploreToolBlock(block: AssistantConversationBlock) {
   if (block.type !== "tool") return false
   return (
+    block.category === "explore" ||
     EXPLORE_TOOL_NAMES.has(block.name || "") ||
     Boolean(exploreShellCommandName(block))
   )
+}
+
+function isExploreToolBlock(
+  block: AssistantConversationBlock
+): block is AssistantToolBlock {
+  return matchesExploreToolBlock(block)
+}
+
+function isPendingUnclassifiedToolBlock(block: AssistantConversationBlock) {
+  if (
+    block.type !== "tool" ||
+    !block.running ||
+    matchesExploreToolBlock(block)
+  ) {
+    return false
+  }
+
+  if (!block.name) {
+    return true
+  }
+
+  if (block.name === "bash") {
+    return !rawShellCommandText(block)
+  }
+
+  return false
 }
 
 function getToolArgNumber(
@@ -2563,7 +2588,7 @@ function assistantBlockIsVisible({
     case "thinking":
       return !hideThinking
     case "tool":
-      return !hideToolBlocks
+      return !hideToolBlocks && !isPendingUnclassifiedToolBlock(block)
     default:
       return false
   }

@@ -8,6 +8,7 @@ import type {
   StreamingBehavior,
   ToolBlock,
 } from "@/lib/phi"
+import { toolCategoryFromTool } from "@/lib/phi/tool-classification"
 
 type MessageContentPart = {
   type?: unknown
@@ -509,11 +510,14 @@ export function assistantBlocksFromMessage(
 
     if (part?.type === "toolCall") {
       const callId = typeof part.id === "string" ? part.id.trim() : ""
+      const toolName = typeof part.name === "string" ? part.name : undefined
+      const category = toolCategoryFromTool(toolName, part.arguments)
       const toolBlock = {
         type: "tool",
         blockKey: callId ? `${keyPrefix}:tool:${callId}` : `${partKey}:tool`,
         ...(callId ? { callId } : {}),
-        ...(typeof part.name === "string" ? { name: part.name } : {}),
+        ...(toolName ? { name: toolName } : {}),
+        ...(category ? { category } : {}),
         args: part.arguments,
         output: "",
         details: undefined,
@@ -530,6 +534,9 @@ export function assistantBlocksFromMessage(
         blocks[existingIndex] = {
           ...existingBlock,
           ...(toolBlock.name ? { name: toolBlock.name } : {}),
+          ...(toolBlock.category || existingBlock.category
+            ? { category: toolBlock.category || existingBlock.category }
+            : {}),
           args: toolBlock.args,
           running: true,
         }
@@ -681,6 +688,7 @@ function mergeStreamingAssistantBlocks(options: {
     return {
       ...block,
       renderKey: assistantBlockRenderKey(previousTool),
+      category: block.category || previousTool.category,
       output: previousTool.output || block.output,
       details: previousTool.details ?? block.details,
       isError: previousTool.isError || block.isError,

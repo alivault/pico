@@ -148,6 +148,7 @@ export type ToolBlock = {
   callId?: string
   name?: string
   args?: unknown
+  category?: "explore"
   output: string
   details?: unknown
   isError: boolean
