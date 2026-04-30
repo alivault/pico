@@ -134,6 +134,7 @@ import {
   GitPanel,
   GitPanelToolbar,
   GitTabStatusText,
+  HeaderGitStatusText,
 } from "@/features/phi/git-panel"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
@@ -5695,6 +5696,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         newSessionDirectoryOptions={newSessionDirectoryOptions}
         onToggleGitPanel={toggleGitPanel}
         sessionStore={sessionStore}
+        viewerContextId={viewerContextId}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -5807,6 +5809,7 @@ type AppShellSessionHeaderProps = {
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
   sessionStore: ValueStore<SessionState>
+  viewerContextId: string
 }
 
 const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
@@ -5820,6 +5823,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   newSessionDirectoryOptions,
   onToggleGitPanel,
   sessionStore,
+  viewerContextId,
 }: AppShellSessionHeaderProps) {
   const sessionHeaderState = useSelectedValueStore(
     sessionStore,
@@ -5874,7 +5878,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <SquarePenIcon />
           </Button>
         ) : null}
-        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 text-center">
+        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0.5 text-center">
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
               <Spinner
@@ -5889,13 +5893,19 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               {displaySessionTitle}
             </h2>
           </div>
-          {displaySessionCwd ? (
-            <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
-              <span className="truncate">
-                {formatFolderName(displaySessionCwd)}
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+            {displaySessionCwd ? (
+              <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
+                <span className="truncate">
+                  {formatFolderName(displaySessionCwd)}
+                </span>
               </span>
-            </span>
-          ) : null}
+            ) : null}
+            <HeaderGitStatusText
+              viewerContextId={viewerContextId}
+              cwd={displaySessionCwd}
+            />
+          </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1">
           <DropdownMenu>

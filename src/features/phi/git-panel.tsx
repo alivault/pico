@@ -1559,10 +1559,9 @@ export function HeaderGitStatusText({
 
   return (
     <span
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+      className="inline-flex items-center text-xs text-muted-foreground"
       title={statusQuery.data?.title || text}
     >
-      <GitBranchIcon className="size-3 shrink-0" aria-hidden="true" />
       <span>{text}</span>
     </span>
   )
