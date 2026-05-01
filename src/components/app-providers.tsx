@@ -26,7 +26,12 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       >
         <TooltipProvider delay={150}>
           {children}
-          <Toaster richColors position="top-right" />
+          <Toaster
+            richColors
+            position="top-right"
+            offset={{ top: "calc(2.75rem + 0.75rem)" }}
+            mobileOffset={{ top: "calc(2.75rem + 0.75rem)" }}
+          />
         </TooltipProvider>
       </ThemeProvider>
     </HotkeysProvider>
