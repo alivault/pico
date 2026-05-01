@@ -881,6 +881,9 @@ function GitCommitDialog({
   const [query, setQuery] = React.useState("")
   const [selectedCommandId, setSelectedCommandId] = React.useState("commit")
   const [stage, setStage] = React.useState<"browse" | "message">("browse")
+  const [pendingRun, setPendingRun] = React.useState<"commit" | "push" | null>(
+    null
+  )
   const blockNextCloseRef = React.useRef(false)
   const fileSummary = `${files.length} file${files.length === 1 ? "" : "s"}`
   const lineSummary = gitFilesLineSummary(files)
@@ -942,6 +945,9 @@ function GitCommitDialog({
         )
       )
     },
+    onSettled: () => {
+      setPendingRun(null)
+    },
   })
 
   const committing = commitMutation.isPending
@@ -974,6 +980,8 @@ function GitCommitDialog({
   const continueCommit = async (push: boolean) => {
     if (busy || files.length === 0) return
 
+    setPendingRun(push ? "push" : "commit")
+
     let commitMessage = message.trim()
     if (!commitMessage) {
       try {
@@ -981,11 +989,15 @@ function GitCommitDialog({
         commitMessage = generated.message.trim()
         applyGeneratedMessage(generated)
       } catch {
+        setPendingRun(null)
         return
       }
     }
 
-    if (!commitMessage) return
+    if (!commitMessage) {
+      setPendingRun(null)
+      return
+    }
     commitMutation.mutate({
       push,
       commitMessage,
@@ -1143,22 +1155,16 @@ function GitCommitDialog({
                 className="items-start py-2"
               >
                 {command.id === "commit" ? (
-                  busy ? (
+                  pendingRun === "commit" ? (
                     <Spinner />
                   ) : (
                     <GitCommitIcon />
                   )
                 ) : command.id === "commit-push" ? (
-                  busy ? (
+                  pendingRun === "push" ? (
                     <Spinner />
                   ) : (
                     <UploadIcon />
-                  )
-                ) : command.id === "generate-message" ? (
-                  generating ? (
-                    <Spinner />
-                  ) : (
-                    <WandSparklesIcon />
                   )
                 ) : null}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
