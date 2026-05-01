@@ -2795,7 +2795,7 @@ function AppShellSessionContent({
 
   if (showNewSessionComposer) {
     return (
-      <div className="grid min-h-0 flex-1 place-items-center overflow-auto p-4">
+      <div className="grid min-h-0 flex-1 items-end justify-items-center overflow-auto p-4 md:place-items-center">
         <AppShellComposerController
           actionsRef={actionsRef}
           composerPanelRef={composerPanelRef}
