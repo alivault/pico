@@ -421,7 +421,7 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
           <img
             src={image.previewUrl}
             alt="Attachment preview"
-            className="h-20 w-20 rounded-lg border object-cover"
+            className="h-20 rounded-lg border object-cover"
           />
           <Button
             type="button"
