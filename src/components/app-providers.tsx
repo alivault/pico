@@ -1,4 +1,5 @@
 import * as React from "react"
+import { HotkeysProvider } from "@tanstack/react-hotkeys"
 import { ThemeProvider } from "next-themes"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -7,17 +8,27 @@ import { THEME_STORAGE_KEY } from "@/lib/phi"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-      storageKey={THEME_STORAGE_KEY}
+    <HotkeysProvider
+      defaultOptions={{
+        hotkey: {
+          preventDefault: false,
+          stopPropagation: false,
+          ignoreInputs: false,
+        },
+      }}
     >
-      <TooltipProvider delay={150}>
-        {children}
-        <Toaster richColors position="top-right" />
-      </TooltipProvider>
-    </ThemeProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+        storageKey={THEME_STORAGE_KEY}
+      >
+        <TooltipProvider delay={150}>
+          {children}
+          <Toaster richColors position="top-right" />
+        </TooltipProvider>
+      </ThemeProvider>
+    </HotkeysProvider>
   )
 }

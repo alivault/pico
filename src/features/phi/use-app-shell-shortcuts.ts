@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
 import type { SessionListEntry } from "@/lib/phi/api"
 
@@ -57,6 +58,16 @@ type UseAppShellShortcutsOptions = {
   treeOpenRef: React.RefObject<boolean>
 }
 
+type ShortcutContext = AppShellShortcutState & {
+  activeElement: Element | null
+  activeElementIsConversationViewport: boolean
+  blockingModalOpen: boolean
+  commandPaletteOpen: boolean
+  focusedSidebarSession?: SessionListEntry
+  modalOpen: boolean
+  targetIsSessionSearch: boolean
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   const tagName = target.tagName.toLowerCase()
@@ -104,344 +115,413 @@ export function useAppShellShortcuts({
   shortcutStateRef,
   treeOpenRef,
 }: UseAppShellShortcutsOptions) {
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase()
-      const {
-        currentTab,
-        selectedSidebarSessions,
-        sessionHasAvailableModels,
-        sessionHasFile,
-        sessionIsStreaming,
-        sidebarSessionEntriesByKey,
-      } = shortcutStateRef.current
-      const commandPaletteOpen = commandPaletteOpenRef.current
-      const blockingModalOpen =
-        addDirectoryOpenRef.current ||
-        renameOpenRef.current ||
-        deleteOpenRef.current ||
-        forkOpenRef.current ||
-        gitCommitOpenRef.current ||
-        treeOpenRef.current ||
-        sessionsOpenRef.current ||
-        settingsOpenRef.current ||
-        pendingUiRequestOpenRef.current
-      const modalOpen = blockingModalOpen || commandPaletteOpen
-      const closeCommandPaletteForShortcut = () => {
-        if (commandPaletteOpen) {
-          shortcutActionsRef.current.closeCommandPalette()
-        }
-      }
+  const getShortcutContext = (event: KeyboardEvent): ShortcutContext => {
+    const shortcutState = shortcutStateRef.current
+    const commandPaletteOpen = commandPaletteOpenRef.current
+    const blockingModalOpen =
+      addDirectoryOpenRef.current ||
+      renameOpenRef.current ||
+      deleteOpenRef.current ||
+      forkOpenRef.current ||
+      gitCommitOpenRef.current ||
+      treeOpenRef.current ||
+      sessionsOpenRef.current ||
+      settingsOpenRef.current ||
+      pendingUiRequestOpenRef.current
+    const activeElement = document.activeElement
+    const activeElementIsConversationViewport =
+      activeElement instanceof HTMLElement &&
+      activeElement.closest('[data-conversation-viewport="true"]') !== null
+    const focusedSidebarSessionKey =
+      activeElement instanceof HTMLElement
+        ? (activeElement.dataset.sessionKey?.trim() ?? "")
+        : ""
+    const focusedSidebarSession = focusedSidebarSessionKey
+      ? shortcutState.sidebarSessionEntriesByKey.get(focusedSidebarSessionKey)
+      : undefined
+    const targetIsSessionSearch =
+      event.target instanceof HTMLInputElement &&
+      event.target === sessionSearchInputRef.current
 
-      const activeElement = document.activeElement
-      const activeElementIsConversationViewport =
-        activeElement instanceof HTMLElement &&
-        activeElement.closest('[data-conversation-viewport="true"]') !== null
-      const focusedSidebarSessionKey =
-        activeElement instanceof HTMLElement
-          ? (activeElement.dataset.sessionKey?.trim() ?? "")
-          : ""
-      const focusedSidebarSession = focusedSidebarSessionKey
-        ? sidebarSessionEntriesByKey.get(focusedSidebarSessionKey)
-        : undefined
-      const targetIsSessionSearch =
-        event.target instanceof HTMLInputElement &&
-        event.target === sessionSearchInputRef.current
+    return {
+      ...shortcutState,
+      activeElement,
+      activeElementIsConversationViewport,
+      blockingModalOpen,
+      commandPaletteOpen,
+      focusedSidebarSession,
+      modalOpen: blockingModalOpen || commandPaletteOpen,
+      targetIsSessionSearch,
+    }
+  }
 
-      if (
-        key === "escape" &&
-        !event.repeat &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        !modalOpen &&
-        !event.defaultPrevented
-      ) {
-        if (compactRunningRef.current) {
-          event.preventDefault()
-          void shortcutActionsRef.current.abortCompact()
-          return
-        }
+  const closeCommandPaletteForShortcut = (commandPaletteOpen: boolean) => {
+    if (commandPaletteOpen) {
+      shortcutActionsRef.current.closeCommandPalette()
+    }
+  }
 
-        if (sessionIsStreaming && !isEditableTarget(event.target)) {
-          event.preventDefault()
-          void shortcutActionsRef.current.abortSession()
-          return
-        }
-      }
+  const handleEscape = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
 
-      if (
-        !modalOpen &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        (!isEditableTarget(event.target) || targetIsSessionSearch)
-      ) {
-        if (
-          !activeElementIsConversationViewport &&
-          (key === "arrowdown" ||
-            key === "arrowup" ||
-            key === "home" ||
-            key === "end")
-        ) {
-          const sessionButtons = Array.from(
-            document.querySelectorAll<HTMLElement>(
-              "[data-sidebar-session-item]"
-            )
+    if (event.repeat || context.modalOpen || event.defaultPrevented) return
+
+    if (compactRunningRef.current) {
+      event.preventDefault()
+      void shortcutActionsRef.current.abortCompact()
+      return
+    }
+
+    if (context.sessionIsStreaming && !isEditableTarget(event.target)) {
+      event.preventDefault()
+      void shortcutActionsRef.current.abortSession()
+    }
+  }
+
+  const handleSidebarFocusNavigation = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
+
+    if (
+      context.modalOpen ||
+      (isEditableTarget(event.target) && !context.targetIsSessionSearch) ||
+      context.activeElementIsConversationViewport
+    ) {
+      return
+    }
+
+    const sessionButtons = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+    )
+    const focusedSessionButton =
+      context.activeElement instanceof HTMLElement
+        ? context.activeElement.closest<HTMLElement>(
+            "[data-sidebar-session-item]"
           )
-          const focusedSessionButton =
-            activeElement instanceof HTMLElement
-              ? activeElement.closest<HTMLElement>(
-                  "[data-sidebar-session-item]"
+        : null
+
+    if (sessionButtons.length === 0) return
+
+    const currentIndex = focusedSessionButton
+      ? sessionButtons.findIndex((button) => button === focusedSessionButton)
+      : -1
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? sessionButtons.length - 1
+          : currentIndex >= 0
+            ? Math.max(
+                0,
+                Math.min(
+                  sessionButtons.length - 1,
+                  currentIndex + (event.key === "ArrowDown" ? 1 : -1)
                 )
-              : null
+              )
+            : event.key === "ArrowUp"
+              ? sessionButtons.length - 1
+              : 0
 
-          if (sessionButtons.length > 0) {
-            const currentIndex = focusedSessionButton
-              ? sessionButtons.findIndex(
-                  (button) => button === focusedSessionButton
-                )
-              : -1
-            const nextIndex =
-              key === "home"
-                ? 0
-                : key === "end"
-                  ? sessionButtons.length - 1
-                  : currentIndex >= 0
-                    ? Math.max(
-                        0,
-                        Math.min(
-                          sessionButtons.length - 1,
-                          currentIndex + (key === "arrowdown" ? 1 : -1)
-                        )
-                      )
-                    : key === "arrowup"
-                      ? sessionButtons.length - 1
-                      : 0
+    event.preventDefault()
+    sessionButtons[nextIndex]?.focus()
+  }
 
-            event.preventDefault()
-            sessionButtons[nextIndex]?.focus()
-            return
-          }
-        }
+  const handleSidebarDelete = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
 
-        if (
-          !event.shiftKey &&
-          (key === "delete" ||
-            (key === "backspace" && selectedSidebarSessions.length > 0))
-        ) {
-          const targetsToDelete =
-            selectedSidebarSessions.length > 0
-              ? selectedSidebarSessions
-              : focusedSidebarSession?.path
-                ? [focusedSidebarSession]
-                : []
-
-          if (targetsToDelete.length > 0) {
-            event.preventDefault()
-            shortcutActionsRef.current.openDeleteDialog(targetsToDelete)
-            return
-          }
-        }
-      }
-
-      if (
-        event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        key === "enter"
-      ) {
-        if (blockingModalOpen || event.defaultPrevented) return
-
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.focusPrompt()
-        return
-      }
-
-      if (
-        event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        currentTab === "session" &&
-        (!isEditableTarget(event.target) ||
-          isPromptTextareaTarget(event.target))
-      ) {
-        if (modalOpen || event.defaultPrevented) return
-
-        if (key === "arrowleft") {
-          event.preventDefault()
-          shortcutActionsRef.current.jumpToPreviousMessage()
-          return
-        }
-
-        if (key === "arrowright") {
-          event.preventDefault()
-          shortcutActionsRef.current.jumpToNextMessage()
-          return
-        }
-
-        if (key === "arrowup") {
-          event.preventDefault()
-          shortcutActionsRef.current.scrollConversationToTop()
-          return
-        }
-
-        if (key === "arrowdown") {
-          event.preventDefault()
-          shortcutActionsRef.current.scrollConversationToBottom()
-          return
-        }
-      }
-
-      if (!event.ctrlKey || event.metaKey || event.altKey) return
-
-      if (blockingModalOpen) return
-
-      if (!event.shiftKey && (key === "\\" || event.code === "Backslash")) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.toggleGitPanel()
-        return
-      }
-
-      if (key === "p" && !event.shiftKey) {
-        event.preventDefault()
-        shortcutActionsRef.current.openCommandPalette()
-        return
-      }
-
-      if (key === "n" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.createSession()
-        return
-      }
-
-      if (key === "s" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openSessionsDialog()
-        return
-      }
-
-      if (key === "e" && !event.shiftKey) {
-        if (!sessionHasFile) return
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openRenameDialog()
-        return
-      }
-
-      if (key === "f" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.openForkDialog()
-        return
-      }
-
-      if (key === "d" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openAddDirectoryDialog()
-        return
-      }
-
-      if (key === "," && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openSettingsDialog()
-        return
-      }
-
-      if (key === "m" && !event.shiftKey) {
-        if (!sessionHasAvailableModels && !commandPaletteOpen) return
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.focusModelSelector()
-        return
-      }
-
-      if (key === "t" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.openTreeDialog()
-        return
-      }
-
-      if (key === "g" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.toggleHideThinking()
-        return
-      }
-
-      if (key === "u" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.pushGitChanges()
-        return
-      }
-
-      if (key === "r") {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        void shortcutActionsRef.current.cycleThinkingLevel(
-          event.shiftKey ? -1 : 1
-        )
-        return
-      }
-
-      if (key === "o" && !event.shiftKey) {
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.toggleHideToolBlocks()
-        return
-      }
-
-      if (key === "c" && !event.shiftKey) {
-        if (!commandPaletteOpen && hasSelectedText(event.target)) return
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openCommitDialog()
-        return
-      }
-
-      if (key === "x" && !event.shiftKey) {
-        if (
-          isEditableTarget(event.target) &&
-          !isPromptTextareaTarget(event.target)
-        ) {
-          return
-        }
-        if (!sessionHasFile) return
-        event.preventDefault()
-        closeCommandPaletteForShortcut()
-        shortcutActionsRef.current.openDeleteDialogForCurrentSession()
-      }
+    if (
+      context.modalOpen ||
+      (isEditableTarget(event.target) && !context.targetIsSessionSearch)
+    ) {
+      return
     }
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown)
+    const targetsToDelete =
+      context.selectedSidebarSessions.length > 0
+        ? context.selectedSidebarSessions
+        : context.focusedSidebarSession?.path
+          ? [context.focusedSidebarSession]
+          : []
+
+    if (targetsToDelete.length === 0) return
+
+    event.preventDefault()
+    shortcutActionsRef.current.openDeleteDialog(targetsToDelete)
+  }
+
+  const handleFocusPrompt = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
+
+    if (context.blockingModalOpen || event.defaultPrevented) return
+
+    event.preventDefault()
+    closeCommandPaletteForShortcut(context.commandPaletteOpen)
+    shortcutActionsRef.current.focusPrompt()
+  }
+
+  const handleConversationJump = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
+
+    if (
+      context.currentTab !== "session" ||
+      context.modalOpen ||
+      event.defaultPrevented ||
+      (isEditableTarget(event.target) && !isPromptTextareaTarget(event.target))
+    ) {
+      return
     }
-  }, [
-    addDirectoryOpenRef,
-    commandPaletteOpenRef,
-    compactRunningRef,
-    deleteOpenRef,
-    forkOpenRef,
-    gitCommitOpenRef,
-    pendingUiRequestOpenRef,
-    renameOpenRef,
-    sessionSearchInputRef,
-    sessionsOpenRef,
-    settingsOpenRef,
-    shortcutActionsRef,
-    shortcutStateRef,
-    treeOpenRef,
-  ])
+
+    event.preventDefault()
+
+    if (event.key === "ArrowLeft") {
+      shortcutActionsRef.current.jumpToPreviousMessage()
+      return
+    }
+
+    if (event.key === "ArrowRight") {
+      shortcutActionsRef.current.jumpToNextMessage()
+      return
+    }
+
+    if (event.key === "ArrowUp") {
+      shortcutActionsRef.current.scrollConversationToTop()
+      return
+    }
+
+    shortcutActionsRef.current.scrollConversationToBottom()
+  }
+
+  const handleGlobalShortcut = (event: KeyboardEvent) => {
+    const key = event.key.toLowerCase()
+    const context = getShortcutContext(event)
+
+    if (context.blockingModalOpen) return
+
+    if (key === "\\") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.toggleGitPanel()
+      return
+    }
+
+    if (key === "p") {
+      event.preventDefault()
+      shortcutActionsRef.current.openCommandPalette()
+      return
+    }
+
+    if (key === "n") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.createSession()
+      return
+    }
+
+    if (key === "s") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openSessionsDialog()
+      return
+    }
+
+    if (key === "e") {
+      if (!context.sessionHasFile) return
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openRenameDialog()
+      return
+    }
+
+    if (key === "f") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.openForkDialog()
+      return
+    }
+
+    if (key === "d") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openAddDirectoryDialog()
+      return
+    }
+
+    if (key === ",") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openSettingsDialog()
+      return
+    }
+
+    if (key === "m") {
+      if (!context.sessionHasAvailableModels && !context.commandPaletteOpen) {
+        return
+      }
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.focusModelSelector()
+      return
+    }
+
+    if (key === "t") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.openTreeDialog()
+      return
+    }
+
+    if (key === "g") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.toggleHideThinking()
+      return
+    }
+
+    if (key === "u") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.pushGitChanges()
+      return
+    }
+
+    if (key === "r") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.cycleThinkingLevel(
+        event.shiftKey ? -1 : 1
+      )
+      return
+    }
+
+    if (key === "o") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.toggleHideToolBlocks()
+      return
+    }
+
+    if (key === "c") {
+      if (!context.commandPaletteOpen && hasSelectedText(event.target)) return
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openCommitDialog()
+      return
+    }
+
+    if (key === "x") {
+      if (
+        isEditableTarget(event.target) &&
+        !isPromptTextareaTarget(event.target)
+      ) {
+        return
+      }
+      if (!context.sessionHasFile) return
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.openDeleteDialogForCurrentSession()
+    }
+  }
+
+  const hotkeys: Array<UseHotkeyDefinition> = [
+    {
+      hotkey: "Escape",
+      callback: handleEscape,
+      options: {
+        meta: {
+          name: "Abort active session",
+          description: "Abort compaction or the streaming assistant response.",
+        },
+      },
+    },
+    ...(
+      [
+        { key: "ArrowDown" },
+        { key: "ArrowUp" },
+        { key: "Home" },
+        { key: "End" },
+        { key: "ArrowDown", shift: true },
+        { key: "ArrowUp", shift: true },
+        { key: "Home", shift: true },
+        { key: "End", shift: true },
+      ] as const
+    ).map((hotkey) => ({
+      hotkey,
+      callback: handleSidebarFocusNavigation,
+      options: {
+        meta: {
+          name: "Move sidebar focus",
+          description: "Move keyboard focus through sidebar sessions.",
+        },
+      },
+    })),
+    ...(["Delete", "Backspace"] as const).map((hotkey) => ({
+      hotkey,
+      callback: handleSidebarDelete,
+      options: {
+        meta: {
+          name: "Delete selected sidebar sessions",
+          description:
+            "Open the delete dialog for focused or selected sessions.",
+        },
+      },
+    })),
+    {
+      hotkey: { key: "Enter", ctrl: true },
+      callback: handleFocusPrompt,
+      options: {
+        meta: {
+          name: "Focus prompt",
+          description: "Focus the prompt composer.",
+        },
+      },
+    },
+    ...(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const).map(
+      (key) => ({
+        hotkey: { key, ctrl: true },
+        callback: handleConversationJump,
+        options: {
+          meta: {
+            name: "Navigate conversation",
+            description: "Jump between messages or to conversation boundaries.",
+          },
+        },
+      })
+    ),
+    ...(
+      [
+        { key: "\\" },
+        { key: "P" },
+        { key: "N" },
+        { key: "S" },
+        { key: "E" },
+        { key: "F" },
+        { key: "D" },
+        { key: "," },
+        { key: "M" },
+        { key: "T" },
+        { key: "G" },
+        { key: "U" },
+        { key: "R" },
+        { key: "R", shift: true },
+        { key: "O" },
+        { key: "C" },
+        { key: "X" },
+      ] as const
+    ).map((hotkey) => ({
+      hotkey: { ...hotkey, ctrl: true },
+      callback: handleGlobalShortcut,
+      options: {
+        meta: {
+          name: "App shell shortcut",
+          description: "Run a Phi app shell command.",
+        },
+      },
+    })),
+  ]
+
+  useHotkeys(hotkeys, {
+    conflictBehavior: "allow",
+    ignoreInputs: false,
+    preventDefault: false,
+    stopPropagation: false,
+  })
 }
