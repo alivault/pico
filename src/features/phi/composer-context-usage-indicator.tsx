@@ -338,7 +338,7 @@ function TooltipUsageProgress({ percent }: { percent: number }) {
   const clampedPercent = Math.max(0, Math.min(100, percent))
 
   return (
-    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background/15">
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
       <div
         className="h-full rounded-full"
         style={{
@@ -363,10 +363,10 @@ function ContextUsageQuotaTooltipLine({
       ? `${used} / ${limit}`
       : (used ?? limit ?? "Available")
   return (
-    <div className="rounded-lg bg-background/5 px-2.5 py-2">
+    <div className="rounded-lg bg-background/70 px-2.5 py-2">
       <div className="flex items-center justify-between gap-6">
-        <span className="font-medium text-background/80">{quota.label}</span>
-        <span className="font-semibold text-background">
+        <span className="font-medium text-muted-foreground">{quota.label}</span>
+        <span className="font-semibold text-foreground">
           {percent ? `${percent} ` : null}
           {value}
         </span>
@@ -375,7 +375,7 @@ function ContextUsageQuotaTooltipLine({
         <TooltipUsageProgress percent={quota.percent} />
       ) : null}
       {quota.timeLeft ? (
-        <div className="mt-1 text-xs text-background/50">
+        <div className="mt-1 text-xs text-muted-foreground">
           Resets in {quota.timeLeft}
         </div>
       ) : null}
@@ -387,16 +387,16 @@ function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
   const percent = `${formatContextUsagePercent(window.usedPercent)}%`
 
   return (
-    <div className="rounded-lg bg-background/5 px-2.5 py-2">
+    <div className="rounded-lg bg-background/70 px-2.5 py-2">
       <div className="flex items-center justify-between gap-6">
-        <span className="font-medium text-background/80">
+        <span className="font-medium text-muted-foreground">
           {window.label === "Week" ? "Weekly usage" : `${window.label} usage`}
         </span>
-        <span className="font-semibold text-background">{percent}</span>
+        <span className="font-semibold text-foreground">{percent}</span>
       </div>
       <TooltipUsageProgress percent={window.usedPercent} />
       {window.resetsIn ? (
-        <div className="mt-1 text-xs text-background/50">
+        <div className="mt-1 text-xs text-muted-foreground">
           Resets in {window.resetsIn}
         </div>
       ) : null}
@@ -608,15 +608,17 @@ export function ComposerContextUsageIndicator({
   )
   const content = (
     <>
-      <div className="rounded-lg bg-background/5 px-2.5 py-2">
+      <div className="rounded-lg bg-background/70 px-2.5 py-2">
         <div className="flex items-center justify-between gap-6">
-          <span className="font-medium text-background/80">Context window</span>
-          <span className="font-semibold text-background">
+          <span className="font-medium text-muted-foreground">
+            Context window
+          </span>
+          <span className="font-semibold text-foreground">
             {displayPercent}
           </span>
         </div>
         <TooltipUsageProgress percent={percent} />
-        <div className="mt-1 text-xs text-background/50">
+        <div className="mt-1 text-xs text-muted-foreground">
           {compactTokens == null
             ? `${compactContextWindow} token window`
             : `${compactTokens} / ${compactContextWindow} tokens used`}
@@ -647,7 +649,7 @@ export function ComposerContextUsageIndicator({
           side="top"
           align="end"
           sideOffset={8}
-          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-foreground px-3 py-3 text-sm text-background"
+          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-secondary px-3 py-3 text-sm text-secondary-foreground"
         >
           {content}
         </PopoverContent>
