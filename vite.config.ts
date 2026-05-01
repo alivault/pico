@@ -1,4 +1,7 @@
+import os from "node:os"
+
 import { defineConfig } from "vite-plus"
+import type { Plugin } from "vite"
 import { devtools } from "@tanstack/devtools-vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react"
@@ -13,6 +16,72 @@ const piSdkDir = tryResolvePiSdkDir()
 const fsAllow = [searchForWorkspaceRoot(process.cwd())]
 if (piSdkDir) {
   fsAllow.push(piSdkDir)
+}
+
+const localHostname = os.hostname()
+const localHostnameWithoutSuffix = localHostname.replace(/\.local$/i, "")
+const allowedHosts = Array.from(
+  new Set([
+    // Tailscale MagicDNS names are outside Vite's default localhost/IP allowlist.
+    // Keep this scoped to Tailscale instead of disabling host checks entirely.
+    ".ts.net",
+    localHostname,
+    localHostname.toLowerCase(),
+    localHostnameWithoutSuffix,
+    localHostnameWithoutSuffix.toLowerCase(),
+    `${localHostnameWithoutSuffix}.local`,
+    `${localHostnameWithoutSuffix.toLowerCase()}.local`,
+  ])
+)
+
+function devAssetFetchMetadataFallback(): Plugin {
+  return {
+    name: "phi-dev-asset-fetch-metadata-fallback",
+    apply: "serve",
+    enforce: "pre",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const acceptValues = request.headers.accept
+          ?.split(",")
+          .map((value) => value.trim())
+        const url = new URL(request.url ?? "/", "http://phi.local")
+        const path = url.pathname
+        const hasFetchDest = Boolean(request.headers["sec-fetch-dest"])
+        const acceptsCss = acceptValues?.some((value) =>
+          value.startsWith("text/css")
+        )
+        const isCssModuleRequest =
+          path.endsWith(".css") &&
+          (url.searchParams.has("url") ||
+            url.searchParams.has("raw") ||
+            url.searchParams.has("inline"))
+
+        if (path.endsWith(".css") && acceptsCss && !isCssModuleRequest) {
+          // Some browsers/clients do not send Fetch Metadata headers over
+          // non-local HTTP origins. TanStack Start's dev asset handling relies
+          // on this header to avoid routing dev assets as app pages.
+          request.headers["sec-fetch-dest"] ??= "style"
+
+          if (path.startsWith("/src/") && !hasFetchDest) {
+            const result = await server.transformRequest(`${path}?direct`)
+            if (result) {
+              response.setHeader("Content-Type", "text/css")
+              response.setHeader("Cache-Control", "no-cache")
+              response.end(result.code)
+              return
+            }
+          }
+        } else if (path && !hasFetchDest) {
+          if (isCssModuleRequest || /\.(?:js|mjs|ts|tsx|jsx)$/.test(path)) {
+            request.headers["sec-fetch-dest"] = "script"
+          } else if (/\.(?:woff2?|ttf|otf|eot)$/.test(path)) {
+            request.headers["sec-fetch-dest"] = "font"
+          }
+        }
+        next()
+      })
+    },
+  }
 }
 
 const config = defineConfig({
@@ -44,14 +113,20 @@ const config = defineConfig({
   },
   server: {
     port: 1618,
+    allowedHosts,
     fs: {
       allow: fsAllow,
     },
+  },
+  preview: {
+    port: 1618,
+    allowedHosts,
   },
   plugins: [
     devtools(),
     nitro(),
     tailwindcss(),
+    devAssetFetchMetadataFallback(),
     tanstackStart(),
     viteReact(),
     babel({
