@@ -282,7 +282,7 @@ export function AppShellSettingsDialog({
                     {command.description}
                   </span>
                 </div>
-                <CommandShortcut className="shrink-0 tracking-normal normal-case">
+                <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
                   {command.valueLabel}
                 </CommandShortcut>
               </CommandItem>
