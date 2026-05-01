@@ -142,6 +142,15 @@ import {
 } from "@/features/phi/git-panel"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
+  applyStoreAction,
+  batch,
+  createPhiStore,
+  setStoreField,
+  setStoreState,
+  useSelector,
+  type PhiStore,
+} from "@/features/phi/tanstack-store-utils"
+import {
   AppSidebar,
   createDirectorySessionsStore,
 } from "@/features/phi/sidebar"
@@ -337,12 +346,10 @@ type AppShellSidebarStateUpdate =
       current: AppShellSidebarState
     ) => Partial<AppShellSidebarState> | AppShellSidebarState)
 
-type AppShellSidebarStore = {
-  getSnapshot: () => AppShellSidebarStoreSnapshot
+type AppShellSidebarStore = PhiStore<AppShellSidebarStoreSnapshot> & {
   getWorkspaceSnapshot: () => AppShellSidebarSnapshot
   getWorkspaceVersion: () => string
-  subscribe: (listener: () => void) => () => void
-  setState: (update: AppShellSidebarStateUpdate) => void
+  setSidebarState: (update: AppShellSidebarStateUpdate) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setDirectoryIndexDataByPath: React.Dispatch<
@@ -831,41 +838,18 @@ function computeAppShellSidebarDerived(
   }
 }
 
-function applySidebarStateAction<T>(
-  current: T,
-  action: React.SetStateAction<T>
-) {
-  return typeof action === "function"
-    ? (action as (value: T) => T)(current)
-    : action
-}
-
 function createAppShellSidebarStore(): AppShellSidebarStore {
-  let state = createInitialSidebarState()
-  let snapshot: AppShellSidebarStoreSnapshot = {
-    state,
-    derived: computeAppShellSidebarDerived(state),
+  const initialState = createInitialSidebarState()
+  const store = createPhiStore<AppShellSidebarStoreSnapshot>({
+    state: initialState,
+    derived: computeAppShellSidebarDerived(initialState),
     revision: 0,
-  }
-  const listeners = new Set<() => void>()
+  }) as AppShellSidebarStore
 
-  const publish = (nextState: AppShellSidebarState) => {
-    if (nextState === state) return
-
-    state = nextState
-    snapshot = {
-      state,
-      derived: computeAppShellSidebarDerived(state),
-      revision: snapshot.revision + 1,
-    }
-    for (const listener of listeners) {
-      listener()
-    }
-  }
-
-  const setState = (update: AppShellSidebarStateUpdate) => {
-    const partial = typeof update === "function" ? update(state) : update
-    if (partial === state) return
+  const setSidebarState = (update: AppShellSidebarStateUpdate) => {
+    const currentState = store.state.state
+    const partial = typeof update === "function" ? update(currentState) : update
+    if (partial === currentState) return
 
     const entries = Object.entries(partial) as Array<
       [
@@ -873,105 +857,129 @@ function createAppShellSidebarStore(): AppShellSidebarStore {
         AppShellSidebarState[keyof AppShellSidebarState],
       ]
     >
-    if (entries.every(([key, value]) => Object.is(state[key], value))) {
+    if (entries.every(([key, value]) => Object.is(currentState[key], value))) {
       return
     }
 
-    publish({
-      ...state,
+    const nextState = {
+      ...currentState,
       ...partial,
-    })
+    }
+
+    store.setState((current) => ({
+      state: nextState,
+      derived: computeAppShellSidebarDerived(nextState),
+      revision: current.revision + 1,
+    }))
   }
 
-  return {
-    getSnapshot: () => snapshot,
-    getWorkspaceSnapshot: () => snapshot.derived,
-    getWorkspaceVersion: () => snapshot.derived.workspaceVersion,
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    setState,
+  Object.assign(store, {
+    getWorkspaceSnapshot: () => store.state.derived,
+    getWorkspaceVersion: () => store.state.derived.workspaceVersion,
+    setSidebarState,
     setSessionsEvent: (action) => {
-      const sessionsEvent = applySidebarStateAction(state.sessionsEvent, action)
-      if (sessionsEvent === state.sessionsEvent) return
-      setState({ sessionsEvent })
+      const sessionsEvent = applyStoreAction(
+        store.state.state.sessionsEvent,
+        action
+      )
+      if (sessionsEvent === store.state.state.sessionsEvent) return
+      setSidebarState({ sessionsEvent })
     },
     setSidebarDirectories: (action) => {
-      const sidebarDirectories = applySidebarStateAction(
-        state.sidebarDirectories,
+      const sidebarDirectories = applyStoreAction(
+        store.state.state.sidebarDirectories,
         action
       )
-      if (sidebarDirectories === state.sidebarDirectories) return
-      setState({ sidebarDirectories })
+      if (sidebarDirectories === store.state.state.sidebarDirectories) return
+      setSidebarState({ sidebarDirectories })
     },
     setDirectoryIndexDataByPath: (action) => {
-      const directoryIndexDataByPath = applySidebarStateAction(
-        state.directoryIndexDataByPath,
+      const directoryIndexDataByPath = applyStoreAction(
+        store.state.state.directoryIndexDataByPath,
         action
       )
-      if (directoryIndexDataByPath === state.directoryIndexDataByPath) return
-      setState({ directoryIndexDataByPath })
+      if (
+        directoryIndexDataByPath === store.state.state.directoryIndexDataByPath
+      ) {
+        return
+      }
+      setSidebarState({ directoryIndexDataByPath })
     },
     setDirectoryIndexLoading: (action) => {
-      const directoryIndexLoading = applySidebarStateAction(
-        state.directoryIndexLoading,
+      const directoryIndexLoading = applyStoreAction(
+        store.state.state.directoryIndexLoading,
         action
       )
-      if (directoryIndexLoading === state.directoryIndexLoading) return
-      setState({ directoryIndexLoading })
+      if (directoryIndexLoading === store.state.state.directoryIndexLoading)
+        return
+      setSidebarState({ directoryIndexLoading })
     },
     setSidebarSessionStatusByKey: (action) => {
-      const sidebarSessionStatusByKey = applySidebarStateAction(
-        state.sidebarSessionStatusByKey,
+      const sidebarSessionStatusByKey = applyStoreAction(
+        store.state.state.sidebarSessionStatusByKey,
         action
       )
-      if (sidebarSessionStatusByKey === state.sidebarSessionStatusByKey) return
-      setState({ sidebarSessionStatusByKey })
+      if (
+        sidebarSessionStatusByKey ===
+        store.state.state.sidebarSessionStatusByKey
+      ) {
+        return
+      }
+      setSidebarState({ sidebarSessionStatusByKey })
     },
     setSidebarDeferredDirectoryLoadingReady: (action) => {
-      const sidebarDeferredDirectoryLoadingReady = applySidebarStateAction(
-        state.sidebarDeferredDirectoryLoadingReady,
+      const sidebarDeferredDirectoryLoadingReady = applyStoreAction(
+        store.state.state.sidebarDeferredDirectoryLoadingReady,
         action
       )
       if (
         sidebarDeferredDirectoryLoadingReady ===
-        state.sidebarDeferredDirectoryLoadingReady
+        store.state.state.sidebarDeferredDirectoryLoadingReady
       ) {
         return
       }
-      setState({ sidebarDeferredDirectoryLoadingReady })
+      setSidebarState({ sidebarDeferredDirectoryLoadingReady })
     },
     setSessionSearch: (action) => {
-      const sessionSearch = applySidebarStateAction(state.sessionSearch, action)
-      if (sessionSearch === state.sessionSearch) return
-      setState({ sessionSearch })
-    },
-    setSelectedSidebarSessionKeys: (action) => {
-      const selectedSidebarSessionKeys = applySidebarStateAction(
-        state.selectedSidebarSessionKeys,
+      const sessionSearch = applyStoreAction(
+        store.state.state.sessionSearch,
         action
       )
-      if (selectedSidebarSessionKeys === state.selectedSidebarSessionKeys) {
-        return
-      }
-      setState({ selectedSidebarSessionKeys })
+      if (sessionSearch === store.state.state.sessionSearch) return
+      setSidebarState({ sessionSearch })
     },
-    setSidebarSessionSelectionAnchor: (action) => {
-      const sidebarSessionSelectionAnchor = applySidebarStateAction(
-        state.sidebarSessionSelectionAnchor,
+    setSelectedSidebarSessionKeys: (action) => {
+      const selectedSidebarSessionKeys = applyStoreAction(
+        store.state.state.selectedSidebarSessionKeys,
         action
       )
       if (
-        sidebarSessionSelectionAnchor === state.sidebarSessionSelectionAnchor
+        selectedSidebarSessionKeys ===
+        store.state.state.selectedSidebarSessionKeys
       ) {
         return
       }
-      setState({ sidebarSessionSelectionAnchor })
+      setSidebarState({ selectedSidebarSessionKeys })
     },
-  }
+    setSidebarSessionSelectionAnchor: (action) => {
+      const sidebarSessionSelectionAnchor = applyStoreAction(
+        store.state.state.sidebarSessionSelectionAnchor,
+        action
+      )
+      if (
+        sidebarSessionSelectionAnchor ===
+        store.state.state.sidebarSessionSelectionAnchor
+      ) {
+        return
+      }
+      setSidebarState({ sidebarSessionSelectionAnchor })
+    },
+  } satisfies Omit<
+    AppShellSidebarStore,
+    keyof PhiStore<AppShellSidebarStoreSnapshot>
+  >)
+
+  return store
 }
 
 function useAppShellSidebarValue<T>(
@@ -979,40 +987,7 @@ function useAppShellSidebarValue<T>(
   selector: (snapshot: AppShellSidebarStoreSnapshot) => T,
   isEqual: (left: T, right: T) => boolean = Object.is
 ) {
-  const cacheRef = React.useRef<{
-    source: AppShellSidebarStoreSnapshot | undefined
-    selected: T | undefined
-  }>({
-    source: undefined,
-    selected: undefined,
-  })
-
-  const getSnapshot = () => {
-    const source = store.getSnapshot()
-    const cache = cacheRef.current
-    if (cache.source === source && cache.selected !== undefined) {
-      return cache.selected
-    }
-
-    const selected = selector(source)
-    if (cache.selected !== undefined && isEqual(cache.selected, selected)) {
-      cacheRef.current = { source, selected: cache.selected }
-      return cache.selected
-    }
-
-    cacheRef.current = { source, selected }
-    return selected
-  }
-
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
-}
-
-function useAppShellSidebarWorkspaceVersion(store: AppShellSidebarStore) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    store.getWorkspaceVersion,
-    store.getWorkspaceVersion
-  )
+  return useSelector(store, selector, { compare: isEqual })
 }
 
 function useLatestRef<T>(value: T) {
@@ -1030,90 +1005,6 @@ function useStableEvent<Args extends Array<unknown>, Result>(
     (...args: Args) => handlerRef.current(...args),
     [handlerRef]
   )
-}
-
-type ValueStore<T> = {
-  getSnapshot: () => T
-  setSnapshot: (nextSnapshot: T) => void
-  subscribe: (listener: () => void) => () => void
-}
-
-function createValueStore<T>(
-  initialSnapshot: T,
-  isEqual: (left: T, right: T) => boolean = Object.is
-): ValueStore<T> {
-  let snapshot = initialSnapshot
-  const listeners = new Set<() => void>()
-
-  return {
-    getSnapshot: () => snapshot,
-    setSnapshot: (nextSnapshot) => {
-      if (isEqual(snapshot, nextSnapshot)) return
-      snapshot = nextSnapshot
-      for (const listener of listeners) listener()
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-function useValueStore<T>(store: ValueStore<T>) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot
-  )
-}
-
-function setValueStoreField<T extends object, K extends keyof T>(
-  store: ValueStore<T>,
-  key: K,
-  action: React.SetStateAction<T[K]>
-) {
-  const current = store.getSnapshot()
-  const nextValue = applySidebarStateAction(current[key], action)
-  if (Object.is(current[key], nextValue)) return
-  store.setSnapshot({
-    ...current,
-    [key]: nextValue,
-  })
-}
-
-function useSelectedValueStore<T, S>(
-  store: ValueStore<T>,
-  selector: (snapshot: T) => S,
-  isEqual: (left: S, right: S) => boolean = Object.is
-) {
-  const cacheRef = React.useRef<{
-    source: T | undefined
-    selected: S | undefined
-  }>({
-    source: undefined,
-    selected: undefined,
-  })
-
-  const getSnapshot = () => {
-    const source = store.getSnapshot()
-    const cache = cacheRef.current
-    if (cache.source === source && cache.selected !== undefined) {
-      return cache.selected
-    }
-
-    const selected = selector(source)
-    if (cache.selected !== undefined && isEqual(cache.selected, selected)) {
-      cacheRef.current = { source, selected: cache.selected }
-      return cache.selected
-    }
-
-    cacheRef.current = { source, selected }
-    return selected
-  }
-
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
 }
 
 function shallowRecordEqual<T extends Record<string, unknown>>(
@@ -1353,12 +1244,6 @@ type ConversationItemsStore = {
     listener: () => void
   ) => () => void
   subscribeItems: (keys: Array<string>, listener: () => void) => () => void
-}
-
-type TextValueStore = {
-  getSnapshot: () => string
-  setValue: (value: string) => void
-  subscribe: (listener: () => void) => () => void
 }
 
 function buildConversationItemMap(items: Array<ConversationItem>) {
@@ -1696,37 +1581,6 @@ function createMutableAssistantMessagesStore(
   }
 }
 
-function createTextValueStore(initialValue = ""): TextValueStore {
-  let value = initialValue
-  const listeners = new Set<() => void>()
-
-  return {
-    getSnapshot: () => value,
-    setValue: (nextValue) => {
-      if (value === nextValue) return
-
-      value = nextValue
-      for (const listener of listeners) {
-        listener()
-      }
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-function useTextValueSnapshot(store: TextValueStore) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot
-  )
-}
-
 type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
@@ -1821,8 +1675,8 @@ const ConversationContentChangeContext = React.createContext<
   (() => void) | null
 >(null)
 
-function useAppShellConversationSessionState(store: ValueStore<SessionState>) {
-  return useSelectedValueStore(
+function useAppShellConversationSessionState(store: PhiStore<SessionState>) {
+  return useSelector(
     store,
     (sessionState) => ({
       cwd: sessionState.cwd,
@@ -1831,7 +1685,7 @@ function useAppShellConversationSessionState(store: ValueStore<SessionState>) {
       sessionId: sessionState.sessionId,
       streaming: sessionState.streaming,
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
 }
 
@@ -1957,10 +1811,10 @@ function AppShellWorkingIndicatorLabel({
   useHiddenThinkingPreview,
 }: {
   fallbackLabel: string
-  hiddenThinkingPreviewStore: TextValueStore
+  hiddenThinkingPreviewStore: PhiStore<string>
   useHiddenThinkingPreview: boolean
 }) {
-  const hiddenThinkingPreview = useTextValueSnapshot(hiddenThinkingPreviewStore)
+  const hiddenThinkingPreview = useSelector(hiddenThinkingPreviewStore)
   const visibleLabel =
     useHiddenThinkingPreview && hiddenThinkingPreview
       ? hiddenThinkingPreview
@@ -1974,7 +1828,7 @@ function AppShellMessagesWorkingIndicator({
   state,
   useHiddenThinkingPreview,
 }: {
-  hiddenThinkingPreviewStore: TextValueStore
+  hiddenThinkingPreviewStore: PhiStore<string>
   state: AppShellWorkingState
   useHiddenThinkingPreview: boolean
 }) {
@@ -2018,12 +1872,9 @@ function AppShellTabsList({
   sessionStore,
 }: {
   viewerContextId: string
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
 }) {
-  const cwd = useSelectedValueStore(
-    sessionStore,
-    (sessionState) => sessionState.cwd
-  )
+  const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
   return (
     <TabsList className="w-full rounded-none border-b border-border/70 md:hidden">
@@ -2042,13 +1893,10 @@ const AppShellGitPanelController = React.memo(
     viewerContextId,
   }: {
     active: boolean
-    sessionStore: ValueStore<SessionState>
+    sessionStore: PhiStore<SessionState>
     viewerContextId: string
   }) {
-    const cwd = useSelectedValueStore(
-      sessionStore,
-      (sessionState) => sessionState.cwd
-    )
+    const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
     if (!active) return null
 
@@ -2246,13 +2094,13 @@ function AppShellConversationEmptyState({
   onCreateSession: () => void
   streaming: boolean
   viewerContextId: string
-  workingStateStore: ValueStore<AppShellWorkingState | null>
+  workingStateStore: PhiStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
     conversationItemsStore
   )
-  const workingState = useValueStore(workingStateStore)
+  const workingState = useSelector(workingStateStore)
   const displayedWorkingState =
     workingState ||
     (hasAssistantOutput
@@ -2325,10 +2173,10 @@ function AppShellConversationWorkingFooter({
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
-  hiddenThinkingPreviewStore: TextValueStore
+  hiddenThinkingPreviewStore: PhiStore<string>
   hideThinking: boolean
   streaming: boolean
-  workingStateStore: ValueStore<AppShellWorkingState | null>
+  workingStateStore: PhiStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
@@ -2337,7 +2185,7 @@ function AppShellConversationWorkingFooter({
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
     : "w-full"
-  const workingState = useValueStore(workingStateStore)
+  const workingState = useSelector(workingStateStore)
   const displayedWorkingState =
     workingState ||
     (hasAssistantOutput
@@ -2369,9 +2217,9 @@ function AppShellConversationMessageStack({
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideToolBlocks: boolean
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
 }) {
-  const hideThinking = useSelectedValueStore(
+  const hideThinking = useSelector(
     sessionStore,
     (sessionState) => sessionState.hideThinkingBlock
   )
@@ -2407,25 +2255,25 @@ const AppShellSessionConversation = React.memo(
     awaitingFirstTurn: boolean
     conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
     conversationItemsStore: ConversationItemsStore
-    displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
-    hiddenThinkingPreviewStore: TextValueStore
+    displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
+    hiddenThinkingPreviewStore: PhiStore<string>
     isSessionViewLoading: boolean
     isSubmitting: boolean
     onCreateSession: () => void
-    sessionStore: ValueStore<SessionState>
+    sessionStore: PhiStore<SessionState>
     viewerContextId: string
-    workingStateStore: ValueStore<AppShellWorkingState | null>
+    workingStateStore: PhiStore<AppShellWorkingState | null>
   }) {
     const sessionState = useAppShellConversationSessionState(sessionStore)
     const { autoScrollEnabled, centerMessages, hideToolBlocks } =
-      useValueStore(displaySettingsStore)
-    const hideThinking = useSelectedValueStore(
+      useSelector(displaySettingsStore)
+    const hideThinking = useSelector(
       sessionStore,
       (currentSessionState) => currentSessionState.hideThinkingBlock
     )
 
     React.useLayoutEffect(() => {
-      conversationItemsStore.setItems(sessionStore.getSnapshot().items)
+      conversationItemsStore.setItems(sessionStore.state.items)
     }, [conversationItemsStore, hideThinking, hideToolBlocks, sessionStore])
 
     return (
@@ -2472,9 +2320,9 @@ const AppShellSessionConversation = React.memo(
 )
 
 function useAppShellComposerSnapshot(
-  store: ValueStore<AppShellComposerSnapshot>
+  store: PhiStore<AppShellComposerSnapshot>
 ) {
-  return useValueStore(store)
+  return useSelector(store)
 }
 
 function gitStatusQueryOptions({
@@ -2739,14 +2587,14 @@ const AppShellComposerController = React.memo(
     actionsRef: React.RefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
     contextUsageStore: ComposerContextUsageStore
-    displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
+    displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
     fileInputRef: React.RefObject<HTMLInputElement | null>
-    sessionStore: ValueStore<SessionState>
-    store: ValueStore<AppShellComposerSnapshot>
+    sessionStore: PhiStore<SessionState>
+    store: PhiStore<AppShellComposerSnapshot>
     topContent?: React.ReactNode
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
-    const centerMessages = useSelectedValueStore(
+    const centerMessages = useSelector(
       displaySettingsStore,
       (settings) => settings.centerMessages
     )
@@ -2895,17 +2743,17 @@ type AppShellSessionContentProps = {
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
   defaultNewSessionDirectory: string
-  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
+  displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
-  hiddenThinkingPreviewStore: TextValueStore
+  hiddenThinkingPreviewStore: PhiStore<string>
   isSessionViewLoading: boolean
   isSubmitting: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onCreateSession: (cwdOverride?: string) => void
-  sessionStore: ValueStore<SessionState>
-  store: ValueStore<AppShellComposerSnapshot>
+  sessionStore: PhiStore<SessionState>
+  store: PhiStore<AppShellComposerSnapshot>
   viewerContextId: string
-  workingStateStore: ValueStore<AppShellWorkingState | null>
+  workingStateStore: PhiStore<AppShellWorkingState | null>
 }
 
 function AppShellSessionContent({
@@ -2928,13 +2776,13 @@ function AppShellSessionContent({
   viewerContextId,
   workingStateStore,
 }: AppShellSessionContentProps) {
-  const sessionState = useSelectedValueStore(
+  const sessionState = useSelector(
     sessionStore,
     (currentSessionState) => ({
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const showNewSessionComposer =
@@ -3000,13 +2848,10 @@ function AppShellDesktopGitPanel({
   viewerContextId,
 }: {
   active: boolean
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
   viewerContextId: string
 }) {
-  const cwd = useSelectedValueStore(
-    sessionStore,
-    (sessionState) => sessionState.cwd
-  )
+  const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
   return (
     <aside
@@ -3060,16 +2905,13 @@ function AppShellTabsController({
   viewerContextId,
   workingStateStore,
 }: AppShellSessionContentProps & {
-  appUiStore: ValueStore<AppShellUiState>
+  appUiStore: PhiStore<AppShellUiState>
   gitPanelOpen: boolean
   isMobile: boolean
   onValueChange: (value: string) => void
 }) {
-  const currentTab = useSelectedValueStore(
-    appUiStore,
-    (state) => state.currentTab
-  )
-  const isDraftSession = useSelectedValueStore(
+  const currentTab = useSelector(appUiStore, (state) => state.currentTab)
+  const isDraftSession = useSelector(
     sessionStore,
     (sessionState) => sessionState.draft
   )
@@ -3232,12 +3074,12 @@ function AppShellWindowEffectsHost({
 }: {
   isSessionViewLoading: boolean
   loadingDisplaySessionTitle: string
-  notificationStore: ValueStore<AppShellNotificationState>
+  notificationStore: PhiStore<AppShellNotificationState>
   onSelectSession: (nextSessionId?: string) => void
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
   sidebarStore: AppShellSidebarStore
 }) {
-  const sessionWindowState = useSelectedValueStore(
+  const sessionWindowState = useSelector(
     sessionStore,
     (sessionState) => ({
       activeSessionKey: sessionState.sessionKey,
@@ -3251,9 +3093,9 @@ function AppShellWindowEffectsHost({
       firstMessage: sessionState.firstMessage,
       uiTitle: sessionState.uiState.title?.trim() || "",
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
-  const notificationState = useValueStore(notificationStore)
+  const notificationState = useSelector(notificationStore)
   React.useEffect(() => {
     if (!notificationState.sessionDoneSoundEnabled) return
 
@@ -3278,7 +3120,7 @@ function AppShellWindowEffectsHost({
       (currentSessionTitle !== "New session" ? currentSessionTitle : "Phi")
   const onConsumeSessionDoneEvents = (ids: Array<string>) => {
     const consumedIds = new Set(ids)
-    setValueStoreField(notificationStore, "sessionDoneEvents", (current) =>
+    setStoreField(notificationStore, "sessionDoneEvents", (current) =>
       current.filter((event) => !consumedIds.has(event.id))
     )
   }
@@ -3474,17 +3316,13 @@ function AppShellWindowEffects({
     sessionDoneSoundEnabled,
   ])
 
-  const sidebarUnreadVersion = React.useSyncExternalStore(
-    sidebarStore.subscribe,
-    () =>
-      sidebarStore
-        .getWorkspaceSnapshot()
-        .sidebarSessions.filter((session) => session.unread)
-        .map((session) => sessionNotificationKey(session))
-        .filter(Boolean)
-        .sort()
-        .join("\n"),
-    () => ""
+  const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
+    snapshot.derived.sidebarSessions
+      .filter((session) => session.unread)
+      .map((session) => sessionNotificationKey(session))
+      .filter(Boolean)
+      .sort()
+      .join("\n")
   )
   const unreadSessionCount = (() => {
     const unreadKeys = new Set(
@@ -3779,14 +3617,14 @@ type AppShellDraftFlowState = {
 
 type AppShellController = {
   stores: {
-    appUi: ValueStore<AppShellUiState>
-    composer: ValueStore<AppShellComposerSnapshot>
+    appUi: PhiStore<AppShellUiState>
+    composer: PhiStore<AppShellComposerSnapshot>
     contextUsage: ComposerContextUsageStore
     conversationItems: ConversationItemsStore
-    displaySettings: ValueStore<AppShellDisplaySettingsState>
-    draftFlow: ValueStore<AppShellDraftFlowState>
-    notification: ValueStore<AppShellNotificationState>
-    session: ValueStore<SessionState>
+    displaySettings: PhiStore<AppShellDisplaySettingsState>
+    draftFlow: PhiStore<AppShellDraftFlowState>
+    notification: PhiStore<AppShellNotificationState>
+    session: PhiStore<SessionState>
     sidebar: AppShellSidebarStore
   }
   refs: {
@@ -3835,15 +3673,15 @@ const AppShellSessionWorkspace = React.forwardRef<
   if (!initialSessionStateRef.current) {
     initialSessionStateRef.current = createInitialSessionState()
   }
-  const sessionStoreRef = React.useRef<ValueStore<SessionState> | null>(null)
+  const sessionStoreRef = React.useRef<PhiStore<SessionState> | null>(null)
   if (!sessionStoreRef.current) {
-    sessionStoreRef.current = createValueStore(initialSessionStateRef.current)
+    sessionStoreRef.current = createPhiStore(initialSessionStateRef.current)
   }
   const sessionStore = sessionStoreRef.current
-  const sessionStateRef = React.useRef(sessionStore.getSnapshot())
-  const appUiStoreRef = React.useRef<ValueStore<AppShellUiState> | null>(null)
+  const sessionStateRef = React.useRef(sessionStore.state)
+  const appUiStoreRef = React.useRef<PhiStore<AppShellUiState> | null>(null)
   if (!appUiStoreRef.current) {
-    appUiStoreRef.current = createValueStore<AppShellUiState>(
+    appUiStoreRef.current = createPhiStore<AppShellUiState>(
       {
         currentTab: "session",
         gitPanelOpen: false,
@@ -3858,7 +3696,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<string>>
   >(
     (action) => {
-      setValueStoreField(appUiStore, "currentTab", action)
+      setStoreField(appUiStore, "currentTab", action)
     },
     [appUiStore]
   )
@@ -3866,7 +3704,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setValueStoreField(appUiStore, "gitPanelOpen", action)
+      setStoreField(appUiStore, "gitPanelOpen", action)
     },
     [appUiStore]
   )
@@ -3874,7 +3712,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<string | null>>
   >(
     (action) => {
-      setValueStoreField(appUiStore, "loadingSessionId", action)
+      setStoreField(appUiStore, "loadingSessionId", action)
     },
     [appUiStore]
   )
@@ -3882,36 +3720,36 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<string | null>>
   >(
     (action) => {
-      setValueStoreField(appUiStore, "initialLoadingSessionId", action)
+      setStoreField(appUiStore, "initialLoadingSessionId", action)
     },
     [appUiStore]
   )
   const previousRouteSessionIdRef = React.useRef(sessionId)
-  const composerDraftSeedStoreRef = React.useRef<ValueStore<{
+  const composerDraftSeedStoreRef = React.useRef<PhiStore<{
     text: string
     skillName?: string
     syncNonce: number
   }> | null>(null)
   if (!composerDraftSeedStoreRef.current) {
-    composerDraftSeedStoreRef.current = createValueStore({
+    composerDraftSeedStoreRef.current = createPhiStore({
       text: "",
       syncNonce: 0,
     })
   }
   const composerDraftSeedStore = composerDraftSeedStoreRef.current
-  const composerImagesStoreRef = React.useRef<ValueStore<
+  const composerImagesStoreRef = React.useRef<PhiStore<
     Array<PromptImage>
   > | null>(null)
   if (!composerImagesStoreRef.current) {
-    composerImagesStoreRef.current = createValueStore<Array<PromptImage>>([])
+    composerImagesStoreRef.current = createPhiStore<Array<PromptImage>>([])
   }
   const composerImagesStore = composerImagesStoreRef.current
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
   const displaySettingsStoreRef =
-    React.useRef<ValueStore<AppShellDisplaySettingsState> | null>(null)
+    React.useRef<PhiStore<AppShellDisplaySettingsState> | null>(null)
   if (!displaySettingsStoreRef.current) {
     displaySettingsStoreRef.current =
-      createValueStore<AppShellDisplaySettingsState>(
+      createPhiStore<AppShellDisplaySettingsState>(
         {
           autoScrollEnabled: true,
           centerMessages: false,
@@ -3921,16 +3759,16 @@ const AppShellSessionWorkspace = React.forwardRef<
       )
   }
   const displaySettingsStore = displaySettingsStoreRef.current!
-  const displaySettingsRef = React.useRef(displaySettingsStore.getSnapshot())
+  const displaySettingsRef = React.useRef(displaySettingsStore.state)
   const hideToolBlocksRef = React.useRef(
-    displaySettingsStore.getSnapshot().hideToolBlocks
+    displaySettingsStore.state.hideToolBlocks
   )
   const setHideToolBlocks = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      const current = displaySettingsStore.getSnapshot()
-      const nextHideToolBlocks = applySidebarStateAction(
+      const current = displaySettingsStore.state
+      const nextHideToolBlocks = applyStoreAction(
         current.hideToolBlocks,
         action
       )
@@ -3938,7 +3776,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       const next = { ...current, hideToolBlocks: nextHideToolBlocks }
       displaySettingsRef.current = next
       hideToolBlocksRef.current = next.hideToolBlocks
-      displaySettingsStore.setSnapshot(next)
+      setStoreState(displaySettingsStore, next)
     },
     [displaySettingsStore]
   )
@@ -3946,15 +3784,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      const current = displaySettingsStore.getSnapshot()
-      const nextCenterMessages = applySidebarStateAction(
+      const current = displaySettingsStore.state
+      const nextCenterMessages = applyStoreAction(
         current.centerMessages,
         action
       )
       if (nextCenterMessages === current.centerMessages) return
       const next = { ...current, centerMessages: nextCenterMessages }
       displaySettingsRef.current = next
-      displaySettingsStore.setSnapshot(next)
+      setStoreState(displaySettingsStore, next)
     },
     [displaySettingsStore]
   )
@@ -3962,26 +3800,24 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      const current = displaySettingsStore.getSnapshot()
-      const nextAutoScrollEnabled = applySidebarStateAction(
+      const current = displaySettingsStore.state
+      const nextAutoScrollEnabled = applyStoreAction(
         current.autoScrollEnabled,
         action
       )
       if (nextAutoScrollEnabled === current.autoScrollEnabled) return
       const next = { ...current, autoScrollEnabled: nextAutoScrollEnabled }
       displaySettingsRef.current = next
-      displaySettingsStore.setSnapshot(next)
+      setStoreState(displaySettingsStore, next)
     },
     [displaySettingsStore]
   )
-  const awaitingFirstTurnStoreRef = React.useRef<ValueStore<boolean> | null>(
-    null
-  )
+  const awaitingFirstTurnStoreRef = React.useRef<PhiStore<boolean> | null>(null)
   if (!awaitingFirstTurnStoreRef.current) {
-    awaitingFirstTurnStoreRef.current = createValueStore(false)
+    awaitingFirstTurnStoreRef.current = createPhiStore(false)
   }
   const awaitingFirstTurnStore = awaitingFirstTurnStoreRef.current
-  const pendingDraftPromptStoreRef = React.useRef<ValueStore<{
+  const pendingDraftPromptStoreRef = React.useRef<PhiStore<{
     ownerKey: string
     message: string
     images: Array<PromptImage>
@@ -3989,7 +3825,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     optimisticId?: string
   } | null> | null>(null)
   if (!pendingDraftPromptStoreRef.current) {
-    pendingDraftPromptStoreRef.current = createValueStore<{
+    pendingDraftPromptStoreRef.current = createPhiStore<{
       ownerKey: string
       message: string
       images: Array<PromptImage>
@@ -3998,7 +3834,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     } | null>(null)
   }
   const pendingDraftPromptStore = pendingDraftPromptStoreRef.current
-  const pendingDraftFollowUpsStoreRef = React.useRef<ValueStore<
+  const pendingDraftFollowUpsStoreRef = React.useRef<PhiStore<
     Array<{
       message: string
       images: Array<PromptImage>
@@ -4007,7 +3843,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     }>
   > | null>(null)
   if (!pendingDraftFollowUpsStoreRef.current) {
-    pendingDraftFollowUpsStoreRef.current = createValueStore<
+    pendingDraftFollowUpsStoreRef.current = createPhiStore<
       Array<{
         message: string
         images: Array<PromptImage>
@@ -4017,24 +3853,24 @@ const AppShellSessionWorkspace = React.forwardRef<
     >([])
   }
   const pendingDraftFollowUpsStore = pendingDraftFollowUpsStoreRef.current
-  const isSubmittingStoreRef = React.useRef<ValueStore<boolean> | null>(null)
+  const isSubmittingStoreRef = React.useRef<PhiStore<boolean> | null>(null)
   if (!isSubmittingStoreRef.current) {
-    isSubmittingStoreRef.current = createValueStore(false)
+    isSubmittingStoreRef.current = createPhiStore(false)
   }
   const isSubmittingStore = isSubmittingStoreRef.current
-  const pendingMessagesStoreRef = React.useRef<ValueStore<
+  const pendingMessagesStoreRef = React.useRef<PhiStore<
     Array<PendingComposerMessage>
   > | null>(null)
   if (!pendingMessagesStoreRef.current) {
-    pendingMessagesStoreRef.current = createValueStore<
+    pendingMessagesStoreRef.current = createPhiStore<
       Array<PendingComposerMessage>
     >([])
   }
   const pendingMessagesStore = pendingMessagesStoreRef.current
   const notificationStoreRef =
-    React.useRef<ValueStore<AppShellNotificationState> | null>(null)
+    React.useRef<PhiStore<AppShellNotificationState> | null>(null)
   if (!notificationStoreRef.current) {
-    notificationStoreRef.current = createValueStore<AppShellNotificationState>(
+    notificationStoreRef.current = createPhiStore<AppShellNotificationState>(
       {
         desktopNotificationPermission: "unsupported",
         sessionDoneDesktopNotificationsEnabled: true,
@@ -4049,7 +3885,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<Array<SessionDoneEvent>>>
   >(
     (action) => {
-      setValueStoreField(notificationStore, "sessionDoneEvents", action)
+      setStoreField(notificationStore, "sessionDoneEvents", action)
     },
     [notificationStore]
   )
@@ -4057,7 +3893,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setValueStoreField(notificationStore, "sessionDoneSoundEnabled", action)
+      setStoreField(notificationStore, "sessionDoneSoundEnabled", action)
     },
     [notificationStore]
   )
@@ -4065,7 +3901,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setValueStoreField(
+      setStoreField(
         notificationStore,
         "sessionDoneDesktopNotificationsEnabled",
         action
@@ -4077,18 +3913,14 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<DesktopNotificationPermission>>
   >(
     (action) => {
-      setValueStoreField(
-        notificationStore,
-        "desktopNotificationPermission",
-        action
-      )
+      setStoreField(notificationStore, "desktopNotificationPermission", action)
     },
     [notificationStore]
   )
   const draftFlowStoreRef =
-    React.useRef<ValueStore<AppShellDraftFlowState> | null>(null)
+    React.useRef<PhiStore<AppShellDraftFlowState> | null>(null)
   if (!draftFlowStoreRef.current) {
-    draftFlowStoreRef.current = createValueStore<AppShellDraftFlowState>(
+    draftFlowStoreRef.current = createPhiStore<AppShellDraftFlowState>(
       {
         draftSessionLoadingOwnerKey: null,
         storedDraftDirectory: "",
@@ -4101,7 +3933,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<string | null>>
   >(
     (action) => {
-      setValueStoreField(draftFlowStore, "draftSessionLoadingOwnerKey", action)
+      setStoreField(draftFlowStore, "draftSessionLoadingOwnerKey", action)
     },
     [draftFlowStore]
   )
@@ -4109,15 +3941,15 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<string>>
   >(
     (action) => {
-      setValueStoreField(draftFlowStore, "storedDraftDirectory", action)
+      setStoreField(draftFlowStore, "storedDraftDirectory", action)
     },
     [draftFlowStore]
   )
-  const recentDirectoriesStoreRef = React.useRef<ValueStore<
+  const recentDirectoriesStoreRef = React.useRef<PhiStore<
     Array<string>
   > | null>(null)
   if (!recentDirectoriesStoreRef.current) {
-    recentDirectoriesStoreRef.current = createValueStore<Array<string>>(
+    recentDirectoriesStoreRef.current = createPhiStore<Array<string>>(
       [],
       sameStringArray
     )
@@ -4127,10 +3959,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<Array<string>>>
   >(
     (action) => {
-      const current = recentDirectoriesStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = recentDirectoriesStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      recentDirectoriesStore.setSnapshot(next)
+      setStoreState(recentDirectoriesStore, next)
     },
     [recentDirectoriesStore]
   )
@@ -4139,20 +3971,20 @@ const AppShellSessionWorkspace = React.forwardRef<
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
   const composerStoreRef =
-    React.useRef<ValueStore<AppShellComposerSnapshot> | null>(null)
+    React.useRef<PhiStore<AppShellComposerSnapshot> | null>(null)
   if (!composerStoreRef.current) {
-    composerStoreRef.current = createValueStore(
+    composerStoreRef.current = createPhiStore(
       createInitialAppShellComposerSnapshot(viewerContextId),
       sameAppShellComposerSnapshot
     )
   }
   const composerStore = composerStoreRef.current
-  const contextUsageStoreRef = React.useRef<ValueStore<
+  const contextUsageStoreRef = React.useRef<PhiStore<
     SessionState["contextUsage"]
   > | null>(null)
   if (!contextUsageStoreRef.current) {
     contextUsageStoreRef.current =
-      createValueStore<SessionState["contextUsage"]>(undefined)
+      createPhiStore<SessionState["contextUsage"]>(undefined)
   }
   const contextUsageStore = contextUsageStoreRef.current
   const setComposerDraftSeed = React.useCallback<
@@ -4165,18 +3997,20 @@ const AppShellSessionWorkspace = React.forwardRef<
     >
   >(
     (action) => {
-      const current = composerDraftSeedStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = composerDraftSeedStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      composerDraftSeedStore.setSnapshot(next)
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
-        ...currentComposerSnapshot,
-        composerSkill: currentComposerSnapshot.disabled
-          ? undefined
-          : next.skillName,
-        composerSyncNonce: next.syncNonce,
-        composerText: currentComposerSnapshot.disabled ? "" : next.text,
+      batch(() => {
+        setStoreState(composerDraftSeedStore, next)
+        const currentComposerSnapshot = composerStore.state
+        setStoreState(composerStore, {
+          ...currentComposerSnapshot,
+          composerSkill: currentComposerSnapshot.disabled
+            ? undefined
+            : next.skillName,
+          composerSyncNonce: next.syncNonce,
+          composerText: currentComposerSnapshot.disabled ? "" : next.text,
+        })
       })
     },
     [composerDraftSeedStore, composerStore]
@@ -4185,29 +4019,31 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   >(
     (action) => {
-      const current = composerImagesStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = composerImagesStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
       composerImagesRef.current = next
-      composerImagesStore.setSnapshot(next)
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
-        ...currentComposerSnapshot,
-        composerImages: currentComposerSnapshot.disabled ? [] : next,
+      batch(() => {
+        setStoreState(composerImagesStore, next)
+        const currentComposerSnapshot = composerStore.state
+        setStoreState(composerStore, {
+          ...currentComposerSnapshot,
+          composerImages: currentComposerSnapshot.disabled ? [] : next,
+        })
       })
     },
     [composerImagesStore, composerStore]
   )
   const setComposerContextUsage = React.useCallback(
     (contextUsage: SessionState["contextUsage"]) => {
-      contextUsageStore.setSnapshot(contextUsage)
+      setStoreState(contextUsageStore, contextUsage)
     },
     [contextUsageStore]
   )
   const setComposerStreaming = React.useCallback(
     (streaming: boolean) => {
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
+      const currentComposerSnapshot = composerStore.state
+      setStoreState(composerStore, {
         ...currentComposerSnapshot,
         isStreaming: currentComposerSnapshot.disabled ? false : streaming,
       })
@@ -4259,7 +4095,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         typeof action === "function"
           ? (action as (current: SessionState) => SessionState)(currentRefState)
           : action
-      const currentStoreState = sessionStore.getSnapshot()
+      const currentStoreState = sessionStore.state
       if (
         Object.is(currentRefState, nextState) &&
         Object.is(currentStoreState, nextState)
@@ -4268,15 +4104,13 @@ const AppShellSessionWorkspace = React.forwardRef<
       }
 
       sessionStateRef.current = nextState
-      sessionStore.setSnapshot(nextState)
+      setStoreState(sessionStore, nextState)
     },
     [sessionStore]
   )
-  const composerTextRef = React.useRef(
-    composerDraftSeedStore.getSnapshot().text
-  )
+  const composerTextRef = React.useRef(composerDraftSeedStore.state.text)
   const composerSkillRef = React.useRef<string | undefined>(
-    composerDraftSeedStore.getSnapshot().skillName
+    composerDraftSeedStore.state.skillName
   )
   const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const pendingRouteSessionPathRef = React.useRef<string | undefined>(undefined)
@@ -4297,20 +4131,22 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
   const conversationItemsStore = conversationItemsStoreRef.current
-  const hiddenThinkingPreviewStoreRef = React.useRef<TextValueStore | null>(
+  const hiddenThinkingPreviewStoreRef = React.useRef<PhiStore<string> | null>(
     null
   )
   if (!hiddenThinkingPreviewStoreRef.current) {
-    hiddenThinkingPreviewStoreRef.current = createTextValueStore(
+    hiddenThinkingPreviewStoreRef.current = createPhiStore<string>(
       sessionStateRef.current.hiddenThinkingPreview || ""
     )
   }
   const hiddenThinkingPreviewStore = hiddenThinkingPreviewStoreRef.current
   const workingStateStoreRef =
-    React.useRef<ValueStore<AppShellWorkingState | null> | null>(null)
+    React.useRef<PhiStore<AppShellWorkingState | null> | null>(null)
   if (!workingStateStoreRef.current) {
-    workingStateStoreRef.current =
-      createValueStore<AppShellWorkingState | null>(null, sameWorkingState)
+    workingStateStoreRef.current = createPhiStore<AppShellWorkingState | null>(
+      null,
+      sameWorkingState
+    )
   }
   const workingStateStore = workingStateStoreRef.current
   const compactRunningRef = React.useRef(false)
@@ -4319,23 +4155,27 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      const current = awaitingFirstTurnStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = awaitingFirstTurnStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      awaitingFirstTurnStore.setSnapshot(next)
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
-        ...currentComposerSnapshot,
-        awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
+      batch(() => {
+        setStoreState(awaitingFirstTurnStore, next)
+        const currentComposerSnapshot = composerStore.state
+        setStoreState(composerStore, {
+          ...currentComposerSnapshot,
+          awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
+        })
+        if (next && !sessionStateRef.current.streaming) {
+          setStoreState(workingStateStore, {
+            label: "Waiting for first response…",
+          })
+        } else if (
+          !next &&
+          workingStateStore.state?.label === "Waiting for first response…"
+        ) {
+          setStoreState(workingStateStore, null)
+        }
       })
-      if (next && !sessionStateRef.current.streaming) {
-        workingStateStore.setSnapshot({ label: "Waiting for first response…" })
-      } else if (
-        !next &&
-        workingStateStore.getSnapshot()?.label === "Waiting for first response…"
-      ) {
-        workingStateStore.setSnapshot(null)
-      }
     },
     [awaitingFirstTurnStore, composerStore, workingStateStore]
   )
@@ -4343,36 +4183,35 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      const current = isSubmittingStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = isSubmittingStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      isSubmittingStore.setSnapshot(next)
-      const currentComposerSnapshot = composerStore.getSnapshot()
-      composerStore.setSnapshot({
-        ...currentComposerSnapshot,
-        isSubmitting: currentComposerSnapshot.disabled ? false : next,
+      batch(() => {
+        setStoreState(isSubmittingStore, next)
+        const currentComposerSnapshot = composerStore.state
+        setStoreState(composerStore, {
+          ...currentComposerSnapshot,
+          isSubmitting: currentComposerSnapshot.disabled ? false : next,
+        })
       })
     },
     [composerStore, isSubmittingStore]
   )
   const refreshComposerPendingMessages = React.useCallback(() => {
-    const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore
-      .getSnapshot()
-      .map((message, index) => ({
+    const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore.state.map(
+      (message, index) => ({
         pendingId: message.optimisticId || `pending-draft:${index}`,
         text: message.message,
         images: message.images,
         streamingBehavior: message.streamingBehavior,
-      }))
-    const currentComposerSnapshot = composerStore.getSnapshot()
-    composerStore.setSnapshot({
+      })
+    )
+    const currentComposerSnapshot = composerStore.state
+    setStoreState(composerStore, {
       ...currentComposerSnapshot,
       currentPendingMessages: currentComposerSnapshot.disabled
         ? []
-        : [
-            ...pendingDraftFollowUpMessages,
-            ...pendingMessagesStore.getSnapshot(),
-          ],
+        : [...pendingDraftFollowUpMessages, ...pendingMessagesStore.state],
     })
   }, [composerStore, pendingDraftFollowUpsStore, pendingMessagesStore])
   const setPendingDraftPrompt = React.useCallback<
@@ -4387,17 +4226,21 @@ const AppShellSessionWorkspace = React.forwardRef<
     >
   >(
     (action) => {
-      const current = pendingDraftPromptStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = pendingDraftPromptStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      pendingDraftPromptStore.setSnapshot(next)
-      if (next) {
-        workingStateStore.setSnapshot({ label: "Waiting for new session…" })
-      } else if (
-        workingStateStore.getSnapshot()?.label === "Waiting for new session…"
-      ) {
-        workingStateStore.setSnapshot(null)
-      }
+      batch(() => {
+        setStoreState(pendingDraftPromptStore, next)
+        if (next) {
+          setStoreState(workingStateStore, {
+            label: "Waiting for new session…",
+          })
+        } else if (
+          workingStateStore.state?.label === "Waiting for new session…"
+        ) {
+          setStoreState(workingStateStore, null)
+        }
+      })
     },
     [pendingDraftPromptStore, workingStateStore]
   )
@@ -4414,11 +4257,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     >
   >(
     (action) => {
-      const current = pendingDraftFollowUpsStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = pendingDraftFollowUpsStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      pendingDraftFollowUpsStore.setSnapshot(next)
-      refreshComposerPendingMessages()
+      batch(() => {
+        setStoreState(pendingDraftFollowUpsStore, next)
+        refreshComposerPendingMessages()
+      })
     },
     [pendingDraftFollowUpsStore, refreshComposerPendingMessages]
   )
@@ -4426,11 +4271,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<Array<PendingComposerMessage>>>
   >(
     (action) => {
-      const current = pendingMessagesStore.getSnapshot()
-      const next = applySidebarStateAction(current, action)
+      const current = pendingMessagesStore.state
+      const next = applyStoreAction(current, action)
       if (next === current) return
-      pendingMessagesStore.setSnapshot(next)
-      refreshComposerPendingMessages()
+      batch(() => {
+        setStoreState(pendingMessagesStore, next)
+        refreshComposerPendingMessages()
+      })
     },
     [pendingMessagesStore, refreshComposerPendingMessages]
   )
@@ -4485,13 +4332,13 @@ const AppShellSessionWorkspace = React.forwardRef<
   const setHiddenThinkingPreview = React.useCallback(
     (value: string, options?: { preserveExisting?: boolean }) => {
       if (options?.preserveExisting && !value) return
-      hiddenThinkingPreviewStore.setValue(value)
+      setStoreState(hiddenThinkingPreviewStore, value)
     },
     [hiddenThinkingPreviewStore]
   )
   const setWorkingState = React.useCallback(
     (state: AppShellWorkingState | null) => {
-      workingStateStore.setSnapshot(state)
+      setStoreState(workingStateStore, state)
     },
     [workingStateStore]
   )
@@ -4544,17 +4391,17 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const { setTheme, theme } = useTheme()
   const currentTheme = normalizeThemeMode(theme)
-  const { initialLoadingSessionId, loadingSessionId } = useSelectedValueStore(
+  const { initialLoadingSessionId, loadingSessionId } = useSelector(
     appUiStore,
     (state) => ({
       initialLoadingSessionId: state.initialLoadingSessionId,
       loadingSessionId: state.loadingSessionId,
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
   const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
-    useValueStore(draftFlowStore)
-  const sessionState = useSelectedValueStore(
+    useSelector(draftFlowStore)
+  const sessionState = useSelector(
     sessionStore,
     (currentSessionState) => ({
       cwd: currentSessionState.cwd,
@@ -4563,20 +4410,19 @@ const AppShellSessionWorkspace = React.forwardRef<
       sessionId: currentSessionState.sessionId,
       sessionKey: currentSessionState.sessionKey,
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
-  const gitPanelOpen = useSelectedValueStore(
-    appUiStore,
-    (state) => state.gitPanelOpen
-  )
+  const gitPanelOpen = useSelector(appUiStore, (state) => state.gitPanelOpen)
 
   React.useEffect(() => {
     if (!sessionState.draft) return
     setGitPanelOpen(false)
   }, [sessionState.draft, setGitPanelOpen])
 
-  const sidebarWorkspaceVersion =
-    useAppShellSidebarWorkspaceVersion(sidebarStore)
+  const sidebarWorkspaceVersion = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.workspaceVersion
+  )
   void sidebarWorkspaceVersion
   const {
     baseSidebarDirectories,
@@ -4610,7 +4456,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   React.useLayoutEffect(() => {
     if (contextUsageSessionScopeRef.current === currentSessionQueryScope) return
     contextUsageSessionScopeRef.current = currentSessionQueryScope
-    contextUsageStore.setSnapshot(sessionStateRef.current.contextUsage)
+    setStoreState(contextUsageStore, sessionStateRef.current.contextUsage)
   }, [contextUsageStore, currentSessionQueryScope])
   const initialRouteLoadingSessionId =
     initialLoadingSessionId && !sessionState.sessionKey
@@ -4670,12 +4516,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerTextRef.current = nextText
     composerSkillRef.current = nextSkill
 
-    const currentDraftSeed = composerDraftSeedStore.getSnapshot()
+    const currentDraftSeed = composerDraftSeedStore.state
     if (
       currentDraftSeed.text !== nextText ||
       currentDraftSeed.skillName !== nextSkill
     ) {
-      composerDraftSeedStore.setSnapshot({
+      setStoreState(composerDraftSeedStore, {
         ...currentDraftSeed,
         text: nextText,
         skillName: nextSkill,
@@ -4873,7 +4719,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
 
   const focusPrompt = () => {
-    if (appUiStore.getSnapshot().currentTab !== "session") {
+    if (appUiStore.state.currentTab !== "session") {
       setCurrentTab("session")
     }
 
@@ -4999,7 +4845,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
       const nextKey = nextSessionId
         ? findSidebarSessionSelectionKey(
-            sidebarStore.getSnapshot().derived.sidebarSessionEntriesByKey,
+            sidebarStore.state.derived.sidebarSessionEntriesByKey,
             {
               sessionId: nextSessionId,
               sessionPath: options?.sessionPath,
@@ -5055,7 +4901,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionId,
     draftSessionLoadingOwnerKey,
     bootstrapSidebarDirectories:
-      sidebarStore.getSnapshot().state.initialSidebarBootstrapDirectories,
+      sidebarStore.state.state.initialSidebarBootstrapDirectories,
     hideToolBlocksRef,
     sessionStore,
     sessionStateRef,
@@ -5209,11 +5055,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }, [sidebarStore])
 
-  const awaitingFirstTurn = awaitingFirstTurnStore.getSnapshot()
-  const isSubmitting = isSubmittingStore.getSnapshot()
-  const pendingDraftPrompt = pendingDraftPromptStore.getSnapshot()
-  const pendingDraftFollowUps = pendingDraftFollowUpsStore.getSnapshot()
-  const pendingMessages = pendingMessagesStore.getSnapshot()
+  const awaitingFirstTurn = awaitingFirstTurnStore.state
+  const isSubmitting = isSubmittingStore.state
+  const pendingDraftPrompt = pendingDraftPromptStore.state
+  const pendingDraftFollowUps = pendingDraftFollowUpsStore.state
+  const pendingMessages = pendingMessagesStore.state
 
   const {
     abortSession,
@@ -5325,8 +5171,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
   }
 
-  const composerDraftSeed = composerDraftSeedStore.getSnapshot()
-  const composerImages = composerImagesStore.getSnapshot()
+  const composerDraftSeed = composerDraftSeedStore.state
+  const composerImages = composerImagesStore.state
   const pendingDraftFollowUpMessages = pendingDraftFollowUps.map(
     (message, index) => ({
       pendingId: pendingDraftFollowUpId(message, index),
@@ -5409,22 +5255,22 @@ const AppShellSessionWorkspace = React.forwardRef<
       if (running) {
         compactRunningRef.current = true
         compactAbortRequestedRef.current = false
-        workingStateStore.setSnapshot({ label: COMPACT_WORKING_LABEL })
+        setStoreState(workingStateStore, { label: COMPACT_WORKING_LABEL })
         return
       }
 
       compactRunningRef.current = false
       if (compactAbortRequestedRef.current) {
         compactAbortRequestedRef.current = false
-        workingStateStore.setSnapshot({
+        setStoreState(workingStateStore, {
           label: COMPACT_CANCELLED_LABEL,
           error: true,
         })
         return
       }
 
-      if (workingStateStore.getSnapshot()?.label === COMPACT_WORKING_LABEL) {
-        workingStateStore.setSnapshot(null)
+      if (workingStateStore.state?.label === COMPACT_WORKING_LABEL) {
+        setStoreState(workingStateStore, null)
       }
     },
     [workingStateStore]
@@ -5450,12 +5296,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionStateRef,
     setSessionState,
     getDirectoryIndexDataByPath: () =>
-      sidebarStore.getSnapshot().state.directoryIndexDataByPath,
+      sidebarStore.state.state.directoryIndexDataByPath,
     setDirectoryIndexDataByPath: sidebarStore.setDirectoryIndexDataByPath,
-    getSessionsEvent: () => sidebarStore.getSnapshot().state.sessionsEvent,
+    getSessionsEvent: () => sidebarStore.state.state.sessionsEvent,
     setSessionsEvent: sidebarStore.setSessionsEvent,
     getSidebarSelection: () => {
-      const sidebarState = sidebarStore.getSnapshot().state
+      const sidebarState = sidebarStore.state.state
       return {
         selectedSidebarSessionKeys: sidebarState.selectedSidebarSessionKeys,
         sidebarSessionSelectionAnchor:
@@ -5624,7 +5470,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   } satisfies AppShellComposerSnapshot
 
   React.useLayoutEffect(() => {
-    composerStore.setSnapshot(composerSnapshot)
+    setStoreState(composerStore, composerSnapshot)
   })
 
   const composerActionsRef = useLatestRef<AppShellComposerActions>({
@@ -5923,7 +5769,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   })
 
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
-    currentTab: isMobile ? appUiStore.getSnapshot().currentTab : "session",
+    currentTab: isMobile ? appUiStore.state.currentTab : "session",
     selectedSidebarSessions,
     sessionHasAvailableModels:
       sessionStateRef.current.availableModels.length > 0,
@@ -6158,11 +6004,11 @@ type AppShellSessionHeaderProps = {
   displaySessionCwd?: string
   gitPanelOpen: boolean
   loadingDisplaySessionTitle: string
-  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
+  displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
   viewerContextId: string
 }
 
@@ -6179,7 +6025,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   sessionStore,
   viewerContextId,
 }: AppShellSessionHeaderProps) {
-  const sessionHeaderState = useSelectedValueStore(
+  const sessionHeaderState = useSelector(
     sessionStore,
     (sessionState) => ({
       firstMessage: sessionState.firstMessage,
@@ -6188,9 +6034,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
       sessionName: sessionState.sessionName,
       sessionStreaming: sessionState.streaming,
     }),
-    shallowRecordEqual
+    { compare: shallowRecordEqual }
   )
-  const hideToolBlocks = useSelectedValueStore(
+  const hideToolBlocks = useSelector(
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
   )
@@ -6423,12 +6269,12 @@ type AppShellFloatingControllersProps = {
   >["onDeleteSession"]
   deleteOldDirectorySessionsDialogRef: React.RefObject<DeleteOldDirectorySessionsDialogHandle | null>
   deleteOldDirectorySessionsOpenRef: React.RefObject<boolean>
-  notificationStore: ValueStore<AppShellNotificationState>
+  notificationStore: PhiStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
   forkOpenRef: React.RefObject<boolean>
   gitCommitDialogRef: React.RefObject<GitCommitDialogControllerHandle | null>
   gitCommitOpenRef: React.RefObject<boolean>
-  displaySettingsStore: ValueStore<AppShellDisplaySettingsState>
+  displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
   onAutoScrollEnabledChange: (enabled: boolean) => void
   onCenterMessagesChange: (centered: boolean) => void
@@ -6441,7 +6287,7 @@ type AppShellFloatingControllersProps = {
     options?: SelectSessionNavigationOptions
   ) => void
   onThemeChange: (value: ThemeMode) => void
-  recentDirectoriesStore: ValueStore<Array<string>>
+  recentDirectoriesStore: PhiStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
   renameSessionPath: React.ComponentProps<
@@ -6451,7 +6297,7 @@ type AppShellFloatingControllersProps = {
   sessionsDialogDirectory: string
   sessionsDialogRef: React.RefObject<AppShellSessionsDialogHandle | null>
   sessionsOpenRef: React.RefObject<boolean>
-  sessionStore: ValueStore<SessionState>
+  sessionStore: PhiStore<SessionState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.RefObject<boolean>
   sidebarStore: AppShellSidebarStore
@@ -6566,7 +6412,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
     | "recentDirectoriesStore"
     | "sessionCwd"
   >) {
-    const recentDirectories = useValueStore(recentDirectoriesStore)
+    const recentDirectories = useSelector(recentDirectoriesStore)
     return (
       <AppShellAddDirectoryDialogController
         ref={addDirectoryDialogRef}
@@ -6683,7 +6529,7 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
   | "treeOpenRef"
   | "viewerContextId"
 >) {
-  const treeSummaryAvailable = useSelectedValueStore(
+  const treeSummaryAvailable = useSelector(
     sessionStore,
     (sessionState) => sessionState.availableModels.length > 0
   )
@@ -6731,17 +6577,17 @@ const AppShellSettingsDialogHost = React.memo(
     | "settingsDialogRef"
     | "settingsOpenRef"
   >) {
-    const hideThinkingBlocks = useSelectedValueStore(
+    const hideThinkingBlocks = useSelector(
       sessionStore,
       (sessionState) => sessionState.hideThinkingBlock
     )
     const { autoScrollEnabled, centerMessages, hideToolBlocks } =
-      useValueStore(displaySettingsStore)
+      useSelector(displaySettingsStore)
     const {
       desktopNotificationPermission,
       sessionDoneDesktopNotificationsEnabled,
       sessionDoneSoundEnabled,
-    } = useSelectedValueStore(
+    } = useSelector(
       notificationStore,
       (state) => ({
         desktopNotificationPermission: state.desktopNotificationPermission,
@@ -6749,7 +6595,7 @@ const AppShellSettingsDialogHost = React.memo(
           state.sessionDoneDesktopNotificationsEnabled,
         sessionDoneSoundEnabled: state.sessionDoneSoundEnabled,
       }),
-      shallowRecordEqual
+      { compare: shallowRecordEqual }
     )
 
     return (
@@ -7173,7 +7019,7 @@ function AppShellSidebarController({
     const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
 
-    sidebarStore.setState((current) => {
+    sidebarStore.setSidebarState((current) => {
       const merged = payloadDirectories.length
         ? mergeDirectoryIndexData(
             current.directoryIndexDataByPath,
@@ -7289,7 +7135,7 @@ function AppShellSidebarController({
             .filter((entry) => Boolean(entry[1]))
         )
 
-        sidebarStore.setState((current) => {
+        sidebarStore.setSidebarState((current) => {
           const nextDirectoryIndexDataByPath =
             Object.keys(activeDirectoryIndexes).length > 0
               ? mergeDirectoryIndexData(
@@ -7406,7 +7252,7 @@ function AppShellSidebarController({
             .filter((entry) => Boolean(entry[1]))
         )
 
-        sidebarStore.setState((current) => {
+        sidebarStore.setSidebarState((current) => {
           const nextDirectoryIndexDataByPath =
             Object.keys(activeDirectoryIndexes).length > 0
               ? mergeDirectoryIndexData(
@@ -7673,7 +7519,7 @@ export function PhiAppShell({
       0,
       INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
     )
-    sidebarStore.setState((current) => {
+    sidebarStore.setSidebarState((current) => {
       if (
         sameStringArray(current.sidebarDirectories, nextDirectories) &&
         sameStringArray(

@@ -1,6 +1,11 @@
 import * as React from "react"
 
 import type { SessionState } from "@/lib/phi"
+import {
+  createPhiStore,
+  useSelector,
+  type PhiStore,
+} from "@/features/phi/tanstack-store-utils"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -72,15 +77,10 @@ type ComposerContextUsageSnapshot = {
 
 type ContextUsageRecord = NonNullable<SessionState["contextUsage"]>
 
-export type ComposerContextUsageStore = {
-  getSnapshot: () => SessionState["contextUsage"]
-  subscribe: (listener: () => void) => () => void
-}
+export type ComposerContextUsageStore = PhiStore<SessionState["contextUsage"]>
 
-const emptyContextUsageStore: ComposerContextUsageStore = {
-  getSnapshot: () => undefined,
-  subscribe: () => () => {},
-}
+const emptyContextUsageStore: ComposerContextUsageStore =
+  createPhiStore<SessionState["contextUsage"]>(undefined)
 
 type ProviderUsageWindow = {
   label: string
@@ -300,24 +300,9 @@ function sameComposerContextUsageSnapshot(
 function useComposerContextUsageSnapshot(
   contextUsageStore: ComposerContextUsageStore
 ) {
-  const snapshotRef = React.useRef<ComposerContextUsageSnapshot | undefined>(
-    undefined
-  )
-
-  return React.useSyncExternalStore(
-    contextUsageStore.subscribe,
-    () => {
-      const nextSnapshot = getComposerContextUsageSnapshot(
-        contextUsageStore.getSnapshot()
-      )
-      if (sameComposerContextUsageSnapshot(snapshotRef.current, nextSnapshot)) {
-        return snapshotRef.current
-      }
-      snapshotRef.current = nextSnapshot
-      return nextSnapshot
-    },
-    () => undefined
-  )
+  return useSelector(contextUsageStore, getComposerContextUsageSnapshot, {
+    compare: sameComposerContextUsageSnapshot,
+  })
 }
 
 function formatContextUsageQuotaPercent(value: number | null) {

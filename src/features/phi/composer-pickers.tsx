@@ -21,6 +21,7 @@ import {
   ComposerContextUsageIndicator,
   type ComposerContextUsageStore,
 } from "@/features/phi/composer-context-usage-indicator"
+import { useSelector, type PhiStore } from "@/features/phi/tanstack-store-utils"
 
 function thinkingLabel(level: string) {
   switch (level) {
@@ -45,10 +46,7 @@ function currentModelValue(model?: ModelOption) {
   return model ? `${model.provider}/${model.id}` : ""
 }
 
-type ComposerPickerSessionStore = {
-  getSnapshot: () => SessionState
-  subscribe: (listener: () => void) => () => void
-}
+type ComposerPickerSessionStore = PhiStore<SessionState>
 
 type ModelPickerState = {
   availableModels: Array<ModelOption>
@@ -91,57 +89,25 @@ function sameThinkingPickerState(
 }
 
 function useModelPickerState(store: ComposerPickerSessionStore) {
-  const cacheRef = React.useRef<{
-    selected?: ModelPickerState
-    source?: SessionState
-  }>({})
-
-  const getSnapshot = () => {
-    const source = store.getSnapshot()
-    const cache = cacheRef.current
-    if (cache.source === source && cache.selected) return cache.selected
-
-    const selected = {
+  return useSelector(
+    store,
+    (source) => ({
       availableModels: source.availableModels,
       model: source.model,
-    }
-    if (cache.selected && sameModelPickerState(cache.selected, selected)) {
-      cacheRef.current = { source, selected: cache.selected }
-      return cache.selected
-    }
-
-    cacheRef.current = { source, selected }
-    return selected
-  }
-
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+    }),
+    { compare: sameModelPickerState }
+  )
 }
 
 function useThinkingPickerState(store: ComposerPickerSessionStore) {
-  const cacheRef = React.useRef<{
-    selected?: ThinkingPickerState
-    source?: SessionState
-  }>({})
-
-  const getSnapshot = () => {
-    const source = store.getSnapshot()
-    const cache = cacheRef.current
-    if (cache.source === source && cache.selected) return cache.selected
-
-    const selected = {
+  return useSelector(
+    store,
+    (source) => ({
       availableThinkingLevels: source.availableThinkingLevels,
       thinkingLevel: source.thinkingLevel,
-    }
-    if (cache.selected && sameThinkingPickerState(cache.selected, selected)) {
-      cacheRef.current = { source, selected: cache.selected }
-      return cache.selected
-    }
-
-    cacheRef.current = { source, selected }
-    return selected
-  }
-
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+    }),
+    { compare: sameThinkingPickerState }
+  )
 }
 
 const ComposerModelPicker = React.memo(function ComposerModelPicker({
@@ -262,10 +228,9 @@ const ComposerContextUsageIndicatorHost = React.memo(
     disabled: boolean
     sessionStore: ComposerPickerSessionStore
   }) {
-    const modelProvider = React.useSyncExternalStore(
-      sessionStore.subscribe,
-      () => sessionStore.getSnapshot().model?.provider,
-      () => sessionStore.getSnapshot().model?.provider
+    const modelProvider = useSelector(
+      sessionStore,
+      (sessionState) => sessionState.model?.provider
     )
 
     return (

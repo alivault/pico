@@ -22,6 +22,11 @@ import {
 import { serializeComposerDraft } from "@/features/phi/composer-utils"
 import { phiQueryKeys } from "@/features/phi/query-keys"
 import {
+  batch,
+  useSelector,
+  type PhiStore,
+} from "@/features/phi/tanstack-store-utils"
+import {
   normalizePromptImage,
   promptDraftKey,
   readStoredPromptDraft,
@@ -45,10 +50,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type SessionStateStore = {
-  getSnapshot: () => SessionState
-  subscribe: (listener: () => void) => () => void
-}
+type SessionStateStore = PhiStore<SessionState>
 
 type SyncedWorkingState = {
   label: string
@@ -465,16 +467,14 @@ export function useAppShellSessionSync({
     initialEventsSessionIdRef.current = sessionId
   }, [sessionId])
 
-  const syncedSessionId = React.useSyncExternalStore(
-    sessionStore.subscribe,
-    () => sessionStore.getSnapshot().sessionId,
-    () => sessionStore.getSnapshot().sessionId
+  const syncedSessionId = useSelector(
+    sessionStore,
+    (sessionState) => sessionState.sessionId
   )
   const syncedSessionIdRef = React.useRef(syncedSessionId)
-  const syncedSessionDraft = React.useSyncExternalStore(
-    sessionStore.subscribe,
-    () => sessionStore.getSnapshot().draft,
-    () => sessionStore.getSnapshot().draft
+  const syncedSessionDraft = useSelector(
+    sessionStore,
+    (sessionState) => sessionState.draft
   )
 
   React.useEffect(() => {
@@ -649,95 +649,99 @@ export function useAppShellSessionSync({
             nextState.uiState.editorText ??
             "")
 
-        sessionStateRef.current = nextState
-        setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
-          preserveExisting: Boolean(
-            previousState.streaming &&
-            nextState.streaming &&
-            !nextState.hiddenThinkingPreview
-          ),
+        batch(() => {
+          sessionStateRef.current = nextState
+          setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
+            preserveExisting: Boolean(
+              previousState.streaming &&
+              nextState.streaming &&
+              !nextState.hiddenThinkingPreview
+            ),
+          })
+          if (previousState.contextUsage !== nextState.contextUsage) {
+            setComposerContextUsage(nextState.contextUsage)
+          }
+          if (previousState.streaming !== nextState.streaming) {
+            setComposerStreaming(nextState.streaming)
+          }
+          if (previousState.streaming || nextState.streaming) {
+            setWorkingState(
+              nextState.streaming
+                ? { label: nextState.uiState.workingMessage || "Working…" }
+                : null
+            )
+          }
+          const forceConversationSync =
+            previousState.sessionKey !== nextState.sessionKey ||
+            previousState.sessionId !== nextState.sessionId ||
+            previousState.sessionFile !== nextState.sessionFile
+          if (
+            forceConversationSync ||
+            !sameVisibleConversation(previousState.items, nextState.items, {
+              hideThinking: nextState.hideThinkingBlock,
+              hideToolBlocks: hideToolBlocksRef.current,
+            })
+          ) {
+            setConversationItems(nextState.items)
+          }
+          if (shouldPublishSessionState(previousState, nextState)) {
+            setSessionState(nextState)
+          }
+
+          if (
+            previousState.sessionKey !== nextState.sessionKey ||
+            previousState.sessionId !== nextState.sessionId ||
+            previousState.sessionFile !== nextState.sessionFile ||
+            previousState.streaming !== nextState.streaming
+          ) {
+            applySidebarSessionStatusRef.current({
+              type: "session_status",
+              sessionKey: nextState.sessionKey,
+              sessionId: nextState.sessionId,
+              sessionPath: nextState.sessionFile,
+              streaming: nextState.streaming,
+              unread: false,
+            })
+          }
+
+          if (sessionChanged) {
+            setSessionsEvent((current) => {
+              if (!current) return current
+              const nextSessionsEvent = {
+                ...current,
+                activeSessionId: nextState.sessionId,
+                activeSessionKey: nextState.sessionKey,
+                activeSessionPath: nextState.sessionFile,
+              }
+              return sameSessionsEvent(current, nextSessionsEvent)
+                ? current
+                : nextSessionsEvent
+            })
+          }
+
+          if (sessionChanged) {
+            setComposerImages((current) =>
+              current.length === 0 ? current : []
+            )
+          }
+
+          if (shouldClearDraftRoute) {
+            handleSelectSessionRef.current(undefined, { replace: true })
+          }
+
+          if (!preserveLocalPrompt) {
+            replaceComposerDraftRef.current(nextPromptText, nextState)
+          }
+          lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
+          const nextPendingMessages = normalizePendingMessages(payload)
+          if (nextPendingMessages) {
+            setPendingMessages((current) =>
+              samePendingMessages(current, nextPendingMessages)
+                ? current
+                : nextPendingMessages
+            )
+          }
         })
-        if (previousState.contextUsage !== nextState.contextUsage) {
-          setComposerContextUsage(nextState.contextUsage)
-        }
-        if (previousState.streaming !== nextState.streaming) {
-          setComposerStreaming(nextState.streaming)
-        }
-        if (previousState.streaming || nextState.streaming) {
-          setWorkingState(
-            nextState.streaming
-              ? { label: nextState.uiState.workingMessage || "Working…" }
-              : null
-          )
-        }
-        const forceConversationSync =
-          previousState.sessionKey !== nextState.sessionKey ||
-          previousState.sessionId !== nextState.sessionId ||
-          previousState.sessionFile !== nextState.sessionFile
-        if (
-          forceConversationSync ||
-          !sameVisibleConversation(previousState.items, nextState.items, {
-            hideThinking: nextState.hideThinkingBlock,
-            hideToolBlocks: hideToolBlocksRef.current,
-          })
-        ) {
-          setConversationItems(nextState.items)
-        }
-        if (shouldPublishSessionState(previousState, nextState)) {
-          setSessionState(nextState)
-        }
-
-        if (
-          previousState.sessionKey !== nextState.sessionKey ||
-          previousState.sessionId !== nextState.sessionId ||
-          previousState.sessionFile !== nextState.sessionFile ||
-          previousState.streaming !== nextState.streaming
-        ) {
-          applySidebarSessionStatusRef.current({
-            type: "session_status",
-            sessionKey: nextState.sessionKey,
-            sessionId: nextState.sessionId,
-            sessionPath: nextState.sessionFile,
-            streaming: nextState.streaming,
-            unread: false,
-          })
-        }
-
-        if (sessionChanged) {
-          setSessionsEvent((current) => {
-            if (!current) return current
-            const nextSessionsEvent = {
-              ...current,
-              activeSessionId: nextState.sessionId,
-              activeSessionKey: nextState.sessionKey,
-              activeSessionPath: nextState.sessionFile,
-            }
-            return sameSessionsEvent(current, nextSessionsEvent)
-              ? current
-              : nextSessionsEvent
-          })
-        }
-
-        if (sessionChanged) {
-          setComposerImages((current) => (current.length === 0 ? current : []))
-        }
-
-        if (shouldClearDraftRoute) {
-          handleSelectSessionRef.current(undefined, { replace: true })
-        }
-
-        if (!preserveLocalPrompt) {
-          replaceComposerDraftRef.current(nextPromptText, nextState)
-        }
-        lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
-        const nextPendingMessages = normalizePendingMessages(payload)
-        if (nextPendingMessages) {
-          setPendingMessages((current) =>
-            samePendingMessages(current, nextPendingMessages)
-              ? current
-              : nextPendingMessages
-          )
-        }
         return
       }
 

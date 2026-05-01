@@ -74,6 +74,12 @@ import {
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/phi"
+import {
+  createPhiStore,
+  setStoreState,
+  useSelector,
+  type PhiStore,
+} from "@/features/phi/tanstack-store-utils"
 import { cn } from "@/lib/utils"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
@@ -291,94 +297,91 @@ function directoryOrderEqual(left: Array<string>, right: Array<string>) {
   return left.every((directory, index) => directory === right[index])
 }
 
-type CollapsedDirectoryStore = {
-  subscribe: (listener: () => void) => () => void
-  isCollapsed: (directory: string) => boolean
-  areAllCollapsed: (directories: Array<string>) => boolean
+type CollapsedDirectoryState = Record<string, boolean>
+
+type CollapsedDirectoryStore = PhiStore<CollapsedDirectoryState> & {
   loadStored: () => void
   toggle: (directory: string) => void
   setAll: (directories: Array<string>, collapsed: boolean) => void
   remove: (directory: string) => void
 }
 
-function createCollapsedDirectoryStore(): CollapsedDirectoryStore {
-  let collapsedDirectories: Record<string, boolean> = {}
-  const listeners = new Set<() => void>()
+function sameCollapsedDirectoryState(
+  left: CollapsedDirectoryState,
+  right: CollapsedDirectoryState
+) {
+  const leftKeys = Object.keys(left).sort()
+  const rightKeys = Object.keys(right).sort()
+  if (!directoryOrderEqual(leftKeys, rightKeys)) return false
 
-  const notify = () => {
-    for (const listener of listeners) {
-      listener()
-    }
-  }
+  return leftKeys.every((key) => Boolean(left[key]) === Boolean(right[key]))
+}
+
+function createCollapsedDirectoryStore(): CollapsedDirectoryStore {
+  const store = createPhiStore<CollapsedDirectoryState>(
+    {},
+    sameCollapsedDirectoryState
+  ) as CollapsedDirectoryStore
 
   const persist = () => {
     safeLocalStorageSetItem(
       COLLAPSED_DIRECTORIES_STORAGE_KEY,
-      JSON.stringify(collapsedDirectories)
+      JSON.stringify(store.state)
     )
   }
 
-  return {
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    isCollapsed(directory) {
-      return Boolean(collapsedDirectories[directory])
-    },
-    areAllCollapsed(directories) {
-      return (
-        directories.length > 0 &&
-        directories.every((directory) => collapsedDirectories[directory])
-      )
-    },
+  Object.assign(store, {
     loadStored() {
-      collapsedDirectories = readStoredCollapsedDirectories()
-      notify()
+      setStoreState(store, readStoredCollapsedDirectories())
     },
     toggle(directory) {
-      const next = { ...collapsedDirectories }
-      if (next[directory]) {
-        delete next[directory]
-      } else {
-        next[directory] = true
-      }
-      collapsedDirectories = next
+      setStoreState(store, (current) => {
+        const next = { ...current }
+        if (next[directory]) {
+          delete next[directory]
+        } else {
+          next[directory] = true
+        }
+        return next
+      })
       persist()
-      notify()
     },
     setAll(directories, collapsed) {
-      let changed = false
-      const next = { ...collapsedDirectories }
+      setStoreState(store, (current) => {
+        let changed = false
+        const next = { ...current }
 
-      for (const directory of directories) {
-        if (collapsed) {
-          if (next[directory]) continue
-          next[directory] = true
-          changed = true
-        } else {
-          if (!next[directory]) continue
-          delete next[directory]
-          changed = true
+        for (const directory of directories) {
+          if (collapsed) {
+            if (next[directory]) continue
+            next[directory] = true
+            changed = true
+          } else {
+            if (!next[directory]) continue
+            delete next[directory]
+            changed = true
+          }
         }
-      }
 
-      if (!changed) return
-      collapsedDirectories = next
+        return changed ? next : current
+      })
       persist()
-      notify()
     },
     remove(directory) {
-      if (!collapsedDirectories[directory]) return
-      const next = { ...collapsedDirectories }
-      delete next[directory]
-      collapsedDirectories = next
+      setStoreState(store, (current) => {
+        if (!current[directory]) return current
+        const next = { ...current }
+        delete next[directory]
+        return next
+      })
       persist()
-      notify()
     },
-  }
+  } satisfies Omit<
+    CollapsedDirectoryStore,
+    keyof PhiStore<CollapsedDirectoryState>
+  >)
+
+  return store
 }
 
 function useDirectoryCollapsed(
@@ -386,10 +389,8 @@ function useDirectoryCollapsed(
   directory: string,
   searchActive: boolean
 ) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    () => (searchActive ? false : store.isCollapsed(directory)),
-    () => false
+  return useSelector(store, (collapsedDirectories) =>
+    searchActive ? false : Boolean(collapsedDirectories[directory])
   )
 }
 
@@ -397,10 +398,11 @@ function useAllDirectoriesCollapsed(
   store: CollapsedDirectoryStore,
   directories: Array<string>
 ) {
-  return React.useSyncExternalStore(
-    store.subscribe,
-    () => store.areAllCollapsed(directories),
-    () => false
+  return useSelector(
+    store,
+    (collapsedDirectories) =>
+      directories.length > 0 &&
+      directories.every((directory) => collapsedDirectories[directory])
   )
 }
 
@@ -471,62 +473,45 @@ function SortableDirectoryGroup({
   )
 }
 
-type SelectedSessionKeyStore = {
-  subscribeKey: (key: string, listener: () => void) => () => void
-  isSelected: (key: string) => boolean
+type SelectedSessionKeyStore = PhiStore<ReadonlySet<string>> & {
   setKeys: (keys: Array<string>) => void
 }
 
-type ActiveSidebarSessionStore = {
-  subscribeEntry: (
-    entryKey: string,
-    sessionId: string | undefined,
-    listener: () => void
-  ) => () => void
-  isActive: (entryKey: string, sessionId: string | undefined) => boolean
+type ActiveSidebarSessionState = {
+  sessionId: string
+  sessionKey: string
+}
+
+type ActiveSidebarSessionStore = PhiStore<ActiveSidebarSessionState> & {
   setActive: (active: { sessionId?: string; sessionKey?: string }) => void
 }
 
+function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  if (left.size !== right.size) return false
+
+  for (const key of left) {
+    if (!right.has(key)) return false
+  }
+
+  return true
+}
+
 function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
-  let selectedKeys = new Set<string>()
-  const listenersByKey = new Map<string, Set<() => void>>()
+  const store = createPhiStore<ReadonlySet<string>>(
+    new Set(),
+    sameStringSet
+  ) as SelectedSessionKeyStore
 
-  const notifyKey = (key: string) => {
-    const listeners = listenersByKey.get(key)
-    if (!listeners) return
-    for (const listener of listeners) listener()
-  }
-
-  return {
-    subscribeKey(key, listener) {
-      if (!key) return () => {}
-      const listeners = listenersByKey.get(key) ?? new Set<() => void>()
-      listeners.add(listener)
-      listenersByKey.set(key, listeners)
-      return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0) {
-          listenersByKey.delete(key)
-        }
-      }
-    },
-    isSelected(key) {
-      return Boolean(key && selectedKeys.has(key))
-    },
+  Object.assign(store, {
     setKeys(keys) {
-      const nextKeys = new Set(keys.filter(Boolean))
-      const changedKeys = new Set<string>()
-      for (const key of selectedKeys) {
-        if (!nextKeys.has(key)) changedKeys.add(key)
-      }
-      for (const key of nextKeys) {
-        if (!selectedKeys.has(key)) changedKeys.add(key)
-      }
-      if (changedKeys.size === 0) return
-      selectedKeys = nextKeys
-      for (const key of changedKeys) notifyKey(key)
+      setStoreState(store, new Set(keys.filter(Boolean)))
     },
-  }
+  } satisfies Omit<
+    SelectedSessionKeyStore,
+    keyof PhiStore<ReadonlySet<string>>
+  >)
+
+  return store
 }
 
 function normalizeActiveSidebarSessionKey(sessionKey: string | undefined) {
@@ -540,84 +525,40 @@ function normalizeActiveSidebarSessionKey(sessionKey: string | undefined) {
 }
 
 function createActiveSidebarSessionStore(): ActiveSidebarSessionStore {
-  let activeSessionId = ""
-  let activeSessionKey = ""
-  const listenersByKey = new Map<string, Set<() => void>>()
+  const store = createPhiStore<ActiveSidebarSessionState>({
+    sessionId: "",
+    sessionKey: "",
+  }) as ActiveSidebarSessionStore
 
-  const subscriptionKeys = (entryKey: string, sessionId: string | undefined) =>
-    [
-      entryKey ? `key:${entryKey}` : "",
-      sessionId ? `id:${sessionId}` : "",
-    ].filter(Boolean)
-
-  const notifyKey = (key: string) => {
-    const listeners = listenersByKey.get(key)
-    if (!listeners) return
-    for (const listener of listeners) listener()
-  }
-
-  return {
-    subscribeEntry(entryKey, sessionId, listener) {
-      const keys = subscriptionKeys(entryKey, sessionId)
-      if (keys.length === 0) return () => {}
-
-      for (const key of keys) {
-        const listeners = listenersByKey.get(key) ?? new Set<() => void>()
-        listeners.add(listener)
-        listenersByKey.set(key, listeners)
-      }
-
-      return () => {
-        for (const key of keys) {
-          const listeners = listenersByKey.get(key)
-          if (!listeners) continue
-          listeners.delete(listener)
-          if (listeners.size === 0) {
-            listenersByKey.delete(key)
-          }
-        }
-      }
-    },
-    isActive(entryKey, sessionId) {
-      if (activeSessionKey && entryKey === activeSessionKey) return true
-      return Boolean(activeSessionId && sessionId === activeSessionId)
-    },
+  Object.assign(store, {
     setActive(active) {
-      const nextSessionId = active.sessionId || ""
-      const nextSessionKey = normalizeActiveSidebarSessionKey(active.sessionKey)
-      if (
-        activeSessionId === nextSessionId &&
-        activeSessionKey === nextSessionKey
-      ) {
-        return
-      }
+      const sessionId = active.sessionId || ""
+      const sessionKey = normalizeActiveSidebarSessionKey(active.sessionKey)
+      setStoreState(store, (current) => {
+        if (
+          current.sessionId === sessionId &&
+          current.sessionKey === sessionKey
+        ) {
+          return current
+        }
 
-      const changedKeys = new Set([
-        activeSessionKey ? `key:${activeSessionKey}` : "",
-        nextSessionKey ? `key:${nextSessionKey}` : "",
-        activeSessionId ? `id:${activeSessionId}` : "",
-        nextSessionId ? `id:${nextSessionId}` : "",
-      ])
-      activeSessionId = nextSessionId
-      activeSessionKey = nextSessionKey
-      for (const key of changedKeys) {
-        if (key) notifyKey(key)
-      }
+        return { sessionId, sessionKey }
+      })
     },
-  }
+  } satisfies Omit<
+    ActiveSidebarSessionStore,
+    keyof PhiStore<ActiveSidebarSessionState>
+  >)
+
+  return store
 }
 
 function useSidebarSessionSelected(
   store: SelectedSessionKeyStore,
   entryKey: string
 ) {
-  return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeKey(entryKey, listener),
-      [entryKey, store]
-    ),
-    () => store.isSelected(entryKey),
-    () => false
+  return useSelector(store, (selectedKeys) =>
+    Boolean(entryKey && selectedKeys.has(entryKey))
   )
 }
 
@@ -626,14 +567,10 @@ function useSidebarSessionActive(
   entryKey: string,
   sessionId: string | undefined
 ) {
-  return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeEntry(entryKey, sessionId, listener),
-      [entryKey, sessionId, store]
-    ),
-    () => store.isActive(entryKey, sessionId),
-    () => false
-  )
+  return useSelector(store, (active) => {
+    if (active.sessionKey && entryKey === active.sessionKey) return true
+    return Boolean(active.sessionId && sessionId === active.sessionId)
+  })
 }
 
 type SidebarSessionItemProps = {
@@ -775,15 +712,17 @@ type DirectorySessionsSnapshot = {
   isLoadingSessions: boolean
 }
 
-export type DirectorySessionsStore = {
-  getSnapshot: (directory: string) => DirectorySessionsSnapshot
-  getEntrySnapshot: (entryKey: string) => SessionListEntry | undefined
+type DirectorySessionsState = {
+  sessionKeysByDirectory: Record<string, Array<string>>
+  entriesByKey: Map<string, SessionListEntry>
+  loadingByDirectory: Record<string, boolean>
+}
+
+export type DirectorySessionsStore = PhiStore<DirectorySessionsState> & {
   setData: (
     sessionsByDirectory: Record<string, Array<SessionListEntry>>,
     loadingByDirectory: Record<string, boolean>
   ) => void
-  subscribeDirectory: (directory: string, listener: () => void) => () => void
-  subscribeEntry: (entryKey: string, listener: () => void) => () => void
 }
 
 function sameDirectorySessionEntry(
@@ -839,147 +778,102 @@ function buildDirectorySessionKeys(
   return sessionKeysByDirectory
 }
 
+function sameDirectorySessionsSnapshot(
+  left: DirectorySessionsSnapshot,
+  right: DirectorySessionsSnapshot
+) {
+  return (
+    left.isLoadingSessions === right.isLoadingSessions &&
+    directoryOrderEqual(left.sessionKeys, right.sessionKeys)
+  )
+}
+
+function sameDirectorySessionsState(
+  left: DirectorySessionsState,
+  right: DirectorySessionsState
+) {
+  const directories = new Set([
+    ...Object.keys(left.sessionKeysByDirectory),
+    ...Object.keys(left.loadingByDirectory),
+    ...Object.keys(right.sessionKeysByDirectory),
+    ...Object.keys(right.loadingByDirectory),
+  ])
+
+  for (const directory of directories) {
+    if (
+      !directoryOrderEqual(
+        left.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
+        right.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS
+      ) ||
+      Boolean(left.loadingByDirectory[directory]) !==
+        Boolean(right.loadingByDirectory[directory])
+    ) {
+      return false
+    }
+  }
+
+  const entryKeys = new Set([
+    ...left.entriesByKey.keys(),
+    ...right.entriesByKey.keys(),
+  ])
+
+  for (const entryKey of entryKeys) {
+    if (
+      !sameDirectorySessionEntry(
+        left.entriesByKey.get(entryKey),
+        right.entriesByKey.get(entryKey)
+      )
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
 export function createDirectorySessionsStore(
   sessionsByDirectory: Record<string, Array<SessionListEntry>>,
   loadingByDirectory: Record<string, boolean>
 ): DirectorySessionsStore {
-  let sessionKeysByDirectory = buildDirectorySessionKeys(sessionsByDirectory)
-  let entriesByKey = buildDirectorySessionEntryMap(sessionsByDirectory)
-  let snapshots = new Map<string, DirectorySessionsSnapshot>()
-  const listenersByDirectory = new Map<string, Set<() => void>>()
-  const listenersByEntry = new Map<string, Set<() => void>>()
-
-  const readSnapshot = (directory: string) => ({
-    sessionKeys:
-      sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
-    isLoadingSessions: Boolean(loadingByDirectory[directory]),
-  })
-
-  const notifyDirectory = (directory: string) => {
-    const listeners = listenersByDirectory.get(directory)
-    if (!listeners) return
-    for (const listener of listeners) listener()
-  }
-
-  const notifyEntry = (entryKey: string) => {
-    const listeners = listenersByEntry.get(entryKey)
-    if (!listeners) return
-    for (const listener of listeners) listener()
-  }
-
-  const getCachedSnapshot = (directory: string) => {
-    const snapshot = snapshots.get(directory)
-    if (snapshot) return snapshot
-
-    const nextSnapshot = readSnapshot(directory)
-    snapshots.set(directory, nextSnapshot)
-    return nextSnapshot
-  }
-
-  for (const directory of new Set([
-    ...Object.keys(sessionKeysByDirectory),
-    ...Object.keys(loadingByDirectory),
-  ])) {
-    snapshots.set(directory, readSnapshot(directory))
-  }
-
-  return {
-    getSnapshot(directory) {
-      return getCachedSnapshot(directory)
+  const store = createPhiStore<DirectorySessionsState>(
+    {
+      sessionKeysByDirectory: buildDirectorySessionKeys(sessionsByDirectory),
+      entriesByKey: buildDirectorySessionEntryMap(sessionsByDirectory),
+      loadingByDirectory,
     },
-    getEntrySnapshot(entryKey) {
-      return entriesByKey.get(entryKey)
-    },
+    sameDirectorySessionsState
+  ) as DirectorySessionsStore
+
+  Object.assign(store, {
     setData(nextSessionsByDirectory, nextLoadingByDirectory) {
-      const nextSessionKeysByDirectory = buildDirectorySessionKeys(
-        nextSessionsByDirectory
-      )
-      const nextEntriesByKey = buildDirectorySessionEntryMap(
-        nextSessionsByDirectory
-      )
-      const directories = new Set([
-        ...Object.keys(sessionKeysByDirectory),
-        ...Object.keys(loadingByDirectory),
-        ...Object.keys(nextSessionKeysByDirectory),
-        ...Object.keys(nextLoadingByDirectory),
-      ])
-      const previousEntriesByKey = entriesByKey
-      const entryKeys = new Set([
-        ...previousEntriesByKey.keys(),
-        ...nextEntriesByKey.keys(),
-      ])
-
-      sessionKeysByDirectory = nextSessionKeysByDirectory
-      entriesByKey = nextEntriesByKey
-      loadingByDirectory = nextLoadingByDirectory
-
-      for (const entryKey of entryKeys) {
-        if (
-          sameDirectorySessionEntry(
-            previousEntriesByKey.get(entryKey),
-            nextEntriesByKey.get(entryKey)
-          )
-        ) {
-          continue
-        }
-        notifyEntry(entryKey)
-      }
-
-      for (const directory of directories) {
-        const previous = snapshots.get(directory)
-        const next = readSnapshot(directory)
-        if (
-          previous &&
-          directoryOrderEqual(previous.sessionKeys, next.sessionKeys) &&
-          previous.isLoadingSessions === next.isLoadingSessions
-        ) {
-          snapshots.set(directory, previous)
-          continue
-        }
-
-        snapshots.set(directory, next)
-        notifyDirectory(directory)
-      }
+      setStoreState(store, {
+        sessionKeysByDirectory: buildDirectorySessionKeys(
+          nextSessionsByDirectory
+        ),
+        entriesByKey: buildDirectorySessionEntryMap(nextSessionsByDirectory),
+        loadingByDirectory: nextLoadingByDirectory,
+      })
     },
-    subscribeDirectory(directory, listener) {
-      const listeners = listenersByDirectory.get(directory) ?? new Set()
-      listeners.add(listener)
-      listenersByDirectory.set(directory, listeners)
+  } satisfies Omit<
+    DirectorySessionsStore,
+    keyof PhiStore<DirectorySessionsState>
+  >)
 
-      return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0) {
-          listenersByDirectory.delete(directory)
-        }
-      }
-    },
-    subscribeEntry(entryKey, listener) {
-      if (!entryKey) return () => {}
-      const listeners = listenersByEntry.get(entryKey) ?? new Set()
-      listeners.add(listener)
-      listenersByEntry.set(entryKey, listeners)
-
-      return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0) {
-          listenersByEntry.delete(entryKey)
-        }
-      }
-    },
-  }
+  return store
 }
 
 function useDirectorySessions(
   store: DirectorySessionsStore,
   directory: string
 ) {
-  return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeDirectory(directory, listener),
-      [directory, store]
-    ),
-    () => store.getSnapshot(directory),
-    () => store.getSnapshot(directory)
+  return useSelector(
+    store,
+    (state) => ({
+      sessionKeys:
+        state.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
+      isLoadingSessions: Boolean(state.loadingByDirectory[directory]),
+    }),
+    { compare: sameDirectorySessionsSnapshot }
   )
 }
 
@@ -987,14 +881,9 @@ function useDirectorySessionEntry(
   store: DirectorySessionsStore,
   entryKey: string
 ) {
-  return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeEntry(entryKey, listener),
-      [entryKey, store]
-    ),
-    () => store.getEntrySnapshot(entryKey),
-    () => store.getEntrySnapshot(entryKey)
-  )
+  return useSelector(store, (state) => state.entriesByKey.get(entryKey), {
+    compare: sameDirectorySessionEntry,
+  })
 }
 
 type DirectorySessionGroupProps = {

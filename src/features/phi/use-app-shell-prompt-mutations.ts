@@ -12,6 +12,7 @@ import type {
 } from "@/lib/phi/api"
 
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import { useSelector, type PhiStore } from "@/features/phi/tanstack-store-utils"
 import { serializeComposerDraft } from "@/features/phi/composer-utils"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
@@ -45,10 +46,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type SessionStateStore = {
-  getSnapshot: () => SessionState
-  subscribe: (listener: () => void) => () => void
-}
+type SessionStateStore = PhiStore<SessionState>
 
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
@@ -124,33 +122,18 @@ function samePromptMutationSessionSnapshot(
 }
 
 function usePromptMutationSessionSnapshot(store: SessionStateStore) {
-  const cacheRef = React.useRef<PromptMutationSessionSnapshot | undefined>(
-    undefined
-  )
-
-  const getSnapshot = () => {
-    const sessionState = store.getSnapshot()
-    const nextSnapshot = {
+  return useSelector(
+    store,
+    (sessionState) => ({
       cwd: sessionState.cwd,
       draft: sessionState.draft,
       sessionFile: sessionState.sessionFile,
       sessionId: sessionState.sessionId,
       sessionKey: sessionState.sessionKey,
       streaming: sessionState.streaming,
-    }
-    const previousSnapshot = cacheRef.current
-    if (
-      previousSnapshot &&
-      samePromptMutationSessionSnapshot(previousSnapshot, nextSnapshot)
-    ) {
-      return previousSnapshot
-    }
-
-    cacheRef.current = nextSnapshot
-    return nextSnapshot
-  }
-
-  return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+    }),
+    { compare: samePromptMutationSessionSnapshot }
+  )
 }
 
 function normalizeQueuedStreamingBehavior(

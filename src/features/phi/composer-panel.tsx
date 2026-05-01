@@ -13,6 +13,11 @@ import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/phi"
 import type { CompletionItem } from "@/lib/phi/api"
 
 import type { SlashCommandDescriptor } from "@/features/phi/composer-utils"
+import {
+  shallow,
+  useSelector,
+  type PhiStore,
+} from "@/features/phi/tanstack-store-utils"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -46,15 +51,13 @@ export type ComposerPanelHandle = {
 
 type ImageFileSelection = FileList | Array<File> | null
 
-type ComposerSessionStore = {
-  getSnapshot: () => SessionState
-  subscribe: (listener: () => void) => () => void
-}
+type ComposerSessionStore = PhiStore<SessionState>
 
-type ComposerDisplaySettingsStore = {
-  getSnapshot: () => { hideToolBlocks: boolean }
-  subscribe: (listener: () => void) => () => void
-}
+type ComposerDisplaySettingsStore = PhiStore<{
+  autoScrollEnabled: boolean
+  centerMessages: boolean
+  hideToolBlocks: boolean
+}>
 
 type ComposerPanelProps = {
   currentPendingMessages: Array<PendingComposerMessage>
@@ -213,52 +216,28 @@ function useComposerSlashCommands({
   displaySettingsStore: ComposerDisplaySettingsStore
   sessionStore: ComposerSessionStore
 }) {
-  const cacheRef = React.useRef<{
-    availableSkills?: SessionState["availableSkills"]
-    commands?: Array<SlashCommandDescriptor>
-    hideThinkingBlock?: boolean
-    hideToolBlocks?: boolean
-  }>({})
-  const subscribe = React.useCallback(
-    (listener: () => void) => {
-      const unsubscribeSession = sessionStore.subscribe(listener)
-      const unsubscribeDisplaySettings =
-        displaySettingsStore.subscribe(listener)
-      return () => {
-        unsubscribeSession()
-        unsubscribeDisplaySettings()
-      }
-    },
-    [displaySettingsStore, sessionStore]
+  const { availableSkills, hideThinkingBlock } = useSelector(
+    sessionStore,
+    (sessionState) => ({
+      availableSkills: sessionState.availableSkills,
+      hideThinkingBlock: sessionState.hideThinkingBlock,
+    }),
+    { compare: shallow }
   )
-  const getSnapshot = () => {
-    const sessionState = sessionStore.getSnapshot()
-    const displaySettings = displaySettingsStore.getSnapshot()
-    const cache = cacheRef.current
-    if (
-      cache.commands &&
-      cache.availableSkills === sessionState.availableSkills &&
-      cache.hideThinkingBlock === sessionState.hideThinkingBlock &&
-      cache.hideToolBlocks === displaySettings.hideToolBlocks
-    ) {
-      return cache.commands
-    }
+  const hideToolBlocks = useSelector(
+    displaySettingsStore,
+    (displaySettings) => displaySettings.hideToolBlocks
+  )
 
-    const commands = buildComposerSlashCommands({
-      availableSkills: sessionState.availableSkills,
-      hideThinkingBlock: sessionState.hideThinkingBlock,
-      hideToolBlocks: displaySettings.hideToolBlocks,
-    })
-    cacheRef.current = {
-      availableSkills: sessionState.availableSkills,
-      commands,
-      hideThinkingBlock: sessionState.hideThinkingBlock,
-      hideToolBlocks: displaySettings.hideToolBlocks,
-    }
-    return commands
-  }
-
-  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return React.useMemo(
+    () =>
+      buildComposerSlashCommands({
+        availableSkills,
+        hideThinkingBlock,
+        hideToolBlocks,
+      }),
+    [availableSkills, hideThinkingBlock, hideToolBlocks]
+  )
 }
 
 function getClipboardImageFiles(data: DataTransfer) {
