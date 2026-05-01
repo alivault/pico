@@ -29,6 +29,7 @@ export function flattenTree(tree: Array<TreeNode>) {
       depth,
       label,
       labelTimestamp: node.labelTimestamp,
+      streaming: Boolean(node.streaming),
       timestamp: entry.timestamp,
       type: entry.type,
       role,

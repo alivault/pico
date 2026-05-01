@@ -6576,6 +6576,10 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
     sessionStore,
     (sessionState) => sessionState.availableModels.length > 0
   )
+  const activeSessionStreaming = useSelector(
+    sessionStore,
+    (sessionState) => sessionState.streaming
+  )
 
   return (
     <AppShellTreeDialogController
@@ -6585,6 +6589,7 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
       sessionScopeKey={currentSessionQueryScope}
       sessionId={activeSessionId}
       treeSummaryAvailable={treeSummaryAvailable}
+      activeSessionStreaming={activeSessionStreaming}
     />
   )
 })

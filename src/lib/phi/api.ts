@@ -322,6 +322,7 @@ export type SessionTreeResponse =
   | {
       ok: true
       leafId: string | null
+      streamingEntryId?: string | null
       tree: Array<TreeNode>
     }
   | ApiErrorResponse

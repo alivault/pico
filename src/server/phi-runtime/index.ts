@@ -3703,21 +3703,45 @@ export class PhiRuntime {
   getSessionTree(entry: SessionEntry) {
     const manager = entry.session.sessionManager
     if (!manager.getTree) {
-      return { leafId: null, tree: [] as Array<TreeNode> }
+      return {
+        leafId: null,
+        streamingEntryId: null,
+        tree: [] as Array<TreeNode>,
+      }
     }
 
+    const leafId = manager.getLeafId?.() ?? null
+    const streamingEntryId =
+      this.getEntryStreamingState(entry) || entry.session.isStreaming
+        ? leafId
+        : null
+    const markStreamingNode = (node: TreeNode): TreeNode => ({
+      ...node,
+      streaming: Boolean(
+        streamingEntryId && node.entry.id === streamingEntryId
+      ),
+      children: node.children.map((child) => markStreamingNode(child)),
+    })
+
     return {
-      leafId: manager.getLeafId?.() ?? null,
+      leafId,
+      streamingEntryId,
       tree: (manager.getTree() || [])
         .map((node) => serializeSessionTreeNode(node))
-        .filter((node): node is TreeNode => Boolean(node)),
+        .filter((node): node is TreeNode => Boolean(node))
+        .map((node) => markStreamingNode(node)),
     }
   }
 
   async getSessionTreeForRequest(request: Request) {
     const { activeEntry } = await this.resolveRequest(request)
     const tree = this.getSessionTree(activeEntry)
-    return { ok: true, leafId: tree.leafId, tree: tree.tree }
+    return {
+      ok: true,
+      leafId: tree.leafId,
+      streamingEntryId: tree.streamingEntryId,
+      tree: tree.tree,
+    }
   }
 
   async setSessionTreeLabel(
@@ -3729,6 +3753,15 @@ export class PhiRuntime {
     const label = typeof body.label === "string" ? body.label : ""
     if (!entryId) {
       throw new Error("entryId is required")
+    }
+
+    if (
+      this.getEntryStreamingState(activeEntry) ||
+      activeEntry.session.isStreaming
+    ) {
+      throw new Error(
+        "Wait for the current response to finish before editing tree labels."
+      )
     }
 
     const manager = activeEntry.session.sessionManager
@@ -3744,7 +3777,12 @@ export class PhiRuntime {
     }
 
     const tree = this.getSessionTree(activeEntry)
-    return { ok: true, leafId: tree.leafId, tree: tree.tree }
+    return {
+      ok: true,
+      leafId: tree.leafId,
+      streamingEntryId: tree.streamingEntryId,
+      tree: tree.tree,
+    }
   }
 
   async navigateSessionTree(
@@ -3762,6 +3800,13 @@ export class PhiRuntime {
       typeof body.targetId === "string" ? body.targetId.trim() : ""
     if (!targetId) {
       throw new Error("targetId is required")
+    }
+
+    if (
+      this.getEntryStreamingState(activeEntry) ||
+      activeEntry.session.isStreaming
+    ) {
+      throw new Error("Abort the current response before navigating the tree.")
     }
 
     const result = await activeEntry.session.navigateTree(targetId, {

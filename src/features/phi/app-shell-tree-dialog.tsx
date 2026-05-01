@@ -8,6 +8,7 @@ import type { FlatTreeNode, TreeNode } from "@/lib/phi"
 import type {
   NavigateSessionTreeResponse,
   SessionTreeResponse,
+  SimpleOkResponse,
 } from "@/lib/phi/api"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,8 +48,7 @@ type TreeFilterMode =
   | "labeled-only"
   | "all"
 
-type TreeStage = "browse" | "actions" | "custom" | "label"
-
+type TreeStage = "browse" | "abort" | "actions" | "custom" | "label"
 type TreeGutter = {
   position: number
   show: boolean
@@ -1071,6 +1071,7 @@ type TreeBrowsePanelProps = {
   treeLoading: boolean
   treeSubmitting: boolean
   treeLeafId: string | null
+  treeStreamingEntryId: string | null
   treeQuery: string
   onTreeQueryChange: (value: string) => void
   treeViewModel: TreeDialogViewModel
@@ -1088,6 +1089,7 @@ function TreeBrowsePanel({
   treeLoading,
   treeSubmitting,
   treeLeafId,
+  treeStreamingEntryId,
   treeQuery,
   onTreeQueryChange,
   treeViewModel,
@@ -1286,7 +1288,8 @@ function TreeBrowsePanel({
             !event.altKey &&
             key === "l" &&
             cursorVisibleTreeNode &&
-            !treeSubmitting
+            !treeSubmitting &&
+            !treeStreamingEntryId
           ) {
             event.preventDefault()
             event.stopPropagation()
@@ -1386,7 +1389,12 @@ function TreeBrowsePanel({
                 <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
                   <TreeCommandPrefix node={node} viewModel={treeViewModel} />
                   <span className="flex h-6 w-2.5 items-center justify-center">
-                    {node.isActivePath ? (
+                    {node.streaming || node.id === treeStreamingEntryId ? (
+                      <Spinner
+                        className="size-3 text-[var(--success)]"
+                        aria-label="Streaming"
+                      />
+                    ) : node.isActivePath ? (
                       <TreeHierarchyIcon
                         name="active-path"
                         className={cn(
@@ -1438,7 +1446,9 @@ function TreeBrowsePanel({
                 {option.label}
               </TreeFooterHint>
             ))}
-            <TreeFooterHint kbd="Shift+L">Label</TreeFooterHint>
+            {!treeStreamingEntryId ? (
+              <TreeFooterHint kbd="Shift+L">Label</TreeFooterHint>
+            ) : null}
             <TreeFooterHint kbd="Esc">Close</TreeFooterHint>
           </div>
         ) : null}
@@ -1457,6 +1467,7 @@ type TreeContinueActionsPanelProps = {
   canNavigateSelectedNode: boolean
   treeSummaryAvailable: boolean
   treeSubmitting: boolean
+  activeSessionStreaming: boolean
   selectedTreeNodeId: string | null
   onNavigateTreeNode: (
     targetId: string,
@@ -1470,6 +1481,7 @@ function TreeContinueActionsPanel({
   canNavigateSelectedNode,
   treeSummaryAvailable,
   treeSubmitting,
+  activeSessionStreaming,
   selectedTreeNodeId,
   onNavigateTreeNode,
   onCustomPrompt,
@@ -1482,17 +1494,24 @@ function TreeContinueActionsPanel({
   }> = [
     {
       value: "No summary",
-      disabled: !canNavigateSelectedNode || treeSubmitting,
+      disabled:
+        !canNavigateSelectedNode || treeSubmitting || activeSessionStreaming,
     },
     {
       value: "Summarize",
       disabled:
-        !canNavigateSelectedNode || !treeSummaryAvailable || treeSubmitting,
+        !canNavigateSelectedNode ||
+        !treeSummaryAvailable ||
+        treeSubmitting ||
+        activeSessionStreaming,
     },
     {
       value: "Summarize with custom prompt",
       disabled:
-        !canNavigateSelectedNode || !treeSummaryAvailable || treeSubmitting,
+        !canNavigateSelectedNode ||
+        !treeSummaryAvailable ||
+        treeSubmitting ||
+        activeSessionStreaming,
     },
   ]
   const enabledActions = actions.filter((action) => !action.disabled)
@@ -1574,6 +1593,7 @@ function TreeContinueActionsPanel({
       window.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [
+    activeSessionStreaming,
     canNavigateSelectedNode,
     enabledActions,
     onCustomPrompt,
@@ -1611,7 +1631,11 @@ function TreeContinueActionsPanel({
         <CommandGroup>
           <CommandItem
             value="No summary"
-            disabled={!canNavigateSelectedNode || treeSubmitting}
+            disabled={
+              !canNavigateSelectedNode ||
+              treeSubmitting ||
+              activeSessionStreaming
+            }
             onSelect={() => {
               if (!selectedTreeNodeId) return
               void onNavigateTreeNode(selectedTreeNodeId)
@@ -1629,7 +1653,8 @@ function TreeContinueActionsPanel({
             disabled={
               !canNavigateSelectedNode ||
               !treeSummaryAvailable ||
-              treeSubmitting
+              treeSubmitting ||
+              activeSessionStreaming
             }
             onSelect={() => {
               if (!selectedTreeNodeId) return
@@ -1650,7 +1675,8 @@ function TreeContinueActionsPanel({
             disabled={
               !canNavigateSelectedNode ||
               !treeSummaryAvailable ||
-              treeSubmitting
+              treeSubmitting ||
+              activeSessionStreaming
             }
             onSelect={onCustomPrompt}
           >
@@ -1668,7 +1694,9 @@ function TreeContinueActionsPanel({
           <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
           <TreeFooterHint kbd="Enter">Select</TreeFooterHint>
           <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
-          {!treeSummaryAvailable ? (
+          {activeSessionStreaming ? (
+            <span>Summary actions require the response to finish.</span>
+          ) : !treeSummaryAvailable ? (
             <span>Summary actions require a selected model.</span>
           ) : null}
         </div>
@@ -1725,7 +1753,9 @@ type AppShellTreeDialogProps = {
   onOpenChange: (open: boolean) => void
   treeLoading: boolean
   treeSubmitting: boolean
+  treeAborting: boolean
   treeLeafId: string | null
+  treeStreamingEntryId: string | null
   treeSummaryAvailable: boolean
   treeQuery: string
   onTreeQueryChange: (value: string) => void
@@ -1738,6 +1768,7 @@ type AppShellTreeDialogProps = {
     targetId: string,
     options?: TreeNavigateOptions
   ) => Promise<void> | void
+  onAbortStreamingSession: () => Promise<void> | void
   onSaveTreeLabel: (label: string) => Promise<void> | void
 }
 
@@ -1746,7 +1777,9 @@ export function AppShellTreeDialog({
   onOpenChange,
   treeLoading,
   treeSubmitting,
+  treeAborting,
   treeLeafId,
+  treeStreamingEntryId,
   treeSummaryAvailable,
   treeQuery,
   onTreeQueryChange,
@@ -1756,6 +1789,7 @@ export function AppShellTreeDialog({
   selectedTreeNodeLabel,
   onSelectedTreeNodeLabelChange,
   onNavigateTreeNode,
+  onAbortStreamingSession,
   onSaveTreeLabel,
 }: AppShellTreeDialogProps) {
   const [treeFilterMode, setTreeFilterMode] =
@@ -1788,6 +1822,7 @@ export function AppShellTreeDialog({
     selectedTreeNodeId != null
       ? (treeViewModel.nodeById.get(selectedTreeNodeId) ?? null)
       : null
+  const activeSessionStreaming = Boolean(treeStreamingEntryId)
 
   React.useEffect(() => {
     const wasOpen = treeWasOpenRef.current
@@ -1864,7 +1899,8 @@ export function AppShellTreeDialog({
           event.key === "Enter" &&
           selectedTreeNodeId &&
           selectedTreeNodeId !== treeLeafId &&
-          !treeSubmitting
+          !treeSubmitting &&
+          !activeSessionStreaming
         ) {
           event.preventDefault()
           event.stopPropagation()
@@ -1901,6 +1937,7 @@ export function AppShellTreeDialog({
     treeFilterMode,
     treeLeafId,
     treeStage,
+    activeSessionStreaming,
     treeSubmitting,
   ])
 
@@ -1916,16 +1953,24 @@ export function AppShellTreeDialog({
     }
   }, [open, treeStage])
 
+  React.useEffect(() => {
+    if (!open || treeStage !== "abort" || activeSessionStreaming) return
+
+    setTreeStage("actions")
+  }, [activeSessionStreaming, open, treeStage])
+
   const selectTreeNode = (nodeId: string) => {
     const node = treeViewModel.nodeById.get(nodeId)
     if (!node) return
 
     onSelectedTreeNodeIdChange(nodeId)
     onSelectedTreeNodeLabelChange(node.label || "")
-    setTreeStage("actions")
+    setTreeStage(activeSessionStreaming ? "abort" : "actions")
   }
 
   const labelTreeNode = (nodeId: string) => {
+    if (activeSessionStreaming) return
+
     const node = treeViewModel.nodeById.get(nodeId)
     if (!node) return
 
@@ -1938,7 +1983,7 @@ export function AppShellTreeDialog({
     selectedTreeNodeId && selectedTreeNodeId !== treeLeafId && selectedTreeNode
   )
   const submitCustomSummary = () => {
-    if (!selectedTreeNodeId) return
+    if (!selectedTreeNodeId || activeSessionStreaming) return
 
     void onNavigateTreeNode(selectedTreeNodeId, {
       summarize: true,
@@ -1950,9 +1995,11 @@ export function AppShellTreeDialog({
       ? "Summarize with custom prompt"
       : treeStage === "label"
         ? "Label selected node"
-        : treeStage === "actions"
-          ? "Summarize branch?"
-          : "Session tree"
+        : treeStage === "abort"
+          ? "Abort response?"
+          : treeStage === "actions"
+            ? "Summarize branch?"
+            : "Session tree"
   const treeDialogDescription =
     treeStage === "browse"
       ? "Browse branches, search the tree, and continue from an older point."
@@ -1960,7 +2007,9 @@ export function AppShellTreeDialog({
         ? "Add summary instructions before continuing from the selected node."
         : treeStage === "label"
           ? "Add or update the selected node label."
-          : "Choose how to continue from the selected node."
+          : treeStage === "abort"
+            ? "Abort the current response before continuing from this point."
+            : "Choose how to continue from the selected node."
 
   const treeDialogBody =
     treeStage === "browse" ? (
@@ -1972,6 +2021,7 @@ export function AppShellTreeDialog({
         treeLoading={treeLoading}
         treeSubmitting={treeSubmitting}
         treeLeafId={treeLeafId}
+        treeStreamingEntryId={treeStreamingEntryId}
         treeQuery={treeQuery}
         onTreeQueryChange={onTreeQueryChange}
         treeViewModel={treeViewModel}
@@ -1990,7 +2040,7 @@ export function AppShellTreeDialog({
             onClick={() =>
               setTreeStage(treeStage === "custom" ? "actions" : "browse")
             }
-            disabled={treeSubmitting}
+            disabled={treeSubmitting || treeAborting}
             aria-label={treeStage === "custom" ? "Back" : "Back to tree"}
           >
             <ArrowLeftIcon />
@@ -2001,7 +2051,9 @@ export function AppShellTreeDialog({
                 ? "Summarize with custom prompt"
                 : treeStage === "label"
                   ? "Label selected node"
-                  : "Summarize branch?"}
+                  : treeStage === "abort"
+                    ? "Abort response?"
+                    : "Summarize branch?"}
             </div>
             <div className="truncate text-xs text-muted-foreground">
               {treeDialogPlainText(selectedTreeNode)}
@@ -2015,15 +2067,53 @@ export function AppShellTreeDialog({
             canNavigateSelectedNode={canNavigateSelectedNode}
             treeSummaryAvailable={treeSummaryAvailable}
             treeSubmitting={treeSubmitting}
+            activeSessionStreaming={activeSessionStreaming}
             selectedTreeNodeId={selectedTreeNodeId}
             onNavigateTreeNode={onNavigateTreeNode}
             onCustomPrompt={() => setTreeStage("custom")}
           />
+        ) : treeStage === "abort" ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 text-sm">
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-muted-foreground">
+                Tree navigation changes the active branch. Abort the current
+                response before continuing from the selected point.
+              </div>
+              <div className="text-xs text-muted-foreground">
+                The streaming node is marked with the spinner in the tree.
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-border/70 px-3 py-3 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setTreeStage("browse")}
+                disabled={treeAborting}
+              >
+                Back
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={treeAborting || !activeSessionStreaming}
+                onClick={() => {
+                  void Promise.resolve(onAbortStreamingSession())
+                    .then(() => {
+                      setTreeStage("actions")
+                    })
+                    .catch(() => {})
+                }}
+              >
+                {treeAborting ? <Spinner /> : null}
+                Abort response
+              </Button>
+            </div>
+          </div>
         ) : treeStage === "label" ? (
           <TreeLabelPanel
             isMobile={isMobile}
             defaultLabel={selectedTreeNodeLabel}
-            disabled={!selectedTreeNodeId || treeSubmitting}
+            disabled={
+              !selectedTreeNodeId || treeSubmitting || activeSessionStreaming
+            }
             onSave={(label) => {
               onSelectedTreeNodeLabelChange(label)
               void Promise.resolve(onSaveTreeLabel(label)).then(() => {
@@ -2038,7 +2128,11 @@ export function AppShellTreeDialog({
                 ref={treeCustomSummaryRef}
                 placeholder="Add summary instructions before continuing"
                 className="min-h-32 resize-none"
-                disabled={!canNavigateSelectedNode || treeSubmitting}
+                disabled={
+                  !canNavigateSelectedNode ||
+                  treeSubmitting ||
+                  activeSessionStreaming
+                }
                 autoFocus
               />
             </div>
@@ -2052,7 +2146,11 @@ export function AppShellTreeDialog({
                   Back
                 </Button>
                 <Button
-                  disabled={!canNavigateSelectedNode || treeSubmitting}
+                  disabled={
+                    !canNavigateSelectedNode ||
+                    treeSubmitting ||
+                    activeSessionStreaming
+                  }
                   onClick={submitCustomSummary}
                 >
                   {treeSubmitting ? <Spinner /> : null}
@@ -2118,6 +2216,7 @@ type AppShellTreeDialogControllerProps = {
   sessionScopeKey: string
   sessionId?: string
   treeSummaryAvailable: boolean
+  activeSessionStreaming: boolean
 }
 
 export function AppShellTreeDialogController({
@@ -2127,6 +2226,7 @@ export function AppShellTreeDialogController({
   sessionScopeKey,
   sessionId,
   treeSummaryAvailable,
+  activeSessionStreaming,
 }: AppShellTreeDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [treeQuery, setTreeQuery] = React.useState("")
@@ -2186,6 +2286,29 @@ export function AppShellTreeDialogController({
     },
     onSuccess: (response) => {
       queryClient.setQueryData(queryKey, response)
+    },
+  })
+
+  const abortStreamingSessionMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<SimpleOkResponse>(
+        buildRequestUrl("/api/abort", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        { method: "POST" }
+      )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey,
+        exact: true,
+        refetchType: "active",
+      })
     },
   })
 
@@ -2283,6 +2406,20 @@ export function AppShellTreeDialogController({
     }
   }
 
+  const abortStreamingSession = async () => {
+    if (!viewerContextId) return
+
+    try {
+      await abortStreamingSessionMutation.mutateAsync()
+      toast.info("Response aborted")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to abort response"
+      )
+      throw error
+    }
+  }
+
   React.useEffect(() => {
     if (!open || !treeQueryResult.error) return
 
@@ -2296,6 +2433,12 @@ export function AppShellTreeDialogController({
   const treeData = treeQueryResult.data ?? null
   const flatTree = treeData ? flattenTree(treeData.tree) : []
   const treeLeafId = treeData?.leafId ?? null
+  const treeStreamingEntryId =
+    treeData && "streamingEntryId" in treeData
+      ? (treeData.streamingEntryId ?? null)
+      : activeSessionStreaming
+        ? treeLeafId
+        : null
 
   React.useEffect(() => {
     if (!open || !treeData) return
@@ -2335,6 +2478,7 @@ export function AppShellTreeDialogController({
   )
   const treeSubmitting =
     saveTreeLabelMutation.isPending || navigateTreeNodeMutation.isPending
+  const treeAborting = abortStreamingSessionMutation.isPending
 
   return (
     <AppShellTreeDialog
@@ -2342,7 +2486,9 @@ export function AppShellTreeDialogController({
       onOpenChange={setOpenState}
       treeLoading={treeLoading}
       treeSubmitting={treeSubmitting}
+      treeAborting={treeAborting}
       treeLeafId={treeLeafId}
+      treeStreamingEntryId={treeStreamingEntryId}
       treeSummaryAvailable={treeSummaryAvailable}
       treeQuery={treeQuery}
       onTreeQueryChange={setTreeQuery}
@@ -2354,6 +2500,7 @@ export function AppShellTreeDialogController({
       onNavigateTreeNode={(targetId, options) => {
         void navigateTreeNode(targetId, options)
       }}
+      onAbortStreamingSession={abortStreamingSession}
       onSaveTreeLabel={(label) => saveTreeLabel(label)}
     />
   )

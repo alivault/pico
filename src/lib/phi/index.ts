@@ -306,6 +306,7 @@ export type SessionsPayload = {
 }
 
 export type TreeNode = {
+  streaming?: boolean
   entry: {
     id: string
     parentId?: string | null
@@ -337,6 +338,7 @@ export type TreeNode = {
 
 export type FlatTreeNode = {
   id: string
+  streaming?: boolean
   parentId?: string | null
   depth: number
   label?: string
