@@ -13,8 +13,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
+const CONTEXT_USAGE_MOBILE_QUERY = "(hover: none), (pointer: coarse)"
 const CONTEXT_USAGE_CIRCLE_CENTER = 14
 const CONTEXT_USAGE_CIRCLE_RADIUS = 10.5
 const CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH = 2.2
@@ -50,6 +56,21 @@ function formatContextUsageCompactNumber(value: number) {
 
 function formatContextUsagePercent(value: number) {
   return String(Math.round(value))
+}
+
+function useContextUsageMobilePopover() {
+  const [isMobilePopover, setIsMobilePopover] = React.useState(false)
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia(CONTEXT_USAGE_MOBILE_QUERY)
+    const update = () => setIsMobilePopover(mediaQuery.matches)
+
+    update()
+    mediaQuery.addEventListener("change", update)
+    return () => mediaQuery.removeEventListener("change", update)
+  }, [])
+
+  return isMobilePopover
 }
 
 function contextUsageStroke(percent: number) {
@@ -464,6 +485,7 @@ export function ComposerContextUsageIndicator({
   modelProvider,
 }: ComposerContextUsageIndicatorProps) {
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
+  const useMobilePopover = useContextUsageMobilePopover()
   const [providerUsageWindows, setProviderUsageWindows] = React.useState<
     Array<ProviderUsageWindow>
   >([])
@@ -617,17 +639,33 @@ export function ComposerContextUsageIndicator({
     </>
   )
 
+  if (useMobilePopover) {
+    return (
+      <Popover>
+        <PopoverTrigger render={trigger} />
+        <PopoverContent
+          side="top"
+          align="end"
+          sideOffset={8}
+          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-foreground px-3 py-3 text-sm text-background"
+        >
+          {content}
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
   return (
-    <Popover>
-      <PopoverTrigger render={trigger} />
-      <PopoverContent
+    <Tooltip>
+      <TooltipTrigger render={trigger} />
+      <TooltipContent
         side="top"
         align="end"
         sideOffset={8}
-        className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-foreground px-3 py-3 text-sm text-background"
+        className="w-72 max-w-none flex-col items-stretch gap-2 rounded-xl px-3 py-3 text-sm"
       >
         {content}
-      </PopoverContent>
-    </Popover>
+      </TooltipContent>
+    </Tooltip>
   )
 }
