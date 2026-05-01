@@ -3284,11 +3284,23 @@ function AppShellWindowEffects({
       }
 
       if (event.sessionId) {
+        const sessionId = event.sessionId
+        const toastId = event.id
+
         toast.success(label, {
-          action: {
-            label: "Open",
-            onClick: () => onSelectSession(event.sessionId),
-          },
+          id: toastId,
+          className: "cursor-pointer",
+          action: (
+            <button
+              type="button"
+              aria-label={`Open ${label}`}
+              className="absolute inset-0 z-10 cursor-pointer rounded-[var(--border-radius)] bg-transparent p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+              onClick={() => {
+                toast.dismiss(toastId)
+                onSelectSession(sessionId)
+              }}
+            />
+          ),
         })
       } else {
         toast.success(label)
