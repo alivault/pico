@@ -4630,14 +4630,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     gitCommitDialogRef.current?.open()
   }
 
-  const pushGitChanges = async () => {
-    const cwd = sessionStateRef.current.cwd?.trim() || ""
-    if (!cwd) {
-      toast.error("Open a session in a repository before pushing.")
-      return
-    }
-
-    try {
+  const gitPushMutation = useMutation({
+    mutationKey: phiQueryKeys.gitAction(
+      viewerContextId,
+      sessionStateRef.current.cwd?.trim() || "",
+      "push"
+    ),
+    mutationFn: async (cwd: string) =>
       await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-push", { contextId: viewerContextId }),
         {
@@ -4645,7 +4644,8 @@ const AppShellSessionWorkspace = React.forwardRef<
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ cwd }),
         }
-      )
+      ),
+    onSuccess: async (_response, cwd) => {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
@@ -4669,9 +4669,21 @@ const AppShellSessionWorkspace = React.forwardRef<
         }),
       ])
       toast.success("Pushed changes")
-    } catch (error) {
+    },
+    onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to push")
+    },
+  })
+
+  const pushGitChanges = async () => {
+    const cwd = sessionStateRef.current.cwd?.trim() || ""
+    if (!cwd) {
+      toast.error("Open a session in a repository before pushing.")
+      return
     }
+    if (gitPushMutation.isPending) return
+
+    await gitPushMutation.mutateAsync(cwd).catch(() => {})
   }
 
   const toggleGitPanel = () => {

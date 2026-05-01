@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   useIsFetching,
+  useIsMutating,
   useMutation,
   useQuery,
   useQueryClient,
@@ -738,10 +739,15 @@ export function GitPanelToolbar({
     },
   })
 
+  const shortcutPushMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "push"),
+  })
   const pushing =
-    gitActionMutation.isPending && gitActionMutation.variables === "push"
+    (gitActionMutation.isPending && gitActionMutation.variables === "push") ||
+    shortcutPushMutatingCount > 0
   const pulling =
     gitActionMutation.isPending && gitActionMutation.variables === "pull"
+  const gitActionBusy = gitActionMutation.isPending || pushing
   const showCommitAction = Boolean(
     isMobile && viewerContextId && normalizedCwd && hasChanges
   )
@@ -750,14 +756,14 @@ export function GitPanelToolbar({
     viewerContextId &&
     normalizedCwd &&
     canPush &&
-    (!gitActionMutation.isPending || pushing)
+    (!gitActionBusy || pushing)
   )
   const showPullAction = Boolean(
     isMobile &&
     viewerContextId &&
     normalizedCwd &&
     canPull &&
-    (!gitActionMutation.isPending || pulling)
+    (!gitActionBusy || pulling)
   )
   const showActions = showCommitAction || showPushAction || showPullAction
 
@@ -793,7 +799,7 @@ export function GitPanelToolbar({
             <Button
               variant="outline"
               size="xs"
-              disabled={gitActionMutation.isPending}
+              disabled={gitActionBusy}
               onClick={() => {
                 gitActionMutation.mutate("push")
               }}
@@ -806,7 +812,7 @@ export function GitPanelToolbar({
             <Button
               variant="outline"
               size="xs"
-              disabled={gitActionMutation.isPending}
+              disabled={gitActionBusy}
               onClick={() => {
                 gitActionMutation.mutate("pull")
               }}
@@ -1737,8 +1743,17 @@ export function HeaderGitActions({
     },
   })
 
-  const showPush = canPush && !gitActionMutation.isPending
-  const showPull = canPull && !gitActionMutation.isPending
+  const shortcutPushMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "push"),
+  })
+  const pushing =
+    (gitActionMutation.isPending && gitActionMutation.variables === "push") ||
+    shortcutPushMutatingCount > 0
+  const pulling =
+    gitActionMutation.isPending && gitActionMutation.variables === "pull"
+  const gitActionBusy = gitActionMutation.isPending || pushing
+  const showPush = canPush && (!gitActionBusy || pushing)
+  const showPull = canPull && (!gitActionBusy || pulling)
   const showActions = !isMobile && (canCommit || showPush || showPull)
 
   if (!showActions && !commitDialogOpen) return null
@@ -1762,22 +1777,24 @@ export function HeaderGitActions({
             <Button
               variant="outline"
               size="xs"
+              disabled={gitActionBusy}
               onClick={() => {
                 gitActionMutation.mutate("push")
               }}
             >
-              <UploadIcon /> Push
+              {pushing ? <Spinner /> : <UploadIcon />} Push
             </Button>
           ) : null}
           {showPull ? (
             <Button
               variant="outline"
               size="xs"
+              disabled={gitActionBusy}
               onClick={() => {
                 gitActionMutation.mutate("pull")
               }}
             >
-              <DownloadIcon /> Pull
+              {pulling ? <Spinner /> : <DownloadIcon />} Pull
             </Button>
           ) : null}
         </div>
