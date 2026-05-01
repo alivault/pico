@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -56,6 +57,11 @@ type SyncedWorkingState = {
   label: string
   summary?: string
   done?: boolean
+}
+
+type GitInvalidationBatchItem = {
+  cwd: string
+  scopes: Set<string>
 }
 
 type UseAppShellSessionSyncOptions = {
@@ -573,6 +579,59 @@ export function useAppShellSessionSync({
     if (!viewerContextId) return
 
     hasReceivedStateSyncRef.current = false
+    const gitInvalidationBatcher = new Batcher<GitInvalidationBatchItem>(
+      (items) => {
+        const scopesByCwd = new Map<string, Set<string>>()
+        for (const item of items) {
+          const scopes = scopesByCwd.get(item.cwd) ?? new Set<string>()
+          for (const scope of item.scopes) scopes.add(scope)
+          scopesByCwd.set(item.cwd, scopes)
+        }
+
+        const invalidations = []
+        for (const [cwd, scopes] of scopesByCwd) {
+          if (scopes.has("status")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("files")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("refs")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+        }
+
+        void Promise.all(invalidations).catch(() => undefined)
+      },
+      {
+        key: "phi.git.invalidations",
+        wait: 100,
+      }
+    )
+
     const source = new EventSource(
       buildRequestUrl("/events", {
         contextId: viewerContextId,
@@ -769,41 +828,10 @@ export function useAppShellSessionSync({
       if (isGitChangedEvent(payload)) {
         const cwd = payload.cwd.trim()
         if (cwd) {
-          const scopes = new Set(payload.scopes ?? ["status", "files", "refs"])
-          const invalidations = []
-          if (scopes.has("status")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              })
-            )
-          }
-          if (scopes.has("files")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              })
-            )
-          }
-          if (scopes.has("refs")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              }),
-              queryClient.invalidateQueries({
-                queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              })
-            )
-          }
-          void Promise.all(invalidations).catch(() => undefined)
+          gitInvalidationBatcher.addItem({
+            cwd,
+            scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
+          })
         }
         return
       }
@@ -841,6 +869,9 @@ export function useAppShellSessionSync({
         currentSourceRef.current = null
       }
       source.close()
+      gitInvalidationBatcher.flush()
+      gitInvalidationBatcher.cancel()
+      gitInvalidationBatcher.clear()
     }
   }, [
     bootstrapSidebarDirectories,

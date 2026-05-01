@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from "node:fs"
 import { stat } from "node:fs/promises"
 import { resolve } from "node:path"
+import { Debouncer } from "@tanstack/pacer"
 
 import {
   resolveDirectoryGitRepository,
@@ -24,7 +25,7 @@ type RepositoryWatchState = {
   subscribers: Set<string>
   watchers: Set<FSWatcher>
   disposed: boolean
-  debounceTimer?: NodeJS.Timeout
+  changeDebouncer: Debouncer<() => void>
 }
 
 const GIT_WATCH_DEBOUNCE_MS = 300
@@ -141,7 +142,12 @@ export class GitWatchManager {
       subscribers: new Set(),
       watchers: new Set(),
       disposed: false,
+      changeDebouncer: new Debouncer(() => {}, {
+        key: `phi.git-watch.${key}`,
+        wait: GIT_WATCH_DEBOUNCE_MS,
+      }),
     }
+    state.changeDebouncer.fn = () => this.emitRepositoryChange(state)
     this.repositories.set(key, state)
     void this.startRepositoryWatch(state, repository)
     return state
@@ -201,15 +207,7 @@ export class GitWatchManager {
   private scheduleRepositoryChange(state: RepositoryWatchState) {
     if (state.disposed) return
 
-    if (state.debounceTimer) {
-      clearTimeout(state.debounceTimer)
-    }
-
-    state.debounceTimer = setTimeout(() => {
-      state.debounceTimer = undefined
-      this.emitRepositoryChange(state)
-    }, GIT_WATCH_DEBOUNCE_MS)
-    state.debounceTimer.unref?.()
+    state.changeDebouncer.maybeExecute()
   }
 
   private emitRepositoryChange(state: RepositoryWatchState) {
@@ -227,10 +225,7 @@ export class GitWatchManager {
     state.disposed = true
     this.repositories.delete(state.key)
 
-    if (state.debounceTimer) {
-      clearTimeout(state.debounceTimer)
-      state.debounceTimer = undefined
-    }
+    state.changeDebouncer.cancel()
 
     for (const watcher of state.watchers) {
       try {

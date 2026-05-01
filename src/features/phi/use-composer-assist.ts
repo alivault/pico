@@ -1,4 +1,5 @@
 import * as React from "react"
+import { AsyncDebouncer } from "@tanstack/pacer"
 
 import type { CompletionItem } from "@/lib/phi/api"
 
@@ -28,6 +29,10 @@ type CompletionState = {
   items: Array<CompletionItem>
   selectedIndex: number
 }
+
+type CompletionLoader = (
+  query: ComposerCompletionQuery
+) => Promise<Array<CompletionItem>>
 
 export type ComposerVisibleCompletion = CompletionState
 
@@ -210,6 +215,32 @@ export function useComposerAssist({
   const [completionState, setCompletionState] =
     React.useState<CompletionState | null>(null)
   const completionRequestIdRef = React.useRef(0)
+  const completionRequestFnsRef = React.useRef({
+    requestFileCompletions,
+    requestPathCompletions,
+  })
+  completionRequestFnsRef.current = {
+    requestFileCompletions,
+    requestPathCompletions,
+  }
+  const completionDebouncerRef =
+    React.useRef<AsyncDebouncer<CompletionLoader> | null>(null)
+  if (!completionDebouncerRef.current) {
+    completionDebouncerRef.current = new AsyncDebouncer<CompletionLoader>(
+      async (query) => {
+        const { requestFileCompletions, requestPathCompletions } =
+          completionRequestFnsRef.current
+        return query.kind === "file-reference"
+          ? await requestFileCompletions(query.rawPrefix, query.isQuotedPrefix)
+          : await requestPathCompletions(query.prefix)
+      },
+      {
+        key: "phi.composer.completions",
+        wait: 80,
+      }
+    )
+  }
+  const completionDebouncer = completionDebouncerRef.current
   const [slashMenuState, setSlashMenuState] =
     React.useState<ComposerSlashMenuState | null>(null)
   const slashMenuStateRef = React.useRef<ComposerSlashMenuState | null>(null)
@@ -266,6 +297,7 @@ export function useComposerAssist({
   React.useEffect(() => {
     if (!completionQuery) {
       completionRequestIdRef.current += 1
+      completionDebouncer.cancel()
       setCompletionState((current) => (current ? null : current))
       return
     }
@@ -274,17 +306,13 @@ export function useComposerAssist({
 
     const load = async () => {
       try {
-        const items =
-          completionQuery.kind === "file-reference"
-            ? await requestFileCompletions(
-                completionQuery.rawPrefix,
-                completionQuery.isQuotedPrefix
-              )
-            : await requestPathCompletions(completionQuery.prefix)
+        const items = await completionDebouncer.maybeExecute(completionQuery)
 
         if (requestId !== completionRequestIdRef.current) return
 
-        const filteredItems = items.filter((item) => Boolean(item.value))
+        const filteredItems = (items ?? []).filter((item) =>
+          Boolean(item.value)
+        )
         if (filteredItems.length === 0) {
           setCompletionState((current) => (current ? null : current))
           return
@@ -318,17 +346,26 @@ export function useComposerAssist({
     }
 
     void load()
-  }, [completionQuery, requestFileCompletions, requestPathCompletions])
+  }, [completionDebouncer, completionQuery])
+
+  React.useEffect(
+    () => () => {
+      completionDebouncer.cancel()
+      completionDebouncer.abort()
+    },
+    [completionDebouncer]
+  )
 
   const dismissMenus = React.useCallback(() => {
     completionRequestIdRef.current += 1
+    completionDebouncer.cancel()
     completionQueryRef.current = null
     slashMenuStateRef.current = null
     setCompletionQuery((current) => (current ? null : current))
     setCompletionState((current) => (current ? null : current))
     setSlashMenuState((current) => (current ? null : current))
     setSlashSelectionIndex(0)
-  }, [setSlashSelectionIndex])
+  }, [completionDebouncer, setSlashSelectionIndex])
 
   const visibleCompletion = completionState?.items.length
     ? completionState

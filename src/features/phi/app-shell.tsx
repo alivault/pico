@@ -10,6 +10,7 @@ import {
   PanelRightIcon,
   SquarePenIcon,
 } from "lucide-react"
+import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import type { PanelImperativeHandle } from "react-resizable-panels"
@@ -140,6 +141,10 @@ import {
   HeaderGitStatusText,
   type GitCommitDialogControllerHandle,
 } from "@/features/phi/git-panel"
+import {
+  createPhiLatestThrottler,
+  type PhiLatestThrottler,
+} from "@/features/phi/pacer-utils"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
   applyStoreAction,
@@ -3987,6 +3992,30 @@ const AppShellSessionWorkspace = React.forwardRef<
       createPhiStore<SessionState["contextUsage"]>(undefined)
   }
   const contextUsageStore = contextUsageStoreRef.current
+  const contextUsageThrottlerRef = React.useRef<Throttler<
+    (contextUsage: SessionState["contextUsage"]) => void
+  > | null>(null)
+  if (!contextUsageThrottlerRef.current) {
+    contextUsageThrottlerRef.current = new Throttler(
+      (contextUsage: SessionState["contextUsage"]) => {
+        setStoreState(contextUsageStore, contextUsage)
+      },
+      {
+        key: "phi.composer.context-usage",
+        wait: 250,
+        leading: true,
+        trailing: true,
+      }
+    )
+  }
+  const contextUsageThrottler = contextUsageThrottlerRef.current
+  React.useEffect(
+    () => () => {
+      contextUsageThrottler.flush()
+      contextUsageThrottler.cancel()
+    },
+    [contextUsageThrottler]
+  )
   const setComposerDraftSeed = React.useCallback<
     React.Dispatch<
       React.SetStateAction<{
@@ -4036,9 +4065,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
   const setComposerContextUsage = React.useCallback(
     (contextUsage: SessionState["contextUsage"]) => {
-      setStoreState(contextUsageStore, contextUsage)
+      contextUsageThrottler.maybeExecute(contextUsage)
     },
-    [contextUsageStore]
+    [contextUsageThrottler]
   )
   const setComposerStreaming = React.useCallback(
     (streaming: boolean) => {
@@ -4281,9 +4310,19 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
     [pendingMessagesStore, refreshComposerPendingMessages]
   )
-  const pendingConversationItemsRef =
-    React.useRef<Array<ConversationItem> | null>(null)
-  const conversationItemsFrameRef = React.useRef<number | null>(null)
+  const conversationItemsThrottlerRef = React.useRef<PhiLatestThrottler<
+    Array<ConversationItem>
+  > | null>(null)
+  if (!conversationItemsThrottlerRef.current) {
+    conversationItemsThrottlerRef.current = createPhiLatestThrottler({
+      key: "phi.conversation.streaming-items",
+      wait: 16,
+      onLatest: (items: Array<ConversationItem>) => {
+        conversationItemsStore.setItems(items)
+      },
+    })
+  }
+  const conversationItemsThrottler = conversationItemsThrottlerRef.current
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       const hasStreamingAssistant = items.some(
@@ -4291,43 +4330,22 @@ const AppShellSessionWorkspace = React.forwardRef<
       )
 
       if (hasStreamingAssistant && typeof window !== "undefined") {
-        pendingConversationItemsRef.current = items
-        if (conversationItemsFrameRef.current !== null) return
-
-        conversationItemsFrameRef.current = window.requestAnimationFrame(() => {
-          conversationItemsFrameRef.current = null
-          const pendingItems = pendingConversationItemsRef.current
-          pendingConversationItemsRef.current = null
-          if (pendingItems) {
-            conversationItemsStore.setItems(pendingItems)
-          }
-        })
+        conversationItemsThrottler.add(items)
         return
       }
 
-      if (
-        conversationItemsFrameRef.current !== null &&
-        typeof window !== "undefined"
-      ) {
-        window.cancelAnimationFrame(conversationItemsFrameRef.current)
-        conversationItemsFrameRef.current = null
-      }
-      pendingConversationItemsRef.current = null
+      conversationItemsThrottler.cancel()
       conversationItemsStore.setItems(items)
     },
-    [conversationItemsStore]
+    [conversationItemsThrottler, conversationItemsStore]
   )
 
   React.useEffect(
     () => () => {
-      if (
-        conversationItemsFrameRef.current !== null &&
-        typeof window !== "undefined"
-      ) {
-        window.cancelAnimationFrame(conversationItemsFrameRef.current)
-      }
+      conversationItemsThrottler.flush()
+      conversationItemsThrottler.cancel()
     },
-    []
+    [conversationItemsThrottler]
   )
   const setHiddenThinkingPreview = React.useCallback(
     (value: string, options?: { preserveExisting?: boolean }) => {
@@ -4456,8 +4474,9 @@ const AppShellSessionWorkspace = React.forwardRef<
   React.useLayoutEffect(() => {
     if (contextUsageSessionScopeRef.current === currentSessionQueryScope) return
     contextUsageSessionScopeRef.current = currentSessionQueryScope
+    contextUsageThrottler.cancel()
     setStoreState(contextUsageStore, sessionStateRef.current.contextUsage)
-  }, [contextUsageStore, currentSessionQueryScope])
+  }, [contextUsageStore, contextUsageThrottler, currentSessionQueryScope])
   const initialRouteLoadingSessionId =
     initialLoadingSessionId && !sessionState.sessionKey
       ? initialLoadingSessionId
