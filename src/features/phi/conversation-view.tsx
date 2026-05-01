@@ -1361,11 +1361,15 @@ function visibleAssistantBlocksFromSnapshot(
   )
 }
 
+function assistantBlockIsMessageJumpAnchor(block: AssistantConversationBlock) {
+  return block.type === "text" || block.type === "compaction"
+}
+
 function assistantMessagesShellSnapshotFromBlocks(
   snapshot: AssistantMessagesSnapshot,
   blocks: Array<AssistantConversationBlock>
 ): AssistantMessagesShellSnapshot {
-  const anchorBlockIndex = blocks.findIndex((block) => block.type !== "tool")
+  const anchorBlockIndex = blocks.findIndex(assistantBlockIsMessageJumpAnchor)
   const anchorBlock =
     anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
 
