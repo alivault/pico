@@ -1499,6 +1499,7 @@ type ToolBlockHeaderSnapshot = {
   isError: boolean
   summary: string
   editStats: EditDiffStatCounts | null
+  openStateKey: string
 }
 
 type ExploreToolGroupHeaderSnapshot = {
@@ -1506,6 +1507,7 @@ type ExploreToolGroupHeaderSnapshot = {
   summary: string
   hasRunning: boolean
   hasError: boolean
+  openStateKey: string
 }
 
 function sameEditDiffStatCounts(
@@ -1515,6 +1517,21 @@ function sameEditDiffStatCounts(
   if (left === right) return true
   if (!left || !right) return false
   return left.additions === right.additions && left.removals === right.removals
+}
+
+function rememberedToolAccordionStateKey(
+  block: AssistantConversationBlock | undefined,
+  prefix = "tool"
+) {
+  if (!block) return `${prefix}:missing`
+
+  if (block.type === "tool" && block.callId) {
+    return `${prefix}:call:${block.callId}`
+  }
+
+  return `${prefix}:block:${
+    block.renderKey || block.blockKey || assistantBlockKey(block)
+  }`
 }
 
 function buildToolBlockHeaderSnapshot(
@@ -1531,6 +1548,7 @@ function buildToolBlockHeaderSnapshot(
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolDiffText(block))
         : null,
+    openStateKey: rememberedToolAccordionStateKey(block),
   }
 }
 
@@ -1546,7 +1564,8 @@ function sameToolBlockHeaderSnapshot(
     left.running === right.running &&
     left.isError === right.isError &&
     left.summary === right.summary &&
-    sameEditDiffStatCounts(left.editStats, right.editStats)
+    sameEditDiffStatCounts(left.editStats, right.editStats) &&
+    left.openStateKey === right.openStateKey
   )
 }
 
@@ -1610,6 +1629,7 @@ function buildExploreToolGroupHeaderSnapshot(
     summary: blocks.length > 0 ? exploreGroupSummary(blocks) : "",
     hasRunning: blocks.some((block) => block.running),
     hasError: blocks.some((block) => block.isError),
+    openStateKey: rememberedToolAccordionStateKey(blocks[0], "explore"),
   }
 }
 
@@ -1621,7 +1641,8 @@ function sameExploreToolGroupHeaderSnapshot(
     left.count === right.count &&
     left.summary === right.summary &&
     left.hasRunning === right.hasRunning &&
-    left.hasError === right.hasError
+    left.hasError === right.hasError &&
+    left.openStateKey === right.openStateKey
   )
 }
 
@@ -1634,6 +1655,7 @@ function useAssistantToolGroupHeader(
     summary: "",
     hasRunning: false,
     hasError: false,
+    openStateKey: "explore:missing",
   })
 
   const getSnapshot = () => {
@@ -2412,6 +2434,48 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
   )
 }
 
+const REMEMBERED_TOOL_ACCORDION_STATE_LIMIT = 500
+const rememberedToolAccordionOpenKeys = new Map<string, true>()
+
+function rememberToolAccordionOpenKey(key: string, open: boolean) {
+  if (!key) return
+
+  rememberedToolAccordionOpenKeys.delete(key)
+  if (!open) return
+
+  rememberedToolAccordionOpenKeys.set(key, true)
+  while (
+    rememberedToolAccordionOpenKeys.size > REMEMBERED_TOOL_ACCORDION_STATE_LIMIT
+  ) {
+    const oldestKey = rememberedToolAccordionOpenKeys.keys().next().value
+    if (!oldestKey) break
+    rememberedToolAccordionOpenKeys.delete(oldestKey)
+  }
+}
+
+function useRememberedToolAccordionValue(
+  openStateKey: string,
+  itemValue: string
+) {
+  const [openValue, setOpenValueState] = React.useState<Array<string>>(() =>
+    rememberedToolAccordionOpenKeys.has(openStateKey) ? [itemValue] : []
+  )
+
+  React.useEffect(() => {
+    setOpenValueState(
+      rememberedToolAccordionOpenKeys.has(openStateKey) ? [itemValue] : []
+    )
+  }, [itemValue, openStateKey])
+
+  const setOpenValue = (value: Array<string>) => {
+    const open = value.includes(itemValue)
+    rememberToolAccordionOpenKey(openStateKey, open)
+    setOpenValueState(open ? [itemValue] : [])
+  }
+
+  return [openValue, setOpenValue] as const
+}
+
 const ToolBlockCard = React.memo(function ToolBlockCard({
   blockKey,
   store,
@@ -2419,12 +2483,30 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
   blockKey: string
   store: AssistantBlockStore
 }) {
-  const [openValue, setOpenValue] = React.useState<Array<string>>([])
-  const isOpen = openValue.includes("tool")
   const header = useAssistantToolBlockHeader(store, blockKey)
-  const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
 
   if (!header) return null
+
+  return (
+    <ToolBlockCardContent blockKey={blockKey} header={header} store={store} />
+  )
+})
+
+function ToolBlockCardContent({
+  blockKey,
+  header,
+  store,
+}: {
+  blockKey: string
+  header: ToolBlockHeaderSnapshot
+  store: AssistantBlockStore
+}) {
+  const [openValue, setOpenValue] = useRememberedToolAccordionValue(
+    header.openStateKey,
+    "tool"
+  )
+  const isOpen = openValue.includes("tool")
+  const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
 
   return (
     <Accordion
@@ -2463,7 +2545,7 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
       </AccordionItem>
     </Accordion>
   )
-})
+}
 
 function ExploreToolGroupCardBody({
   blocks,
@@ -2515,9 +2597,12 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
   blockKeys: Array<string>
   store: AssistantBlockStore
 }) {
-  const [openValue, setOpenValue] = React.useState<Array<string>>([])
-  const isOpen = openValue.includes("explore")
   const header = useAssistantToolGroupHeader(store, blockKeys)
+  const [openValue, setOpenValue] = useRememberedToolAccordionValue(
+    header.openStateKey,
+    "explore"
+  )
+  const isOpen = openValue.includes("explore")
   const blocks = useAssistantToolGroupBodyBlocks(store, blockKeys, isOpen)
   const statusLabel = exploreGroupStatusLabel()
 
