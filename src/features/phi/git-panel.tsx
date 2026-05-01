@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import {
+  ArrowLeftIcon,
   CheckIcon,
   DownloadIcon,
   GitBranchIcon,
@@ -19,12 +20,15 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command"
 import {
   Drawer,
   DrawerContent,
@@ -33,7 +37,6 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Spinner } from "@/components/ui/spinner"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { phiQueryKeys } from "@/features/phi/query-keys"
@@ -836,6 +839,25 @@ export function GitPanelToolbar({
   )
 }
 
+type GitCommitCommand = {
+  id: string
+  title: string
+  description: string
+  keywords: Array<string>
+  valueLabel?: string
+  disabled?: boolean
+  onSelect: () => void | Promise<void>
+}
+
+function gitCommitCommandKeywords(command: GitCommitCommand) {
+  return [
+    command.title,
+    command.description,
+    command.valueLabel ?? "",
+    ...command.keywords,
+  ]
+}
+
 function GitCommitDialog({
   viewerContextId,
   cwd,
@@ -855,8 +877,11 @@ function GitCommitDialog({
   const isMobile = useIsMobile()
   const [message, setMessage] = React.useState("")
   const [includeUnstaged, setIncludeUnstaged] = React.useState(true)
-  const [nextStep, setNextStep] = React.useState<"commit" | "push">("commit")
   const [generatedReason, setGeneratedReason] = React.useState("")
+  const [query, setQuery] = React.useState("")
+  const [selectedCommandId, setSelectedCommandId] = React.useState("commit")
+  const [stage, setStage] = React.useState<"browse" | "message">("browse")
+  const blockNextCloseRef = React.useRef(false)
   const fileSummary = `${files.length} file${files.length === 1 ? "" : "s"}`
   const lineSummary = gitFilesLineSummary(files)
   const branchName = gitStatus?.detached
@@ -904,7 +929,6 @@ function GitCommitDialog({
     onSuccess: async () => {
       setMessage("")
       setGeneratedReason("")
-      setNextStep("commit")
       onOpenChange(false)
       await invalidateGitQueries({ queryClient, viewerContextId, cwd })
     },
@@ -924,7 +948,30 @@ function GitCommitDialog({
   const generating = generateMutation.isPending
   const busy = committing || generating
 
-  const continueCommit = async () => {
+  React.useEffect(() => {
+    if (!open) {
+      if (query) setQuery("")
+      setStage("browse")
+    }
+  }, [open, query])
+
+  const applyGeneratedMessage = (generated: GitCommitMessageData) => {
+    setMessage(generated.message)
+    setGeneratedReason(generated.reason || "")
+    if (generated.source !== "ai" && generated.reason) {
+      toast.info(`Using heuristic message: ${generated.reason}`)
+    }
+  }
+
+  const generateCommitMessage = () => {
+    if (busy || !cwd || files.length === 0) return
+
+    generateMutation.mutate(undefined, {
+      onSuccess: applyGeneratedMessage,
+    })
+  }
+
+  const continueCommit = async (push: boolean) => {
     if (busy || files.length === 0) return
 
     let commitMessage = message.trim()
@@ -932,11 +979,7 @@ function GitCommitDialog({
       try {
         const generated = await generateMutation.mutateAsync()
         commitMessage = generated.message.trim()
-        setMessage(commitMessage)
-        setGeneratedReason(generated.reason || "")
-        if (generated.source !== "ai" && generated.reason) {
-          toast.info(`Using heuristic message: ${generated.reason}`)
-        }
+        applyGeneratedMessage(generated)
       } catch {
         return
       }
@@ -944,19 +987,111 @@ function GitCommitDialog({
 
     if (!commitMessage) return
     commitMutation.mutate({
-      push: nextStep === "push",
+      push,
       commitMessage,
     })
   }
 
-  const body = (
-    <div className="grid gap-6 px-0">
-      <div className="grid gap-5">
-        <h2 className="font-heading text-3xl leading-tight font-semibold tracking-tight">
-          Commit your changes
-        </h2>
+  const openCommitMessage = () => {
+    setQuery("")
+    setStage("message")
+  }
 
-        <div className="grid gap-4 text-base">
+  const returnToCommitActions = () => {
+    blockNextCloseRef.current = true
+    setStage("browse")
+  }
+
+  const commandGroups: Array<{
+    heading: string
+    commands: Array<GitCommitCommand>
+  }> = [
+    {
+      heading: "Run",
+      commands: [
+        {
+          id: "commit",
+          title: "Commit",
+          description: message.trim()
+            ? "Commit with the current message."
+            : "Generate a message automatically, then commit.",
+          keywords: ["continue", "run", "save", "stage", "git"],
+          valueLabel: "Commit",
+          disabled: busy || files.length === 0,
+          onSelect: () => continueCommit(false),
+        },
+        {
+          id: "commit-push",
+          title: "Commit and push",
+          description: message.trim()
+            ? "Commit with the current message, then push."
+            : "Generate a message automatically, then commit and push.",
+          keywords: ["continue", "run", "save", "stage", "git", "push"],
+          valueLabel: "Push",
+          disabled: busy || files.length === 0,
+          onSelect: () => continueCommit(true),
+        },
+      ],
+    },
+    {
+      heading: "Message",
+      commands: [
+        {
+          id: "edit-message",
+          title: "Edit commit message",
+          description: message.trim()
+            ? message.trim()
+            : "Leave it blank to autogenerate before committing.",
+          keywords: ["message", "subject", "body", "focus", "edit"],
+          valueLabel: message.trim() ? "Custom" : "Blank",
+          disabled: busy,
+          onSelect: openCommitMessage,
+        },
+      ],
+    },
+    {
+      heading: "Options",
+      commands: [
+        {
+          id: "include-unstaged",
+          title: "Include unstaged changes",
+          description: "Stage unstaged files before committing.",
+          keywords: ["stage", "unstaged", "files", "working tree"],
+          valueLabel: includeUnstaged ? "On" : "Off",
+          disabled: busy,
+          onSelect: () => setIncludeUnstaged(!includeUnstaged),
+        },
+      ],
+    },
+  ]
+
+  const commandBrowseBody = (
+    <Command
+      shouldFilter
+      loop
+      value={selectedCommandId}
+      onValueChange={setSelectedCommandId}
+      onKeyDown={(event) => {
+        if (
+          event.key === "Enter" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.shiftKey
+        ) {
+          event.preventDefault()
+          void continueCommit(false)
+        }
+      }}
+      className="min-h-0 flex-1 rounded-none md:rounded-xl"
+    >
+      <CommandInput
+        autoFocus={!isMobile}
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search commit actions"
+        className="text-base md:text-sm"
+      />
+      <div className="grid gap-3 px-3 py-4 text-sm md:px-4 md:text-base">
+        <div className="grid gap-3">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
             <div className="font-semibold">Branch</div>
             <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
@@ -983,134 +1118,212 @@ function GitCommitDialog({
               ) : null}
             </div>
           </div>
-
-          <label className="flex items-center gap-3 font-medium">
-            <Switch
-              checked={includeUnstaged}
-              onCheckedChange={setIncludeUnstaged}
-              disabled={busy}
-              className="scale-125"
-            />
-            Include unstaged
-          </label>
         </div>
+      </div>
 
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <label
-              htmlFor="git-commit-message"
-              className="text-base font-semibold"
-            >
-              Commit message
-            </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy || !cwd || files.length === 0}
-              onClick={() => {
-                generateMutation.mutate(undefined, {
-                  onSuccess: (generated) => {
-                    setMessage(generated.message)
-                    setGeneratedReason(generated.reason || "")
-                    if (generated.source !== "ai" && generated.reason) {
-                      toast.info(`Using heuristic message: ${generated.reason}`)
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(50vh,24rem)]">
+        <CommandEmpty>No commit actions found.</CommandEmpty>
+        {commandGroups.map((group) => (
+          <CommandGroup key={group.heading} heading={group.heading}>
+            {group.commands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={command.id}
+                keywords={gitCommitCommandKeywords(command)}
+                disabled={command.disabled}
+                onSelect={() => {
+                  void Promise.resolve(command.onSelect()).catch(
+                    (error: unknown) => {
+                      toast.error(
+                        getErrorMessage(error, "Failed to run commit action")
+                      )
                     }
-                  },
-                })
-              }}
-            >
-              {generating ? <Spinner /> : <WandSparklesIcon />}
-              Generate message
-            </Button>
-          </div>
-          <Textarea
-            id="git-commit-message"
-            value={message}
-            onChange={(event) => {
-              setMessage(event.target.value)
-              setGeneratedReason("")
-            }}
-            placeholder="Leave blank to autogenerate a commit message"
-            className="min-h-28 resize-none rounded-2xl bg-muted/20 px-4 py-3 text-base"
-            disabled={busy}
-          />
-          {generatedReason ? (
-            <p className="text-xs text-muted-foreground">
-              AI message unavailable, using heuristic fallback:{" "}
-              {generatedReason}
-            </p>
-          ) : null}
-        </div>
+                  )
+                }}
+                className="items-start py-2"
+              >
+                {command.id === "commit" ? (
+                  busy ? (
+                    <Spinner />
+                  ) : (
+                    <GitCommitIcon />
+                  )
+                ) : command.id === "commit-push" ? (
+                  busy ? (
+                    <Spinner />
+                  ) : (
+                    <UploadIcon />
+                  )
+                ) : command.id === "generate-message" ? (
+                  generating ? (
+                    <Spinner />
+                  ) : (
+                    <WandSparklesIcon />
+                  )
+                ) : null}
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{command.title}</span>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
+                    {command.description}
+                  </span>
+                </div>
+                {command.valueLabel ? (
+                  <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
+                    {command.valueLabel}
+                  </CommandShortcut>
+                ) : null}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
+      </CommandList>
+      <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+        Use ↑/↓ to select, Enter to run, Esc to close. Press ⌘/Ctrl+Enter to
+        continue.
+      </div>
+    </Command>
+  )
 
-        <div className="grid gap-3">
-          <div className="text-base font-semibold">Next steps</div>
-          <div className="overflow-hidden rounded-2xl bg-muted/40 ring-1 ring-border/60">
-            <button
-              type="button"
-              className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-              disabled={busy}
-              onClick={() => setNextStep("commit")}
-            >
-              <GitCommitIcon className="size-5" />
-              <span className="text-base font-medium">Commit</span>
-              {nextStep === "commit" ? <CheckIcon className="size-5" /> : null}
-            </button>
-            <button
-              type="button"
-              className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-t border-border/70 px-4 text-left transition-colors hover:bg-muted/70 disabled:opacity-60"
-              disabled={busy}
-              onClick={() => setNextStep("push")}
-            >
-              <UploadIcon className="size-5" />
-              <span className="text-base font-medium">Commit and push</span>
-              {nextStep === "push" ? <CheckIcon className="size-5" /> : null}
-            </button>
-          </div>
-        </div>
+  const commitMessageBody = (
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Escape") return
 
+        event.preventDefault()
+        event.stopPropagation()
+        returnToCommitActions()
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <Button
-          size="lg"
-          className="h-14 rounded-2xl text-base"
-          disabled={busy || files.length === 0}
-          onClick={() => {
-            void continueCommit()
-          }}
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={returnToCommitActions}
+          aria-label="Back to commit actions"
         >
-          {busy ? <Spinner /> : null}
-          Continue
+          <ArrowLeftIcon />
         </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">Commit message</div>
+          <div className="truncate text-xs text-muted-foreground">
+            Leave blank to autogenerate before committing.
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy || !cwd || files.length === 0}
+          onClick={generateCommitMessage}
+        >
+          {generating ? <Spinner /> : <WandSparklesIcon />}
+          Generate
+        </Button>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+        <Textarea
+          autoFocus={!isMobile}
+          id="git-commit-message"
+          value={message}
+          onChange={(event) => {
+            setMessage(event.target.value)
+            setGeneratedReason("")
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault()
+              event.stopPropagation()
+              returnToCommitActions()
+              return
+            }
+
+            if (
+              event.key.toLowerCase() === "g" &&
+              event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey &&
+              !event.shiftKey
+            ) {
+              event.preventDefault()
+              event.stopPropagation()
+              generateCommitMessage()
+              return
+            }
+
+            if (
+              event.key === "Enter" &&
+              (event.metaKey || event.ctrlKey) &&
+              !event.shiftKey
+            ) {
+              event.preventDefault()
+              event.stopPropagation()
+              void continueCommit(false)
+            }
+          }}
+          placeholder="Leave blank to autogenerate a commit message"
+          className="min-h-40 flex-1 resize-none rounded-xl bg-muted/20 px-4 py-3 text-base"
+          disabled={busy}
+        />
+        {generatedReason ? (
+          <p className="text-xs text-muted-foreground">
+            AI message unavailable, using heuristic fallback: {generatedReason}
+          </p>
+        ) : null}
+      </div>
+      <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+        <span>Ctrl+G Generate</span>
+        <span>⌘/Ctrl+Enter Continue</span>
+        <span>Esc Back</span>
       </div>
     </div>
   )
 
+  const body = stage === "message" ? commitMessageBody : commandBrowseBody
+  const handleSurfaceOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && (stage === "message" || blockNextCloseRef.current)) {
+      blockNextCloseRef.current = false
+      setStage("browse")
+      return
+    }
+
+    onOpenChange(nextOpen)
+  }
+
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
-        <DrawerContent className="max-h-[92svh] overflow-y-auto">
+      <Drawer
+        open={open}
+        onOpenChange={handleSurfaceOpenChange}
+        autoFocus={false}
+      >
+        <DrawerContent className="max-h-[92svh] overflow-hidden">
           <DrawerHeader className="sr-only">
             <DrawerTitle>Commit your changes</DrawerTitle>
             <DrawerDescription>
               Stage and commit changes in this repository.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="px-5 pt-3 pb-6">{body}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {body}
+          </div>
         </DrawerContent>
       </Drawer>
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 p-8 sm:max-w-lg">
-        <DialogHeader className="sr-only">
-          <DialogTitle>Commit your changes</DialogTitle>
-          <DialogDescription>
-            Stage and commit changes in this repository.
-          </DialogDescription>
-        </DialogHeader>
-        {body}
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={handleSurfaceOpenChange}
+      title="Commit your changes"
+      description="Search commit actions, edit the message, and choose whether to push."
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {body}
+    </CommandDialog>
   )
 }
 
