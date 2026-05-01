@@ -7,6 +7,9 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 ## Stack
 
 - TanStack Start + TanStack Router + TanStack Query
+- TanStack Store / React Store for narrow client subscriptions
+- TanStack Hotkeys for app-wide shortcuts
+- TanStack Pacer for named debounce/throttle/batch controls in high-churn flows
 - React 19 + TypeScript
 - Vite+ + Nitro
 - Tailwind CSS v4
@@ -18,9 +21,10 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 ### Sidebar and session management
 
-- Directory-grouped sidebar with search, collapse/expand, drag reordering, and off-canvas mobile behavior
+- Directory-grouped sidebar with collapse/expand, drag reordering, and off-canvas mobile behavior
 - Route-linked session selection via `?session=`
 - Session lifecycle actions: new, rename, delete, and fork
+- Session search/switching through the sessions dialog
 - Multi-select sidebar session deletion
 - Delete-old-sessions cleanup flow for sidebar directories
 - Unread/live badges and title-bar unread counts
@@ -30,8 +34,8 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 - Prompt drafting with per-session draft persistence
 - Image attachments
-- Path completions and `@file` reference completions
-- Model picker, reasoning/thinking level picker, and context/provider usage indicator
+- Debounced path completions and `@file` reference completions
+- Model picker, reasoning/thinking level picker, and throttled context/provider usage indicator
 - Streaming controls: submit, abort, steer, and queued follow-ups
 - Pending prompt inspection, removal, and reordering while a response is active
 - Slash commands for built-ins like `/compact`, `/delete`, `/fork`, `/tree`, `/rename`, thinking/tool visibility, plus skill shortcuts when skills are available
@@ -42,6 +46,8 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Markdown rendering with GFM support
 - Syntax-highlighted fenced code blocks via `/api/highlight`
 - Assistant text, thinking, tool, and compaction block rendering
+- TanStack Store-backed narrow subscriptions for conversation items and assistant blocks
+- TanStack Pacer throttling for streaming conversation item publications
 - Optional hiding of thinking blocks and tool cards
 - Scroll jump controls for top, bottom, previous message, and next message
 - Session-finished toasts, sound, desktop notifications, and unread tracking
@@ -60,7 +66,8 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 - Git tab for repository status, changed files, local/remote branches, recent commits, and unpushed commit highlighting for the active session directory
 - Commit dialog with AI/heuristic message generation, include-unstaged toggle, commit, and commit-and-push flows
 - Push, pull, and refresh controls in the Git tab
-- Native backend git inspection/actions in `src/server/git.ts`, with filesystem watching in `src/server/git-watch.ts`
+- Native backend git inspection/actions in `src/server/git.ts`, with Pacer-debounced filesystem watching in `src/server/git-watch.ts`
+- Batched client-side git query invalidations from `git_changed` SSE bursts
 
 ## Project layout
 
@@ -69,15 +76,18 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 Main feature code lives in `src/features/phi`:
 
 - `app-shell.tsx` — top-level shell orchestration, store/controller wiring, commands, tabs, notifications, and focused hook/dialog composition
-- `use-app-shell-session-sync.ts` — SSE session/state sync behavior
+- `use-app-shell-session-sync.ts` — SSE session/state sync behavior plus batched git invalidations
 - `use-app-shell-prompt-mutations.ts` and `use-app-shell-session-mutations.ts` — prompt/session action flows
 - `sidebar.tsx` — directory/session sidebar UI
 - `composer-panel.tsx` — composer, slash commands, completions, model/thinking pickers, context usage, and pending prompt controls
-- `composer-assist-menu.tsx`, `composer-context-usage-indicator.tsx`, `composer-pending-messages.tsx`, `composer-pickers.tsx`, and `use-composer-assist.ts` — focused composer subcomponents and assist logic
+- `composer-assist-menu.tsx`, `composer-context-usage-indicator.tsx`, `composer-pending-messages.tsx`, `composer-pickers.tsx`, and `use-composer-assist.ts` — focused composer subcomponents and debounced assist logic
 - `conversation-view.tsx` — message rendering, markdown/code blocks, tool cards, compaction UI, assistant block subscriptions, and deferred highlighting
-- `app-shell-dialogs.tsx` — dialog coordinator
-- `app-shell-add-directory-dialog.tsx`, `app-shell-session-dialogs.tsx`, `app-shell-settings-dialog.tsx`, `app-shell-tree-dialog.tsx`, and `app-shell-ui-request-dialog.tsx` — focused dialog implementations
+- `app-shell-dialogs.tsx` — legacy/minimal UI-request dialog wrapper
+- `app-shell-add-directory-dialog.tsx`, `app-shell-session-dialogs.tsx`, `app-shell-sessions-dialog.tsx`, `app-shell-settings-dialog.tsx`, `app-shell-tree-dialog.tsx`, and `app-shell-ui-request-dialog.tsx` — focused dialog implementations
 - `app-shell-command-palette.tsx` — command palette
+- `use-app-shell-shortcuts.ts` — TanStack Hotkeys-backed shortcut definitions
+- `tanstack-store-utils.ts` — TanStack Store helpers used by the shell stores
+- `pacer-utils.ts` — small Phi wrappers around TanStack Pacer primitives
 - `git-panel.tsx` — git status/files/branches/commits tab plus commit, push, and pull actions
 - `session-done-notifications.ts` — sound and desktop notification helpers
 
@@ -94,7 +104,7 @@ Main feature code lives in `src/features/phi`:
 - `src/routes/__root.tsx` — root document, CSS, and devtools shell
 - `src/routes/index.tsx` — root route and `?session=` wiring
 - `src/router.tsx` — router + query integration
-- `src/components/app-providers.tsx` — theme, tooltip, and toast providers
+- `src/components/app-providers.tsx` — theme, TanStack Hotkeys, tooltip, and toast providers
 
 ### Server/runtime
 
@@ -105,7 +115,19 @@ Main feature code lives in `src/features/phi`:
 - `src/server/pi-sdk.ts`, `src/server/pi-sdk-path.ts`, and `src/server/pi-sdk-types.ts` — SDK loading, package resolution, settings-manager adaptation, and local adapter types
 - `src/server/session-naming.ts` — heuristic/LLM-backed automatic session naming helpers
 - `src/server/provider-usage.ts` — provider usage lookup for composer context/limit display
-- `src/server/git.ts` and `src/server/git-watch.ts` — git inspection/actions, short-lived caches, and filesystem watch notifications
+- `src/server/git.ts` and `src/server/git-watch.ts` — git inspection/actions, short-lived caches, and Pacer-debounced filesystem watch notifications
+
+## Current TanStack architecture notes
+
+- TanStack Store is the primary client state primitive for shared shell state. The app favors narrow selector subscriptions over broad React state mirrors.
+- TanStack Hotkeys owns app-wide keyboard shortcuts through `use-app-shell-shortcuts.ts` and `HotkeysProvider` in `src/components/app-providers.tsx`.
+- TanStack Pacer is used for high-churn execution control:
+  - streaming conversation item publication throttling
+  - path and `@file` completion request debouncing
+  - context usage publication throttling
+  - client git invalidation batching
+  - server git-watch debounce
+- TanStack Query remains the server-state/cache layer. Use `src/features/phi/query-keys.ts` for cached query keys and `buildRequestUrl()` for app-aware requests.
 
 ## Key HTTP/SSE endpoints
 
@@ -212,7 +234,7 @@ pnpm check:fix
 
 ## Status
 
-Repo snapshot reviewed on 2026-04-27:
+Repo snapshot reviewed on 2026-04-30:
 
 - `pnpm check:fix` passing
 - legacy parity reference is still `~/code/pi-web-legacy`

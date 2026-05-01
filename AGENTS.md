@@ -17,6 +17,9 @@ Important parity/reference note:
 - TanStack Start
 - TanStack Router
 - TanStack Query
+- TanStack Store / React Store
+- TanStack Hotkeys
+- TanStack Pacer
 - React 19
 - React Compiler enabled via `reactCompilerPreset()` in `vite.config.ts`
 - TypeScript (strict mode)
@@ -75,7 +78,7 @@ Notes:
 - `src/features/phi/use-app-shell-message-scroll.ts`
   - scroll/jump behavior for the conversation pane
 - `src/features/phi/use-app-shell-shortcuts.ts`
-  - keyboard shortcut handling for the shell
+  - TanStack Hotkeys-backed keyboard shortcut handling for the shell
 - `src/features/phi/sidebar.tsx`
   - directory/session sidebar UI
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
@@ -100,6 +103,10 @@ Notes:
   - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
 - `src/features/phi/query-keys.ts`
   - TanStack Query cache keys
+- `src/features/phi/tanstack-store-utils.ts`
+  - shared TanStack Store helpers (`createPhiStore`, `setStoreState`, `useSelector`, `batch`)
+- `src/features/phi/pacer-utils.ts`
+  - small Phi wrappers around TanStack Pacer primitives for named high-churn controls
 - `src/features/phi/app-shell-utils.ts`
   - request URL builder, fetch helper, image conversion, sync-state helpers
 - `src/features/phi/composer-utils.ts`
@@ -160,6 +167,7 @@ Notes:
   - native git inspection and git action helpers with short-lived caching
 - `src/server/git-watch.ts`
   - filesystem watcher that emits git refresh events for active directories
+  - debounces filesystem bursts with TanStack Pacer
 - `src/server/http.ts`
   - JSON/error response helpers
 - `src/server/route-helpers.ts`
@@ -245,10 +253,11 @@ Notable current client-side state patterns:
 - `draftFlowStore`, `composerDraftSeedStore`, `composerImagesStore`, `awaitingFirstTurnStore`, `pendingDraftPromptStore`, and `pendingDraftFollowUpsStore` own draft/composer setup state.
 - `composerStore`, `isSubmittingStore`, and `pendingMessagesStore` hold the composer snapshot, submit status, and queued prompt state consumed by `AppShellComposerController`.
 - `contextUsageStore` feeds the composer context/provider usage indicator.
+  - high-frequency context-usage publications are throttled with TanStack Pacer and reset on session switches.
 - `conversationItemsStore` owns the render-optimized projection of `SessionState.items`.
   - `sessionStore`/`sessionStateRef` still hold the canonical session snapshot, including `items`; the conversation store exists to avoid broad rerenders.
   - It supports global revision subscriptions, render-group subscriptions, assistant-group item-key subscriptions, and per-item subscriptions.
-  - Streaming conversation item updates are batched to animation frames.
+  - Streaming conversation item updates are throttled with TanStack Pacer before publishing to the conversation store.
   - Assistant rendering bridges through a per-assistant-group `AssistantMessagesStore`, then an `AssistantBlockStore` in `conversation-view.tsx` with per-block and tool-derived subscriptions.
   - The session-loading state intentionally hides the previous message stack while switching sessions.
 - `hiddenThinkingPreviewStore` and `workingStateStore` are narrow stores for footer/loading text.
@@ -317,7 +326,7 @@ Prefer these existing helpers/patterns:
 - TanStack Query for cached server data
 - local React state for transient UI-only state
 
-Use query keys from `src/features/phi/query-keys.ts` when extending cached data.
+Use query keys from `src/features/phi/query-keys.ts` when extending cached data. Git SSE refresh invalidations are batched with TanStack Pacer in `use-app-shell-session-sync.ts`; prefer extending that batching path over adding one invalidation per event.
 
 ### Session selection
 
@@ -347,6 +356,9 @@ If you touch composer parsing or submission, inspect both:
 
 - `src/features/phi/composer-panel.tsx`
 - `src/features/phi/composer-utils.ts`
+- `src/features/phi/use-composer-assist.ts`
+
+Path and `@file` completion requests are debounced with TanStack Pacer while preserving request-id stale-result guards.
 
 ### Conversation history and rendering
 
@@ -373,7 +385,7 @@ Rendering/performance details:
 - Treat `sessionStore`/`sessionStateRef` as the canonical session snapshot, but use `conversationItemsStore` as the render-optimized projection of `SessionState.items`.
 - `conversationItemsStore` supports global revision subscriptions, render-group subscriptions, assistant-group item-key subscriptions, and per-item subscriptions; avoid passing whole message arrays through broad React state.
 - Conversation rendering is layered: `ConversationItemsStore` → per-assistant-group `AssistantMessagesStore` → `AssistantBlockStore` in `conversation-view.tsx` → per-block and tool-derived subscriptions.
-- Streaming conversation item updates are batched to animation frames before publishing to the conversation store.
+- Streaming conversation item updates are throttled with TanStack Pacer before publishing to the conversation store.
 - Assistant block rendering subscribes narrowly: text/thinking/compaction blocks subscribe by block key, while tool cards derive separate header/body snapshots so collapsed bodies do not subscribe to full tool payloads.
 - Long streaming markdown can temporarily render as plain text and switches back to markdown when streaming stops.
 - Code block syntax highlighting is deferred until code blocks are near the viewport and uses `/api/highlight` caching.
@@ -478,6 +490,9 @@ Code style conventions already used in the repo:
 
 - `useQuery` / `useQueries` / `useMutation` for server-backed data and actions
 - route-driven app shell via TanStack Router file routes
+- TanStack Store + `@tanstack/react-store` selectors for narrow client subscriptions
+- TanStack Hotkeys for app-wide shortcuts in `use-app-shell-shortcuts.ts`
+- TanStack Pacer for named debounce/throttle/batch behavior in high-churn flows
 - local state for view-specific UI state
 - minimal route handlers, richer runtime/service layer
 
@@ -498,9 +513,9 @@ Current behavior includes:
 - AI/heuristic commit message generation
 - commit, optional commit-and-push, push, and pull actions
 - short-lived caches for status/files/branches/commits
-- filesystem git watching that emits `git_changed` SSE notifications
+- filesystem git watching that emits debounced `git_changed` SSE notifications
 
-The git panel renders files, branches, and commits sections together when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title.
+The git panel renders files, branches, and commits sections together when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
 
 If you extend git UI, update:
 
@@ -580,6 +595,7 @@ Be especially careful around these:
 - assuming every `state_sync` event is complete; initial sync currently includes full history, but follow-up patch events may omit unchanged fields
 - invalidating the wrong TanStack Query keys
 - changing storage keys unnecessarily
+- replacing named TanStack Pacer controls with ad hoc debounce/throttle/queue timers in high-churn paths
 - bypassing the runtime singleton with ad hoc server state
 - altering session tree/fork behavior without testing the dialog flows
 - assuming the legacy app is in this repo
