@@ -2222,11 +2222,12 @@ export class PhiRuntime {
     options?: {
       draft?: boolean
       newSessionOptions?: { parentSession?: string }
+      sessionDir?: string
       sessionStartEvent?: SessionStartEventLike
     }
   ) {
     const sdk = await this.getSdk()
-    const sessionManager = sdk.SessionManager.create(cwd)
+    const sessionManager = sdk.SessionManager.create(cwd, options?.sessionDir)
     if (options?.newSessionOptions && sessionManager.newSession) {
       sessionManager.newSession(options.newSessionOptions)
     }
@@ -3559,32 +3560,18 @@ export class PhiRuntime {
         : undefined
     const nextCwd = requestedCwd || context.sessionScope || activeEntry.cwd
 
-    const nextEntry =
-      nextCwd === activeEntry.cwd
-        ? (
-            await this.createTransitionSessionEntry(
-              activeEntry,
-              async (runtime) => {
-                const next = await runtime.newSession()
-                return {
-                  cancelled: next.cancelled,
-                  draft: true,
-                }
-              }
-            )
-          ).entry
-        : await this.createNewSessionEntry(nextCwd, {
-            draft: true,
-            sessionStartEvent: {
-              type: "session_start",
-              reason: "new",
-              previousSessionFile: activeEntry.session.sessionFile,
-            },
-          })
-
-    if (!nextEntry) {
-      return { ok: true, draft: true, cancelled: true }
-    }
+    const nextEntry = await this.createNewSessionEntry(nextCwd, {
+      draft: true,
+      sessionDir:
+        nextCwd === activeEntry.cwd
+          ? activeEntry.session.sessionManager.getSessionDir?.()
+          : undefined,
+      sessionStartEvent: {
+        type: "session_start",
+        reason: "new",
+        previousSessionFile: activeEntry.session.sessionFile,
+      },
+    })
 
     context.draftKey = nextEntry.key
     await this.activateContextSession(context, nextEntry)
