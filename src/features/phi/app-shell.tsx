@@ -2863,7 +2863,7 @@ function AppShellDesktopGitPanel({
       aria-label="Git panel"
       aria-hidden={!active}
       data-state={active ? "open" : "closed"}
-      className="flex h-full min-h-0 min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-border/70 p-2">
         <div className="min-w-0 flex-1">
@@ -3049,18 +3049,20 @@ function AppShellTabsController({
             minSize="20rem"
             collapsedSize="0%"
             collapsible
-            className="h-full min-h-0 min-w-0"
+            className="h-full min-h-0 min-w-0 overflow-hidden"
             onResize={(size) => {
               if (!desktopGitPanelOpen || size.asPercentage <= 0) return
               lastGitPanelSizeRef.current = size.asPercentage
             }}
           >
             {desktopGitPanelMounted || desktopGitPanelOpen ? (
-              <AppShellDesktopGitPanel
-                viewerContextId={viewerContextId}
-                sessionStore={sessionStore}
-                active={desktopGitPanelOpen}
-              />
+              <div className="h-full min-w-[20rem]">
+                <AppShellDesktopGitPanel
+                  viewerContextId={viewerContextId}
+                  sessionStore={sessionStore}
+                  active={desktopGitPanelOpen}
+                />
+              </div>
             ) : null}
           </ResizablePanel>
         </ResizablePanelGroup>
