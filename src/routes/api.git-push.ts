@@ -12,7 +12,11 @@ export const Route = createFileRoute("/api/git-push")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const body = await readRequestJson<{ cwd?: unknown }>(request)
+          const body = await readRequestJson<{
+            cwd?: unknown
+            force?: unknown
+            forcePush?: unknown
+          }>(request)
           const requestedCwd = typeof body.cwd === "string" ? body.cwd : ""
           if (!requestedCwd.trim()) throw new Error("cwd is required")
 
@@ -20,7 +24,9 @@ export const Route = createFileRoute("/api/git-push")({
             await getPhiRuntime().resolveRequest(request)
           const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
-          const result = await pushDirectoryGitChanges(cwd)
+          const result = await pushDirectoryGitChanges(cwd, {
+            force: body.force === true || body.forcePush === true,
+          })
           return jsonResponse({
             ok: true,
             cwd,

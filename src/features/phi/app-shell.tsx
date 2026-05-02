@@ -145,6 +145,7 @@ import {
   createPhiLatestThrottler,
   type PhiLatestThrottler,
 } from "@/features/phi/pacer-utils"
+import { formatShortcutLabel } from "@/features/phi/keyboard-shortcuts"
 import { phiQueryKeys, phiSessionScopeKey } from "@/features/phi/query-keys"
 import {
   applyStoreAction,
@@ -308,6 +309,7 @@ type DirectorySessionsIndexesData = Extract<
 >
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
+type GitRemoteAction = "push" | "force-push" | "pull"
 
 type AppShellSidebarSnapshot = {
   baseSidebarDirectories: Array<string>
@@ -4644,6 +4646,31 @@ const AppShellSessionWorkspace = React.forwardRef<
     gitCommitDialogRef.current?.open()
   }
 
+  const invalidateGitActionQueries = async (cwd: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      }),
+      queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      }),
+      queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      }),
+      queryClient.invalidateQueries({
+        queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      }),
+    ])
+  }
+
   const gitPushMutation = useMutation({
     mutationKey: phiQueryKeys.gitAction(
       viewerContextId,
@@ -4660,28 +4687,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
       ),
     onSuccess: async (_response, cwd) => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: phiQueryKeys.gitStatus(viewerContextId, cwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
-          exact: true,
-          refetchType: "active",
-        }),
-        queryClient.invalidateQueries({
-          queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
-          exact: true,
-          refetchType: "active",
-        }),
-      ])
+      await invalidateGitActionQueries(cwd)
       toast.success("Pushed changes")
     },
     onError: (error) => {
@@ -4689,15 +4695,91 @@ const AppShellSessionWorkspace = React.forwardRef<
     },
   })
 
-  const pushGitChanges = async () => {
+  const gitForcePushMutation = useMutation({
+    mutationKey: phiQueryKeys.gitAction(
+      viewerContextId,
+      sessionStateRef.current.cwd?.trim() || "",
+      "force-push"
+    ),
+    mutationFn: async (cwd: string) =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-push", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd, force: true }),
+        }
+      ),
+    onSuccess: async (_response, cwd) => {
+      await invalidateGitActionQueries(cwd)
+      toast.success("Force pushed changes")
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to force push"
+      )
+    },
+  })
+
+  const gitPullMutation = useMutation({
+    mutationKey: phiQueryKeys.gitAction(
+      viewerContextId,
+      sessionStateRef.current.cwd?.trim() || "",
+      "pull"
+    ),
+    mutationFn: async (cwd: string) =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-pull", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd }),
+        }
+      ),
+    onSuccess: async (_response, cwd) => {
+      await invalidateGitActionQueries(cwd)
+      toast.success("Pulled changes")
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to pull")
+    },
+  })
+
+  const runGitRemoteAction = async (action: GitRemoteAction) => {
     const cwd = sessionStateRef.current.cwd?.trim() || ""
     if (!cwd) {
-      toast.error("Open a session in a repository before pushing.")
+      toast.error("Open a session in a repository before running Git actions.")
       return
     }
-    if (gitPushMutation.isPending) return
 
-    await gitPushMutation.mutateAsync(cwd).catch(() => {})
+    const mutation =
+      action === "pull"
+        ? gitPullMutation
+        : action === "force-push"
+          ? gitForcePushMutation
+          : gitPushMutation
+
+    if (
+      gitPushMutation.isPending ||
+      gitForcePushMutation.isPending ||
+      gitPullMutation.isPending
+    ) {
+      return
+    }
+
+    await mutation.mutateAsync(cwd).catch(() => {})
+  }
+
+  const pushGitChanges = async () => {
+    await runGitRemoteAction("push")
+  }
+
+  const forcePushGitChanges = async () => {
+    await runGitRemoteAction("force-push")
+  }
+
+  const pullGitChanges = async () => {
+    await runGitRemoteAction("pull")
   }
 
   const toggleGitPanel = () => {
@@ -5557,7 +5639,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sessions",
         title: "New session",
         description: "Create a new draft session",
-        shortcut: "Ctrl+N",
+        shortcut: formatShortcutLabel("Control+N"),
         keywords: ["create", "draft", "session"],
         onSelect: createSession,
       },
@@ -5566,7 +5648,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sessions",
         title: "Open sessions",
         description: "Search and switch sessions",
-        shortcut: "Ctrl+S",
+        shortcut: formatShortcutLabel("Control+S"),
         keywords: ["session", "search", "switch", "jump"],
         onSelect: openSessionsDialog,
       },
@@ -5581,7 +5663,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         description: commandState.isMobile
           ? "Switch the mobile Git tab on or off"
           : "Toggle the right-side Git panel",
-        shortcut: "Ctrl+\\",
+        shortcut: formatShortcutLabel("Control+\\"),
         keywords: ["git", "changes", "branch", "commit", "panel"],
         onSelect: toggleGitPanel,
       },
@@ -5590,7 +5672,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Git",
         title: "Commit changes",
         description: "Open the Git commit dialog",
-        shortcut: "Ctrl+C",
+        shortcut: formatShortcutLabel("Control+C"),
         keywords: ["git", "commit", "changes", "stage"],
         onSelect: openCommitDialog,
       },
@@ -5599,16 +5681,34 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Git",
         title: "Push changes",
         description: "Push local commits to the remote",
-        shortcut: "Ctrl+U",
+        shortcut: formatShortcutLabel("Control+P"),
         keywords: ["git", "push", "remote", "upstream"],
         onSelect: pushGitChanges,
+      },
+      {
+        id: "force-push-changes",
+        group: "Git",
+        title: "Force push changes",
+        description: "Force push local commits with --force-with-lease",
+        shortcut: formatShortcutLabel("Control+Shift+P"),
+        keywords: ["git", "force", "push", "remote", "upstream", "lease"],
+        onSelect: forcePushGitChanges,
+      },
+      {
+        id: "pull-changes",
+        group: "Git",
+        title: "Pull changes",
+        description: "Pull remote changes into the current branch",
+        shortcut: formatShortcutLabel("Alt+P"),
+        keywords: ["git", "pull", "remote", "upstream"],
+        onSelect: pullGitChanges,
       },
       {
         id: "focus-prompt",
         group: "Assistant",
         title: "Focus prompt",
         description: "Move focus to the prompt field",
-        shortcut: "Ctrl+Enter",
+        shortcut: formatShortcutLabel("Control+Enter"),
         keywords: ["prompt", "composer", "input", "message", "reply"],
         onSelect: focusPrompt,
       },
@@ -5617,7 +5717,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Assistant",
         title: "Set model",
         description: "Open the model picker",
-        shortcut: "Ctrl+M",
+        shortcut: formatShortcutLabel("Control+M"),
         keywords: ["model", "provider", "picker", "choose"],
         onSelect: () => {
           if (!commandPaletteStateRef.current.hasAvailableModels) {
@@ -5632,7 +5732,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sidebar",
         title: "Add Directory",
         description: "Add a directory accordion to the sidebar",
-        shortcut: "Ctrl+D",
+        shortcut: formatShortcutLabel("Control+D"),
         keywords: ["workspace", "sidebar", "directory", "folder"],
         onSelect: openAddDirectoryDialog,
       },
@@ -5641,7 +5741,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sessions",
         title: "Open tree",
         description: "Jump to an earlier point in the current session tree",
-        shortcut: "Ctrl+T",
+        shortcut: "Esc Esc",
         keywords: ["tree", "branch", "history", "navigate"],
         onSelect: openTreeDialog,
       },
@@ -5650,7 +5750,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sessions",
         title: "Fork session",
         description: "Create a new session from a previous user message",
-        shortcut: "Ctrl+F",
+        shortcut: formatShortcutLabel("Control+F"),
         keywords: ["fork", "branch", "draft"],
         onSelect: openForkDialog,
       },
@@ -5671,7 +5771,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         description: currentHideThinkingBlock
           ? "Show assistant thinking blocks"
           : "Hide assistant thinking blocks",
-        shortcut: "Ctrl+G",
+        shortcut: formatShortcutLabel("Control+T"),
         keywords: ["thinking", "reasoning", "visibility", "show", "hide"],
         onSelect: toggleHideThinking,
       },
@@ -5680,7 +5780,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Assistant",
         title: "Next reasoning level",
         description: `Current level: ${currentThinkingLevel}`,
-        shortcut: "Ctrl+R",
+        shortcut: formatShortcutLabel("Control+R"),
         keywords: ["thinking", "reasoning", "level", "cycle", "next"],
         onSelect: () => {
           void cycleThinkingLevel(1)
@@ -5691,7 +5791,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Assistant",
         title: "Previous reasoning level",
         description: `Current level: ${currentThinkingLevel}`,
-        shortcut: "Ctrl+Shift+R",
+        shortcut: formatShortcutLabel("Control+Shift+R"),
         keywords: [
           "thinking",
           "reasoning",
@@ -5713,7 +5813,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         description: displaySettingsRef.current.hideToolBlocks
           ? "Show assistant tool calls"
           : "Hide assistant tool calls",
-        shortcut: "Ctrl+O",
+        shortcut: formatShortcutLabel("Control+O"),
         keywords: ["tools", "tool calls", "visibility", "show", "hide"],
         onSelect: toggleHideToolBlocks,
       },
@@ -5722,7 +5822,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "App",
         title: "Open settings",
         description: "Open app settings",
-        shortcut: "Ctrl+,",
+        shortcut: formatShortcutLabel("Control+,"),
         keywords: ["settings", "theme", "notifications", "display"],
         onSelect: openSettingsDialog,
       },
@@ -5734,7 +5834,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Sessions",
         title: "Rename session",
         description: "Rename the current session",
-        shortcut: "Ctrl+E",
+        shortcut: formatShortcutLabel("Control+E"),
         keywords: ["rename", "title", "name"],
         onSelect: openRenameDialog,
       })
@@ -5745,7 +5845,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         description: `Delete ${getCurrentSessionTitleFromState(
           sessionStateRef.current
         )}`,
-        shortcut: "Ctrl+X",
+        shortcut: formatShortcutLabel("Control+X"),
         keywords: ["delete", "remove", "session"],
         onSelect: openDeleteDialogForCurrentSession,
       })
@@ -5781,6 +5881,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     abortSession,
     createSession,
     closeCommandPalette,
+    forcePushGitChanges,
     focusModelSelector,
     focusPrompt,
     focusSessionSearch,
@@ -5800,6 +5901,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     openSessionsDialog,
     openSettingsDialog,
     openTreeDialog,
+    pullGitChanges,
     pushGitChanges,
     scrollConversationToBottom: () => {
       conversationFrameRef.current?.scrollConversationToBottom()
@@ -6177,7 +6279,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Create new session</span>
-                <DropdownMenuShortcut>Ctrl+N</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+N")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               {newSessionDirectoryOptions.length > 0 ? (
                 <DropdownMenuSub>
@@ -6222,7 +6326,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Tree</span>
-                <DropdownMenuShortcut>Ctrl+T</DropdownMenuShortcut>
+                <DropdownMenuShortcut>Esc Esc</DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
@@ -6230,7 +6334,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Fork</span>
-                <DropdownMenuShortcut>Ctrl+F</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+F")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -6243,7 +6349,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                     ? "Show thinking"
                     : "Hide thinking"}
                 </span>
-                <DropdownMenuShortcut>Ctrl+G</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+T")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
@@ -6251,7 +6359,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
-                <DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+O")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -6261,7 +6371,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Rename session</span>
-                <DropdownMenuShortcut>Ctrl+E</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+E")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
@@ -6271,7 +6383,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>Delete session</span>
-                <DropdownMenuShortcut>Ctrl+X</DropdownMenuShortcut>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+X")}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -6282,7 +6396,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             aria-pressed={gitPanelOpen}
             aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
             title={
-              gitPanelOpen ? "Close Git panel" : "Open Git panel (Ctrl+\\)"
+              gitPanelOpen
+                ? "Close Git panel"
+                : `Open Git panel (${formatShortcutLabel("Control+\\")})`
             }
             onClick={onToggleGitPanel}
           >

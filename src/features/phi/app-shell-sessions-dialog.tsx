@@ -28,6 +28,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import {
+  formatShortcutLabel,
+  matchesShortcutEvent,
+} from "@/features/phi/keyboard-shortcuts"
 import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/phi"
@@ -481,17 +485,13 @@ function AppShellSessionsDialog({
       return
     }
 
-    if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
-      return
-    }
-
-    if (key === "r") {
+    if (matchesShortcutEvent(event.nativeEvent, "Control+R")) {
       event.preventDefault()
       renameSelectedSession()
       return
     }
 
-    if (key === "d") {
+    if (matchesShortcutEvent(event.nativeEvent, "Control+D")) {
       event.preventDefault()
       deleteSelectedSession()
     }
@@ -597,10 +597,10 @@ function AppShellSessionsDialog({
             <FooterKbd>Enter</FooterKbd> Switch
           </span>
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>Ctrl+R</FooterKbd> Rename
+            <FooterKbd>{formatShortcutLabel("Control+R")}</FooterKbd> Rename
           </span>
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>Ctrl+D</FooterKbd> Delete
+            <FooterKbd>{formatShortcutLabel("Control+D")}</FooterKbd> Delete
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Esc</FooterKbd> Close

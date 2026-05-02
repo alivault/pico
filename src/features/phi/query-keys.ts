@@ -24,8 +24,11 @@ export const phiQueryKeys = {
     ["phi", "git-branches", viewerContextId, cwd] as const,
   gitCommits: (viewerContextId: string, cwd: string) =>
     ["phi", "git-commits", viewerContextId, cwd] as const,
-  gitAction: (viewerContextId: string, cwd: string, action: "push" | "pull") =>
-    ["phi", "git-action", viewerContextId, cwd, action] as const,
+  gitAction: (
+    viewerContextId: string,
+    cwd: string,
+    action: "push" | "force-push" | "pull"
+  ) => ["phi", "git-action", viewerContextId, cwd, action] as const,
   sessionTree: (viewerContextId: string, sessionScopeKey: string) =>
     ["phi", "session-tree", viewerContextId, sessionScopeKey] as const,
   forkableMessages: (viewerContextId: string, sessionScopeKey: string) =>

@@ -1034,8 +1034,13 @@ export async function commitDirectoryGitChanges(
   message: string,
   {
     push = false,
+    forcePush = false,
     includeUnstaged = true,
-  }: { push?: boolean; includeUnstaged?: boolean } = {}
+  }: {
+    push?: boolean
+    forcePush?: boolean
+    includeUnstaged?: boolean
+  } = {}
 ): Promise<GitActionResult> {
   const normalizedCwd = normalizeGitCwd(cwd)
   const normalizedMessage = cleanupCommitMessageCandidate(message)
@@ -1099,7 +1104,9 @@ export async function commitDirectoryGitChanges(
   let stdout = commitResult.stdout
   let stderr = commitResult.stderr
   if (push) {
-    const pushResult = await pushDirectoryGitChanges(normalizedCwd)
+    const pushResult = await pushDirectoryGitChanges(normalizedCwd, {
+      force: forcePush,
+    })
     stdout = [stdout, pushResult.stdout].filter(Boolean).join("\n")
     stderr = [stderr, pushResult.stderr].filter(Boolean).join("\n")
   }
@@ -1109,7 +1116,8 @@ export async function commitDirectoryGitChanges(
 }
 
 export async function pushDirectoryGitChanges(
-  cwd: string
+  cwd: string,
+  { force = false }: { force?: boolean } = {}
 ): Promise<GitActionResult> {
   const normalizedCwd = normalizeGitCwd(cwd)
   if (!normalizedCwd) throw new Error("cwd is required")
@@ -1117,12 +1125,21 @@ export async function pushDirectoryGitChanges(
     throw new Error("No git repository detected")
   }
 
-  const result = await runCommand("git", ["push"], {
-    cwd: normalizedCwd,
-    timeoutMs: GIT_ACTION_TIMEOUT_MS,
-  })
+  const result = await runCommand(
+    "git",
+    force ? ["push", "--force-with-lease"] : ["push"],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: GIT_ACTION_TIMEOUT_MS,
+    }
+  )
   if (result.code !== 0) {
-    throw new Error(gitCommandErrorMessage("Failed to push changes", result))
+    throw new Error(
+      gitCommandErrorMessage(
+        force ? "Failed to force push changes" : "Failed to push changes",
+        result
+      )
+    )
   }
 
   invalidateDirectoryGitCaches(normalizedCwd)

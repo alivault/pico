@@ -16,6 +16,7 @@ export const Route = createFileRoute("/api/git-commit")({
             cwd?: unknown
             message?: unknown
             push?: unknown
+            forcePush?: unknown
             includeUnstaged?: unknown
           }>(request)
           const requestedCwd = typeof body.cwd === "string" ? body.cwd : ""
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/api/git-commit")({
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const result = await commitDirectoryGitChanges(cwd, message, {
             push: body.push === true,
+            forcePush: body.forcePush === true,
             includeUnstaged: body.includeUnstaged !== false,
           })
           return jsonResponse({

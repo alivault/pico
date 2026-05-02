@@ -30,6 +30,10 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import {
+  formatShortcutLabel,
+  matchesShortcutEvent,
+} from "@/features/phi/keyboard-shortcuts"
 import { phiQueryKeys } from "@/features/phi/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { flattenTree } from "@/lib/phi"
@@ -81,13 +85,13 @@ type TreeDialogViewModel = {
 const TREE_FILTER_OPTIONS: Array<{
   mode: TreeFilterMode
   label: string
-  shortcut: Array<string>
+  shortcut: string
 }> = [
-  { mode: "default", label: "Default", shortcut: ["Ctrl", "D"] },
-  { mode: "no-tools", label: "No tools", shortcut: ["Ctrl", "T"] },
-  { mode: "user-only", label: "User only", shortcut: ["Ctrl", "U"] },
-  { mode: "labeled-only", label: "Labeled", shortcut: ["Ctrl", "L"] },
-  { mode: "all", label: "All", shortcut: ["Ctrl", "A"] },
+  { mode: "default", label: "Default", shortcut: "Control+D" },
+  { mode: "no-tools", label: "No tools", shortcut: "Control+T" },
+  { mode: "user-only", label: "User only", shortcut: "Control+U" },
+  { mode: "labeled-only", label: "Labeled", shortcut: "Control+L" },
+  { mode: "all", label: "All", shortcut: "Control+A" },
 ]
 
 function toggleTreeFilterMode(
@@ -1319,17 +1323,13 @@ function TreeBrowsePanel({
           }
 
           if (
-            event.ctrlKey &&
-            !event.shiftKey &&
-            !event.metaKey &&
-            !event.altKey
+            matchesShortcutEvent(event.nativeEvent, "Control+ArrowLeft") ||
+            matchesShortcutEvent(event.nativeEvent, "Control+ArrowRight")
           ) {
-            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-              event.preventDefault()
-              event.stopPropagation()
-              toggleTreeNodeFold(event.key === "ArrowRight")
-              return
-            }
+            event.preventDefault()
+            event.stopPropagation()
+            toggleTreeNodeFold(event.key === "ArrowRight")
+            return
           }
         }}
         className="min-h-0 w-full max-w-full min-w-0 flex-1"
@@ -1436,11 +1436,15 @@ function TreeBrowsePanel({
             </span>
             <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
             <TreeFooterHint kbd="←/→">Page</TreeFooterHint>
-            <TreeFooterHint kbd="Ctrl+←/→">Fold</TreeFooterHint>
+            <TreeFooterHint
+              kbd={`${formatShortcutLabel("Control+ArrowLeft")}/${formatShortcutLabel("Control+ArrowRight")}`}
+            >
+              Fold
+            </TreeFooterHint>
             {TREE_FILTER_OPTIONS.map((option) => (
               <TreeFooterHint
                 key={option.mode}
-                kbd={option.shortcut.join("+")}
+                kbd={formatShortcutLabel(option.shortcut)}
                 active={treeFilterMode === option.mode}
               >
                 {option.label}
@@ -1559,19 +1563,25 @@ function TreeContinueActionsPanel({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        ((event.ctrlKey && (event.key === "j" || event.key === "k")) ||
-          (!event.ctrlKey &&
-            (event.key === "ArrowDown" || event.key === "ArrowUp")))
-      ) {
+      const moveDown =
+        matchesShortcutEvent(event, "Control+J") ||
+        (!event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key === "ArrowDown")
+      const moveUp =
+        matchesShortcutEvent(event, "Control+K") ||
+        (!event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key === "ArrowUp")
+
+      if (moveDown || moveUp) {
         event.preventDefault()
         event.stopPropagation()
-        moveSelectedAction(
-          event.key === "j" || event.key === "ArrowDown" ? 1 : -1
-        )
+        moveSelectedAction(moveDown ? 1 : -1)
         return
       }
 
@@ -1866,37 +1876,32 @@ export function AppShellTreeDialog({
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
 
-      if (
-        treeStage === "browse" &&
-        event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        if (!event.shiftKey) {
-          const presetMap: Partial<Record<string, TreeFilterMode>> = {
-            d: "default",
-            t: "no-tools",
-            u: "user-only",
-            l: "labeled-only",
-            a: "all",
-          }
-          const nextMode = presetMap[key]
-          if (nextMode) {
-            event.preventDefault()
-            event.stopPropagation()
-            setTreeFilterMode((currentMode) =>
-              toggleTreeFilterMode(currentMode, nextMode)
-            )
-            return
-          }
+      if (treeStage === "browse") {
+        const presetMap: Partial<Record<string, TreeFilterMode>> = {
+          d: "default",
+          t: "no-tools",
+          u: "user-only",
+          l: "labeled-only",
+          a: "all",
+        }
+        const nextMode = presetMap[key]
+        if (
+          nextMode &&
+          matchesShortcutEvent(event, `Control+${key.toUpperCase()}`)
+        ) {
+          event.preventDefault()
+          event.stopPropagation()
+          setTreeFilterMode((currentMode) =>
+            toggleTreeFilterMode(currentMode, nextMode)
+          )
+          return
         }
       }
 
       if (event.key !== "Escape") {
         if (
           treeStage === "custom" &&
-          (event.ctrlKey || event.metaKey) &&
-          event.key === "Enter" &&
+          matchesShortcutEvent(event, "Control+Enter") &&
           selectedTreeNodeId &&
           selectedTreeNodeId !== treeLeafId &&
           !treeSubmitting &&
@@ -2159,7 +2164,9 @@ export function AppShellTreeDialog({
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
-                <TreeFooterHint kbd="Ctrl/⌘+Enter">Summarize</TreeFooterHint>
+                <TreeFooterHint kbd={formatShortcutLabel("Control+Enter")}>
+                  Summarize
+                </TreeFooterHint>
                 <TreeFooterHint kbd="Esc">Back</TreeFooterHint>
               </div>
             )}

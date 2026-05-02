@@ -74,6 +74,7 @@ import {
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/phi"
+import { formatShortcutLabel } from "@/features/phi/keyboard-shortcuts"
 import {
   createPhiStore,
   setStoreState,
@@ -1232,7 +1233,7 @@ function AppSidebarHeader({
             <SearchIcon />
             <span>Search sessions...</span>
             <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
-              Ctrl+S
+              {formatShortcutLabel("Control+S")}
             </kbd>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -1241,7 +1242,7 @@ function AppSidebarHeader({
             <SquarePenIcon />
             <span>New session</span>
             <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
-              Ctrl+N
+              {formatShortcutLabel("Control+N")}
             </kbd>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -1550,7 +1551,7 @@ export function AppSidebar({
               <CommandIcon />
               <span>Commands</span>
               <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
-                Ctrl+P
+                {formatShortcutLabel("Control+K")}
               </kbd>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -1559,7 +1560,7 @@ export function AppSidebar({
               <Settings2Icon />
               <span>Settings</span>
               <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
-                Ctrl+,
+                {formatShortcutLabel("Control+,")}
               </kbd>
             </SidebarMenuButton>
           </SidebarMenuItem>

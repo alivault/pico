@@ -39,6 +39,10 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import {
+  formatShortcutLabel,
+  matchesShortcutEvent,
+} from "@/features/phi/keyboard-shortcuts"
 import { phiQueryKeys } from "@/features/phi/query-keys"
 import type {
   GitActionResponse,
@@ -59,6 +63,7 @@ type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type GitCommitMessageData = Extract<GitCommitMessageResponse, { ok: true }>
 type GitStatusValue = GitStatusSummary | null
 type BranchScope = "local" | "remote"
+type GitRemoteAction = "push" | "force-push" | "pull"
 
 type GitPanelProps = {
   viewerContextId: string
@@ -712,14 +717,17 @@ export function GitPanelToolbar({
   )
 
   const gitActionMutation = useMutation({
-    mutationFn: async (action: "push" | "pull") => {
-      const endpoint = action === "push" ? "/api/git-push" : "/api/git-pull"
+    mutationFn: async (action: GitRemoteAction) => {
+      const endpoint = action === "pull" ? "/api/git-pull" : "/api/git-push"
       return await fetchJson<GitActionResponse>(
         buildRequestUrl(endpoint, { contextId: viewerContextId }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: normalizedCwd }),
+          body: JSON.stringify({
+            cwd: normalizedCwd,
+            force: action === "force-push",
+          }),
         }
       )
     },
@@ -734,9 +742,11 @@ export function GitPanelToolbar({
       toast.error(
         getErrorMessage(
           error,
-          action === "push"
-            ? "Failed to push changes"
-            : "Failed to pull changes"
+          action === "pull"
+            ? "Failed to pull changes"
+            : action === "force-push"
+              ? "Failed to force push changes"
+              : "Failed to push changes"
         )
       )
     },
@@ -745,12 +755,28 @@ export function GitPanelToolbar({
   const shortcutPushMutatingCount = useIsMutating({
     mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "push"),
   })
+  const shortcutForcePushMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(
+      viewerContextId,
+      normalizedCwd,
+      "force-push"
+    ),
+  })
+  const shortcutPullMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "pull"),
+  })
   const pushing =
     (gitActionMutation.isPending && gitActionMutation.variables === "push") ||
     shortcutPushMutatingCount > 0
+  const forcePushing =
+    (gitActionMutation.isPending &&
+      gitActionMutation.variables === "force-push") ||
+    shortcutForcePushMutatingCount > 0
   const pulling =
-    gitActionMutation.isPending && gitActionMutation.variables === "pull"
-  const gitActionBusy = gitActionMutation.isPending || pushing
+    (gitActionMutation.isPending && gitActionMutation.variables === "pull") ||
+    shortcutPullMutatingCount > 0
+  const gitActionBusy =
+    gitActionMutation.isPending || pushing || forcePushing || pulling
   const showCommitAction = Boolean(
     isMobile && viewerContextId && normalizedCwd && hasChanges
   )
@@ -761,6 +787,13 @@ export function GitPanelToolbar({
     canPush &&
     (!gitActionBusy || pushing)
   )
+  const showForcePushAction = Boolean(
+    isMobile &&
+    viewerContextId &&
+    normalizedCwd &&
+    canPush &&
+    (!gitActionBusy || forcePushing)
+  )
   const showPullAction = Boolean(
     isMobile &&
     viewerContextId &&
@@ -768,7 +801,8 @@ export function GitPanelToolbar({
     canPull &&
     (!gitActionBusy || pulling)
   )
-  const showActions = showCommitAction || showPushAction || showPullAction
+  const showActions =
+    showCommitAction || showPushAction || showForcePushAction || showPullAction
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -809,6 +843,20 @@ export function GitPanelToolbar({
             >
               {pushing ? <Spinner /> : <UploadIcon />}
               Push
+            </Button>
+          ) : null}
+          {showForcePushAction ? (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={gitActionBusy}
+              title="Force push with --force-with-lease"
+              onClick={() => {
+                gitActionMutation.mutate("force-push")
+              }}
+            >
+              {forcePushing ? <Spinner /> : <UploadIcon />}
+              Force Push
             </Button>
           ) : null}
           {showPullAction ? (
@@ -881,9 +929,9 @@ function GitCommitDialog({
   const [query, setQuery] = React.useState("")
   const [selectedCommandId, setSelectedCommandId] = React.useState("commit")
   const [stage, setStage] = React.useState<"browse" | "message">("browse")
-  const [pendingRun, setPendingRun] = React.useState<"commit" | "push" | null>(
-    null
-  )
+  const [pendingRun, setPendingRun] = React.useState<
+    "commit" | "push" | "force-push" | null
+  >(null)
   const blockNextCloseRef = React.useRef(false)
   const fileSummary = `${files.length} file${files.length === 1 ? "" : "s"}`
   const lineSummary = gitFilesLineSummary(files)
@@ -911,9 +959,11 @@ function GitCommitDialog({
   const commitMutation = useMutation({
     mutationFn: async ({
       push,
+      forcePush,
       commitMessage,
     }: {
       push: boolean
+      forcePush: boolean
       commitMessage: string
     }) =>
       await fetchJson<GitCommitResponse>(
@@ -925,6 +975,7 @@ function GitCommitDialog({
             cwd,
             message: commitMessage,
             push,
+            forcePush,
             includeUnstaged,
           }),
         }
@@ -939,9 +990,11 @@ function GitCommitDialog({
       toast.error(
         getErrorMessage(
           error,
-          variables.push
-            ? "Failed to commit and push changes"
-            : "Failed to commit changes"
+          variables.forcePush
+            ? "Failed to commit and force push changes"
+            : variables.push
+              ? "Failed to commit and push changes"
+              : "Failed to commit changes"
         )
       )
     },
@@ -977,10 +1030,10 @@ function GitCommitDialog({
     })
   }
 
-  const continueCommit = async (push: boolean) => {
+  const continueCommit = async (push: boolean, forcePush = false) => {
     if (busy || files.length === 0) return
 
-    setPendingRun(push ? "push" : "commit")
+    setPendingRun(forcePush ? "force-push" : push ? "push" : "commit")
 
     let commitMessage = message.trim()
     if (!commitMessage) {
@@ -1000,6 +1053,7 @@ function GitCommitDialog({
     }
     commitMutation.mutate({
       push,
+      forcePush,
       commitMessage,
     })
   }
@@ -1043,6 +1097,26 @@ function GitCommitDialog({
           disabled: busy || files.length === 0,
           onSelect: () => continueCommit(true),
         },
+        {
+          id: "commit-force-push",
+          title: "Commit and force push",
+          description: message.trim()
+            ? "Commit with the current message, then force push with --force-with-lease."
+            : "Generate a message automatically, then commit and force push with --force-with-lease.",
+          keywords: [
+            "continue",
+            "run",
+            "save",
+            "stage",
+            "git",
+            "push",
+            "force",
+            "lease",
+          ],
+          valueLabel: "Force push",
+          disabled: busy || files.length === 0,
+          onSelect: () => continueCommit(true, true),
+        },
       ],
     },
     {
@@ -1084,11 +1158,7 @@ function GitCommitDialog({
       value={selectedCommandId}
       onValueChange={setSelectedCommandId}
       onKeyDown={(event) => {
-        if (
-          event.key === "Enter" &&
-          (event.metaKey || event.ctrlKey) &&
-          !event.shiftKey
-        ) {
+        if (matchesShortcutEvent(event.nativeEvent, "Control+Enter")) {
           event.preventDefault()
           void continueCommit(false)
         }
@@ -1166,6 +1236,12 @@ function GitCommitDialog({
                   ) : (
                     <UploadIcon />
                   )
+                ) : command.id === "commit-force-push" ? (
+                  pendingRun === "force-push" ? (
+                    <Spinner />
+                  ) : (
+                    <UploadIcon />
+                  )
                 ) : null}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="truncate font-medium">{command.title}</span>
@@ -1184,8 +1260,8 @@ function GitCommitDialog({
         ))}
       </CommandList>
       <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-        Use ↑/↓ to select, Enter to run, Esc to close. Press ⌘/Ctrl+Enter to
-        continue.
+        Use ↑/↓ to select, Enter to run, Esc to close. Press{" "}
+        {formatShortcutLabel("Control+Enter")} to continue.
       </div>
     </Command>
   )
@@ -1245,24 +1321,14 @@ function GitCommitDialog({
               return
             }
 
-            if (
-              event.key.toLowerCase() === "g" &&
-              event.ctrlKey &&
-              !event.metaKey &&
-              !event.altKey &&
-              !event.shiftKey
-            ) {
+            if (matchesShortcutEvent(event.nativeEvent, "Control+G")) {
               event.preventDefault()
               event.stopPropagation()
               generateCommitMessage()
               return
             }
 
-            if (
-              event.key === "Enter" &&
-              (event.metaKey || event.ctrlKey) &&
-              !event.shiftKey
-            ) {
+            if (matchesShortcutEvent(event.nativeEvent, "Control+Enter")) {
               event.preventDefault()
               event.stopPropagation()
               void continueCommit(false)
@@ -1279,8 +1345,8 @@ function GitCommitDialog({
         ) : null}
       </div>
       <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-        <span>Ctrl+G Generate</span>
-        <span>⌘/Ctrl+Enter Continue</span>
+        <span>{formatShortcutLabel("Control+G")} Generate</span>
+        <span>{formatShortcutLabel("Control+Enter")} Continue</span>
         <span>Esc Back</span>
       </div>
     </div>
@@ -1932,14 +1998,17 @@ export function HeaderGitActions({
   const files = Array.isArray(filesQuery.data) ? filesQuery.data : []
 
   const gitActionMutation = useMutation({
-    mutationFn: async (action: "push" | "pull") => {
-      const endpoint = action === "push" ? "/api/git-push" : "/api/git-pull"
+    mutationFn: async (action: GitRemoteAction) => {
+      const endpoint = action === "pull" ? "/api/git-pull" : "/api/git-push"
       return await fetchJson<GitActionResponse>(
         buildRequestUrl(endpoint, { contextId: viewerContextId }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: normalizedCwd }),
+          body: JSON.stringify({
+            cwd: normalizedCwd,
+            force: action === "force-push",
+          }),
         }
       )
     },
@@ -1954,9 +2023,11 @@ export function HeaderGitActions({
       toast.error(
         getErrorMessage(
           error,
-          action === "push"
-            ? "Failed to push changes"
-            : "Failed to pull changes"
+          action === "pull"
+            ? "Failed to pull changes"
+            : action === "force-push"
+              ? "Failed to force push changes"
+              : "Failed to push changes"
         )
       )
     },
@@ -1965,15 +2036,33 @@ export function HeaderGitActions({
   const shortcutPushMutatingCount = useIsMutating({
     mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "push"),
   })
+  const shortcutForcePushMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(
+      viewerContextId,
+      normalizedCwd,
+      "force-push"
+    ),
+  })
+  const shortcutPullMutatingCount = useIsMutating({
+    mutationKey: phiQueryKeys.gitAction(viewerContextId, normalizedCwd, "pull"),
+  })
   const pushing =
     (gitActionMutation.isPending && gitActionMutation.variables === "push") ||
     shortcutPushMutatingCount > 0
+  const forcePushing =
+    (gitActionMutation.isPending &&
+      gitActionMutation.variables === "force-push") ||
+    shortcutForcePushMutatingCount > 0
   const pulling =
-    gitActionMutation.isPending && gitActionMutation.variables === "pull"
-  const gitActionBusy = gitActionMutation.isPending || pushing
+    (gitActionMutation.isPending && gitActionMutation.variables === "pull") ||
+    shortcutPullMutatingCount > 0
+  const gitActionBusy =
+    gitActionMutation.isPending || pushing || forcePushing || pulling
   const showPush = canPush && (!gitActionBusy || pushing)
+  const showForcePush = canPush && (!gitActionBusy || forcePushing)
   const showPull = canPull && (!gitActionBusy || pulling)
-  const showActions = !isMobile && (canCommit || showPush || showPull)
+  const showActions =
+    !isMobile && (canCommit || showPush || showForcePush || showPull)
 
   if (!showActions && !commitDialogOpen) return null
 
@@ -2002,6 +2091,19 @@ export function HeaderGitActions({
               }}
             >
               {pushing ? <Spinner /> : <UploadIcon />} Push
+            </Button>
+          ) : null}
+          {showForcePush ? (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={gitActionBusy}
+              title="Force push with --force-with-lease"
+              onClick={() => {
+                gitActionMutation.mutate("force-push")
+              }}
+            >
+              {forcePushing ? <Spinner /> : <UploadIcon />} Force Push
             </Button>
           ) : null}
           {showPull ? (

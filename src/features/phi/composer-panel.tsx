@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ComposerAssistMenu } from "@/features/phi/composer-assist-menu"
 import { ComposerPendingMessages } from "@/features/phi/composer-pending-messages"
 import { ComposerPickers } from "@/features/phi/composer-pickers"
+import { matchesShortcutEvent } from "@/features/phi/keyboard-shortcuts"
 import type { ComposerContextUsageStore } from "@/features/phi/composer-context-usage-indicator"
 import {
   formatComposerSkillName,
@@ -660,7 +661,11 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
     const draftText = draftTextRef.current
     const currentDraftSkill = draftSkillRef.current
-    const ctrlShortcut = event.ctrlKey && !event.metaKey
+    const moveDownShortcut = matchesShortcutEvent(
+      event.nativeEvent,
+      "Control+J"
+    )
+    const moveUpShortcut = matchesShortcutEvent(event.nativeEvent, "Control+K")
 
     if (event.key === "Backspace" && !draftText && currentDraftSkill) {
       applyDraft("", undefined, { immediate: true })
@@ -686,12 +691,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       return
     }
 
-    if (
-      ctrlShortcut &&
-      !event.shiftKey &&
-      (event.key === "j" || event.key === "k")
-    ) {
-      const direction = event.key === "j" ? 1 : -1
+    if (moveDownShortcut || moveUpShortcut) {
+      const direction = moveDownShortcut ? 1 : -1
       if (visibleCompletion) {
         event.preventDefault()
         moveCompletionSelection(direction)

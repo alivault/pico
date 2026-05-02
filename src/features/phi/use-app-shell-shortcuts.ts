@@ -3,6 +3,8 @@ import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
 import type { SessionListEntry } from "@/lib/phi/api"
 
+const DOUBLE_ESCAPE_INTERVAL_MS = 500
+
 type ShortcutActions = {
   abortCompact: () => void | Promise<unknown>
   abortSession: () => void | Promise<unknown>
@@ -23,6 +25,8 @@ type ShortcutActions = {
   openSessionsDialog: () => void
   openSettingsDialog: () => void
   openTreeDialog: () => void | Promise<unknown>
+  forcePushGitChanges: () => void | Promise<unknown>
+  pullGitChanges: () => void | Promise<unknown>
   pushGitChanges: () => void | Promise<unknown>
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
@@ -115,6 +119,8 @@ export function useAppShellShortcuts({
   shortcutStateRef,
   treeOpenRef,
 }: UseAppShellShortcutsOptions) {
+  const lastEscapeKeyDownAtRef = React.useRef(0)
+
   const getShortcutContext = (event: KeyboardEvent): ShortcutContext => {
     const shortcutState = shortcutStateRef.current
     const commandPaletteOpen = commandPaletteOpenRef.current
@@ -165,6 +171,16 @@ export function useAppShellShortcuts({
     const context = getShortcutContext(event)
 
     if (event.repeat || context.modalOpen || event.defaultPrevented) return
+
+    const now = Date.now()
+    if (now - lastEscapeKeyDownAtRef.current <= DOUBLE_ESCAPE_INTERVAL_MS) {
+      lastEscapeKeyDownAtRef.current = 0
+      event.preventDefault()
+      void shortcutActionsRef.current.openTreeDialog()
+      return
+    }
+
+    lastEscapeKeyDownAtRef.current = now
 
     if (compactRunningRef.current) {
       event.preventDefault()
@@ -291,7 +307,10 @@ export function useAppShellShortcuts({
   }
 
   const handleGlobalShortcut = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase()
+    const key =
+      event.altKey && event.code.startsWith("Key")
+        ? event.code.slice(3).toLowerCase()
+        : event.key.toLowerCase()
     const context = getShortcutContext(event)
 
     if (context.blockingModalOpen) return
@@ -303,9 +322,27 @@ export function useAppShellShortcuts({
       return
     }
 
-    if (key === "p") {
+    if (key === "k") {
       event.preventDefault()
       shortcutActionsRef.current.openCommandPalette()
+      return
+    }
+
+    if (key === "p") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+
+      if (event.altKey) {
+        void shortcutActionsRef.current.pullGitChanges()
+        return
+      }
+
+      if (event.shiftKey) {
+        void shortcutActionsRef.current.forcePushGitChanges()
+        return
+      }
+
+      void shortcutActionsRef.current.pushGitChanges()
       return
     }
 
@@ -365,21 +402,7 @@ export function useAppShellShortcuts({
     if (key === "t") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      void shortcutActionsRef.current.openTreeDialog()
-      return
-    }
-
-    if (key === "g") {
-      event.preventDefault()
-      closeCommandPaletteForShortcut(context.commandPaletteOpen)
       void shortcutActionsRef.current.toggleHideThinking()
-      return
-    }
-
-    if (key === "u") {
-      event.preventDefault()
-      closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      void shortcutActionsRef.current.pushGitChanges()
       return
     }
 
@@ -489,7 +512,9 @@ export function useAppShellShortcuts({
     ...(
       [
         { key: "\\" },
+        { key: "K" },
         { key: "P" },
+        { key: "P", shift: true },
         { key: "N" },
         { key: "S" },
         { key: "E" },
@@ -498,8 +523,6 @@ export function useAppShellShortcuts({
         { key: "," },
         { key: "M" },
         { key: "T" },
-        { key: "G" },
-        { key: "U" },
         { key: "R" },
         { key: "R", shift: true },
         { key: "O" },
@@ -516,6 +539,16 @@ export function useAppShellShortcuts({
         },
       },
     })),
+    {
+      hotkey: { key: "P", alt: true },
+      callback: handleGlobalShortcut,
+      options: {
+        meta: {
+          name: "App shell shortcut",
+          description: "Run a Phi app shell command.",
+        },
+      },
+    },
   ]
 
   useHotkeys(hotkeys, {
