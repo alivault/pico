@@ -136,7 +136,8 @@ function blockRenderKey(block: AssistantBlock | undefined) {
 
 function mergeRetainedBlocks(
   previousBlocks: Array<AssistantBlock>,
-  nextBlocks: Array<AssistantBlock>
+  nextBlocks: Array<AssistantBlock>,
+  options?: { preserveMissingTools?: boolean }
 ) {
   const previousToolByCallId = new Map<string, ToolBlock>()
   previousBlocks.forEach((block) => {
@@ -145,8 +146,10 @@ function mergeRetainedBlocks(
     }
   })
 
-  return nextBlocks.map((block, index) => {
+  const nextToolCallIds = new Set<string>()
+  const mergedNextBlocks = nextBlocks.map((block, index) => {
     if (block.type === "tool" && block.callId) {
+      nextToolCallIds.add(block.callId)
       const previousTool = previousToolByCallId.get(block.callId)
       if (previousTool) {
         return {
@@ -171,6 +174,38 @@ function mergeRetainedBlocks(
 
     return block
   })
+
+  if (!options?.preserveMissingTools) return mergedNextBlocks
+
+  const missingPreviousTools = previousBlocks
+    .map((block, index) => ({ block, index }))
+    .filter(
+      (entry): entry is { block: ToolBlock; index: number } =>
+        entry.block.type === "tool" &&
+        Boolean(entry.block.callId) &&
+        !nextToolCallIds.has(entry.block.callId || "")
+    )
+
+  if (missingPreviousTools.length === 0) return mergedNextBlocks
+
+  const blocks: Array<AssistantBlock> = []
+  let missingIndex = 0
+  for (let index = 0; index < mergedNextBlocks.length; index += 1) {
+    while (
+      missingIndex < missingPreviousTools.length &&
+      missingPreviousTools[missingIndex].index <= index
+    ) {
+      blocks.push(missingPreviousTools[missingIndex].block)
+      missingIndex += 1
+    }
+    blocks.push(mergedNextBlocks[index])
+  }
+  while (missingIndex < missingPreviousTools.length) {
+    blocks.push(missingPreviousTools[missingIndex].block)
+    missingIndex += 1
+  }
+
+  return blocks
 }
 
 function ensureStreamingAssistant(state: RetainedConversationState) {
@@ -199,7 +234,8 @@ function updateStreamingAssistantFromMessage(
   const renderKey = item.renderKey || nextMessageItemKey(state.items)
   const blocks = mergeRetainedBlocks(
     item.blocks,
-    assistantBlocksFromMessage(message, renderKey)
+    assistantBlocksFromMessage(message, renderKey),
+    { preserveMissingTools: true }
   )
   const nextItem = {
     ...item,
