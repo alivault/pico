@@ -6225,7 +6225,9 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           <TitleTooltip
             title={
               defaultNewSessionDirectory
-                ? `Create a new session in ${defaultNewSessionDirectory}`
+                ? `Create a new session in ${formatDisplayPath(
+                    defaultNewSessionDirectory
+                  )}`
                 : "Create a new session"
             }
             kbd={formatShortcutLabel("Control+N")}
