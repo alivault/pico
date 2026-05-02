@@ -65,7 +65,11 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import {
   SidebarInset,
@@ -3053,6 +3057,7 @@ function AppShellTabsController({
           >
             {sessionPane}
           </ResizablePanel>
+          <ResizableHandle />
           <ResizablePanel
             id="git"
             panelRef={gitPanelRef}

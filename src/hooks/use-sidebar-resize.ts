@@ -29,9 +29,41 @@ type SidebarDragState = {
 const SIDEBAR_RESIZE_START_THRESHOLD_PX = 4
 const SIDEBAR_COLLAPSE_DISTANCE_RATIO = 0.5
 const SIDEBAR_EXPAND_DISTANCE_RATIO = 0.2
+const SIDEBAR_RESIZE_TARGET_MINIMUM_COARSE_PX = 20
+const SIDEBAR_RESIZE_TARGET_MINIMUM_FINE_PX = 10
 const DEFAULT_SIDEBAR_WIDTH_PX = 320
 const DEFAULT_SIDEBAR_MIN_WIDTH_PX = 256
 const DEFAULT_SIDEBAR_MAX_WIDTH_PX = 512
+
+export type SidebarHorizontalResizeCursor = "ew-resize" | "col-resize"
+
+export function getSidebarHorizontalResizeCursor(): SidebarHorizontalResizeCursor {
+  if (typeof window === "undefined") return "col-resize"
+
+  const userAgent = window.navigator.userAgent
+  return userAgent.includes("Chrome") || userAgent.includes("Firefox")
+    ? "ew-resize"
+    : "col-resize"
+}
+
+export function getSidebarResizeTargetMinimumSize() {
+  if (typeof window === "undefined") {
+    return SIDEBAR_RESIZE_TARGET_MINIMUM_FINE_PX
+  }
+
+  return window.matchMedia("(pointer:coarse)").matches
+    ? SIDEBAR_RESIZE_TARGET_MINIMUM_COARSE_PX
+    : SIDEBAR_RESIZE_TARGET_MINIMUM_FINE_PX
+}
+
+function installGlobalResizeCursor(cursor: SidebarHorizontalResizeCursor) {
+  const style = document.createElement("style")
+  style.dataset.sidebarResizeCursor = "true"
+  style.textContent = `*, *:hover { cursor: ${cursor} !important; }`
+  document.head.append(style)
+
+  return () => style.remove()
+}
 
 function parseCssLengthToPixels(value: string, fallback: number) {
   const trimmedValue = value.trim()
@@ -157,10 +189,13 @@ export function useSidebarResize({
 
     cleanupResizeRef.current?.()
 
+    let cleanupGlobalResizeCursor: (() => void) | null = null
+
     const cleanup = () => {
       window.removeEventListener("pointermove", handlePointerMove)
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
+      cleanupGlobalResizeCursor?.()
       document.body.style.cursor = dragState.previousCursor
       document.body.style.userSelect = dragState.previousUserSelect
       if (dragState.moved) optionsRef.current.onResizeActiveChange(false)
@@ -168,10 +203,12 @@ export function useSidebarResize({
     }
 
     const startDragging = () => {
+      const cursor = getSidebarHorizontalResizeCursor()
       dragState.moved = true
       skipNextClickRef.current = true
       optionsRef.current.onResizeActiveChange(true)
-      document.body.style.cursor = "ew-resize"
+      cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
+      document.body.style.cursor = cursor
       document.body.style.userSelect = "none"
     }
 

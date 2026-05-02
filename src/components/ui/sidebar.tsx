@@ -8,7 +8,12 @@ import { PanelLeftIcon } from "lucide-react"
 import type { VariantProps } from "class-variance-authority"
 
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useSidebarResize } from "@/hooks/use-sidebar-resize"
+import {
+  getSidebarHorizontalResizeCursor,
+  getSidebarResizeTargetMinimumSize,
+  useSidebarResize,
+  type SidebarHorizontalResizeCursor,
+} from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -338,7 +343,7 @@ function Sidebar({
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear group-data-[resizing=true]:transition-none data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+          "fixed inset-y-0 z-30 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear group-data-[resizing=true]:transition-none data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -391,6 +396,7 @@ function SidebarRail({
   className,
   onClick,
   onPointerDown,
+  style,
   ...props
 }: React.ComponentProps<"button">) {
   const {
@@ -411,6 +417,27 @@ function SidebarRail({
     onResize: setSidebarWidth,
     onResizeActiveChange: setSidebarResizing,
   })
+  const [horizontalResizeCursor, setHorizontalResizeCursor] =
+    React.useState<SidebarHorizontalResizeCursor>("col-resize")
+  const [resizeTargetMinimumSize, setResizeTargetMinimumSize] =
+    React.useState(10)
+  React.useEffect(() => {
+    const updateResizeTarget = () => {
+      setResizeTargetMinimumSize(getSidebarResizeTargetMinimumSize())
+    }
+    const coarsePointerQuery = window.matchMedia("(pointer:coarse)")
+
+    setHorizontalResizeCursor(getSidebarHorizontalResizeCursor())
+    updateResizeTarget()
+    coarsePointerQuery.addEventListener("change", updateResizeTarget)
+    return () => {
+      coarsePointerQuery.removeEventListener("change", updateResizeTarget)
+    }
+  }, [])
+  const horizontalResizeCursorClass =
+    horizontalResizeCursor === "ew-resize"
+      ? "cursor-ew-resize group-data-[side=left]:cursor-ew-resize group-data-[side=right]:cursor-ew-resize [[data-side=left][data-state=collapsed]_&]:cursor-ew-resize [[data-side=right][data-state=collapsed]_&]:cursor-ew-resize"
+      : "cursor-col-resize group-data-[side=left]:cursor-col-resize group-data-[side=right]:cursor-col-resize [[data-side=left][data-state=collapsed]_&]:cursor-col-resize [[data-side=right][data-state=collapsed]_&]:cursor-col-resize"
 
   return (
     <button
@@ -429,10 +456,16 @@ function SidebarRail({
         handlePointerDown(event)
       }}
       title="Toggle or resize Sidebar"
+      style={
+        {
+          ...style,
+          "--sidebar-rail-width": `${resizeTargetMinimumSize}px`,
+          cursor: horizontalResizeCursor,
+        } as React.CSSProperties
+      }
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 touch-none transition-all ease-linear select-none group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
-        "in-data-[side=left]:cursor-ew-resize in-data-[side=right]:cursor-ew-resize",
-        "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
+        "absolute inset-y-0 z-40 hidden w-(--sidebar-rail-width) touch-none transition-all ease-linear select-none group-data-[side=left]:right-[calc(var(--sidebar-rail-width)*-1)] group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
+        horizontalResizeCursorClass,
         "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar",
         "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
         "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
