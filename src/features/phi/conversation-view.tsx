@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
@@ -2572,15 +2573,16 @@ function ExploreToolGroupCardBody({
                 <span className="truncate font-medium whitespace-nowrap text-foreground">
                   {line.label}
                 </span>
-                <span
-                  className={cn(
-                    "truncate text-muted-foreground",
-                    block.isError && "text-destructive"
-                  )}
-                  title={lineText}
-                >
-                  {lineText}
-                </span>
+                <TitleTooltip title={lineText}>
+                  <span
+                    className={cn(
+                      "truncate text-muted-foreground",
+                      block.isError && "text-destructive"
+                    )}
+                  >
+                    {lineText}
+                  </span>
+                </TitleTooltip>
               </div>
             )
           })}

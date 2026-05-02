@@ -34,6 +34,7 @@ import {
 
 import type { SessionListEntry } from "@/lib/phi/api"
 import { Button } from "@/components/ui/button"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   Empty,
   EmptyHeader,
@@ -249,7 +250,11 @@ function getSidebarSessionTimeRefreshDelay(
   return Math.max(SIDEBAR_TIME_MIN_DELAY_MS, delay)
 }
 
-function SidebarSessionTime({ value }: { value?: string }) {
+function SidebarSessionTime({
+  value,
+  className,
+  ...props
+}: { value?: string } & React.ComponentProps<"span">) {
   const timestamp = value ? new Date(value).getTime() : Number.NaN
   const [label, setLabel] = React.useState(() =>
     formatSidebarSessionTime(value)
@@ -289,7 +294,11 @@ function SidebarSessionTime({ value }: { value?: string }) {
 
   if (!label) return null
 
-  return <span className="tabular-nums">{label}</span>
+  return (
+    <span className={cn("tabular-nums", className)} {...props}>
+      {label}
+    </span>
+  )
 }
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
@@ -666,11 +675,19 @@ function SidebarSessionItem({
             <span className="min-w-0 truncate font-medium">{entry.title}</span>
           </span>
           {hasMetaLine ? (
-            <span
-              className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50"
-              title={exactTimestamp}
-            >
-              {hasTimestamp ? <SidebarSessionTime value={timestamp} /> : null}
+            <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
+              {hasTimestamp ? (
+                <TitleTooltip
+                  title={exactTimestamp}
+                  side="right"
+                  align="center"
+                >
+                  <SidebarSessionTime
+                    value={timestamp}
+                    className="inline-flex"
+                  />
+                </TitleTooltip>
+              ) : null}
               {hasTimestamp && messageCount ? " · " : null}
               {messageCount}
             </span>
@@ -981,7 +998,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
             collapsedDirectoryStore.toggle(directory)
           }
         }}
-        title={directory}
         {...(attributes ?? {})}
         {...(listeners ?? {})}
       >
@@ -1004,15 +1020,16 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
       </button>
 
       {onCreateSessionInDirectory && !overlay && !isMobile ? (
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          title={`Create a session in ${directory}`}
-          onClick={() => onCreateSessionInDirectory(directory)}
-        >
-          <SquarePenIcon className="size-4" />
-        </Button>
+        <TitleTooltip title={`Create a session in ${directory}`}>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => onCreateSessionInDirectory(directory)}
+          >
+            <SquarePenIcon className="size-4" />
+          </Button>
+        </TitleTooltip>
       ) : null}
 
       {hasDirectoryActions && isMobile ? (
@@ -1024,7 +1041,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 variant="ghost"
                 className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 aria-label={`Directory actions for ${directory}`}
-                title="Directory actions"
               />
             }
           >
@@ -1176,31 +1192,28 @@ function DirectoryCollapseAllButton({
     visibleDirectories
   )
 
+  const tooltipTitle = allDirectoriesCollapsed
+    ? "Expand all directories"
+    : "Collapse all directories"
+
   return (
-    <Button
-      size="icon-sm"
-      variant="ghost"
-      className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-      disabled={searchActive || visibleDirectories.length === 0}
-      onClick={() => {
-        collapsedDirectoryStore.setAll(
-          visibleDirectories,
-          !allDirectoriesCollapsed
-        )
-      }}
-      aria-label={
-        allDirectoriesCollapsed
-          ? "Expand all directories"
-          : "Collapse all directories"
-      }
-      title={
-        allDirectoriesCollapsed
-          ? "Expand all directories"
-          : "Collapse all directories"
-      }
-    >
-      {allDirectoriesCollapsed ? <ChevronsUpDown /> : <ChevronsDownUpIcon />}
-    </Button>
+    <TitleTooltip title={tooltipTitle}>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        disabled={searchActive || visibleDirectories.length === 0}
+        onClick={() => {
+          collapsedDirectoryStore.setAll(
+            visibleDirectories,
+            !allDirectoriesCollapsed
+          )
+        }}
+        aria-label={tooltipTitle}
+      >
+        {allDirectoriesCollapsed ? <ChevronsUpDown /> : <ChevronsDownUpIcon />}
+      </Button>
+    </TitleTooltip>
   )
 }
 
@@ -1232,7 +1245,7 @@ function AppSidebarHeader({
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
             <span>Search sessions...</span>
-            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
               {formatShortcutLabel("Control+S")}
             </kbd>
           </SidebarMenuButton>
@@ -1241,7 +1254,7 @@ function AppSidebarHeader({
           <SidebarMenuButton type="button" onClick={onCreateSession}>
             <SquarePenIcon />
             <span>New session</span>
-            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
               {formatShortcutLabel("Control+N")}
             </kbd>
           </SidebarMenuButton>
@@ -1260,16 +1273,20 @@ function AppSidebarHeader({
             visibleDirectories={visibleDirectories}
             collapsedDirectoryStore={collapsedDirectoryStore}
           />
-          <Button
-            variant="secondary"
-            size="icon-sm"
-            className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            onClick={onOpenAddDirectoryDialog}
-            aria-label="Add directory"
+          <TitleTooltip
             title="Add directory"
+            kbd={formatShortcutLabel("Control+D")}
           >
-            <FolderPlusIcon />
-          </Button>
+            <Button
+              variant="secondary"
+              size="icon-sm"
+              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={onOpenAddDirectoryDialog}
+              aria-label="Add directory"
+            >
+              <FolderPlusIcon />
+            </Button>
+          </TitleTooltip>
         </div>
       </div>
     </SidebarHeader>
@@ -1550,7 +1567,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
               <CommandIcon />
               <span>Commands</span>
-              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
                 {formatShortcutLabel("Control+K")}
               </kbd>
             </SidebarMenuButton>
@@ -1559,7 +1576,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenSettings}>
               <Settings2Icon />
               <span>Settings</span>
-              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-foreground/70 md:inline">
+              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
                 {formatShortcutLabel("Control+,")}
               </kbd>
             </SidebarMenuButton>

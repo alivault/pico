@@ -11,6 +11,7 @@ import type {
   SimpleOkResponse,
 } from "@/lib/phi/api"
 import { Button } from "@/components/ui/button"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   Command,
   CommandDialog,
@@ -1355,69 +1356,69 @@ function TreeBrowsePanel({
             </div>
           ) : treeViewModel.orderedVisibleNodes.length > 0 ? (
             treeViewModel.orderedVisibleNodes.map((node) => (
-              <CommandItem
-                key={node.id}
-                value={node.id}
-                disabled={treeSubmitting || node.id === treeLeafId}
-                onMouseEnter={() => {
-                  if (!treeMouseMovedSinceOpenRef.current) return
+              <TitleTooltip key={node.id} title={treeDialogPlainText(node)}>
+                <CommandItem
+                  value={node.id}
+                  disabled={treeSubmitting || node.id === treeLeafId}
+                  onMouseEnter={() => {
+                    if (!treeMouseMovedSinceOpenRef.current) return
 
-                  moveTreeCursorToNode(node.id)
-                }}
-                onMouseMove={(event) => {
-                  if (
-                    !treeMouseMovedSinceOpenRef.current &&
-                    !markTreeMouseMoved(event.movementX, event.movementY)
-                  ) {
-                    return
-                  }
+                    moveTreeCursorToNode(node.id)
+                  }}
+                  onMouseMove={(event) => {
+                    if (
+                      !treeMouseMovedSinceOpenRef.current &&
+                      !markTreeMouseMoved(event.movementX, event.movementY)
+                    ) {
+                      return
+                    }
 
-                  moveTreeCursorToNode(node.id)
-                }}
-                onClick={() => onSelectTreeNode(node.id)}
-                onSelect={() => onSelectTreeNode(node.id)}
-                ref={(element) => {
-                  if (element) {
-                    treeItemRefs.current.set(node.id, element)
-                  } else {
-                    treeItemRefs.current.delete(node.id)
-                  }
-                }}
-                title={treeDialogPlainText(node)}
-                className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
-              >
-                <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
-                  <TreeCommandPrefix node={node} viewModel={treeViewModel} />
-                  <span className="flex h-6 w-2.5 items-center justify-center">
-                    {node.streaming || node.id === treeStreamingEntryId ? (
-                      <Spinner
-                        className="size-3 text-[var(--success)]"
-                        aria-label="Streaming"
-                      />
-                    ) : node.isActivePath ? (
-                      <TreeHierarchyIcon
-                        name="active-path"
-                        className={cn(
-                          node.isActivePath
-                            ? "text-[var(--success)]"
-                            : "text-muted-foreground"
-                        )}
-                      />
-                    ) : null}
-                  </span>
-                </div>
-
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                  {node.label ? (
-                    <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
-                      [{node.label}]
+                    moveTreeCursorToNode(node.id)
+                  }}
+                  onClick={() => onSelectTreeNode(node.id)}
+                  onSelect={() => onSelectTreeNode(node.id)}
+                  ref={(element) => {
+                    if (element) {
+                      treeItemRefs.current.set(node.id, element)
+                    } else {
+                      treeItemRefs.current.delete(node.id)
+                    }
+                  }}
+                  className="h-6 min-w-0 items-stretch gap-2 overflow-hidden px-2 py-0"
+                >
+                  <div className="flex shrink-0 items-stretch gap-1 text-muted-foreground">
+                    <TreeCommandPrefix node={node} viewModel={treeViewModel} />
+                    <span className="flex h-6 w-2.5 items-center justify-center">
+                      {node.streaming || node.id === treeStreamingEntryId ? (
+                        <Spinner
+                          className="size-3 text-[var(--success)]"
+                          aria-label="Streaming"
+                        />
+                      ) : node.isActivePath ? (
+                        <TreeHierarchyIcon
+                          name="active-path"
+                          className={cn(
+                            node.isActivePath
+                              ? "text-[var(--success)]"
+                              : "text-muted-foreground"
+                          )}
+                        />
+                      ) : null}
                     </span>
-                  ) : null}
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <TreeEntryLine node={node} />
                   </div>
-                </div>
-              </CommandItem>
+
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                    {node.label ? (
+                      <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-border/90 bg-background/20 px-2 text-[11px] font-semibold text-muted-foreground">
+                        [{node.label}]
+                      </span>
+                    ) : null}
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <TreeEntryLine node={node} />
+                    </div>
+                  </div>
+                </CommandItem>
+              </TitleTooltip>
             ))
           ) : (
             <div className="p-4 text-sm text-muted-foreground">

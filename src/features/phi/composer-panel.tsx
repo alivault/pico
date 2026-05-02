@@ -21,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { ComposerAssistMenu } from "@/features/phi/composer-assist-menu"
 import { ComposerPendingMessages } from "@/features/phi/composer-pending-messages"
 import { ComposerPickers } from "@/features/phi/composer-pickers"
@@ -841,41 +842,49 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       </div>
 
       <div className="absolute bottom-3 left-3 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Add images"
-          aria-label="Add images"
-          className="cursor-pointer"
-          disabled={disabled}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlusIcon />
-        </Button>
+        <TitleTooltip title="Add images">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Add images"
+            className="cursor-pointer"
+            disabled={disabled}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImagePlusIcon />
+          </Button>
+        </TitleTooltip>
       </div>
 
       <div className="absolute right-3 bottom-3 flex flex-nowrap items-center justify-end gap-2">
         {!acceptFollowUps ? (
-          <Button
-            size="icon-sm"
-            className="cursor-pointer"
-            disabled={
-              disabled ||
-              blockInitialSubmit ||
-              (!hasSubmittableContent && !isStreaming && !slashMenuState)
-            }
+          <TitleTooltip
             title="Send"
-            aria-label="Send"
-            onClick={() => {
-              runPrimaryComposerAction(undefined)
-            }}
+            rows={[
+              { title: "Send", kbd: "Enter" },
+              { title: "New line", kbd: "⇧ Enter" },
+            ]}
           >
-            {blockInitialSubmit ? (
-              <LoaderCircleIcon className="animate-spin" />
-            ) : (
-              <ArrowUpIcon />
-            )}
-          </Button>
+            <Button
+              size="icon-sm"
+              className="cursor-pointer"
+              disabled={
+                disabled ||
+                blockInitialSubmit ||
+                (!hasSubmittableContent && !isStreaming && !slashMenuState)
+              }
+              aria-label="Send"
+              onClick={() => {
+                runPrimaryComposerAction(undefined)
+              }}
+            >
+              {blockInitialSubmit ? (
+                <LoaderCircleIcon className="animate-spin" />
+              ) : (
+                <ArrowUpIcon />
+              )}
+            </Button>
+          </TitleTooltip>
         ) : null}
 
         {acceptFollowUps ? (
@@ -901,17 +910,18 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               Steer
             </Button>
             {isStreaming ? (
-              <Button
-                variant="destructive"
-                size="icon-sm"
-                className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
-                title="Abort (Esc)"
-                aria-label="Abort"
-                disabled={disabled}
-                onClick={onAbort}
-              >
-                <SquareIcon className="fill-current text-white" />
-              </Button>
+              <TitleTooltip title="Abort" kbd="Esc">
+                <Button
+                  variant="destructive"
+                  size="icon-sm"
+                  className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
+                  aria-label="Abort"
+                  disabled={disabled}
+                  onClick={onAbort}
+                >
+                  <SquareIcon className="fill-current text-white" />
+                </Button>
+              </TitleTooltip>
             ) : null}
           </>
         ) : null}

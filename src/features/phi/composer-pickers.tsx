@@ -4,6 +4,7 @@ import { CheckIcon, ChevronDownIcon } from "lucide-react"
 import type { ModelOption, SessionState } from "@/lib/phi"
 
 import { Button } from "@/components/ui/button"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   Command,
   CommandEmpty,
@@ -21,6 +22,7 @@ import {
   ComposerContextUsageIndicator,
   type ComposerContextUsageStore,
 } from "@/features/phi/composer-context-usage-indicator"
+import { formatShortcutLabel } from "@/features/phi/keyboard-shortcuts"
 import { useSelector, type PhiStore } from "@/features/phi/tanstack-store-utils"
 
 function thinkingLabel(level: string) {
@@ -158,21 +160,25 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
     return [...groups.entries()]
   })()
 
+  const modelLabel = model?.name || "Select model"
+
   return (
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="max-w-full"
-            disabled={disabled}
-          />
-        }
-      >
-        <span className="truncate">{model?.name || "Select model"}</span>
-        <ChevronDownIcon data-icon="inline-end" />
-      </PopoverTrigger>
+      <TitleTooltip title="Model" kbd={formatShortcutLabel("Control+M")}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="max-w-full"
+              disabled={disabled}
+            />
+          }
+        >
+          <span className="truncate">{modelLabel}</span>
+          <ChevronDownIcon data-icon="inline-end" />
+        </PopoverTrigger>
+      </TitleTooltip>
       <PopoverContent className="w-88 p-0" side="top" align="start">
         <Command shouldFilter={false}>
           <CommandInput
@@ -259,21 +265,28 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
   const { availableThinkingLevels, thinkingLevel } =
     useThinkingPickerState(sessionStore)
 
+  const currentThinkingLabel = thinkingLabel(thinkingLevel)
+
   return (
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="max-w-full"
-            disabled={disabled}
-          />
-        }
+      <TitleTooltip
+        title="Reasoning"
+        kbd={`${formatShortcutLabel("Control+R")} / ${formatShortcutLabel("Control+Shift+R")}`}
       >
-        <span className="truncate">{thinkingLabel(thinkingLevel)}</span>
-        <ChevronDownIcon data-icon="inline-end" />
-      </PopoverTrigger>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="max-w-full"
+              disabled={disabled}
+            />
+          }
+        >
+          <span className="truncate">{currentThinkingLabel}</span>
+          <ChevronDownIcon data-icon="inline-end" />
+        </PopoverTrigger>
+      </TitleTooltip>
       <PopoverContent className="w-64 p-0" side="top" align="start">
         <Command>
           <CommandList>

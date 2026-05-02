@@ -5,10 +5,7 @@ import {
 } from "@tanstack/react-hotkeys"
 
 export function formatShortcutLabel(hotkey: string) {
-  return formatForDisplay(hotkey, { useSymbols: false }).replace(
-    /\bControl\b/g,
-    "Ctrl"
-  )
+  return formatForDisplay(hotkey, { useSymbols: true })
 }
 
 export function matchesShortcutEvent(event: KeyboardEvent, hotkey: string) {

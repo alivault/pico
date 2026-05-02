@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/drawer"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import {
   formatShortcutLabel,
@@ -832,55 +833,65 @@ export function GitPanelToolbar({
       {showActions ? (
         <div className="flex flex-wrap items-center justify-end gap-2 md:hidden">
           {showCommitAction ? (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                setCommitDialogOpen(true)
-              }}
-            >
-              <GitCommitIcon /> Commit…
-            </Button>
+            <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => {
+                  setCommitDialogOpen(true)
+                }}
+              >
+                <GitCommitIcon /> Commit…
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showPushAction ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              onClick={() => {
-                gitActionMutation.mutate("push")
-              }}
-            >
-              {pushing ? <Spinner /> : <UploadIcon />}
-              Push
-            </Button>
+            <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("push")
+                }}
+              >
+                {pushing ? <Spinner /> : <UploadIcon />}
+                Push
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showForcePushAction ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              title="Force push with --force-with-lease"
-              onClick={() => {
-                gitActionMutation.mutate("force-push")
-              }}
+            <TitleTooltip
+              title="Force push"
+              kbd={formatShortcutLabel("Control+Shift+P")}
             >
-              {forcePushing ? <Spinner /> : <UploadIcon />}
-              Force Push
-            </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("force-push")
+                }}
+              >
+                {forcePushing ? <Spinner /> : <UploadIcon />}
+                Force Push
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showPullAction ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              onClick={() => {
-                gitActionMutation.mutate("pull")
-              }}
-            >
-              {pulling ? <Spinner /> : <DownloadIcon />}
-              Pull
-            </Button>
+            <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("pull")
+                }}
+              >
+                {pulling ? <Spinner /> : <DownloadIcon />}
+                Pull
+              </Button>
+            </TitleTooltip>
           ) : null}
         </div>
       ) : null}
@@ -2088,52 +2099,62 @@ export function HeaderGitActions({
       {showActions ? (
         <div className="hidden items-center gap-1 md:flex">
           {canCommit ? (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                setCommitDialogOpen(true)
-              }}
-            >
-              <GitCommitIcon /> Commit…
-            </Button>
+            <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => {
+                  setCommitDialogOpen(true)
+                }}
+              >
+                <GitCommitIcon /> Commit…
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showPush ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              onClick={() => {
-                gitActionMutation.mutate("push")
-              }}
-            >
-              {pushing ? <Spinner /> : <UploadIcon />} Push
-            </Button>
+            <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("push")
+                }}
+              >
+                {pushing ? <Spinner /> : <UploadIcon />} Push
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showForcePush ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              title="Force push with --force-with-lease"
-              onClick={() => {
-                gitActionMutation.mutate("force-push")
-              }}
+            <TitleTooltip
+              title="Force push"
+              kbd={formatShortcutLabel("Control+Shift+P")}
             >
-              {forcePushing ? <Spinner /> : <UploadIcon />} Force Push
-            </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("force-push")
+                }}
+              >
+                {forcePushing ? <Spinner /> : <UploadIcon />} Force Push
+              </Button>
+            </TitleTooltip>
           ) : null}
           {showPull ? (
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={gitActionBusy}
-              onClick={() => {
-                gitActionMutation.mutate("pull")
-              }}
-            >
-              {pulling ? <Spinner /> : <DownloadIcon />} Pull
-            </Button>
+            <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("pull")
+                }}
+              >
+                {pulling ? <Spinner /> : <DownloadIcon />} Pull
+              </Button>
+            </TitleTooltip>
           ) : null}
         </div>
       ) : null}

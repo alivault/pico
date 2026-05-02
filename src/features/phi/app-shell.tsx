@@ -46,6 +46,7 @@ import type { ComposerPanelHandle } from "@/features/phi/composer-panel"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1613,17 +1614,21 @@ function ConversationLatestMessageButton({
   )
 
   return (
-    <Button
-      variant="secondary"
-      size="icon-lg"
-      disabled={isDisabled}
-      className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
+    <TitleTooltip
       title="Jump to latest message"
-      aria-label="Jump to latest message"
-      onClick={onClick}
+      kbd={formatShortcutLabel("Control+ArrowDown")}
     >
-      <ArrowDownIcon className="size-4" />
-    </Button>
+      <Button
+        variant="secondary"
+        size="icon-lg"
+        disabled={isDisabled}
+        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
+        aria-label="Jump to latest message"
+        onClick={onClick}
+      >
+        <ArrowDownIcon className="size-4" />
+      </Button>
+    </TitleTooltip>
   )
 }
 
@@ -1659,17 +1664,21 @@ function ConversationPreviousMessageButton({
   )
 
   return (
-    <Button
-      variant="secondary"
-      size="icon-lg"
-      disabled={isDisabled}
-      className="absolute right-4 bottom-4 z-10 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:right-[18px] md:bottom-[18px]"
+    <TitleTooltip
       title="Jump to previous message"
-      aria-label="Jump to previous message"
-      onClick={onClick}
+      kbd={formatShortcutLabel("Control+ArrowLeft")}
     >
-      <ArrowUpToLineIcon className="size-4" />
-    </Button>
+      <Button
+        variant="secondary"
+        size="icon-lg"
+        disabled={isDisabled}
+        className="absolute right-4 bottom-4 z-10 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:right-[18px] md:bottom-[18px]"
+        aria-label="Jump to previous message"
+        onClick={onClick}
+      >
+        <ArrowUpToLineIcon className="size-4" />
+      </Button>
+    </TitleTooltip>
   )
 }
 
@@ -6208,22 +6217,26 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           className="shrink-0"
         />
         {showCollapsedNewSessionButton ? (
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className="shrink-0"
-            aria-label="Create a new session"
+          <TitleTooltip
             title={
               defaultNewSessionDirectory
                 ? `Create a new session in ${defaultNewSessionDirectory}`
                 : "Create a new session"
             }
-            onClick={() => {
-              void actionsRef.current.createSession()
-            }}
+            kbd={formatShortcutLabel("Control+N")}
           >
-            <SquarePenIcon />
-          </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="shrink-0"
+              aria-label="Create a new session"
+              onClick={() => {
+                void actionsRef.current.createSession()
+              }}
+            >
+              <SquarePenIcon />
+            </Button>
+          </TitleTooltip>
         ) : null}
         <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0 text-center">
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
@@ -6233,12 +6246,11 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 aria-label="Session streaming"
               />
             ) : null}
-            <h2
-              className="min-w-0 truncate text-[13px] leading-tight font-semibold"
-              title={displaySessionTitle}
-            >
-              {displaySessionTitle}
-            </h2>
+            <TitleTooltip title={displaySessionTitle}>
+              <h2 className="min-w-0 truncate text-[13px] leading-tight font-semibold">
+                {displaySessionTitle}
+              </h2>
+            </TitleTooltip>
           </div>
           <div className="flex max-w-full min-w-0 items-center justify-center gap-x-3">
             {displaySessionCwd ? (
@@ -6260,18 +6272,19 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             cwd={displaySessionCwd}
           />
           <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Session menu"
-                  title="Session menu"
-                />
-              }
-            >
-              <EllipsisIcon />
-            </DropdownMenuTrigger>
+            <TitleTooltip title="Session menu">
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Session menu"
+                  />
+                }
+              >
+                <EllipsisIcon />
+              </DropdownMenuTrigger>
+            </TitleTooltip>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem
                 onClick={() => {
@@ -6389,21 +6402,21 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            size="icon-sm"
-            variant={gitPanelOpen ? "secondary" : "ghost"}
-            className="hidden md:inline-flex"
-            aria-pressed={gitPanelOpen}
-            aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
-            title={
-              gitPanelOpen
-                ? "Close Git panel"
-                : `Open Git panel (${formatShortcutLabel("Control+\\")})`
-            }
-            onClick={onToggleGitPanel}
+          <TitleTooltip
+            title={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+            kbd={formatShortcutLabel("Control+\\")}
           >
-            <PanelRightIcon />
-          </Button>
+            <Button
+              size="icon-sm"
+              variant={gitPanelOpen ? "secondary" : "ghost"}
+              className="hidden md:inline-flex"
+              aria-pressed={gitPanelOpen}
+              aria-label={gitPanelOpen ? "Close Git panel" : "Open Git panel"}
+              onClick={onToggleGitPanel}
+            >
+              <PanelRightIcon />
+            </Button>
+          </TitleTooltip>
         </div>
       </div>
     </div>
