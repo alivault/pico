@@ -18,7 +18,10 @@ type SidebarResizeOptions = {
 
 type SidebarDragState = {
   collapsed: boolean
+  latestWidth: string | null
   moved: boolean
+  previewAnimationFrame: number | null
+  previewElement: HTMLElement | null
   previousCursor: string
   previousUserSelect: string
   side: SidebarResizeSide
@@ -90,6 +93,33 @@ function clamp(value: number, min: number, max: number) {
 function getResizeSide(element: HTMLElement): SidebarResizeSide {
   const sidebar = element.closest<HTMLElement>("[data-slot='sidebar']")
   return sidebar?.dataset.side === "right" ? "right" : "left"
+}
+
+function getSidebarWrapper(element: HTMLElement) {
+  return element.closest<HTMLElement>("[data-slot='sidebar-wrapper']")
+}
+
+function previewSidebarWidth(dragState: SidebarDragState, width: string) {
+  dragState.latestWidth = width
+  if (!dragState.previewElement) return
+  if (dragState.previewAnimationFrame !== null) return
+
+  dragState.previewAnimationFrame = window.requestAnimationFrame(() => {
+    dragState.previewAnimationFrame = null
+    if (!dragState.previewElement || !dragState.latestWidth) return
+
+    dragState.previewElement.style.setProperty(
+      "--sidebar-width",
+      dragState.latestWidth
+    )
+  })
+}
+
+function cancelSidebarWidthPreview(dragState: SidebarDragState) {
+  if (dragState.previewAnimationFrame === null) return
+
+  window.cancelAnimationFrame(dragState.previewAnimationFrame)
+  dragState.previewAnimationFrame = null
 }
 
 function calculateResizeWidth(dragState: SidebarDragState, clientX: number) {
@@ -179,7 +209,10 @@ export function useSidebarResize({
     )
     const dragState: SidebarDragState = {
       collapsed: options.state !== "expanded",
+      latestWidth: null,
       moved: false,
+      previewAnimationFrame: null,
+      previewElement: getSidebarWrapper(event.currentTarget),
       previousCursor: document.body.style.cursor,
       previousUserSelect: document.body.style.userSelect,
       side: getResizeSide(event.currentTarget),
@@ -196,6 +229,7 @@ export function useSidebarResize({
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
       cleanupGlobalResizeCursor?.()
+      cancelSidebarWidthPreview(dragState)
       document.body.style.cursor = dragState.previousCursor
       document.body.style.userSelect = dragState.previousUserSelect
       if (dragState.moved) optionsRef.current.onResizeActiveChange(false)
@@ -214,6 +248,7 @@ export function useSidebarResize({
 
     const collapseSidebar = (clientX: number) => {
       const nextWidth = `${Math.round(minWidthPx)}px`
+      previewSidebarWidth(dragState, nextWidth)
       optionsRef.current.onResize(nextWidth)
       optionsRef.current.onOpenChange(false)
       dragState.collapsed = true
@@ -223,6 +258,7 @@ export function useSidebarResize({
 
     const expandSidebar = (clientX: number) => {
       const nextWidth = `${Math.round(minWidthPx)}px`
+      previewSidebarWidth(dragState, nextWidth)
       optionsRef.current.onResize(nextWidth)
       optionsRef.current.onOpenChange(true)
       dragState.collapsed = false
@@ -265,12 +301,15 @@ export function useSidebarResize({
       }
 
       const nextWidth = clamp(attemptedWidth, minWidthPx, maxWidthPx)
-      optionsRef.current.onResize(`${Math.round(nextWidth)}px`)
+      previewSidebarWidth(dragState, `${Math.round(nextWidth)}px`)
     }
 
     const handlePointerUp = (pointerEvent: PointerEvent) => {
       if (dragState.moved) {
         pointerEvent.preventDefault()
+        if (dragState.latestWidth) {
+          optionsRef.current.onResize(dragState.latestWidth)
+        }
         window.setTimeout(() => {
           skipNextClickRef.current = false
         }, 0)
