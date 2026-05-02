@@ -1,3 +1,4 @@
+import * as React from "react"
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
@@ -5,6 +6,15 @@ import { TanStackDevtools } from "@tanstack/react-devtools"
 import { AppProviders } from "@/components/app-providers"
 
 import appCss from "../styles.css?url"
+
+const TANSTACK_DEVTOOLS_SETTINGS_KEY = "tanstack_devtools_settings"
+const TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY =
+  "phi-tanstack-devtools-defaults-v1"
+const TANSTACK_DEVTOOLS_CONFIG = {
+  position: "bottom-right",
+  openHotkey: ["Control", "`"],
+  triggerHidden: true,
+} satisfies NonNullable<React.ComponentProps<typeof TanStackDevtools>["config"]>
 
 export const Route = createRootRoute({
   head: () => ({
@@ -79,20 +89,68 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="h-svh overflow-hidden bg-background text-foreground antialiased">
         <AppProviders>
           {children}
-          <TanStackDevtools
-            config={{
-              position: "bottom-right",
-            }}
-            plugins={[
-              {
-                name: "Tanstack Router",
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-            ]}
-          />
+          <AppTanStackDevtools />
         </AppProviders>
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function AppTanStackDevtools() {
+  const [isReady, setIsReady] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      const defaultsApplied = window.localStorage.getItem(
+        TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY
+      )
+
+      if (defaultsApplied !== "true") {
+        const rawSettings = window.localStorage.getItem(
+          TANSTACK_DEVTOOLS_SETTINGS_KEY
+        )
+        const parsedSettings = rawSettings
+          ? (JSON.parse(rawSettings) as unknown)
+          : undefined
+        const existingSettings =
+          parsedSettings &&
+          typeof parsedSettings === "object" &&
+          !Array.isArray(parsedSettings)
+            ? parsedSettings
+            : {}
+
+        window.localStorage.setItem(
+          TANSTACK_DEVTOOLS_SETTINGS_KEY,
+          JSON.stringify({
+            ...existingSettings,
+            openHotkey: TANSTACK_DEVTOOLS_CONFIG.openHotkey,
+            triggerHidden: TANSTACK_DEVTOOLS_CONFIG.triggerHidden,
+          })
+        )
+        window.localStorage.setItem(
+          TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY,
+          "true"
+        )
+      }
+    } catch {
+      // Ignore unavailable localStorage or malformed persisted devtools settings.
+    }
+
+    setIsReady(true)
+  }, [])
+
+  if (!isReady) return null
+
+  return (
+    <TanStackDevtools
+      config={TANSTACK_DEVTOOLS_CONFIG}
+      plugins={[
+        {
+          name: "Tanstack Router",
+          render: <TanStackRouterDevtoolsPanel />,
+        },
+      ]}
+    />
   )
 }
