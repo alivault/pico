@@ -5241,6 +5241,56 @@ const AppShellSessionWorkspace = React.forwardRef<
     setComposerImages,
   })
 
+  const switchEmptyDraftDirectory = React.useCallback(
+    (directory: string) => {
+      const nextDirectory = directory.trim()
+      if (!nextDirectory) return
+
+      const previousState = sessionStateRef.current
+      if (!previousState.draft || previousState.items.length > 0) return
+
+      safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
+      setStoredDraftDirectory(nextDirectory)
+      rememberRecentDirectory(nextDirectory)
+
+      const ownerKey = promptDraftKey({ cwd: nextDirectory })
+      const nextState = createOptimisticDraftSessionState({
+        previous: previousState,
+        cwd: nextDirectory,
+        ownerKey,
+      })
+      sessionStateRef.current = nextState
+      conversationItemsStore.setItems(nextState.items)
+      setSessionState(nextState)
+
+      rememberStoredPromptDraft(
+        nextState,
+        serializeComposerDraft({
+          text: composerTextRef.current,
+          skillName: composerSkillRef.current,
+        })
+      )
+    },
+    [
+      conversationItemsStore,
+      rememberRecentDirectory,
+      sessionStateRef,
+      setSessionState,
+      setStoredDraftDirectory,
+    ]
+  )
+
+  const addDirectoryPathForDialog = React.useCallback(
+    async (path: string) => {
+      const result = await addDirectoryPath(path)
+      if (typeof result === "string") {
+        switchEmptyDraftDirectory(result)
+      }
+      return result
+    },
+    [addDirectoryPath, switchEmptyDraftDirectory]
+  )
+
   const createSession = React.useCallback(
     async (cwdOverride?: string, options?: CreateSessionOptions) => {
       const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
@@ -6093,7 +6143,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         activeSessionId={activeSessionId}
         addDirectoryDialogRef={addDirectoryDialogRef}
         addDirectoryOpenRef={addDirectoryOpenRef}
-        addDirectoryPath={addDirectoryPath}
+        addDirectoryPath={addDirectoryPathForDialog}
         baseSidebarDirectories={baseSidebarDirectories}
         commandPaletteCommandsRef={commandPaletteCommandsRef}
         commandPaletteOpenRef={commandPaletteOpenRef}
@@ -6583,6 +6633,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
     knownDirectories,
     recentDirectoriesStore,
     sessionCwd,
+    sessionStore,
   }: Pick<
     AppShellFloatingControllersProps,
     | "addDirectoryDialogRef"
@@ -6592,8 +6643,13 @@ const AppShellAddDirectoryDialogHost = React.memo(
     | "knownDirectories"
     | "recentDirectoriesStore"
     | "sessionCwd"
+    | "sessionStore"
   >) {
     const recentDirectories = useSelector(recentDirectoriesStore)
+    const useForNewSession = useSelector(
+      sessionStore,
+      (sessionState) => sessionState.draft && sessionState.items.length === 0
+    )
     return (
       <AppShellAddDirectoryDialogController
         ref={addDirectoryDialogRef}
@@ -6602,6 +6658,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
         currentDirectory={sessionCwd}
         recentDirectories={recentDirectories}
         knownDirectories={knownDirectories}
+        useForNewSession={useForNewSession}
         onAddDirectoryPath={addDirectoryPath}
       />
     )
@@ -6922,6 +6979,7 @@ const AppShellFloatingControllers = React.memo(
           knownDirectories={knownDirectories}
           recentDirectoriesStore={recentDirectoriesStore}
           sessionCwd={sessionCwd}
+          sessionStore={sessionStore}
         />
 
         <AppShellRenameSessionDialogHost

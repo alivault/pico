@@ -407,7 +407,7 @@ export function useAppShellPromptMutations({
         })
         rememberRecentDirectory(response.path)
         prefetchDirectorySessionsIndex(response.path)
-        return true
+        return response.path
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to add directory"

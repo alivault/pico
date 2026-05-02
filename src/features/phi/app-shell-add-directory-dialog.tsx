@@ -101,7 +101,7 @@ function DirectoryPathLabel({
   prefix,
 }: {
   path: string
-  prefix?: string
+  prefix?: React.ReactNode
 }) {
   const displayPath = formatDirectoryDisplayPath(path)
   const { leading, trailing } = splitDisplayPath(displayPath)
@@ -140,6 +140,7 @@ type AppShellAddDirectoryDialogProps = {
   currentDirectory?: string
   recentDirectories: Array<string>
   knownDirectories: Array<string>
+  useForNewSession?: boolean
   onAddDirectoryPath: (path: string) => void
 }
 
@@ -152,6 +153,7 @@ export function AppShellAddDirectoryDialog({
   currentDirectory,
   recentDirectories,
   knownDirectories,
+  useForNewSession = false,
   onAddDirectoryPath,
 }: AppShellAddDirectoryDialogProps) {
   const isMobile = useIsMobile()
@@ -196,6 +198,18 @@ export function AppShellAddDirectoryDialog({
     currentMatching.length > 0 ||
     recentMatching.length > 0 ||
     knownMatching.length > 0
+  const addPathDescription = useForNewSession
+    ? "Add to sidebar and use for this new session."
+    : "Resolve and add this path to the sidebar."
+  const openedDescription = useForNewSession
+    ? "Use for this new session."
+    : "Expand and show it in the sidebar."
+  const currentDescription = useForNewSession
+    ? "Use the current Phi working directory for this new session."
+    : "Use the current Phi working directory."
+  const addKnownDescription = useForNewSession
+    ? "Add to sidebar and use for this new session."
+    : ""
 
   const directoryPicker = (
     <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
@@ -221,9 +235,9 @@ export function AppShellAddDirectoryDialog({
               onSelect={() => onAddDirectoryPath(manualPath)}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <DirectoryPathLabel path={manualPath} prefix="Add " />
+                <DirectoryPathLabel path={manualPath} prefix={<>Add&nbsp;</>} />
                 <span className="truncate text-xs text-muted-foreground">
-                  Resolve and add this path to the sidebar.
+                  {addPathDescription}
                 </span>
               </div>
             </CommandItem>
@@ -240,7 +254,7 @@ export function AppShellAddDirectoryDialog({
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
                   <span className="truncate text-xs text-muted-foreground">
-                    Expand and show it in the sidebar.
+                    {openedDescription}
                   </span>
                 </div>
               </CommandItem>
@@ -258,7 +272,7 @@ export function AppShellAddDirectoryDialog({
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
                   <span className="truncate text-xs text-muted-foreground">
-                    Use the current Phi working directory.
+                    {currentDescription}
                   </span>
                 </div>
               </CommandItem>
@@ -273,7 +287,14 @@ export function AppShellAddDirectoryDialog({
                 value={`recent ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <DirectoryPathLabel path={directoryPath} />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <DirectoryPathLabel path={directoryPath} />
+                  {addKnownDescription ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {addKnownDescription}
+                    </span>
+                  ) : null}
+                </div>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -290,7 +311,14 @@ export function AppShellAddDirectoryDialog({
                 value={`known ${directoryPath}`}
                 onSelect={() => onAddDirectoryPath(directoryPath)}
               >
-                <DirectoryPathLabel path={directoryPath} />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <DirectoryPathLabel path={directoryPath} />
+                  {addKnownDescription ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {addKnownDescription}
+                    </span>
+                  ) : null}
+                </div>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -349,7 +377,10 @@ type AppShellAddDirectoryDialogControllerProps = {
   currentDirectory?: string
   recentDirectories: Array<string>
   knownDirectories: Array<string>
-  onAddDirectoryPath: (path: string) => Promise<boolean> | boolean | void
+  useForNewSession?: boolean
+  onAddDirectoryPath: (
+    path: string
+  ) => Promise<boolean | string> | boolean | string | void
 }
 
 export function AppShellAddDirectoryDialogController({
@@ -359,6 +390,7 @@ export function AppShellAddDirectoryDialogController({
   currentDirectory,
   recentDirectories,
   knownDirectories,
+  useForNewSession,
   onAddDirectoryPath,
 }: AppShellAddDirectoryDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
@@ -406,6 +438,7 @@ export function AppShellAddDirectoryDialogController({
       currentDirectory={currentDirectory}
       recentDirectories={recentDirectories}
       knownDirectories={knownDirectories}
+      useForNewSession={useForNewSession}
       onAddDirectoryPath={(path) => {
         void addDirectoryPath(path)
       }}
