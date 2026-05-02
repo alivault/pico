@@ -610,7 +610,7 @@ function mutateToolBlockInItems(
   }
 }
 
-type ToolResultUpdate = Pick<ToolBlock, "output" | "details" | "isError">
+export type ToolResultUpdate = Pick<ToolBlock, "output" | "details" | "isError">
 
 function applyToolResultToBlock(
   block: ToolBlock,
@@ -657,18 +657,20 @@ function applyToolResultsToBlocks(
   return changed ? nextBlocks : blocks
 }
 
-function mergeStreamingAssistantBlocks(options: {
-  previousStreamingItem: AssistantItem | null
+export function mergeAssistantBlocksForStreaming(options: {
+  previousBlocks?: Array<AssistantBlock>
   nextBlocks: Array<AssistantBlock>
-  toolResultsByCallId: Map<string, ToolResultUpdate>
+  toolResultsByCallId?: Map<string, ToolResultUpdate>
+  preserveMissingTools?: boolean
+  preserveBlockRenderKeysByIndex?: boolean
 }) {
-  const previousBlocks = options.previousStreamingItem?.blocks ?? []
-  if (previousBlocks.length === 0) {
-    return applyToolResultsToBlocks(
-      options.nextBlocks,
-      options.toolResultsByCallId
-    )
-  }
+  const previousBlocks = options.previousBlocks ?? []
+  const withToolResults = (blocks: Array<AssistantBlock>) =>
+    options.toolResultsByCallId
+      ? applyToolResultsToBlocks(blocks, options.toolResultsByCallId)
+      : blocks
+
+  if (previousBlocks.length === 0) return withToolResults(options.nextBlocks)
 
   const previousToolByCallId = new Map<string, ToolBlock>()
   previousBlocks.forEach((block) => {
@@ -678,23 +680,34 @@ function mergeStreamingAssistantBlocks(options: {
   })
 
   const nextToolCallIds = new Set<string>()
-  const mergedNextBlocks = options.nextBlocks.map((block) => {
-    if (block.type !== "tool" || !block.callId) return block
+  const mergedNextBlocks = options.nextBlocks.map((block, index) => {
+    if (block.type === "tool" && block.callId) {
+      nextToolCallIds.add(block.callId)
+      const previousTool = previousToolByCallId.get(block.callId)
+      if (previousTool) {
+        return {
+          ...block,
+          renderKey: assistantBlockRenderKey(previousTool),
+          category: block.category || previousTool.category,
+          output: previousTool.output || block.output,
+          details: previousTool.details ?? block.details,
+          isError: previousTool.isError || block.isError,
+          running: previousTool.running === false ? false : block.running,
+        } satisfies ToolBlock
+      }
+    }
 
-    nextToolCallIds.add(block.callId)
-    const previousTool = previousToolByCallId.get(block.callId)
-    if (!previousTool) return block
+    const previousBlock = options.preserveBlockRenderKeysByIndex
+      ? previousBlocks[index]
+      : undefined
+    if (previousBlock?.type === block.type) {
+      return withAssistantBlockRenderKey(block, previousBlock)
+    }
 
-    return {
-      ...block,
-      renderKey: assistantBlockRenderKey(previousTool),
-      category: block.category || previousTool.category,
-      output: previousTool.output || block.output,
-      details: previousTool.details ?? block.details,
-      isError: previousTool.isError || block.isError,
-      running: previousTool.running === false ? false : block.running,
-    } satisfies ToolBlock
+    return block
   })
+
+  if (!options.preserveMissingTools) return withToolResults(mergedNextBlocks)
 
   const missingPreviousTools = previousBlocks
     .map((block, index) => ({ block, index }))
@@ -706,10 +719,7 @@ function mergeStreamingAssistantBlocks(options: {
     )
 
   if (missingPreviousTools.length === 0) {
-    return applyToolResultsToBlocks(
-      mergedNextBlocks,
-      options.toolResultsByCallId
-    )
+    return withToolResults(mergedNextBlocks)
   }
 
   const blocks: Array<AssistantBlock> = []
@@ -729,7 +739,20 @@ function mergeStreamingAssistantBlocks(options: {
     missingIndex += 1
   }
 
-  return applyToolResultsToBlocks(blocks, options.toolResultsByCallId)
+  return withToolResults(blocks)
+}
+
+function mergeStreamingAssistantBlocks(options: {
+  previousStreamingItem: AssistantItem | null
+  nextBlocks: Array<AssistantBlock>
+  toolResultsByCallId: Map<string, ToolResultUpdate>
+}) {
+  return mergeAssistantBlocksForStreaming({
+    previousBlocks: options.previousStreamingItem?.blocks,
+    nextBlocks: options.nextBlocks,
+    toolResultsByCallId: options.toolResultsByCallId,
+    preserveMissingTools: true,
+  })
 }
 
 function appendAssistantItem(

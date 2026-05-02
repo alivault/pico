@@ -11,6 +11,7 @@ import {
   extractMessageImages,
   extractMessageText,
   extractToolText,
+  mergeAssistantBlocksForStreaming,
 } from "@/lib/phi/sync"
 import { toolCategoryFromTool } from "@/lib/phi/tool-classification"
 
@@ -130,84 +131,6 @@ function applyAbortedStopToBlocks(
   ]
 }
 
-function blockRenderKey(block: AssistantBlock | undefined) {
-  return block?.renderKey || block?.blockKey
-}
-
-function mergeRetainedBlocks(
-  previousBlocks: Array<AssistantBlock>,
-  nextBlocks: Array<AssistantBlock>,
-  options?: { preserveMissingTools?: boolean }
-) {
-  const previousToolByCallId = new Map<string, ToolBlock>()
-  previousBlocks.forEach((block) => {
-    if (block.type === "tool" && block.callId) {
-      previousToolByCallId.set(block.callId, block)
-    }
-  })
-
-  const nextToolCallIds = new Set<string>()
-  const mergedNextBlocks = nextBlocks.map((block, index) => {
-    if (block.type === "tool" && block.callId) {
-      nextToolCallIds.add(block.callId)
-      const previousTool = previousToolByCallId.get(block.callId)
-      if (previousTool) {
-        return {
-          ...block,
-          renderKey: blockRenderKey(previousTool),
-          category: block.category || previousTool.category,
-          output: previousTool.output || block.output,
-          details: previousTool.details ?? block.details,
-          isError: previousTool.isError || block.isError,
-          running: previousTool.running === false ? false : block.running,
-        } satisfies ToolBlock
-      }
-    }
-
-    const previousBlock = previousBlocks[index]
-    if (previousBlock?.type === block.type) {
-      return {
-        ...block,
-        renderKey: blockRenderKey(previousBlock),
-      } satisfies AssistantBlock
-    }
-
-    return block
-  })
-
-  if (!options?.preserveMissingTools) return mergedNextBlocks
-
-  const missingPreviousTools = previousBlocks
-    .map((block, index) => ({ block, index }))
-    .filter(
-      (entry): entry is { block: ToolBlock; index: number } =>
-        entry.block.type === "tool" &&
-        Boolean(entry.block.callId) &&
-        !nextToolCallIds.has(entry.block.callId || "")
-    )
-
-  if (missingPreviousTools.length === 0) return mergedNextBlocks
-
-  const blocks: Array<AssistantBlock> = []
-  let missingIndex = 0
-  for (let index = 0; index < mergedNextBlocks.length; index += 1) {
-    while (
-      missingIndex < missingPreviousTools.length &&
-      missingPreviousTools[missingIndex].index <= index
-    ) {
-      blocks.push(missingPreviousTools[missingIndex].block)
-      missingIndex += 1
-    }
-    blocks.push(mergedNextBlocks[index])
-  }
-  while (missingIndex < missingPreviousTools.length) {
-    blocks.push(missingPreviousTools[missingIndex].block)
-    missingIndex += 1
-  }
-
-  return blocks
-}
-
 function ensureStreamingAssistant(state: RetainedConversationState) {
   const existing = streamingAssistantItem(state.items)
   if (existing) return existing
@@ -232,11 +155,12 @@ function updateStreamingAssistantFromMessage(
 
   const item = ensureStreamingAssistant(state)
   const renderKey = item.renderKey || nextMessageItemKey(state.items)
-  const blocks = mergeRetainedBlocks(
-    item.blocks,
-    assistantBlocksFromMessage(message, renderKey),
-    { preserveMissingTools: true }
-  )
+  const blocks = mergeAssistantBlocksForStreaming({
+    previousBlocks: item.blocks,
+    nextBlocks: assistantBlocksFromMessage(message, renderKey),
+    preserveMissingTools: true,
+    preserveBlockRenderKeysByIndex: true,
+  })
   const nextItem = {
     ...item,
     renderKey,
@@ -397,10 +321,11 @@ function appendCommittedMessage(
 
   const streamingItem = streamingAssistantItem(state.items)
   const renderKey = streamingItem?.renderKey || itemKey
-  const blocks = mergeRetainedBlocks(
-    streamingItem?.blocks ?? [],
-    assistantBlocksFromMessage(message, renderKey)
-  )
+  const blocks = mergeAssistantBlocksForStreaming({
+    previousBlocks: streamingItem?.blocks,
+    nextBlocks: assistantBlocksFromMessage(message, renderKey),
+    preserveBlockRenderKeysByIndex: true,
+  })
   const finalizedItem = {
     kind: "assistant",
     itemKey,
