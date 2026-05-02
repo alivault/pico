@@ -263,6 +263,15 @@ function selectGitWorkingTreeSummary(data: GitStatusData) {
   return formatGitWorkingTreeSummary(data.gitStatus)
 }
 
+function gitStatusHasDiverged(gitStatus: GitStatusValue | undefined) {
+  return Boolean(
+    gitStatus &&
+    !gitStatus.detached &&
+    (gitStatus.ahead || 0) > 0 &&
+    (gitStatus.behind || 0) > 0
+  )
+}
+
 function gitFileStatusCharacters(status: string | undefined) {
   const normalized =
     typeof status === "string" ? status.slice(0, 2).padEnd(2, " ") : "  "
@@ -712,6 +721,7 @@ export function GitPanelToolbar({
   const canPush = Boolean(
     hasRepository && !gitStatus?.detached && (gitStatus?.ahead || 0) > 0
   )
+  const canForcePush = gitStatusHasDiverged(gitStatus)
   const canPull = Boolean(
     hasRepository && !gitStatus?.detached && (gitStatus?.behind || 0) > 0
   )
@@ -791,7 +801,7 @@ export function GitPanelToolbar({
     isMobile &&
     viewerContextId &&
     normalizedCwd &&
-    canPush &&
+    canForcePush &&
     (!gitActionBusy || forcePushing)
   )
   const showPullAction = Boolean(
@@ -938,6 +948,7 @@ function GitCommitDialog({
   const branchName = gitStatus?.detached
     ? `Detached ${gitStatus.revision || "HEAD"}`
     : gitStatus?.branch || "Unknown branch"
+  const canForcePush = gitStatusHasDiverged(gitStatus)
 
   const generateMutation = useMutation({
     mutationFn: async () =>
@@ -1097,26 +1108,30 @@ function GitCommitDialog({
           disabled: busy || files.length === 0,
           onSelect: () => continueCommit(true),
         },
-        {
-          id: "commit-force-push",
-          title: "Commit and force push",
-          description: message.trim()
-            ? "Commit with the current message, then force push with --force-with-lease."
-            : "Generate a message automatically, then commit and force push with --force-with-lease.",
-          keywords: [
-            "continue",
-            "run",
-            "save",
-            "stage",
-            "git",
-            "push",
-            "force",
-            "lease",
-          ],
-          valueLabel: "Force push",
-          disabled: busy || files.length === 0,
-          onSelect: () => continueCommit(true, true),
-        },
+        ...(canForcePush
+          ? [
+              {
+                id: "commit-force-push",
+                title: "Commit and force push",
+                description: message.trim()
+                  ? "Commit with the current message, then force push with --force-with-lease."
+                  : "Generate a message automatically, then commit and force push with --force-with-lease.",
+                keywords: [
+                  "continue",
+                  "run",
+                  "save",
+                  "stage",
+                  "git",
+                  "push",
+                  "force",
+                  "lease",
+                ],
+                valueLabel: "Force push",
+                disabled: busy || files.length === 0,
+                onSelect: () => continueCommit(true, true),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -1978,6 +1993,8 @@ export function HeaderGitActions({
     !gitStatus?.detached &&
     (gitStatus?.ahead || 0) > 0
   )
+  const canForcePush =
+    Boolean(viewerContextId && normalizedCwd) && gitStatusHasDiverged(gitStatus)
   const canPull = Boolean(
     viewerContextId &&
     normalizedCwd &&
@@ -2059,7 +2076,7 @@ export function HeaderGitActions({
   const gitActionBusy =
     gitActionMutation.isPending || pushing || forcePushing || pulling
   const showPush = canPush && (!gitActionBusy || pushing)
-  const showForcePush = canPush && (!gitActionBusy || forcePushing)
+  const showForcePush = canForcePush && (!gitActionBusy || forcePushing)
   const showPull = canPull && (!gitActionBusy || pulling)
   const showActions =
     !isMobile && (canCommit || showPush || showForcePush || showPull)
