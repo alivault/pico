@@ -1189,11 +1189,11 @@ function TreeBrowsePanel({
     const visibleNodes = treeViewModel.orderedVisibleNodes
     if (visibleNodes.length === 0) return
 
-    const currentIndex = Math.max(0, cursorTreeIndex)
-    const nextIndex = Math.max(
-      0,
-      Math.min(visibleNodes.length - 1, currentIndex + step)
-    )
+    const currentIndex =
+      cursorTreeIndex >= 0 ? cursorTreeIndex : step > 0 ? -1 : 0
+    const nextIndex =
+      (((currentIndex + step) % visibleNodes.length) + visibleNodes.length) %
+      visibleNodes.length
     const nextNode = visibleNodes[nextIndex]
     if (!nextNode) return
 
