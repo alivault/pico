@@ -1245,7 +1245,7 @@ function AppSidebarHeader({
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
             <span>Search sessions...</span>
-            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
+            <kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
               {formatShortcutLabel("Control+S")}
             </kbd>
           </SidebarMenuButton>
@@ -1254,7 +1254,7 @@ function AppSidebarHeader({
           <SidebarMenuButton type="button" onClick={onCreateSession}>
             <SquarePenIcon />
             <span>New session</span>
-            <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
+            <kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
               {formatShortcutLabel("Control+N")}
             </kbd>
           </SidebarMenuButton>
@@ -1567,7 +1567,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
               <CommandIcon />
               <span>Commands</span>
-              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
+              <kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
                 {formatShortcutLabel("Control+K")}
               </kbd>
             </SidebarMenuButton>
@@ -1576,7 +1576,7 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenSettings}>
               <Settings2Icon />
               <span>Settings</span>
-              <kbd className="ml-auto hidden rounded border border-sidebar-border/70 bg-sidebar-accent/20 px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
+              <kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
                 {formatShortcutLabel("Control+,")}
               </kbd>
             </SidebarMenuButton>
