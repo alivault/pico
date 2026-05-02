@@ -1174,20 +1174,20 @@ function GitCommitDialog({
       />
       <div className="grid gap-3 px-3 py-4 text-sm md:px-4 md:text-base">
         <div className="grid gap-3">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-4">
             <div className="font-semibold">Branch</div>
             <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
               <GitBranchIcon className="size-5 shrink-0" />
-              <span className="max-w-52 truncate font-medium text-foreground">
+              <span className="truncate font-medium text-foreground">
                 {branchName}
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-4">
             <div className="font-semibold">Changes</div>
-            <div className="flex items-center gap-3 text-muted-foreground tabular-nums">
-              <span>{fileSummary}</span>
+            <div className="flex min-w-0 items-center gap-3 text-muted-foreground tabular-nums">
+              <span className="shrink-0">{fileSummary}</span>
               {lineSummary ? (
                 <span>
                   <span className="text-emerald-500">
