@@ -6893,7 +6893,9 @@ const AppShellSettingsDialogHost = React.memo(
 
     const openAuthFromSettings = (mode: "login" | "logout") => {
       settingsDialogRef.current?.close()
-      authDialogRef.current?.open(mode)
+      authDialogRef.current?.open(mode, {
+        returnOnClose: () => settingsDialogRef.current?.open(),
+      })
     }
 
     return (

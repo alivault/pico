@@ -33,7 +33,10 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 
 export type AppShellAuthDialogHandle = {
-  open: (mode?: "login" | "logout") => void
+  open: (
+    mode?: "login" | "logout",
+    options?: { returnOnClose?: () => void }
+  ) => void
   close: () => void
   isOpen: () => boolean
 }
@@ -118,6 +121,7 @@ export function AppShellAuthDialogController({
     React.useState<AuthProviderOption | null>(null)
   const [apiKey, setApiKey] = React.useState("")
   const openRef = React.useRef(false)
+  const returnOnCloseRef = React.useRef<(() => void) | null>(null)
 
   const authDialogOpen = loginOpen || logoutOpen || apiKeyOpen
 
@@ -139,10 +143,20 @@ export function AppShellAuthDialogController({
     setLoginOpen(true)
   }
 
-  const closeAllDialogs = () => {
+  const closeAllDialogs = (options?: { returnToOrigin?: boolean }) => {
     setLoginOpen(false)
     setLogoutOpen(false)
     closeApiKeyDialog()
+
+    const returnOnClose = returnOnCloseRef.current
+    returnOnCloseRef.current = null
+    if (options?.returnToOrigin && returnOnClose) {
+      returnOnClose()
+    }
+  }
+
+  const closeAndReturnToOrigin = () => {
+    closeAllDialogs({ returnToOrigin: true })
   }
 
   const providersQuery = useQuery({
@@ -249,7 +263,10 @@ export function AppShellAuthDialogController({
   React.useImperativeHandle(
     ref,
     () => ({
-      open: (mode = "login") => {
+      open: (mode = "login", options) => {
+        if (options?.returnOnClose) {
+          returnOnCloseRef.current = options.returnOnClose
+        }
         closeApiKeyDialog()
         if (mode === "logout") {
           setLoginOpen(false)
@@ -259,7 +276,7 @@ export function AppShellAuthDialogController({
           setLoginOpen(true)
         }
       },
-      close: closeAllDialogs,
+      close: () => closeAllDialogs(),
       isOpen: () => openRef.current,
     }),
     []
@@ -340,7 +357,7 @@ export function AppShellAuthDialogController({
             type="button"
             variant="outline"
             className="w-full"
-            onClick={closeAllDialogs}
+            onClick={closeAndReturnToOrigin}
           >
             Cancel
           </Button>
@@ -513,14 +530,20 @@ export function AppShellAuthDialogController({
     <>
       {renderAuthSurface(
         loginOpen,
-        setLoginOpen,
+        (nextOpen) => {
+          if (!nextOpen) closeAndReturnToOrigin()
+          else setLoginOpen(true)
+        },
         "Login to provider",
         "Search providers and press Enter to configure authentication.",
         loginCommandBody
       )}
       {renderAuthSurface(
         logoutOpen,
-        setLogoutOpen,
+        (nextOpen) => {
+          if (!nextOpen) closeAndReturnToOrigin()
+          else setLogoutOpen(true)
+        },
         "Logout from provider",
         "Search saved provider credentials and press Enter to remove them.",
         logoutCommandBody
