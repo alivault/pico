@@ -92,8 +92,9 @@ Notes:
 - `src/features/phi/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
-- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-sessions-dialog.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
+- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-auth-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-sessions-dialog.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
   - focused dialog implementations hosted by the floating controller section in `app-shell.tsx`
+  - auth dialogs are keyboard-first command surfaces on desktop and drawers on mobile
 - `src/features/phi/app-shell-dialogs.tsx`
   - legacy/minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
 - `src/features/phi/app-shell-command-palette.tsx`
@@ -157,6 +158,7 @@ Notes:
   - render-optimized conversation item construction plus streaming conversation item helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
+  - provider auth uses the SDK's `AuthStorage` and `ModelRegistry` rather than browser-local credential storage
 - `src/server/pi-sdk-path.ts` and `src/server/pi-sdk-types.ts`
   - SDK package resolution and local SDK adapter types
 - `src/server/session-naming.ts`
@@ -282,6 +284,10 @@ Existing notable endpoints:
 - `/events`
 - `/api/prompt`
 - `/api/abort`
+- `/api/auth/providers`
+- `/api/auth/api-key`
+- `/api/auth/oauth`
+- `/api/auth/logout`
 - `/api/session/new`
 - `/api/session/select`
 - `/api/session/rename`
@@ -337,6 +343,33 @@ If you add a flow that creates/selects a session, make sure it stays compatible 
 - route navigation in `src/routes/index.tsx`
 - `onSelectSession` in `PhiAppShell`
 - runtime request resolution based on `context` + `session`
+
+### Provider authentication
+
+Provider auth is exposed through `/login` and `/logout`, command palette actions, and the Provider authentication section in Settings.
+
+Important behavior:
+
+- Credentials are managed by the Pi SDK `AuthStorage` / `ModelRegistry`; do not add parallel browser credential storage.
+- Auth routes are thin and delegate to `getPhiRuntime()`:
+  - `/api/auth/providers`
+  - `/api/auth/api-key`
+  - `/api/auth/oauth`
+  - `/api/auth/logout`
+- Auth UI lives in `src/features/phi/app-shell-auth-dialog.tsx`; server-driven OAuth/device-code prompts flow through `src/features/phi/app-shell-ui-request-dialog.tsx` and `/api/ui/$id`.
+- Desktop auth flows should remain keyboard-first `CommandDialog` surfaces; mobile flows should use `Drawer` with explicit buttons for actions such as cancel/continue/save.
+- OAuth URLs should be opened or copied via command actions, not shown raw in toasts or inline visible text unless there is an explicit UX reason.
+- When auth is opened from Settings, closing the top-level login/logout dialog should return to Settings; substeps such as API-key entry should first go back to their provider list.
+- After login/logout/API-key changes, refresh model/provider state through the runtime/model registry path and invalidate provider queries as needed.
+
+If you change auth contracts, update:
+
+- `src/lib/phi/api.ts`
+- `src/lib/phi/index.ts` for UI-request shape changes
+- `src/server/pi-sdk-types.ts` for local SDK adapter type changes
+- `src/features/phi/app-shell-auth-dialog.tsx`
+- `src/features/phi/app-shell-ui-request-dialog.tsx`
+- the relevant `src/routes/api.auth.*.ts` route
 
 ### Composer behavior
 
@@ -450,7 +483,7 @@ with `src/server/phi-runtime/index.ts` remaining the coordinator.
 
 ### Slash commands
 
-Built-in slash commands are surfaced in the client and executed in the runtime.
+Built-in slash commands are surfaced in the client and executed in the runtime. `/login` and `/logout` are client-handled auth dialog commands; most other built-ins execute runtime behavior.
 
 If you add or change a slash command, update both sides:
 
@@ -582,12 +615,14 @@ Manual smoke tests are recommended for the touched area. Useful flows:
 - rename/delete a session
 - open git tab
 - toggle settings for thinking/tools/notifications
+- open Settings → Login/Logout, verify Esc/back returns to Settings, then smoke test OAuth/API-key auth dialog substeps
 
 ## Things that are easy to break
 
 Be especially careful around these:
 
 - forgetting `context` / `session` request params
+- storing provider credentials outside Pi SDK `AuthStorage` / `ModelRegistry`
 - changing shared payload shapes without updating client contracts
 - updating `sessionStateRef.current` without publishing to `sessionStore`
 - adding broad React state in `AppShellSessionWorkspace` instead of narrow stores/selectors
