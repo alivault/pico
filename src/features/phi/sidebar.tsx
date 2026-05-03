@@ -678,7 +678,7 @@ function SidebarSessionItem({
             <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
               {hasTimestamp ? (
                 <TitleTooltip
-                  title={exactTimestamp}
+                  title={isMobile ? undefined : exactTimestamp}
                   side="right"
                   align="center"
                 >
