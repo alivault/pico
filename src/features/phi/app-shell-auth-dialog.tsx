@@ -365,7 +365,7 @@ export function AppShellAuthDialogController({
       ) : (
         <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
           Use ↑/↓ to select, Enter to start login or enter an API key, and Esc
-          to close.
+          to {returnOnCloseRef.current ? "go back" : "close"}.
         </div>
       )}
     </Command>
@@ -407,7 +407,8 @@ export function AppShellAuthDialogController({
         )}
       </CommandList>
       <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-        Use ↑/↓ to select, Enter to remove credentials, and Esc to close.
+        Use ↑/↓ to select, Enter to remove credentials, and Esc to{" "}
+        {returnOnCloseRef.current ? "go back" : "close"}.
       </div>
     </Command>
   )
