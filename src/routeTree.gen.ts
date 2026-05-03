@@ -44,6 +44,10 @@ import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pend
 import { Route as ApiPendingMessageRemoveRouteImport } from './routes/api.pending-message.remove'
 import { Route as ApiDirectoryResolveRouteImport } from './routes/api.directory.resolve'
 import { Route as ApiDirectorySessionsCleanupRouteImport } from './routes/api.directory-sessions.cleanup'
+import { Route as ApiAuthProvidersRouteImport } from './routes/api.auth.providers'
+import { Route as ApiAuthOauthRouteImport } from './routes/api.auth.oauth'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api.auth.logout'
+import { Route as ApiAuthApiKeyRouteImport } from './routes/api.auth.api-key'
 import { Route as ApiSessionTreeLabelRouteImport } from './routes/api.session.tree.label'
 
 const EventsRoute = EventsRouteImport.update({
@@ -225,6 +229,26 @@ const ApiDirectorySessionsCleanupRoute =
     path: '/cleanup',
     getParentRoute: () => ApiDirectorySessionsRoute,
   } as any)
+const ApiAuthProvidersRoute = ApiAuthProvidersRouteImport.update({
+  id: '/api/auth/providers',
+  path: '/api/auth/providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthOauthRoute = ApiAuthOauthRouteImport.update({
+  id: '/api/auth/oauth',
+  path: '/api/auth/oauth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth/logout',
+  path: '/api/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthApiKeyRoute = ApiAuthApiKeyRouteImport.update({
+  id: '/api/auth/api-key',
+  path: '/api/auth/api-key',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionTreeLabelRoute = ApiSessionTreeLabelRouteImport.update({
   id: '/label',
   path: '/label',
@@ -253,6 +277,10 @@ export interface FileRoutesByFullPath {
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/auth/api-key': typeof ApiAuthApiKeyRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/oauth': typeof ApiAuthOauthRoute
+  '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
@@ -291,6 +319,10 @@ export interface FileRoutesByTo {
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/auth/api-key': typeof ApiAuthApiKeyRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/oauth': typeof ApiAuthOauthRoute
+  '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
@@ -330,6 +362,10 @@ export interface FileRoutesById {
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
   '/api/thinking': typeof ApiThinkingRoute
+  '/api/auth/api-key': typeof ApiAuthApiKeyRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/oauth': typeof ApiAuthOauthRoute
+  '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
@@ -370,6 +406,10 @@ export interface FileRouteTypes {
     | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/auth/api-key'
+    | '/api/auth/logout'
+    | '/api/auth/oauth'
+    | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
@@ -408,6 +448,10 @@ export interface FileRouteTypes {
     | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/auth/api-key'
+    | '/api/auth/logout'
+    | '/api/auth/oauth'
+    | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
@@ -446,6 +490,10 @@ export interface FileRouteTypes {
     | '/api/provider-usage'
     | '/api/slash-command'
     | '/api/thinking'
+    | '/api/auth/api-key'
+    | '/api/auth/logout'
+    | '/api/auth/oauth'
+    | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/pending-message/remove'
@@ -485,6 +533,10 @@ export interface RootRouteChildren {
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
   ApiSlashCommandRoute: typeof ApiSlashCommandRoute
   ApiThinkingRoute: typeof ApiThinkingRoute
+  ApiAuthApiKeyRoute: typeof ApiAuthApiKeyRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
+  ApiAuthOauthRoute: typeof ApiAuthOauthRoute
+  ApiAuthProvidersRoute: typeof ApiAuthProvidersRoute
   ApiDirectoryResolveRoute: typeof ApiDirectoryResolveRoute
   ApiPendingMessageRemoveRoute: typeof ApiPendingMessageRemoveRoute
   ApiPendingMessagesReorderRoute: typeof ApiPendingMessagesReorderRoute
@@ -747,6 +799,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDirectorySessionsCleanupRouteImport
       parentRoute: typeof ApiDirectorySessionsRoute
     }
+    '/api/auth/providers': {
+      id: '/api/auth/providers'
+      path: '/api/auth/providers'
+      fullPath: '/api/auth/providers'
+      preLoaderRoute: typeof ApiAuthProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/oauth': {
+      id: '/api/auth/oauth'
+      path: '/api/auth/oauth'
+      fullPath: '/api/auth/oauth'
+      preLoaderRoute: typeof ApiAuthOauthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/logout': {
+      id: '/api/auth/logout'
+      path: '/api/auth/logout'
+      fullPath: '/api/auth/logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/api-key': {
+      id: '/api/auth/api-key'
+      path: '/api/auth/api-key'
+      fullPath: '/api/auth/api-key'
+      preLoaderRoute: typeof ApiAuthApiKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/tree/label': {
       id: '/api/session/tree/label'
       path: '/label'
@@ -802,6 +882,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProviderUsageRoute: ApiProviderUsageRoute,
   ApiSlashCommandRoute: ApiSlashCommandRoute,
   ApiThinkingRoute: ApiThinkingRoute,
+  ApiAuthApiKeyRoute: ApiAuthApiKeyRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
+  ApiAuthOauthRoute: ApiAuthOauthRoute,
+  ApiAuthProvidersRoute: ApiAuthProvidersRoute,
   ApiDirectoryResolveRoute: ApiDirectoryResolveRoute,
   ApiPendingMessageRemoveRoute: ApiPendingMessageRemoveRoute,
   ApiPendingMessagesReorderRoute: ApiPendingMessagesReorderRoute,

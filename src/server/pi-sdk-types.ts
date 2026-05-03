@@ -127,9 +127,56 @@ export type ModelRegistryAuthResult =
       error?: string
     }
 
+export type AuthCredentialLike =
+  | {
+      type: "api_key"
+      key: string
+    }
+  | {
+      type: "oauth"
+      refresh: string
+      access: string
+      expires: number
+      [key: string]: unknown
+    }
+
+export type AuthStorageLike = {
+  set(provider: string, credential: AuthCredentialLike): void
+  logout(provider: string): void
+  list(): Array<string>
+  get(provider: string): AuthCredentialLike | undefined
+  getAuthStatus?(provider: string): {
+    configured: boolean
+    source?: string
+    label?: string
+  }
+  getOAuthProviders(): Array<{
+    id: string
+    name: string
+    usesCallbackServer?: boolean
+  }>
+  login(
+    providerId: string,
+    callbacks: {
+      onAuth?: (info: { url: string; instructions?: string }) => void
+      onPrompt?: (prompt: {
+        message: string
+        placeholder?: string
+        allowEmpty?: boolean
+      }) => Promise<string>
+      onProgress?: (message: string) => void
+      onManualCodeInput?: () => Promise<string>
+      signal?: AbortSignal
+    }
+  ): Promise<void>
+}
+
 export type ModelRegistryLike = {
+  authStorage?: AuthStorageLike
+  getAll?(): Array<ModelLike>
   getAvailable(): Array<ModelLike>
   find(provider: string, id: string): ModelLike | undefined
+  refresh?(): void
   getApiKeyAndHeaders(model: ModelLike): Promise<ModelRegistryAuthResult>
 }
 

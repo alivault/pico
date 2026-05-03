@@ -1,0 +1,542 @@
+import * as React from "react"
+import { ArrowLeftIcon } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+
+import type {
+  AuthMutationResponse,
+  AuthProviderOption,
+  AuthProvidersResponse,
+} from "@/lib/phi/api"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
+import { Input } from "@/components/ui/input"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+
+export type AppShellAuthDialogHandle = {
+  open: (mode?: "login" | "logout") => void
+  close: () => void
+  isOpen: () => boolean
+}
+
+type AppShellAuthDialogControllerProps = {
+  ref?: React.Ref<AppShellAuthDialogHandle>
+  openStateRef?: React.RefObject<boolean>
+  viewerContextId: string
+  sessionId?: string
+}
+
+function providerKey(provider: AuthProviderOption) {
+  return `${provider.authType}:${provider.id}`
+}
+
+function providerKeywords(provider: AuthProviderOption) {
+  return [
+    provider.id,
+    provider.name,
+    provider.authType === "oauth" ? "oauth subscription login" : "api key",
+    provider.configured ? "saved configured" : "",
+    provider.source || "",
+  ].filter(Boolean)
+}
+
+function providerDescription(provider: AuthProviderOption) {
+  const kind =
+    provider.authType === "oauth" ? "Subscription / OAuth" : "API key"
+  return provider.source ? `${kind} · ${provider.source}` : kind
+}
+
+function ProviderCommandItem({
+  provider,
+  actionLabel,
+  disabled,
+  onSelect,
+}: {
+  provider: AuthProviderOption
+  actionLabel: string
+  disabled?: boolean
+  onSelect: () => void
+}) {
+  return (
+    <CommandItem
+      value={providerKey(provider)}
+      keywords={providerKeywords(provider)}
+      disabled={disabled}
+      onSelect={onSelect}
+      className="items-start py-2"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-medium">{provider.name}</span>
+        <span className="line-clamp-2 text-xs text-muted-foreground">
+          {providerDescription(provider)}
+        </span>
+      </div>
+      {provider.configured ? (
+        <Badge variant="secondary" className="shrink-0">
+          Saved
+        </Badge>
+      ) : (
+        <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
+          {actionLabel}
+        </CommandShortcut>
+      )}
+    </CommandItem>
+  )
+}
+
+export function AppShellAuthDialogController({
+  ref,
+  openStateRef,
+  viewerContextId,
+  sessionId,
+}: AppShellAuthDialogControllerProps) {
+  const isMobile = useIsMobile()
+  const queryClient = useQueryClient()
+  const [loginOpen, setLoginOpen] = React.useState(false)
+  const [logoutOpen, setLogoutOpen] = React.useState(false)
+  const [apiKeyOpen, setApiKeyOpen] = React.useState(false)
+  const [selectedApiKeyProvider, setSelectedApiKeyProvider] =
+    React.useState<AuthProviderOption | null>(null)
+  const [apiKey, setApiKey] = React.useState("")
+  const openRef = React.useRef(false)
+
+  const authDialogOpen = loginOpen || logoutOpen || apiKeyOpen
+
+  React.useLayoutEffect(() => {
+    openRef.current = authDialogOpen
+    if (openStateRef) {
+      openStateRef.current = authDialogOpen
+    }
+  }, [authDialogOpen, openStateRef])
+
+  const closeApiKeyDialog = () => {
+    setApiKeyOpen(false)
+    setSelectedApiKeyProvider(null)
+    setApiKey("")
+  }
+
+  const backToLoginProviders = () => {
+    closeApiKeyDialog()
+    setLoginOpen(true)
+  }
+
+  const closeAllDialogs = () => {
+    setLoginOpen(false)
+    setLogoutOpen(false)
+    closeApiKeyDialog()
+  }
+
+  const providersQuery = useQuery({
+    queryKey: ["phi", "auth", "providers", viewerContextId, sessionId],
+    enabled: authDialogOpen && Boolean(viewerContextId),
+    queryFn: async () => {
+      return await fetchJson<AuthProvidersResponse>(
+        buildRequestUrl("/api/auth/providers", {
+          contextId: viewerContextId,
+          sessionId,
+        })
+      )
+    },
+  })
+
+  const invalidateProviders = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["phi", "auth", "providers", viewerContextId, sessionId],
+    })
+  }
+
+  const apiKeyMutation = useMutation({
+    mutationFn: async ({
+      provider,
+      key,
+    }: {
+      provider: string
+      key: string
+    }) => {
+      return await fetchJson<AuthMutationResponse>(
+        buildRequestUrl("/api/auth/api-key", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider, key }),
+        }
+      )
+    },
+    onSuccess: async (_response, variables) => {
+      toast.success(`Saved API key for ${variables.provider}`)
+      await invalidateProviders()
+      closeAllDialogs()
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save API key"
+      )
+    },
+  })
+
+  const oauthMutation = useMutation({
+    mutationFn: async ({ provider }: { provider: string }) => {
+      return await fetchJson<AuthMutationResponse>(
+        buildRequestUrl("/api/auth/oauth", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider }),
+        }
+      )
+    },
+    onSuccess: async (_response, variables) => {
+      toast.success(`Logged in to ${variables.provider}`)
+      await invalidateProviders()
+      closeAllDialogs()
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Login failed"
+      if (message === "Login cancelled") return
+      toast.error(message)
+    },
+  })
+
+  const logoutMutation = useMutation({
+    mutationFn: async ({ provider }: { provider: string }) => {
+      return await fetchJson<AuthMutationResponse>(
+        buildRequestUrl("/api/auth/logout", {
+          contextId: viewerContextId,
+          sessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider }),
+        }
+      )
+    },
+    onSuccess: async (_response, variables) => {
+      toast.success(`Logged out of ${variables.provider}`)
+      await invalidateProviders()
+      closeAllDialogs()
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Logout failed")
+    },
+  })
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open: (mode = "login") => {
+        closeApiKeyDialog()
+        if (mode === "logout") {
+          setLoginOpen(false)
+          setLogoutOpen(true)
+        } else {
+          setLogoutOpen(false)
+          setLoginOpen(true)
+        }
+      },
+      close: closeAllDialogs,
+      isOpen: () => openRef.current,
+    }),
+    []
+  )
+
+  const data = providersQuery.data?.ok ? providersQuery.data : undefined
+  const oauthProviders = data?.oauthProviders ?? []
+  const apiKeyProviders = data?.apiKeyProviders ?? []
+  const loggedInProviders = data?.loggedInProviders ?? []
+
+  const selectLoginProvider = (provider: AuthProviderOption) => {
+    if (provider.authType === "oauth") {
+      setLoginOpen(false)
+      oauthMutation.mutate({ provider: provider.id })
+      return
+    }
+
+    setSelectedApiKeyProvider(provider)
+    setApiKey("")
+    setLoginOpen(false)
+    setApiKeyOpen(true)
+  }
+
+  const submitApiKey = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedApiKeyProvider || !apiKey.trim()) return
+    apiKeyMutation.mutate({
+      provider: selectedApiKeyProvider.id,
+      key: apiKey,
+    })
+  }
+
+  const loginCommandBody = (
+    <Command loop shouldFilter className="min-h-0 flex-1">
+      <CommandInput
+        autoFocus={!isMobile}
+        placeholder="Search login providers"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+        <CommandEmpty>
+          {providersQuery.isLoading
+            ? "Loading providers…"
+            : providersQuery.isError
+              ? providersQuery.error instanceof Error
+                ? providersQuery.error.message
+                : "Failed to load providers"
+              : "No auth providers found."}
+        </CommandEmpty>
+        {oauthProviders.length > 0 && (
+          <CommandGroup heading="Subscriptions / OAuth">
+            {oauthProviders.map((provider) => (
+              <ProviderCommandItem
+                key={providerKey(provider)}
+                provider={provider}
+                actionLabel="Login"
+                onSelect={() => selectLoginProvider(provider)}
+              />
+            ))}
+          </CommandGroup>
+        )}
+        {apiKeyProviders.length > 0 && (
+          <CommandGroup heading="API keys">
+            {apiKeyProviders.map((provider) => (
+              <ProviderCommandItem
+                key={providerKey(provider)}
+                provider={provider}
+                actionLabel="Set key"
+                onSelect={() => selectLoginProvider(provider)}
+              />
+            ))}
+          </CommandGroup>
+        )}
+      </CommandList>
+      {isMobile ? (
+        <div className="border-t border-border/70 p-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={closeAllDialogs}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+          Use ↑/↓ to select, Enter to start login or enter an API key, and Esc
+          to close.
+        </div>
+      )}
+    </Command>
+  )
+
+  const logoutCommandBody = (
+    <Command loop shouldFilter className="min-h-0 flex-1">
+      <CommandInput
+        autoFocus={!isMobile}
+        placeholder="Search logged-in providers"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
+        <CommandEmpty>
+          {providersQuery.isLoading
+            ? "Loading providers…"
+            : providersQuery.isError
+              ? providersQuery.error instanceof Error
+                ? providersQuery.error.message
+                : "Failed to load providers"
+              : "No providers are currently logged in."}
+        </CommandEmpty>
+        {loggedInProviders.length > 0 && (
+          <CommandGroup heading="Logged in providers">
+            {loggedInProviders.map((provider) => (
+              <ProviderCommandItem
+                key={providerKey(provider)}
+                provider={provider}
+                actionLabel="Logout"
+                disabled={logoutMutation.isPending}
+                onSelect={() => {
+                  if (logoutMutation.isPending) return
+                  setLogoutOpen(false)
+                  logoutMutation.mutate({ provider: provider.id })
+                }}
+              />
+            ))}
+          </CommandGroup>
+        )}
+      </CommandList>
+      <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+        Use ↑/↓ to select, Enter to remove credentials, and Esc to close.
+      </div>
+    </Command>
+  )
+
+  const apiKeyCommandBody = (
+    <form
+      onSubmit={submitApiKey}
+      className="flex min-h-0 flex-1 flex-col"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          backToLoginProviders()
+        }
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={backToLoginProviders}
+          aria-label="Back to login providers"
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">
+            {selectedApiKeyProvider
+              ? `Set ${selectedApiKeyProvider.name} API key`
+              : "Set provider API key"}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            The key is saved to pi auth storage, not the browser.
+          </div>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center p-3">
+        <Input
+          type="password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={
+            selectedApiKeyProvider
+              ? `Enter ${selectedApiKeyProvider.name} API key`
+              : "Enter API key"
+          }
+          autoComplete="off"
+          autoFocus={!isMobile}
+          className="min-w-0 flex-1"
+        />
+      </div>
+      {isMobile ? (
+        <div className="border-t border-border/70 p-3">
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={apiKeyMutation.isPending || !apiKey.trim()}
+          >
+            {apiKeyMutation.isPending ? "Saving…" : "Save API key"}
+          </Button>
+        </div>
+      ) : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
+              Enter
+            </kbd>
+            Save
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
+              Esc
+            </kbd>
+            Back
+          </span>
+        </div>
+      )}
+    </form>
+  )
+
+  const renderAuthSurface = (
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    title: string,
+    description: string,
+    body: React.ReactNode
+  ) => {
+    if (isMobile) {
+      return (
+        <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+          <DrawerContent className="max-h-[90svh] overflow-hidden">
+            <DrawerHeader>
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>{description}</DrawerDescription>
+            </DrawerHeader>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+              {body}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )
+    }
+
+    return (
+      <CommandDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={title}
+        description={description}
+        className="sm:max-w-xl"
+        initialFocus
+      >
+        {body}
+      </CommandDialog>
+    )
+  }
+
+  return (
+    <>
+      {renderAuthSurface(
+        loginOpen,
+        setLoginOpen,
+        "Login to provider",
+        "Search providers and press Enter to configure authentication.",
+        loginCommandBody
+      )}
+      {renderAuthSurface(
+        logoutOpen,
+        setLogoutOpen,
+        "Logout from provider",
+        "Search saved provider credentials and press Enter to remove them.",
+        logoutCommandBody
+      )}
+      {renderAuthSurface(
+        apiKeyOpen,
+        (nextOpen) => {
+          if (!nextOpen) backToLoginProviders()
+          else setApiKeyOpen(true)
+        },
+        selectedApiKeyProvider
+          ? `Set ${selectedApiKeyProvider.name} API key`
+          : "Set provider API key",
+        "Enter an API key to save it to pi auth storage.",
+        apiKeyCommandBody
+      )}
+    </>
+  )
+}

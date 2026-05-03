@@ -95,6 +95,10 @@ import {
   type AppShellAddDirectoryDialogHandle,
 } from "@/features/phi/app-shell-add-directory-dialog"
 import {
+  AppShellAuthDialogController,
+  type AppShellAuthDialogHandle,
+} from "@/features/phi/app-shell-auth-dialog"
+import {
   AppShellTreeDialogController,
   type AppShellTreeDialogHandle,
 } from "@/features/phi/app-shell-tree-dialog"
@@ -4138,6 +4142,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     null
   )
   const settingsOpenRef = React.useRef(false)
+  const authDialogRef = React.useRef<AppShellAuthDialogHandle | null>(null)
+  const authOpenRef = React.useRef(false)
   const uiRequestDialogRef = React.useRef<AppShellUiRequestDialogHandle | null>(
     null
   )
@@ -5559,10 +5565,32 @@ const AppShellSessionWorkspace = React.forwardRef<
     )
   }
 
+  const openAuthDialog = (mode: "login" | "logout" = "login") => {
+    authDialogRef.current?.open(mode)
+  }
+
   const runBuiltinSlashCommand = async (name: string, args: string) => {
     const trimmedArgs = args.trim()
 
     switch (name) {
+      case "login": {
+        if (trimmedArgs) {
+          toast.error("/login does not take any arguments yet.")
+          return
+        }
+        replaceComposerDraft("")
+        openAuthDialog("login")
+        return
+      }
+      case "logout": {
+        if (trimmedArgs) {
+          toast.error("/logout does not take any arguments yet.")
+          return
+        }
+        replaceComposerDraft("")
+        openAuthDialog("logout")
+        return
+      }
       case "compact": {
         if (composerImages.length > 0) {
           toast.error("Built-in slash commands do not support images.")
@@ -5882,6 +5910,22 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSelect: toggleHideToolBlocks,
       },
       {
+        id: "login-provider",
+        group: "App",
+        title: "Login to provider",
+        description: "Configure provider API key or subscription auth",
+        keywords: ["login", "auth", "api key", "oauth", "provider"],
+        onSelect: () => openAuthDialog("login"),
+      },
+      {
+        id: "logout-provider",
+        group: "App",
+        title: "Logout from provider",
+        description: "Remove stored provider credentials",
+        keywords: ["logout", "auth", "api key", "oauth", "provider"],
+        onSelect: () => openAuthDialog("logout"),
+      },
+      {
         id: "open-settings",
         group: "App",
         title: "Open settings",
@@ -6150,6 +6194,8 @@ const AppShellSessionWorkspace = React.forwardRef<
         commandPaletteRef={commandPaletteRef}
         currentSessionQueryScope={currentSessionQueryScope}
         currentTheme={currentTheme}
+        authDialogRef={authDialogRef}
+        authOpenRef={authOpenRef}
         deleteDialogRef={deleteDialogRef}
         deleteOpenRef={deleteOpenRef}
         deleteSessions={deleteSessions}
@@ -6493,6 +6539,8 @@ type AppShellFloatingControllersProps = {
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
   currentSessionQueryScope: string
   currentTheme: ThemeMode
+  authDialogRef: React.RefObject<AppShellAuthDialogHandle | null>
+  authOpenRef: React.RefObject<boolean>
   deleteDialogRef: React.RefObject<DeleteSessionsDialogHandle | null>
   deleteOpenRef: React.RefObject<boolean>
   deleteSessions: React.ComponentProps<
@@ -6872,12 +6920,14 @@ const AppShellSettingsDialogHost = React.memo(
 const AppShellUiRequestDialogHost = React.memo(
   function AppShellUiRequestDialogHost({
     activeSessionId,
+    authDialogRef,
     uiRequestDialogRef,
     uiRequestOpenRef,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
     | "activeSessionId"
+    | "authDialogRef"
     | "uiRequestDialogRef"
     | "uiRequestOpenRef"
     | "viewerContextId"
@@ -6888,6 +6938,7 @@ const AppShellUiRequestDialogHost = React.memo(
         openStateRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
         sessionId={activeSessionId}
+        onAuthBack={() => authDialogRef.current?.open("login")}
       />
     )
   }
@@ -6905,6 +6956,8 @@ const AppShellFloatingControllers = React.memo(
     commandPaletteRef,
     currentSessionQueryScope,
     currentTheme,
+    authDialogRef,
+    authOpenRef,
     deleteDialogRef,
     deleteOpenRef,
     deleteSessions,
@@ -6956,6 +7009,13 @@ const AppShellFloatingControllers = React.memo(
           openStateRef={gitCommitOpenRef}
           viewerContextId={viewerContextId}
           cwd={sessionCwd}
+        />
+
+        <AppShellAuthDialogController
+          ref={authDialogRef}
+          openStateRef={authOpenRef}
+          viewerContextId={viewerContextId}
+          sessionId={activeSessionId}
         />
 
         <AppShellSessionsDialogHost
@@ -7039,6 +7099,7 @@ const AppShellFloatingControllers = React.memo(
 
         <AppShellUiRequestDialogHost
           activeSessionId={activeSessionId}
+          authDialogRef={authDialogRef}
           uiRequestDialogRef={uiRequestDialogRef}
           uiRequestOpenRef={uiRequestOpenRef}
           viewerContextId={viewerContextId}

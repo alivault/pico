@@ -385,6 +385,39 @@ export type DeleteSessionsResponse =
     }
   | ApiErrorResponse
 
+export type AuthProviderKind = "oauth" | "api_key"
+
+export type AuthProviderOption = {
+  id: string
+  name: string
+  authType: AuthProviderKind
+  configured: boolean
+  source?: string
+  label?: string
+}
+
+export type AuthProvidersResponse =
+  | {
+      ok: true
+      oauthProviders: Array<AuthProviderOption>
+      apiKeyProviders: Array<AuthProviderOption>
+      loggedInProviders: Array<AuthProviderOption>
+    }
+  | ApiErrorResponse
+
+export type AuthMutationResponse =
+  | {
+      ok: true
+      provider: string
+      availableModels: Array<{
+        id: string
+        provider?: string
+        name?: string
+        reasoning?: boolean
+      }>
+    }
+  | ApiErrorResponse
+
 export type UiRequestResponse =
   | {
       ok: true

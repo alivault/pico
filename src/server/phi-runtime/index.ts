@@ -152,6 +152,38 @@ const identityTheme = {
   getBashModeBorderColor: () => (text: string) => text,
 }
 
+const API_KEY_LOGIN_PROVIDER_NAMES: Record<string, string> = {
+  anthropic: "Anthropic",
+  "amazon-bedrock": "Amazon Bedrock",
+  "azure-openai-responses": "Azure OpenAI Responses",
+  cerebras: "Cerebras",
+  deepseek: "DeepSeek",
+  fireworks: "Fireworks",
+  google: "Google Gemini",
+  "google-vertex": "Google Vertex AI",
+  groq: "Groq",
+  huggingface: "Hugging Face",
+  "kimi-coding": "Kimi For Coding",
+  mistral: "Mistral",
+  minimax: "MiniMax",
+  "minimax-cn": "MiniMax (China)",
+  opencode: "OpenCode Zen",
+  "opencode-go": "OpenCode Go",
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  "vercel-ai-gateway": "Vercel AI Gateway",
+  xai: "xAI",
+  zai: "ZAI",
+}
+
+const BUILT_IN_API_KEY_LOGIN_PROVIDERS = new Set(
+  Object.keys(API_KEY_LOGIN_PROVIDER_NAMES)
+)
+
+function getApiKeyProviderDisplayName(providerId: string) {
+  return API_KEY_LOGIN_PROVIDER_NAMES[providerId] ?? providerId
+}
+
 type PromptImageInput = PromptImageInputLike
 
 type PendingUserMessage = {
@@ -597,6 +629,7 @@ export class PhiRuntime {
   private readonly sessionEntries = new Map<string, SessionEntry>()
   private readonly servicesByCwd = new Map<string, SessionServicesLike>()
   private readonly pendingUiRequests = new Map<string, PendingUiRequest>()
+  private readonly activeOAuthLogins = new Map<string, () => void>()
   private readonly highlightCache = new Map<string, HighlightPayload>()
   private readonly gitFingerprints = new Map<
     string,
@@ -4220,6 +4253,281 @@ export class PhiRuntime {
       ok: true,
       sessionId: response.sessionId,
       sessionFile: response.sessionFile,
+    }
+  }
+
+  private requireAuthStorage(entry: SessionEntry) {
+    const authStorage = entry.services.modelRegistry.authStorage
+    if (!authStorage) {
+      throw new Error("Provider authentication is unavailable")
+    }
+    return authStorage
+  }
+
+  private refreshModelRegistries() {
+    for (const services of this.servicesByCwd.values()) {
+      services.modelRegistry.refresh?.()
+    }
+  }
+
+  private async finishAuthMutation(entry: SessionEntry, provider: string) {
+    this.refreshModelRegistries()
+    await this.broadcastEntryState(entry)
+    return {
+      ok: true,
+      provider,
+      availableModels: this.listAvailableModels(entry),
+    }
+  }
+
+  async getAuthProviders(request: Request) {
+    const { activeEntry } = await this.resolveRequest(request)
+    const modelRegistry = activeEntry.services.modelRegistry
+    const authStorage = this.requireAuthStorage(activeEntry)
+    const oauthProviders = authStorage.getOAuthProviders()
+    const oauthProviderIds = new Set(
+      oauthProviders.map((provider) => provider.id)
+    )
+    const providerIds = new Set(
+      (modelRegistry.getAll?.() ?? modelRegistry.getAvailable()).map(
+        (model) => model.provider
+      )
+    )
+
+    const authStatus = (providerId: string) => {
+      const status = authStorage.getAuthStatus?.(providerId)
+      const credential = authStorage.get(providerId)
+      return {
+        configured: status?.configured ?? Boolean(credential),
+        source: status?.source,
+        label: status?.label,
+      }
+    }
+
+    const oauthOptions = oauthProviders
+      .map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        authType: "oauth" as const,
+        ...authStatus(provider.id),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+
+    const apiKeyOptions = Array.from(providerIds)
+      .filter((providerId) => {
+        if (BUILT_IN_API_KEY_LOGIN_PROVIDERS.has(providerId)) return true
+        return !oauthProviderIds.has(providerId)
+      })
+      .map((providerId) => ({
+        id: providerId,
+        name: getApiKeyProviderDisplayName(providerId),
+        authType: "api_key" as const,
+        ...authStatus(providerId),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+
+    const nameByProvider = new Map(
+      [...oauthOptions, ...apiKeyOptions].map((option) => [
+        option.id,
+        option.name,
+      ])
+    )
+    const authTypeByProvider = new Map(
+      [...oauthOptions, ...apiKeyOptions].map((option) => [
+        option.id,
+        option.authType,
+      ])
+    )
+    const loggedInProviders = authStorage
+      .list()
+      .map((providerId) => {
+        const credential = authStorage.get(providerId)
+        return {
+          id: providerId,
+          name:
+            nameByProvider.get(providerId) ??
+            getApiKeyProviderDisplayName(providerId),
+          authType:
+            credential?.type ?? authTypeByProvider.get(providerId) ?? "api_key",
+          ...authStatus(providerId),
+          configured: true,
+        }
+      })
+      .sort((left, right) => left.name.localeCompare(right.name))
+
+    return {
+      ok: true,
+      oauthProviders: oauthOptions,
+      apiKeyProviders: apiKeyOptions,
+      loggedInProviders,
+    }
+  }
+
+  async saveProviderApiKey(
+    request: Request,
+    body: { provider?: unknown; key?: unknown }
+  ) {
+    const { activeEntry } = await this.resolveRequest(request)
+    const provider =
+      typeof body.provider === "string" ? body.provider.trim() : ""
+    const key = typeof body.key === "string" ? body.key.trim() : ""
+    if (!provider) throw new Error("provider is required")
+    if (!key) throw new Error("API key is required")
+
+    this.requireAuthStorage(activeEntry).set(provider, {
+      type: "api_key",
+      key,
+    })
+    return await this.finishAuthMutation(activeEntry, provider)
+  }
+
+  async logoutProvider(request: Request, body: { provider?: unknown }) {
+    const { activeEntry } = await this.resolveRequest(request)
+    const provider =
+      typeof body.provider === "string" ? body.provider.trim() : ""
+    if (!provider) throw new Error("provider is required")
+
+    this.requireAuthStorage(activeEntry).logout(provider)
+    return await this.finishAuthMutation(activeEntry, provider)
+  }
+
+  async loginProviderOAuth(request: Request, body: { provider?: unknown }) {
+    const { activeEntry } = await this.resolveRequest(request)
+    const provider =
+      typeof body.provider === "string" ? body.provider.trim() : ""
+    if (!provider) throw new Error("provider is required")
+
+    const authStorage = this.requireAuthStorage(activeEntry)
+    const providerInfo = authStorage
+      .getOAuthProviders()
+      .find((candidate) => candidate.id === provider)
+    if (!providerInfo) {
+      throw new Error(`Unknown OAuth provider: ${provider}`)
+    }
+
+    const loginKey = providerInfo.id
+
+    const ui = createUiRequestBridge({
+      entryKey: activeEntry.key,
+      pendingUiRequests: this.pendingUiRequests,
+      createRequestId: () => randomUUID(),
+      broadcastToViewers: (sessionKey, payload) =>
+        this.broadcastToViewers(sessionKey, payload),
+    })
+
+    const requestInput = async (payload: Record<string, unknown>) => {
+      const value = await ui.createDialogPromise(
+        undefined as string | undefined,
+        {
+          payload,
+        },
+        (response) => {
+          if (response.cancelled) return undefined
+          return typeof response.value === "string" ? response.value : undefined
+        }
+      )
+      if (value === undefined) {
+        throw new Error("Login cancelled")
+      }
+      return value
+    }
+
+    let manualRedirect:
+      | {
+          promise: Promise<string>
+          resolve: (value: string) => void
+          reject: (error: Error) => void
+        }
+      | undefined
+    const getManualRedirect = () => {
+      if (!manualRedirect) {
+        let resolveManual!: (value: string) => void
+        let rejectManual!: (error: Error) => void
+        const promise = new Promise<string>((resolve, reject) => {
+          resolveManual = resolve
+          rejectManual = reject
+        })
+        manualRedirect = {
+          promise,
+          resolve: resolveManual,
+          reject: rejectManual,
+        }
+      }
+      return manualRedirect
+    }
+
+    const activeLogin = this.activeOAuthLogins.get(loginKey)
+    if (activeLogin) {
+      activeLogin()
+      throw new Error(
+        `Cancelled the existing ${providerInfo.name} login. Try login again.`
+      )
+    }
+
+    this.activeOAuthLogins.set(loginKey, () => {
+      getManualRedirect().reject(new Error("Login cancelled"))
+    })
+
+    try {
+      await authStorage.login(provider, {
+        onAuth: (info) => {
+          void ui
+            .createDialogPromise(
+              { action: "cancel" as const },
+              {
+                payload: {
+                  method: "auth",
+                  title: `Log in to ${providerInfo.name}`,
+                  message:
+                    info.instructions ||
+                    "Open the login page in your browser to continue.",
+                  authUrl: info.url,
+                  authManualAllowed: Boolean(providerInfo.usesCallbackServer),
+                },
+                timeout: 10 * 60 * 1000,
+              },
+              (response) => {
+                if (typeof response.value === "string") {
+                  return {
+                    action: "manual" as const,
+                    value: response.value,
+                  }
+                }
+                return { action: "cancel" as const }
+              }
+            )
+            .then((result) => {
+              const deferred = getManualRedirect()
+              if (result.action !== "manual") {
+                deferred.reject(new Error("Login cancelled"))
+                return
+              }
+
+              deferred.resolve(result.value)
+            })
+        },
+        onPrompt: async (prompt) => {
+          return await requestInput({
+            method: "auth_input",
+            title: `Log in to ${providerInfo.name}`,
+            message: prompt.message,
+            placeholder: prompt.placeholder,
+            allowEmpty: Boolean(prompt.allowEmpty),
+          })
+        },
+        onProgress: (message) => {
+          ui.notify(message, "info")
+        },
+        onManualCodeInput: async () => {
+          return await getManualRedirect().promise
+        },
+      })
+
+      return await this.finishAuthMutation(activeEntry, provider)
+    } finally {
+      if (this.activeOAuthLogins.get(loginKey)) {
+        this.activeOAuthLogins.delete(loginKey)
+      }
     }
   }
 

@@ -147,6 +147,16 @@ function buildComposerSlashCommands({
   return [
     {
       kind: "builtin" as const,
+      name: "login",
+      description: "Configure provider authentication",
+    },
+    {
+      kind: "builtin" as const,
+      name: "logout",
+      description: "Remove provider authentication",
+    },
+    {
+      kind: "builtin" as const,
       name: "compact",
       description: "Summarize the session to reduce context size",
     },

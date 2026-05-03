@@ -117,11 +117,21 @@ export type SkillOption = {
 
 export type UiRequest = {
   id: string
-  method: "confirm" | "editor" | "input" | "notify" | "select"
+  method:
+    | "auth"
+    | "auth_input"
+    | "confirm"
+    | "editor"
+    | "input"
+    | "notify"
+    | "select"
   title?: string
   message?: string
   placeholder?: string
   prefill?: string
+  authUrl?: string
+  authManualAllowed?: boolean
+  allowEmpty?: boolean
   notifyType?: "info" | "success" | "warning" | "error"
   options?: Array<{ value: string; label?: string } | string>
   timeout?: number
