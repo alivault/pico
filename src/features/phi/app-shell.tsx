@@ -6305,7 +6305,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const sidebarOpen = sidebarIsMobile
     ? sidebarOpenMobile
     : sidebarState === "expanded"
-  const showCollapsedNewSessionButton = sidebarState === "collapsed"
+  const showCollapsedNewSessionButton = !sidebarOpen
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
