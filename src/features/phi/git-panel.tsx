@@ -1988,7 +1988,7 @@ export function HeaderGitActions({
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
   const statusQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
-    enabled: Boolean(!isMobile && viewerContextId && normalizedCwd),
+    enabled: Boolean(viewerContextId && normalizedCwd),
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],
   })
@@ -2019,7 +2019,7 @@ export function HeaderGitActions({
       cwd: normalizedCwd,
       scope: "files",
     }),
-    enabled: Boolean(!isMobile && canCommit),
+    enabled: Boolean(canCommit),
     select: selectGitFiles,
     notifyOnChangeProps: ["data"],
   })
@@ -2086,23 +2086,39 @@ export function HeaderGitActions({
     shortcutPullMutatingCount > 0
   const gitActionBusy =
     gitActionMutation.isPending || pushing || forcePushing || pulling
-  const showPush = canPush && (!gitActionBusy || pushing)
-  const showForcePush = canForcePush && (!gitActionBusy || forcePushing)
-  const showPull = canPull && (!gitActionBusy || pulling)
-  const showActions =
-    !isMobile && (canCommit || showPush || showForcePush || showPull)
+  const showPush = !isMobile && canPush && (!gitActionBusy || pushing)
+  const showForcePush =
+    !isMobile && canForcePush && (!gitActionBusy || forcePushing)
+  const showPull = !isMobile && canPull && (!gitActionBusy || pulling)
+  const showActions = canCommit || showPush || showForcePush || showPull
 
   if (!showActions && !commitDialogOpen) return null
 
   return (
     <>
       {showActions ? (
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="flex items-center gap-1">
           {canCommit ? (
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
-                variant="outline"
+                variant="ghost"
+                size="icon-sm"
+                className="md:hidden"
+                aria-label="Commit changes"
+                onClick={() => {
+                  setCommitDialogOpen(true)
+                }}
+              >
+                <GitCommitIcon />
+              </Button>
+            </TitleTooltip>
+          ) : null}
+          {canCommit ? (
+            <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
+              <Button
+                variant="ghost"
                 size="xs"
+                className="hidden md:inline-flex"
                 onClick={() => {
                   setCommitDialogOpen(true)
                 }}
@@ -2114,8 +2130,9 @@ export function HeaderGitActions({
           {showPush ? (
             <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="xs"
+                className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("push")
@@ -2131,8 +2148,9 @@ export function HeaderGitActions({
               kbd={formatShortcutLabel("Control+Shift+P")}
             >
               <Button
-                variant="outline"
+                variant="ghost"
                 size="xs"
+                className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("force-push")
@@ -2145,8 +2163,9 @@ export function HeaderGitActions({
           {showPull ? (
             <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="xs"
+                className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("pull")
