@@ -6839,6 +6839,7 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
 
 const AppShellSettingsDialogHost = React.memo(
   function AppShellSettingsDialogHost({
+    authDialogRef,
     currentTheme,
     displaySettingsStore,
     notificationStore,
@@ -6854,6 +6855,7 @@ const AppShellSettingsDialogHost = React.memo(
     settingsOpenRef,
   }: Pick<
     AppShellFloatingControllersProps,
+    | "authDialogRef"
     | "currentTheme"
     | "displaySettingsStore"
     | "notificationStore"
@@ -6889,6 +6891,11 @@ const AppShellSettingsDialogHost = React.memo(
       { compare: shallowRecordEqual }
     )
 
+    const openAuthFromSettings = (mode: "login" | "logout") => {
+      settingsDialogRef.current?.close()
+      authDialogRef.current?.open(mode)
+    }
+
     return (
       <AppShellSettingsDialogController
         ref={settingsDialogRef}
@@ -6912,6 +6919,8 @@ const AppShellSettingsDialogHost = React.memo(
           onSessionDoneDesktopNotificationsEnabledChange
         }
         desktopNotificationPermission={desktopNotificationPermission}
+        onLoginProviders={() => openAuthFromSettings("login")}
+        onLogoutProviders={() => openAuthFromSettings("logout")}
       />
     )
   }
@@ -7080,6 +7089,7 @@ const AppShellFloatingControllers = React.memo(
         />
 
         <AppShellSettingsDialogHost
+          authDialogRef={authDialogRef}
           currentTheme={currentTheme}
           displaySettingsStore={displaySettingsStore}
           notificationStore={notificationStore}

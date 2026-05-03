@@ -120,6 +120,8 @@ type AppShellSettingsDialogProps = {
   sessionDoneDesktopNotificationsEnabled: boolean
   onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
   desktopNotificationPermission: DesktopNotificationPermission
+  onLoginProviders: () => void
+  onLogoutProviders: () => void
 }
 
 export function AppShellSettingsDialog({
@@ -140,6 +142,8 @@ export function AppShellSettingsDialog({
   sessionDoneDesktopNotificationsEnabled,
   onSessionDoneDesktopNotificationsEnabledChange,
   desktopNotificationPermission,
+  onLoginProviders,
+  onLogoutProviders,
 }: AppShellSettingsDialogProps) {
   const [query, setQuery] = React.useState("")
   const [selectedCommandId, setSelectedCommandId] = React.useState("theme")
@@ -199,6 +203,29 @@ export function AppShellSettingsDialog({
           valueLabel: formatToggleValue(autoScrollEnabled),
           keywords: ["auto", "scroll", "latest", "follow", "streaming"],
           onSelect: () => onAutoScrollEnabledChange(!autoScrollEnabled),
+        },
+      ],
+    },
+    {
+      heading: "Provider authentication",
+      commands: [
+        {
+          id: "login-providers",
+          title: "Login to provider",
+          description:
+            "Authenticate a subscription provider or save a provider API key.",
+          valueLabel: "Open",
+          keywords: ["auth", "authentication", "login", "provider", "api key"],
+          onSelect: onLoginProviders,
+        },
+        {
+          id: "logout-providers",
+          title: "Logout from provider",
+          description:
+            "Remove saved provider credentials from pi auth storage.",
+          valueLabel: "Open",
+          keywords: ["auth", "authentication", "logout", "provider", "remove"],
+          onSelect: onLogoutProviders,
         },
       ],
     },
