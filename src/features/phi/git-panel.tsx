@@ -1766,12 +1766,6 @@ const GIT_FILE_TREE_UNSAFE_CSS = `
     --trees-selected-bg-override: var(--accent);
     --trees-selected-fg-override: var(--accent-foreground);
     --trees-padding-inline-override: 0px;
-    --trees-item-margin-x-override: 0px;
-    font-family: var(--font-sans);
-    font-size: 12px;
-  }
-  button[data-type='item'] {
-    border-radius: calc(var(--radius-sm) - 1px);
   }
 `
 
