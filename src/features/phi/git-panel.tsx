@@ -1,4 +1,6 @@
 import * as React from "react"
+import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
+import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import {
   useIsFetching,
   useIsMutating,
@@ -9,14 +11,22 @@ import {
 import {
   ArrowLeftIcon,
   CheckIcon,
+  ChevronsUpDownIcon,
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
   UploadIcon,
   WandSparklesIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -51,10 +61,15 @@ import type {
   GitChangesResponse,
   GitCommitMessageResponse,
   GitCommitResponse,
+  GitFileDiffResponse,
+  GitFileReviewResponse,
   GitLocalBranch,
   GitRemoteBranch,
   GitStatusResponse,
   GitStatusSummary,
+  HighlightResponse,
+  ProjectFileReadResponse,
+  ProjectFileTreeResponse,
 } from "@/lib/phi/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -62,6 +77,10 @@ import { cn } from "@/lib/utils"
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type GitCommitMessageData = Extract<GitCommitMessageResponse, { ok: true }>
+type GitFileDiffData = Extract<GitFileDiffResponse, { ok: true }>
+type GitFileReviewData = Extract<GitFileReviewResponse, { ok: true }>
+type ProjectFileTreeData = Extract<ProjectFileTreeResponse, { ok: true }>
+type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
 type GitStatusValue = GitStatusSummary | null
 type BranchScope = "local" | "remote"
 type GitRemoteAction = "push" | "force-push" | "pull"
@@ -70,6 +89,8 @@ type GitPanelProps = {
   viewerContextId: string
   cwd?: string
   active: boolean
+  activeFilePath?: string
+  onOpenFile?: (path: string) => void
   showToolbar?: boolean
 }
 
@@ -92,6 +113,40 @@ type GitSectionProps = {
 
 const GIT_QUERY_STALE_TIME_MS = 1000 * 30
 const GIT_QUERY_GC_TIME_MS = 1000 * 60 * 10
+const GIT_COMMITS_PAGE_SIZE = 50
+const GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES = 10_000
+const GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD = 100
+
+const fileHighlightCache = new Map<
+  string,
+  Promise<HighlightResponse> | HighlightResponse
+>()
+
+const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  c: "c",
+  cc: "c",
+  cpp: "c",
+  cs: "c",
+  css: "css",
+  go: "go",
+  h: "c",
+  htm: "html",
+  html: "html",
+  java: "java",
+  js: "javascript",
+  jsx: "jsx",
+  json: "json",
+  jsonc: "jsonc",
+  mjs: "javascript",
+  mdx: "mdx",
+  py: "python",
+  rs: "rust",
+  ts: "typescript",
+  tsx: "tsx",
+  xml: "xml",
+  yaml: "yaml",
+  yml: "yaml",
+}
 
 function normalizeCwd(cwd: string | undefined) {
   return cwd?.trim() || ""
@@ -119,6 +174,44 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+function codeLanguageFromPath(path: string) {
+  const cleanPath = path.split(/[?#]/)[0] || ""
+  const extension = cleanPath.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase()
+  if (!extension) return undefined
+
+  return CODE_LANGUAGE_BY_EXTENSION[extension]
+}
+
+function hasHighlightHtml(
+  payload: HighlightResponse | null
+): payload is Extract<HighlightResponse, { html: string }> {
+  return Boolean(payload && "html" in payload && payload.html)
+}
+
+async function getHighlightedProjectFile(code: string, language?: string) {
+  if (!language) {
+    return {
+      ok: true,
+      skipped: true,
+    } satisfies HighlightResponse
+  }
+
+  const cacheKey = `${language}\u0000${code}`
+  const cached = fileHighlightCache.get(cacheKey)
+  if (cached) return await cached
+
+  const promise = fetchJson<HighlightResponse>("/api/highlight", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, language }),
+  })
+
+  fileHighlightCache.set(cacheKey, promise)
+  const payload = await promise
+  fileHighlightCache.set(cacheKey, payload)
+  return payload
+}
+
 function gitStatusQueryOptions({
   viewerContextId,
   cwd,
@@ -143,24 +236,141 @@ function gitChangesQueryOptions({
   viewerContextId,
   cwd,
   scope,
+  commitsLimit,
 }: {
   viewerContextId: string
   cwd: string
   scope: "files" | "branches" | "commits"
+  commitsLimit?: number
 }) {
   const queryKey =
     scope === "files"
       ? phiQueryKeys.gitFiles(viewerContextId, cwd)
       : scope === "branches"
         ? phiQueryKeys.gitBranches(viewerContextId, cwd)
-        : phiQueryKeys.gitCommits(viewerContextId, cwd)
+        : [
+            ...phiQueryKeys.gitCommits(viewerContextId, cwd),
+            commitsLimit ?? GIT_COMMITS_PAGE_SIZE,
+          ]
 
   return {
     queryKey,
     queryFn: () =>
       fetchJson<GitChangesData>(
         buildRequestUrl(
-          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=${scope}`,
+          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=${scope}${
+            scope === "commits"
+              ? `&commitsLimit=${encodeURIComponent(
+                  String(commitsLimit ?? GIT_COMMITS_PAGE_SIZE)
+                )}`
+              : ""
+          }`,
+          {
+            contextId: viewerContextId,
+          }
+        )
+      ),
+    staleTime: GIT_QUERY_STALE_TIME_MS,
+    gcTime: GIT_QUERY_GC_TIME_MS,
+  }
+}
+
+function gitFileDiffQueryOptions({
+  viewerContextId,
+  cwd,
+  path,
+}: {
+  viewerContextId: string
+  cwd: string
+  path: string
+}) {
+  return {
+    queryKey: phiQueryKeys.gitFileDiff(viewerContextId, cwd, path),
+    queryFn: () =>
+      fetchJson<GitFileDiffData>(
+        buildRequestUrl(
+          `/api/git-diff?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}`,
+          {
+            contextId: viewerContextId,
+          }
+        )
+      ),
+    staleTime: GIT_QUERY_STALE_TIME_MS,
+    gcTime: GIT_QUERY_GC_TIME_MS,
+  }
+}
+
+function gitFileReviewQueryOptions({
+  viewerContextId,
+  cwd,
+  path,
+  previousPath,
+}: {
+  viewerContextId: string
+  cwd: string
+  path: string
+  previousPath?: string
+}) {
+  const previousPathParam = previousPath
+    ? `&previousPath=${encodeURIComponent(previousPath)}`
+    : ""
+
+  return {
+    queryKey: phiQueryKeys.gitFileReview(
+      viewerContextId,
+      cwd,
+      path,
+      previousPath
+    ),
+    queryFn: () =>
+      fetchJson<GitFileReviewData>(
+        buildRequestUrl(
+          `/api/git-review?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}${previousPathParam}`,
+          {
+            contextId: viewerContextId,
+          }
+        )
+      ),
+    staleTime: GIT_QUERY_STALE_TIME_MS,
+    gcTime: GIT_QUERY_GC_TIME_MS,
+  }
+}
+
+function projectFileTreeQueryOptions({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd: string
+}) {
+  return {
+    queryKey: phiQueryKeys.projectFileTree(viewerContextId, cwd),
+    queryFn: () =>
+      fetchJson<ProjectFileTreeData>(
+        buildRequestUrl(`/api/files/tree?cwd=${encodeURIComponent(cwd)}`, {
+          contextId: viewerContextId,
+        })
+      ),
+    staleTime: GIT_QUERY_STALE_TIME_MS,
+    gcTime: GIT_QUERY_GC_TIME_MS,
+  }
+}
+
+function projectFileReadQueryOptions({
+  viewerContextId,
+  cwd,
+  path,
+}: {
+  viewerContextId: string
+  cwd: string
+  path: string
+}) {
+  return {
+    queryKey: phiQueryKeys.projectFileRead(viewerContextId, cwd, path),
+    queryFn: () =>
+      fetchJson<ProjectFileReadData>(
+        buildRequestUrl(
+          `/api/files/read?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}`,
           {
             contextId: viewerContextId,
           }
@@ -187,14 +397,6 @@ function selectGitRemoteBranches(data: GitChangesData) {
   return data.remoteBranches
 }
 
-function selectGitCommits(data: GitChangesData) {
-  return data.commits
-}
-
-function selectGitUnpushedCommitShortHashes(data: GitChangesData) {
-  return data.unpushedCommitShortHashes
-}
-
 async function invalidateGitQueries({
   queryClient,
   viewerContextId,
@@ -216,13 +418,28 @@ async function invalidateGitQueries({
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
+      queryKey: phiQueryKeys.gitFileDiffs(viewerContextId, cwd),
+      exact: false,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: phiQueryKeys.gitFileReviews(viewerContextId, cwd),
+      exact: false,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
+      queryKey: phiQueryKeys.projectFileTree(viewerContextId, cwd),
+      exact: true,
+      refetchType: "active",
+    }),
+    queryClient.invalidateQueries({
       queryKey: phiQueryKeys.gitBranches(viewerContextId, cwd),
       exact: true,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
       queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
-      exact: true,
+      exact: false,
       refetchType: "active",
     }),
   ])
@@ -258,10 +475,6 @@ function formatGitWorkingTreeSummary(gitStatus: GitStatusValue | undefined) {
   if (changedFileCount === 0) return "Working tree clean"
 
   return `${changedFileCount} file${changedFileCount === 1 ? "" : "s"} changed`
-}
-
-function selectGitWorkingTreeSummary(data: GitStatusData) {
-  return formatGitWorkingTreeSummary(data.gitStatus)
 }
 
 function gitStatusHasDiverged(gitStatus: GitStatusValue | undefined) {
@@ -480,7 +693,7 @@ function GitSection({
         className
       )}
     >
-      <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-muted/20 px-3 py-2">
+      <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-2">
         <div className="flex min-w-0 items-baseline gap-3">
           <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
             {title}
@@ -706,7 +919,7 @@ export function GitPanelToolbar({
   })
   const commitsFetchCount = useIsFetching({
     queryKey: phiQueryKeys.gitCommits(viewerContextId, normalizedCwd),
-    exact: true,
+    exact: false,
   })
   const refreshing =
     statusFetchCount +
@@ -1544,35 +1757,501 @@ function GitFileDiff({ file }: { file: GitChangeFile }) {
   )
 }
 
-function GitFileRow({ file }: { file: GitChangeFile }) {
-  const title = file.previousPath
-    ? `${file.status} ${file.previousPath} -> ${file.path}`
-    : `${file.status} ${file.path}`
+const GIT_FILE_TREE_UNSAFE_CSS = `
+  :host {
+    --trees-bg-override: var(--background);
+    --trees-fg-override: var(--foreground);
+    --trees-border-color-override: var(--border);
+    --trees-muted-fg-override: var(--muted-foreground);
+    --trees-selected-bg-override: var(--accent);
+    --trees-selected-fg-override: var(--accent-foreground);
+    --trees-padding-inline-override: 0px;
+    --trees-item-margin-x-override: 0px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+  }
+  button[data-type='item'] {
+    border-radius: calc(var(--radius-sm) - 1px);
+  }
+`
+
+function ProjectFileTree({
+  paths,
+  selectedPath,
+  onSelectFile,
+}: {
+  paths: Array<string>
+  selectedPath: string
+  onSelectFile: (path: string) => void
+}) {
+  const validPathsRef = React.useRef(new Set(paths))
+  const onSelectFileRef = React.useRef(onSelectFile)
+  validPathsRef.current = new Set(paths)
+  onSelectFileRef.current = onSelectFile
+
+  const { model } = useFileTree({
+    paths,
+    flattenEmptyDirectories: true,
+    initialExpansion: 1,
+    initialSelectedPaths: selectedPath ? [selectedPath] : [],
+    onSelectionChange: (selectedPaths) => {
+      const [path] = selectedPaths
+      if (!path || !validPathsRef.current.has(path)) return
+      onSelectFileRef.current(path)
+    },
+    search: true,
+    unsafeCSS: GIT_FILE_TREE_UNSAFE_CSS,
+  })
+
+  React.useEffect(() => {
+    model.resetPaths(paths)
+  }, [model, paths])
+
+  React.useEffect(() => {
+    if (!selectedPath) return
+    const item = model.getItem(selectedPath)
+    if (!item) return
+    item.select()
+    item.focus()
+  }, [model, selectedPath])
+
+  const openFocusedFile = () => {
+    window.requestAnimationFrame(() => {
+      const path = model.getFocusedPath()
+      if (!path || !validPathsRef.current.has(path)) return
+      onSelectFileRef.current(path)
+    })
+  }
 
   return (
-    <li
-      title={title}
-      className="grid min-h-7 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3 border-t border-border/70 py-1.5 font-mono text-[13px] leading-5 first:border-t-0"
-    >
-      <GitFileStatus status={file.status} />
-      <span className="min-w-0 truncate">
-        {file.previousPath ? (
-          <>
-            <span className="text-muted-foreground">{file.previousPath}</span>
-            <span className="text-muted-foreground/70"> → </span>
-            <span>{file.path}</span>
-          </>
-        ) : (
-          file.path
-        )}
-      </span>
-      <GitFileDiff file={file} />
-    </li>
+    <PierreFileTree
+      model={model}
+      className="block h-full min-h-0 w-full overflow-hidden"
+      onClick={openFocusedFile}
+      onKeyUp={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        openFocusedFile()
+      }}
+    />
   )
 }
 
-function GitFilesSection({ viewerContextId, cwd, active }: GitScopedProps) {
+type ProjectFilesPreviewMode = "external" | "inline"
+
+function ProjectFilesWorkspace({
+  viewerContextId,
+  cwd,
+  active,
+  activeFilePath,
+  onCloseFile,
+  onOpenFile,
+  previewMode = "external",
+}: GitScopedProps & {
+  activeFilePath: string
+  onCloseFile?: () => void
+  onOpenFile: (path: string) => void
+  previewMode?: ProjectFilesPreviewMode
+}) {
   const normalizedCwd = normalizeCwd(cwd)
+  const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
+  const showInlinePreview = previewMode === "inline" && Boolean(activeFilePath)
+  const fileTreeQuery = useQuery({
+    ...projectFileTreeQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: (data) => data.paths,
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const paths = fileTreeQuery.data ?? []
+  const canOpenFile = paths.length > 0
+
+  const renderOpenFileDialogButton = () => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={!canOpenFile}
+      onClick={() => {
+        setOpenFileDialogOpen(true)
+      }}
+    >
+      Open File
+    </Button>
+  )
+
+  return (
+    <div
+      className={cn(
+        "h-full min-h-0 overflow-hidden",
+        showInlinePreview
+          ? "grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
+          : "flex flex-col"
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-h-0 flex-col bg-background",
+          showInlinePreview
+            ? "border-b border-border/70"
+            : "flex-1 overflow-hidden"
+        )}
+      >
+        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 text-xs font-medium text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0">File tree</span>
+            {paths.length ? <span>{paths.length}</span> : null}
+          </div>
+          {renderOpenFileDialogButton()}
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-2">
+          {!normalizedCwd ? (
+            <GitSectionNote>No directory selected.</GitSectionNote>
+          ) : !viewerContextId ? (
+            <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+          ) : fileTreeQuery.isPending &&
+            typeof fileTreeQuery.data === "undefined" ? (
+            <GitSectionNote>
+              <Spinner /> Loading files…
+            </GitSectionNote>
+          ) : fileTreeQuery.error ? (
+            <GitSectionNote tone="destructive">
+              {getErrorMessage(fileTreeQuery.error, "Failed to load files")}
+            </GitSectionNote>
+          ) : paths.length > 0 ? (
+            <ProjectFileTree
+              paths={paths}
+              selectedPath={activeFilePath}
+              onSelectFile={onOpenFile}
+            />
+          ) : (
+            <GitSectionNote>No files found.</GitSectionNote>
+          )}
+        </div>
+      </div>
+      {showInlinePreview ? (
+        <div className="flex min-h-0 flex-col overflow-hidden bg-background">
+          <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 text-xs font-medium text-muted-foreground">
+            <span className="min-w-0 truncate" title={activeFilePath}>
+              {activeFilePath}
+            </span>
+            <TitleTooltip title="Close file preview">
+              <button
+                type="button"
+                aria-label="Close file preview"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={onCloseFile}
+              >
+                <XIcon className="size-4" />
+              </button>
+            </TitleTooltip>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ProjectFileContent
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active}
+              path={activeFilePath}
+            />
+          </div>
+        </div>
+      ) : null}
+      <ProjectOpenFileDialog
+        open={openFileDialogOpen}
+        onOpenChange={setOpenFileDialogOpen}
+        paths={paths}
+        onOpenFile={onOpenFile}
+      />
+    </div>
+  )
+}
+
+function ProjectOpenFileDialog({
+  open,
+  onOpenChange,
+  paths,
+  onOpenFile,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  paths: Array<string>
+  onOpenFile: (path: string) => void
+}) {
+  const [query, setQuery] = React.useState("")
+
+  React.useEffect(() => {
+    if (!open) setQuery("")
+  }, [open])
+
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange}>
+      <Command shouldFilter>
+        <CommandInput
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search files…"
+        />
+        <CommandList>
+          <CommandEmpty>No files found.</CommandEmpty>
+          <CommandGroup heading="Files">
+            {paths.map((path) => (
+              <CommandItem
+                key={path}
+                value={path}
+                keywords={[path]}
+                onSelect={() => {
+                  onOpenFile(path)
+                  onOpenChange(false)
+                }}
+              >
+                <span className="min-w-0 truncate font-mono text-xs">
+                  {path}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </CommandDialog>
+  )
+}
+
+function ProjectFileContent({
+  viewerContextId,
+  cwd,
+  active,
+  path,
+}: GitScopedProps & {
+  path: string
+}) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const fileQuery = useQuery({
+    ...projectFileReadQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      path,
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd && path),
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const content = fileQuery.data?.content ?? ""
+  const language = codeLanguageFromPath(path)
+  const [highlighted, setHighlighted] =
+    React.useState<HighlightResponse | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+
+    if (!active || !content || !language) {
+      setHighlighted(null)
+      return
+    }
+
+    setHighlighted(null)
+    void getHighlightedProjectFile(content, language)
+      .then((payload) => {
+        if (!cancelled) setHighlighted(payload)
+      })
+      .catch(() => {
+        if (!cancelled) setHighlighted({ ok: true, unavailable: true })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [active, content, language])
+
+  if (!path) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+        Select a file to preview it.
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full min-h-0 overflow-auto bg-background">
+      {fileQuery.isPending && !fileQuery.data ? (
+        <div className="p-4">
+          <GitSectionNote>
+            <Spinner /> Loading file…
+          </GitSectionNote>
+        </div>
+      ) : fileQuery.error ? (
+        <div className="p-4">
+          <GitSectionNote tone="destructive">
+            {getErrorMessage(fileQuery.error, "Failed to load file")}
+          </GitSectionNote>
+        </div>
+      ) : hasHighlightHtml(highlighted) ? (
+        <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
+          <code
+            className={cn(language && `language-${language}`)}
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: syntax highlighting HTML is generated by sugar-high
+            dangerouslySetInnerHTML={{ __html: highlighted.html }}
+          />
+        </pre>
+      ) : (
+        <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
+          <code>{content}</code>
+        </pre>
+      )}
+    </div>
+  )
+}
+
+type RightSidebarTabValue = "branches" | "files" | "history" | "review"
+
+function RightSidebarTabStrip({
+  activeTab,
+  onActiveTabChange,
+  showReview = false,
+}: {
+  activeTab: RightSidebarTabValue
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  showReview?: boolean
+}) {
+  const renderTab = ({
+    label,
+    value,
+  }: {
+    label: string
+    value: RightSidebarTabValue
+  }) => {
+    const active = activeTab === value
+    return (
+      <button
+        key={value}
+        type="button"
+        aria-pressed={active}
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          active && "border-border/70 bg-muted text-foreground shadow-xs"
+        )}
+        onClick={() => {
+          onActiveTabChange(value)
+        }}
+      >
+        {label}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
+      {showReview ? renderTab({ label: "Review", value: "review" }) : null}
+      {renderTab({ label: "Files", value: "files" })}
+      {renderTab({ label: "Branches", value: "branches" })}
+      {renderTab({ label: "History", value: "history" })}
+    </div>
+  )
+}
+
+function FileViewerTabStrip({
+  activeFilePath,
+  fileTabs,
+  onActiveFileChange,
+  onCloseFile,
+  onOpenFileDialog,
+  reviewCount,
+}: {
+  activeFilePath: string
+  fileTabs: Array<string>
+  onActiveFileChange: (path: string) => void
+  onCloseFile: (path: string) => void
+  onOpenFileDialog: () => void
+  reviewCount: number
+}) {
+  const reviewActive = !activeFilePath
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
+      <button
+        type="button"
+        aria-pressed={reviewActive}
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          reviewActive && "border-border/70 bg-muted text-foreground shadow-xs"
+        )}
+        onClick={() => {
+          onActiveFileChange("")
+        }}
+      >
+        Review{reviewCount > 0 ? ` ${reviewCount}` : ""}
+      </button>
+      {fileTabs.map((path) => {
+        const active = activeFilePath === path
+        return (
+          <div
+            key={path}
+            className={cn(
+              "inline-flex h-7 max-w-56 shrink-0 items-center rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              active && "border-border/70 bg-muted text-foreground shadow-xs"
+            )}
+          >
+            <button
+              type="button"
+              title={path}
+              className="min-w-0 flex-1 px-2 text-left"
+              onClick={() => {
+                onActiveFileChange(path)
+              }}
+            >
+              <span className="block min-w-0 truncate">{path}</span>
+            </button>
+            <button
+              type="button"
+              aria-label={`Close ${path}`}
+              className="mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => {
+                onCloseFile(path)
+              }}
+            >
+              <XIcon className="size-3" />
+            </button>
+          </div>
+        )
+      })}
+      <TitleTooltip title="Open another file">
+        <button
+          type="button"
+          aria-label="Open another file"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={onOpenFileDialog}
+        >
+          +
+        </button>
+      </TitleTooltip>
+    </div>
+  )
+}
+
+type ReviewDiffStyle = "unified" | "split"
+
+function reviewFileValue(file: GitChangeFile) {
+  return `${file.status}:${file.previousPath || ""}:${file.path}`
+}
+
+function gitFileChangedLineCount(file: GitChangeFile) {
+  return (
+    gitFileLineChangeValue(file.linesAdded) +
+    gitFileLineChangeValue(file.linesDeleted)
+  )
+}
+
+function gitFileShouldPreviewPatch(file: GitChangeFile) {
+  return (
+    (typeof file.sizeBytes === "number" &&
+      file.sizeBytes > GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES) ||
+    gitFileChangedLineCount(file) >
+      GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD
+  )
+}
+
+function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const [diffStyle, setDiffStyle] = React.useState<ReviewDiffStyle>("unified")
+  const [openFiles, setOpenFiles] = React.useState<Array<string>>([])
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
@@ -1584,37 +2263,331 @@ function GitFilesSection({ viewerContextId, cwd, active }: GitScopedProps) {
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
   const files = filesQuery.data
-  const meta = Array.isArray(files) ? gitFilesSummaryText(files) : ""
+  const changedFiles = Array.isArray(files) ? files : []
+  const meta = changedFiles.length > 0 ? gitFilesSummaryText(changedFiles) : ""
+
+  React.useEffect(() => {
+    setOpenFiles([])
+  }, [normalizedCwd])
+
+  const hasOpenFile = openFiles.length > 0
+  const toggleAll = () => {
+    setOpenFiles(hasOpenFile ? [] : changedFiles.map(reviewFileValue))
+  }
 
   return (
-    <GitSection title="Files" meta={meta}>
+    <div className="h-full min-h-0 overflow-auto bg-background p-3">
+      <div className="mb-3 flex min-h-8 flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <span>Git changes</span>
+          {meta ? (
+            <span className="text-xs font-medium text-muted-foreground">
+              {meta}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="inline-flex h-8 items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-xs">
+            {(["unified", "split"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={diffStyle === value}
+                className={cn(
+                  "h-7 rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                  diffStyle === value && "bg-muted text-foreground shadow-xs"
+                )}
+                onClick={() => {
+                  setDiffStyle(value)
+                }}
+              >
+                {value === "unified" ? "Unified" : "Split"}
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={changedFiles.length === 0}
+            className="h-8 gap-2"
+            onClick={toggleAll}
+          >
+            <ChevronsUpDownIcon className="size-4" />
+            {hasOpenFile ? "Collapse all" : "Expand all"}
+          </Button>
+        </div>
+      </div>
       {!normalizedCwd ? (
         <GitSectionNote>No directory selected.</GitSectionNote>
       ) : !viewerContextId ? (
         <GitSectionNote>Waiting for viewer context…</GitSectionNote>
       ) : filesQuery.isPending && typeof files === "undefined" ? (
         <GitSectionNote>
-          <Spinner /> Loading files…
+          <Spinner /> Loading changes…
         </GitSectionNote>
       ) : filesQuery.error ? (
         <GitSectionNote tone="destructive">
-          {getErrorMessage(filesQuery.error, "Failed to load files")}
+          {getErrorMessage(filesQuery.error, "Failed to load changes")}
         </GitSectionNote>
       ) : files === null ? (
         <GitSectionNote>No git repository detected.</GitSectionNote>
-      ) : Array.isArray(files) && files.length > 0 ? (
-        <ul className="m-0 grid list-none gap-0 p-0">
-          {files.map((file) => (
-            <GitFileRow
-              key={`${file.status}:${file.previousPath || ""}:${file.path}`}
+      ) : changedFiles.length > 0 ? (
+        <Accordion
+          multiple
+          value={openFiles}
+          onValueChange={setOpenFiles}
+          className="overflow-hidden rounded-xl border border-border/80"
+        >
+          {changedFiles.map((file) => (
+            <ReviewFileAccordionItem
+              key={reviewFileValue(file)}
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active}
+              diffStyle={diffStyle}
               file={file}
+              open={openFiles.includes(reviewFileValue(file))}
             />
           ))}
-        </ul>
+        </Accordion>
       ) : (
         <GitSectionNote>Working tree clean.</GitSectionNote>
       )}
-    </GitSection>
+    </div>
+  )
+}
+
+function ReviewFileAccordionItem({
+  viewerContextId,
+  cwd,
+  active,
+  diffStyle,
+  file,
+  open,
+}: GitScopedProps & {
+  diffStyle: ReviewDiffStyle
+  file: GitChangeFile
+  open: boolean
+}) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const value = reviewFileValue(file)
+  const [fullContextRequested, setFullContextRequested] = React.useState(false)
+  const previewPatch = gitFileShouldPreviewPatch(file) && !fullContextRequested
+  const diffQuery = useQuery({
+    ...gitFileDiffQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      path: file.path,
+    }),
+    enabled: Boolean(
+      previewPatch && open && active && viewerContextId && normalizedCwd
+    ),
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const reviewQuery = useQuery({
+    ...gitFileReviewQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      path: file.path,
+      previousPath: file.previousPath,
+    }),
+    enabled: Boolean(
+      !previewPatch && open && active && viewerContextId && normalizedCwd
+    ),
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const oldContent = reviewQuery.data?.oldContent ?? ""
+  const newContent = reviewQuery.data?.newContent ?? ""
+  const patch = diffQuery.data?.patch ?? ""
+
+  React.useEffect(() => {
+    setFullContextRequested(false)
+  }, [value])
+
+  return (
+    <AccordionItem value={value} className="border-border/70">
+      <AccordionTrigger className="min-h-10 items-center gap-3 rounded-none px-3 py-2 font-mono text-[13px] hover:no-underline">
+        <span className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3">
+          <GitFileStatus status={file.status} />
+          <span className="min-w-0 truncate text-left">
+            {file.previousPath ? (
+              <>
+                <span className="text-muted-foreground">
+                  {file.previousPath}
+                </span>
+                <span className="text-muted-foreground/70"> → </span>
+                <span>{file.path}</span>
+              </>
+            ) : (
+              file.path
+            )}
+          </span>
+          <GitFileDiff file={file} />
+        </span>
+      </AccordionTrigger>
+      <AccordionContent className="border-t border-border/70 bg-background p-0">
+        {previewPatch ? (
+          diffQuery.isPending && !diffQuery.data ? (
+            <div className="p-3">
+              <GitSectionNote>
+                <Spinner /> Loading hunk…
+              </GitSectionNote>
+            </div>
+          ) : diffQuery.error ? (
+            <div className="p-3">
+              <GitSectionNote tone="destructive">
+                {getErrorMessage(diffQuery.error, "Failed to load hunk")}
+              </GitSectionNote>
+            </div>
+          ) : patch ? (
+            <div>
+              <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-2 text-xs text-muted-foreground">
+                <span>Showing changed hunks only for this large change.</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 shrink-0"
+                  onClick={() => {
+                    setFullContextRequested(true)
+                  }}
+                >
+                  Load full context
+                </Button>
+              </div>
+              <PatchDiff
+                patch={patch}
+                disableWorkerPool
+                options={{
+                  diffStyle,
+                  disableFileHeader: true,
+                  overflow: "wrap",
+                }}
+              />
+            </div>
+          ) : (
+            <div className="p-3">
+              <GitSectionNote>No line changes.</GitSectionNote>
+            </div>
+          )
+        ) : reviewQuery.isPending && !reviewQuery.data ? (
+          <div className="p-3">
+            <GitSectionNote>
+              <Spinner /> Loading hunk…
+            </GitSectionNote>
+          </div>
+        ) : reviewQuery.error ? (
+          <div className="p-3">
+            <GitSectionNote tone="destructive">
+              {getErrorMessage(reviewQuery.error, "Failed to load hunk")}
+            </GitSectionNote>
+          </div>
+        ) : oldContent !== newContent ? (
+          <MultiFileDiff
+            oldFile={{
+              name: file.previousPath || file.path,
+              contents: oldContent,
+            }}
+            newFile={{
+              name: file.path,
+              contents: newContent,
+            }}
+            disableWorkerPool
+            options={{
+              diffStyle,
+              disableFileHeader: true,
+              overflow: "wrap",
+            }}
+          />
+        ) : (
+          <div className="p-3">
+            <GitSectionNote>No line changes.</GitSectionNote>
+          </div>
+        )}
+      </AccordionContent>
+    </AccordionItem>
+  )
+}
+
+export function GitFileViewerPanel({
+  viewerContextId,
+  cwd,
+  active,
+  activeFilePath,
+  fileTabs,
+  onActiveFileChange,
+  onCloseFile,
+  onOpenFile,
+}: {
+  viewerContextId: string
+  cwd?: string
+  active: boolean
+  activeFilePath: string
+  fileTabs: Array<string>
+  onActiveFileChange: (path: string) => void
+  onCloseFile: (path: string) => void
+  onOpenFile: (path: string) => void
+}) {
+  const normalizedCwd = normalizeCwd(cwd)
+  const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
+  const fileTreeQuery = useQuery({
+    ...projectFileTreeQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: (data) => data.paths,
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+  const reviewFilesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: selectGitFiles,
+    notifyOnChangeProps: ["data"],
+  })
+  const paths = fileTreeQuery.data ?? []
+  const reviewCount = Array.isArray(reviewFilesQuery.data)
+    ? reviewFilesQuery.data.length
+    : 0
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card/50">
+      <FileViewerTabStrip
+        activeFilePath={activeFilePath}
+        fileTabs={fileTabs}
+        onActiveFileChange={onActiveFileChange}
+        onCloseFile={onCloseFile}
+        onOpenFileDialog={() => {
+          setOpenFileDialogOpen(true)
+        }}
+        reviewCount={reviewCount}
+      />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {activeFilePath ? (
+          <ProjectFileContent
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active}
+            path={activeFilePath}
+          />
+        ) : (
+          <FileReviewContent
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active}
+          />
+        )}
+      </div>
+      <ProjectOpenFileDialog
+        open={openFileDialogOpen}
+        onOpenChange={setOpenFileDialogOpen}
+        paths={paths}
+        onOpenFile={onOpenFile}
+      />
+    </div>
   )
 }
 
@@ -1647,8 +2620,7 @@ function GitBranchesControls({
             aria-pressed={branchScope === value}
             className={cn(
               "min-h-6 rounded-[calc(var(--radius-sm)-1px)] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground",
-              branchScope === value &&
-                "bg-muted text-foreground shadow-xs dark:bg-input/40"
+              branchScope === value && "bg-muted text-foreground shadow-xs"
             )}
             onClick={() => {
               setBranchScope(value)
@@ -1730,7 +2702,14 @@ function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
   )
 }
 
-function GitBranchesSection({ viewerContextId, cwd, active }: GitScopedProps) {
+function GitBranchesSection({
+  viewerContextId,
+  cwd,
+  active,
+  flush = false,
+}: GitScopedProps & {
+  flush?: boolean
+}) {
   const [branchScope, setBranchScope] = React.useState<BranchScope>("local")
   const normalizedCwd = normalizeCwd(cwd)
   const branchesQuery = useQuery({
@@ -1772,50 +2751,64 @@ function GitBranchesSection({ viewerContextId, cwd, active }: GitScopedProps) {
     ? `${visibleCount} ${branchScope === "remote" ? "remote" : "local"}`
     : ""
 
+  const controls = (
+    <GitBranchesControls
+      branchScope={branchScope}
+      countLabel={countLabel}
+      setBranchScope={setBranchScope}
+    />
+  )
+  const content = !normalizedCwd ? (
+    <GitSectionNote>No directory selected.</GitSectionNote>
+  ) : !viewerContextId ? (
+    <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+  ) : branchesQuery.isPending && typeof selectedBranches === "undefined" ? (
+    <GitSectionNote>
+      <Spinner /> Loading branches…
+    </GitSectionNote>
+  ) : branchesQuery.error ? (
+    <GitSectionNote tone="destructive">
+      {getErrorMessage(branchesQuery.error, "Failed to load branches")}
+    </GitSectionNote>
+  ) : selectedBranches === null ? (
+    <GitSectionNote>No git repository detected.</GitSectionNote>
+  ) : branchScope === "remote" ? (
+    remoteBranches.length > 0 ? (
+      <ul className="m-0 grid list-none gap-0 p-0">
+        {remoteBranches.map((branch) => (
+          <GitRemoteBranchRow key={branch.name} branch={branch} />
+        ))}
+      </ul>
+    ) : (
+      <GitSectionNote>No remote branches.</GitSectionNote>
+    )
+  ) : localBranches.length > 0 ? (
+    <ul className="m-0 grid list-none gap-0 p-0">
+      {localBranches.map((branch) => (
+        <GitLocalBranchRow key={branch.name} branch={branch} />
+      ))}
+    </ul>
+  ) : (
+    <GitSectionNote>No local branches.</GitSectionNote>
+  )
+
+  if (flush) {
+    return (
+      <section className="min-h-full bg-background">
+        <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background px-3">
+          <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+            Branches
+          </div>
+          <div className="shrink-0">{controls}</div>
+        </div>
+        <div className="grid gap-2 px-3 py-2.5">{content}</div>
+      </section>
+    )
+  }
+
   return (
-    <GitSection
-      title="Branches"
-      controls={
-        <GitBranchesControls
-          branchScope={branchScope}
-          countLabel={countLabel}
-          setBranchScope={setBranchScope}
-        />
-      }
-    >
-      {!normalizedCwd ? (
-        <GitSectionNote>No directory selected.</GitSectionNote>
-      ) : !viewerContextId ? (
-        <GitSectionNote>Waiting for viewer context…</GitSectionNote>
-      ) : branchesQuery.isPending && typeof selectedBranches === "undefined" ? (
-        <GitSectionNote>
-          <Spinner /> Loading branches…
-        </GitSectionNote>
-      ) : branchesQuery.error ? (
-        <GitSectionNote tone="destructive">
-          {getErrorMessage(branchesQuery.error, "Failed to load branches")}
-        </GitSectionNote>
-      ) : selectedBranches === null ? (
-        <GitSectionNote>No git repository detected.</GitSectionNote>
-      ) : branchScope === "remote" ? (
-        remoteBranches.length > 0 ? (
-          <ul className="m-0 grid list-none gap-0 p-0">
-            {remoteBranches.map((branch) => (
-              <GitRemoteBranchRow key={branch.name} branch={branch} />
-            ))}
-          </ul>
-        ) : (
-          <GitSectionNote>No remote branches.</GitSectionNote>
-        )
-      ) : localBranches.length > 0 ? (
-        <ul className="m-0 grid list-none gap-0 p-0">
-          {localBranches.map((branch) => (
-            <GitLocalBranchRow key={branch.name} branch={branch} />
-          ))}
-        </ul>
-      ) : (
-        <GitSectionNote>No local branches.</GitSectionNote>
-      )}
+    <GitSection title="Branches" controls={controls}>
+      {content}
     </GitSection>
   )
 }
@@ -1864,31 +2857,98 @@ function GitCommitRow({
   )
 }
 
-function GitCommitsSection({ viewerContextId, cwd, active }: GitScopedProps) {
+function GitCommitsSection({
+  viewerContextId,
+  cwd,
+  active,
+  flush = false,
+}: GitScopedProps & {
+  flush?: boolean
+}) {
   const normalizedCwd = normalizeCwd(cwd)
+  const [commitsLimit, setCommitsLimit] = React.useState(GIT_COMMITS_PAGE_SIZE)
+  React.useEffect(() => {
+    setCommitsLimit(GIT_COMMITS_PAGE_SIZE)
+  }, [normalizedCwd])
   const commitsQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
       cwd: normalizedCwd,
       scope: "commits",
+      commitsLimit,
     }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
-    select: selectGitCommits,
-    notifyOnChangeProps: ["data", "isPending", "error"],
+    notifyOnChangeProps: ["data", "isFetching", "isPending", "error"],
   })
-  const unpushedQuery = useQuery({
-    ...gitChangesQueryOptions({
-      viewerContextId,
-      cwd: normalizedCwd,
-      scope: "commits",
-    }),
-    enabled: Boolean(active && viewerContextId && normalizedCwd),
-    select: selectGitUnpushedCommitShortHashes,
-    notifyOnChangeProps: ["data"],
-  })
-  const commits = commitsQuery.data
+  const commitsData = commitsQuery.data
+  const commits = commitsData?.commits
+  const commitsHasMore = Boolean(commitsData?.commitsHasMore)
   const meta = Array.isArray(commits) ? gitCommitsSummaryText(commits) : ""
-  const unpushedCommitShortHashes = new Set(unpushedQuery.data ?? [])
+  const unpushedCommitShortHashes = new Set(
+    commitsData?.unpushedCommitShortHashes ?? []
+  )
+
+  const content = !normalizedCwd ? (
+    <GitSectionNote>No directory selected.</GitSectionNote>
+  ) : !viewerContextId ? (
+    <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+  ) : commitsQuery.isPending && typeof commits === "undefined" ? (
+    <GitSectionNote>
+      <Spinner /> Loading commits…
+    </GitSectionNote>
+  ) : commitsQuery.error ? (
+    <GitSectionNote tone="destructive">
+      {getErrorMessage(commitsQuery.error, "Failed to load commits")}
+    </GitSectionNote>
+  ) : commits === null ? (
+    <GitSectionNote>No git repository detected.</GitSectionNote>
+  ) : Array.isArray(commits) && commits.length > 0 ? (
+    <div className="grid min-w-max gap-3">
+      <div className="grid gap-0.5">
+        {commits.map((line, index) => (
+          <GitCommitRow
+            key={`${index}:${line}`}
+            line={line}
+            unpushedCommitShortHashes={unpushedCommitShortHashes}
+          />
+        ))}
+      </div>
+      {commitsHasMore ? (
+        <button
+          type="button"
+          className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-border/80 bg-background px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={commitsQuery.isFetching}
+          onClick={() => {
+            setCommitsLimit((value) => value + GIT_COMMITS_PAGE_SIZE)
+          }}
+        >
+          {commitsQuery.isFetching ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
+    </div>
+  ) : (
+    <GitSectionNote>No commits on this branch yet.</GitSectionNote>
+  )
+
+  if (flush) {
+    return (
+      <section className="min-h-full overflow-x-auto bg-background">
+        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-2">
+          <div className="flex min-w-0 items-baseline gap-3">
+            <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+              History
+            </div>
+            {meta ? (
+              <div className="min-w-0 truncate text-xs text-muted-foreground/80">
+                {meta}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-2 overflow-x-auto px-3 py-2.5">{content}</div>
+      </section>
+    )
+  }
 
   return (
     <GitSection
@@ -1897,33 +2957,7 @@ function GitCommitsSection({ viewerContextId, cwd, active }: GitScopedProps) {
       className="overflow-x-auto"
       bodyClassName="overflow-x-auto"
     >
-      {!normalizedCwd ? (
-        <GitSectionNote>No directory selected.</GitSectionNote>
-      ) : !viewerContextId ? (
-        <GitSectionNote>Waiting for viewer context…</GitSectionNote>
-      ) : commitsQuery.isPending && typeof commits === "undefined" ? (
-        <GitSectionNote>
-          <Spinner /> Loading commits…
-        </GitSectionNote>
-      ) : commitsQuery.error ? (
-        <GitSectionNote tone="destructive">
-          {getErrorMessage(commitsQuery.error, "Failed to load commits")}
-        </GitSectionNote>
-      ) : commits === null ? (
-        <GitSectionNote>No git repository detected.</GitSectionNote>
-      ) : Array.isArray(commits) && commits.length > 0 ? (
-        <div className="grid min-w-max gap-0.5">
-          {commits.map((line, index) => (
-            <GitCommitRow
-              key={`${index}:${line}`}
-              line={line}
-              unpushedCommitShortHashes={unpushedCommitShortHashes}
-            />
-          ))}
-        </div>
-      ) : (
-        <GitSectionNote>No commits on this branch yet.</GitSectionNote>
-      )}
+      {content}
     </GitSection>
   )
 }
@@ -1939,10 +2973,13 @@ export function GitTabStatusText({
   const statusQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
     enabled: Boolean(viewerContextId && normalizedCwd),
-    select: selectGitWorkingTreeSummary,
+    select: (data) =>
+      data.gitStatus === null
+        ? "Files"
+        : formatGitWorkingTreeSummary(data.gitStatus) || "Changes",
     notifyOnChangeProps: ["data"],
   })
-  const text = statusQuery.data || "Git"
+  const text = statusQuery.data || "Changes"
 
   return <span className="max-w-48 truncate">{text}</span>
 }
@@ -2213,39 +3250,106 @@ export function GitPanel({
   viewerContextId,
   cwd,
   active,
+  activeFilePath = "",
+  onOpenFile,
   showToolbar = true,
 }: GitPanelProps) {
   const normalizedCwd = normalizeCwd(cwd)
+  const isMobile = useIsMobile()
+  const [activeTab, setActiveTab] = React.useState<RightSidebarTabValue>(() =>
+    isMobile ? "review" : "files"
+  )
+  const [inlineActiveFilePath, setInlineActiveFilePath] = React.useState("")
+  const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
+  const panelHasCardChrome = showToolbar && !isMobile
+  const currentFilePath =
+    previewMode === "inline" ? inlineActiveFilePath : activeFilePath
+
+  const openFile = (path: string) => {
+    if (!path) return
+    if (previewMode === "inline") {
+      setInlineActiveFilePath(path)
+      return
+    }
+    onOpenFile?.(path)
+  }
+
+  React.useEffect(() => {
+    setActiveTab(isMobile ? "review" : "files")
+    setInlineActiveFilePath("")
+  }, [isMobile, normalizedCwd])
 
   return (
-    <div className="mx-auto grid w-full max-w-[80ch] gap-3">
+    <div className="h-full min-h-[520px] w-full min-w-0">
       <GitPanelErrorToasts
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
         active={active}
       />
-      {showToolbar ? (
-        <GitPanelToolbar
-          viewerContextId={viewerContextId}
-          cwd={normalizedCwd}
-          active={active}
+      <div
+        className={cn(
+          "flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden bg-card/50",
+          panelHasCardChrome
+            ? "rounded-xl border border-border/80"
+            : "rounded-none border-0"
+        )}
+      >
+        {showToolbar ? (
+          <div className="shrink-0 border-b border-border/70 bg-background p-2">
+            <GitPanelToolbar
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active}
+            />
+          </div>
+        ) : null}
+        <RightSidebarTabStrip
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
+          showReview={isMobile}
         />
-      ) : null}
-      <GitFilesSection
-        viewerContextId={viewerContextId}
-        cwd={normalizedCwd}
-        active={active}
-      />
-      <GitBranchesSection
-        viewerContextId={viewerContextId}
-        cwd={normalizedCwd}
-        active={active}
-      />
-      <GitCommitsSection
-        viewerContextId={viewerContextId}
-        cwd={normalizedCwd}
-        active={active}
-      />
+        {activeTab === "review" && isMobile ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <FileReviewContent
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active && activeTab === "review"}
+            />
+          </div>
+        ) : activeTab === "branches" ? (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <GitBranchesSection
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active && activeTab === "branches"}
+              flush
+            />
+          </div>
+        ) : activeTab === "history" ? (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <GitCommitsSection
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active && activeTab === "history"}
+              flush
+            />
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ProjectFilesWorkspace
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active && activeTab === "files"}
+              activeFilePath={currentFilePath}
+              onCloseFile={() => {
+                setInlineActiveFilePath("")
+              }}
+              onOpenFile={openFile}
+              previewMode={previewMode}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

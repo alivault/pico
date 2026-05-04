@@ -47,6 +47,24 @@ export type FileCompletionsResponse =
     }
   | ApiErrorResponse
 
+export type ProjectFileTreeResponse =
+  | {
+      ok: true
+      cwd: string
+      totalCount: number
+      paths: Array<string>
+    }
+  | ApiErrorResponse
+
+export type ProjectFileReadResponse =
+  | {
+      ok: true
+      cwd: string
+      path: string
+      content: string
+    }
+  | ApiErrorResponse
+
 export type GitStatusSummary = {
   branch?: string
   detached: boolean
@@ -74,6 +92,7 @@ export type GitChangeFile = {
   previousPath?: string
   linesAdded?: number
   linesDeleted?: number
+  sizeBytes?: number
 }
 
 export type GitLocalBranch = {
@@ -105,7 +124,29 @@ export type GitChangesResponse =
       localBranches: Array<GitLocalBranch> | null
       remoteBranches: Array<GitRemoteBranch> | null
       commits: Array<string> | null
+      commitsHasMore: boolean
+      commitsLimit: number
       unpushedCommitShortHashes: Array<string> | null
+    }
+  | ApiErrorResponse
+
+export type GitFileDiffResponse =
+  | {
+      ok: true
+      cwd: string
+      path: string
+      patch: string
+    }
+  | ApiErrorResponse
+
+export type GitFileReviewResponse =
+  | {
+      ok: true
+      cwd: string
+      path: string
+      previousPath?: string
+      oldContent: string
+      newContent: string
     }
   | ApiErrorResponse
 

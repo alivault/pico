@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import { readFile, stat } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 
 import { loadPiAi } from "@/server/pi-sdk"
@@ -26,6 +27,7 @@ export type GitChangeFile = {
   previousPath?: string
   linesAdded?: number
   linesDeleted?: number
+  sizeBytes?: number
 }
 
 export type GitLocalBranch = {
@@ -56,6 +58,8 @@ export type GitBranchSummary = {
 
 export type GitCommitSummary = {
   commits: Array<string>
+  commitsHasMore: boolean
+  commitsLimit: number
   unpushedCommitShortHashes: Array<string>
 }
 
@@ -64,6 +68,8 @@ export type GitChangesSummary = {
   localBranches: Array<GitLocalBranch>
   remoteBranches: Array<GitRemoteBranch>
   commits: Array<string>
+  commitsHasMore: boolean
+  commitsLimit: number
   unpushedCommitShortHashes: Array<string>
 }
 
@@ -91,9 +97,22 @@ export type GitCommitMessageResult = {
   reason?: string
 }
 
+export type GitFileDiffResult = {
+  path: string
+  patch: string
+}
+
+export type GitFileReviewResult = {
+  path: string
+  previousPath?: string
+  oldContent: string
+  newContent: string
+}
+
 const GIT_STATUS_CACHE_TTL_MS = 5_000
 const GIT_CHANGES_CACHE_TTL_MS = 5_000
-const GIT_COMMITS_LIMIT = 20
+const GIT_COMMITS_DEFAULT_LIMIT = 50
+const GIT_COMMITS_MAX_LIMIT = 500
 const GIT_ACTION_TIMEOUT_MS = 120_000
 const GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS = 18_000
 const GIT_COMMIT_MESSAGE_SYSTEM_PROMPT = `You write concise Git commit messages.
@@ -132,6 +151,25 @@ function normalizeGitCwd(cwd: string) {
   return typeof cwd === "string" ? cwd.trim() : ""
 }
 
+function normalizeGitCommitsLimit(limit: number | undefined) {
+  if (!Number.isFinite(limit)) return GIT_COMMITS_DEFAULT_LIMIT
+
+  return Math.max(1, Math.min(GIT_COMMITS_MAX_LIMIT, Math.floor(limit || 0)))
+}
+
+function gitCommitsCacheKey(cwd: string, limit: number) {
+  return `${cwd}\u0000${limit}`
+}
+
+function invalidateDirectoryGitCommitsCache(cwd: string) {
+  const prefix = `${cwd}\u0000`
+  for (const key of gitCommitsCache.keys()) {
+    if (key === cwd || key.startsWith(prefix)) {
+      gitCommitsCache.delete(key)
+    }
+  }
+}
+
 function normalizeGitPath(path: string, cwd: string) {
   const trimmed = typeof path === "string" ? path.trim() : ""
   if (!trimmed) return ""
@@ -147,7 +185,7 @@ export function invalidateDirectoryGitCaches(cwd: string) {
   gitChangesCache.delete(normalizedCwd)
   gitFilesCache.delete(normalizedCwd)
   gitBranchesCache.delete(normalizedCwd)
-  gitCommitsCache.delete(normalizedCwd)
+  invalidateDirectoryGitCommitsCache(normalizedCwd)
 }
 
 export function invalidateAllDirectoryGitCaches() {
@@ -330,6 +368,34 @@ function parseCommandLines(
     .split(/\r?\n/)
     .map((entry) => (trim ? entry.trim() : entry))
     .filter((entry) => Boolean(trim ? entry : entry.length))
+}
+
+function isGitCommitGraphLine(line: string) {
+  const tabIndex = line.indexOf("\t")
+  if (tabIndex < 0) return false
+
+  const beforeSubject = line.slice(0, tabIndex).trim()
+  const tokens = beforeSubject.split(/\s+/).filter(Boolean)
+  const hash = tokens[tokens.length - 1] || ""
+
+  return /^[0-9a-f]{4,}$/i.test(hash)
+}
+
+function limitGitCommitGraphLines(lines: Array<string>, limit: number) {
+  let commitCount = 0
+  const limitedLines: Array<string> = []
+
+  for (const line of lines) {
+    if (isGitCommitGraphLine(line)) {
+      commitCount += 1
+      if (commitCount > limit) {
+        return { lines: limitedLines, hasMore: true }
+      }
+    }
+    limitedLines.push(line)
+  }
+
+  return { lines: limitedLines, hasMore: false }
 }
 
 function gitCommandErrorMessage(
@@ -594,6 +660,16 @@ function parseGitLocalBranches(output: string) {
   return branches
 }
 
+function assertGitFilePath(path: string) {
+  const normalizedPath = typeof path === "string" ? path.trim() : ""
+  if (!normalizedPath) throw new Error("file path is required")
+  if (isAbsolute(normalizedPath)) throw new Error("file path must be relative")
+  if (normalizedPath.split(/[\\/]+/).some((part) => part === "..")) {
+    throw new Error("file path must stay inside the repository")
+  }
+  return normalizedPath.replaceAll("\\", "/")
+}
+
 function parseGitRemoteBranches(output: string) {
   const branches: Array<GitRemoteBranch> = []
 
@@ -824,18 +900,22 @@ export async function readDirectoryGitFiles(
       : new Map()
   const value =
     statusResult.code === 0
-      ? parseGitStatusEntries(statusResult.stdout).map((file) => {
-          const diff = numstatByPath.get(file.path)
-          if (!diff) {
-            return file
-          }
-
-          return {
-            ...file,
-            linesAdded: diff.linesAdded,
-            linesDeleted: diff.linesDeleted,
-          }
-        })
+      ? await Promise.all(
+          parseGitStatusEntries(statusResult.stdout).map(async (file) => {
+            const diff = numstatByPath.get(file.path)
+            const sizeBytes = await readGitFileSizeBytes(normalizedCwd, file)
+            return {
+              ...file,
+              ...(diff
+                ? {
+                    linesAdded: diff.linesAdded,
+                    linesDeleted: diff.linesDeleted,
+                  }
+                : null),
+              ...(typeof sizeBytes === "number" ? { sizeBytes } : null),
+            }
+          })
+        )
       : []
 
   gitFilesCache.set(normalizedCwd, {
@@ -844,6 +924,171 @@ export async function readDirectoryGitFiles(
   })
 
   return value
+}
+
+async function readGitFileSizeBytes(cwd: string, file: GitChangeFile) {
+  try {
+    const fileStats = await stat(resolve(cwd, file.path))
+    if (fileStats.isFile()) return fileStats.size
+  } catch {
+    // Fall back to HEAD for deleted files or paths that no longer exist.
+  }
+
+  const headPath = file.previousPath || file.path
+  const result = await runCommand(
+    "git",
+    ["cat-file", "-s", `HEAD:${headPath}`],
+    {
+      cwd,
+      timeoutMs: 1_500,
+    }
+  )
+  if (result.code !== 0) return undefined
+
+  const size = Number.parseInt(result.stdout.trim(), 10)
+  return Number.isFinite(size) ? size : undefined
+}
+
+async function readGitHeadFileContent(cwd: string, path: string) {
+  const result = await runCommand("git", ["show", `HEAD:${path}`], {
+    cwd,
+    timeoutMs: 10_000,
+  })
+
+  if (result.code === 0) return result.stdout
+  return ""
+}
+
+async function readWorktreeFileContent(cwd: string, path: string) {
+  try {
+    const content = await readFile(resolve(cwd, path), "utf8")
+    if (content.includes("\u0000")) {
+      throw new Error("Binary files cannot be reviewed")
+    }
+    return content
+  } catch (error) {
+    if ((error as { code?: string })?.code === "ENOENT") return ""
+    throw error
+  }
+}
+
+export async function readDirectoryGitFileReview(
+  cwd: string,
+  path: string,
+  previousPath?: string
+): Promise<GitFileReviewResult | null> {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  const normalizedPath = assertGitFilePath(path)
+  const normalizedPreviousPath = previousPath
+    ? assertGitFilePath(previousPath)
+    : undefined
+  if (!normalizedCwd) return null
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    return null
+  }
+
+  const oldContent = await readGitHeadFileContent(
+    normalizedCwd,
+    normalizedPreviousPath || normalizedPath
+  )
+  const newContent = await readWorktreeFileContent(
+    normalizedCwd,
+    normalizedPath
+  )
+
+  return {
+    path: normalizedPath,
+    previousPath: normalizedPreviousPath,
+    oldContent,
+    newContent,
+  }
+}
+
+export async function readDirectoryGitFileDiff(
+  cwd: string,
+  path: string
+): Promise<GitFileDiffResult | null> {
+  const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
+  const normalizedPath = assertGitFilePath(path)
+  if (!normalizedCwd) return null
+
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    return null
+  }
+
+  const trackedDiff = await runCommand(
+    "git",
+    [
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--find-renames=50%",
+      "HEAD",
+      "--",
+      normalizedPath,
+    ],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: 10_000,
+    }
+  )
+
+  if (trackedDiff.code === 0 && trackedDiff.stdout.trim()) {
+    return { path: normalizedPath, patch: trackedDiff.stdout }
+  }
+  if (trackedDiff.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to read file diff", trackedDiff)
+    )
+  }
+
+  const statusResult = await runCommand(
+    "git",
+    [
+      "status",
+      "--porcelain",
+      "-z",
+      "--untracked-files=all",
+      "--",
+      normalizedPath,
+    ],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }
+  )
+  const statusEntries =
+    statusResult.code === 0 ? parseGitStatusEntries(statusResult.stdout) : []
+  const isUntracked = statusEntries.some(
+    (entry) => entry.path === normalizedPath && entry.status.includes("?")
+  )
+  if (!isUntracked) return { path: normalizedPath, patch: "" }
+
+  const untrackedDiff = await runCommand(
+    "git",
+    [
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-index",
+      "--",
+      "/dev/null",
+      normalizedPath,
+    ],
+    {
+      cwd: normalizedCwd,
+      timeoutMs: 10_000,
+    }
+  )
+
+  if (untrackedDiff.code === 0 || untrackedDiff.code === 1) {
+    return { path: normalizedPath, patch: untrackedDiff.stdout }
+  }
+
+  throw new Error(
+    gitCommandErrorMessage("Failed to read untracked file diff", untrackedDiff)
+  )
 }
 
 export async function readDirectoryGitBranches(
@@ -920,22 +1165,25 @@ export async function readDirectoryGitBranches(
 
 export async function readDirectoryGitCommits(
   cwd: string,
-  { force = false }: { force?: boolean } = {}
+  { force = false, limit }: { force?: boolean; limit?: number } = {}
 ) {
   const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
   if (!normalizedCwd) return null
 
+  const normalizedLimit = normalizeGitCommitsLimit(limit)
+  const cacheKey = gitCommitsCacheKey(normalizedCwd, normalizedLimit)
+
   if (force) {
-    gitCommitsCache.delete(normalizedCwd)
+    invalidateDirectoryGitCommitsCache(normalizedCwd)
   }
 
-  const cached = gitCommitsCache.get(normalizedCwd)
+  const cached = gitCommitsCache.get(cacheKey)
   if (!force && cached && cached.expiresAt > Date.now()) {
     return cached.value
   }
 
   if (!(await isInsideWorkTree(normalizedCwd))) {
-    gitCommitsCache.set(normalizedCwd, {
+    gitCommitsCache.set(cacheKey, {
       value: null,
       expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
     })
@@ -952,7 +1200,7 @@ export async function readDirectoryGitCommits(
         "--abbrev-commit",
         "--date-order",
         "-n",
-        String(GIT_COMMITS_LIMIT),
+        String(normalizedLimit + 1),
         "--no-color",
         "HEAD",
       ],
@@ -971,16 +1219,23 @@ export async function readDirectoryGitCommits(
     ),
   ])
 
+  const commitLines =
+    commitsResult.code === 0 ? parseCommandLines(commitsResult.stdout) : []
+  const limitedCommitLines = limitGitCommitGraphLines(
+    commitLines,
+    normalizedLimit
+  )
   const value = {
-    commits:
-      commitsResult.code === 0 ? parseCommandLines(commitsResult.stdout) : [],
+    commits: limitedCommitLines.lines,
+    commitsHasMore: limitedCommitLines.hasMore,
+    commitsLimit: normalizedLimit,
     unpushedCommitShortHashes:
       unpushedResult.code === 0
         ? parseCommandLines(unpushedResult.stdout, { trim: true })
         : [],
   } satisfies GitCommitSummary
 
-  gitCommitsCache.set(normalizedCwd, {
+  gitCommitsCache.set(cacheKey, {
     value,
     expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
   })
@@ -1018,6 +1273,8 @@ export async function readDirectoryGitChanges(
           localBranches: branches.localBranches,
           remoteBranches: branches.remoteBranches,
           commits: commits.commits,
+          commitsHasMore: commits.commitsHasMore,
+          commitsLimit: commits.commitsLimit,
           unpushedCommitShortHashes: commits.unpushedCommitShortHashes,
         }
 

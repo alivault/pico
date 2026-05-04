@@ -18,6 +18,10 @@ export const Route = createFileRoute("/api/git-changes")({
         const url = new URL(request.url)
         const requestedCwd = url.searchParams.get("cwd") || ""
         const scope = url.searchParams.get("scope") || "all"
+        const commitsLimitParam = Number(url.searchParams.get("commitsLimit"))
+        const commitsLimit = Number.isFinite(commitsLimitParam)
+          ? commitsLimitParam
+          : undefined
         if (!requestedCwd.trim()) {
           return errorResponse("cwd is required")
         }
@@ -36,6 +40,8 @@ export const Route = createFileRoute("/api/git-changes")({
               localBranches: [],
               remoteBranches: [],
               commits: [],
+              commitsHasMore: false,
+              commitsLimit: 0,
               unpushedCommitShortHashes: [],
             })
           }
@@ -57,12 +63,16 @@ export const Route = createFileRoute("/api/git-changes")({
                   ? null
                   : [],
               commits: [],
+              commitsHasMore: false,
+              commitsLimit: 0,
               unpushedCommitShortHashes: [],
             })
           }
 
           if (scope === "commits") {
-            const commits = await readDirectoryGitCommits(cwd)
+            const commits = await readDirectoryGitCommits(cwd, {
+              limit: commitsLimit,
+            })
             return jsonResponse({
               ok: true,
               cwd,
@@ -74,6 +84,8 @@ export const Route = createFileRoute("/api/git-changes")({
                 : commits === null
                   ? null
                   : [],
+              commitsHasMore: Boolean(commits?.commitsHasMore),
+              commitsLimit: commits?.commitsLimit ?? 0,
               unpushedCommitShortHashes: Array.isArray(
                 commits?.unpushedCommitShortHashes
               )
@@ -108,6 +120,8 @@ export const Route = createFileRoute("/api/git-changes")({
               : gitChanges === null
                 ? null
                 : [],
+            commitsHasMore: Boolean(gitChanges?.commitsHasMore),
+            commitsLimit: gitChanges?.commitsLimit ?? 0,
             unpushedCommitShortHashes: Array.isArray(
               gitChanges?.unpushedCommitShortHashes
             )

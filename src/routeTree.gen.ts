@@ -19,8 +19,10 @@ import { Route as ApiPathCompletionsRouteImport } from './routes/api.path-comple
 import { Route as ApiModelRouteImport } from './routes/api.model'
 import { Route as ApiHighlightRouteImport } from './routes/api.highlight'
 import { Route as ApiGitStatusRouteImport } from './routes/api.git-status'
+import { Route as ApiGitReviewRouteImport } from './routes/api.git-review'
 import { Route as ApiGitPushRouteImport } from './routes/api.git-push'
 import { Route as ApiGitPullRouteImport } from './routes/api.git-pull'
+import { Route as ApiGitDiffRouteImport } from './routes/api.git-diff'
 import { Route as ApiGitCommitMessageRouteImport } from './routes/api.git-commit-message'
 import { Route as ApiGitCommitRouteImport } from './routes/api.git-commit'
 import { Route as ApiGitCheckoutRouteImport } from './routes/api.git-checkout'
@@ -42,6 +44,8 @@ import { Route as ApiSessionForkRouteImport } from './routes/api.session.fork'
 import { Route as ApiSessionDeleteRouteImport } from './routes/api.session.delete'
 import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pending-messages.reorder'
 import { Route as ApiPendingMessageRemoveRouteImport } from './routes/api.pending-message.remove'
+import { Route as ApiFilesTreeRouteImport } from './routes/api.files.tree'
+import { Route as ApiFilesReadRouteImport } from './routes/api.files.read'
 import { Route as ApiDirectoryResolveRouteImport } from './routes/api.directory.resolve'
 import { Route as ApiDirectorySessionsCleanupRouteImport } from './routes/api.directory-sessions.cleanup'
 import { Route as ApiAuthProvidersRouteImport } from './routes/api.auth.providers'
@@ -100,6 +104,11 @@ const ApiGitStatusRoute = ApiGitStatusRouteImport.update({
   path: '/api/git-status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGitReviewRoute = ApiGitReviewRouteImport.update({
+  id: '/api/git-review',
+  path: '/api/git-review',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGitPushRoute = ApiGitPushRouteImport.update({
   id: '/api/git-push',
   path: '/api/git-push',
@@ -108,6 +117,11 @@ const ApiGitPushRoute = ApiGitPushRouteImport.update({
 const ApiGitPullRoute = ApiGitPullRouteImport.update({
   id: '/api/git-pull',
   path: '/api/git-pull',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitDiffRoute = ApiGitDiffRouteImport.update({
+  id: '/api/git-diff',
+  path: '/api/git-diff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGitCommitMessageRoute = ApiGitCommitMessageRouteImport.update({
@@ -218,6 +232,16 @@ const ApiPendingMessageRemoveRoute = ApiPendingMessageRemoveRouteImport.update({
   path: '/api/pending-message/remove',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiFilesTreeRoute = ApiFilesTreeRouteImport.update({
+  id: '/api/files/tree',
+  path: '/api/files/tree',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFilesReadRoute = ApiFilesReadRouteImport.update({
+  id: '/api/files/read',
+  path: '/api/files/read',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDirectoryResolveRoute = ApiDirectoryResolveRouteImport.update({
   id: '/api/directory/resolve',
   path: '/api/directory/resolve',
@@ -267,8 +291,10 @@ export interface FileRoutesByFullPath {
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
+  '/api/git-review': typeof ApiGitReviewRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -283,6 +309,8 @@ export interface FileRoutesByFullPath {
   '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/files/read': typeof ApiFilesReadRoute
+  '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
@@ -309,8 +337,10 @@ export interface FileRoutesByTo {
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
+  '/api/git-review': typeof ApiGitReviewRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -325,6 +355,8 @@ export interface FileRoutesByTo {
   '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/files/read': typeof ApiFilesReadRoute
+  '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
@@ -352,8 +384,10 @@ export interface FileRoutesById {
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
+  '/api/git-review': typeof ApiGitReviewRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -368,6 +402,8 @@ export interface FileRoutesById {
   '/api/auth/providers': typeof ApiAuthProvidersRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
+  '/api/files/read': typeof ApiFilesReadRoute
+  '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
@@ -396,8 +432,10 @@ export interface FileRouteTypes {
     | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
+    | '/api/git-diff'
     | '/api/git-pull'
     | '/api/git-push'
+    | '/api/git-review'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -412,6 +450,8 @@ export interface FileRouteTypes {
     | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
+    | '/api/files/read'
+    | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
@@ -438,8 +478,10 @@ export interface FileRouteTypes {
     | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
+    | '/api/git-diff'
     | '/api/git-pull'
     | '/api/git-push'
+    | '/api/git-review'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -454,6 +496,8 @@ export interface FileRouteTypes {
     | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
+    | '/api/files/read'
+    | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
@@ -480,8 +524,10 @@ export interface FileRouteTypes {
     | '/api/git-checkout'
     | '/api/git-commit'
     | '/api/git-commit-message'
+    | '/api/git-diff'
     | '/api/git-pull'
     | '/api/git-push'
+    | '/api/git-review'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -496,6 +542,8 @@ export interface FileRouteTypes {
     | '/api/auth/providers'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
+    | '/api/files/read'
+    | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
     | '/api/session/delete'
@@ -523,8 +571,10 @@ export interface RootRouteChildren {
   ApiGitCheckoutRoute: typeof ApiGitCheckoutRoute
   ApiGitCommitRoute: typeof ApiGitCommitRoute
   ApiGitCommitMessageRoute: typeof ApiGitCommitMessageRoute
+  ApiGitDiffRoute: typeof ApiGitDiffRoute
   ApiGitPullRoute: typeof ApiGitPullRoute
   ApiGitPushRoute: typeof ApiGitPushRoute
+  ApiGitReviewRoute: typeof ApiGitReviewRoute
   ApiGitStatusRoute: typeof ApiGitStatusRoute
   ApiHighlightRoute: typeof ApiHighlightRoute
   ApiModelRoute: typeof ApiModelRoute
@@ -538,6 +588,8 @@ export interface RootRouteChildren {
   ApiAuthOauthRoute: typeof ApiAuthOauthRoute
   ApiAuthProvidersRoute: typeof ApiAuthProvidersRoute
   ApiDirectoryResolveRoute: typeof ApiDirectoryResolveRoute
+  ApiFilesReadRoute: typeof ApiFilesReadRoute
+  ApiFilesTreeRoute: typeof ApiFilesTreeRoute
   ApiPendingMessageRemoveRoute: typeof ApiPendingMessageRemoveRoute
   ApiPendingMessagesReorderRoute: typeof ApiPendingMessagesReorderRoute
   ApiSessionDeleteRoute: typeof ApiSessionDeleteRoute
@@ -624,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGitStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/git-review': {
+      id: '/api/git-review'
+      path: '/api/git-review'
+      fullPath: '/api/git-review'
+      preLoaderRoute: typeof ApiGitReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/git-push': {
       id: '/api/git-push'
       path: '/api/git-push'
@@ -636,6 +695,13 @@ declare module '@tanstack/react-router' {
       path: '/api/git-pull'
       fullPath: '/api/git-pull'
       preLoaderRoute: typeof ApiGitPullRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-diff': {
+      id: '/api/git-diff'
+      path: '/api/git-diff'
+      fullPath: '/api/git-diff'
+      preLoaderRoute: typeof ApiGitDiffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/git-commit-message': {
@@ -785,6 +851,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPendingMessageRemoveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/files/tree': {
+      id: '/api/files/tree'
+      path: '/api/files/tree'
+      fullPath: '/api/files/tree'
+      preLoaderRoute: typeof ApiFilesTreeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/files/read': {
+      id: '/api/files/read'
+      path: '/api/files/read'
+      fullPath: '/api/files/read'
+      preLoaderRoute: typeof ApiFilesReadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/directory/resolve': {
       id: '/api/directory/resolve'
       path: '/api/directory/resolve'
@@ -872,8 +952,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGitCheckoutRoute: ApiGitCheckoutRoute,
   ApiGitCommitRoute: ApiGitCommitRoute,
   ApiGitCommitMessageRoute: ApiGitCommitMessageRoute,
+  ApiGitDiffRoute: ApiGitDiffRoute,
   ApiGitPullRoute: ApiGitPullRoute,
   ApiGitPushRoute: ApiGitPushRoute,
+  ApiGitReviewRoute: ApiGitReviewRoute,
   ApiGitStatusRoute: ApiGitStatusRoute,
   ApiHighlightRoute: ApiHighlightRoute,
   ApiModelRoute: ApiModelRoute,
@@ -887,6 +969,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthOauthRoute: ApiAuthOauthRoute,
   ApiAuthProvidersRoute: ApiAuthProvidersRoute,
   ApiDirectoryResolveRoute: ApiDirectoryResolveRoute,
+  ApiFilesReadRoute: ApiFilesReadRoute,
+  ApiFilesTreeRoute: ApiFilesTreeRoute,
   ApiPendingMessageRemoveRoute: ApiPendingMessageRemoveRoute,
   ApiPendingMessagesReorderRoute: ApiPendingMessagesReorderRoute,
   ApiSessionDeleteRoute: ApiSessionDeleteRoute,

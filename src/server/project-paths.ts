@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from "node:fs/promises"
+import { readFile, readdir, realpath, stat } from "node:fs/promises"
 import os from "node:os"
 import path, { basename, dirname, isAbsolute, join, resolve } from "node:path"
 import { spawn } from "node:child_process"
@@ -12,6 +12,8 @@ const WALK_IGNORE_DIRECTORIES = new Set([
   "dist",
   "node_modules",
 ])
+const PROJECT_FILE_TREE_LIMIT = 20_000
+const PROJECT_FILE_READ_MAX_BYTES = 1_000_000
 
 export type CompletionEntry = {
   value: string
@@ -412,6 +414,16 @@ async function walkDirectory(baseDir: string, query = "", maxResults = 100) {
     ".git/*",
     "--exclude",
     ".git/**",
+    "--exclude",
+    ".next",
+    "--exclude",
+    ".output",
+    "--exclude",
+    ".tanstack",
+    "--exclude",
+    "dist",
+    "--exclude",
+    "node_modules",
   ]
 
   if (query) {
@@ -467,6 +479,61 @@ function scopedDisplayPath(displayBase: string, relativePath: string) {
     return `/${normalizedRelativePath}`
   }
   return `${displayPath(displayBase)}${normalizedRelativePath}`
+}
+
+function normalizeProjectRelativePath(filePath: string) {
+  const normalizedPath = displayPath(filePath).trim().replace(/^\.\//, "")
+  if (!normalizedPath) throw new Error("file path is required")
+  if (isAbsolute(normalizedPath)) throw new Error("file path must be relative")
+  if (normalizedPath.split("/").some((part) => part === "..")) {
+    throw new Error("file path must stay inside the directory")
+  }
+  return normalizedPath
+}
+
+function resolveProjectFilePath(baseCwd: string, filePath: string) {
+  const normalizedPath = normalizeProjectRelativePath(filePath)
+  const fullPath = resolve(baseCwd, normalizedPath)
+  const relativePath = path.relative(baseCwd, fullPath)
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error("file path must stay inside the directory")
+  }
+  return { fullPath, path: displayPath(relativePath) }
+}
+
+export async function listProjectFileTreePaths(baseCwd: string) {
+  const entries = await walkDirectory(baseCwd, "", PROJECT_FILE_TREE_LIMIT)
+  return entries
+    .filter((entry) => !entry.isDirectory)
+    .map((entry) => displayPath(entry.path).replace(/\/+$/g, ""))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+}
+
+export async function readProjectFileContent(
+  baseCwd: string,
+  filePath: string
+) {
+  const resolved = resolveProjectFilePath(baseCwd, filePath)
+  const fileStats = await stat(resolved.fullPath)
+  if (!fileStats.isFile()) throw new Error("Not a file")
+  if (fileStats.size > PROJECT_FILE_READ_MAX_BYTES) {
+    throw new Error("File is too large to preview")
+  }
+
+  const content = await readFile(resolved.fullPath, "utf8")
+  if (content.includes("\u0000")) {
+    throw new Error("Binary files cannot be previewed")
+  }
+
+  return {
+    path: resolved.path,
+    content,
+  }
 }
 
 export async function listFileReferenceEntries(

@@ -605,6 +605,16 @@ export function useAppShellSessionSync({
                 queryKey: phiQueryKeys.gitFiles(viewerContextId, cwd),
                 exact: true,
                 refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.projectFileTree(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: phiQueryKeys.gitFileReviews(viewerContextId, cwd),
+                exact: false,
+                refetchType: "active",
               })
             )
           }
@@ -617,7 +627,7 @@ export function useAppShellSessionSync({
               }),
               queryClient.invalidateQueries({
                 queryKey: phiQueryKeys.gitCommits(viewerContextId, cwd),
-                exact: true,
+                exact: false,
                 refetchType: "active",
               })
             )
