@@ -14,10 +14,14 @@ import {
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
-import type { PanelImperativeHandle } from "react-resizable-panels"
 import { toast } from "sonner"
 
 import type { DesktopNotificationPermission } from "@/features/phi/session-done-notifications"
+import {
+  getSidebarHorizontalResizeCursor,
+  getSidebarResizeTargetMinimumSize,
+  type SidebarHorizontalResizeCursor,
+} from "@/hooks/use-sidebar-resize"
 import type {
   ConversationItem,
   DirectoryState,
@@ -66,14 +70,8 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  SIDEBAR_WIDTH,
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
@@ -2963,6 +2961,203 @@ function AppShellDesktopFileViewer({
   )
 }
 
+const DESKTOP_DEFAULT_FILE_VIEW_WIDTH = 520
+const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
+const DESKTOP_MIN_SESSION_WIDTH = 320
+const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
+
+function clampDesktopPanelSize(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min
+  if (max <= min) return Math.max(0, max)
+  return Math.min(max, Math.max(min, value))
+}
+
+function fitDesktopSidePanelWidths({
+  availableWidth,
+  fileOpen,
+  fileWidth,
+  gitOpen,
+  gitWidth,
+}: {
+  availableWidth: number
+  fileOpen: boolean
+  fileWidth: number
+  gitOpen: boolean
+  gitWidth: number
+}) {
+  const maxSideWidth = Math.max(0, availableWidth - DESKTOP_MIN_SESSION_WIDTH)
+
+  if (!fileOpen && !gitOpen) {
+    return { fileWidth: 0, gitWidth: 0, sideWidth: 0 }
+  }
+
+  if (fileOpen && !gitOpen) {
+    const nextFileWidth = clampDesktopPanelSize(
+      fileWidth,
+      Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth),
+      maxSideWidth
+    )
+    return { fileWidth: nextFileWidth, gitWidth: 0, sideWidth: nextFileWidth }
+  }
+
+  if (!fileOpen && gitOpen) {
+    const nextGitWidth = clampDesktopPanelSize(
+      gitWidth,
+      Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth),
+      maxSideWidth
+    )
+    return { fileWidth: 0, gitWidth: nextGitWidth, sideWidth: nextGitWidth }
+  }
+
+  const requestedTotal = Math.max(1, fileWidth + gitWidth)
+  if (requestedTotal <= maxSideWidth) {
+    return {
+      fileWidth,
+      gitWidth,
+      sideWidth: fileWidth + gitWidth,
+    }
+  }
+
+  const minWidth = Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth / 2)
+  let nextFileWidth = Math.round((fileWidth / requestedTotal) * maxSideWidth)
+  nextFileWidth = Math.max(
+    minWidth,
+    Math.min(maxSideWidth - minWidth, nextFileWidth)
+  )
+  const nextGitWidth = Math.max(0, maxSideWidth - nextFileWidth)
+
+  return {
+    fileWidth: nextFileWidth,
+    gitWidth: nextGitWidth,
+    sideWidth: nextFileWidth + nextGitWidth,
+  }
+}
+
+function installAppShellGlobalResizeCursor(
+  cursor: SidebarHorizontalResizeCursor
+) {
+  const style = document.createElement("style")
+  style.dataset.appShellResizeCursor = "true"
+  style.textContent = `*, *:hover { cursor: ${cursor} !important; }`
+  document.head.append(style)
+
+  return () => style.remove()
+}
+
+function AppShellDesktopResizeHandle({
+  label,
+  max,
+  min,
+  onResize,
+  onResizeEnd,
+  onResizeStart,
+  size,
+}: {
+  label: string
+  max: number
+  min: number
+  onResize: (size: number) => void
+  onResizeEnd?: () => void
+  onResizeStart?: () => void
+  size: number
+}) {
+  const propsRef = useLatestRef({
+    max,
+    min,
+    onResize,
+    onResizeEnd,
+    onResizeStart,
+    size,
+  })
+  const [horizontalResizeCursor, setHorizontalResizeCursor] =
+    React.useState<SidebarHorizontalResizeCursor>("col-resize")
+  const [resizeTargetMinimumSize, setResizeTargetMinimumSize] =
+    React.useState(10)
+
+  React.useEffect(() => {
+    const updateResizeTarget = () => {
+      setResizeTargetMinimumSize(getSidebarResizeTargetMinimumSize())
+    }
+    const coarsePointerQuery = window.matchMedia("(pointer:coarse)")
+
+    setHorizontalResizeCursor(getSidebarHorizontalResizeCursor())
+    updateResizeTarget()
+    coarsePointerQuery.addEventListener("change", updateResizeTarget)
+    return () => {
+      coarsePointerQuery.removeEventListener("change", updateResizeTarget)
+    }
+  }, [])
+
+  const horizontalResizeCursorClass =
+    horizontalResizeCursor === "ew-resize"
+      ? "cursor-ew-resize"
+      : "cursor-col-resize"
+
+  const resizeTo = (nextSize: number) => {
+    const current = propsRef.current
+    current.onResize(clampDesktopPanelSize(nextSize, current.min, current.max))
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-label={label}
+      aria-orientation="vertical"
+      tabIndex={0}
+      style={
+        {
+          "--resize-target-width": `${resizeTargetMinimumSize}px`,
+          cursor: horizontalResizeCursor,
+        } as React.CSSProperties
+      }
+      className={`absolute inset-y-0 left-0 z-20 w-(--resize-target-width) -translate-x-1/2 touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent hover:bg-sidebar-border/30 hover:after:bg-muted-foreground/40 focus-visible:bg-sidebar-border/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:after:bg-muted-foreground/40 active:bg-sidebar-border/30 active:after:bg-muted-foreground/40 dark:hover:after:bg-sidebar-border dark:focus-visible:after:bg-sidebar-border dark:active:after:bg-sidebar-border ${horizontalResizeCursorClass}`}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+        event.preventDefault()
+        const delta = event.shiftKey ? 48 : 16
+        resizeTo(
+          propsRef.current.size + (event.key === "ArrowLeft" ? delta : -delta)
+        )
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+
+        const current = propsRef.current
+        const startX = event.clientX
+        const startSize = current.size
+
+        const cursor = getSidebarHorizontalResizeCursor()
+        const previousCursor = document.body.style.cursor
+        const previousUserSelect = document.body.style.userSelect
+        const cleanupGlobalResizeCursor =
+          installAppShellGlobalResizeCursor(cursor)
+
+        current.onResizeStart?.()
+        document.body.style.userSelect = "none"
+        document.body.style.cursor = cursor
+
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+          resizeTo(startSize + startX - moveEvent.clientX)
+        }
+        const handlePointerUp = () => {
+          cleanupGlobalResizeCursor()
+          document.body.style.userSelect = previousUserSelect
+          document.body.style.cursor = previousCursor
+          document.removeEventListener("pointermove", handlePointerMove)
+          document.removeEventListener("pointerup", handlePointerUp)
+          document.removeEventListener("pointercancel", handlePointerUp)
+          propsRef.current.onResizeEnd?.()
+        }
+
+        document.addEventListener("pointermove", handlePointerMove)
+        document.addEventListener("pointerup", handlePointerUp)
+        document.addEventListener("pointercancel", handlePointerUp)
+      }}
+    />
+  )
+}
+
 function AppShellTabsController({
   actionsRef,
   appUiStore,
@@ -3018,16 +3213,20 @@ function AppShellTabsController({
     currentTab === "git" ? "min-h-0 flex-1 overflow-hidden md:hidden" : "hidden"
   const desktopGitPanelOpen = !isMobile && gitPanelOpen
   const desktopFileViewOpen = !isMobile && fileViewOpen
-  const sessionPanelRef = React.useRef<PanelImperativeHandle | null>(null)
-  const fileViewPanelRef = React.useRef<PanelImperativeHandle | null>(null)
-  const gitPanelRef = React.useRef<PanelImperativeHandle | null>(null)
-  const lastGitPanelSizeRef = React.useRef(SIDEBAR_WIDTH)
+  const desktopSideWorkspaceOpen = desktopFileViewOpen || desktopGitPanelOpen
+  const desktopLayoutRef = React.useRef<HTMLDivElement | null>(null)
+  const [desktopLayoutWidth, setDesktopLayoutWidth] = React.useState(0)
+  const [desktopFileViewWidth, setDesktopFileViewWidth] = React.useState(
+    DESKTOP_DEFAULT_FILE_VIEW_WIDTH
+  )
+  const [desktopGitPanelWidth, setDesktopGitPanelWidth] = React.useState(
+    DESKTOP_DEFAULT_GIT_PANEL_WIDTH
+  )
   const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
     React.useState(desktopGitPanelOpen)
   const [desktopFileViewMounted, setDesktopFileViewMounted] =
     React.useState(desktopFileViewOpen)
-  const [desktopPanelsAnimating, setDesktopPanelsAnimating] =
-    React.useState(false)
+  const [desktopPanelResizing, setDesktopPanelResizing] = React.useState(false)
   const sessionPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className={sessionVisibleClassName}>
@@ -3065,70 +3264,90 @@ function AppShellTabsController({
 
   React.useLayoutEffect(() => {
     if (isMobile) {
-      setDesktopPanelsAnimating(false)
       setDesktopGitPanelMounted(false)
       setDesktopFileViewMounted(false)
       return
     }
 
-    setDesktopPanelsAnimating(true)
-    if (desktopGitPanelOpen) {
+    if (desktopSideWorkspaceOpen) {
       setDesktopGitPanelMounted(true)
-    }
-    if (desktopFileViewOpen) {
       setDesktopFileViewMounted(true)
     }
 
     const timeoutId = window.setTimeout(() => {
-      setDesktopPanelsAnimating(false)
-      if (!desktopGitPanelOpen) {
+      if (!desktopSideWorkspaceOpen) {
         setDesktopGitPanelMounted(false)
-      }
-      if (!desktopFileViewOpen) {
         setDesktopFileViewMounted(false)
       }
     }, 220)
 
     return () => window.clearTimeout(timeoutId)
-  }, [desktopFileViewOpen, desktopGitPanelOpen, isMobile])
+  }, [desktopSideWorkspaceOpen, isMobile])
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (isMobile) return
 
-    const frameId = window.requestAnimationFrame(() => {
-      const sessionPanel = sessionPanelRef.current
-      const fileViewPanel = fileViewPanelRef.current
-      const gitPanel = gitPanelRef.current
+    const element = desktopLayoutRef.current
+    if (!element) return
 
-      if (desktopFileViewOpen) {
-        if (desktopGitPanelOpen) {
-          sessionPanel?.resize("40%")
-          fileViewPanel?.resize("35%")
-          gitPanel?.resize(lastGitPanelSizeRef.current)
-          return
-        }
+    const updateWidth = () => {
+      setDesktopLayoutWidth(element.clientWidth)
+    }
 
-        sessionPanel?.resize("60%")
-        fileViewPanel?.resize("40%")
-        gitPanel?.resize("0%")
-        return
-      }
+    updateWidth()
 
-      fileViewPanel?.resize("0%")
-      if (desktopGitPanelOpen) {
-        gitPanel?.resize(lastGitPanelSizeRef.current)
-      } else {
-        sessionPanel?.resize("100%")
-        gitPanel?.resize("0%")
-      }
-    })
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth)
+      return () => window.removeEventListener("resize", updateWidth)
+    }
 
-    return () => window.cancelAnimationFrame(frameId)
-  }, [desktopFileViewOpen, desktopGitPanelOpen, isMobile])
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [isMobile])
 
-  const desktopPanelGroupClassName = desktopPanelsAnimating
-    ? "min-h-0 flex-1 overflow-hidden [&>[data-panel]]:transition-[flex-grow] [&>[data-panel]]:duration-200 [&>[data-panel]]:ease-linear"
-    : "min-h-0 flex-1 overflow-hidden"
+  const desktopAvailableWidth =
+    desktopLayoutWidth ||
+    (typeof window === "undefined" ? 1200 : window.innerWidth)
+  const desktopFileViewRendered =
+    desktopSideWorkspaceOpen || desktopFileViewMounted || desktopFileViewOpen
+  const desktopGitPanelRendered =
+    desktopSideWorkspaceOpen || desktopGitPanelMounted || desktopGitPanelOpen
+  const desktopFittedWidths = fitDesktopSidePanelWidths({
+    availableWidth: desktopAvailableWidth,
+    fileOpen: desktopFileViewOpen,
+    fileWidth: desktopFileViewWidth,
+    gitOpen: desktopGitPanelOpen,
+    gitWidth: desktopGitPanelWidth,
+  })
+  const desktopSideWorkspaceRendered =
+    desktopSideWorkspaceOpen || desktopFileViewMounted || desktopGitPanelMounted
+  const desktopSideWorkspaceWidth = desktopSideWorkspaceOpen
+    ? desktopFittedWidths.sideWidth
+    : 0
+  const desktopTransitionClassName = !desktopPanelResizing
+    ? "transition-[width] duration-200 ease-linear"
+    : ""
+  const desktopPanelGroupClassName =
+    "relative flex h-full min-h-0 w-full flex-1 overflow-hidden"
+  const desktopResizeStart = () => {
+    setDesktopPanelResizing(true)
+  }
+  const desktopResizeEnd = () => {
+    setDesktopPanelResizing(false)
+  }
+  const desktopFileViewMaxWidth = Math.max(
+    0,
+    desktopAvailableWidth -
+      DESKTOP_MIN_SESSION_WIDTH -
+      (desktopGitPanelOpen ? desktopFittedWidths.gitWidth : 0)
+  )
+  const desktopGitPanelMaxWidth = Math.max(
+    0,
+    desktopAvailableWidth -
+      DESKTOP_MIN_SESSION_WIDTH -
+      (desktopFileViewOpen ? desktopFittedWidths.fileWidth : 0)
+  )
 
   return (
     <Tabs
@@ -3146,84 +3365,99 @@ function AppShellTabsController({
       {isMobile ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
       ) : (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className={desktopPanelGroupClassName}
-        >
-          <ResizablePanel
-            id="session"
-            panelRef={sessionPanelRef}
-            defaultSize={
-              desktopFileViewOpen
-                ? desktopGitPanelOpen
-                  ? "40%"
-                  : "60%"
-                : desktopGitPanelOpen
-                  ? "50%"
-                  : "100%"
-            }
-            minSize="20rem"
-            className="h-full min-h-0 min-w-0"
-          >
-            {sessionPane}
-          </ResizablePanel>
-          {desktopFileViewMounted || desktopFileViewOpen ? (
-            <>
-              <ResizableHandle />
-              <ResizablePanel
-                id="file-view"
-                panelRef={fileViewPanelRef}
-                defaultSize={desktopFileViewOpen ? "35%" : "0%"}
-                minSize="20rem"
-                collapsedSize="0%"
-                collapsible
-                className="h-full min-h-0 min-w-0 overflow-hidden"
-              >
-                <div className="h-full min-w-[20rem]">
-                  <AppShellDesktopFileViewer
-                    viewerContextId={viewerContextId}
-                    sessionStore={sessionStore}
-                    active={desktopFileViewOpen}
-                    fileTabs={fileViewTabs}
-                    activeFilePath={fileViewActivePath}
-                    onActiveFileChange={onFileViewActivePathChange}
-                    onCloseFile={onCloseFileViewTab}
-                    onOpenFile={onOpenFileViewTab}
-                  />
-                </div>
-              </ResizablePanel>
-            </>
-          ) : null}
-          <ResizableHandle />
-          <ResizablePanel
-            id="git"
-            panelRef={gitPanelRef}
-            defaultSize={
-              desktopGitPanelOpen ? lastGitPanelSizeRef.current : "0%"
-            }
-            minSize="20rem"
-            collapsedSize="0%"
-            collapsible
-            groupResizeBehavior="preserve-pixel-size"
-            className="h-full min-h-0 min-w-0 overflow-hidden"
-            onResize={(size) => {
-              if (!desktopGitPanelOpen || size.asPercentage <= 0) return
-              lastGitPanelSizeRef.current = `${size.inPixels}px`
+        <div ref={desktopLayoutRef} className={desktopPanelGroupClassName}>
+          <div
+            data-desktop-panel="session"
+            className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden ${desktopTransitionClassName}`}
+            style={{
+              width: desktopSideWorkspaceOpen
+                ? `calc(100% - ${desktopSideWorkspaceWidth}px)`
+                : "100%",
             }}
           >
-            {desktopGitPanelMounted || desktopGitPanelOpen ? (
-              <div className="h-full min-w-[20rem]">
-                <AppShellDesktopGitPanel
-                  viewerContextId={viewerContextId}
-                  sessionStore={sessionStore}
-                  active={desktopGitPanelOpen}
-                  activeFilePath={fileViewActivePath}
-                  onOpenFile={onOpenFileViewTab}
-                />
-              </div>
-            ) : null}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            {sessionPane}
+          </div>
+
+          {desktopSideWorkspaceRendered ? (
+            <aside
+              aria-label="Desktop side workspace"
+              aria-hidden={!desktopSideWorkspaceOpen}
+              data-state={desktopSideWorkspaceOpen ? "open" : "closed"}
+              data-desktop-panel="side-workspace"
+              className={`flex h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none ${desktopTransitionClassName}`}
+              style={{ width: `${desktopSideWorkspaceWidth}px` }}
+            >
+              {desktopFileViewRendered ? (
+                <div
+                  data-desktop-panel="file-view"
+                  className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
+                  style={{ width: `${desktopFittedWidths.fileWidth}px` }}
+                >
+                  {desktopFileViewOpen ? (
+                    <AppShellDesktopResizeHandle
+                      label="Resize file view"
+                      min={Math.min(
+                        DESKTOP_MIN_SIDE_PANEL_WIDTH,
+                        desktopFileViewMaxWidth
+                      )}
+                      max={desktopFileViewMaxWidth}
+                      size={desktopFittedWidths.fileWidth}
+                      onResize={setDesktopFileViewWidth}
+                      onResizeStart={desktopResizeStart}
+                      onResizeEnd={desktopResizeEnd}
+                    />
+                  ) : null}
+                  <div className="h-full min-h-0 min-w-0 overflow-hidden">
+                    <AppShellDesktopFileViewer
+                      viewerContextId={viewerContextId}
+                      sessionStore={sessionStore}
+                      active={desktopFileViewOpen}
+                      fileTabs={fileViewTabs}
+                      activeFilePath={fileViewActivePath}
+                      onActiveFileChange={onFileViewActivePathChange}
+                      onCloseFile={onCloseFileViewTab}
+                      onOpenFile={onOpenFileViewTab}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {desktopGitPanelRendered ? (
+                <div
+                  data-desktop-panel="git"
+                  className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
+                  style={{ width: `${desktopFittedWidths.gitWidth}px` }}
+                >
+                  {desktopGitPanelOpen ? (
+                    <AppShellDesktopResizeHandle
+                      label="Resize right sidebar"
+                      min={Math.min(
+                        DESKTOP_MIN_SIDE_PANEL_WIDTH,
+                        desktopGitPanelMaxWidth
+                      )}
+                      max={desktopGitPanelMaxWidth}
+                      size={desktopFittedWidths.gitWidth}
+                      onResize={setDesktopGitPanelWidth}
+                      onResizeStart={desktopResizeStart}
+                      onResizeEnd={desktopResizeEnd}
+                    />
+                  ) : null}
+                  <div className="h-full min-h-0 min-w-0 overflow-hidden">
+                    {desktopGitPanelRendered ? (
+                      <AppShellDesktopGitPanel
+                        viewerContextId={viewerContextId}
+                        sessionStore={sessionStore}
+                        active={desktopGitPanelOpen}
+                        activeFilePath={fileViewActivePath}
+                        onOpenFile={onOpenFileViewTab}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </aside>
+          ) : null}
+        </div>
       )}
     </Tabs>
   )
