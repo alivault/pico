@@ -73,6 +73,7 @@ import {
 } from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  SIDEBAR_WIDTH,
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
@@ -3020,7 +3021,7 @@ function AppShellTabsController({
   const sessionPanelRef = React.useRef<PanelImperativeHandle | null>(null)
   const fileViewPanelRef = React.useRef<PanelImperativeHandle | null>(null)
   const gitPanelRef = React.useRef<PanelImperativeHandle | null>(null)
-  const lastGitPanelSizeRef = React.useRef(50)
+  const lastGitPanelSizeRef = React.useRef(SIDEBAR_WIDTH)
   const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
     React.useState(desktopGitPanelOpen)
   const [desktopFileViewMounted, setDesktopFileViewMounted] =
@@ -3103,7 +3104,7 @@ function AppShellTabsController({
         if (desktopGitPanelOpen) {
           sessionPanel?.resize("40%")
           fileViewPanel?.resize("35%")
-          gitPanel?.resize("25%")
+          gitPanel?.resize(lastGitPanelSizeRef.current)
           return
         }
 
@@ -3115,7 +3116,7 @@ function AppShellTabsController({
 
       fileViewPanel?.resize("0%")
       if (desktopGitPanelOpen) {
-        gitPanel?.resize(`${lastGitPanelSizeRef.current}%`)
+        gitPanel?.resize(lastGitPanelSizeRef.current)
       } else {
         sessionPanel?.resize("100%")
         gitPanel?.resize("0%")
@@ -3198,15 +3199,16 @@ function AppShellTabsController({
             id="git"
             panelRef={gitPanelRef}
             defaultSize={
-              desktopGitPanelOpen ? (desktopFileViewOpen ? "25%" : "50%") : "0%"
+              desktopGitPanelOpen ? lastGitPanelSizeRef.current : "0%"
             }
             minSize="20rem"
             collapsedSize="0%"
             collapsible
+            groupResizeBehavior="preserve-pixel-size"
             className="h-full min-h-0 min-w-0 overflow-hidden"
             onResize={(size) => {
               if (!desktopGitPanelOpen || size.asPercentage <= 0) return
-              lastGitPanelSizeRef.current = size.asPercentage
+              lastGitPanelSizeRef.current = `${size.inPixels}px`
             }}
           >
             {desktopGitPanelMounted || desktopGitPanelOpen ? (

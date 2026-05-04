@@ -879,6 +879,7 @@ export {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarInput,
+  SIDEBAR_WIDTH,
   SidebarInset,
   SidebarMenu,
   SidebarMenuAction,
