@@ -90,8 +90,8 @@ type ComposerContextUsageQuotaSnapshot = {
 type ComposerContextUsageSnapshot = {
   contextWindow: number
   tokens: number | null
-  percent: number
-  roundedPercent: number
+  percent: number | null
+  roundedPercent: number | null
   fiveHourUsage: ComposerContextUsageQuotaSnapshot | null
   weeklyUsage: ComposerContextUsageQuotaSnapshot | null
 }
@@ -112,7 +112,7 @@ type ProviderUsageWindow = {
 type ContextUsageRing = {
   key: string
   label: string
-  percent: number
+  percent: number | null
 }
 
 type ComposerContextUsageIndicatorProps = {
@@ -257,10 +257,10 @@ function getComposerContextUsageSnapshot(
         ? (tokens / contextUsage.contextWindow) * 100
         : null
 
-  if (rawPercent == null) return undefined
-
-  const percent = Math.max(0, Math.min(100, rawPercent))
-  const roundedPercent = Math.max(0, Math.min(100, Math.round(percent)))
+  const percent =
+    rawPercent == null ? null : Math.max(0, Math.min(100, rawPercent))
+  const roundedPercent =
+    percent == null ? null : Math.max(0, Math.min(100, Math.round(percent)))
 
   const fiveHourUsage = getContextUsageQuotaSnapshot(
     contextUsage,
@@ -424,7 +424,7 @@ function isWeeklyProviderUsageWindow(window: ProviderUsageWindow) {
 }
 
 function getContextUsageRings(
-  contextPercent: number,
+  contextPercent: number | null,
   fiveHourUsage: ComposerContextUsageQuotaSnapshot | null,
   weeklyUsage: ComposerContextUsageQuotaSnapshot | null,
   providerUsageWindows: Array<ProviderUsageWindow>
@@ -443,7 +443,10 @@ function getContextUsageRings(
     {
       key: "context",
       label: "Context window",
-      percent: clampContextUsageRingPercent(contextPercent),
+      percent:
+        contextPercent == null
+          ? null
+          : clampContextUsageRingPercent(contextPercent),
     },
   ]
 
@@ -528,7 +531,10 @@ export function ComposerContextUsageIndicator({
     tokens,
     weeklyUsage,
   } = contextUsage
-  const displayPercent = `${formatContextUsagePercent(roundedPercent)}%`
+  const displayPercent =
+    roundedPercent == null
+      ? "Pending"
+      : `${formatContextUsagePercent(roundedPercent)}%`
   const compactContextWindow = formatContextUsageCompactNumber(contextWindow)
   const compactTokens =
     tokens == null ? null : formatContextUsageCompactNumber(tokens)
@@ -541,16 +547,19 @@ export function ComposerContextUsageIndicator({
   const ringGeometry = getContextUsageRingGeometry(usageRings.length)
   const usageRingAriaText = usageRings
     .slice(1)
-    .map(
-      (ring) =>
-        `${ring.label}. ${formatContextUsagePercent(ring.percent)}% used.`
+    .map((ring) =>
+      ring.percent == null
+        ? `${ring.label}. Usage estimate unavailable.`
+        : `${ring.label}. ${formatContextUsagePercent(ring.percent)}% used.`
     )
     .join(" ")
-  const tooltipAriaLabel = `${
-    tokens == null
-      ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
-      : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
-  }${usageRingAriaText ? ` ${usageRingAriaText}` : ""}`
+  const contextAriaText =
+    roundedPercent == null
+      ? `Context window. Usage estimate pending. ${compactContextWindow} token window.`
+      : tokens == null
+        ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
+        : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
+  const tooltipAriaLabel = `${contextAriaText}${usageRingAriaText ? ` ${usageRingAriaText}` : ""}`
 
   const trigger = (
     <Button
@@ -585,7 +594,7 @@ export function ComposerContextUsageIndicator({
         })}
         {usageRings.map((ring, index) => {
           const geometry = ringGeometry[index]
-          if (!geometry) return null
+          if (!geometry || ring.percent == null) return null
 
           return (
             <circle
@@ -617,10 +626,10 @@ export function ComposerContextUsageIndicator({
             {displayPercent}
           </span>
         </div>
-        <TooltipUsageProgress percent={percent} />
+        {percent == null ? null : <TooltipUsageProgress percent={percent} />}
         <div className="mt-1 text-xs text-muted-foreground">
           {compactTokens == null
-            ? `${compactContextWindow} token window`
+            ? `Usage estimate pending · ${compactContextWindow} token window`
             : `${compactTokens} / ${compactContextWindow} tokens used`}
         </div>
       </div>

@@ -233,9 +233,9 @@ export type SessionState = {
   hideThinkingBlock: boolean
   hiddenThinkingPreview?: string
   contextUsage?: {
-    tokens?: number
+    tokens?: number | null
     contextWindow?: number
-    percent?: number
+    percent?: number | null
     [key: string]: unknown
   }
   uiState: SessionUiState

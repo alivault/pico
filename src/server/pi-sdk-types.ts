@@ -37,9 +37,9 @@ export type SessionListInfoLike = {
   lastUserMessageAt?: string | Date
   messageCount?: number
   contextUsage?: {
-    tokens?: number
+    tokens?: number | null
     contextWindow?: number
-    percent?: number
+    percent?: number | null
     [key: string]: unknown
   }
   firstMessage?: string
