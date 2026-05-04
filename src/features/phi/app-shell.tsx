@@ -5755,6 +5755,9 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const runBuiltinSlashCommand = async (name: string, args: string) => {
     const trimmedArgs = args.trim()
+    const clearComposerDraft = () => {
+      replaceComposerDraft("", sessionStateRef.current, { forceSync: true })
+    }
 
     switch (name) {
       case "login": {
@@ -5762,7 +5765,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("/login does not take any arguments yet.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         openAuthDialog("login")
         return
       }
@@ -5771,7 +5774,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("/logout does not take any arguments yet.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         openAuthDialog("logout")
         return
       }
@@ -5780,7 +5783,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("Built-in slash commands do not support images.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         await runCompact()
         return
       }
@@ -5790,10 +5793,11 @@ const AppShellSessionWorkspace = React.forwardRef<
           return
         }
         if (!trimmedArgs) {
+          clearComposerDraft()
           openRenameDialog()
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         await renameSessionPath(sessionState.sessionFile, trimmedArgs)
         return
       }
@@ -5802,7 +5806,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("Start the session before deleting it.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         openDeleteDialogForCurrentSession()
         return
       }
@@ -5811,7 +5815,7 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("/fork does not take any arguments.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         await openForkDialog()
         return
       }
@@ -5820,31 +5824,31 @@ const AppShellSessionWorkspace = React.forwardRef<
           toast.error("/tree does not take any arguments.")
           return
         }
-        replaceComposerDraft("")
+        clearComposerDraft()
         await openTreeDialog()
         return
       }
       case "hide-thinking": {
-        replaceComposerDraft("")
+        clearComposerDraft()
         if (!sessionStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
       }
       case "show-thinking": {
-        replaceComposerDraft("")
+        clearComposerDraft()
         if (sessionStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
       }
       case "hide-tools": {
-        replaceComposerDraft("")
+        clearComposerDraft()
         setToolBlocksHidden(true)
         return
       }
       case "show-tools": {
-        replaceComposerDraft("")
+        clearComposerDraft()
         setToolBlocksHidden(false)
         return
       }
