@@ -198,6 +198,7 @@ export type AssistantItem = {
   renderKey?: string
   blocks: Array<AssistantBlock>
   streaming?: boolean
+  model?: ModelOption
 }
 
 export type ConversationItem = UserItem | AssistantItem
@@ -251,6 +252,8 @@ export type MessagePayload = UnknownRecord & {
   errorMessage?: unknown
   queued?: unknown
   metadata?: UnknownRecord
+  provider?: unknown
+  model?: unknown
   streamingBehavior?: unknown
   deliverAs?: unknown
   summary?: unknown

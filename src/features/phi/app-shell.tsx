@@ -132,6 +132,7 @@ import {
 import {
   AssistantMessagesStoreCard,
   UserMessageCard,
+  assistantMessageHasFooterMeta,
   assistantMessageHasVisibleBlocks,
   type AssistantMessagesSnapshot,
   type AssistantMessagesStore,
@@ -1159,11 +1160,13 @@ function groupConversationItemsForRender(options: {
       }
 
       pendingAssistantGroup.itemKeys.push(key)
-      pendingAssistantVisible ||= assistantMessageHasVisibleBlocks({
-        item,
-        hideThinking: options.hideThinking,
-        hideToolBlocks: options.hideToolBlocks,
-      })
+      pendingAssistantVisible ||=
+        assistantMessageHasFooterMeta(item) ||
+        assistantMessageHasVisibleBlocks({
+          item,
+          hideThinking: options.hideThinking,
+          hideToolBlocks: options.hideToolBlocks,
+        })
       return
     }
 

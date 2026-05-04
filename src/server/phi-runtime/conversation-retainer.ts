@@ -85,6 +85,25 @@ function abortedAssistantStopMessage(message: MessagePayload | undefined) {
     : "Operation aborted"
 }
 
+function assistantModelFromMessage(message: MessagePayload | undefined) {
+  const id = typeof message?.model === "string" ? message.model.trim() : ""
+  if (!id) return undefined
+
+  const provider =
+    typeof message?.provider === "string" ? message.provider.trim() : ""
+
+  return {
+    id,
+    ...(provider ? { provider } : {}),
+  } satisfies AssistantItem["model"]
+}
+
+function assistantMetadataFromMessage(message: MessagePayload | undefined) {
+  const model = assistantModelFromMessage(message)
+
+  return (model ? { model } : {}) satisfies Partial<AssistantItem>
+}
+
 function applyAbortedStopToBlocks(
   blocks: Array<AssistantBlock>,
   renderKey: string,
@@ -165,6 +184,7 @@ function updateStreamingAssistantFromMessage(
     ...item,
     renderKey,
     blocks,
+    ...assistantMetadataFromMessage(message),
   } satisfies AssistantItem
 
   state.items = state.items.map((entry) => (entry === item ? nextItem : entry))
@@ -332,6 +352,8 @@ function appendCommittedMessage(
     renderKey,
     blocks,
     streaming: false,
+    ...(streamingItem?.model ? { model: streamingItem.model } : {}),
+    ...assistantMetadataFromMessage(message),
   } satisfies AssistantItem
 
   state.items = [...removeStreamingAssistantItem(state.items), finalizedItem]
@@ -415,6 +437,8 @@ export function applyRetainedConversationEvent(
             abortedAssistantStopMessage(abortedMessage)
           ),
           streaming: false,
+          ...(item.model ? { model: item.model } : {}),
+          ...assistantMetadataFromMessage(abortedMessage),
         },
       ]
       return

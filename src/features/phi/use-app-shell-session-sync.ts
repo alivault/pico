@@ -344,14 +344,21 @@ function visibleConversationSignature(
     const blockKeys = item.blocks
       .map((block) => visibleAssistantBlockKey(block, options))
       .filter(Boolean)
+    const footerSignature = [
+      item.model?.provider || "",
+      item.model?.id || "",
+    ].join(":")
+
     if (blockKeys.length === 0) {
-      if (item.streaming) {
-        parts.push(`assistant:${itemKey}:1`)
+      if (item.streaming || footerSignature !== ":") {
+        parts.push(
+          `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${footerSignature}`
+        )
       }
       continue
     }
     parts.push(
-      `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${blockKeys.join("|")}`
+      `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${footerSignature}:${blockKeys.join("|")}`
     )
   }
 

@@ -421,6 +421,10 @@ function sanitizeSessionMessage(message: MessageLike) {
     ...(typeof message?.errorMessage === "string"
       ? { errorMessage: message.errorMessage }
       : {}),
+    ...(typeof message?.provider === "string"
+      ? { provider: message.provider }
+      : {}),
+    ...(typeof message?.model === "string" ? { model: message.model } : {}),
     ...(message?.queued || metadata?.queued ? { queued: true } : {}),
     ...(message?.streamingBehavior === "steer" ||
     message?.streamingBehavior === "followUp"

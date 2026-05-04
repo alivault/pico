@@ -497,9 +497,15 @@ export function conversationItemSignature(item: ConversationItem) {
       .join(",")}:${item.streamingBehavior || ""}:${item.queued ? "1" : "0"}`
   }
 
-  return `assistant:${itemKey}:${item.blocks
+  const blockSignature = item.blocks
     .map((block) => block.renderKey || assistantBlockKey(block))
-    .join("|")}:${item.streaming ? "1" : "0"}`
+    .join("|")
+  const modelSignature = [
+    item.model?.provider || "",
+    item.model?.id || "",
+  ].join(":")
+
+  return `assistant:${itemKey}:${blockSignature}:${item.streaming ? "1" : "0"}:${modelSignature}`
 }
 
 function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
@@ -800,7 +806,11 @@ export type AssistantMessagesStore = {
 type AssistantMessagesShellSnapshot = {
   anchorBlockKey?: string
   hasBlocks: boolean
+  hasFooter: boolean
   streaming: boolean
+  working: boolean
+  copyText: string
+  modelLabel: string
 }
 
 type AssistantMessagesShellStore = {
@@ -1322,7 +1332,11 @@ function sameAssistantMessagesShellSnapshot(
   return (
     left.anchorBlockKey === right.anchorBlockKey &&
     left.hasBlocks === right.hasBlocks &&
-    left.streaming === right.streaming
+    left.hasFooter === right.hasFooter &&
+    left.streaming === right.streaming &&
+    left.working === right.working &&
+    left.copyText === right.copyText &&
+    left.modelLabel === right.modelLabel
   )
 }
 
@@ -1367,6 +1381,56 @@ function assistantBlockIsMessageJumpAnchor(block: AssistantConversationBlock) {
   return block.type === "text" || block.type === "compaction"
 }
 
+function assistantCopyTextFromItems(
+  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
+) {
+  return items
+    .flatMap((item) =>
+      item.blocks
+        .map((block) => {
+          if (block.type === "text") return block.text
+          if (block.type === "compaction") return block.summary
+          return ""
+        })
+        .filter((text) => text.trim())
+    )
+    .join("\n\n")
+    .trim()
+}
+
+function formatAssistantModelId(id: string) {
+  return id.replace(/^gpt/i, "GPT")
+}
+
+function assistantModelLabel(
+  item: Extract<ConversationItem, { kind: "assistant" }> | undefined
+) {
+  const model = item?.model
+  if (!model) return ""
+
+  return (model.name || formatAssistantModelId(model.id)).trim()
+}
+
+function assistantMessagesModelLabel(
+  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
+) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const label = assistantModelLabel(items[index])
+    if (label) return label
+  }
+
+  return ""
+}
+
+function assistantItemIsWorking(
+  item: Extract<ConversationItem, { kind: "assistant" }>
+) {
+  return (
+    Boolean(item.streaming) ||
+    item.blocks.some((block) => block.type === "tool" && block.running)
+  )
+}
+
 function assistantMessagesShellSnapshotFromBlocks(
   snapshot: AssistantMessagesSnapshot,
   blocks: Array<AssistantConversationBlock>
@@ -1374,6 +1438,11 @@ function assistantMessagesShellSnapshotFromBlocks(
   const anchorBlockIndex = blocks.findIndex(assistantBlockIsMessageJumpAnchor)
   const anchorBlock =
     anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
+
+  const copyText = assistantCopyTextFromItems(snapshot.items)
+  const modelLabel = assistantMessagesModelLabel(snapshot.items)
+  const working = snapshot.items.some(assistantItemIsWorking)
+  const hasFooter = Boolean(copyText.trim() || modelLabel || working)
 
   return {
     ...(anchorBlock
@@ -1385,7 +1454,11 @@ function assistantMessagesShellSnapshotFromBlocks(
         }
       : {}),
     hasBlocks: blocks.length > 0,
-    streaming: snapshot.items.some((item) => item.streaming),
+    hasFooter,
+    streaming: working,
+    working,
+    copyText,
+    modelLabel,
   }
 }
 
@@ -2786,6 +2859,16 @@ export function assistantMessageHasVisibleBlocks({
   )
 }
 
+export function assistantMessageHasFooterMeta(
+  item: Extract<ConversationItem, { kind: "assistant" }>
+) {
+  return Boolean(
+    assistantItemIsWorking(item) ||
+    item.model ||
+    assistantCopyTextFromItems([item])
+  )
+}
+
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
   anchorBlockKey,
   descriptor,
@@ -2937,6 +3020,75 @@ function AssistantBlockGroupsView({
   )
 }
 
+function AssistantMessageFooterCopyButton({ text }: { text: string }) {
+  const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
+    "idle"
+  )
+  const canCopy = Boolean(text.trim())
+
+  const copyMessage = async () => {
+    if (!canCopy) return
+
+    try {
+      await copyTextToClipboard(text)
+      setCopyState("copied")
+      window.setTimeout(() => setCopyState("idle"), 1400)
+    } catch {
+      setCopyState("error")
+      window.setTimeout(() => setCopyState("idle"), 1400)
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="-ml-2 text-muted-foreground"
+      disabled={!canCopy}
+      onClick={copyMessage}
+    >
+      {copyState === "copied" ? (
+        <CheckIcon data-icon="inline-start" />
+      ) : (
+        <CopyIcon data-icon="inline-start" />
+      )}
+      {copyState === "copied"
+        ? "Copied"
+        : copyState === "error"
+          ? "Retry"
+          : "Copy"}
+    </Button>
+  )
+}
+
+function AssistantMessageFooter({
+  copyText,
+  modelLabel,
+  streaming,
+}: {
+  copyText: string
+  modelLabel: string
+  streaming: boolean
+}) {
+  const showCopyButton = !streaming && Boolean(copyText.trim())
+
+  if (!showCopyButton && !modelLabel) return null
+
+  return (
+    <div className="-mt-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      {showCopyButton ? (
+        <AssistantMessageFooterCopyButton text={copyText} />
+      ) : null}
+      {modelLabel ? (
+        <>
+          {showCopyButton ? <span aria-hidden="true">·</span> : null}
+          <span className="truncate">{modelLabel}</span>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 export function AssistantMessagesStoreCard({
   store,
 }: {
@@ -2978,7 +3130,7 @@ export function AssistantMessagesStoreCard({
     shellStore.getSnapshot
   )
 
-  if (!shellSnapshot.hasBlocks) {
+  if (!shellSnapshot.hasBlocks && !shellSnapshot.hasFooter) {
     return null
   }
 
@@ -2988,9 +3140,16 @@ export function AssistantMessagesStoreCard({
       data-conversation-assistant-group="true"
       data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
     >
-      <AssistantBlockGroupsView
-        anchorBlockKey={shellSnapshot.anchorBlockKey}
-        store={assistantBlockStore}
+      {shellSnapshot.hasBlocks ? (
+        <AssistantBlockGroupsView
+          anchorBlockKey={shellSnapshot.anchorBlockKey}
+          store={assistantBlockStore}
+          streaming={shellSnapshot.streaming}
+        />
+      ) : null}
+      <AssistantMessageFooter
+        copyText={shellSnapshot.copyText}
+        modelLabel={shellSnapshot.modelLabel}
         streaming={shellSnapshot.streaming}
       />
     </div>
@@ -3013,9 +3172,10 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   } satisfies AssistantMessagesSnapshot
   const blocks = visibleAssistantBlocksFromSnapshot(snapshot)
 
-  if (blocks.length === 0) {
-    return null
-  }
+  const shellSnapshot = assistantMessagesShellSnapshotFromBlocks(
+    snapshot,
+    blocks
+  )
 
   const assistantBlockStoreRef = React.useRef<AssistantBlockStore | null>(null)
   if (!assistantBlockStoreRef.current) {
@@ -3027,10 +3187,9 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
     assistantBlockStore.setBlocks(blocks)
   }, [assistantBlockStore, blocks])
 
-  const shellSnapshot = assistantMessagesShellSnapshotFromBlocks(
-    snapshot,
-    blocks
-  )
+  if (blocks.length === 0 && !shellSnapshot.hasFooter) {
+    return null
+  }
 
   return (
     <div
@@ -3038,9 +3197,16 @@ export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
       data-conversation-assistant-group="true"
       data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
     >
-      <AssistantBlockGroupsView
-        anchorBlockKey={shellSnapshot.anchorBlockKey}
-        store={assistantBlockStore}
+      {shellSnapshot.hasBlocks ? (
+        <AssistantBlockGroupsView
+          anchorBlockKey={shellSnapshot.anchorBlockKey}
+          store={assistantBlockStore}
+          streaming={shellSnapshot.streaming}
+        />
+      ) : null}
+      <AssistantMessageFooter
+        copyText={shellSnapshot.copyText}
+        modelLabel={shellSnapshot.modelLabel}
         streaming={shellSnapshot.streaming}
       />
     </div>

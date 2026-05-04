@@ -218,6 +218,25 @@ function sameAssistantBlock(left: AssistantBlock, right: AssistantBlock) {
   )
 }
 
+function sameAssistantModel(
+  left: AssistantItem["model"],
+  right: AssistantItem["model"]
+) {
+  if (left === right) return true
+  if (!left || !right) return false
+
+  return (
+    left.id === right.id &&
+    (left.provider || "") === (right.provider || "") &&
+    (left.name || "") === (right.name || "") &&
+    Boolean(left.reasoning) === Boolean(right.reasoning)
+  )
+}
+
+function sameAssistantMessageMeta(left: AssistantItem, right: AssistantItem) {
+  return sameAssistantModel(left.model, right.model)
+}
+
 function sameStateItem(left: ConversationItem, right: ConversationItem) {
   if (!left || !right || left.kind !== right.kind) return false
   if ((left.itemKey || "") !== (right.itemKey || "")) return false
@@ -234,6 +253,7 @@ function sameStateItem(left: ConversationItem, right: ConversationItem) {
   }
 
   if (Boolean(left.streaming) !== Boolean(right.streaming)) return false
+  if (!sameAssistantMessageMeta(left, right)) return false
   if (left.blocks.length !== right.blocks.length) return false
 
   for (let index = 0; index < left.blocks.length; index += 1) {
@@ -406,7 +426,8 @@ export function reconcileConversationItems(
       if (
         sameLogicalItem &&
         blocks === previousItem.blocks &&
-        Boolean(previousItem.streaming) === Boolean(nextItem.streaming)
+        Boolean(previousItem.streaming) === Boolean(nextItem.streaming) &&
+        sameAssistantMessageMeta(previousItem, nextItem)
       ) {
         reconciled.push(previousItem)
         continue
@@ -451,6 +472,25 @@ function assistantStopIsError(message: SyncMessage | undefined) {
   const stopReason =
     typeof message?.stopReason === "string" ? message.stopReason : ""
   return stopReason === "aborted" || stopReason === "error"
+}
+
+function assistantModelFromMessage(message: SyncMessage | undefined) {
+  const id = typeof message?.model === "string" ? message.model.trim() : ""
+  if (!id) return undefined
+
+  const provider =
+    typeof message?.provider === "string" ? message.provider.trim() : ""
+
+  return {
+    id,
+    ...(provider ? { provider } : {}),
+  } satisfies AssistantItem["model"]
+}
+
+function assistantItemMetadataFromMessage(message: SyncMessage | undefined) {
+  const model = assistantModelFromMessage(message)
+
+  return (model ? { model } : {}) satisfies Partial<AssistantItem>
 }
 
 function applyAssistantStopToToolBlocks(
@@ -1027,6 +1067,7 @@ export function buildItemsFromSync(
         itemKey,
         blocks: assistantBlocksFromMessage(message, itemKey),
         streaming: false,
+        ...assistantItemMetadataFromMessage(message),
       })
       continue
     }
@@ -1099,6 +1140,7 @@ export function buildItemsFromSync(
           toolResultsByCallId,
         }),
         streaming: true,
+        ...assistantItemMetadataFromMessage(sync.streamingMessage),
       })
     } else if (previousStreamingItem && !hasStreamingMessageUpdate) {
       const blocks = applyToolResultsToBlocks(
