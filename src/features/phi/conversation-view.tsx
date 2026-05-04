@@ -359,6 +359,7 @@ const CodeBlock = React.memo(function CodeBlock({
     highlighted && "language" in highlighted && highlighted.language
       ? highlighted.language
       : language
+  const displayedLanguage = language || renderedLanguage
 
   const highlightedHtml = hasHighlightHtml(highlighted)
     ? highlighted.html
@@ -378,7 +379,7 @@ const CodeBlock = React.memo(function CodeBlock({
     <div className="not-prose overflow-hidden rounded-xl border bg-muted/40">
       <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 text-xs text-muted-foreground">
         <div className="truncate font-medium tracking-wide uppercase">
-          {renderedLanguage || "code"}
+          {displayedLanguage || "code"}
         </div>
         <CodeBlockCopyButton code={code} />
       </div>
