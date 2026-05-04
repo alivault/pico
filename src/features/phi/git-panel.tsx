@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/drawer"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import {
@@ -2120,7 +2121,7 @@ function RightSidebarTabStrip({
         aria-pressed={active}
         className={cn(
           "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-          active && "border-border/70 bg-muted text-foreground shadow-xs"
+          active && "bg-muted text-foreground"
         )}
         onClick={() => {
           onActiveTabChange(value)
@@ -2165,7 +2166,7 @@ function FileViewerTabStrip({
         aria-pressed={reviewActive}
         className={cn(
           "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-          reviewActive && "border-border/70 bg-muted text-foreground shadow-xs"
+          reviewActive && "bg-muted text-foreground"
         )}
         onClick={() => {
           onActiveFileChange("")
@@ -2180,7 +2181,7 @@ function FileViewerTabStrip({
             key={path}
             className={cn(
               "inline-flex h-7 max-w-56 shrink-0 items-center rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-              active && "border-border/70 bg-muted text-foreground shadow-xs"
+              active && "bg-muted text-foreground"
             )}
           >
             <button
@@ -2281,24 +2282,26 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <div className="inline-flex h-8 items-center rounded-lg border border-border/80 bg-background p-0.5 shadow-xs">
+          <ToggleGroup
+            variant="outline"
+            value={[diffStyle]}
+            onValueChange={(values) => {
+              const value = values[0]
+              if (value === "unified" || value === "split") {
+                setDiffStyle(value)
+              }
+            }}
+          >
             {(["unified", "split"] as const).map((value) => (
-              <button
+              <ToggleGroupItem
                 key={value}
-                type="button"
-                aria-pressed={diffStyle === value}
-                className={cn(
-                  "h-7 rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
-                  diffStyle === value && "bg-muted text-foreground shadow-xs"
-                )}
-                onClick={() => {
-                  setDiffStyle(value)
-                }}
+                value={value}
+                className="text-xs font-medium"
               >
                 {value === "unified" ? "Unified" : "Split"}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
           <Button
             variant="outline"
             size="sm"
@@ -2601,29 +2604,32 @@ function GitBranchesControls({
           {countLabel}
         </span>
       ) : null}
-      <div className="inline-flex items-center rounded-md border border-border/80 bg-background/70 p-0.5">
+      <ToggleGroup
+        variant="outline"
+        size="sm"
+        value={[branchScope]}
+        onValueChange={(values) => {
+          const value = values[0]
+          if (value === "local" || value === "remote") {
+            setBranchScope(value)
+          }
+        }}
+      >
         {(
           [
             ["local", "Local"],
             ["remote", "Remote"],
           ] as const
         ).map(([value, label]) => (
-          <button
+          <ToggleGroupItem
             key={value}
-            type="button"
-            aria-pressed={branchScope === value}
-            className={cn(
-              "min-h-6 rounded-[calc(var(--radius-sm)-1px)] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground",
-              branchScope === value && "bg-muted text-foreground shadow-xs"
-            )}
-            onClick={() => {
-              setBranchScope(value)
-            }}
+            value={value}
+            className="text-xs font-semibold"
           >
             {label}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
     </div>
   )
 }
