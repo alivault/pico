@@ -410,13 +410,16 @@ export function useAppShellShortcuts({
     if (key === "r") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.cycleThinkingLevel(
+        event.shiftKey ? -1 : 1
+      )
+      return
+    }
 
-      if (event.shiftKey) {
-        shortcutActionsRef.current.toggleFileView()
-        return
-      }
-
-      void shortcutActionsRef.current.cycleThinkingLevel(1)
+    if (key === "v") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.toggleFileView()
       return
     }
 
@@ -530,6 +533,7 @@ export function useAppShellShortcuts({
         { key: "T" },
         { key: "R" },
         { key: "R", shift: true },
+        { key: "V" },
         { key: "O" },
         { key: "C" },
         { key: "X" },
