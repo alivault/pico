@@ -61,6 +61,7 @@ import {
   createUiRequestBridge,
   resolvePendingUiRequest,
 } from "@/server/phi-runtime/ui-requests"
+import { createPhiEditToolDefinition } from "@/server/pi-edit-tool"
 import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import { GitWatchManager, type GitWatchChange } from "@/server/git-watch"
 import {
@@ -815,10 +816,13 @@ export class PhiRuntime {
           async ({ cwd: runtimeCwd, sessionManager, sessionStartEvent }) => {
             const services = await this.getServicesForCwd(runtimeCwd)
             const sessionStartedAt = performance.now()
+            const editTool = await createPhiEditToolDefinition(sdk, runtimeCwd)
+            const customTools = editTool ? [editTool] : []
             const result = await sdk.createAgentSessionFromServices({
               services,
               sessionManager,
               sessionStartEvent,
+              customTools,
             })
             this.logSessionLoadDebug("agent_session_from_services:create", {
               cwd: runtimeCwd,

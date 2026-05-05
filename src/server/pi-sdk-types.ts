@@ -306,6 +306,7 @@ export type PiSdkLike = {
     services: SessionServicesLike
     sessionManager: SessionManagerLike
     sessionStartEvent?: SessionStartEventLike
+    customTools?: Array<unknown>
   }): Promise<{
     session: AgentSessionLike
   }>
