@@ -2870,6 +2870,10 @@ function GitCommitsSection({
   React.useEffect(() => {
     setCommitsLimit(GIT_COMMITS_PAGE_SIZE)
   }, [normalizedCwd])
+  const commitsScopeQueryKey = phiQueryKeys.gitCommits(
+    viewerContextId,
+    normalizedCwd
+  )
   const commitsQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
@@ -2878,6 +2882,13 @@ function GitCommitsSection({
       commitsLimit,
     }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
+    placeholderData: (previousData, previousQuery) => {
+      const previousKey = previousQuery?.queryKey
+      const sameCommitScope = commitsScopeQueryKey.every(
+        (part, index) => previousKey?.[index] === part
+      )
+      return sameCommitScope ? previousData : undefined
+    },
     notifyOnChangeProps: ["data", "isFetching", "isPending", "error"],
   })
   const commitsData = commitsQuery.data
@@ -2932,7 +2943,7 @@ function GitCommitsSection({
 
   if (flush) {
     return (
-      <section className="min-h-full overflow-x-auto bg-background">
+      <section className="flex h-full min-h-0 flex-col bg-background">
         <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-2">
           <div className="flex min-w-0 items-baseline gap-3">
             <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
@@ -2945,7 +2956,9 @@ function GitCommitsSection({
             ) : null}
           </div>
         </div>
-        <div className="grid gap-2 overflow-x-auto px-3 py-2.5">{content}</div>
+        <div className="grid min-h-0 flex-1 gap-2 overflow-auto px-3 py-2.5">
+          {content}
+        </div>
       </section>
     )
   }
@@ -3326,7 +3339,7 @@ export function GitPanel({
             />
           </div>
         ) : activeTab === "history" ? (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <GitCommitsSection
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
