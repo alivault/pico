@@ -3346,6 +3346,61 @@ function GitBranchesSection({
   )
 }
 
+type GitCommitPage = {
+  key: string
+  lines: Array<string>
+}
+
+type GitCommitPagesCache = {
+  commits: Array<string>
+  pages: Array<GitCommitPage>
+}
+
+function getGitCommitPages(
+  cache: GitCommitPagesCache,
+  commits: Array<string>,
+  pageSize: number
+): GitCommitPagesCache {
+  const previousCommits = cache.commits
+  const previousPages = cache.pages
+  const pages: Array<GitCommitPage> = []
+
+  for (let start = 0; start < commits.length; start += pageSize) {
+    const lines = commits.slice(start, start + pageSize)
+    const previousPage = previousPages[start / pageSize]
+    let reusePreviousPage = Boolean(previousPage)
+
+    if (reusePreviousPage) {
+      for (let index = 0; index < lines.length; index += 1) {
+        if (previousCommits[start + index] !== lines[index]) {
+          reusePreviousPage = false
+          break
+        }
+      }
+    }
+
+    pages.push(
+      reusePreviousPage && previousPage
+        ? previousPage
+        : {
+            key: `${start}:${lines[0] || ""}`,
+            lines,
+          }
+    )
+  }
+
+  return { commits, pages }
+}
+
+function sameGitCommitPageProps(
+  left: GitCommitPageProps,
+  right: GitCommitPageProps
+) {
+  return (
+    left.page === right.page && left.unpushedHashKey === right.unpushedHashKey
+  )
+}
+
 function GitCommitRow({
   line,
   unpushedCommitShortHashes,
@@ -3390,6 +3445,29 @@ function GitCommitRow({
   )
 }
 
+type GitCommitPageProps = {
+  page: GitCommitPage
+  unpushedCommitShortHashes: Set<string>
+  unpushedHashKey: string
+}
+
+const GitCommitPageRows = React.memo(function GitCommitPageRows({
+  page,
+  unpushedCommitShortHashes,
+}: GitCommitPageProps) {
+  return (
+    <>
+      {page.lines.map((line, index) => (
+        <GitCommitRow
+          key={`${index}:${line}`}
+          line={line}
+          unpushedCommitShortHashes={unpushedCommitShortHashes}
+        />
+      ))}
+    </>
+  )
+}, sameGitCommitPageProps)
+
 function GitCommitsSection({
   viewerContextId,
   cwd,
@@ -3428,9 +3506,23 @@ function GitCommitsSection({
   const commits = commitsData?.commits
   const commitsHasMore = Boolean(commitsData?.commitsHasMore)
   const meta = Array.isArray(commits) ? gitCommitsSummaryText(commits) : ""
+  const unpushedHashKey = (commitsData?.unpushedCommitShortHashes ?? []).join(
+    "\n"
+  )
   const unpushedCommitShortHashes = new Set(
     commitsData?.unpushedCommitShortHashes ?? []
   )
+  const commitPagesCacheRef = React.useRef<GitCommitPagesCache>({
+    commits: [],
+    pages: [],
+  })
+  const commitPages = Array.isArray(commits)
+    ? (commitPagesCacheRef.current = getGitCommitPages(
+        commitPagesCacheRef.current,
+        commits,
+        GIT_COMMITS_PAGE_SIZE
+      )).pages
+    : []
 
   const content = !normalizedCwd ? (
     <GitSectionNote>No directory selected.</GitSectionNote>
@@ -3449,11 +3541,12 @@ function GitCommitsSection({
   ) : Array.isArray(commits) && commits.length > 0 ? (
     <div className="grid min-w-max gap-3">
       <div className="grid gap-0.5">
-        {commits.map((line, index) => (
-          <GitCommitRow
-            key={`${index}:${line}`}
-            line={line}
+        {commitPages.map((page) => (
+          <GitCommitPageRows
+            key={page.key}
+            page={page}
             unpushedCommitShortHashes={unpushedCommitShortHashes}
+            unpushedHashKey={unpushedHashKey}
           />
         ))}
       </div>
