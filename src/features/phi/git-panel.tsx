@@ -7,6 +7,24 @@ import {
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier,
+} from "@dnd-kit/core"
+import {
+  horizontalListSortingStrategy,
+  arrayMove,
+  SortableContext,
+  useSortable,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   useIsFetching,
   useIsMutating,
   useMutation,
@@ -21,6 +39,8 @@ import {
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   UploadIcon,
   WandSparklesIcon,
   XIcon,
@@ -34,6 +54,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -45,6 +72,13 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   Drawer,
   DrawerContent,
@@ -92,13 +126,28 @@ type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
 type GitStatusValue = GitStatusSummary | null
 type BranchScope = "local" | "remote"
 type GitRemoteAction = "push" | "force-push" | "pull"
+type OpenProjectFileOptions = { pin?: boolean }
+
+export type RightSidebarTabValue = "branches" | "files" | "history" | "review"
 
 type GitPanelProps = {
   viewerContextId: string
   cwd?: string
   active: boolean
   activeFilePath?: string
-  onOpenFile?: (path: string) => void
+  activeTab?: RightSidebarTabValue
+  fileTabs?: Array<string>
+  filePreviewPath?: string
+  fileTreeCollapsed?: boolean
+  onActiveFileChange?: (path: string) => void
+  onActiveTabChange?: (tab: RightSidebarTabValue) => void
+  onCloseAllFiles?: () => void
+  onCloseFile?: (path: string) => void
+  onCloseFilesToRight?: (path: string) => void
+  onCloseOtherFiles?: (path: string) => void
+  onFileTreeCollapsedChange?: (collapsed: boolean) => void
+  onOpenFile?: (path: string, options?: OpenProjectFileOptions) => void
+  onReorderFiles?: (paths: Array<string>) => void
   showToolbar?: boolean
 }
 
@@ -122,6 +171,18 @@ type GitSectionProps = {
 const GIT_QUERY_STALE_TIME_MS = 1000 * 30
 const GIT_QUERY_GC_TIME_MS = 1000 * 60 * 10
 const GIT_COMMITS_PAGE_SIZE = 50
+const PROJECT_FILE_TREE_DEFAULT_WIDTH = 320
+const PROJECT_FILE_TREE_MIN_WIDTH = 220
+const PROJECT_FILE_TREE_MAX_WIDTH = 720
+const restrictFileTabDragOverlayToHorizontalAxis: Modifier = ({
+  transform,
+}) => ({
+  ...transform,
+  y: 0,
+})
+const FILE_TAB_DRAG_OVERLAY_MODIFIERS = [
+  restrictFileTabDragOverlayToHorizontalAxis,
+]
 const GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES = 10_000
 const GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD = 100
 
@@ -1864,6 +1925,10 @@ function ProjectFileTree({
     if (!selectedPath) return
     const item = model.getItem(selectedPath)
     if (!item) return
+    for (const path of model.getSelectedPaths()) {
+      if (path === selectedPath) continue
+      model.getItem(path)?.deselect()
+    }
     item.select()
     item.focus()
   }, [model, selectedPath])
@@ -1902,7 +1967,7 @@ function ProjectFilesWorkspace({
 }: GitScopedProps & {
   activeFilePath: string
   onCloseFile?: () => void
-  onOpenFile: (path: string) => void
+  onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
   previewMode?: ProjectFilesPreviewMode
 }) {
   const normalizedCwd = normalizeCwd(cwd)
@@ -1918,20 +1983,6 @@ function ProjectFilesWorkspace({
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
   const paths = fileTreeQuery.data ?? []
-  const canOpenFile = paths.length > 0
-
-  const renderOpenFileDialogButton = () => (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={!canOpenFile}
-      onClick={() => {
-        setOpenFileDialogOpen(true)
-      }}
-    >
-      Open File
-    </Button>
-  )
 
   return (
     <div
@@ -1950,13 +2001,6 @@ function ProjectFilesWorkspace({
             : "flex-1 overflow-hidden"
         )}
       >
-        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 text-xs font-medium text-muted-foreground">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0">File tree</span>
-            {paths.length ? <span>{paths.length}</span> : null}
-          </div>
-          {renderOpenFileDialogButton()}
-        </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {!normalizedCwd ? (
             <GitSectionNote>No directory selected.</GitSectionNote>
@@ -2160,15 +2204,196 @@ function ProjectFileContent({
   )
 }
 
-type RightSidebarTabValue = "branches" | "files" | "history" | "review"
+function FileViewerTabContent({
+  active,
+  dragging = false,
+  dragListeners,
+  dragAttributes,
+  index,
+  onActiveFileChange,
+  onActiveTabChange,
+  onCloseAllFiles,
+  onCloseFile,
+  onCloseFilesToRight,
+  onCloseOtherFiles,
+  path,
+  preview,
+  tabCount,
+}: {
+  active: boolean
+  dragging?: boolean
+  dragListeners?: ReturnType<typeof useSortable>["listeners"]
+  dragAttributes?: ReturnType<typeof useSortable>["attributes"]
+  index: number
+  onActiveFileChange?: (path: string) => void
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllFiles?: () => void
+  onCloseFile?: (path: string) => void
+  onCloseFilesToRight?: (path: string) => void
+  onCloseOtherFiles?: (path: string) => void
+  path: string
+  preview: boolean
+  tabCount: number
+}) {
+  const tab = (
+    <div
+      className={cn(
+        "inline-flex h-7 max-w-56 shrink-0 items-center rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        active && "bg-muted text-foreground",
+        dragging && "border-transparent shadow-none ring-0"
+      )}
+      {...dragAttributes}
+      {...dragListeners}
+    >
+      <button
+        type="button"
+        title={path}
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
+        onClick={() => {
+          onActiveTabChange("files")
+          onActiveFileChange?.(path)
+        }}
+      >
+        <ProjectFileTypeIcon path={path} />
+        <span className={cn("block min-w-0 truncate", preview && "italic")}>
+          {fileNameFromPath(path)}
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${path}`}
+        className="mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => {
+          onCloseFile?.(path)
+        }}
+      >
+        <XIcon className="size-3" />
+      </button>
+    </div>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={tab} />
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => onCloseFile?.(path)}>
+          Close
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={tabCount <= 1}
+          onClick={() => onCloseOtherFiles?.(path)}
+        >
+          Close others
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={index >= tabCount - 1}
+          onClick={() => onCloseFilesToRight?.(path)}
+        >
+          Close to the right
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onCloseAllFiles?.()}>
+          Close all
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+function SortableFileViewerTab(props: {
+  active: boolean
+  index: number
+  onActiveFileChange?: (path: string) => void
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllFiles?: () => void
+  onCloseFile?: (path: string) => void
+  onCloseFilesToRight?: (path: string) => void
+  onCloseOtherFiles?: (path: string) => void
+  path: string
+  preview: boolean
+  tabCount: number
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: props.path })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  } satisfies React.CSSProperties
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("shrink-0", isDragging && "opacity-0")}
+    >
+      <FileViewerTabContent
+        {...props}
+        dragAttributes={attributes}
+        dragListeners={listeners}
+      />
+    </div>
+  )
+}
+
+function FileViewerTabOverlay({
+  activeFilePath,
+  activePath,
+  filePreviewPath,
+  fileTabs,
+}: {
+  activeFilePath?: string
+  activePath: string
+  filePreviewPath: string
+  fileTabs: Array<string>
+}) {
+  const index = fileTabs.indexOf(activePath)
+  if (index < 0) return null
+
+  return (
+    <FileViewerTabContent
+      active={activeFilePath === activePath}
+      dragging
+      index={index}
+      onActiveTabChange={() => {}}
+      path={activePath}
+      preview={filePreviewPath === activePath}
+      tabCount={fileTabs.length}
+    />
+  )
+}
 
 function RightSidebarTabStrip({
+  activeFilePath,
   activeTab,
+  filePreviewPath = "",
+  fileTabs = [],
+  onActiveFileChange,
   onActiveTabChange,
+  onCloseAllFiles,
+  onCloseFile,
+  onCloseFilesToRight,
+  onCloseOtherFiles,
+  onOpenFileDialog,
+  onReorderFiles,
   showReview = false,
 }: {
+  activeFilePath?: string
   activeTab: RightSidebarTabValue
+  filePreviewPath?: string
+  fileTabs?: Array<string>
+  onActiveFileChange?: (path: string) => void
   onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllFiles?: () => void
+  onCloseFile?: (path: string) => void
+  onCloseFilesToRight?: (path: string) => void
+  onCloseOtherFiles?: (path: string) => void
+  onOpenFileDialog?: () => void
+  onReorderFiles?: (paths: Array<string>) => void
   showReview?: boolean
 }) {
   const renderTab = ({
@@ -2197,12 +2422,239 @@ function RightSidebarTabStrip({
     )
   }
 
+  const [activeDragPath, setActiveDragPath] = React.useState("")
+  const hasOpenFiles = fileTabs.length > 0
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    })
+  )
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragPath(String(event.active.id))
+  }
+  const handleDragEnd = (event: DragEndEvent) => {
+    const activeId = String(event.active.id)
+    const overId = event.over ? String(event.over.id) : ""
+    if (!activeId || !overId || activeId === overId) return
+
+    const oldIndex = fileTabs.indexOf(activeId)
+    const newIndex = fileTabs.indexOf(overId)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    onReorderFiles?.(arrayMove(fileTabs, oldIndex, newIndex))
+    setActiveDragPath("")
+  }
+  const handleDragCancel = () => {
+    setActiveDragPath("")
+  }
+
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
+      {hasOpenFiles ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Review", value: "review" }) : null}
-      {renderTab({ label: "Files", value: "files" })}
       {renderTab({ label: "Branches", value: "branches" })}
       {renderTab({ label: "History", value: "history" })}
+      {!hasOpenFiles ? renderTab({ label: "Files", value: "files" }) : null}
+      {hasOpenFiles ? (
+        <span className="mx-1 shrink-0 text-xs text-border" aria-hidden="true">
+          |
+        </span>
+      ) : null}
+      {hasOpenFiles ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <SortableContext
+            items={fileTabs}
+            strategy={horizontalListSortingStrategy}
+          >
+            {fileTabs.map((path, index) => (
+              <SortableFileViewerTab
+                key={path}
+                active={activeTab === "files" && activeFilePath === path}
+                index={index}
+                onActiveFileChange={onActiveFileChange}
+                onActiveTabChange={onActiveTabChange}
+                onCloseAllFiles={onCloseAllFiles}
+                onCloseFile={onCloseFile}
+                onCloseFilesToRight={onCloseFilesToRight}
+                onCloseOtherFiles={onCloseOtherFiles}
+                path={path}
+                preview={filePreviewPath === path}
+                tabCount={fileTabs.length}
+              />
+            ))}
+          </SortableContext>
+          <DragOverlay
+            dropAnimation={null}
+            modifiers={FILE_TAB_DRAG_OVERLAY_MODIFIERS}
+          >
+            {activeDragPath ? (
+              <FileViewerTabOverlay
+                activeFilePath={activeFilePath}
+                activePath={activeDragPath}
+                filePreviewPath={filePreviewPath}
+                fileTabs={fileTabs}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : null}
+      {hasOpenFiles ? (
+        <TitleTooltip title="Open another file">
+          <button
+            type="button"
+            aria-label="Open another file"
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={onOpenFileDialog}
+          >
+            +
+          </button>
+        </TitleTooltip>
+      ) : null}
+    </div>
+  )
+}
+
+function clampProjectFileTreeWidth(width: number) {
+  if (!Number.isFinite(width)) return PROJECT_FILE_TREE_DEFAULT_WIDTH
+  return Math.min(
+    PROJECT_FILE_TREE_MAX_WIDTH,
+    Math.max(PROJECT_FILE_TREE_MIN_WIDTH, width)
+  )
+}
+
+function FileTreeResizeHandle({
+  onResize,
+  width,
+}: {
+  onResize: (width: number) => void
+  width: number
+}) {
+  const resizeTo = (nextWidth: number) => {
+    onResize(clampProjectFileTreeWidth(nextWidth))
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-label="Resize file tree"
+      aria-orientation="vertical"
+      tabIndex={0}
+      className="absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-border/70 hover:bg-sidebar-border/30 hover:after:bg-muted-foreground/50 focus-visible:bg-sidebar-border/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:after:bg-muted-foreground/50 active:bg-sidebar-border/30 active:after:bg-muted-foreground/50"
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+        event.preventDefault()
+        const delta = event.shiftKey ? 48 : 16
+        resizeTo(width + (event.key === "ArrowRight" ? delta : -delta))
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+
+        const startX = event.clientX
+        const startWidth = width
+        const previousCursor = document.body.style.cursor
+        const previousUserSelect = document.body.style.userSelect
+
+        document.body.style.cursor = "col-resize"
+        document.body.style.userSelect = "none"
+
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+          resizeTo(startWidth + moveEvent.clientX - startX)
+        }
+        const handlePointerUp = () => {
+          document.body.style.cursor = previousCursor
+          document.body.style.userSelect = previousUserSelect
+          document.removeEventListener("pointermove", handlePointerMove)
+          document.removeEventListener("pointerup", handlePointerUp)
+          document.removeEventListener("pointercancel", handlePointerUp)
+        }
+
+        document.addEventListener("pointermove", handlePointerMove)
+        document.addEventListener("pointerup", handlePointerUp)
+        document.addEventListener("pointercancel", handlePointerUp)
+      }}
+    />
+  )
+}
+
+function fileNameFromPath(path: string) {
+  const parts = path.split("/").filter(Boolean)
+  return parts.at(-1) || path
+}
+
+function FilePathBreadcrumb({
+  fileTreeCollapsed = false,
+  onFileTreeCollapsedChange,
+  path,
+}: {
+  fileTreeCollapsed?: boolean
+  onFileTreeCollapsedChange?: (collapsed: boolean) => void
+  path: string
+}) {
+  const parts = path.split("/").filter(Boolean)
+
+  if (parts.length === 0) return null
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 bg-background px-3">
+      {onFileTreeCollapsedChange ? (
+        <TitleTooltip
+          title={fileTreeCollapsed ? "Show file tree" : "Collapse file tree"}
+        >
+          <button
+            type="button"
+            aria-pressed={fileTreeCollapsed}
+            aria-label={
+              fileTreeCollapsed ? "Show file tree" : "Collapse file tree"
+            }
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={() => {
+              onFileTreeCollapsedChange(!fileTreeCollapsed)
+            }}
+          >
+            {fileTreeCollapsed ? (
+              <PanelLeftOpenIcon className="size-4" />
+            ) : (
+              <PanelLeftCloseIcon className="size-4" />
+            )}
+          </button>
+        </TitleTooltip>
+      ) : null}
+      <div className="min-w-0 flex-1 overflow-x-auto">
+        <Breadcrumb title={path}>
+          <BreadcrumbList className="flex-nowrap gap-1 font-mono text-xs whitespace-nowrap">
+            {parts.map((part, index) => {
+              const isLast = index === parts.length - 1
+              const key = `${index}:${part}`
+
+              return (
+                <React.Fragment key={key}>
+                  {index > 0 ? (
+                    <BreadcrumbSeparator className="text-muted-foreground/60" />
+                  ) : null}
+                  <BreadcrumbItem className="min-w-0 shrink-0">
+                    {isLast ? (
+                      <BreadcrumbPage className="max-w-80 truncate font-mono text-xs font-medium">
+                        {part}
+                      </BreadcrumbPage>
+                    ) : (
+                      <span className="max-w-40 truncate text-muted-foreground">
+                        {part}
+                      </span>
+                    )}
+                  </BreadcrumbItem>
+                </React.Fragment>
+              )
+            })}
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
     </div>
   )
 }
@@ -2213,32 +2665,15 @@ function FileViewerTabStrip({
   onActiveFileChange,
   onCloseFile,
   onOpenFileDialog,
-  reviewCount,
 }: {
   activeFilePath: string
   fileTabs: Array<string>
   onActiveFileChange: (path: string) => void
   onCloseFile: (path: string) => void
   onOpenFileDialog: () => void
-  reviewCount: number
 }) {
-  const reviewActive = !activeFilePath
-
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
-      <button
-        type="button"
-        aria-pressed={reviewActive}
-        className={cn(
-          "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-          reviewActive && "bg-muted text-foreground"
-        )}
-        onClick={() => {
-          onActiveFileChange("")
-        }}
-      >
-        Review{reviewCount > 0 ? ` ${reviewCount}` : ""}
-      </button>
       {fileTabs.map((path) => {
         const active = activeFilePath === path
         return (
@@ -2604,20 +3039,7 @@ export function GitFileViewerPanel({
     select: (data) => data.paths,
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
-  const reviewFilesQuery = useQuery({
-    ...gitChangesQueryOptions({
-      viewerContextId,
-      cwd: normalizedCwd,
-      scope: "files",
-    }),
-    enabled: Boolean(active && viewerContextId && normalizedCwd),
-    select: selectGitFiles,
-    notifyOnChangeProps: ["data"],
-  })
   const paths = fileTreeQuery.data ?? []
-  const reviewCount = Array.isArray(reviewFilesQuery.data)
-    ? reviewFilesQuery.data.length
-    : 0
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card/50">
@@ -2629,22 +3051,24 @@ export function GitFileViewerPanel({
         onOpenFileDialog={() => {
           setOpenFileDialogOpen(true)
         }}
-        reviewCount={reviewCount}
       />
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {activeFilePath ? (
-          <ProjectFileContent
-            viewerContextId={viewerContextId}
-            cwd={normalizedCwd}
-            active={active}
-            path={activeFilePath}
-          />
+          <>
+            <FilePathBreadcrumb path={activeFilePath} />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <ProjectFileContent
+                viewerContextId={viewerContextId}
+                cwd={normalizedCwd}
+                active={active}
+                path={activeFilePath}
+              />
+            </div>
+          </>
         ) : (
-          <FileReviewContent
-            viewerContextId={viewerContextId}
-            cwd={normalizedCwd}
-            active={active}
-          />
+          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+            Select a file to view it.
+          </div>
         )}
       </div>
       <ProjectOpenFileDialog
@@ -3358,33 +3782,70 @@ export function GitPanel({
   cwd,
   active,
   activeFilePath = "",
+  activeTab: controlledActiveTab,
+  filePreviewPath = "",
+  fileTabs = [],
+  fileTreeCollapsed = false,
+  onActiveFileChange,
+  onActiveTabChange,
+  onCloseAllFiles,
+  onCloseFile,
+  onCloseFilesToRight,
+  onCloseOtherFiles,
+  onFileTreeCollapsedChange,
   onOpenFile,
+  onReorderFiles,
   showToolbar = true,
 }: GitPanelProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
-  const [activeTab, setActiveTab] = React.useState<RightSidebarTabValue>(() =>
-    isMobile ? "review" : "files"
-  )
+  const [uncontrolledActiveTab, setUncontrolledActiveTab] =
+    React.useState<RightSidebarTabValue>(() => (isMobile ? "review" : "files"))
+  const activeTab = controlledActiveTab ?? uncontrolledActiveTab
+  const setActiveTab = (tab: RightSidebarTabValue) => {
+    setUncontrolledActiveTab(tab)
+    onActiveTabChange?.(tab)
+  }
   const [inlineActiveFilePath, setInlineActiveFilePath] = React.useState("")
+  const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
+  const [fileTreeWidth, setFileTreeWidth] = React.useState(
+    PROJECT_FILE_TREE_DEFAULT_WIDTH
+  )
   const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
   const panelHasCardChrome = showToolbar && !isMobile
   const currentFilePath =
     previewMode === "inline" ? inlineActiveFilePath : activeFilePath
+  const hasOpenFileTabs = fileTabs.length > 0
+  const fileDialogTreeQuery = useQuery({
+    ...projectFileTreeQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
+    enabled: Boolean(
+      active && hasOpenFileTabs && viewerContextId && normalizedCwd
+    ),
+    select: (data) => data.paths,
+    notifyOnChangeProps: ["data"],
+  })
+  const fileDialogPaths = fileDialogTreeQuery.data ?? []
 
-  const openFile = (path: string) => {
+  const openFile = (path: string, options?: OpenProjectFileOptions) => {
     if (!path) return
+    setActiveTab("files")
     if (previewMode === "inline") {
       setInlineActiveFilePath(path)
       return
     }
-    onOpenFile?.(path)
+    onOpenFile?.(path, options)
+    onActiveFileChange?.(path)
   }
 
   React.useEffect(() => {
-    setActiveTab(isMobile ? "review" : "files")
+    if (!controlledActiveTab) {
+      setUncontrolledActiveTab(isMobile ? "review" : "files")
+    }
     setInlineActiveFilePath("")
-  }, [isMobile, normalizedCwd])
+  }, [controlledActiveTab, isMobile, normalizedCwd])
 
   return (
     <div className="h-full min-h-[520px] w-full min-w-0">
@@ -3411,11 +3872,23 @@ export function GitPanel({
           </div>
         ) : null}
         <RightSidebarTabStrip
+          activeFilePath={currentFilePath}
           activeTab={activeTab}
+          filePreviewPath={filePreviewPath}
+          fileTabs={fileTabs}
+          onActiveFileChange={onActiveFileChange}
           onActiveTabChange={setActiveTab}
-          showReview={isMobile}
+          onCloseAllFiles={onCloseAllFiles}
+          onCloseFile={onCloseFile}
+          onCloseFilesToRight={onCloseFilesToRight}
+          onCloseOtherFiles={onCloseOtherFiles}
+          onOpenFileDialog={() => {
+            setOpenFileDialogOpen(true)
+          }}
+          onReorderFiles={onReorderFiles}
+          showReview
         />
-        {activeTab === "review" && isMobile ? (
+        {activeTab === "review" ? (
           <div className="min-h-0 flex-1 overflow-hidden">
             <FileReviewContent
               viewerContextId={viewerContextId}
@@ -3443,19 +3916,76 @@ export function GitPanel({
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-hidden">
-            <ProjectFilesWorkspace
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "files"}
-              activeFilePath={currentFilePath}
-              onCloseFile={() => {
-                setInlineActiveFilePath("")
-              }}
-              onOpenFile={openFile}
-              previewMode={previewMode}
-            />
+            {previewMode === "external" && hasOpenFileTabs ? (
+              <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+                {currentFilePath ? (
+                  <FilePathBreadcrumb
+                    path={currentFilePath}
+                    fileTreeCollapsed={fileTreeCollapsed}
+                    onFileTreeCollapsedChange={onFileTreeCollapsedChange}
+                  />
+                ) : null}
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                  {fileTreeCollapsed ? null : (
+                    <div
+                      className="relative min-h-0 shrink-0 overflow-visible border-r border-border/70"
+                      style={{
+                        width: `${fileTreeWidth}px`,
+                        maxWidth: "70%",
+                      }}
+                    >
+                      <div className="h-full min-h-0 overflow-hidden">
+                        <ProjectFilesWorkspace
+                          viewerContextId={viewerContextId}
+                          cwd={normalizedCwd}
+                          active={active && activeTab === "files"}
+                          activeFilePath={currentFilePath}
+                          onCloseFile={() => {}}
+                          onOpenFile={openFile}
+                          previewMode={previewMode}
+                        />
+                      </div>
+                      <FileTreeResizeHandle
+                        width={fileTreeWidth}
+                        onResize={setFileTreeWidth}
+                      />
+                    </div>
+                  )}
+                  {currentFilePath ? (
+                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                      <ProjectFileContent
+                        viewerContextId={viewerContextId}
+                        cwd={normalizedCwd}
+                        active={active && activeTab === "files"}
+                        path={currentFilePath}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <ProjectFilesWorkspace
+                viewerContextId={viewerContextId}
+                cwd={normalizedCwd}
+                active={active && activeTab === "files"}
+                activeFilePath={currentFilePath}
+                onCloseFile={() => {
+                  setInlineActiveFilePath("")
+                }}
+                onOpenFile={openFile}
+                previewMode={previewMode}
+              />
+            )}
           </div>
         )}
+        <ProjectOpenFileDialog
+          open={openFileDialogOpen}
+          onOpenChange={setOpenFileDialogOpen}
+          paths={fileDialogPaths}
+          onOpenFile={(path) => {
+            openFile(path, { pin: true })
+          }}
+        />
       </div>
     </div>
   )

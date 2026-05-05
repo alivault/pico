@@ -4,7 +4,6 @@ import {
   ArrowUpToLineIcon,
   CheckIcon,
   ChevronDownIcon,
-  DiffIcon,
   EllipsisIcon,
   FolderIcon,
   GitBranchIcon,
@@ -145,12 +144,12 @@ import {
 import {
   DraftGitStatusBadge,
   GitCommitDialogController,
-  GitFileViewerPanel,
   GitPanel,
   GitTabStatusText,
   HeaderGitActions,
   HeaderGitStatusText,
   type GitCommitDialogControllerHandle,
+  type RightSidebarTabValue,
 } from "@/features/phi/git-panel"
 import {
   createPhiLatestThrottler,
@@ -1925,10 +1924,38 @@ function AppShellTabsList({
 const AppShellGitPanelController = React.memo(
   function AppShellGitPanelController({
     active,
+    activeFilePath,
+    activeTab,
+    filePreviewPath,
+    fileTabs,
+    fileTreeCollapsed,
+    onActiveFileChange,
+    onActiveTabChange,
+    onCloseAllFiles,
+    onCloseFile,
+    onCloseFilesToRight,
+    onCloseOtherFiles,
+    onFileTreeCollapsedChange,
+    onOpenFile,
+    onReorderFiles,
     sessionStore,
     viewerContextId,
   }: {
     active: boolean
+    activeFilePath: string
+    activeTab: RightSidebarTabValue
+    filePreviewPath: string
+    fileTabs: Array<string>
+    fileTreeCollapsed: boolean
+    onActiveFileChange: (path: string) => void
+    onActiveTabChange: (tab: RightSidebarTabValue) => void
+    onCloseAllFiles: () => void
+    onCloseFile: (path: string) => void
+    onCloseFilesToRight: (path: string) => void
+    onCloseOtherFiles: (path: string) => void
+    onFileTreeCollapsedChange: (collapsed: boolean) => void
+    onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
+    onReorderFiles: (paths: Array<string>) => void
     sessionStore: PhiStore<SessionState>
     viewerContextId: string
   }) {
@@ -1937,7 +1964,25 @@ const AppShellGitPanelController = React.memo(
     if (!active) return null
 
     return (
-      <GitPanel viewerContextId={viewerContextId} cwd={cwd} active={active} />
+      <GitPanel
+        viewerContextId={viewerContextId}
+        cwd={cwd}
+        active={active}
+        activeFilePath={activeFilePath}
+        activeTab={activeTab}
+        filePreviewPath={filePreviewPath}
+        fileTabs={fileTabs}
+        fileTreeCollapsed={fileTreeCollapsed}
+        onActiveFileChange={onActiveFileChange}
+        onActiveTabChange={onActiveTabChange}
+        onCloseAllFiles={onCloseAllFiles}
+        onCloseFile={onCloseFile}
+        onCloseFilesToRight={onCloseFilesToRight}
+        onCloseOtherFiles={onCloseOtherFiles}
+        onFileTreeCollapsedChange={onFileTreeCollapsedChange}
+        onOpenFile={onOpenFile}
+        onReorderFiles={onReorderFiles}
+      />
     )
   }
 )
@@ -2909,13 +2954,37 @@ function AppShellSessionContent({
 function AppShellDesktopGitPanel({
   active,
   activeFilePath,
+  activeTab,
+  filePreviewPath,
+  fileTabs,
+  fileTreeCollapsed,
+  onActiveFileChange,
+  onActiveTabChange,
+  onCloseAllFiles,
+  onCloseFile,
+  onCloseFilesToRight,
+  onCloseOtherFiles,
+  onFileTreeCollapsedChange,
   onOpenFile,
+  onReorderFiles,
   sessionStore,
   viewerContextId,
 }: {
   active: boolean
   activeFilePath: string
-  onOpenFile: (path: string) => void
+  activeTab: RightSidebarTabValue
+  filePreviewPath: string
+  fileTabs: Array<string>
+  fileTreeCollapsed: boolean
+  onActiveFileChange: (path: string) => void
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllFiles: () => void
+  onCloseFile: (path: string) => void
+  onCloseFilesToRight: (path: string) => void
+  onCloseOtherFiles: (path: string) => void
+  onFileTreeCollapsedChange: (collapsed: boolean) => void
+  onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
+  onReorderFiles: (paths: Array<string>) => void
   sessionStore: PhiStore<SessionState>
   viewerContextId: string
 }) {
@@ -2933,49 +3002,20 @@ function AppShellDesktopGitPanel({
         cwd={cwd}
         active={active}
         activeFilePath={activeFilePath}
-        onOpenFile={onOpenFile}
-        showToolbar={false}
-      />
-    </aside>
-  )
-}
-
-function AppShellDesktopFileViewer({
-  active,
-  activeFilePath,
-  fileTabs,
-  onActiveFileChange,
-  onCloseFile,
-  onOpenFile,
-  sessionStore,
-  viewerContextId,
-}: {
-  active: boolean
-  activeFilePath: string
-  fileTabs: Array<string>
-  onActiveFileChange: (path: string) => void
-  onCloseFile: (path: string) => void
-  onOpenFile: (path: string) => void
-  sessionStore: PhiStore<SessionState>
-  viewerContextId: string
-}) {
-  const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
-
-  return (
-    <aside
-      aria-label="File view"
-      data-state={active ? "open" : "closed"}
-      className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background"
-    >
-      <GitFileViewerPanel
-        viewerContextId={viewerContextId}
-        cwd={cwd}
-        active={active}
-        activeFilePath={activeFilePath}
+        activeTab={activeTab}
+        filePreviewPath={filePreviewPath}
         fileTabs={fileTabs}
+        fileTreeCollapsed={fileTreeCollapsed}
         onActiveFileChange={onActiveFileChange}
+        onActiveTabChange={onActiveTabChange}
+        onCloseAllFiles={onCloseAllFiles}
         onCloseFile={onCloseFile}
+        onCloseFilesToRight={onCloseFilesToRight}
+        onCloseOtherFiles={onCloseOtherFiles}
+        onFileTreeCollapsedChange={onFileTreeCollapsedChange}
         onOpenFile={onOpenFile}
+        onReorderFiles={onReorderFiles}
+        showToolbar={false}
       />
     </aside>
   )
@@ -3192,6 +3232,8 @@ function AppShellTabsController({
   fileViewActivePath,
   fileViewOpen,
   fileViewTabs,
+  fileViewPreviewPath,
+  fileTreeCollapsed,
   gitPanelOpen,
   hiddenThinkingPreviewStore,
   isSessionViewLoading,
@@ -3199,10 +3241,17 @@ function AppShellTabsController({
   isMobile,
   newSessionDirectoryOptions,
   onCreateSession,
+  onCloseAllFileViewTabs,
   onCloseFileViewTab,
+  onCloseFileViewTabsToRight,
+  onCloseOtherFileViewTabs,
+  onFileTreeCollapsedChange,
   onFileViewActivePathChange,
   onOpenFileViewTab,
+  onReorderFileViewTabs,
+  onRightSidebarActiveTabChange,
   onValueChange,
+  rightSidebarActiveTab,
   sessionStore,
   store,
   viewerContextId,
@@ -3211,13 +3260,22 @@ function AppShellTabsController({
   appUiStore: PhiStore<AppShellUiState>
   fileViewActivePath: string
   fileViewOpen: boolean
+  fileViewPreviewPath: string
   fileViewTabs: Array<string>
+  fileTreeCollapsed: boolean
   gitPanelOpen: boolean
   isMobile: boolean
+  onCloseAllFileViewTabs: () => void
   onCloseFileViewTab: (path: string) => void
+  onCloseFileViewTabsToRight: (path: string) => void
+  onCloseOtherFileViewTabs: (path: string) => void
+  onFileTreeCollapsedChange: (collapsed: boolean) => void
   onFileViewActivePathChange: (path: string) => void
-  onOpenFileViewTab: (path: string) => void
+  onOpenFileViewTab: (path: string, options?: OpenFileViewTabOptions) => void
+  onReorderFileViewTabs: (paths: Array<string>) => void
+  onRightSidebarActiveTabChange: (tab: RightSidebarTabValue) => void
   onValueChange: (value: string) => void
+  rightSidebarActiveTab: RightSidebarTabValue
 }) {
   const currentTab = useSelector(appUiStore, (state) => state.currentTab)
   const isDraftSession = useSelector(
@@ -3244,8 +3302,6 @@ function AppShellTabsController({
   )
   const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
     React.useState(desktopGitPanelOpen)
-  const [desktopFileViewMounted, setDesktopFileViewMounted] =
-    React.useState(desktopFileViewOpen)
   const [desktopPanelResizing, setDesktopPanelResizing] = React.useState(false)
   const sessionPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -3277,6 +3333,20 @@ function AppShellTabsController({
           viewerContextId={viewerContextId}
           sessionStore={sessionStore}
           active={isMobile && currentTab === "git"}
+          activeFilePath={fileViewActivePath}
+          activeTab={rightSidebarActiveTab}
+          filePreviewPath={fileViewPreviewPath}
+          fileTabs={fileViewTabs}
+          fileTreeCollapsed={fileTreeCollapsed}
+          onActiveFileChange={onFileViewActivePathChange}
+          onActiveTabChange={onRightSidebarActiveTabChange}
+          onCloseAllFiles={onCloseAllFileViewTabs}
+          onCloseFile={onCloseFileViewTab}
+          onCloseFilesToRight={onCloseFileViewTabsToRight}
+          onCloseOtherFiles={onCloseOtherFileViewTabs}
+          onFileTreeCollapsedChange={onFileTreeCollapsedChange}
+          onOpenFile={onOpenFileViewTab}
+          onReorderFiles={onReorderFileViewTabs}
         />
       </div>
     </div>
@@ -3285,19 +3355,16 @@ function AppShellTabsController({
   React.useLayoutEffect(() => {
     if (isMobile) {
       setDesktopGitPanelMounted(false)
-      setDesktopFileViewMounted(false)
       return
     }
 
     if (desktopSideWorkspaceOpen) {
       setDesktopGitPanelMounted(true)
-      setDesktopFileViewMounted(true)
     }
 
     const timeoutId = window.setTimeout(() => {
       if (!desktopSideWorkspaceOpen) {
         setDesktopGitPanelMounted(false)
-        setDesktopFileViewMounted(false)
       }
     }, 220)
 
@@ -3329,8 +3396,6 @@ function AppShellTabsController({
   const desktopAvailableWidth =
     desktopLayoutWidth ||
     (typeof window === "undefined" ? 1200 : window.innerWidth)
-  const desktopFileViewRendered =
-    desktopSideWorkspaceOpen || desktopFileViewMounted || desktopFileViewOpen
   const desktopGitPanelRendered =
     desktopSideWorkspaceOpen || desktopGitPanelMounted || desktopGitPanelOpen
   const desktopFittedWidths = fitDesktopSidePanelWidths({
@@ -3341,7 +3406,7 @@ function AppShellTabsController({
     gitWidth: desktopGitPanelWidth,
   })
   const desktopSideWorkspaceRendered =
-    desktopSideWorkspaceOpen || desktopFileViewMounted || desktopGitPanelMounted
+    desktopSideWorkspaceOpen || desktopGitPanelMounted
   const desktopSideWorkspaceWidth = desktopSideWorkspaceOpen
     ? desktopFittedWidths.sideWidth
     : 0
@@ -3356,18 +3421,20 @@ function AppShellTabsController({
   const desktopResizeEnd = () => {
     setDesktopPanelResizing(false)
   }
-  const desktopFileViewMaxWidth = Math.max(
+  const desktopSideWorkspaceMaxWidth = Math.max(
     0,
-    desktopAvailableWidth -
-      DESKTOP_MIN_SESSION_WIDTH -
-      (desktopGitPanelOpen ? desktopFittedWidths.gitWidth : 0)
+    desktopAvailableWidth - DESKTOP_MIN_SESSION_WIDTH
   )
-  const desktopGitPanelMaxWidth = Math.max(
-    0,
-    desktopAvailableWidth -
-      DESKTOP_MIN_SESSION_WIDTH -
-      (desktopFileViewOpen ? desktopFittedWidths.fileWidth : 0)
-  )
+  const setDesktopSideWorkspaceWidth = (nextSize: number) => {
+    if (!desktopFileViewOpen) {
+      setDesktopGitPanelWidth(nextSize)
+      return
+    }
+
+    setDesktopFileViewWidth(
+      Math.max(DESKTOP_MIN_SIDE_PANEL_WIDTH, nextSize - desktopGitPanelWidth)
+    )
+  }
 
   return (
     <Tabs
@@ -3407,57 +3474,22 @@ function AppShellTabsController({
               className={`flex h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none ${desktopTransitionClassName}`}
               style={{ width: `${desktopSideWorkspaceWidth}px` }}
             >
-              {desktopFileViewRendered ? (
-                <div
-                  data-desktop-panel="file-view"
-                  className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
-                  style={{ width: `${desktopFittedWidths.fileWidth}px` }}
-                >
-                  {desktopFileViewOpen ? (
-                    <AppShellDesktopResizeHandle
-                      label="Resize file view"
-                      min={Math.min(
-                        DESKTOP_MIN_SIDE_PANEL_WIDTH,
-                        desktopFileViewMaxWidth
-                      )}
-                      max={desktopFileViewMaxWidth}
-                      size={desktopFittedWidths.fileWidth}
-                      onResize={setDesktopFileViewWidth}
-                      onResizeStart={desktopResizeStart}
-                      onResizeEnd={desktopResizeEnd}
-                    />
-                  ) : null}
-                  <div className="h-full min-h-0 min-w-0 overflow-hidden">
-                    <AppShellDesktopFileViewer
-                      viewerContextId={viewerContextId}
-                      sessionStore={sessionStore}
-                      active={desktopFileViewOpen}
-                      fileTabs={fileViewTabs}
-                      activeFilePath={fileViewActivePath}
-                      onActiveFileChange={onFileViewActivePathChange}
-                      onCloseFile={onCloseFileViewTab}
-                      onOpenFile={onOpenFileViewTab}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
               {desktopGitPanelRendered ? (
                 <div
                   data-desktop-panel="git"
                   className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
-                  style={{ width: `${desktopFittedWidths.gitWidth}px` }}
+                  style={{ width: `${desktopSideWorkspaceWidth}px` }}
                 >
                   {desktopGitPanelOpen ? (
                     <AppShellDesktopResizeHandle
                       label="Resize right sidebar"
                       min={Math.min(
                         DESKTOP_MIN_SIDE_PANEL_WIDTH,
-                        desktopGitPanelMaxWidth
+                        desktopSideWorkspaceMaxWidth
                       )}
-                      max={desktopGitPanelMaxWidth}
-                      size={desktopFittedWidths.gitWidth}
-                      onResize={setDesktopGitPanelWidth}
+                      max={desktopSideWorkspaceMaxWidth}
+                      size={desktopSideWorkspaceWidth}
+                      onResize={setDesktopSideWorkspaceWidth}
                       onResizeStart={desktopResizeStart}
                       onResizeEnd={desktopResizeEnd}
                     />
@@ -3469,7 +3501,19 @@ function AppShellTabsController({
                         sessionStore={sessionStore}
                         active={desktopGitPanelOpen}
                         activeFilePath={fileViewActivePath}
+                        activeTab={rightSidebarActiveTab}
+                        filePreviewPath={fileViewPreviewPath}
+                        fileTabs={fileViewTabs}
+                        fileTreeCollapsed={fileTreeCollapsed}
+                        onActiveFileChange={onFileViewActivePathChange}
+                        onActiveTabChange={onRightSidebarActiveTabChange}
+                        onCloseAllFiles={onCloseAllFileViewTabs}
+                        onCloseFile={onCloseFileViewTab}
+                        onCloseFilesToRight={onCloseFileViewTabsToRight}
+                        onCloseOtherFiles={onCloseOtherFileViewTabs}
+                        onFileTreeCollapsedChange={onFileTreeCollapsedChange}
                         onOpenFile={onOpenFileViewTab}
+                        onReorderFiles={onReorderFileViewTabs}
                       />
                     ) : null}
                   </div>
@@ -4859,48 +4903,145 @@ const AppShellSessionWorkspace = React.forwardRef<
     { compare: shallowRecordEqual }
   )
   const gitPanelOpen = useSelector(appUiStore, (state) => state.gitPanelOpen)
-  const [fileViewOpen, setFileViewOpen] = React.useState(false)
+  const [rightSidebarActiveTab, setRightSidebarActiveTab] =
+    React.useState<RightSidebarTabValue>("files")
   const [fileViewTabs, setFileViewTabs] = React.useState<Array<string>>([])
+  const [fileViewPreviewPath, setFileViewPreviewPath] = React.useState("")
   const [fileViewActivePath, setFileViewActivePath] = React.useState("")
+  const [fileTreeCollapsed, setFileTreeCollapsed] = React.useState(false)
+  const visibleFileViewTabs =
+    fileViewPreviewPath && !fileViewTabs.includes(fileViewPreviewPath)
+      ? [...fileViewTabs, fileViewPreviewPath]
+      : fileViewTabs
+  const fileViewOpen = gitPanelOpen && visibleFileViewTabs.length > 0
 
-  const openFileViewTab = (path: string) => {
+  const openFileViewTab = (path: string, options?: OpenFileViewTabOptions) => {
     if (!path) return
-    setFileViewTabs((currentTabs) =>
-      currentTabs.includes(path) ? currentTabs : [...currentTabs, path]
-    )
+    setGitPanelOpen(true)
+    setRightSidebarActiveTab("files")
+    setFileTreeCollapsed(false)
+
+    const shouldPin =
+      Boolean(options?.pin) ||
+      fileViewTabs.includes(path) ||
+      fileViewActivePath === path
+
+    if (shouldPin) {
+      setFileViewTabs((currentTabs) =>
+        currentTabs.includes(path) ? currentTabs : [...currentTabs, path]
+      )
+      setFileViewPreviewPath((currentPath) =>
+        currentPath === path ? "" : currentPath
+      )
+    } else {
+      setFileViewPreviewPath(path)
+    }
+
     setFileViewActivePath(path)
-    setFileViewOpen(true)
   }
 
   const closeFileViewTab = (path: string) => {
-    setFileViewTabs((currentTabs) => {
-      const index = currentTabs.indexOf(path)
-      const nextTabs = currentTabs.filter((tab) => tab !== path)
-      if (fileViewActivePath === path) {
-        setFileViewActivePath(
-          nextTabs[Math.max(0, index - 1)] || nextTabs[0] || ""
-        )
-      }
-      return nextTabs
-    })
+    const index = visibleFileViewTabs.indexOf(path)
+    const nextTabs = fileViewTabs.filter((tab) => tab !== path)
+    const nextPreviewPath =
+      fileViewPreviewPath === path ? "" : fileViewPreviewPath
+    const nextVisibleTabs =
+      nextPreviewPath && !nextTabs.includes(nextPreviewPath)
+        ? [...nextTabs, nextPreviewPath]
+        : nextTabs
+
+    setFileViewTabs(nextTabs)
+    setFileViewPreviewPath(nextPreviewPath)
+
+    if (fileViewActivePath === path) {
+      setFileViewActivePath(
+        nextVisibleTabs[Math.max(0, index - 1)] || nextVisibleTabs[0] || ""
+      )
+    }
   }
 
-  const toggleFileView = () => {
-    setFileViewOpen((open) => !open)
+  const closeOtherFileViewTabs = (path: string) => {
+    const pinned = fileViewTabs.includes(path) ? [path] : []
+    setFileViewTabs(pinned)
+    setFileViewPreviewPath(pinned.length === 0 ? path : "")
+    setFileViewActivePath(path)
   }
+
+  const closeFileViewTabsToRight = (path: string) => {
+    const index = visibleFileViewTabs.indexOf(path)
+    if (index < 0) return
+
+    const keep = new Set(visibleFileViewTabs.slice(0, index + 1))
+    const nextTabs = fileViewTabs.filter((tab) => keep.has(tab))
+    const nextPreviewPath = keep.has(fileViewPreviewPath)
+      ? fileViewPreviewPath
+      : ""
+    const nextVisibleTabs =
+      nextPreviewPath && !nextTabs.includes(nextPreviewPath)
+        ? [...nextTabs, nextPreviewPath]
+        : nextTabs
+
+    setFileViewTabs(nextTabs)
+    setFileViewPreviewPath(nextPreviewPath)
+
+    if (!nextVisibleTabs.includes(fileViewActivePath)) {
+      setFileViewActivePath(path)
+    }
+  }
+
+  const closeAllFileViewTabs = () => {
+    setFileViewTabs([])
+    setFileViewPreviewPath("")
+    setFileViewActivePath("")
+  }
+
+  const reorderFileViewTabs = (paths: Array<string>) => {
+    const uniquePaths = paths.filter(
+      (path, index) => path && paths.indexOf(path) === index
+    )
+    if (uniquePaths.length === 0) return
+
+    setFileViewTabs(uniquePaths)
+    setFileViewPreviewPath("")
+    if (!uniquePaths.includes(fileViewActivePath)) {
+      setFileViewActivePath(uniquePaths[0] || "")
+    }
+  }
+
+  const toggleReviewPane = () => {
+    if (isMobile) {
+      setRightSidebarActiveTab("review")
+      setCurrentTab((tab) =>
+        tab === "git" && rightSidebarActiveTab === "review" ? "session" : "git"
+      )
+      return
+    }
+
+    if (gitPanelOpen && rightSidebarActiveTab === "review") {
+      setGitPanelOpen(false)
+      return
+    }
+
+    setRightSidebarActiveTab("review")
+    setGitPanelOpen(true)
+  }
+
+  const toggleFileView = toggleReviewPane
 
   React.useEffect(() => {
     setFileViewTabs([])
+    setFileViewPreviewPath("")
     setFileViewActivePath("")
-    setFileViewOpen(false)
+    setFileTreeCollapsed(false)
   }, [sessionState.cwd])
 
   React.useEffect(() => {
     if (!sessionState.draft) return
     setGitPanelOpen(false)
     setFileViewTabs([])
+    setFileViewPreviewPath("")
     setFileViewActivePath("")
-    setFileViewOpen(false)
+    setFileTreeCollapsed(false)
   }, [sessionState.draft, setGitPanelOpen])
 
   const sidebarWorkspaceVersion = useAppShellSidebarValue(
@@ -6353,7 +6494,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Git",
         title: "Toggle Review Pane",
         description: "Toggle the review pane for changed files",
-        shortcut: formatShortcutLabel("Control+V"),
         keywords: ["review", "diff", "file", "changes", "pane"],
         onSelect: toggleFileView,
       },
@@ -6478,7 +6618,6 @@ const AppShellSessionWorkspace = React.forwardRef<
     scrollConversationToTop: () => {
       conversationFrameRef.current?.scrollConversationToTop()
     },
-    toggleFileView,
     toggleGitPanel,
     toggleHideThinking,
     toggleHideToolBlocks,
@@ -6603,13 +6742,11 @@ const AppShellSessionWorkspace = React.forwardRef<
         actionsRef={sessionHeaderActionsRef}
         defaultNewSessionDirectory={defaultNewSessionDirectory}
         displaySessionCwd={displaySessionCwd}
-        fileViewOpen={fileViewOpen}
         gitPanelOpen={gitPanelOpen}
         loadingDisplaySessionTitle={loadingDisplaySessionTitle}
         displaySettingsStore={displaySettingsStore}
         isSessionViewLoading={isSessionViewLoading}
         newSessionDirectoryOptions={newSessionDirectoryOptions}
-        onToggleFileView={toggleFileView}
         onToggleGitPanel={toggleGitPanel}
         sessionStore={sessionStore}
         viewerContextId={viewerContextId}
@@ -6630,7 +6767,9 @@ const AppShellSessionWorkspace = React.forwardRef<
             fileInputRef={fileInputRef}
             fileViewActivePath={fileViewActivePath}
             fileViewOpen={fileViewOpen}
-            fileViewTabs={fileViewTabs}
+            fileViewTabs={visibleFileViewTabs}
+            fileViewPreviewPath={fileViewPreviewPath}
+            fileTreeCollapsed={fileTreeCollapsed}
             gitPanelOpen={gitPanelOpen}
             hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
             isSessionViewLoading={isSessionViewLoading}
@@ -6640,9 +6779,16 @@ const AppShellSessionWorkspace = React.forwardRef<
             onCreateSession={(cwdOverride) => {
               void createSession(cwdOverride)
             }}
+            onCloseAllFileViewTabs={closeAllFileViewTabs}
             onCloseFileViewTab={closeFileViewTab}
+            onCloseFileViewTabsToRight={closeFileViewTabsToRight}
+            onCloseOtherFileViewTabs={closeOtherFileViewTabs}
+            onFileTreeCollapsedChange={setFileTreeCollapsed}
             onFileViewActivePathChange={setFileViewActivePath}
             onOpenFileViewTab={openFileViewTab}
+            onReorderFileViewTabs={reorderFileViewTabs}
+            onRightSidebarActiveTabChange={setRightSidebarActiveTab}
+            rightSidebarActiveTab={rightSidebarActiveTab}
             sessionStore={sessionStore}
             store={composerStore}
             viewerContextId={viewerContextId}
@@ -6714,6 +6860,8 @@ const AppShellSessionWorkspace = React.forwardRef<
   )
 })
 
+type OpenFileViewTabOptions = { pin?: boolean }
+
 type AppShellSessionHeaderActions = {
   createSession: (cwdOverride?: string) => void | Promise<unknown>
   onDeleteCurrentSession: () => void
@@ -6729,13 +6877,11 @@ type AppShellSessionHeaderProps = {
   actionsRef: React.RefObject<AppShellSessionHeaderActions>
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
-  fileViewOpen: boolean
   gitPanelOpen: boolean
   loadingDisplaySessionTitle: string
   displaySettingsStore: PhiStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
-  onToggleFileView: () => void
   onToggleGitPanel: () => void
   sessionStore: PhiStore<SessionState>
   viewerContextId: string
@@ -6745,13 +6891,11 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   actionsRef,
   defaultNewSessionDirectory,
   displaySessionCwd,
-  fileViewOpen,
   gitPanelOpen,
   loadingDisplaySessionTitle,
   displaySettingsStore,
   isSessionViewLoading,
   newSessionDirectoryOptions,
-  onToggleFileView,
   onToggleGitPanel,
   sessionStore,
   viewerContextId,
@@ -6979,21 +7123,6 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <TitleTooltip
-            title="Toggle Review Pane"
-            kbd={formatShortcutLabel("Control+V")}
-          >
-            <Button
-              size="icon-sm"
-              variant={fileViewOpen ? "secondary" : "ghost"}
-              className="hidden md:inline-flex"
-              aria-pressed={fileViewOpen}
-              aria-label="Toggle Review Pane"
-              onClick={onToggleFileView}
-            >
-              <DiffIcon />
-            </Button>
-          </TitleTooltip>
           <TitleTooltip
             title="Toggle right sidebar"
             kbd={formatShortcutLabel("Control+\\")}

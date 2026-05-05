@@ -30,7 +30,6 @@ type ShortcutActions = {
   pushGitChanges: () => void | Promise<unknown>
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
-  toggleFileView: () => void
   toggleGitPanel: () => void
   toggleHideThinking: () => void | Promise<unknown>
   toggleHideToolBlocks: () => void
@@ -413,13 +412,6 @@ export function useAppShellShortcuts({
       void shortcutActionsRef.current.cycleThinkingLevel(
         event.shiftKey ? -1 : 1
       )
-      return
-    }
-
-    if (key === "v") {
-      event.preventDefault()
-      closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.toggleFileView()
       return
     }
 
