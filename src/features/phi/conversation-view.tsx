@@ -31,58 +31,185 @@ const highlightCache = new Map<
 const MemoizedReactMarkdown = React.memo(ReactMarkdown)
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 
-function createMarkdownComponents(streaming: boolean) {
-  return {
-    a({ href, children, ...props }) {
-      return (
-        <a
-          href={href}
-          onClick={(event) => handleMarkdownAnchorClick(event, href)}
-          {...props}
-        >
-          {children}
-        </a>
-      )
-    },
-    code({ className, children, ...props }) {
-      return (
-        <code
-          className={cn(
-            "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
-            className
-          )}
-          {...props}
-        >
-          {children}
-        </code>
-      )
-    },
-    pre({ children }) {
-      const codeElement = getCodeBlockChild(children)
-
-      if (!codeElement) {
-        return <pre>{children}</pre>
-      }
-
-      const code = markdownNodeText(codeElement.props.children).replace(
-        /\n$/,
-        ""
-      )
-      const language = parseCodeLanguage(codeElement.props.className)
-
-      return <CodeBlock code={code} language={language} streaming={streaming} />
-    },
-  } satisfies NonNullable<
-    React.ComponentProps<typeof ReactMarkdown>["components"]
-  >
+type MarkdownFenceRange = {
+  end: number
+  start: number
 }
 
-const MARKDOWN_COMPONENTS = createMarkdownComponents(false)
-const STREAMING_MARKDOWN_COMPONENTS = createMarkdownComponents(true)
+type MarkdownRenderingContextValue = {
+  completedFenceRanges?: Array<MarkdownFenceRange>
+  streaming: boolean
+}
+
+const MarkdownRenderingContext =
+  React.createContext<MarkdownRenderingContextValue>({
+    streaming: false,
+  })
+
+type MarkdownAnchorProps = React.ComponentProps<"a"> & {
+  node?: unknown
+}
+
+function MarkdownAnchor({
+  children,
+  href,
+  node: _node,
+  ...props
+}: MarkdownAnchorProps) {
+  return (
+    <a
+      href={href}
+      onClick={(event) => handleMarkdownAnchorClick(event, href)}
+      {...props}
+    >
+      {children}
+    </a>
+  )
+}
+
+type MarkdownCodeProps = React.ComponentProps<"code"> & {
+  node?: unknown
+}
+
+function MarkdownCode({
+  children,
+  className,
+  node: _node,
+  ...props
+}: MarkdownCodeProps) {
+  return (
+    <code
+      className={cn(
+        "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </code>
+  )
+}
+
+type MarkdownPreProps = React.ComponentProps<"pre"> & {
+  node?: unknown
+}
+
+function MarkdownPre({ children, node, ...props }: MarkdownPreProps) {
+  const { completedFenceRanges, streaming } = React.useContext(
+    MarkdownRenderingContext
+  )
+  const codeElement = getCodeBlockChild(children)
+
+  if (!codeElement) {
+    return <pre {...props}>{children}</pre>
+  }
+
+  const code = markdownNodeText(codeElement.props.children).replace(/\n$/, "")
+  const language = parseCodeLanguage(codeElement.props.className)
+  const codeBlockStreaming =
+    streaming && !markdownNodeIsInFenceRange(node, completedFenceRanges)
+
+  return (
+    <CodeBlock code={code} language={language} streaming={codeBlockStreaming} />
+  )
+}
+
+const MARKDOWN_COMPONENTS = {
+  a: MarkdownAnchor,
+  code: MarkdownCode,
+  pre: MarkdownPre,
+} satisfies NonNullable<
+  React.ComponentProps<typeof ReactMarkdown>["components"]
+>
 
 function parseCodeLanguage(className?: string) {
   const match = className?.match(/language-([A-Za-z0-9_+#.-]+)/)
   return match?.[1]
+}
+
+function collectCompleteFencedCodeRanges(markdown: string) {
+  const ranges: Array<MarkdownFenceRange> = []
+  let lineStart = 0
+  let fence: {
+    char: "`" | "~"
+    length: number
+    start: number
+  } | null = null
+
+  while (lineStart <= markdown.length) {
+    const nextNewline = markdown.indexOf("\n", lineStart)
+    const rawLineEnd = nextNewline === -1 ? markdown.length : nextNewline
+    const rawLine = markdown.slice(lineStart, rawLineEnd)
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine
+
+    if (!fence) {
+      const opening = line.match(/^(?: {0,3})(`{3,}|~{3,})(.*)$/)
+      if (opening) {
+        const marker = opening[1]
+        const char = marker[0] as "`" | "~"
+        const info = opening[2] || ""
+
+        if (char !== "`" || !info.includes("`")) {
+          fence = {
+            char,
+            length: marker.length,
+            start: lineStart,
+          }
+        }
+      }
+    } else {
+      const closing = line.match(/^(?: {0,3})(`{3,}|~{3,})[ \t]*$/)
+      const marker = closing?.[1]
+
+      if (marker && marker[0] === fence.char && marker.length >= fence.length) {
+        ranges.push({
+          end: rawLineEnd,
+          start: fence.start,
+        })
+        fence = null
+      }
+    }
+
+    if (nextNewline === -1) break
+    lineStart = nextNewline + 1
+  }
+
+  return ranges
+}
+
+function markdownNodePositionOffsets(node: unknown) {
+  if (!node || typeof node !== "object") return null
+
+  const position = (node as { position?: unknown }).position
+  if (!position || typeof position !== "object") return null
+
+  const start = (position as { start?: unknown }).start
+  const end = (position as { end?: unknown }).end
+  if (!start || typeof start !== "object" || !end || typeof end !== "object") {
+    return null
+  }
+
+  const startOffset = (start as { offset?: unknown }).offset
+  const endOffset = (end as { offset?: unknown }).offset
+  if (typeof startOffset !== "number" || typeof endOffset !== "number") {
+    return null
+  }
+
+  return { end: endOffset, start: startOffset }
+}
+
+function markdownNodeIsInFenceRange(
+  node: unknown,
+  ranges?: Array<MarkdownFenceRange>
+) {
+  if (!ranges?.length) return false
+
+  const position = markdownNodePositionOffsets(node)
+  if (!position) return false
+
+  return ranges.some(
+    (range) => position.start >= range.start && position.end <= range.end
+  )
 }
 
 function handleMarkdownAnchorClick(
@@ -409,17 +536,24 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   streaming?: boolean
   text: string
 }) {
+  const renderingContext = {
+    ...(streaming
+      ? { completedFenceRanges: collectCompleteFencedCodeRanges(text) }
+      : {}),
+    streaming,
+  } satisfies MarkdownRenderingContextValue
+
   return (
-    <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
-      <MemoizedReactMarkdown
-        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-        components={
-          streaming ? STREAMING_MARKDOWN_COMPONENTS : MARKDOWN_COMPONENTS
-        }
-      >
-        {text}
-      </MemoizedReactMarkdown>
-    </div>
+    <MarkdownRenderingContext value={renderingContext}>
+      <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
+        <MemoizedReactMarkdown
+          remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+          components={MARKDOWN_COMPONENTS}
+        >
+          {text}
+        </MemoizedReactMarkdown>
+      </div>
+    </MarkdownRenderingContext>
   )
 })
 
