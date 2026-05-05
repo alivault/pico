@@ -1412,7 +1412,7 @@ function GitCommitDialog({
         placeholder="Search commit actions"
         className="text-base md:text-sm"
       />
-      <div className="grid gap-3 px-3 py-4 text-sm md:px-4 md:text-base">
+      <div className="grid gap-3 px-3 py-4 text-sm md:px-4">
         <div className="grid gap-3">
           <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-4">
             <div className="font-semibold">Branch</div>
