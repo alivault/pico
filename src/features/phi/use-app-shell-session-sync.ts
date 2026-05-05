@@ -345,12 +345,13 @@ function visibleConversationSignature(
       .map((block) => visibleAssistantBlockKey(block, options))
       .filter(Boolean)
     const footerSignature = [
+      item.done === false ? "0" : "1",
       item.model?.provider || "",
       item.model?.id || "",
     ].join(":")
 
     if (blockKeys.length === 0) {
-      if (item.streaming || footerSignature !== ":") {
+      if (item.streaming || item.done === false || footerSignature !== "1::") {
         parts.push(
           `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${footerSignature}`
         )

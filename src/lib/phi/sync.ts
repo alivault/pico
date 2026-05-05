@@ -234,7 +234,10 @@ function sameAssistantModel(
 }
 
 function sameAssistantMessageMeta(left: AssistantItem, right: AssistantItem) {
-  return sameAssistantModel(left.model, right.model)
+  return (
+    sameAssistantModel(left.model, right.model) &&
+    (left.done === false) === (right.done === false)
+  )
 }
 
 function sameStateItem(left: ConversationItem, right: ConversationItem) {
@@ -1140,6 +1143,7 @@ export function buildItemsFromSync(
           toolResultsByCallId,
         }),
         streaming: true,
+        done: false,
         ...assistantItemMetadataFromMessage(sync.streamingMessage),
       })
     } else if (previousStreamingItem && !hasStreamingMessageUpdate) {
@@ -1169,6 +1173,7 @@ export function buildItemsFromSync(
           toolResultsByCallId,
         }),
         streaming: true,
+        done: false,
       })
     }
   }

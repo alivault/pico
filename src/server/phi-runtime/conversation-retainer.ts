@@ -161,6 +161,7 @@ function ensureStreamingAssistant(state: RetainedConversationState) {
     renderKey,
     blocks: [],
     streaming: true,
+    done: false,
   } satisfies AssistantItem
   state.items = [...state.items, item]
   return item
@@ -352,6 +353,7 @@ function appendCommittedMessage(
     renderKey,
     blocks,
     streaming: false,
+    done: false,
     ...(streamingItem?.model ? { model: streamingItem.model } : {}),
     ...assistantMetadataFromMessage(message),
   } satisfies AssistantItem
@@ -419,10 +421,9 @@ export function applyRetainedConversationEvent(
 
   if (type === "agent_end") {
     const item = streamingAssistantItem(state.items)
-    if (!item) return
-
     const abortedMessage = abortedAssistantMessage(event)
-    if (abortedMessage) {
+
+    if (abortedMessage && item) {
       const itemKey = nextMessageItemKey(state.items)
       const renderKey = item.renderKey || itemKey
       state.items = [
@@ -437,6 +438,7 @@ export function applyRetainedConversationEvent(
             abortedAssistantStopMessage(abortedMessage)
           ),
           streaming: false,
+          done: true,
           ...(item.model ? { model: item.model } : {}),
           ...assistantMetadataFromMessage(abortedMessage),
         },
@@ -444,8 +446,29 @@ export function applyRetainedConversationEvent(
       return
     }
 
-    if (item.blocks.length === 0) {
-      state.items = removeStreamingAssistantItem(state.items)
-    }
+    state.items = state.items
+      .filter(
+        (entry) =>
+          !(
+            entry.kind === "assistant" &&
+            entry.streaming &&
+            entry.blocks.length === 0
+          )
+      )
+      .map((entry) => {
+        if (entry.kind !== "assistant") return entry
+        if (!entry.streaming && entry.done !== false) return entry
+
+        return {
+          ...entry,
+          streaming: false,
+          done: true,
+          blocks: entry.blocks.map((block) =>
+            block.type === "tool" && block.running
+              ? { ...block, running: false }
+              : block
+          ),
+        } satisfies AssistantItem
+      })
   }
 }

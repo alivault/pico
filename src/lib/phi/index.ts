@@ -198,6 +198,7 @@ export type AssistantItem = {
   renderKey?: string
   blocks: Array<AssistantBlock>
   streaming?: boolean
+  done?: boolean
   model?: ModelOption
 }
 

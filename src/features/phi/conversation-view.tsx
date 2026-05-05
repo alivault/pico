@@ -504,8 +504,9 @@ export function conversationItemSignature(item: ConversationItem) {
     item.model?.provider || "",
     item.model?.id || "",
   ].join(":")
+  const doneSignature = item.done === false ? "0" : "1"
 
-  return `assistant:${itemKey}:${blockSignature}:${item.streaming ? "1" : "0"}:${modelSignature}`
+  return `assistant:${itemKey}:${blockSignature}:${item.streaming ? "1" : "0"}:${doneSignature}:${modelSignature}`
 }
 
 function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
@@ -1427,6 +1428,7 @@ function assistantItemIsWorking(
 ) {
   return (
     Boolean(item.streaming) ||
+    item.done === false ||
     item.blocks.some((block) => block.type === "tool" && block.running)
   )
 }
