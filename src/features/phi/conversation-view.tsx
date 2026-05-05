@@ -3039,25 +3039,26 @@ function AssistantMessageFooterCopyButton({ text }: { text: string }) {
     }
   }
 
+  const label =
+    copyState === "copied"
+      ? "Copied"
+      : copyState === "error"
+        ? "Retry copy"
+        : "Copy assistant message"
+
   return (
-    <Button
-      variant="ghost"
-      size="xs"
-      className="-ml-2 text-muted-foreground"
-      disabled={!canCopy}
-      onClick={copyMessage}
-    >
-      {copyState === "copied" ? (
-        <CheckIcon data-icon="inline-start" />
-      ) : (
-        <CopyIcon data-icon="inline-start" />
-      )}
-      {copyState === "copied"
-        ? "Copied"
-        : copyState === "error"
-          ? "Retry"
-          : "Copy"}
-    </Button>
+    <TitleTooltip title={label}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="-ml-2 text-muted-foreground"
+        disabled={!canCopy}
+        aria-label={label}
+        onClick={copyMessage}
+      >
+        {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+      </Button>
+    </TitleTooltip>
   )
 }
 
@@ -3070,7 +3071,9 @@ function AssistantMessageFooter({
   modelLabel: string
   streaming: boolean
 }) {
-  const showCopyButton = !streaming && Boolean(copyText.trim())
+  if (streaming) return null
+
+  const showCopyButton = Boolean(copyText.trim())
 
   if (!showCopyButton && !modelLabel) return null
 
@@ -3079,12 +3082,7 @@ function AssistantMessageFooter({
       {showCopyButton ? (
         <AssistantMessageFooterCopyButton text={copyText} />
       ) : null}
-      {modelLabel ? (
-        <>
-          {showCopyButton ? <span aria-hidden="true">·</span> : null}
-          <span className="truncate">{modelLabel}</span>
-        </>
-      ) : null}
+      {modelLabel ? <span className="truncate">{modelLabel}</span> : null}
     </div>
   )
 }
