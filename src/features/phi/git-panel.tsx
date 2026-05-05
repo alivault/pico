@@ -2583,6 +2583,46 @@ function FileTreeResizeHandle({
   )
 }
 
+function ProjectFileTreePane({
+  viewerContextId,
+  cwd,
+  active,
+  activeFilePath,
+  onOpenFile,
+  previewMode,
+}: GitScopedProps & {
+  activeFilePath: string
+  onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
+  previewMode: ProjectFilesPreviewMode
+}) {
+  const [fileTreeWidth, setFileTreeWidth] = React.useState(
+    PROJECT_FILE_TREE_DEFAULT_WIDTH
+  )
+
+  return (
+    <div
+      className="relative min-h-0 shrink-0 overflow-visible border-r border-border/70"
+      style={{
+        width: `${fileTreeWidth}px`,
+        maxWidth: "70%",
+      }}
+    >
+      <div className="h-full min-h-0 overflow-hidden">
+        <ProjectFilesWorkspace
+          viewerContextId={viewerContextId}
+          cwd={cwd}
+          active={active}
+          activeFilePath={activeFilePath}
+          onCloseFile={() => {}}
+          onOpenFile={onOpenFile}
+          previewMode={previewMode}
+        />
+      </div>
+      <FileTreeResizeHandle width={fileTreeWidth} onResize={setFileTreeWidth} />
+    </div>
+  )
+}
+
 function fileNameFromPath(path: string) {
   const parts = path.split("/").filter(Boolean)
   return parts.at(-1) || path
@@ -3808,9 +3848,6 @@ export function GitPanel({
   }
   const [inlineActiveFilePath, setInlineActiveFilePath] = React.useState("")
   const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
-  const [fileTreeWidth, setFileTreeWidth] = React.useState(
-    PROJECT_FILE_TREE_DEFAULT_WIDTH
-  )
   const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
   const panelHasCardChrome = showToolbar && !isMobile
   const currentFilePath =
@@ -3927,29 +3964,14 @@ export function GitPanel({
                 ) : null}
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   {fileTreeCollapsed ? null : (
-                    <div
-                      className="relative min-h-0 shrink-0 overflow-visible border-r border-border/70"
-                      style={{
-                        width: `${fileTreeWidth}px`,
-                        maxWidth: "70%",
-                      }}
-                    >
-                      <div className="h-full min-h-0 overflow-hidden">
-                        <ProjectFilesWorkspace
-                          viewerContextId={viewerContextId}
-                          cwd={normalizedCwd}
-                          active={active && activeTab === "files"}
-                          activeFilePath={currentFilePath}
-                          onCloseFile={() => {}}
-                          onOpenFile={openFile}
-                          previewMode={previewMode}
-                        />
-                      </div>
-                      <FileTreeResizeHandle
-                        width={fileTreeWidth}
-                        onResize={setFileTreeWidth}
-                      />
-                    </div>
+                    <ProjectFileTreePane
+                      viewerContextId={viewerContextId}
+                      cwd={normalizedCwd}
+                      active={active && activeTab === "files"}
+                      activeFilePath={currentFilePath}
+                      onOpenFile={openFile}
+                      previewMode={previewMode}
+                    />
                   )}
                   {currentFilePath ? (
                     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
