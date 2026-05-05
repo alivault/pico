@@ -1217,11 +1217,19 @@ function GitCommitDialog({
           }),
         }
       ),
-    onSuccess: async () => {
+    onSuccess: async (_response, variables) => {
       setMessage("")
       setGeneratedReason("")
       onOpenChange(false)
       await invalidateGitQueries({ queryClient, viewerContextId, cwd })
+      toast.success(
+        variables.forcePush
+          ? "Committed and force pushed changes"
+          : variables.push
+            ? "Committed and pushed changes"
+            : "Committed changes",
+        { description: variables.commitMessage }
+      )
     },
     onError: (error, variables) => {
       toast.error(
