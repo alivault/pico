@@ -11,6 +11,7 @@ import {
 import {
   ArrowLeftIcon,
   CheckIcon,
+  ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
   GitBranchIcon,
@@ -2309,7 +2310,11 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
             className="h-8 gap-2"
             onClick={toggleAll}
           >
-            <ChevronsUpDownIcon className="size-4" />
+            {hasOpenFile ? (
+              <ChevronsDownUpIcon className="size-4" />
+            ) : (
+              <ChevronsUpDownIcon className="size-4" />
+            )}
             {hasOpenFile ? "Collapse all" : "Expand all"}
           </Button>
         </div>
