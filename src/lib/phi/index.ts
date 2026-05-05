@@ -215,6 +215,7 @@ export type SessionState = {
   connected: boolean
   replaying: boolean
   streaming: boolean
+  compacting: boolean
   draft: boolean
   messages: Array<MessagePayload>
   items: Array<ConversationItem>
@@ -280,6 +281,7 @@ export type StateSyncPayload = {
   pendingUserMessages?: Array<PendingUserMessagePayload>
   draft?: boolean
   streaming?: boolean
+  compacting?: boolean
   streamingMessage?: MessagePayload
   historyOffset?: number
   historyTotalCount?: number

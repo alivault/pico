@@ -13,6 +13,7 @@ import type {
   StateSyncPayload,
   TreeNode,
 } from "@/lib/phi"
+import { createCompactionSummaryItem } from "@/lib/phi"
 import {
   cleanupSessionNameCandidate,
   deriveHeuristicSessionNameAttempt,
@@ -213,6 +214,7 @@ type SessionEntry = {
   session: AgentSessionLike
   draft: boolean
   streamingState: boolean
+  compactingState: boolean
   retainedConversationItems: Array<ConversationItem>
   pendingUserMessages: Array<PendingUserMessage>
   pendingQueueMutation: boolean
@@ -246,6 +248,7 @@ type StateSyncScalarField =
   | "sessionKey"
   | "draft"
   | "streaming"
+  | "compacting"
   | "hideThinkingBlock"
   | "thinkingLevel"
   | "historyOffset"
@@ -295,6 +298,7 @@ const STATE_SYNC_SCALAR_FIELDS = [
   "sessionKey",
   "draft",
   "streaming",
+  "compacting",
   "hideThinkingBlock",
   "thinkingLevel",
   "historyOffset",
@@ -730,6 +734,7 @@ export class PhiRuntime {
       cwd: entry.cwd,
       draft: entry.draft,
       streaming: this.getEntryStreamingState(entry),
+      compacting: this.getEntryCompactingState(entry),
       messageCount: entry.session.messages.length,
     }
   }
@@ -915,6 +920,10 @@ export class PhiRuntime {
     return entry.streamingState
   }
 
+  private getEntryCompactingState(entry: SessionEntry) {
+    return entry.compactingState
+  }
+
   private hasVisibleSessionContent(entry: SessionEntry) {
     return (
       Boolean(entry) &&
@@ -1045,6 +1054,7 @@ export class PhiRuntime {
       ),
       draft,
       streaming: this.getEntryStreamingState(entry),
+      compacting: this.getEntryCompactingState(entry),
       historyOffset: 0,
       historyTotalCount,
       contextUsage:
@@ -2190,6 +2200,7 @@ export class PhiRuntime {
       session,
       draft: Boolean(options?.draft),
       streamingState: Boolean(session.isStreaming),
+      compactingState: false,
       retainedConversationItems: createRetainedConversationState(
         session.messages.map((message) => sanitizeSessionMessage(message))
       ).items,
@@ -3060,6 +3071,27 @@ export class PhiRuntime {
     entry: SessionEntry,
     event: SessionEventLike
   ) {
+    const type = typeof event.type === "string" ? event.type : ""
+    if (type === "compaction_end" && !event.aborted && event.result) {
+      const result =
+        event.result && typeof event.result === "object" ? event.result : {}
+      const state = createRetainedConversationState(
+        entry.session.messages.map((message) => sanitizeSessionMessage(message))
+      )
+      const summary = (result as { summary?: unknown }).summary
+      const tokensBefore = (result as { tokensBefore?: unknown }).tokensBefore
+      state.items = [
+        ...state.items,
+        createCompactionSummaryItem(
+          summary,
+          tokensBefore,
+          `compaction:live:${state.items.length}`
+        ),
+      ]
+      entry.retainedConversationItems = state.items
+      return
+    }
+
     const retainedEvent = {
       ...event,
       ...(event.message
@@ -3088,7 +3120,12 @@ export class PhiRuntime {
       statusChanged = true
     }
 
-    if (type === "compaction_start" || type === "auto_retry_start") {
+    if (type === "compaction_start") {
+      entry.compactingState = true
+      this.clearSessionDoneTimeout(entry)
+    }
+
+    if (type === "auto_retry_start") {
       this.clearSessionDoneTimeout(entry)
     }
 
@@ -3107,6 +3144,7 @@ export class PhiRuntime {
     }
 
     if (type === "compaction_end") {
+      entry.compactingState = false
       this.touchSessionEntry(entry)
 
       const compactionReason =
@@ -4551,10 +4589,17 @@ export class PhiRuntime {
       throw new Error(`Unknown slash command: /${name || "(empty)"}`)
     }
 
-    await activeEntry.session.compact(args.trim() || undefined)
+    activeEntry.compactingState = true
     await this.broadcastEntryState(activeEntry)
-    await this.broadcastSessionsAll()
-    return { ok: true, commandName: name }
+
+    try {
+      await activeEntry.session.compact(args.trim() || undefined)
+      return { ok: true, commandName: name }
+    } finally {
+      activeEntry.compactingState = false
+      await this.broadcastEntryState(activeEntry)
+      await this.broadcastSessionsAll()
+    }
   }
 
   async resolveUiRequest(id: string, body: Record<string, unknown>) {

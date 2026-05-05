@@ -260,6 +260,8 @@ export function updateStateFromSync(
   const { items } = buildItemsFromSync(sync, previousItems)
   const streaming =
     typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
+  const compacting =
+    typeof sync.compacting === "boolean" ? sync.compacting : base.compacting
   const draft = typeof sync.draft === "boolean" ? sync.draft : base.draft
   const historyOffset =
     typeof sync.historyOffset === "number"
@@ -343,6 +345,7 @@ export function updateStateFromSync(
     previous.connected &&
     !previous.replaying &&
     previous.streaming === streaming &&
+    previous.compacting === compacting &&
     previous.draft === draft &&
     previous.messages === messages &&
     previous.items === items &&
@@ -373,6 +376,7 @@ export function updateStateFromSync(
     connected: true,
     replaying: false,
     streaming,
+    compacting,
     draft,
     messages,
     items,

@@ -1276,6 +1276,7 @@ export function createInitialSessionState(): SessionState {
     connected: false,
     replaying: false,
     streaming: false,
+    compacting: false,
     draft: true,
     messages: [],
     items: [],

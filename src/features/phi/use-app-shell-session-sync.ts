@@ -43,6 +43,7 @@ import {
 } from "@/lib/phi/api"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
+const COMPACT_WORKING_LABEL = "Compacting context... (escape to cancel)"
 
 type PendingComposerMessage = {
   pendingId: string
@@ -95,6 +96,7 @@ type UseAppShellSessionSyncOptions = {
     options?: { preserveExisting?: boolean }
   ) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
+  setCompactRunningState: (running: boolean) => void
   setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
   setComposerStreaming: (streaming: boolean) => void
   setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
@@ -387,6 +389,7 @@ function sameSessionStateExceptConversation(
     left.connected === right.connected &&
     left.replaying === right.replaying &&
     left.streaming === right.streaming &&
+    left.compacting === right.compacting &&
     left.draft === right.draft &&
     left.historyOffset === right.historyOffset &&
     left.historyTotalCount === right.historyTotalCount &&
@@ -446,6 +449,7 @@ export function useAppShellSessionSync({
   setConversationItems,
   setHiddenThinkingPreview,
   setWorkingState,
+  setCompactRunningState,
   setComposerContextUsage,
   setComposerStreaming,
   setSessionsEvent,
@@ -738,20 +742,35 @@ export function useAppShellSessionSync({
           if (previousState.contextUsage !== nextState.contextUsage) {
             setComposerContextUsage(nextState.contextUsage)
           }
-          if (previousState.streaming !== nextState.streaming) {
-            setComposerStreaming(nextState.streaming)
-          }
-          if (previousState.streaming || nextState.streaming) {
-            setWorkingState(
-              nextState.streaming
-                ? { label: nextState.uiState.workingMessage || "Working…" }
-                : null
-            )
-          }
-          const forceConversationSync =
+          const activeSessionChanged =
             previousState.sessionKey !== nextState.sessionKey ||
             previousState.sessionId !== nextState.sessionId ||
             previousState.sessionFile !== nextState.sessionFile
+          if (previousState.streaming !== nextState.streaming) {
+            setComposerStreaming(nextState.streaming)
+          }
+          if (
+            activeSessionChanged ||
+            previousState.compacting !== nextState.compacting
+          ) {
+            setCompactRunningState(nextState.compacting)
+          }
+          if (
+            activeSessionChanged ||
+            previousState.streaming ||
+            nextState.streaming ||
+            previousState.compacting ||
+            nextState.compacting
+          ) {
+            setWorkingState(
+              nextState.compacting
+                ? { label: COMPACT_WORKING_LABEL }
+                : nextState.streaming
+                  ? { label: nextState.uiState.workingMessage || "Working…" }
+                  : null
+            )
+          }
+          const forceConversationSync = activeSessionChanged
           if (
             forceConversationSync ||
             !sameVisibleConversation(previousState.items, nextState.items, {
@@ -903,6 +922,7 @@ export function useAppShellSessionSync({
     setComposerImages,
     setHiddenThinkingPreview,
     setWorkingState,
+    setCompactRunningState,
     setComposerContextUsage,
     setComposerStreaming,
     setConversationItems,

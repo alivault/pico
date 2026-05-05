@@ -4832,6 +4832,12 @@ const AppShellSessionWorkspace = React.forwardRef<
   const workingStateStore = workingStateStoreRef.current
   const compactRunningRef = React.useRef(false)
   const compactAbortRequestedRef = React.useRef(false)
+  const setCompactRunningState = React.useCallback((running: boolean) => {
+    compactRunningRef.current = running
+    if (running) {
+      compactAbortRequestedRef.current = false
+    }
+  }, [])
   const setAwaitingFirstTurn = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
@@ -5746,6 +5752,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     setConversationItems,
     setHiddenThinkingPreview,
     setWorkingState,
+    setCompactRunningState,
     setComposerContextUsage,
     setComposerStreaming,
     setSessionsEvent: sidebarStore.setSessionsEvent,
@@ -6133,14 +6140,12 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const setCompactWorkingState = React.useCallback(
     (running: boolean) => {
+      setCompactRunningState(running)
       if (running) {
-        compactRunningRef.current = true
-        compactAbortRequestedRef.current = false
         setStoreState(workingStateStore, { label: COMPACT_WORKING_LABEL })
         return
       }
 
-      compactRunningRef.current = false
       if (compactAbortRequestedRef.current) {
         compactAbortRequestedRef.current = false
         setStoreState(workingStateStore, {
@@ -6154,7 +6159,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         setStoreState(workingStateStore, null)
       }
     },
-    [workingStateStore]
+    [setCompactRunningState, workingStateStore]
   )
 
   const isCompactAbortRequested = React.useCallback(
