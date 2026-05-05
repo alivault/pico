@@ -3149,11 +3149,14 @@ export function HeaderGitActions({
     shortcutPullMutatingCount > 0
   const gitActionBusy =
     gitActionMutation.isPending || pushing || forcePushing || pulling
+  const showMobilePush =
+    isMobile && !canCommit && canPush && (!gitActionBusy || pushing)
   const showPush = !isMobile && canPush && (!gitActionBusy || pushing)
   const showForcePush =
     !isMobile && canForcePush && (!gitActionBusy || forcePushing)
   const showPull = !isMobile && canPull && (!gitActionBusy || pulling)
-  const showActions = canCommit || showPush || showForcePush || showPull
+  const showActions =
+    canCommit || showMobilePush || showPush || showForcePush || showPull
 
   if (!showActions && !commitDialogOpen) return null
 
@@ -3187,6 +3190,22 @@ export function HeaderGitActions({
                 }}
               >
                 <GitCommitIcon /> Commit…
+              </Button>
+            </TitleTooltip>
+          ) : null}
+          {showMobilePush ? (
+            <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="md:hidden"
+                aria-label="Push changes"
+                disabled={gitActionBusy}
+                onClick={() => {
+                  gitActionMutation.mutate("push")
+                }}
+              >
+                {pushing ? <Spinner /> : <UploadIcon />}
               </Button>
             </TitleTooltip>
           ) : null}
