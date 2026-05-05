@@ -6318,7 +6318,6 @@ const AppShellSessionWorkspace = React.forwardRef<
         group: "Assistant",
         title: "Previous reasoning level",
         description: `Current level: ${currentThinkingLevel}`,
-        shortcut: formatShortcutLabel("Control+Shift+R"),
         keywords: [
           "thinking",
           "reasoning",
@@ -6330,6 +6329,15 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSelect: () => {
           void cycleThinkingLevel(-1)
         },
+      },
+      {
+        id: "toggle-review-pane",
+        group: "Git",
+        title: "Toggle Review Pane",
+        description: "Toggle the review pane for changed files",
+        shortcut: formatShortcutLabel("Control+Shift+R"),
+        keywords: ["review", "diff", "file", "changes", "pane"],
+        onSelect: toggleFileView,
       },
       {
         id: "toggle-tools",
@@ -6452,6 +6460,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     scrollConversationToTop: () => {
       conversationFrameRef.current?.scrollConversationToTop()
     },
+    toggleFileView,
     toggleGitPanel,
     toggleHideThinking,
     toggleHideToolBlocks,
@@ -6952,7 +6961,10 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <TitleTooltip title="Toggle Review Pane">
+          <TitleTooltip
+            title="Toggle Review Pane"
+            kbd={formatShortcutLabel("Control+Shift+R")}
+          >
             <Button
               size="icon-sm"
               variant={fileViewOpen ? "secondary" : "ghost"}
