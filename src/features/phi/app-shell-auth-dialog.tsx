@@ -29,6 +29,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 
@@ -487,15 +488,15 @@ export function AppShellAuthDialogController({
       ) : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
+            <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
               Enter
-            </kbd>
+            </Kbd>
             Save
           </span>
           <span className="inline-flex items-center gap-1">
-            <kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
+            <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
               Esc
-            </kbd>
+            </Kbd>
             Back
           </span>
         </div>

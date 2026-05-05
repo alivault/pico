@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
+import { KeyboardShortcutContent } from "@/components/ui/kbd"
 import { SearchIcon, CheckIcon } from "lucide-react"
 
 function Command({
@@ -166,17 +167,20 @@ function CommandItem({
 
 function CommandShortcut({
   className,
+  children,
   ...props
 }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto hidden text-xs tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground md:inline",
+        "ml-auto hidden items-center justify-end text-xs text-muted-foreground group-data-selected/command-item:text-foreground md:inline-flex",
         className
       )}
       {...props}
-    />
+    >
+      <KeyboardShortcutContent>{children}</KeyboardShortcutContent>
+    </span>
   )
 }
 

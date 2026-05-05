@@ -4,6 +4,7 @@ import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
+import { Kbd } from "@/components/ui/kbd"
 
 function TooltipProvider({
   delay = 0,
@@ -100,14 +101,14 @@ function TitleTooltip({
                 className="flex items-center justify-between gap-3"
               >
                 <span className="min-w-0">{row.title}</span>
-                {row.kbd ? <kbd data-slot="kbd">{row.kbd}</kbd> : null}
+                {row.kbd ? <Kbd data-slot="kbd">{row.kbd}</Kbd> : null}
               </span>
             ))}
           </span>
         ) : (
           <>
             <span className="min-w-0">{title}</span>
-            {kbd ? <kbd data-slot="kbd">{kbd}</kbd> : null}
+            {kbd ? <Kbd data-slot="kbd">{kbd}</Kbd> : null}
           </>
         )}
       </TooltipContent>

@@ -28,6 +28,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
@@ -111,14 +112,14 @@ function TreeFooterKbd({
   active?: boolean
 }) {
   return (
-    <kbd
+    <Kbd
       className={cn(
         "rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground",
         active && "border-primary/40 bg-primary text-primary-foreground"
       )}
     >
       {children}
-    </kbd>
+    </Kbd>
   )
 }
 

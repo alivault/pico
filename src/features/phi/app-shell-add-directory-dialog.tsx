@@ -16,6 +16,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { Kbd } from "@/components/ui/kbd"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 function formatDirectoryDisplayPath(value: string) {
@@ -119,9 +120,9 @@ function DirectoryPathLabel({
 
 function FooterKbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+    <Kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
       {children}
-    </kbd>
+    </Kbd>
   )
 }
 

@@ -2,6 +2,7 @@ import * as React from "react"
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu"
 
 import { cn } from "@/lib/utils"
+import { KeyboardShortcutContent } from "@/components/ui/kbd"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
@@ -247,17 +248,20 @@ function ContextMenuSeparator({
 
 function ContextMenuShortcut({
   className,
+  children,
   ...props
 }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="context-menu-shortcut"
       className={cn(
-        "ml-auto hidden text-xs tracking-widest text-muted-foreground group-focus/context-menu-item:text-accent-foreground md:inline",
+        "ml-auto hidden items-center justify-end text-xs text-muted-foreground group-focus/context-menu-item:text-accent-foreground md:inline-flex",
         className
       )}
       {...props}
-    />
+    >
+      <KeyboardShortcutContent>{children}</KeyboardShortcutContent>
+    </span>
   )
 }
 

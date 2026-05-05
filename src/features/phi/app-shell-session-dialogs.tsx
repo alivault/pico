@@ -36,6 +36,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { phiQueryKeys } from "@/features/phi/query-keys"
@@ -50,9 +51,9 @@ type DeleteOldDirectorySessionsData = Extract<
 
 function FooterKbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+    <Kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
       {children}
-    </kbd>
+    </Kbd>
   )
 }
 

@@ -2,6 +2,7 @@ import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
 import { cn } from "@/lib/utils"
+import { KeyboardShortcutContent } from "@/components/ui/kbd"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
@@ -237,17 +238,20 @@ function DropdownMenuSeparator({
 
 function DropdownMenuShortcut({
   className,
+  children,
   ...props
 }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="dropdown-menu-shortcut"
       className={cn(
-        "ml-auto hidden text-xs tracking-widest text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground md:inline",
+        "ml-auto hidden items-center justify-end text-xs text-muted-foreground group-focus/dropdown-menu-item:text-accent-foreground md:inline-flex",
         className
       )}
       {...props}
-    />
+    >
+      <KeyboardShortcutContent>{children}</KeyboardShortcutContent>
+    </span>
   )
 }
 
