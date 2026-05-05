@@ -1944,12 +1944,14 @@ const AppShellGitPanelController = React.memo(
 function ConversationGroupView({
   className,
   group,
+  hideFooter,
   hideThinking,
   hideToolBlocks,
   store,
 }: {
   className: string
   group: RenderConversationGroupDescriptor
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
   store: ConversationItemsStore
@@ -1968,6 +1970,7 @@ function ConversationGroupView({
     <ConversationAssistantGroupView
       className={className}
       groupKey={group.key}
+      hideFooter={hideFooter}
       hideThinking={hideThinking}
       hideToolBlocks={hideToolBlocks}
       store={store}
@@ -2011,12 +2014,14 @@ function useConversationAssistantGroupItemKeys(
 function ConversationAssistantGroupView({
   className,
   groupKey,
+  hideFooter,
   hideThinking,
   hideToolBlocks,
   store,
 }: {
   className: string
   groupKey: string
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
   store: ConversationItemsStore
@@ -2065,7 +2070,10 @@ function ConversationAssistantGroupView({
 
   return (
     <div className={className}>
-      <AssistantMessagesStoreCard store={assistantMessagesStore} />
+      <AssistantMessagesStoreCard
+        hideFooter={hideFooter}
+        store={assistantMessagesStore}
+      />
     </div>
   )
 }
@@ -2073,11 +2081,13 @@ function ConversationAssistantGroupView({
 function AppShellConversationItemGroups({
   centerMessages,
   conversationItemsStore,
+  hideFooter,
   hideThinking,
   hideToolBlocks,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
@@ -2099,6 +2109,7 @@ function AppShellConversationItemGroups({
           key={group.key}
           className={conversationMessageColumnClassName}
           group={group}
+          hideFooter={hideFooter}
           hideThinking={hideThinking}
           hideToolBlocks={hideToolBlocks}
           store={conversationItemsStore}
@@ -2258,6 +2269,10 @@ function AppShellConversationMessageStack({
     sessionStore,
     (sessionState) => sessionState.hideThinkingBlock
   )
+  const streaming = useSelector(
+    sessionStore,
+    (sessionState) => sessionState.streaming
+  )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   if (!hasMessages) return null
 
@@ -2266,6 +2281,7 @@ function AppShellConversationMessageStack({
       <AppShellConversationItemGroups
         centerMessages={centerMessages}
         conversationItemsStore={conversationItemsStore}
+        hideFooter={streaming}
         hideThinking={hideThinking}
         hideToolBlocks={hideToolBlocks}
       />

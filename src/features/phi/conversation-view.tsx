@@ -3090,8 +3090,10 @@ function AssistantMessageFooter({
 }
 
 export function AssistantMessagesStoreCard({
+  hideFooter = false,
   store,
 }: {
+  hideFooter?: boolean
   store: AssistantMessagesStore
 }) {
   const initialSnapshot = store.getSnapshot()
@@ -3147,11 +3149,13 @@ export function AssistantMessagesStoreCard({
           streaming={shellSnapshot.streaming}
         />
       ) : null}
-      <AssistantMessageFooter
-        copyText={shellSnapshot.copyText}
-        modelLabel={shellSnapshot.modelLabel}
-        streaming={shellSnapshot.streaming}
-      />
+      {hideFooter ? null : (
+        <AssistantMessageFooter
+          copyText={shellSnapshot.copyText}
+          modelLabel={shellSnapshot.modelLabel}
+          streaming={shellSnapshot.streaming}
+        />
+      )}
     </div>
   )
 }
