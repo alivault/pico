@@ -1115,6 +1115,15 @@ export function buildItemsFromSync(
         ? true
         : Boolean(previousStreamingItem)
 
+  if (shouldRenderStreaming) {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index]
+      if (item?.kind !== "assistant") continue
+      items[index] = { ...item, done: false }
+      break
+    }
+  }
+
   const pendingItems = mergePendingItemsForSync({
     previousItems,
     committedItems: items,
