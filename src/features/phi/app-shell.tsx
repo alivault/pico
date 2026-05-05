@@ -4079,7 +4079,7 @@ type AppShellRightSidebarState = {
 
 function createInitialRightSidebarState(): AppShellRightSidebarState {
   return {
-    activeTab: "files",
+    activeTab: "review",
     fileActivePath: "",
     filePreviewPath: "",
     fileTabs: [],

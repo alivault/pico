@@ -3933,7 +3933,7 @@ export function GitPanel({
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [uncontrolledActiveTab, setUncontrolledActiveTab] =
-    React.useState<RightSidebarTabValue>(() => (isMobile ? "review" : "files"))
+    React.useState<RightSidebarTabValue>("review")
   const activeTab = controlledActiveTab ?? uncontrolledActiveTab
   const setActiveTab = (tab: RightSidebarTabValue) => {
     setUncontrolledActiveTab(tab)
@@ -3972,7 +3972,7 @@ export function GitPanel({
 
   React.useEffect(() => {
     if (!controlledActiveTab) {
-      setUncontrolledActiveTab(isMobile ? "review" : "files")
+      setUncontrolledActiveTab("review")
     }
     setInlineActiveFilePath("")
   }, [controlledActiveTab, isMobile, normalizedCwd])
