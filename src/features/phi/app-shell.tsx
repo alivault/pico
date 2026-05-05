@@ -7,6 +7,7 @@ import {
   EllipsisIcon,
   FolderIcon,
   GitBranchIcon,
+  OctagonXIcon,
   PanelRightIcon,
   SquarePenIcon,
 } from "lucide-react"
@@ -51,6 +52,7 @@ import type { ComposerPanelHandle } from "@/features/phi/composer-panel"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
@@ -1810,7 +1812,7 @@ const AppShellConversationFrame = React.forwardRef<
   )
 })
 
-const COMPACT_WORKING_LABEL = "Compacting context... (escape to cancel)"
+const COMPACT_WORKING_LABEL = "Compacting context..."
 const COMPACT_CANCELLED_LABEL = "Error: Compaction cancelled"
 
 type AppShellWorkingState = {
@@ -1818,6 +1820,7 @@ type AppShellWorkingState = {
   summary?: string
   done?: boolean
   error?: boolean
+  cancelable?: boolean
 }
 
 function sameWorkingState(
@@ -1828,7 +1831,8 @@ function sameWorkingState(
     left?.label === right?.label &&
     left?.summary === right?.summary &&
     left?.done === right?.done &&
-    left?.error === right?.error
+    left?.error === right?.error &&
+    left?.cancelable === right?.cancelable
   )
 }
 
@@ -1852,10 +1856,12 @@ function AppShellWorkingIndicatorLabel({
 
 function AppShellMessagesWorkingIndicator({
   hiddenThinkingPreviewStore,
+  onCancel,
   state,
   useHiddenThinkingPreview,
 }: {
   hiddenThinkingPreviewStore: PhiStore<string>
+  onCancel?: () => void
   state: AppShellWorkingState
   useHiddenThinkingPreview: boolean
 }) {
@@ -1869,23 +1875,41 @@ function AppShellMessagesWorkingIndicator({
         {state.done ? (
           <CheckIcon className="size-4 text-emerald-600" />
         ) : state.error ? (
-          <span className="text-destructive">!</span>
+          <OctagonXIcon className="size-4 text-destructive" />
         ) : (
           <Spinner />
         )}
       </span>
       <div className="min-w-0 flex-1">
-        {state.done ? (
-          <div className="font-medium text-foreground">Done</div>
-        ) : state.error ? (
-          <div className="font-medium text-destructive">{state.label}</div>
-        ) : (
-          <AppShellWorkingIndicatorLabel
-            fallbackLabel={state.label}
-            hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-            useHiddenThinkingPreview={useHiddenThinkingPreview}
-          />
-        )}
+        <div className="flex min-w-0 items-center justify-start gap-2">
+          <div className="min-w-0 shrink-0">
+            {state.done ? (
+              <div className="font-medium text-foreground">Done</div>
+            ) : state.error ? (
+              <div className="font-medium text-destructive">{state.label}</div>
+            ) : (
+              <AppShellWorkingIndicatorLabel
+                fallbackLabel={state.label}
+                hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+                useHiddenThinkingPreview={useHiddenThinkingPreview}
+              />
+            )}
+          </div>
+          {state.cancelable && !state.done && !state.error && onCancel ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="gap-1.5 text-xs"
+              onClick={onCancel}
+            >
+              Cancel
+              <Kbd className="rounded border border-border/70 bg-muted px-1 py-0 text-[0.65rem] leading-4 text-muted-foreground">
+                Esc
+              </Kbd>
+            </Button>
+          ) : null}
+        </div>
         {state.summary ? (
           <div className="truncate text-muted-foreground">{state.summary}</div>
         ) : null}
@@ -2270,6 +2294,7 @@ function AppShellConversationWorkingFooter({
   conversationItemsStore,
   hiddenThinkingPreviewStore,
   hideThinking,
+  onCancelCompaction,
   streaming,
   workingStateStore,
 }: {
@@ -2277,6 +2302,7 @@ function AppShellConversationWorkingFooter({
   conversationItemsStore: ConversationItemsStore
   hiddenThinkingPreviewStore: PhiStore<string>
   hideThinking: boolean
+  onCancelCompaction: () => void
   streaming: boolean
   workingStateStore: PhiStore<AppShellWorkingState | null>
 }) {
@@ -2303,6 +2329,7 @@ function AppShellConversationWorkingFooter({
     <div className={`${conversationMessageColumnClassName} mt-4`}>
       <AppShellMessagesWorkingIndicator
         hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        onCancel={onCancelCompaction}
         state={displayedWorkingState}
         useHiddenThinkingPreview={streaming && hideThinking}
       />
@@ -2354,6 +2381,7 @@ const AppShellSessionConversation = React.memo(
     hiddenThinkingPreviewStore,
     isSessionViewLoading,
     isSubmitting,
+    onCancelCompaction,
     onCreateSession,
     sessionStore,
     viewerContextId,
@@ -2366,6 +2394,7 @@ const AppShellSessionConversation = React.memo(
     hiddenThinkingPreviewStore: PhiStore<string>
     isSessionViewLoading: boolean
     isSubmitting: boolean
+    onCancelCompaction: () => void
     onCreateSession: () => void
     sessionStore: PhiStore<SessionState>
     viewerContextId: string
@@ -2416,6 +2445,7 @@ const AppShellSessionConversation = React.memo(
               conversationItemsStore={conversationItemsStore}
               hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
               hideThinking={hideThinking}
+              onCancelCompaction={onCancelCompaction}
               streaming={sessionState.streaming}
               workingStateStore={workingStateStore}
             />
@@ -2868,6 +2898,7 @@ type AppShellSessionContentProps = {
   isSessionViewLoading: boolean
   isSubmitting: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  onCancelCompaction: () => void
   onCreateSession: (cwdOverride?: string) => void
   sessionStore: PhiStore<SessionState>
   store: PhiStore<AppShellComposerSnapshot>
@@ -2889,6 +2920,7 @@ function AppShellSessionContent({
   isSessionViewLoading,
   isSubmitting,
   newSessionDirectoryOptions,
+  onCancelCompaction,
   onCreateSession,
   sessionStore,
   store,
@@ -2942,6 +2974,7 @@ function AppShellSessionContent({
         hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
         isSessionViewLoading={isSessionViewLoading}
         isSubmitting={isSubmitting}
+        onCancelCompaction={onCancelCompaction}
         onCreateSession={onCreateSession}
         sessionStore={sessionStore}
         viewerContextId={viewerContextId}
@@ -3255,6 +3288,7 @@ function AppShellTabsController({
   isSubmitting,
   isMobile,
   newSessionDirectoryOptions,
+  onCancelCompaction,
   onCreateSession,
   onCloseAllFileViewTabs,
   onCloseFileViewTab,
@@ -3329,6 +3363,7 @@ function AppShellTabsController({
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
+          onCancelCompaction={onCancelCompaction}
           onCreateSession={onCreateSession}
           sessionStore={sessionStore}
           store={store}
@@ -6142,7 +6177,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     (running: boolean) => {
       setCompactRunningState(running)
       if (running) {
-        setStoreState(workingStateStore, { label: COMPACT_WORKING_LABEL })
+        setStoreState(workingStateStore, {
+          label: COMPACT_WORKING_LABEL,
+          cancelable: true,
+        })
         return
       }
 
@@ -6880,6 +6918,7 @@ const AppShellSessionWorkspace = React.forwardRef<
             isSubmitting={isSubmitting}
             isMobile={isMobile}
             newSessionDirectoryOptions={newSessionDirectoryOptions}
+            onCancelCompaction={abortCompact}
             onCreateSession={(cwdOverride) => {
               void createSession(cwdOverride)
             }}

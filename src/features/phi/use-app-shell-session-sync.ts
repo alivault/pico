@@ -43,7 +43,7 @@ import {
 } from "@/lib/phi/api"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
-const COMPACT_WORKING_LABEL = "Compacting context... (escape to cancel)"
+const COMPACT_WORKING_LABEL = "Compacting context..."
 
 type PendingComposerMessage = {
   pendingId: string
@@ -58,6 +58,7 @@ type SyncedWorkingState = {
   label: string
   summary?: string
   done?: boolean
+  cancelable?: boolean
 }
 
 type GitInvalidationBatchItem = {
@@ -764,7 +765,7 @@ export function useAppShellSessionSync({
           ) {
             setWorkingState(
               nextState.compacting
-                ? { label: COMPACT_WORKING_LABEL }
+                ? { label: COMPACT_WORKING_LABEL, cancelable: true }
                 : nextState.streaming
                   ? { label: nextState.uiState.workingMessage || "Working…" }
                   : null
