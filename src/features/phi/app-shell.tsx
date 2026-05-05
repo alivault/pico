@@ -4,8 +4,8 @@ import {
   ArrowUpToLineIcon,
   CheckIcon,
   ChevronDownIcon,
+  DiffIcon,
   EllipsisIcon,
-  FileTextIcon,
   FolderIcon,
   GitBranchIcon,
   PanelRightIcon,
@@ -6952,22 +6952,20 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <TitleTooltip
-            title={fileViewOpen ? "Close file view" : "Open file view"}
-          >
+          <TitleTooltip title="Toggle Review Pane">
             <Button
               size="icon-sm"
               variant={fileViewOpen ? "secondary" : "ghost"}
               className="hidden md:inline-flex"
               aria-pressed={fileViewOpen}
-              aria-label={fileViewOpen ? "Close file view" : "Open file view"}
+              aria-label="Toggle Review Pane"
               onClick={onToggleFileView}
             >
-              <FileTextIcon />
+              <DiffIcon />
             </Button>
           </TitleTooltip>
           <TitleTooltip
-            title={gitPanelOpen ? "Close right sidebar" : "Open right sidebar"}
+            title="Toggle right sidebar"
             kbd={formatShortcutLabel("Control+\\")}
           >
             <Button
@@ -6975,9 +6973,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               variant={gitPanelOpen ? "secondary" : "ghost"}
               className="hidden md:inline-flex"
               aria-pressed={gitPanelOpen}
-              aria-label={
-                gitPanelOpen ? "Close right sidebar" : "Open right sidebar"
-              }
+              aria-label="Toggle right sidebar"
               onClick={onToggleGitPanel}
             >
               <PanelRightIcon />
