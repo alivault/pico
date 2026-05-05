@@ -89,6 +89,7 @@ export type GitRepositoryInfo = {
 export type GitActionResult = {
   stdout: string
   stderr: string
+  pushedCommitMessages?: Array<string>
 }
 
 export type GitCommitMessageResult = {
@@ -114,6 +115,7 @@ const GIT_CHANGES_CACHE_TTL_MS = 5_000
 const GIT_COMMITS_DEFAULT_LIMIT = 50
 const GIT_COMMITS_MAX_LIMIT = 500
 const GIT_ACTION_TIMEOUT_MS = 120_000
+const GIT_PUSH_COMMIT_MESSAGE_LIMIT = 20
 const GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS = 18_000
 const GIT_COMMIT_MESSAGE_SYSTEM_PROMPT = `You write concise Git commit messages.
 
@@ -1360,16 +1362,44 @@ export async function commitDirectoryGitChanges(
 
   let stdout = commitResult.stdout
   let stderr = commitResult.stderr
+  let pushedCommitMessages: Array<string> | undefined
   if (push) {
     const pushResult = await pushDirectoryGitChanges(normalizedCwd, {
       force: forcePush,
     })
     stdout = [stdout, pushResult.stdout].filter(Boolean).join("\n")
     stderr = [stderr, pushResult.stderr].filter(Boolean).join("\n")
+    pushedCommitMessages = pushResult.pushedCommitMessages
   }
 
   invalidateDirectoryGitCaches(normalizedCwd)
-  return { stdout, stderr }
+  return {
+    stdout,
+    stderr,
+    ...(pushedCommitMessages ? { pushedCommitMessages } : {}),
+  }
+}
+
+async function readUnpushedCommitMessages(cwd: string) {
+  const result = await runCommand(
+    "git",
+    [
+      "log",
+      "--format=%s",
+      "--no-color",
+      "--max-count",
+      String(GIT_PUSH_COMMIT_MESSAGE_LIMIT),
+      "@{upstream}..HEAD",
+    ],
+    {
+      cwd,
+      timeoutMs: 1_500,
+    }
+  )
+
+  return result.code === 0
+    ? parseCommandLines(result.stdout, { trim: true }).filter(Boolean)
+    : []
 }
 
 export async function pushDirectoryGitChanges(
@@ -1382,6 +1412,7 @@ export async function pushDirectoryGitChanges(
     throw new Error("No git repository detected")
   }
 
+  const pushedCommitMessages = await readUnpushedCommitMessages(normalizedCwd)
   const result = await runCommand(
     "git",
     force ? ["push", "--force-with-lease"] : ["push"],
@@ -1400,7 +1431,7 @@ export async function pushDirectoryGitChanges(
   }
 
   invalidateDirectoryGitCaches(normalizedCwd)
-  return { stdout: result.stdout, stderr: result.stderr }
+  return { stdout: result.stdout, stderr: result.stderr, pushedCommitMessages }
 }
 
 export async function pullDirectoryGitChanges(

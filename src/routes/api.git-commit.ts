@@ -38,6 +38,9 @@ export const Route = createFileRoute("/api/git-commit")({
             cwd,
             stdout: result.stdout,
             stderr: result.stderr,
+            ...(result.pushedCommitMessages
+              ? { pushedCommitMessages: result.pushedCommitMessages }
+              : {}),
           } satisfies GitCommitResponse)
         } catch (error) {
           return routeErrorResponse(error, "Failed to commit changes")

@@ -52,6 +52,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
+import { showGitPushSuccessToast } from "@/features/phi/git-toast-utils"
 import {
   formatShortcutLabel,
   matchesShortcutEvent,
@@ -957,12 +958,18 @@ export function GitPanelToolbar({
         }
       )
     },
-    onSuccess: async () => {
+    onSuccess: async (response, action) => {
       await invalidateGitQueries({
         queryClient,
         viewerContextId,
         cwd: normalizedCwd,
       })
+      if (action !== "pull") {
+        showGitPushSuccessToast({
+          response,
+          force: action === "force-push",
+        })
+      }
     },
     onError: (error, action) => {
       toast.error(
@@ -3103,12 +3110,18 @@ export function HeaderGitActions({
         }
       )
     },
-    onSuccess: async () => {
+    onSuccess: async (response, action) => {
       await invalidateGitQueries({
         queryClient,
         viewerContextId,
         cwd: normalizedCwd,
       })
+      if (action !== "pull") {
+        showGitPushSuccessToast({
+          response,
+          force: action === "force-push",
+        })
+      }
     },
     onError: (error, action) => {
       toast.error(

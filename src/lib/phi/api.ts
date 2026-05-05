@@ -156,6 +156,7 @@ export type GitActionResponse =
       cwd: string
       stdout: string
       stderr: string
+      pushedCommitMessages?: Array<string>
     }
   | ApiErrorResponse
 

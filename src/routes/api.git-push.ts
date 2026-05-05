@@ -32,6 +32,9 @@ export const Route = createFileRoute("/api/git-push")({
             cwd,
             stdout: result.stdout,
             stderr: result.stderr,
+            ...(result.pushedCommitMessages
+              ? { pushedCommitMessages: result.pushedCommitMessages }
+              : {}),
           } satisfies GitActionResponse)
         } catch (error) {
           return routeErrorResponse(error, "Failed to push changes")

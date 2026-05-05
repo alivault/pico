@@ -47,6 +47,7 @@ import type {
 } from "@/lib/phi/api"
 import type { AppCommand } from "@/features/phi/app-shell-command-palette"
 import type { ComposerContextUsageStore } from "@/features/phi/composer-context-usage-indicator"
+import { showGitPushSuccessToast } from "@/features/phi/git-toast-utils"
 import type { ComposerPanelHandle } from "@/features/phi/composer-panel"
 
 import { Badge } from "@/components/ui/badge"
@@ -5145,9 +5146,9 @@ const AppShellSessionWorkspace = React.forwardRef<
           body: JSON.stringify({ cwd }),
         }
       ),
-    onSuccess: async (_response, cwd) => {
+    onSuccess: async (response, cwd) => {
       await invalidateGitActionQueries(cwd)
-      toast.success("Pushed changes")
+      showGitPushSuccessToast({ response })
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Failed to push")
@@ -5169,9 +5170,9 @@ const AppShellSessionWorkspace = React.forwardRef<
           body: JSON.stringify({ cwd, force: true }),
         }
       ),
-    onSuccess: async (_response, cwd) => {
+    onSuccess: async (response, cwd) => {
       await invalidateGitActionQueries(cwd)
-      toast.success("Force pushed changes")
+      showGitPushSuccessToast({ response, force: true })
     },
     onError: (error) => {
       toast.error(
