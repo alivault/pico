@@ -638,7 +638,7 @@ function SidebarSessionItem({
       type="button"
       data-sidebar-session-item
       data-session-key={entryKey}
-      isActive={isActive}
+      isActive={isActive || isSelected}
       className={cn(
         "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-8",
         (isActive || isSelected) &&
@@ -983,7 +983,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     )
 
   const directoryHeader = (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent">
+    <div className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-sidebar-accent/50">
       <button
         type="button"
         className={cn(
@@ -1024,7 +1024,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <Button
             size="icon-xs"
             variant="ghost"
-            className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
             onClick={() => onCreateSessionInDirectory(directory)}
           >
             <SquarePenIcon className="size-4" />
@@ -1039,7 +1039,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                className="shrink-0 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                 aria-label={`Directory actions for ${directory}`}
               />
             }
@@ -1146,7 +1146,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                   onClick={() => {
                     setRenderCount((current) =>
                       Math.min(
@@ -1201,7 +1201,7 @@ function DirectoryCollapseAllButton({
       <Button
         size="icon-sm"
         variant="ghost"
-        className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        className="text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
         disabled={searchActive || visibleDirectories.length === 0}
         onClick={() => {
           collapsedDirectoryStore.setAll(
@@ -1280,7 +1280,7 @@ function AppSidebarHeader({
             <Button
               variant="secondary"
               size="icon-sm"
-              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               onClick={onOpenAddDirectoryDialog}
               aria-label="Add directory"
             >
