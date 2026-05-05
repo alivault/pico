@@ -1332,55 +1332,55 @@ function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
   return result
 }
 
-function sameAssistantBlockGroupDescriptors(
-  left: Array<AssistantBlockGroupDescriptor>,
-  right: Array<AssistantBlockGroupDescriptor>
+function sameAssistantBlockGroupDescriptor(
+  left: AssistantBlockGroupDescriptor,
+  right: AssistantBlockGroupDescriptor
 ) {
-  if (left.length !== right.length) return false
+  if (left.type !== right.type || left.key !== right.key) return false
 
-  for (let index = 0; index < left.length; index += 1) {
-    const leftGroup = left[index]
-    const rightGroup = right[index]
-    if (!leftGroup || !rightGroup) return false
-    if (
-      leftGroup.type !== rightGroup.type ||
-      leftGroup.key !== rightGroup.key
-    ) {
-      return false
-    }
+  if (left.type === "block" && right.type === "block") {
+    return (
+      left.blockKey === right.blockKey && left.blockType === right.blockType
+    )
+  }
 
-    if (leftGroup.type === "block" && rightGroup.type === "block") {
-      if (
-        leftGroup.blockKey !== rightGroup.blockKey ||
-        leftGroup.blockType !== rightGroup.blockType
-      ) {
-        return false
-      }
-      continue
-    }
+  if (left.type !== "explore" || right.type !== "explore") return false
+  if (left.blockKeys.length !== right.blockKeys.length) return false
 
-    if (leftGroup.type !== "explore" || rightGroup.type !== "explore") {
-      return false
-    }
-
-    if (leftGroup.blockKeys.length !== rightGroup.blockKeys.length) {
-      return false
-    }
-
-    for (
-      let blockIndex = 0;
-      blockIndex < leftGroup.blockKeys.length;
-      blockIndex += 1
-    ) {
-      if (
-        leftGroup.blockKeys[blockIndex] !== rightGroup.blockKeys[blockIndex]
-      ) {
-        return false
-      }
-    }
+  for (let index = 0; index < left.blockKeys.length; index += 1) {
+    if (left.blockKeys[index] !== right.blockKeys[index]) return false
   }
 
   return true
+}
+
+function reconcileAssistantBlockGroupDescriptors(
+  previousGroups: Array<AssistantBlockGroupDescriptor>,
+  nextGroups: Array<AssistantBlockGroupDescriptor>
+) {
+  if (previousGroups.length === 0) return nextGroups
+
+  let changed = previousGroups.length !== nextGroups.length
+  const groups: Array<AssistantBlockGroupDescriptor> = []
+
+  for (let index = 0; index < nextGroups.length; index += 1) {
+    const previousGroup = previousGroups[index]
+    const nextGroup = nextGroups[index]
+
+    if (
+      previousGroup &&
+      nextGroup &&
+      sameAssistantBlockGroupDescriptor(previousGroup, nextGroup)
+    ) {
+      groups.push(previousGroup)
+      continue
+    }
+
+    changed = true
+    groups.push(nextGroup)
+  }
+
+  return changed ? groups : previousGroups
 }
 
 function buildAssistantBlockSnapshot(
@@ -1422,11 +1422,9 @@ function buildAssistantBlockSnapshot(
 
   return {
     blockByKey,
-    groups:
-      previousSnapshot &&
-      sameAssistantBlockGroupDescriptors(previousSnapshot.groups, groups)
-        ? previousSnapshot.groups
-        : groups,
+    groups: previousSnapshot
+      ? reconcileAssistantBlockGroupDescriptors(previousSnapshot.groups, groups)
+      : groups,
     revision: (previousSnapshot?.revision ?? 0) + 1,
   }
 }
