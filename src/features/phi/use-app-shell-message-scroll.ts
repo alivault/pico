@@ -182,18 +182,18 @@ function isScrollUpKey(event: KeyboardEvent) {
   )
 }
 
-function isToolAccordionToggleKey(event: KeyboardEvent) {
+function isToolCollapsibleToggleKey(event: KeyboardEvent) {
   return event.key === "Enter" || event.key === " "
 }
 
-function findOpeningToolAccordionTrigger(
+function findOpeningToolCollapsibleTrigger(
   target: EventTarget | null,
   viewport: HTMLDivElement
 ) {
   if (!(target instanceof Element)) return null
 
   const trigger = target.closest<HTMLElement>(
-    "[data-conversation-tool-accordion-trigger='true']"
+    "[data-conversation-tool-collapsible-trigger='true']"
   )
   if (!trigger || !viewport.contains(trigger)) return null
 
@@ -347,17 +347,17 @@ export function useAppShellMessageScroll({
 
     const handlePointerDown = (event: PointerEvent) => {
       markUserScrollIntent()
-      if (findOpeningToolAccordionTrigger(event.target, viewport)) {
+      if (findOpeningToolCollapsibleTrigger(event.target, viewport)) {
         followMessagesRef.current = false
       }
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const openingToolAccordionTrigger = findOpeningToolAccordionTrigger(
+      const openingToolCollapsibleTrigger = findOpeningToolCollapsibleTrigger(
         event.target,
         viewport
       )
-      if (openingToolAccordionTrigger && isToolAccordionToggleKey(event)) {
+      if (openingToolCollapsibleTrigger && isToolCollapsibleToggleKey(event)) {
         followMessagesRef.current = false
         return
       }

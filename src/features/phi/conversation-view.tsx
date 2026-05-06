@@ -6,17 +6,22 @@ import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  CopyIcon,
+} from "lucide-react"
 
 import type { ConversationItem, PromptImage } from "@/lib/phi"
 import type { HighlightResponse } from "@/lib/phi/api"
 
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TitleTooltip } from "@/components/ui/tooltip"
@@ -1699,7 +1704,7 @@ function sameEditDiffStatCounts(
   return left.additions === right.additions && left.removals === right.removals
 }
 
-function rememberedToolAccordionStateKey(
+function rememberedToolCollapsibleStateKey(
   block: AssistantConversationBlock | undefined,
   prefix = "tool"
 ) {
@@ -1728,7 +1733,7 @@ function buildToolBlockHeaderSnapshot(
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolPatchText(block) || toolLegacyDiffText(block))
         : null,
-    openStateKey: rememberedToolAccordionStateKey(block),
+    openStateKey: rememberedToolCollapsibleStateKey(block),
   }
 }
 
@@ -1809,7 +1814,7 @@ function buildExploreToolGroupHeaderSnapshot(
     summary: blocks.length > 0 ? exploreGroupSummary(blocks) : "",
     hasRunning: blocks.some((block) => block.running),
     hasError: blocks.some((block) => block.isError),
-    openStateKey: rememberedToolAccordionStateKey(blocks[0], "explore"),
+    openStateKey: rememberedToolCollapsibleStateKey(blocks[0], "explore"),
   }
 }
 
@@ -2541,46 +2546,41 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
   )
 }
 
-const REMEMBERED_TOOL_ACCORDION_STATE_LIMIT = 500
-const rememberedToolAccordionOpenKeys = new Map<string, true>()
+const REMEMBERED_TOOL_COLLAPSIBLE_STATE_LIMIT = 500
+const rememberedToolCollapsibleOpenKeys = new Map<string, true>()
 
-function rememberToolAccordionOpenKey(key: string, open: boolean) {
+function rememberToolCollapsibleOpenKey(key: string, open: boolean) {
   if (!key) return
 
-  rememberedToolAccordionOpenKeys.delete(key)
+  rememberedToolCollapsibleOpenKeys.delete(key)
   if (!open) return
 
-  rememberedToolAccordionOpenKeys.set(key, true)
+  rememberedToolCollapsibleOpenKeys.set(key, true)
   while (
-    rememberedToolAccordionOpenKeys.size > REMEMBERED_TOOL_ACCORDION_STATE_LIMIT
+    rememberedToolCollapsibleOpenKeys.size >
+    REMEMBERED_TOOL_COLLAPSIBLE_STATE_LIMIT
   ) {
-    const oldestKey = rememberedToolAccordionOpenKeys.keys().next().value
+    const oldestKey = rememberedToolCollapsibleOpenKeys.keys().next().value
     if (!oldestKey) break
-    rememberedToolAccordionOpenKeys.delete(oldestKey)
+    rememberedToolCollapsibleOpenKeys.delete(oldestKey)
   }
 }
 
-function useRememberedToolAccordionValue(
-  openStateKey: string,
-  itemValue: string
-) {
-  const [openValue, setOpenValueState] = React.useState<Array<string>>(() =>
-    rememberedToolAccordionOpenKeys.has(openStateKey) ? [itemValue] : []
+function useRememberedToolCollapsibleOpen(openStateKey: string) {
+  const [open, setOpenState] = React.useState(() =>
+    rememberedToolCollapsibleOpenKeys.has(openStateKey)
   )
 
   React.useEffect(() => {
-    setOpenValueState(
-      rememberedToolAccordionOpenKeys.has(openStateKey) ? [itemValue] : []
-    )
-  }, [itemValue, openStateKey])
+    setOpenState(rememberedToolCollapsibleOpenKeys.has(openStateKey))
+  }, [openStateKey])
 
-  const setOpenValue = (value: Array<string>) => {
-    const open = value.includes(itemValue)
-    rememberToolAccordionOpenKey(openStateKey, open)
-    setOpenValueState(open ? [itemValue] : [])
+  const setOpen = (nextOpen: boolean) => {
+    rememberToolCollapsibleOpenKey(openStateKey, nextOpen)
+    setOpenState(nextOpen)
   }
 
-  return [openValue, setOpenValue] as const
+  return [open, setOpen] as const
 }
 
 const ToolBlockCard = React.memo(function ToolBlockCard({
@@ -2608,17 +2608,15 @@ function ToolBlockCardContent({
   header: ToolBlockHeaderSnapshot
   store: AssistantBlockStore
 }) {
-  const [openValue, setOpenValue] = useRememberedToolAccordionValue(
-    header.openStateKey,
-    "tool"
+  const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
+    header.openStateKey
   )
-  const isOpen = openValue.includes("tool")
   const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
 
   return (
-    <Accordion
-      value={openValue}
-      onValueChange={setOpenValue}
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
       className={cn(
         "rounded-xl border text-sm",
         header.running && "border-amber-500/30 bg-amber-500/5",
@@ -2626,31 +2624,33 @@ function ToolBlockCardContent({
         !header.running && !header.isError && "bg-muted/20"
       )}
     >
-      <AccordionItem value="tool" className="border-0">
-        <AccordionTrigger
-          data-conversation-tool-accordion-trigger="true"
-          className="min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 hover:no-underline"
-        >
-          <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
-            <span className="truncate font-medium whitespace-nowrap text-foreground">
-              {toolDisplayName(header.name)}
-            </span>
-            <span className="truncate text-muted-foreground">
-              {header.summary}
-            </span>
+      <CollapsibleTrigger
+        data-conversation-tool-collapsible-trigger="true"
+        className="group/tool-collapsible-trigger relative flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+      >
+        <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+          <span className="truncate font-medium whitespace-nowrap text-foreground">
+            {toolDisplayName(header.name)}
           </span>
-          {header.editStats ? (
-            <EditDiffStatCountsView stats={header.editStats} />
-          ) : null}
-        </AccordionTrigger>
-
-        {isOpen && bodyBlock ? (
-          <AccordionContent className="px-3 pb-3">
-            <ToolBlockCardBody block={bodyBlock} />
-          </AccordionContent>
+          <span className="truncate text-muted-foreground">
+            {header.summary}
+          </span>
+        </span>
+        {header.editStats ? (
+          <EditDiffStatCountsView stats={header.editStats} />
         ) : null}
-      </AccordionItem>
-    </Accordion>
+        <ChevronDownIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
+        <ChevronUpIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
+      </CollapsibleTrigger>
+
+      {isOpen && bodyBlock ? (
+        <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
+          <div className="h-(--collapsible-panel-height) px-3 pt-0 pb-3 data-ending-style:h-0 data-starting-style:h-0">
+            <ToolBlockCardBody block={bodyBlock} />
+          </div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
   )
 }
 
@@ -2706,20 +2706,18 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
   store: AssistantBlockStore
 }) {
   const header = useAssistantToolGroupHeader(store, blockKeys)
-  const [openValue, setOpenValue] = useRememberedToolAccordionValue(
-    header.openStateKey,
-    "explore"
+  const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
+    header.openStateKey
   )
-  const isOpen = openValue.includes("explore")
   const blocks = useAssistantToolGroupBodyBlocks(store, blockKeys, isOpen)
   const statusLabel = exploreGroupStatusLabel()
 
   if (header.count === 0) return null
 
   return (
-    <Accordion
-      value={openValue}
-      onValueChange={setOpenValue}
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
       className={cn(
         "rounded-xl border text-sm",
         header.hasRunning && "border-amber-500/30 bg-amber-500/5",
@@ -2729,28 +2727,30 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
         !header.hasRunning && !header.hasError && "bg-muted/20"
       )}
     >
-      <AccordionItem value="explore" className="border-0">
-        <AccordionTrigger
-          data-conversation-tool-accordion-trigger="true"
-          className="min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 hover:no-underline"
-        >
-          <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
-            <span className="truncate font-medium whitespace-nowrap text-foreground">
-              {statusLabel}
-            </span>
-            <span className="truncate text-muted-foreground">
-              {header.summary}
-            </span>
+      <CollapsibleTrigger
+        data-conversation-tool-collapsible-trigger="true"
+        className="group/tool-collapsible-trigger relative flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+      >
+        <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
+          <span className="truncate font-medium whitespace-nowrap text-foreground">
+            {statusLabel}
           </span>
-        </AccordionTrigger>
+          <span className="truncate text-muted-foreground">
+            {header.summary}
+          </span>
+        </span>
+        <ChevronDownIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
+        <ChevronUpIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
+      </CollapsibleTrigger>
 
-        {isOpen ? (
-          <AccordionContent className="px-3 pb-3">
+      {isOpen ? (
+        <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
+          <div className="h-(--collapsible-panel-height) px-3 pt-0 pb-3 data-ending-style:h-0 data-starting-style:h-0">
             <ExploreToolGroupCardBody blocks={blocks} />
-          </AccordionContent>
-        ) : null}
-      </AccordionItem>
-    </Accordion>
+          </div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
   )
 })
 
