@@ -98,6 +98,22 @@ type ComposerContextUsageSnapshot = {
 
 type ContextUsageRecord = NonNullable<SessionState["contextUsage"]>
 
+const GENERIC_CONTEXT_USAGE_QUOTA_KEYS = new Set([
+  "used",
+  "tokens",
+  "usage",
+  "limit",
+  "total",
+  "max",
+  "percent",
+  "percentage",
+  "timeLeft",
+  "remaining",
+  "resetAt",
+  "resetsAt",
+  "expiresAt",
+])
+
 export type ComposerContextUsageStore = PhiStore<SessionState["contextUsage"]>
 
 const emptyContextUsageStore: ComposerContextUsageStore =
@@ -162,6 +178,14 @@ function getRecordProperty(
   return null
 }
 
+function getQuotaPropertyKeys(
+  keys: Array<string>,
+  hasNestedQuotaRecord: boolean
+) {
+  if (hasNestedQuotaRecord) return keys
+  return keys.filter((key) => !GENERIC_CONTEXT_USAGE_QUOTA_KEYS.has(key))
+}
+
 function formatContextUsageDuration(milliseconds: number) {
   const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60_000))
   const hours = Math.floor(totalMinutes / 60)
@@ -216,18 +240,28 @@ function getContextUsageQuotaSnapshot(
   resetAtKeys: Array<string>
 ): ComposerContextUsageQuotaSnapshot | null {
   const quotaRecord = getRecordProperty(contextUsage, recordKeys)
+  const hasNestedQuotaRecord = Boolean(quotaRecord)
   const source = quotaRecord ?? contextUsage
-  const used = getNumberProperty(source, usedKeys)
-  const limit = getNumberProperty(source, limitKeys)
-  const rawPercent = getNumberProperty(source, percentKeys)
+  const used = getNumberProperty(
+    source,
+    getQuotaPropertyKeys(usedKeys, hasNestedQuotaRecord)
+  )
+  const limit = getNumberProperty(
+    source,
+    getQuotaPropertyKeys(limitKeys, hasNestedQuotaRecord)
+  )
+  const rawPercent = getNumberProperty(
+    source,
+    getQuotaPropertyKeys(percentKeys, hasNestedQuotaRecord)
+  )
   const percent =
     rawPercent ??
     (used != null && limit != null && limit > 0 ? (used / limit) * 100 : null)
 
   const timeLeft = getContextUsageQuotaTimeLeft(
     source,
-    timeLeftKeys,
-    resetAtKeys
+    getQuotaPropertyKeys(timeLeftKeys, hasNestedQuotaRecord),
+    getQuotaPropertyKeys(resetAtKeys, hasNestedQuotaRecord)
   )
 
   if (used == null && limit == null && percent == null && timeLeft == null) {
@@ -312,6 +346,7 @@ function sameComposerContextUsageSnapshot(
 ) {
   return (
     left?.contextWindow === right?.contextWindow &&
+    left?.tokens === right?.tokens &&
     left?.roundedPercent === right?.roundedPercent &&
     sameContextUsageQuotaSnapshot(left?.fiveHourUsage, right?.fiveHourUsage) &&
     sameContextUsageQuotaSnapshot(left?.weeklyUsage, right?.weeklyUsage)
@@ -518,7 +553,7 @@ export function ComposerContextUsageIndicator({
     return () => {
       cancelled = true
     }
-  }, [modelProvider])
+  }, [modelProvider, contextUsage?.tokens])
 
   if (disabled) return null
   if (!contextUsage) return null
