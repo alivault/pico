@@ -3021,7 +3021,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
       ref={reviewContentRef}
       className="flex h-full min-h-0 flex-col bg-background"
     >
-      <div className="flex min-h-12 shrink-0 flex-col gap-2 border-b border-border/70 bg-background p-2">
+      <div className="flex min-h-12 shrink-0 flex-col justify-center gap-2 border-b border-border/70 bg-background p-2">
         <GitPanelToolbar
           viewerContextId={viewerContextId}
           cwd={normalizedCwd}
