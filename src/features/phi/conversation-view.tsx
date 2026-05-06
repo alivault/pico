@@ -2320,7 +2320,7 @@ function EditDiffStatCountsView({ stats }: { stats: EditDiffStatCounts }) {
 function EditDiffBlock({ patch }: { patch: string }) {
   return (
     <div
-      className="overflow-hidden text-xs"
+      className="overflow-hidden rounded-md border bg-background text-xs"
       style={
         {
           "--diffs-font-family":
@@ -2496,10 +2496,7 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
       <div
         ref={block.name === "bash" ? autoScroll.ref : undefined}
         onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
-        className={cn(
-          "max-h-96 overflow-auto rounded-lg border bg-background/80",
-          block.name !== "edit" && "p-3"
-        )}
+        className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3"
       >
         {block.name === "bash" ? (
           <pre
