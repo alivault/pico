@@ -754,15 +754,18 @@ function GitSection({
 function GitSectionNote({
   children,
   tone = "muted",
+  className,
 }: {
   children: React.ReactNode
   tone?: "muted" | "destructive"
+  className?: string
 }) {
   return (
     <div
       className={cn(
         "flex min-h-8 items-center gap-2 text-sm leading-6",
-        tone === "destructive" ? "text-destructive" : "text-muted-foreground"
+        tone === "destructive" ? "text-destructive" : "text-muted-foreground",
+        className
       )}
     >
       {children}
@@ -2994,19 +2997,25 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
         }}
       >
         {!normalizedCwd ? (
-          <GitSectionNote>No directory selected.</GitSectionNote>
+          <GitSectionNote className="px-3 py-2.5">
+            No directory selected.
+          </GitSectionNote>
         ) : !viewerContextId ? (
-          <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+          <GitSectionNote className="px-3 py-2.5">
+            Waiting for viewer context…
+          </GitSectionNote>
         ) : filesQuery.isPending && typeof files === "undefined" ? (
-          <GitSectionNote>
+          <GitSectionNote className="px-3 py-2.5">
             <Spinner /> Loading changes…
           </GitSectionNote>
         ) : filesQuery.error ? (
-          <GitSectionNote tone="destructive">
+          <GitSectionNote tone="destructive" className="px-3 py-2.5">
             {getErrorMessage(filesQuery.error, "Failed to load changes")}
           </GitSectionNote>
         ) : files === null ? (
-          <GitSectionNote>No git repository detected.</GitSectionNote>
+          <GitSectionNote className="px-3 py-2.5">
+            No git repository detected.
+          </GitSectionNote>
         ) : changedFiles.length > 0 ? (
           <Accordion
             multiple
@@ -3028,7 +3037,9 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
             ))}
           </Accordion>
         ) : (
-          <GitSectionNote>Working tree clean.</GitSectionNote>
+          <GitSectionNote className="px-3 py-2.5">
+            Working tree clean.
+          </GitSectionNote>
         )}
       </div>
       {normalizedCwd &&
