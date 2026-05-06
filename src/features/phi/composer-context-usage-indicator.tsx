@@ -570,7 +570,7 @@ export function ComposerContextUsageIndicator({
       aria-label={tooltipAriaLabel}
     >
       <svg
-        className="pointer-events-none absolute inset-0 size-full"
+        className="pointer-events-none absolute top-1/2 left-1/2 size-7 -translate-x-1/2 -translate-y-1/2"
         viewBox="0 0 28 28"
         fill="none"
         aria-hidden="true"
