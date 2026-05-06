@@ -4,6 +4,7 @@ import { toast } from "sonner"
 
 import type { SessionState } from "@/lib/phi"
 import type {
+  CloneSessionResponse,
   DeleteSessionsResponse,
   DirectorySessionsIndexSnapshot,
   RenameSessionResponse,
@@ -15,6 +16,7 @@ import type {
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { sessionListEntryKey } from "@/lib/phi"
 
+type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
 type RenameSessionResponseData = Extract<RenameSessionResponse, { ok: true }>
 type DirectoryIndexDataByPath = Record<string, DirectorySessionsIndexSnapshot>
@@ -449,6 +451,28 @@ export function useAppShellSessionMutations({
     viewerContextId,
   ])
 
+  const runClone = React.useCallback(async () => {
+    if (!viewerContextId) return
+    try {
+      const response = await fetchJson<CloneSessionResponseData>(
+        buildRequestUrl("/api/session/clone", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        }
+      )
+      if (response.cancelled) return
+      toast.success("Cloned session")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to clone session"
+      )
+    }
+  }, [activeSessionId, viewerContextId])
+
   const renameSessionMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
       if (!viewerContextId) {
@@ -740,6 +764,7 @@ export function useAppShellSessionMutations({
     cycleThinkingLevel,
     deleteSessions,
     renameSessionPath,
+    runClone,
     runCompact,
     setModel,
     setThinkingBlocksHidden,

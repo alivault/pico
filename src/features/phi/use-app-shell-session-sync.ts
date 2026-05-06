@@ -491,12 +491,17 @@ export function useAppShellSessionSync({
     (sessionState) => sessionState.sessionId
   )
   const syncedSessionIdRef = React.useRef(syncedSessionId)
+  const observedRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const syncedSessionDraft = useSelector(
     sessionStore,
     (sessionState) => sessionState.draft
   )
 
   React.useEffect(() => {
+    const previousRouteSessionId = observedRouteSessionIdRef.current
+    const routeSessionChanged = previousRouteSessionId !== sessionId
+    observedRouteSessionIdRef.current = sessionId
+
     if (!sessionId) {
       pendingRouteSessionIdRef.current = undefined
       pendingRouteSessionPathRef.current = undefined
@@ -510,6 +515,8 @@ export function useAppShellSessionSync({
       }
       return
     }
+
+    if (!routeSessionChanged) return
 
     if (pendingRouteSessionIdRef.current !== sessionId) {
       pendingRouteSessionPathRef.current = undefined
@@ -945,6 +952,7 @@ export function useAppShellSessionSync({
     if (draftSessionLoadingOwnerKey) return
     if (!hasReceivedStateSyncRef.current) return
     if (sessionId === syncedSessionIdRef.current) return
+    if (pendingRouteSessionIdRef.current !== sessionId) return
 
     const abortController = new AbortController()
     const sessionPath = pendingRouteSessionPathRef.current
@@ -973,6 +981,7 @@ export function useAppShellSessionSync({
     }
   }, [
     draftSessionLoadingOwnerKey,
+    pendingRouteSessionIdRef,
     pendingRouteSessionPathRef,
     viewerContextId,
     sessionId,

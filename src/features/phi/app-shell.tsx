@@ -6217,6 +6217,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     cycleThinkingLevel,
     deleteSessions,
     renameSessionPath,
+    runClone,
     runCompact,
     setModel,
     setThinkingBlocksHidden,
@@ -6336,6 +6337,19 @@ const AppShellSessionWorkspace = React.forwardRef<
         }
         clearComposerDraft()
         await runCompact()
+        return
+      }
+      case "clone": {
+        if (trimmedArgs) {
+          toast.error("/clone does not take any arguments.")
+          return
+        }
+        if (composerImages.length > 0) {
+          toast.error("Built-in slash commands do not support images.")
+          return
+        }
+        clearComposerDraft()
+        await runClone()
         return
       }
       case "rename": {
@@ -6592,6 +6606,14 @@ const AppShellSessionWorkspace = React.forwardRef<
         shortcut: formatShortcutLabel("Control+F"),
         keywords: ["fork", "branch", "draft"],
         onSelect: openForkDialog,
+      },
+      {
+        id: "clone-session",
+        group: "Sessions",
+        title: "Clone session",
+        description: "Duplicate the current active branch into a new session",
+        keywords: ["clone", "branch", "duplicate", "session"],
+        onSelect: runClone,
       },
       {
         id: "compact-session",

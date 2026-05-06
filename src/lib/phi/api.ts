@@ -402,7 +402,19 @@ export type ForkableMessagesResponse =
 export type ForkSessionResponse =
   | {
       ok: true
-      draft: boolean
+      cancelled?: boolean
+      draft?: boolean
+      sessionId?: string
+      sessionFile?: string
+    }
+  | ApiErrorResponse
+
+export type CloneSessionResponse =
+  | {
+      ok: true
+      cancelled?: boolean
+      draft?: boolean
+      previousSessionFile?: string
       sessionId?: string
       sessionFile?: string
     }

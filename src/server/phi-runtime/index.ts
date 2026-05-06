@@ -3948,6 +3948,72 @@ export class PhiRuntime {
     )
   }
 
+  private async cloneSessionForEntry(
+    context: ContextState,
+    activeEntry: SessionEntry
+  ) {
+    if (
+      this.getEntryStreamingState(activeEntry) ||
+      activeEntry.session.isStreaming ||
+      activeEntry.compactingState ||
+      activeEntry.session.isCompacting
+    ) {
+      throw new Error("Wait for the current response to finish before cloning.")
+    }
+
+    const leafId = activeEntry.session.sessionManager.getLeafId?.()
+    if (!leafId) {
+      throw new Error("Start the session before cloning it.")
+    }
+
+    const previousSessionFile = activeEntry.session.sessionFile
+    const result = await this.createTransitionSessionEntry(
+      activeEntry,
+      async (runtime) => {
+        const next = await runtime.fork(leafId, { position: "at" })
+        return {
+          cancelled: next.cancelled,
+          draft: false,
+        }
+      }
+    )
+
+    const nextEntry = result.entry
+    if (!nextEntry) {
+      return { ok: true, cancelled: true as const }
+    }
+
+    nextEntry.uiState.editorText = ""
+    const baseName =
+      cleanupSessionNameCandidate(activeEntry.session.sessionName) ||
+      getSessionListTitle({
+        name: activeEntry.session.sessionName,
+        firstMessage: this.getSessionFirstMessage(activeEntry),
+      })
+    if (baseName) {
+      nextEntry.session.setSessionName(
+        clampSessionNameLength(`${baseName} clone`)
+      )
+    }
+    this.touchSessionEntry(nextEntry)
+
+    await this.activateContextSession(context, nextEntry)
+    await this.broadcastSessionsAll()
+    return {
+      ok: true,
+      cancelled: false as const,
+      draft: this.isDraftEntry(nextEntry),
+      previousSessionFile,
+      sessionId: nextEntry.session.sessionId,
+      sessionFile: nextEntry.session.sessionFile,
+    }
+  }
+
+  async cloneSession(request: Request) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    return await this.cloneSessionForEntry(context, activeEntry)
+  }
+
   async forkSession(request: Request, body: { entryId?: unknown }) {
     const { context, activeEntry } = await this.resolveRequest(request)
     const entryId = typeof body.entryId === "string" ? body.entryId.trim() : ""
@@ -4581,9 +4647,16 @@ export class PhiRuntime {
     request: Request,
     body: { name?: unknown; args?: unknown }
   ) {
-    const { activeEntry } = await this.resolveRequest(request)
+    const { context, activeEntry } = await this.resolveRequest(request)
     const name = typeof body.name === "string" ? body.name.trim() : ""
     const args = typeof body.args === "string" ? body.args : ""
+
+    if (name === "clone") {
+      if (args.trim()) {
+        throw new Error("/clone does not take any arguments.")
+      }
+      return await this.cloneSessionForEntry(context, activeEntry)
+    }
 
     if (name !== "compact") {
       throw new Error(`Unknown slash command: /${name || "(empty)"}`)

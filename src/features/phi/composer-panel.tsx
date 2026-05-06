@@ -162,6 +162,11 @@ function buildComposerSlashCommands({
     },
     {
       kind: "builtin" as const,
+      name: "clone",
+      description: "Duplicate the current active branch into a new session",
+    },
+    {
+      kind: "builtin" as const,
       name: "delete",
       description: "Delete the current session",
     },

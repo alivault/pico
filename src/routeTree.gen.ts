@@ -43,6 +43,7 @@ import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api.session.history'
 import { Route as ApiSessionForkRouteImport } from './routes/api.session.fork'
 import { Route as ApiSessionDeleteRouteImport } from './routes/api.session.delete'
+import { Route as ApiSessionCloneRouteImport } from './routes/api.session.clone'
 import { Route as ApiPendingMessagesReorderRouteImport } from './routes/api.pending-messages.reorder'
 import { Route as ApiPendingMessageRemoveRouteImport } from './routes/api.pending-message.remove'
 import { Route as ApiFilesTreeRouteImport } from './routes/api.files.tree'
@@ -227,6 +228,11 @@ const ApiSessionDeleteRoute = ApiSessionDeleteRouteImport.update({
   path: '/api/session/delete',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionCloneRoute = ApiSessionCloneRouteImport.update({
+  id: '/api/session/clone',
+  path: '/api/session/clone',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPendingMessagesReorderRoute =
   ApiPendingMessagesReorderRouteImport.update({
     id: '/api/pending-messages/reorder',
@@ -320,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/clone': typeof ApiSessionCloneRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
@@ -367,6 +374,7 @@ export interface FileRoutesByTo {
   '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/clone': typeof ApiSessionCloneRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
@@ -415,6 +423,7 @@ export interface FileRoutesById {
   '/api/files/tree': typeof ApiFilesTreeRoute
   '/api/pending-message/remove': typeof ApiPendingMessageRemoveRoute
   '/api/pending-messages/reorder': typeof ApiPendingMessagesReorderRoute
+  '/api/session/clone': typeof ApiSessionCloneRoute
   '/api/session/delete': typeof ApiSessionDeleteRoute
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
@@ -464,6 +473,7 @@ export interface FileRouteTypes {
     | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
+    | '/api/session/clone'
     | '/api/session/delete'
     | '/api/session/fork'
     | '/api/session/history'
@@ -511,6 +521,7 @@ export interface FileRouteTypes {
     | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
+    | '/api/session/clone'
     | '/api/session/delete'
     | '/api/session/fork'
     | '/api/session/history'
@@ -558,6 +569,7 @@ export interface FileRouteTypes {
     | '/api/files/tree'
     | '/api/pending-message/remove'
     | '/api/pending-messages/reorder'
+    | '/api/session/clone'
     | '/api/session/delete'
     | '/api/session/fork'
     | '/api/session/history'
@@ -605,6 +617,7 @@ export interface RootRouteChildren {
   ApiFilesTreeRoute: typeof ApiFilesTreeRoute
   ApiPendingMessageRemoveRoute: typeof ApiPendingMessageRemoveRoute
   ApiPendingMessagesReorderRoute: typeof ApiPendingMessagesReorderRoute
+  ApiSessionCloneRoute: typeof ApiSessionCloneRoute
   ApiSessionDeleteRoute: typeof ApiSessionDeleteRoute
   ApiSessionForkRoute: typeof ApiSessionForkRoute
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
@@ -857,6 +870,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionDeleteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/clone': {
+      id: '/api/session/clone'
+      path: '/api/session/clone'
+      fullPath: '/api/session/clone'
+      preLoaderRoute: typeof ApiSessionCloneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/pending-messages/reorder': {
       id: '/api/pending-messages/reorder'
       path: '/api/pending-messages/reorder'
@@ -994,6 +1014,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFilesTreeRoute: ApiFilesTreeRoute,
   ApiPendingMessageRemoveRoute: ApiPendingMessageRemoveRoute,
   ApiPendingMessagesReorderRoute: ApiPendingMessagesReorderRoute,
+  ApiSessionCloneRoute: ApiSessionCloneRoute,
   ApiSessionDeleteRoute: ApiSessionDeleteRoute,
   ApiSessionForkRoute: ApiSessionForkRoute,
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
