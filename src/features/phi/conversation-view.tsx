@@ -2362,6 +2362,53 @@ function PlainToolOutput({
   )
 }
 
+function scrollDistanceFromBottom(element: HTMLElement) {
+  return element.scrollHeight - element.clientHeight - element.scrollTop
+}
+
+function scrollElementToBottom(element: HTMLElement) {
+  element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+}
+
+function useRunningToolAutoScroll({
+  contentKey,
+  enabled,
+}: {
+  contentKey: string
+  enabled: boolean
+}) {
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const autoScrollRef = React.useRef(true)
+  const wasEnabledRef = React.useRef(false)
+
+  React.useLayoutEffect(() => {
+    const element = scrollRef.current
+
+    if (!enabled) {
+      wasEnabledRef.current = false
+      return
+    }
+
+    if (!wasEnabledRef.current) {
+      autoScrollRef.current = true
+      wasEnabledRef.current = true
+    }
+
+    if (element && autoScrollRef.current) {
+      scrollElementToBottom(element)
+    }
+  }, [contentKey, enabled])
+
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    if (!enabled) return
+
+    const distance = scrollDistanceFromBottom(event.currentTarget)
+    autoScrollRef.current = distance < 1
+  }
+
+  return { onScroll: handleScroll, ref: scrollRef }
+}
+
 const ToolBlockSection = React.memo(function ToolBlockSection({
   isError = false,
   label,
@@ -2439,10 +2486,16 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
         callText ||
         outputText
       : ""
+  const autoScroll = useRunningToolAutoScroll({
+    contentKey: shellBodyText,
+    enabled: block.name === "bash" && block.running,
+  })
 
   return (
     <div className="border-t pt-3">
       <div
+        ref={block.name === "bash" ? autoScroll.ref : undefined}
+        onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
         className={cn(
           "max-h-96 overflow-auto rounded-lg border bg-background/80",
           block.name !== "edit" && "p-3"
