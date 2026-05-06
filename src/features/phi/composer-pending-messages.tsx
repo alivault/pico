@@ -181,13 +181,13 @@ export const ComposerPendingMessages = React.memo(
                                 ) : null}
                                 <div className="flex items-center gap-1">
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     onClick={() => saveEdit(message)}
                                   >
                                     Save
                                   </Button>
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     onClick={cancelEdit}
                                   >
@@ -211,7 +211,7 @@ export const ComposerPendingMessages = React.memo(
                                 ) : null}
                                 <div className="mt-2 flex items-center gap-1">
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     disabled={moveUpDisabled}
                                     title={
@@ -226,7 +226,7 @@ export const ComposerPendingMessages = React.memo(
                                     ↑
                                   </Button>
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     disabled={moveDownDisabled}
                                     title={
@@ -241,14 +241,14 @@ export const ComposerPendingMessages = React.memo(
                                     ↓
                                   </Button>
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     onClick={() => beginEdit(message)}
                                   >
                                     Edit
                                   </Button>
                                   <Button
-                                    size="xs"
+                                    size="sm"
                                     variant="ghost"
                                     onClick={() =>
                                       onRemovePendingMessage(message.pendingId)
