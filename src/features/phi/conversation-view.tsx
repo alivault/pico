@@ -2317,10 +2317,19 @@ function EditDiffStatCountsView({ stats }: { stats: EditDiffStatCounts }) {
   )
 }
 
-function EditDiffBlock({ patch }: { patch: string }) {
+function EditDiffBlock({
+  isBorderless = false,
+  patch,
+}: {
+  isBorderless?: boolean
+  patch: string
+}) {
   return (
     <div
-      className="overflow-hidden rounded-md border bg-background text-xs"
+      className={cn(
+        "overflow-hidden text-xs",
+        !isBorderless && "rounded-md border bg-background"
+      )}
       style={
         {
           "--diffs-font-family":
@@ -2453,6 +2462,7 @@ function EditToolOutput({
   const fallbackOutput = editToolOutputWithoutSuccessMessage(
     toolOutputText(block)
   )
+  const didSucceed = !block.running && !block.isError
 
   if (!diff) {
     return (
@@ -2466,7 +2476,7 @@ function EditToolOutput({
   return (
     <div className="space-y-3">
       {patch ? (
-        <EditDiffBlock patch={patch} />
+        <EditDiffBlock isBorderless={didSucceed} patch={patch} />
       ) : (
         <PlainToolOutput text={legacyDiff} />
       )}
@@ -2490,13 +2500,18 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
     contentKey: shellBodyText,
     enabled: block.name === "bash" && block.running,
   })
+  const isSuccessfulEditTool =
+    block.name === "edit" && !block.running && !block.isError
 
   return (
     <div className="border-t pt-3">
       <div
         ref={block.name === "bash" ? autoScroll.ref : undefined}
         onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
-        className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3"
+        className={cn(
+          "max-h-96 overflow-auto rounded-lg border bg-background/80",
+          !isSuccessfulEditTool && "p-3"
+        )}
       >
         {block.name === "bash" ? (
           <pre
