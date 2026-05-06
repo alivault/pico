@@ -346,6 +346,9 @@ type AppShellSidebarSnapshot = {
 
 type AppShellSidebarState = {
   sessionsEvent: SessionsEvent | null
+  activeSidebarSessionId: string
+  activeSidebarSessionKey: string
+  activeSidebarSessionPath: string
   sidebarDirectories: Array<string>
   initialSidebarBootstrapDirectories: Array<string>
   directoryIndexDataByPath: Record<string, DirectorySessionsIndexData>
@@ -737,6 +740,9 @@ function applySidebarSessionStatusOverlay(
 function createInitialSidebarState(): AppShellSidebarState {
   return {
     sessionsEvent: null,
+    activeSidebarSessionId: "",
+    activeSidebarSessionKey: "",
+    activeSidebarSessionPath: "",
     sidebarDirectories: [],
     initialSidebarBootstrapDirectories: [],
     directoryIndexDataByPath: {},
@@ -5225,6 +5231,52 @@ const AppShellSessionWorkspace = React.forwardRef<
     }),
     { compare: shallowRecordEqual }
   )
+  const setSidebarActiveSession = React.useCallback(
+    (activeSession: {
+      draft?: boolean
+      sessionFile?: string
+      sessionId?: string
+      sessionKey?: string
+      sessionPath?: string
+    }) => {
+      const activeSidebarSessionId = activeSession.draft
+        ? ""
+        : activeSession.sessionId?.trim() || ""
+      const activeSidebarSessionPath = activeSession.draft
+        ? ""
+        : (activeSession.sessionFile || activeSession.sessionPath || "").trim()
+      const activeSidebarSessionKey = activeSession.draft
+        ? ""
+        : sessionNotificationKey({
+            sessionFile: activeSidebarSessionPath,
+            sessionId: activeSidebarSessionId,
+          }) ||
+          activeSession.sessionKey?.trim() ||
+          ""
+
+      sidebarStore.setSidebarState((current) => {
+        if (
+          current.activeSidebarSessionId === activeSidebarSessionId &&
+          current.activeSidebarSessionKey === activeSidebarSessionKey &&
+          current.activeSidebarSessionPath === activeSidebarSessionPath
+        ) {
+          return current
+        }
+
+        return {
+          activeSidebarSessionId,
+          activeSidebarSessionKey,
+          activeSidebarSessionPath,
+        }
+      })
+    },
+    [sidebarStore]
+  )
+
+  React.useLayoutEffect(() => {
+    setSidebarActiveSession(sessionState)
+  }, [sessionState, setSidebarActiveSession])
+
   const gitPanelOpen = useSelector(appUiStore, (state) => state.gitPanelOpen)
 
   const openFileViewTab = (path: string, options?: OpenFileViewTabOptions) => {
@@ -5839,6 +5891,11 @@ const AppShellSessionWorkspace = React.forwardRef<
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
       syncSidebarSelectionForSession(nextSessionId, options)
+      setSidebarActiveSession({
+        draft: !nextSessionId,
+        sessionId: nextSessionId,
+        sessionPath: options?.sessionPath,
+      })
 
       pendingRouteSessionIdRef.current = nextSessionId
       pendingRouteSessionPathRef.current =
@@ -5863,7 +5920,12 @@ const AppShellSessionWorkspace = React.forwardRef<
       })
       onSelectSession?.(nextSessionId, options)
     },
-    [onSelectSession, sessionStateRef, syncSidebarSelectionForSession]
+    [
+      onSelectSession,
+      sessionStateRef,
+      setSidebarActiveSession,
+      syncSidebarSelectionForSession,
+    ]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
 
@@ -8098,25 +8160,29 @@ function AppShellSidebarController({
     sidebarStore,
     (snapshot) => {
       const event = snapshot.state.sessionsEvent
+      const activeSessionId = snapshot.state.activeSidebarSessionId
+      const activeSessionKey = snapshot.state.activeSidebarSessionKey
+      const activeSessionPath = snapshot.state.activeSidebarSessionPath
       const statuses = snapshot.state.sidebarSessionStatusByKey
-      const status = event
-        ? (event.activeSessionPath
-            ? statuses[`path:${event.activeSessionPath}`]
-            : undefined) ||
-          (event.activeSessionId
-            ? statuses[`id:${event.activeSessionId}`]
-            : undefined) ||
-          (event.activeSessionKey
-            ? statuses[`key:${event.activeSessionKey}`]
-            : undefined)
-        : undefined
+      const status =
+        (activeSessionPath
+          ? statuses[`path:${activeSessionPath}`]
+          : undefined) ||
+        (activeSessionId ? statuses[`id:${activeSessionId}`] : undefined) ||
+        (activeSessionKey ? statuses[`key:${activeSessionKey}`] : undefined)
 
       return {
         event,
+        activeSessionId,
+        activeSessionKey,
+        activeSessionPath,
         activeStreaming: Boolean(status?.streaming),
       }
     },
     (left, right) =>
+      left.activeSessionId === right.activeSessionId &&
+      left.activeSessionKey === right.activeSessionKey &&
+      left.activeSessionPath === right.activeSessionPath &&
       left.activeStreaming === right.activeStreaming &&
       left.event?.activeSessionId === right.event?.activeSessionId &&
       left.event?.activeSessionKey === right.event?.activeSessionKey &&
@@ -8130,6 +8196,10 @@ function AppShellSidebarController({
     sidebarStore,
     (snapshot) => snapshot.state.sessionsEvent
   )
+  const activeSidebarSessionId = sidebarSessionsEventSnapshot.activeSessionId
+  const activeSidebarSessionKey = sidebarSessionsEventSnapshot.activeSessionKey
+  const activeSidebarSessionPath =
+    sidebarSessionsEventSnapshot.activeSessionPath
   const activeSidebarSessionStreaming =
     sidebarSessionsEventSnapshot.activeStreaming
   const matchingSessionCount = visibleDirectories.reduce(
@@ -8269,8 +8339,8 @@ function AppShellSidebarController({
       const nextDirectoryIndexDataByPath = clearUnreadForActiveSidebarSession(
         merged,
         {
-          sessionId: sessionsEvent.activeSessionId,
-          sessionPath: sessionsEvent.activeSessionPath,
+          sessionId: activeSidebarSessionId,
+          sessionPath: activeSidebarSessionPath,
         }
       )
       const nextDirectoryIndexLoading = payloadDirectories.length
@@ -8342,9 +8412,9 @@ function AppShellSidebarController({
     }
 
     sidebarDirectorySessionsSnapshotRef.current = {
-      activeSessionId: sessionsEvent.activeSessionId || "",
-      activeSessionKey: sessionsEvent.activeSessionKey || "",
-      activeSessionPath: sessionsEvent.activeSessionPath || "",
+      activeSessionId: activeSidebarSessionId,
+      activeSessionKey: activeSidebarSessionKey,
+      activeSessionPath: activeSidebarSessionPath,
       revisions: nextRevisions,
     }
 
@@ -8423,6 +8493,9 @@ function AppShellSidebarController({
     baseSidebarDirectories,
     directoryIndexDataByPath,
     directoryIndexLoading,
+    activeSidebarSessionId,
+    activeSidebarSessionKey,
+    activeSidebarSessionPath,
     activeSidebarSessionStreaming,
     directoryStateByPath,
     sessionsEvent,
@@ -8431,44 +8504,47 @@ function AppShellSidebarController({
   ])
 
   React.useEffect(() => {
-    if (!sessionsEvent) return
+    if (
+      !activeSidebarSessionId &&
+      !activeSidebarSessionKey &&
+      !activeSidebarSessionPath
+    ) {
+      return
+    }
 
     sidebarStore.setSidebarSessionStatusByKey((current) =>
       mergeSidebarSessionStatusMap(current, {
         type: "session_status",
-        sessionKey: sessionsEvent.activeSessionKey,
-        sessionId: sessionsEvent.activeSessionId,
-        sessionPath: sessionsEvent.activeSessionPath,
+        sessionKey: activeSidebarSessionKey,
+        sessionId: activeSidebarSessionId,
+        sessionPath: activeSidebarSessionPath,
         unread: false,
       })
     )
   }, [
-    sessionsEvent?.activeSessionId,
-    sessionsEvent?.activeSessionKey,
-    sessionsEvent?.activeSessionPath,
+    activeSidebarSessionId,
+    activeSidebarSessionKey,
+    activeSidebarSessionPath,
     sidebarStore,
   ])
 
   React.useEffect(() => {
-    const activeSessionId = sessionsEvent?.activeSessionId?.trim() || ""
-    const activeSessionPath = sessionsEvent?.activeSessionPath?.trim() || ""
-    const activeSessionKey = sessionsEvent?.activeSessionKey?.trim() || ""
     const activeSignature = [
-      activeSessionId,
-      activeSessionPath,
-      activeSessionKey,
+      activeSidebarSessionId,
+      activeSidebarSessionPath,
+      activeSidebarSessionKey,
     ].join("\0")
     let nextKey = findSidebarSessionSelectionKey(sidebarSessionEntriesByKey, {
-      sessionId: activeSessionId,
-      sessionPath: activeSessionPath,
+      sessionId: activeSidebarSessionId,
+      sessionPath: activeSidebarSessionPath,
     })
 
     if (
       !nextKey &&
-      activeSessionKey &&
-      sidebarSessionEntriesByKey.has(activeSessionKey)
+      activeSidebarSessionKey &&
+      sidebarSessionEntriesByKey.has(activeSidebarSessionKey)
     ) {
-      nextKey = activeSessionKey
+      nextKey = activeSidebarSessionKey
     }
 
     const previous = lastActiveSidebarSelectionSyncRef.current
@@ -8488,9 +8564,9 @@ function AppShellSidebarController({
       current === nextKey ? current : nextKey
     )
   }, [
-    sessionsEvent?.activeSessionId,
-    sessionsEvent?.activeSessionKey,
-    sessionsEvent?.activeSessionPath,
+    activeSidebarSessionId,
+    activeSidebarSessionKey,
+    activeSidebarSessionPath,
     sidebarSessionEntriesByKey,
     sidebarStore,
   ])
@@ -8715,13 +8791,8 @@ function AppShellSidebarController({
       directorySessionsStore={directorySessionsStore}
       matchingSessionCount={matchingSessionCount}
       selectedSessionKeys={selectedSidebarSessionKeys}
-      activeSessionId={sessionsEvent?.activeSessionId}
-      activeSessionKey={
-        sessionNotificationKey({
-          sessionId: sessionsEvent?.activeSessionId,
-          sessionPath: sessionsEvent?.activeSessionPath,
-        }) || sessionsEvent?.activeSessionKey
-      }
+      activeSessionId={activeSidebarSessionId || undefined}
+      activeSessionKey={activeSidebarSessionKey || undefined}
       emptyStateText={emptySidebarStateText}
       onCreateSession={() => {
         void sessionWorkspaceRef.current?.createSession(undefined, {
