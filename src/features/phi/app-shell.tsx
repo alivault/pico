@@ -5190,11 +5190,8 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   React.useEffect(() => {
     if (!sessionState.draft) return
-    batch(() => {
-      setGitPanelOpen(false)
-      resetRightSidebarFiles(rightSidebarStore)
-    })
-  }, [rightSidebarStore, sessionState.draft, setGitPanelOpen])
+    resetRightSidebarFiles(rightSidebarStore)
+  }, [rightSidebarStore, sessionState.draft])
 
   const sidebarWorkspaceVersion = useAppShellSidebarValue(
     sidebarStore,
