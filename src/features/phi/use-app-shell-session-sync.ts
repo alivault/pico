@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { SelectSessionNavigationOptions } from "@/features/phi/app-shell"
-import type { PromptImage, SessionState } from "@/lib/phi"
+import type { PromptImage, SessionState, StateSyncPayload } from "@/lib/phi"
 import type {
   ExtensionUiEvent,
   PhiServerEvent,
@@ -432,6 +432,47 @@ function shouldPublishSessionState(previous: SessionState, next: SessionState) {
   )
 }
 
+function stateSyncPayloadConfirmsPendingDraft(
+  payload: StateSyncPayload,
+  ownerKey: string | null
+) {
+  if (!ownerKey || payload.draft !== true) return false
+
+  return (
+    promptDraftKey({
+      cwd: typeof payload.cwd === "string" ? payload.cwd : undefined,
+      sessionFile:
+        typeof payload.sessionFile === "string"
+          ? payload.sessionFile
+          : undefined,
+      sessionId:
+        typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+    }) === ownerKey
+  )
+}
+
+function shouldIgnoreOptimisticDraftStateSync(options: {
+  ownerKey: string | null
+  payload: StateSyncPayload
+  previousState: SessionState
+}) {
+  const previousSessionKey = options.previousState.sessionKey || ""
+  const payloadSessionKey =
+    typeof options.payload.sessionKey === "string"
+      ? options.payload.sessionKey
+      : ""
+
+  if (!previousSessionKey.startsWith("optimistic:")) return false
+  if (!payloadSessionKey || payloadSessionKey === previousSessionKey) {
+    return false
+  }
+
+  return !stateSyncPayloadConfirmsPendingDraft(
+    options.payload,
+    options.ownerKey
+  )
+}
+
 export function useAppShellSessionSync({
   viewerContextId,
   sessionId,
@@ -700,6 +741,16 @@ export function useAppShellSessionSync({
       if (isStateSyncEvent(payload)) {
         hasReceivedStateSyncRef.current = true
         const previousState = sessionStateRef.current
+        if (
+          shouldIgnoreOptimisticDraftStateSync({
+            ownerKey: draftSessionLoadingOwnerKeyRef.current,
+            payload,
+            previousState,
+          })
+        ) {
+          return
+        }
+
         const localPromptText = composerTextRef.current
 
         rememberStoredPromptDraft(
