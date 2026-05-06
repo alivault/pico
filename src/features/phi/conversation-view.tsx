@@ -1093,7 +1093,9 @@ function exploreGroupSummary(
 
   return [
     readCount > 0 ? formatExploreCount(readCount, "read") : "",
-    searchCount > 0 ? formatExploreCount(searchCount, "search") : "",
+    searchCount > 0
+      ? formatExploreCount(searchCount, "search", "searches")
+      : "",
     listCount > 0 ? formatExploreCount(listCount, "list") : "",
   ]
     .filter(Boolean)
