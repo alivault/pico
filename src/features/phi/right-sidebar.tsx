@@ -1162,7 +1162,6 @@ export function GitPanelToolbar({
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
                 variant="outline"
-                size="xs"
                 onClick={() => {
                   setCommitDialogOpen(true)
                 }}
@@ -1175,7 +1174,6 @@ export function GitPanelToolbar({
             <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
               <Button
                 variant="outline"
-                size="xs"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("push")
@@ -1193,7 +1191,6 @@ export function GitPanelToolbar({
             >
               <Button
                 variant="outline"
-                size="xs"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("force-push")
@@ -1208,7 +1205,6 @@ export function GitPanelToolbar({
             <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
               <Button
                 variant="outline"
-                size="xs"
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("pull")
@@ -1649,7 +1645,7 @@ function GitCommitDialog({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           onClick={returnToCommitActions}
           aria-label="Back to commit actions"
         >
@@ -1664,7 +1660,6 @@ function GitCommitDialog({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
           disabled={busy || !cwd || files.length === 0}
           onClick={generateCommitMessage}
         >
@@ -2297,7 +2292,7 @@ function FileViewerTabContent({
   const tab = (
     <div
       className={cn(
-        "inline-flex h-7 max-w-56 shrink-0 items-center rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex h-8 max-w-56 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         active && "bg-muted text-foreground",
         dragging && "border-transparent shadow-none ring-0"
       )}
@@ -2307,7 +2302,7 @@ function FileViewerTabContent({
       <button
         type="button"
         title={path}
-        className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left"
         onClick={() => {
           onActiveTabChange("files")
           onActiveFileChange?.(path)
@@ -2469,7 +2464,7 @@ function RightSidebarTabStrip({
         type="button"
         aria-pressed={active}
         className={cn(
-          "inline-flex h-7 shrink-0 items-center rounded-md border border-transparent px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
           active && "bg-muted text-foreground"
         )}
         onClick={() => {
@@ -2780,14 +2775,14 @@ function FileViewerTabStrip({
           <div
             key={path}
             className={cn(
-              "inline-flex h-7 max-w-56 shrink-0 items-center rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              "inline-flex h-8 max-w-56 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
               active && "bg-muted text-foreground"
             )}
           >
             <button
               type="button"
               title={path}
-              className="min-w-0 flex-1 px-2 text-left"
+              className="min-w-0 flex-1 px-2.5 text-left"
               onClick={() => {
                 onActiveFileChange(path)
               }}
@@ -3028,7 +3023,6 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
         <div className="flex shrink-0 items-center gap-2">
           <ToggleGroup
             variant="outline"
-            size="sm"
             value={[diffStyle]}
             onValueChange={(values) => {
               const value = values[0]
@@ -3038,18 +3032,13 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
             }}
           >
             {(["unified", "split"] as const).map((value) => (
-              <ToggleGroupItem
-                key={value}
-                value={value}
-                className="text-xs font-medium"
-              >
+              <ToggleGroupItem key={value} value={value}>
                 {value === "unified" ? "Unified" : "Split"}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
           <Button
             variant="outline"
-            size="sm"
             disabled={changedFiles.length === 0}
             onClick={toggleAll}
           >
@@ -3277,8 +3266,7 @@ function ReviewFileAccordionItem({
                 <span>Showing changed hunks only for this large change.</span>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-7 shrink-0"
+                  className="shrink-0"
                   onClick={() => {
                     setFullContextRequested(true)
                   }}
@@ -3702,7 +3690,7 @@ function GitBranchDialog({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           onClick={() => setStage("browse")}
           aria-label="Back to branches"
         >
@@ -3737,7 +3725,6 @@ function GitBranchDialog({
         />
         <Button
           type="button"
-          size="sm"
           disabled={!createBranchName.trim() || checkoutMutation.isPending}
           onClick={createBranch}
         >
@@ -4245,7 +4232,7 @@ export function HeaderGitActions({
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 className="md:hidden"
                 aria-label="Commit changes"
                 onClick={() => {
@@ -4260,7 +4247,6 @@ export function HeaderGitActions({
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
                 variant="ghost"
-                size="xs"
                 className="hidden md:inline-flex"
                 onClick={() => {
                   setCommitDialogOpen(true)
@@ -4274,7 +4260,7 @@ export function HeaderGitActions({
             <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 className="md:hidden"
                 aria-label="Push changes"
                 disabled={gitActionBusy}
@@ -4290,7 +4276,6 @@ export function HeaderGitActions({
             <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
               <Button
                 variant="ghost"
-                size="xs"
                 className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {
@@ -4308,7 +4293,6 @@ export function HeaderGitActions({
             >
               <Button
                 variant="ghost"
-                size="xs"
                 className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {
@@ -4323,7 +4307,6 @@ export function HeaderGitActions({
             <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
               <Button
                 variant="ghost"
-                size="xs"
                 className="hidden md:inline-flex"
                 disabled={gitActionBusy}
                 onClick={() => {

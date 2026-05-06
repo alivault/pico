@@ -1929,16 +1929,16 @@ function AppShellTabsList({
   const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
   return (
-    <TabsList className="w-full rounded-none border-b border-border/70 bg-background md:hidden">
+    <TabsList className="w-full rounded-none border-b border-border/70 bg-background group-data-horizontal/tabs:h-auto md:hidden">
       <TabsTrigger
         value="session"
-        className="data-active:bg-muted dark:data-active:bg-muted"
+        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
       >
         Session
       </TabsTrigger>
       <TabsTrigger
         value="git"
-        className="data-active:bg-muted dark:data-active:bg-muted"
+        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
       >
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
       </TabsTrigger>
@@ -7074,7 +7074,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             kbd={formatShortcutLabel("Control+N")}
           >
             <Button
-              size="icon-sm"
+              size="icon"
               variant="ghost"
               className="shrink-0"
               aria-label="Create a new session"
@@ -7124,7 +7124,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    size="icon-sm"
+                    size="icon"
                     variant="ghost"
                     aria-label="Session menu"
                   />
@@ -7255,7 +7255,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             kbd={formatShortcutLabel("Control+\\")}
           >
             <Button
-              size="icon-sm"
+              size="icon"
               variant={gitPanelOpen ? "secondary" : "ghost"}
               className="hidden md:inline-flex"
               aria-pressed={gitPanelOpen}

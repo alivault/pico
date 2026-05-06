@@ -1023,7 +1023,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
       {onCreateSessionInDirectory && !overlay && !isMobile ? (
         <TitleTooltip title={`Create a session in ${directory}`}>
           <Button
-            size="icon-xs"
+            size="icon"
             variant="ghost"
             className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
             onClick={() => onCreateSessionInDirectory(directory)}
@@ -1038,7 +1038,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <DropdownMenuTrigger
             render={
               <Button
-                size="icon-xs"
+                size="icon"
                 variant="ghost"
                 className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                 aria-label={`Directory actions for ${directory}`}
@@ -1146,7 +1146,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               {hasMoreSessions && !overlay ? (
                 <Button
                   variant="ghost"
-                  size="sm"
                   className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                   onClick={() => {
                     setRenderCount((current) =>
@@ -1200,7 +1199,7 @@ function DirectoryCollapseAllButton({
   return (
     <TitleTooltip title={tooltipTitle}>
       <Button
-        size="icon-sm"
+        size="icon"
         variant="ghost"
         className="text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
         disabled={searchActive || visibleDirectories.length === 0}
@@ -1280,7 +1279,7 @@ function AppSidebarHeader({
           >
             <Button
               variant="secondary"
-              size="icon-sm"
+              size="icon"
               className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               onClick={onOpenAddDirectoryDialog}
               aria-label="Add directory"

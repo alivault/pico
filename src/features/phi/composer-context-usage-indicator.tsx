@@ -565,7 +565,7 @@ export function ComposerContextUsageIndicator({
     <Button
       type="button"
       variant="ghost"
-      size="icon-sm"
+      size="icon"
       className="relative ml-auto shrink-0"
       aria-label={tooltipAriaLabel}
     >

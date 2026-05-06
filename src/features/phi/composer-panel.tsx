@@ -437,7 +437,7 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
           />
           <Button
             type="button"
-            size="icon-xs"
+            size="icon-sm"
             variant="ghost"
             className="absolute top-1 right-1 rounded-full bg-background/90 p-1 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             disabled={disabled}
@@ -801,12 +801,12 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-start gap-2">
             {draftSkill ? (
-              <span className="inline-flex h-6 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
+              <span className="inline-flex h-7 max-w-[45%] shrink-0 items-center gap-0 overflow-hidden rounded-full bg-primary/10 pr-0.5 pl-2 text-sm font-medium text-primary">
                 <span className="truncate">
                   Skill: {formatComposerSkillName(draftSkill)}
                 </span>
                 <Button
-                  size="icon-xs"
+                  size="icon-sm"
                   variant="ghost"
                   className="ml-1 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
                   aria-label={`Remove skill ${formatComposerSkillName(draftSkill)}`}
@@ -855,7 +855,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         <TitleTooltip title="Add images">
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             aria-label="Add images"
             className="cursor-pointer"
             disabled={disabled}
@@ -876,7 +876,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
             ]}
           >
             <Button
-              size="icon-sm"
+              size="icon"
               className="cursor-pointer"
               disabled={
                 disabled ||
@@ -901,7 +901,6 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
           <>
             <Button
               variant="outline"
-              size="sm"
               className="cursor-pointer"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("followUp")}
@@ -911,7 +910,6 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
             </Button>
             <Button
               variant="outline"
-              size="sm"
               className="cursor-pointer"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("steer")}
@@ -923,7 +921,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               <TitleTooltip title="Abort" kbd="Esc">
                 <Button
                   variant="destructive"
-                  size="icon-sm"
+                  size="icon"
                   className="cursor-pointer bg-destructive text-white hover:bg-destructive/90"
                   aria-label="Abort"
                   disabled={disabled}

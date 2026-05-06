@@ -169,7 +169,6 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
           render={
             <Button
               variant="ghost"
-              size="sm"
               className="max-w-full"
               disabled={disabled}
             />
@@ -277,7 +276,6 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
           render={
             <Button
               variant="ghost"
-              size="sm"
               className="max-w-full"
               disabled={disabled}
             />
