@@ -36,7 +36,6 @@ import {
   CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  DiffIcon,
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
@@ -3014,8 +3013,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
         />
       </div>
       <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <DiffIcon className="size-4 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 items-center">
           <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
             Diffs
           </span>
@@ -3140,8 +3138,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
               setHistoryOpen((open) => !open)
             }}
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <GitCommitIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="flex min-w-0 items-center">
               <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
                 History
               </span>
