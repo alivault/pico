@@ -122,11 +122,7 @@ function DirectoryPathLabel({
 }
 
 function FooterKbd({ children }: { children: React.ReactNode }) {
-  return (
-    <Kbd className="rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-      {children}
-    </Kbd>
-  )
+  return <Kbd>{children}</Kbd>
 }
 
 type PathCompletionLoader = (prefix: string) => Promise<Array<CompletionItem>>

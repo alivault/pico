@@ -165,15 +165,11 @@ export function AppShellUiRequestDialog({
           ) : (
             <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
               <span className="inline-flex items-center gap-1">
-                <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
-                  Enter
-                </Kbd>
+                <Kbd>Enter</Kbd>
                 Submit URL
               </span>
               <span className="inline-flex items-center gap-1">
-                <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
-                  Esc
-                </Kbd>
+                <Kbd>Esc</Kbd>
                 Back
               </span>
             </div>
@@ -356,15 +352,11 @@ export function AppShellUiRequestDialog({
         ) : (
           <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
             <span className="inline-flex items-center gap-1">
-              <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
-                Enter
-              </Kbd>
+              <Kbd>Enter</Kbd>
               Continue
             </span>
             <span className="inline-flex items-center gap-1">
-              <Kbd className="rounded border border-border/70 px-1 py-0.5 font-mono text-[10px]">
-                Esc
-              </Kbd>
+              <Kbd>Esc</Kbd>
               Back
             </span>
           </div>

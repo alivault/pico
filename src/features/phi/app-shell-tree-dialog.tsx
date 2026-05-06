@@ -111,16 +111,7 @@ function TreeFooterKbd({
   children: React.ReactNode
   active?: boolean
 }) {
-  return (
-    <Kbd
-      className={cn(
-        "rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground",
-        active && "border-primary/40 bg-primary text-primary-foreground"
-      )}
-    >
-      {children}
-    </Kbd>
-  )
+  return <Kbd data-active={active ? "true" : undefined}>{children}</Kbd>
 }
 
 function TreeFooterHint({

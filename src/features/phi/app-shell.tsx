@@ -1907,9 +1907,7 @@ function AppShellMessagesWorkingIndicator({
               onClick={onCancel}
             >
               Cancel
-              <Kbd className="rounded border border-border/70 bg-muted px-1 py-0 text-[0.65rem] leading-4 text-muted-foreground">
-                Esc
-              </Kbd>
+              <Kbd>Esc</Kbd>
             </Button>
           ) : null}
         </div>

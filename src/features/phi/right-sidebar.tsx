@@ -3399,6 +3399,10 @@ export function GitFileViewerPanel({
 
 type GitBranchDialogStage = "browse" | "create"
 
+function GitBranchDialogKbd({ children }: { children: React.ReactNode }) {
+  return <Kbd>{children}</Kbd>
+}
+
 type GitCheckoutBranchPayload = {
   branch: string
   create?: boolean
@@ -3668,13 +3672,16 @@ function GitBranchDialog({
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd> Switch
+            <GitBranchDialogKbd>Enter</GitBranchDialogKbd> Switch
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>{formatShortcutLabel("Control+N")}</Kbd> New branch
+            <GitBranchDialogKbd>
+              {formatShortcutLabel("Control+N")}
+            </GitBranchDialogKbd>{" "}
+            New branch
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd> Close
+            <GitBranchDialogKbd>Esc</GitBranchDialogKbd> Close
           </span>
         </div>
       )}
@@ -3732,10 +3739,10 @@ function GitBranchDialog({
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd> Create
+            <GitBranchDialogKbd>Enter</GitBranchDialogKbd> Create
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd> Back
+            <GitBranchDialogKbd>Esc</GitBranchDialogKbd> Back
           </span>
         </div>
       )}

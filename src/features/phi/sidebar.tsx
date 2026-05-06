@@ -1245,18 +1245,18 @@ function AppSidebarHeader({
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
             <span>Search sessions...</span>
-            <Kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
-              {formatShortcutLabel("Control+S")}
-            </Kbd>
+            <span className="ml-auto hidden items-center md:flex">
+              <Kbd>{formatShortcutLabel("Control+S")}</Kbd>
+            </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton type="button" onClick={onCreateSession}>
             <SquarePenIcon />
             <span>New session</span>
-            <Kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
-              {formatShortcutLabel("Control+N")}
-            </Kbd>
+            <span className="ml-auto hidden items-center md:flex">
+              <Kbd>{formatShortcutLabel("Control+N")}</Kbd>
+            </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -1567,18 +1567,18 @@ export function AppSidebar({
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
               <CommandIcon />
               <span>Commands</span>
-              <Kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
-                {formatShortcutLabel("Control+K")}
-              </Kbd>
+              <span className="ml-auto hidden items-center md:flex">
+                <Kbd>{formatShortcutLabel("Control+K")}</Kbd>
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton type="button" onClick={onOpenSettings}>
               <Settings2Icon />
               <span>Settings</span>
-              <Kbd className="ml-auto hidden rounded bg-sidebar-accent px-1.5 py-0.5 text-xs font-medium text-sidebar-foreground/70 md:inline">
-                {formatShortcutLabel("Control+,")}
-              </Kbd>
+              <span className="ml-auto hidden items-center md:flex">
+                <Kbd>{formatShortcutLabel("Control+,")}</Kbd>
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

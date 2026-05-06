@@ -112,7 +112,7 @@ function tokenizeShortcut(value: string) {
 }
 
 function ShortcutModifierIcon({ modifier }: { modifier: ShortcutModifier }) {
-  const className = "size-[1em] shrink-0 stroke-[2.4]"
+  const className = "size-[10px] shrink-0 stroke-[2.4]"
 
   if (modifier === "shift") {
     return <ArrowBigUpIcon aria-hidden="true" className={className} />
@@ -130,7 +130,7 @@ function ShortcutModifierIcon({ modifier }: { modifier: ShortcutModifier }) {
 }
 
 function ShortcutArrowIcon({ arrow }: { arrow: ShortcutArrow }) {
-  const className = "size-[1em] shrink-0 stroke-[2.4]"
+  const className = "size-[10px] shrink-0 stroke-[2.4]"
 
   if (arrow === "up") {
     return <ArrowUpIcon aria-hidden="true" className={className} />
@@ -210,7 +210,13 @@ function KeyboardShortcutContent({
 
 function Kbd({ className, children, ...props }: React.ComponentProps<"kbd">) {
   return (
-    <kbd className={className} {...props}>
+    <kbd
+      className={cn(
+        "inline-flex items-center rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground data-[active=true]:border-primary/40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground",
+        className
+      )}
+      {...props}
+    >
       <KeyboardShortcutContent>{children}</KeyboardShortcutContent>
     </kbd>
   )
