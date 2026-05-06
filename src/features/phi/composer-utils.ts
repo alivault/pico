@@ -22,6 +22,8 @@ export type PathCompletionQuery = {
   start: number
   end: number
   prefix: string
+  rawPrefix: string
+  isQuotedPrefix: boolean
   token: string
 }
 
@@ -337,6 +339,30 @@ export function getPathCompletionQuery({
   }
 
   const textBeforeCursor = value.slice(0, selectionStart)
+  const quotedPrefix = extractQuotedCompletionPrefix(textBeforeCursor)
+  if (quotedPrefix && !quotedPrefix.startsWith("@")) {
+    const start = selectionStart - quotedPrefix.length
+    const afterCursor = value.slice(selectionStart)
+    const closingQuoteIndex = afterCursor.indexOf('"')
+    const end =
+      closingQuoteIndex >= 0
+        ? selectionStart + closingQuoteIndex + 1
+        : selectionStart
+
+    return {
+      kind: "path",
+      value,
+      selectionStart,
+      selectionEnd,
+      start,
+      end,
+      prefix: quotedPrefix,
+      rawPrefix: quotedPrefix.slice(1),
+      isQuotedPrefix: true,
+      token: value.slice(start, end),
+    }
+  }
+
   const start = findLastPathCompletionDelimiter(textBeforeCursor) + 1
   const end = findNextPathCompletionDelimiter(value, selectionStart)
   const prefix = value.slice(start, selectionStart)
@@ -357,6 +383,8 @@ export function getPathCompletionQuery({
     start,
     end,
     prefix,
+    rawPrefix: prefix,
+    isQuotedPrefix: false,
     token: value.slice(start, end),
   }
 }
@@ -415,6 +443,16 @@ export function sameCompletionContext(
   )
 }
 
+function pathCompletionValue(item: CompletionItem, query: PathCompletionQuery) {
+  const normalizedValue = item.value.replace(/\\/g, "/")
+  const needsQuotes = query.isQuotedPrefix || normalizedValue.includes(" ")
+  if (!needsQuotes || normalizedValue.startsWith('"')) {
+    return normalizedValue
+  }
+
+  return `"${normalizedValue}"`
+}
+
 export function applyCompletionItem({
   value,
   query,
@@ -426,13 +464,15 @@ export function applyCompletionItem({
 }) {
   const before = value.slice(0, query.start)
   const after = value.slice(query.end)
+  const completionValue =
+    query.kind === "path" ? pathCompletionValue(item, query) : item.value
   const suffix = query.kind === "file-reference" && !item.isDirectory ? " " : ""
-  const nextValue = `${before}${item.value}${suffix}${after}`
-  const hasTrailingQuote = item.value.endsWith('"')
+  const nextValue = `${before}${completionValue}${suffix}${after}`
+  const hasTrailingQuote = completionValue.endsWith('"')
   const cursorOffset =
     item.isDirectory && hasTrailingQuote
-      ? item.value.length - 1
-      : item.value.length
+      ? completionValue.length - 1
+      : completionValue.length
   const selection = before.length + cursorOffset + suffix.length
 
   return {

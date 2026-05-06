@@ -232,7 +232,7 @@ export function useComposerAssist({
           completionRequestFnsRef.current
         return query.kind === "file-reference"
           ? await requestFileCompletions(query.rawPrefix, query.isQuotedPrefix)
-          : await requestPathCompletions(query.prefix)
+          : await requestPathCompletions(query.rawPrefix)
       },
       {
         key: "phi.composer.completions",

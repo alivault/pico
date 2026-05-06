@@ -484,6 +484,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     end: composerText.length,
   })
   const hasDraftTextRef = React.useRef(composerText.trim().length > 0)
+  const composerSyncNonceRef = React.useRef(composerSyncNonce)
   const [draftSkill, setDraftSkill] = React.useState(composerSkill)
   const [hasDraftText, setHasDraftText] = React.useState(
     hasDraftTextRef.current
@@ -570,6 +571,17 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   }, [refreshAssistState])
 
   React.useEffect(() => {
+    const sameLocalDraft =
+      composerText === draftTextRef.current &&
+      composerSkill === draftSkillRef.current
+    const syncNonceChanged = composerSyncNonce !== composerSyncNonceRef.current
+    composerSyncNonceRef.current = composerSyncNonce
+
+    if (sameLocalDraft && !syncNonceChanged) {
+      refreshAssistStateRef.current()
+      return
+    }
+
     const nextHasDraftText = composerText.trim().length > 0
 
     draftTextRef.current = composerText
