@@ -1,4 +1,7 @@
 import * as React from "react"
+import { AsyncDebouncer } from "@tanstack/pacer"
+
+import type { CompletionItem } from "@/lib/phi/api"
 
 import {
   Command,
@@ -126,6 +129,33 @@ function FooterKbd({ children }: { children: React.ReactNode }) {
   )
 }
 
+type PathCompletionLoader = (prefix: string) => Promise<Array<CompletionItem>>
+type DirectorySearchLoader = (query: string) => Promise<Array<CompletionItem>>
+
+function pathCompletionCommandValue(item: CompletionItem, index: number) {
+  return `path-completion:${index}:${item.value}`
+}
+
+function directorySearchCommandValue(item: CompletionItem, index: number) {
+  return `directory-search:${index}:${item.value}`
+}
+
+function directoryInputLooksLikePath(value: string) {
+  const input = value.trim()
+  return (
+    input.startsWith("~") ||
+    input.startsWith(".") ||
+    input.startsWith("/") ||
+    input.includes("/") ||
+    input.includes("\\")
+  )
+}
+
+function directoryCompletionInputValue(item: CompletionItem) {
+  const displayPath = formatDirectoryDisplayPath(item.value)
+  return displayPath.endsWith("/") ? displayPath : `${displayPath}/`
+}
+
 export type AppShellAddDirectoryDialogHandle = {
   open: () => void
   close: () => void
@@ -143,6 +173,8 @@ type AppShellAddDirectoryDialogProps = {
   knownDirectories: Array<string>
   useForNewSession?: boolean
   onAddDirectoryPath: (path: string) => void
+  onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
+  onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
 export function AppShellAddDirectoryDialog({
@@ -156,8 +188,63 @@ export function AppShellAddDirectoryDialog({
   knownDirectories,
   useForNewSession = false,
   onAddDirectoryPath,
+  onRequestPathCompletions,
+  onSearchDirectories,
 }: AppShellAddDirectoryDialogProps) {
   const isMobile = useIsMobile()
+  const directoryInputRef = React.useRef(directoryInput)
+  const pathCompletionRequestIdRef = React.useRef(0)
+  const directorySearchRequestIdRef = React.useRef(0)
+  const requestPathCompletionsRef = React.useRef(onRequestPathCompletions)
+  const searchDirectoriesRef = React.useRef(onSearchDirectories)
+  const [pathCompletionItems, setPathCompletionItems] = React.useState<
+    Array<CompletionItem>
+  >([])
+  const [pathCompletionLoading, setPathCompletionLoading] =
+    React.useState(false)
+  const [directorySearchItems, setDirectorySearchItems] = React.useState<
+    Array<CompletionItem>
+  >([])
+  const [directorySearchLoading, setDirectorySearchLoading] =
+    React.useState(false)
+  const [selectedCommandValue, setSelectedCommandValue] = React.useState("")
+  directoryInputRef.current = directoryInput
+  requestPathCompletionsRef.current = onRequestPathCompletions
+  searchDirectoriesRef.current = onSearchDirectories
+  const pathCompletionDebouncerRef =
+    React.useRef<AsyncDebouncer<PathCompletionLoader> | null>(null)
+  if (!pathCompletionDebouncerRef.current) {
+    pathCompletionDebouncerRef.current =
+      new AsyncDebouncer<PathCompletionLoader>(
+        async (prefix) => {
+          const requestPathCompletions = requestPathCompletionsRef.current
+          if (!requestPathCompletions) return []
+          return await requestPathCompletions(prefix)
+        },
+        {
+          key: "phi.add-directory.path-completions",
+          wait: 80,
+        }
+      )
+  }
+  const pathCompletionDebouncer = pathCompletionDebouncerRef.current
+  const directorySearchDebouncerRef =
+    React.useRef<AsyncDebouncer<DirectorySearchLoader> | null>(null)
+  if (!directorySearchDebouncerRef.current) {
+    directorySearchDebouncerRef.current =
+      new AsyncDebouncer<DirectorySearchLoader>(
+        async (query) => {
+          const searchDirectories = searchDirectoriesRef.current
+          if (!searchDirectories) return []
+          return await searchDirectories(query)
+        },
+        {
+          key: "phi.add-directory.directory-search",
+          wait: 120,
+        }
+      )
+  }
+  const directorySearchDebouncer = directorySearchDebouncerRef.current
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
   const openedSet = new Set(openedDirectories)
@@ -193,12 +280,35 @@ export function AppShellAddDirectoryDialog({
     )
       ? directoryQuery
       : ""
-  const hasDirectoryResults =
-    Boolean(manualPath) ||
+  const hasDirectoryMatches =
     openedMatching.length > 0 ||
     currentMatching.length > 0 ||
     recentMatching.length > 0 ||
     knownMatching.length > 0
+  const queryLooksLikePath = directoryInputLooksLikePath(directoryQuery)
+  const shouldShowPathCompletions = Boolean(
+    directoryQuery &&
+    onRequestPathCompletions &&
+    !hasDirectoryMatches &&
+    queryLooksLikePath
+  )
+  const shouldShowDirectorySearch = Boolean(
+    directoryQuery &&
+    onSearchDirectories &&
+    !hasDirectoryMatches &&
+    !queryLooksLikePath
+  )
+  const hasPathCompletionResults =
+    shouldShowPathCompletions &&
+    (pathCompletionLoading || pathCompletionItems.length > 0)
+  const hasDirectorySearchResults =
+    shouldShowDirectorySearch &&
+    (directorySearchLoading || directorySearchItems.length > 0)
+  const hasDirectoryResults =
+    Boolean(manualPath) ||
+    hasDirectoryMatches ||
+    hasPathCompletionResults ||
+    hasDirectorySearchResults
   const addPathDescription = useForNewSession
     ? "Add to sidebar and use for this new session."
     : "Resolve and add this path to the sidebar."
@@ -212,12 +322,240 @@ export function AppShellAddDirectoryDialog({
     ? "Add to sidebar and use for this new session."
     : ""
 
+  React.useEffect(() => {
+    if (!shouldShowPathCompletions) {
+      pathCompletionRequestIdRef.current += 1
+      pathCompletionDebouncer.cancel()
+      setPathCompletionLoading(false)
+      setPathCompletionItems((current) => (current.length === 0 ? current : []))
+      return
+    }
+
+    const requestedPrefix = directoryQuery
+    const requestId = pathCompletionRequestIdRef.current + 1
+    pathCompletionRequestIdRef.current = requestId
+    setPathCompletionLoading(true)
+    setPathCompletionItems((current) => (current.length === 0 ? current : []))
+
+    const load = async () => {
+      try {
+        const completions =
+          await pathCompletionDebouncer.maybeExecute(requestedPrefix)
+        if (
+          requestId !== pathCompletionRequestIdRef.current ||
+          directoryInputRef.current.trim() !== requestedPrefix
+        ) {
+          return
+        }
+
+        setPathCompletionItems(
+          (completions ?? []).filter(
+            (item) => item.isDirectory && item.value.trim() !== requestedPrefix
+          )
+        )
+      } catch {
+        if (requestId === pathCompletionRequestIdRef.current) {
+          setPathCompletionItems((current) =>
+            current.length === 0 ? current : []
+          )
+        }
+      } finally {
+        if (requestId === pathCompletionRequestIdRef.current) {
+          setPathCompletionLoading(false)
+        }
+      }
+    }
+
+    void load()
+  }, [directoryQuery, pathCompletionDebouncer, shouldShowPathCompletions])
+
+  React.useEffect(() => {
+    if (!shouldShowDirectorySearch) {
+      directorySearchRequestIdRef.current += 1
+      directorySearchDebouncer.cancel()
+      setDirectorySearchLoading(false)
+      setDirectorySearchItems((current) =>
+        current.length === 0 ? current : []
+      )
+      return
+    }
+
+    const requestedQuery = directoryQuery
+    const requestId = directorySearchRequestIdRef.current + 1
+    directorySearchRequestIdRef.current = requestId
+    setDirectorySearchLoading(true)
+    setDirectorySearchItems((current) => (current.length === 0 ? current : []))
+
+    const load = async () => {
+      try {
+        const completions =
+          await directorySearchDebouncer.maybeExecute(requestedQuery)
+        if (
+          requestId !== directorySearchRequestIdRef.current ||
+          directoryInputRef.current.trim() !== requestedQuery
+        ) {
+          return
+        }
+
+        setDirectorySearchItems(
+          (completions ?? []).filter((item) => item.isDirectory)
+        )
+      } catch {
+        if (requestId === directorySearchRequestIdRef.current) {
+          setDirectorySearchItems((current) =>
+            current.length === 0 ? current : []
+          )
+        }
+      } finally {
+        if (requestId === directorySearchRequestIdRef.current) {
+          setDirectorySearchLoading(false)
+        }
+      }
+    }
+
+    void load()
+  }, [directoryQuery, directorySearchDebouncer, shouldShowDirectorySearch])
+
+  React.useEffect(
+    () => () => {
+      pathCompletionDebouncer.cancel()
+      pathCompletionDebouncer.abort()
+      directorySearchDebouncer.cancel()
+      directorySearchDebouncer.abort()
+    },
+    [directorySearchDebouncer, pathCompletionDebouncer]
+  )
+
+  const commandValues = [
+    ...pathCompletionItems.map(pathCompletionCommandValue),
+    ...directorySearchItems.map(directorySearchCommandValue),
+    ...(manualPath ? [`add ${manualPath}`] : []),
+    ...openedMatching.map((directoryPath) => `opened ${directoryPath}`),
+    ...currentMatching.map((directoryPath) => `current ${directoryPath}`),
+    ...recentMatching.map((directoryPath) => `recent ${directoryPath}`),
+    ...knownMatching.map((directoryPath) => `known ${directoryPath}`),
+  ]
+
+  React.useEffect(() => {
+    if (selectedCommandValue && commandValues.includes(selectedCommandValue)) {
+      return
+    }
+
+    setSelectedCommandValue(commandValues[0] || "")
+  }, [commandValues, selectedCommandValue])
+
+  const selectedPathCompletionItem = pathCompletionItems.find(
+    (item, index) =>
+      pathCompletionCommandValue(item, index) === selectedCommandValue
+  )
+  const selectedDirectorySearchItem = directorySearchItems.find(
+    (item, index) =>
+      directorySearchCommandValue(item, index) === selectedCommandValue
+  )
+
+  const applyDirectoryCompletion = (completion: CompletionItem) => {
+    onDirectoryInputChange(completion.value)
+    return true
+  }
+
+  const applyDirectorySearchCompletion = (completion: CompletionItem) => {
+    onDirectoryInputChange(directoryCompletionInputValue(completion))
+    return true
+  }
+
+  const completeDirectoryInput = async () => {
+    const visiblePathCompletion = selectedPathCompletionItem
+    if (visiblePathCompletion) {
+      return applyDirectoryCompletion(visiblePathCompletion)
+    }
+
+    const visibleDirectorySearchItem = selectedDirectorySearchItem
+    if (visibleDirectorySearchItem) {
+      return applyDirectorySearchCompletion(visibleDirectorySearchItem)
+    }
+
+    const currentInput = directoryInputRef.current.trim()
+    if (!currentInput) return false
+
+    if (!directoryInputLooksLikePath(currentInput) && onSearchDirectories) {
+      const requestId = directorySearchRequestIdRef.current + 1
+      directorySearchRequestIdRef.current = requestId
+
+      try {
+        const completions = await onSearchDirectories(currentInput)
+        if (
+          requestId !== directorySearchRequestIdRef.current ||
+          directoryInputRef.current.trim() !== currentInput
+        ) {
+          return true
+        }
+
+        const completion = completions.find((item) => item.isDirectory)
+        if (!completion) return false
+
+        return applyDirectorySearchCompletion(completion)
+      } catch {
+        return false
+      }
+    }
+
+    if (!onRequestPathCompletions) return false
+
+    const requestId = pathCompletionRequestIdRef.current + 1
+    pathCompletionRequestIdRef.current = requestId
+
+    try {
+      const completions = await onRequestPathCompletions(currentInput)
+      if (
+        requestId !== pathCompletionRequestIdRef.current ||
+        directoryInputRef.current.trim() !== currentInput
+      ) {
+        return true
+      }
+
+      const completion = completions.find(
+        (item) => item.isDirectory && item.value.trim() !== currentInput
+      )
+      if (!completion) return false
+
+      return applyDirectoryCompletion(completion)
+    } catch {
+      return false
+    }
+  }
+
+  const handleDirectoryInputKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (
+      event.key !== "Tab" ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      (!onRequestPathCompletions && !onSearchDirectories) ||
+      !directoryInput.trim()
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    void completeDirectoryInput()
+  }
+
   const directoryPicker = (
-    <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
+    <Command
+      shouldFilter={false}
+      loop
+      value={selectedCommandValue}
+      onValueChange={setSelectedCommandValue}
+      className="min-h-0 flex-1 rounded-lg"
+    >
       <CommandInput
         autoFocus={!isMobile}
         value={directoryInput}
         onValueChange={onDirectoryInputChange}
+        onKeyDown={handleDirectoryInputKeyDown}
         placeholder="Search or paste a path"
         className="text-base md:text-sm"
       />
@@ -228,6 +566,54 @@ export function AppShellAddDirectoryDialog({
               ? "No directories found. Type or paste a path to add it."
               : "No recent or discovered directories yet."}
           </CommandEmpty>
+        ) : null}
+        {shouldShowPathCompletions &&
+        (pathCompletionLoading || pathCompletionItems.length > 0) ? (
+          <CommandGroup heading="Path completions">
+            {pathCompletionLoading && pathCompletionItems.length === 0 ? (
+              <CommandItem value="path-completion:loading" disabled>
+                Loading directories…
+              </CommandItem>
+            ) : null}
+            {pathCompletionItems.map((completion, index) => (
+              <CommandItem
+                key={`path-completion:${completion.value}`}
+                value={pathCompletionCommandValue(completion, index)}
+                onSelect={() => onAddDirectoryPath(completion.value)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <DirectoryPathLabel path={completion.value} />
+                  <span className="truncate text-xs text-muted-foreground">
+                    Press Tab to complete this path instead.
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+        {shouldShowDirectorySearch &&
+        (directorySearchLoading || directorySearchItems.length > 0) ? (
+          <CommandGroup heading="Matching folders">
+            {directorySearchLoading && directorySearchItems.length === 0 ? (
+              <CommandItem value="directory-search:loading" disabled>
+                Searching directories…
+              </CommandItem>
+            ) : null}
+            {directorySearchItems.map((completion, index) => (
+              <CommandItem
+                key={`directory-search:${completion.value}`}
+                value={directorySearchCommandValue(completion, index)}
+                onSelect={() => onAddDirectoryPath(completion.value)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <DirectoryPathLabel path={completion.value} />
+                  <span className="truncate text-xs text-muted-foreground">
+                    {completion.description || "Found on disk"}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
         ) : null}
         {manualPath ? (
           <CommandGroup heading="Add path">
@@ -332,6 +718,11 @@ export function AppShellAddDirectoryDialog({
         <span className="inline-flex items-center gap-1">
           <FooterKbd>Enter</FooterKbd> Select
         </span>
+        {onRequestPathCompletions || onSearchDirectories ? (
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Tab</FooterKbd> Complete
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-1">
           <FooterKbd>Esc</FooterKbd> Close
         </span>
@@ -382,6 +773,8 @@ type AppShellAddDirectoryDialogControllerProps = {
   onAddDirectoryPath: (
     path: string
   ) => Promise<boolean | string> | boolean | string | void
+  onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
+  onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
 export function AppShellAddDirectoryDialogController({
@@ -393,6 +786,8 @@ export function AppShellAddDirectoryDialogController({
   knownDirectories,
   useForNewSession,
   onAddDirectoryPath,
+  onRequestPathCompletions,
+  onSearchDirectories,
 }: AppShellAddDirectoryDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
@@ -443,6 +838,8 @@ export function AppShellAddDirectoryDialogController({
       onAddDirectoryPath={(path) => {
         void addDirectoryPath(path)
       }}
+      onRequestPathCompletions={onRequestPathCompletions}
+      onSearchDirectories={onSearchDirectories}
     />
   )
 }

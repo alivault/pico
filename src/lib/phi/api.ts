@@ -29,6 +29,15 @@ export type DirectoryResolveResponse =
     }
   | ApiErrorResponse
 
+export type DirectorySearchResponse =
+  | {
+      ok: true
+      query: string
+      totalCount: number
+      items: Array<CompletionItem>
+    }
+  | ApiErrorResponse
+
 export type PathCompletionsResponse =
   | {
       ok: true

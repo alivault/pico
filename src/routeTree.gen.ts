@@ -31,6 +31,7 @@ import { Route as ApiFileCompletionsRouteImport } from './routes/api.file-comple
 import { Route as ApiDirectorySessionsIndexesRouteImport } from './routes/api.directory-sessions-indexes'
 import { Route as ApiDirectorySessionsIndexRouteImport } from './routes/api.directory-sessions-index'
 import { Route as ApiDirectorySessionsRouteImport } from './routes/api.directory-sessions'
+import { Route as ApiDirectorySearchRouteImport } from './routes/api.directory-search'
 import { Route as ApiAbortRouteImport } from './routes/api.abort'
 import { Route as ApiUiIdRouteImport } from './routes/api.ui.$id'
 import { Route as ApiSettingsHideThinkingRouteImport } from './routes/api.settings.hide-thinking'
@@ -166,6 +167,11 @@ const ApiDirectorySessionsRoute = ApiDirectorySessionsRouteImport.update({
   path: '/api/directory-sessions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDirectorySearchRoute = ApiDirectorySearchRouteImport.update({
+  id: '/api/directory-search',
+  path: '/api/directory-search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAbortRoute = ApiAbortRouteImport.update({
   id: '/api/abort',
   path: '/api/abort',
@@ -283,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
+  '/api/directory-search': typeof ApiDirectorySearchRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
@@ -329,6 +336,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
+  '/api/directory-search': typeof ApiDirectorySearchRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
@@ -376,6 +384,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/events': typeof EventsRoute
   '/api/abort': typeof ApiAbortRoute
+  '/api/directory-search': typeof ApiDirectorySearchRoute
   '/api/directory-sessions': typeof ApiDirectorySessionsRouteWithChildren
   '/api/directory-sessions-index': typeof ApiDirectorySessionsIndexRoute
   '/api/directory-sessions-indexes': typeof ApiDirectorySessionsIndexesRoute
@@ -424,6 +433,7 @@ export interface FileRouteTypes {
     | '/'
     | '/events'
     | '/api/abort'
+    | '/api/directory-search'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
     | '/api/directory-sessions-indexes'
@@ -470,6 +480,7 @@ export interface FileRouteTypes {
     | '/'
     | '/events'
     | '/api/abort'
+    | '/api/directory-search'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
     | '/api/directory-sessions-indexes'
@@ -516,6 +527,7 @@ export interface FileRouteTypes {
     | '/'
     | '/events'
     | '/api/abort'
+    | '/api/directory-search'
     | '/api/directory-sessions'
     | '/api/directory-sessions-index'
     | '/api/directory-sessions-indexes'
@@ -563,6 +575,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EventsRoute: typeof EventsRoute
   ApiAbortRoute: typeof ApiAbortRoute
+  ApiDirectorySearchRoute: typeof ApiDirectorySearchRoute
   ApiDirectorySessionsRoute: typeof ApiDirectorySessionsRouteWithChildren
   ApiDirectorySessionsIndexRoute: typeof ApiDirectorySessionsIndexRoute
   ApiDirectorySessionsIndexesRoute: typeof ApiDirectorySessionsIndexesRoute
@@ -760,6 +773,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDirectorySessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/directory-search': {
+      id: '/api/directory-search'
+      path: '/api/directory-search'
+      fullPath: '/api/directory-search'
+      preLoaderRoute: typeof ApiDirectorySearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/abort': {
       id: '/api/abort'
       path: '/api/abort'
@@ -944,6 +964,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EventsRoute: EventsRoute,
   ApiAbortRoute: ApiAbortRoute,
+  ApiDirectorySearchRoute: ApiDirectorySearchRoute,
   ApiDirectorySessionsRoute: ApiDirectorySessionsRouteWithChildren,
   ApiDirectorySessionsIndexRoute: ApiDirectorySessionsIndexRoute,
   ApiDirectorySessionsIndexesRoute: ApiDirectorySessionsIndexesRoute,

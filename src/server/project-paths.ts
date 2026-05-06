@@ -14,6 +14,15 @@ const WALK_IGNORE_DIRECTORIES = new Set([
 ])
 const PROJECT_FILE_TREE_LIMIT = 20_000
 const PROJECT_FILE_READ_MAX_BYTES = 1_000_000
+const DIRECTORY_SEARCH_LIMIT = 50
+const DIRECTORY_SEARCH_MAX_DEPTH = 4
+const DIRECTORY_SEARCH_IGNORE_DIRECTORIES = new Set([
+  ...WALK_IGNORE_DIRECTORIES,
+  ".cache",
+  ".local",
+  "Applications",
+  "Library",
+])
 
 export type CompletionEntry = {
   value: string
@@ -534,6 +543,224 @@ export async function readProjectFileContent(
     path: resolved.path,
     content,
   }
+}
+
+function directorySearchScore({
+  absolutePath,
+  query,
+  root,
+}: {
+  absolutePath: string
+  query: string
+  root: string
+}) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return 0
+
+  const directoryName = basename(absolutePath).toLowerCase()
+  const relativePath = displayPath(path.relative(root, absolutePath))
+  const normalizedRelativePath = relativePath.toLowerCase()
+  const depth = relativePath.split("/").filter(Boolean).length
+
+  let score = 0
+  if (directoryName === normalizedQuery) score = 1000
+  else if (directoryName.startsWith(normalizedQuery)) score = 800
+  else if (directoryName.includes(normalizedQuery)) score = 600
+  else if (normalizedRelativePath.includes(normalizedQuery)) score = 300
+
+  if (score === 0) return 0
+  return score - depth * 5
+}
+
+async function searchDirectoriesWithFallback({
+  root,
+  query,
+  maxResults,
+}: {
+  root: string
+  query: string
+  maxResults: number
+}) {
+  const normalizedQuery = query.trim().toLowerCase()
+  const results: Array<{ path: string; isDirectory: boolean }> = []
+  const queue: Array<{ directory: string; depth: number }> = [
+    { directory: root, depth: 0 },
+  ]
+
+  while (queue.length > 0 && results.length < maxResults) {
+    const current = queue.shift()
+    if (!current || current.depth >= DIRECTORY_SEARCH_MAX_DEPTH) continue
+
+    let entries: Array<Dirent<string>>
+    try {
+      entries = await readdir(current.directory, {
+        withFileTypes: true,
+        encoding: "utf8",
+      })
+    } catch {
+      continue
+    }
+
+    for (const entry of entries) {
+      if (results.length >= maxResults) break
+      if (!entry.isDirectory()) continue
+      if (DIRECTORY_SEARCH_IGNORE_DIRECTORIES.has(entry.name)) continue
+      if (!normalizedQuery.startsWith(".") && entry.name.startsWith(".")) {
+        continue
+      }
+
+      const fullPath = join(current.directory, entry.name)
+      const relativePath = `${displayPath(path.relative(root, fullPath))}/`
+      if (relativePath.toLowerCase().includes(normalizedQuery)) {
+        results.push({ path: relativePath, isDirectory: true })
+      }
+      queue.push({ directory: fullPath, depth: current.depth + 1 })
+    }
+  }
+
+  return results
+}
+
+async function searchDirectoriesInRoot({
+  root,
+  query,
+  maxResults,
+}: {
+  root: string
+  query: string
+  maxResults: number
+}) {
+  const args = [
+    "--base-directory",
+    root,
+    "--max-depth",
+    String(DIRECTORY_SEARCH_MAX_DEPTH),
+    "--max-results",
+    String(maxResults),
+    "--type",
+    "d",
+    "--full-path",
+    "--exclude",
+    ".git",
+    "--exclude",
+    ".git/*",
+    "--exclude",
+    ".git/**",
+    "--exclude",
+    ".cache",
+    "--exclude",
+    ".local",
+    "--exclude",
+    ".next",
+    "--exclude",
+    ".output",
+    "--exclude",
+    ".tanstack",
+    "--exclude",
+    "Applications",
+    "--exclude",
+    "dist",
+    "--exclude",
+    "Library",
+    "--exclude",
+    "node_modules",
+    buildFdPathQuery(query),
+  ]
+
+  for (const command of ["fd", "fdfind"]) {
+    const results = await runFdSearch(command, args)
+    if (results !== undefined) {
+      return results.filter((entry) => entry.isDirectory)
+    }
+  }
+
+  return await searchDirectoriesWithFallback({ root, query, maxResults })
+}
+
+function pathIsInside(childPath: string, parentPath: string) {
+  const relativePath = path.relative(parentPath, childPath)
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+  )
+}
+
+export async function searchDirectoryEntries(query: string, baseCwd: string) {
+  const normalizedQuery = typeof query === "string" ? query.trim() : ""
+  if (!normalizedQuery) return []
+
+  const homeDirectory = os.homedir()
+  const roots = [homeDirectory]
+  if (baseCwd && !pathIsInside(baseCwd, homeDirectory)) {
+    roots.push(baseCwd)
+  }
+
+  const seen = new Set<string>()
+  const matches: Array<{
+    absolutePath: string
+    root: string
+    score: number
+  }> = []
+
+  for (const root of roots) {
+    let rootStats: Stats
+    try {
+      rootStats = await stat(root)
+    } catch {
+      continue
+    }
+    if (!rootStats.isDirectory()) continue
+
+    const entries = await searchDirectoriesInRoot({
+      root,
+      query: normalizedQuery,
+      maxResults: DIRECTORY_SEARCH_LIMIT * 4,
+    })
+
+    for (const entry of entries) {
+      const relativePath = displayPath(entry.path).replace(/\/+$/g, "")
+      if (!relativePath) continue
+
+      const absolutePath = resolve(root, relativePath)
+      if (seen.has(absolutePath)) continue
+      seen.add(absolutePath)
+
+      const score = directorySearchScore({
+        absolutePath,
+        query: normalizedQuery,
+        root,
+      })
+      if (score <= 0) continue
+      matches.push({ absolutePath, root, score })
+    }
+  }
+
+  return matches
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score
+      const leftDepth = displayPath(path.relative(left.root, left.absolutePath))
+        .split("/")
+        .filter(Boolean).length
+      const rightDepth = displayPath(
+        path.relative(right.root, right.absolutePath)
+      )
+        .split("/")
+        .filter(Boolean).length
+      return (
+        leftDepth - rightDepth ||
+        left.absolutePath.localeCompare(right.absolutePath)
+      )
+    })
+    .slice(0, DIRECTORY_SEARCH_LIMIT)
+    .map(({ absolutePath }) => {
+      const value = displayPath(absolutePath)
+      return {
+        value,
+        label: `${basename(value)}/`,
+        description: value,
+        isDirectory: true,
+      }
+    })
 }
 
 export async function listFileReferenceEntries(

@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   EllipsisIcon,
   FolderIcon,
+  FolderPlusIcon,
   GitBranchIcon,
   OctagonXIcon,
   PanelRightIcon,
@@ -32,6 +33,7 @@ import type {
   ThemeMode,
 } from "@/lib/phi"
 import type {
+  DirectorySearchResponse,
   DirectorySessionsIndexSnapshot,
   DirectorySessionsIndexesResponse,
   ExtensionUiEvent,
@@ -2532,12 +2534,14 @@ function NewSessionComposerSelectors({
   defaultNewSessionDirectory,
   directoryOptions,
   onCreateSession,
+  onOpenAddDirectoryDialog,
   viewerContextId,
 }: {
   cwd?: string
   defaultNewSessionDirectory: string
   directoryOptions: Array<{ path: string; label: string }>
   onCreateSession: (cwdOverride?: string) => void
+  onOpenAddDirectoryDialog: () => void
   viewerContextId: string
 }) {
   const queryClient = useQueryClient()
@@ -2656,6 +2660,16 @@ function NewSessionComposerSelectors({
               ) : null}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onOpenAddDirectoryDialog}>
+            <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span>Add directory…</span>
+              <span className="truncate text-xs text-muted-foreground">
+                Search or paste a path for this new session.
+              </span>
+            </div>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -2901,6 +2915,7 @@ type AppShellSessionContentProps = {
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onCancelCompaction: () => void
   onCreateSession: (cwdOverride?: string) => void
+  onOpenAddDirectoryDialog: () => void
   sessionStore: PhiStore<SessionState>
   store: PhiStore<AppShellComposerSnapshot>
   viewerContextId: string
@@ -2923,6 +2938,7 @@ function AppShellSessionContent({
   newSessionDirectoryOptions,
   onCancelCompaction,
   onCreateSession,
+  onOpenAddDirectoryDialog,
   sessionStore,
   store,
   viewerContextId,
@@ -2957,6 +2973,7 @@ function AppShellSessionContent({
               defaultNewSessionDirectory={defaultNewSessionDirectory}
               directoryOptions={newSessionDirectoryOptions}
               onCreateSession={onCreateSession}
+              onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
               viewerContextId={viewerContextId}
             />
           }
@@ -3279,6 +3296,7 @@ function AppShellTabsController({
   newSessionDirectoryOptions,
   onCancelCompaction,
   onCreateSession,
+  onOpenAddDirectoryDialog,
   onCloseAllFileViewTabs,
   onCloseFileViewTab,
   onCloseFileViewTabsToRight,
@@ -3354,6 +3372,7 @@ function AppShellTabsController({
           newSessionDirectoryOptions={newSessionDirectoryOptions}
           onCancelCompaction={onCancelCompaction}
           onCreateSession={onCreateSession}
+          onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
           sessionStore={sessionStore}
           store={store}
           viewerContextId={viewerContextId}
@@ -6911,6 +6930,7 @@ const AppShellSessionWorkspace = React.forwardRef<
             onCreateSession={(cwdOverride) => {
               void createSession(cwdOverride)
             }}
+            onOpenAddDirectoryDialog={openAddDirectoryDialog}
             onCloseAllFileViewTabs={closeAllFileViewTabs}
             onCloseFileViewTab={closeFileViewTab}
             onCloseFileViewTabsToRight={closeFileViewTabsToRight}
@@ -7421,14 +7441,17 @@ const AppShellAddDirectoryDialogHost = React.memo(
   function AppShellAddDirectoryDialogHost({
     addDirectoryDialogRef,
     addDirectoryOpenRef,
+    activeSessionId,
     addDirectoryPath,
     baseSidebarDirectories,
     knownDirectories,
     recentDirectoriesStore,
     sessionCwd,
     sessionStore,
+    viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
+    | "activeSessionId"
     | "addDirectoryDialogRef"
     | "addDirectoryOpenRef"
     | "addDirectoryPath"
@@ -7437,12 +7460,46 @@ const AppShellAddDirectoryDialogHost = React.memo(
     | "recentDirectoriesStore"
     | "sessionCwd"
     | "sessionStore"
+    | "viewerContextId"
   >) {
     const recentDirectories = useSelector(recentDirectoriesStore)
     const useForNewSession = useSelector(
       sessionStore,
       (sessionState) => sessionState.draft && sessionState.items.length === 0
     )
+    const requestPathCompletions = useStableEvent(async (prefix: string) => {
+      if (!viewerContextId) return []
+
+      const response = await fetchJson<PathCompletionsResponse>(
+        buildRequestUrl("/api/path-completions", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prefix }),
+        }
+      )
+      return isApiErrorResponse(response) ? [] : response.items
+    })
+    const searchDirectories = useStableEvent(async (query: string) => {
+      if (!viewerContextId) return []
+
+      const response = await fetchJson<DirectorySearchResponse>(
+        buildRequestUrl("/api/directory-search", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ query }),
+        }
+      )
+      return isApiErrorResponse(response) ? [] : response.items
+    })
+
     return (
       <AppShellAddDirectoryDialogController
         ref={addDirectoryDialogRef}
@@ -7453,6 +7510,8 @@ const AppShellAddDirectoryDialogHost = React.memo(
         knownDirectories={knownDirectories}
         useForNewSession={useForNewSession}
         onAddDirectoryPath={addDirectoryPath}
+        onRequestPathCompletions={requestPathCompletions}
+        onSearchDirectories={searchDirectories}
       />
     )
   }
@@ -7788,6 +7847,7 @@ const AppShellFloatingControllers = React.memo(
         />
 
         <AppShellAddDirectoryDialogHost
+          activeSessionId={activeSessionId}
           addDirectoryDialogRef={addDirectoryDialogRef}
           addDirectoryOpenRef={addDirectoryOpenRef}
           addDirectoryPath={addDirectoryPath}
@@ -7796,6 +7856,7 @@ const AppShellFloatingControllers = React.memo(
           recentDirectoriesStore={recentDirectoriesStore}
           sessionCwd={sessionCwd}
           sessionStore={sessionStore}
+          viewerContextId={viewerContextId}
         />
 
         <AppShellRenameSessionDialogHost
