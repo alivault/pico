@@ -6021,7 +6021,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
-      handleSelectSession(undefined, { replace: true })
+      handleSelectSession(undefined)
       clearSelectedSidebarSelection()
       if (shouldCloseMobileSidebar) {
         pendingMobileSidebarPromptFocusRef.current = true
@@ -7975,6 +7975,10 @@ function AppShellSidebarController({
     sidebarStore,
     (snapshot) => snapshot.state.sidebarSessionSelectionAnchor
   )
+  const lastActiveSidebarSelectionSyncRef = React.useRef({
+    signature: "",
+    key: "",
+  })
   const directoryIndexRequestIdRef = React.useRef(0)
   const directoryIndexRequestIdsByPathRef = React.useRef<
     Record<string, number>
@@ -8268,6 +8272,52 @@ function AppShellSidebarController({
     sessionsEvent?.activeSessionId,
     sessionsEvent?.activeSessionKey,
     sessionsEvent?.activeSessionPath,
+    sidebarStore,
+  ])
+
+  React.useEffect(() => {
+    const activeSessionId = sessionsEvent?.activeSessionId?.trim() || ""
+    const activeSessionPath = sessionsEvent?.activeSessionPath?.trim() || ""
+    const activeSessionKey = sessionsEvent?.activeSessionKey?.trim() || ""
+    const activeSignature = [
+      activeSessionId,
+      activeSessionPath,
+      activeSessionKey,
+    ].join("\0")
+    let nextKey = findSidebarSessionSelectionKey(sidebarSessionEntriesByKey, {
+      sessionId: activeSessionId,
+      sessionPath: activeSessionPath,
+    })
+
+    if (
+      !nextKey &&
+      activeSessionKey &&
+      sidebarSessionEntriesByKey.has(activeSessionKey)
+    ) {
+      nextKey = activeSessionKey
+    }
+
+    const previous = lastActiveSidebarSelectionSyncRef.current
+    if (previous.signature === activeSignature && previous.key === nextKey) {
+      return
+    }
+
+    lastActiveSidebarSelectionSyncRef.current = {
+      signature: activeSignature,
+      key: nextKey,
+    }
+    sidebarStore.setSelectedSidebarSessionKeys((current) => {
+      const nextKeys = nextKey ? [nextKey] : []
+      return sameStringArray(current, nextKeys) ? current : nextKeys
+    })
+    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+      current === nextKey ? current : nextKey
+    )
+  }, [
+    sessionsEvent?.activeSessionId,
+    sessionsEvent?.activeSessionKey,
+    sessionsEvent?.activeSessionPath,
+    sidebarSessionEntriesByKey,
     sidebarStore,
   ])
 
