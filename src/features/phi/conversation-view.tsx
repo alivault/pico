@@ -621,7 +621,7 @@ function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
 function toolDisplayName(name?: string) {
   switch (name) {
     case "bash":
-      return "Shell"
+      return "Bash"
     case "read":
       return "Read"
     case "write":
@@ -629,7 +629,7 @@ function toolDisplayName(name?: string) {
     case "edit":
       return "Edit"
     case "grep":
-      return "Search"
+      return "Grep"
     case "glob":
       return "Glob"
     case "find":
@@ -1187,7 +1187,7 @@ function exploreToolLine(
             ? "List"
             : shellCommandName
               ? `${shellCommandName[0]?.toUpperCase()}${shellCommandName.slice(1)}`
-              : "Shell"
+              : "Bash"
 
       return {
         label,

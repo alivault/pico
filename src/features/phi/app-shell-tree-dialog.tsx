@@ -156,7 +156,7 @@ function treeDialogKindLabel(node: FlatTreeNode) {
       case "toolResult":
         return "Tool"
       case "bashExecution":
-        return "Shell"
+        return "Bash"
       default:
         return entry.message?.role || "Message"
     }
@@ -208,7 +208,7 @@ function treeDialogEntryText(node: FlatTreeNode) {
           "Tool result"
         )
       case "bashExecution":
-        return treeDialogNormalizeLine(message.command) || "Shell command"
+        return treeDialogNormalizeLine(message.command) || "Bash command"
       default:
         return treeDialogNormalizeLine(message.text) || "Message"
     }
@@ -996,7 +996,7 @@ function TreeEntryLine({ node }: { node: FlatTreeNode }) {
         return (
           <div className="min-w-0 truncate text-sm leading-6 text-foreground">
             <span className="text-muted-foreground">[bash]:</span>{" "}
-            {treeDialogNormalizeLine(message.command) || "Shell command"}
+            {treeDialogNormalizeLine(message.command) || "Bash command"}
           </div>
         )
       default:
