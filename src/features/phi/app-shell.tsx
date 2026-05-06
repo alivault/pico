@@ -55,6 +55,15 @@ import type { ComposerPanelHandle } from "@/features/phi/composer-panel"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
@@ -2527,6 +2536,11 @@ function localBranchTrackText(branch: GitLocalBranch) {
   return "synced"
 }
 
+type NewSessionComposerBranchCheckoutPayload = {
+  branch: string
+  create?: boolean
+}
+
 function NewSessionComposerSelectors({
   cwd,
   defaultNewSessionDirectory,
@@ -2543,6 +2557,8 @@ function NewSessionComposerSelectors({
   viewerContextId: string
 }) {
   const queryClient = useQueryClient()
+  const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
+  const [createBranchName, setCreateBranchName] = React.useState("")
   const selectedDirectory = cwd?.trim() || defaultNewSessionDirectory.trim()
   const directoryMenuOptions = (() => {
     const seen = new Set<string>()
@@ -2578,7 +2594,7 @@ function NewSessionComposerSelectors({
   })
   const localBranches = branchQuery.data || []
   const checkoutBranchMutation = useMutation({
-    mutationFn: async (branch: string) =>
+    mutationFn: async (payload: NewSessionComposerBranchCheckoutPayload) =>
       await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-checkout", {
           contextId: viewerContextId,
@@ -2586,10 +2602,10 @@ function NewSessionComposerSelectors({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: selectedDirectory, branch }),
+          body: JSON.stringify({ cwd: selectedDirectory, ...payload }),
         }
       ),
-    onSuccess: (_result, branch) => {
+    onSuccess: (_result, payload) => {
       void queryClient.invalidateQueries({
         queryKey: phiQueryKeys.gitStatus(viewerContextId, selectedDirectory),
       })
@@ -2614,14 +2630,30 @@ function NewSessionComposerSelectors({
           selectedDirectory
         ),
       })
-      toast.success(`Switched to ${branch}`)
+      setCreateBranchOpen(false)
+      setCreateBranchName("")
+      toast.success(
+        payload.create
+          ? `Created and switched to ${payload.branch}`
+          : `Switched to ${payload.branch}`
+      )
     },
-    onError: (error) => {
+    onError: (error, payload) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to switch branch"
+        error instanceof Error
+          ? error.message
+          : payload.create
+            ? "Failed to create branch"
+            : "Failed to switch branch"
       )
     },
   })
+
+  const createBranch = () => {
+    const branch = createBranchName.trim()
+    if (!branch || checkoutBranchMutation.isPending) return
+    checkoutBranchMutation.mutate({ branch, create: true })
+  }
 
   return (
     <div className="flex min-w-0 items-center justify-start gap-1.5 text-muted-foreground">
@@ -2692,6 +2724,19 @@ function NewSessionComposerSelectors({
             )}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-80">
+            <DropdownMenuItem
+              disabled={checkoutBranchMutation.isPending}
+              onClick={() => setCreateBranchOpen(true)}
+            >
+              <GitBranchIcon className="size-4 shrink-0" aria-hidden="true" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span>Create branch…</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Create and switch from the current HEAD.
+                </span>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {branchQuery.isPending ? (
               <DropdownMenuItem disabled>
                 <Spinner />
@@ -2706,7 +2751,7 @@ function NewSessionComposerSelectors({
                     disabled={checkoutBranchMutation.isPending}
                     onClick={() => {
                       if (branch.current) return
-                      checkoutBranchMutation.mutate(branch.name)
+                      checkoutBranchMutation.mutate({ branch: branch.name })
                     }}
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -2731,6 +2776,57 @@ function NewSessionComposerSelectors({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
+
+      <Dialog
+        open={createBranchOpen}
+        onOpenChange={(open) => {
+          setCreateBranchOpen(open)
+          if (!open) setCreateBranchName("")
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create branch</DialogTitle>
+            <DialogDescription>
+              Create a branch in {formatFolderName(selectedDirectory)} and
+              switch to it for the new session.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              createBranch()
+            }}
+          >
+            <Input
+              autoFocus
+              value={createBranchName}
+              onChange={(event) => setCreateBranchName(event.target.value)}
+              placeholder="branch-name"
+              disabled={checkoutBranchMutation.isPending}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateBranchOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  !createBranchName.trim() || checkoutBranchMutation.isPending
+                }
+              >
+                {checkoutBranchMutation.isPending ? <Spinner /> : null}
+                Create branch
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
