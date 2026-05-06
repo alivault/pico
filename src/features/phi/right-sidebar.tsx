@@ -138,7 +138,7 @@ type OpenProjectFileOptions = { pin?: boolean }
 
 export type RightSidebarTabValue = "files" | "review"
 
-type GitPanelProps = {
+type RightSidebarProps = {
   viewerContextId: string
   cwd?: string
   active: boolean
@@ -159,7 +159,7 @@ type GitPanelProps = {
   showToolbar?: boolean
 }
 
-type GitScopedProps = GitPanelProps
+type GitScopedProps = RightSidebarProps
 
 export type GitCommitDialogControllerHandle = {
   open: () => void
@@ -4299,7 +4299,7 @@ export function DraftGitStatusBadge({
   return <Badge variant="outline">{statusQuery.data.label}</Badge>
 }
 
-export function GitPanel({
+export function RightSidebar({
   viewerContextId,
   cwd,
   active,
@@ -4318,7 +4318,7 @@ export function GitPanel({
   onOpenFile,
   onReorderFiles,
   showToolbar = true,
-}: GitPanelProps) {
+}: RightSidebarProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [uncontrolledActiveTab, setUncontrolledActiveTab] =

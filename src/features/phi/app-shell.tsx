@@ -147,13 +147,13 @@ import {
 import {
   DraftGitStatusBadge,
   GitCommitDialogController,
-  GitPanel,
   GitTabStatusText,
   HeaderGitActions,
   HeaderGitStatusText,
+  RightSidebar,
   type GitCommitDialogControllerHandle,
   type RightSidebarTabValue,
-} from "@/features/phi/git-panel"
+} from "@/features/phi/right-sidebar"
 import {
   createPhiLatestThrottler,
   type PhiLatestThrottler,
@@ -1993,7 +1993,7 @@ const AppShellGitPanelController = React.memo(
     if (!active) return null
 
     return (
-      <GitPanel
+      <RightSidebar
         viewerContextId={viewerContextId}
         cwd={cwd}
         active={active}
@@ -3045,7 +3045,7 @@ function AppShellDesktopGitPanel({
       data-state={active ? "open" : "closed"}
       className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none"
     >
-      <GitPanel
+      <RightSidebar
         viewerContextId={viewerContextId}
         cwd={cwd}
         active={active}
