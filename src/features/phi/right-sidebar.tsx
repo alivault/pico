@@ -555,13 +555,69 @@ function gitStatusHasDiverged(gitStatus: GitStatusValue | undefined) {
   )
 }
 
+type GitFileStatusColumn = "index" | "worktree"
+
+const GIT_CONFLICT_STATUS_DESCRIPTIONS: Record<string, string> = {
+  AA: "Conflict: added by both sides",
+  AU: "Conflict: added by us",
+  DD: "Conflict: deleted by both sides",
+  DU: "Conflict: deleted by us",
+  UA: "Conflict: added by them",
+  UD: "Conflict: deleted by them",
+  UU: "Conflict: modified by both sides",
+}
+
 function gitFileStatusCharacters(status: string | undefined) {
   const normalized =
     typeof status === "string" ? status.slice(0, 2).padEnd(2, " ") : "  "
   return [normalized[0] ?? " ", normalized[1] ?? " "] as const
 }
 
-function gitFileStatusTone(column: "index" | "worktree", character: string) {
+function gitFileStatusTooltip({
+  character,
+  column,
+  status,
+}: {
+  character: string
+  column: GitFileStatusColumn
+  status: string | undefined
+}) {
+  if (character === " ") return ""
+
+  const normalizedStatus =
+    typeof status === "string" ? status.slice(0, 2).padEnd(2, " ") : "  "
+  const conflictDescription =
+    GIT_CONFLICT_STATUS_DESCRIPTIONS[normalizedStatus.trim()]
+  if (conflictDescription) return `${character}: ${conflictDescription}`
+
+  if (character === "?") return "?: Untracked file"
+  if (character === "!") return "!: Ignored file"
+  if (character === "U") return "U: Unmerged conflict"
+
+  const stagedDescriptions: Record<string, string> = {
+    A: "Added and staged",
+    C: "Copied and staged",
+    D: "Deleted and staged",
+    M: "Modified and staged",
+    R: "Renamed and staged",
+    T: "Type changed and staged",
+  }
+  const unstagedDescriptions: Record<string, string> = {
+    A: "Added in the working tree",
+    C: "Copied in the working tree",
+    D: "Deleted but not staged",
+    M: "Modified but not staged",
+    R: "Renamed in the working tree",
+    T: "Type changed but not staged",
+  }
+  const descriptions =
+    column === "index" ? stagedDescriptions : unstagedDescriptions
+  const columnDescription = column === "index" ? "staged/index" : "working tree"
+
+  return `${character}: ${descriptions[character] ?? `Changed in ${columnDescription}`}`
+}
+
+function gitFileStatusTone(column: GitFileStatusColumn, character: string) {
   if (character === " ") return "muted"
   if (character === "?") return "untracked"
   if (character === "U" || character === "!") return "conflict"
@@ -1795,17 +1851,30 @@ function GitFileStatus({ status }: { status: string | undefined }) {
           ["index", indexCharacter],
           ["worktree", worktreeCharacter],
         ] as const
-      ).map(([column, character]) => (
-        <span
-          key={column}
-          className={cn(
-            "w-[1ch] text-center whitespace-pre",
-            gitFileStatusToneClass(gitFileStatusTone(column, character))
-          )}
-        >
-          {character}
-        </span>
-      ))}
+      ).map(([column, character]) => {
+        const tooltip = gitFileStatusTooltip({ character, column, status })
+        const statusCharacter = (
+          <span
+            key={column}
+            aria-label={tooltip || undefined}
+            className={cn(
+              "w-[1ch] text-center whitespace-pre",
+              tooltip && "cursor-help",
+              gitFileStatusToneClass(gitFileStatusTone(column, character))
+            )}
+          >
+            {character}
+          </span>
+        )
+
+        if (!tooltip) return statusCharacter
+
+        return (
+          <TitleTooltip key={column} title={tooltip} side="top">
+            {statusCharacter}
+          </TitleTooltip>
+        )
+      })}
     </span>
   )
 }
