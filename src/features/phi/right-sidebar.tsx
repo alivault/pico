@@ -99,6 +99,11 @@ import {
   matchesShortcutEvent,
 } from "@/features/phi/keyboard-shortcuts"
 import { phiQueryKeys } from "@/features/phi/query-keys"
+import {
+  getStuckScrollTriggerValue,
+  hasScrolledContent,
+  setDerivedScrollState,
+} from "@/features/phi/scroll-shadow-utils"
 import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import type {
   GitActionResponse,
@@ -2869,9 +2874,12 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
     React.useState<SidebarVerticalResizeCursor>("row-resize")
   const [openFiles, setOpenFiles] = React.useState<Array<string>>([])
   const [stickyReviewFileValue, setStickyReviewFileValue] = React.useState("")
+  const [historyHeaderShadowed, setHistoryHeaderShadowed] =
+    React.useState(false)
   const changesScrollRef = React.useRef<HTMLDivElement>(null)
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
   const historyPanelRef = React.useRef<HTMLDivElement>(null)
+  const historyScrollRef = React.useRef<HTMLDivElement>(null)
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
@@ -2891,6 +2899,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
     setDefaultHistoryPanelHeight(undefined)
     setOpenFiles([])
     setStickyReviewFileValue("")
+    setHistoryHeaderShadowed(false)
   }, [normalizedCwd])
 
   React.useEffect(() => {
@@ -2900,32 +2909,34 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   const updateStickyReviewFileHeader = (
     scrollElement: HTMLDivElement | null
   ) => {
-    if (!scrollElement || scrollElement.scrollTop <= 0) {
-      setStickyReviewFileValue((current) => (current ? "" : current))
-      return
-    }
-
-    const containerTop = scrollElement.getBoundingClientRect().top
-    const triggers = Array.from(
-      scrollElement.querySelectorAll<HTMLElement>("[data-review-file-trigger]")
+    setDerivedScrollState(
+      setStickyReviewFileValue,
+      getStuckScrollTriggerValue({
+        getValue: (trigger) => trigger.dataset.reviewFileValue || "",
+        scrollElement,
+        selector: "[data-review-file-trigger]",
+      })
     )
-    let nextValue = ""
+  }
 
-    for (const trigger of triggers) {
-      const rect = trigger.getBoundingClientRect()
-      if (rect.top <= containerTop + 1 && rect.bottom > containerTop + 1) {
-        nextValue = trigger.dataset.reviewFileValue || ""
-      }
-    }
-
-    setStickyReviewFileValue((current) =>
-      current === nextValue ? current : nextValue
+  const updateHistoryHeaderShadow = (scrollElement: HTMLDivElement | null) => {
+    setDerivedScrollState(
+      setHistoryHeaderShadowed,
+      hasScrolledContent(scrollElement)
     )
   }
 
   React.useEffect(() => {
     updateStickyReviewFileHeader(changesScrollRef.current)
   }, [openFiles])
+
+  React.useEffect(() => {
+    if (!historyOpen) {
+      setDerivedScrollState<boolean>(setHistoryHeaderShadowed, false)
+      return
+    }
+    updateHistoryHeaderShadow(historyScrollRef.current)
+  }, [historyOpen])
 
   const getHistoryPanelHeightBounds = () => {
     const containerHeight =
@@ -3149,7 +3160,10 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
           <button
             type="button"
             aria-expanded={historyOpen}
-            className="flex min-h-10 w-full shrink-0 items-center justify-between gap-3 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
+            className={cn(
+              "flex min-h-10 w-full shrink-0 items-center justify-between gap-3 bg-background px-3 py-2 text-left transition-[background-color,box-shadow] hover:bg-muted/60",
+              historyHeaderShadowed && "shadow-sm"
+            )}
             onClick={() => {
               setHistoryOpen((open) => !open)
             }}
@@ -3166,7 +3180,13 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
             )}
           </button>
           {historyOpen ? (
-            <div className="min-h-0 flex-1 overflow-auto border-t border-border/70">
+            <div
+              ref={historyScrollRef}
+              className="min-h-0 flex-1 overflow-auto border-t border-border/70"
+              onScroll={(event) => {
+                updateHistoryHeaderShadow(event.currentTarget)
+              }}
+            >
               <GitCommitsSection
                 viewerContextId={viewerContextId}
                 cwd={normalizedCwd}
