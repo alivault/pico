@@ -39,6 +39,10 @@ const DEFAULT_SIDEBAR_MIN_WIDTH_PX = 256
 const DEFAULT_SIDEBAR_MAX_WIDTH_PX = 512
 
 export type SidebarHorizontalResizeCursor = "ew-resize" | "col-resize"
+export type SidebarVerticalResizeCursor = "ns-resize" | "row-resize"
+export type GlobalResizeCursor =
+  | SidebarHorizontalResizeCursor
+  | SidebarVerticalResizeCursor
 
 export function getSidebarHorizontalResizeCursor(): SidebarHorizontalResizeCursor {
   if (typeof window === "undefined") return "col-resize"
@@ -47,6 +51,15 @@ export function getSidebarHorizontalResizeCursor(): SidebarHorizontalResizeCurso
   return userAgent.includes("Chrome") || userAgent.includes("Firefox")
     ? "ew-resize"
     : "col-resize"
+}
+
+export function getSidebarVerticalResizeCursor(): SidebarVerticalResizeCursor {
+  if (typeof window === "undefined") return "row-resize"
+
+  const userAgent = window.navigator.userAgent
+  return userAgent.includes("Chrome") || userAgent.includes("Firefox")
+    ? "ns-resize"
+    : "row-resize"
 }
 
 export function getSidebarResizeTargetMinimumSize() {
@@ -59,9 +72,9 @@ export function getSidebarResizeTargetMinimumSize() {
     : SIDEBAR_RESIZE_TARGET_MINIMUM_FINE_PX
 }
 
-function installGlobalResizeCursor(cursor: SidebarHorizontalResizeCursor) {
+export function installGlobalResizeCursor(cursor: GlobalResizeCursor) {
   const style = document.createElement("style")
-  style.dataset.sidebarResizeCursor = "true"
+  style.dataset.resizeCursor = "true"
   style.textContent = `*, *:hover { cursor: ${cursor} !important; }`
   document.head.append(style)
 

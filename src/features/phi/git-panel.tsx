@@ -86,6 +86,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -97,6 +99,7 @@ import {
   matchesShortcutEvent,
 } from "@/features/phi/keyboard-shortcuts"
 import { phiQueryKeys } from "@/features/phi/query-keys"
+import { useCommandSurfaceAutoFocus } from "@/features/phi/use-command-surface-autofocus"
 import type {
   GitActionResponse,
   GitChangeFile,
@@ -114,6 +117,11 @@ import type {
   ProjectFileTreeResponse,
 } from "@/lib/phi/api"
 import { useIsMobile } from "@/hooks/use-mobile"
+import {
+  getSidebarVerticalResizeCursor,
+  installGlobalResizeCursor,
+  type SidebarVerticalResizeCursor,
+} from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
 
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
@@ -124,11 +132,10 @@ type GitFileReviewData = Extract<GitFileReviewResponse, { ok: true }>
 type ProjectFileTreeData = Extract<ProjectFileTreeResponse, { ok: true }>
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
 type GitStatusValue = GitStatusSummary | null
-type BranchScope = "local" | "remote"
 type GitRemoteAction = "push" | "force-push" | "pull"
 type OpenProjectFileOptions = { pin?: boolean }
 
-export type RightSidebarTabValue = "branches" | "files" | "history" | "review"
+export type RightSidebarTabValue = "files" | "review"
 
 type GitPanelProps = {
   viewerContextId: string
@@ -458,14 +465,6 @@ function selectGitFiles(data: GitChangesData) {
   return data.files
 }
 
-function selectGitLocalBranches(data: GitChangesData) {
-  return data.localBranches
-}
-
-function selectGitRemoteBranches(data: GitChangesData) {
-  return data.remoteBranches
-}
-
 async function invalidateGitQueries({
   queryClient,
   viewerContextId,
@@ -607,36 +606,6 @@ function gitFilesLineSummary(files: Array<GitChangeFile>) {
   return `+${additions} -${deletions}`
 }
 
-function gitFilesSummaryText(files: Array<GitChangeFile>) {
-  if (!files.length) return ""
-
-  let stagedCount = 0
-  let unstagedCount = 0
-  let untrackedCount = 0
-
-  for (const file of files) {
-    const [indexCharacter, worktreeCharacter] = gitFileStatusCharacters(
-      file.status
-    )
-    if (indexCharacter === "?" || worktreeCharacter === "?") {
-      untrackedCount += 1
-      continue
-    }
-    if (indexCharacter !== " " && indexCharacter !== "!") {
-      stagedCount += 1
-    }
-    if (worktreeCharacter !== " " && worktreeCharacter !== "!") {
-      unstagedCount += 1
-    }
-  }
-
-  const parts = [`${files.length} file${files.length === 1 ? "" : "s"}`]
-  if (stagedCount > 0) parts.push(`${stagedCount} staged`)
-  if (unstagedCount > 0) parts.push(`${unstagedCount} unstaged`)
-  if (untrackedCount > 0) parts.push(`${untrackedCount} untracked`)
-  return parts.join(" · ")
-}
-
 function gitLocalBranchTrackText(branch: GitLocalBranch) {
   if (!branch.upstream) return ""
   if (branch.upstreamGone) return "gone"
@@ -685,7 +654,7 @@ function formatGitRelativeDateCompact(value: string | undefined) {
 function gitLocalBranchesForRender(
   branches: Array<GitLocalBranch> | null | undefined,
   gitStatus: GitStatusValue | undefined
-) {
+): Array<GitLocalBranch> {
   if (Array.isArray(branches) && branches.length > 0) {
     return branches
   }
@@ -695,14 +664,14 @@ function gitLocalBranchesForRender(
     return Array.isArray(branches) ? branches : []
   }
 
-  const fallbackBranch = {
+  const fallbackBranch: GitLocalBranch = {
     name: branchName,
     current: true,
     ahead: gitStatus?.ahead || 0,
     behind: gitStatus?.behind || 0,
     upstreamGone: false,
     ...(gitStatus?.revision ? { hash: gitStatus.revision } : {}),
-  } satisfies GitLocalBranch
+  }
 
   return [fallbackBranch]
 }
@@ -867,7 +836,10 @@ function GitRepositorySummary({
   viewerContextId,
   cwd,
   active,
-}: GitScopedProps) {
+  onBranchClick,
+}: GitScopedProps & {
+  onBranchClick?: () => void
+}) {
   const normalizedCwd = normalizeCwd(cwd)
   const enabled = Boolean(active && viewerContextId && normalizedCwd)
   const statusQuery = useQuery({
@@ -940,9 +912,21 @@ function GitRepositorySummary({
       {branchLabel ? (
         <>
           <span className="shrink-0 text-muted-foreground">→</span>
-          <span className="min-w-0 truncate text-muted-foreground">
-            {branchLabel}
-          </span>
+          {onBranchClick ? (
+            <button
+              type="button"
+              aria-label="Switch branch"
+              className="-mx-1 inline-flex min-w-0 items-center gap-1 rounded-md px-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={onBranchClick}
+            >
+              <span className="min-w-0 truncate">{branchLabel}</span>
+              <ChevronsUpDownIcon className="size-3 shrink-0" />
+            </button>
+          ) : (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {branchLabel}
+            </span>
+          )}
         </>
       ) : null}
     </div>
@@ -956,7 +940,7 @@ export function GitPanelToolbar({
 }: GitScopedProps) {
   const queryClient = useQueryClient()
   const normalizedCwd = normalizeCwd(cwd)
-  const isMobile = useIsMobile()
+  const [branchDialogOpen, setBranchDialogOpen] = React.useState(false)
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
   const statusQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
@@ -1077,28 +1061,19 @@ export function GitPanelToolbar({
   const gitActionBusy =
     gitActionMutation.isPending || pushing || forcePushing || pulling
   const showCommitAction = Boolean(
-    isMobile && viewerContextId && normalizedCwd && hasChanges
+    viewerContextId && normalizedCwd && hasChanges
   )
   const showPushAction = Boolean(
-    isMobile &&
-    viewerContextId &&
-    normalizedCwd &&
-    canPush &&
-    (!gitActionBusy || pushing)
+    viewerContextId && normalizedCwd && canPush && (!gitActionBusy || pushing)
   )
   const showForcePushAction = Boolean(
-    isMobile &&
     viewerContextId &&
     normalizedCwd &&
     canForcePush &&
     (!gitActionBusy || forcePushing)
   )
   const showPullAction = Boolean(
-    isMobile &&
-    viewerContextId &&
-    normalizedCwd &&
-    canPull &&
-    (!gitActionBusy || pulling)
+    viewerContextId && normalizedCwd && canPull && (!gitActionBusy || pulling)
   )
   const showActions =
     showCommitAction || showPushAction || showForcePushAction || showPullAction
@@ -1110,6 +1085,9 @@ export function GitPanelToolbar({
           viewerContextId={viewerContextId}
           cwd={normalizedCwd}
           active={active}
+          onBranchClick={() => {
+            setBranchDialogOpen(true)
+          }}
         />
         {active && refreshing ? (
           <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
@@ -1119,7 +1097,7 @@ export function GitPanelToolbar({
       </div>
 
       {showActions ? (
-        <div className="flex flex-wrap items-center justify-end gap-2 md:hidden">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {showCommitAction ? (
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
@@ -1184,6 +1162,14 @@ export function GitPanelToolbar({
         </div>
       ) : null}
 
+      <GitBranchDialog
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        active={active}
+        gitStatus={gitStatus}
+        open={branchDialogOpen}
+        onOpenChange={setBranchDialogOpen}
+      />
       <GitCommitDialog
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
@@ -2451,9 +2437,7 @@ function RightSidebarTabStrip({
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
       {hasOpenFiles ? <ProjectFileIconSprite /> : null}
-      {showReview ? renderTab({ label: "Review", value: "review" }) : null}
-      {renderTab({ label: "Branches", value: "branches" })}
-      {renderTab({ label: "History", value: "history" })}
+      {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
       {!hasOpenFiles ? renderTab({ label: "Files", value: "files" }) : null}
       {hasOpenFiles ? (
         <span className="mx-1 shrink-0 text-xs text-border" aria-hidden="true">
@@ -2560,6 +2544,8 @@ function FileTreeResizeHandle({
         const startWidth = width
         const previousCursor = document.body.style.cursor
         const previousUserSelect = document.body.style.userSelect
+        const cleanupGlobalResizeCursor =
+          installGlobalResizeCursor("col-resize")
 
         document.body.style.cursor = "col-resize"
         document.body.style.userSelect = "none"
@@ -2568,6 +2554,7 @@ function FileTreeResizeHandle({
           resizeTo(startWidth + moveEvent.clientX - startX)
         }
         const handlePointerUp = () => {
+          cleanupGlobalResizeCursor()
           document.body.style.cursor = previousCursor
           document.body.style.userSelect = previousUserSelect
           document.removeEventListener("pointermove", handlePointerMove)
@@ -2763,6 +2750,8 @@ function FileViewerTabStrip({
 
 type ReviewDiffStyle = "unified" | "split"
 
+const GIT_HISTORY_PANEL_MIN_HEIGHT = 160
+
 function reviewFileValue(file: GitChangeFile) {
   return `${file.status}:${file.previousPath || ""}:${file.path}`
 }
@@ -2785,8 +2774,21 @@ function gitFileShouldPreviewPatch(file: GitChangeFile) {
 
 function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   const normalizedCwd = normalizeCwd(cwd)
+  const isMobile = useIsMobile()
   const [diffStyle, setDiffStyle] = React.useState<ReviewDiffStyle>("unified")
+  const [historyOpen, setHistoryOpen] = React.useState(true)
+  const [historyPanelHeight, setHistoryPanelHeight] = React.useState<
+    number | undefined
+  >(undefined)
+  const [defaultHistoryPanelHeight, setDefaultHistoryPanelHeight] =
+    React.useState<number | undefined>(undefined)
+  const [verticalResizeCursor, setVerticalResizeCursor] =
+    React.useState<SidebarVerticalResizeCursor>("row-resize")
   const [openFiles, setOpenFiles] = React.useState<Array<string>>([])
+  const [stickyReviewFileValue, setStickyReviewFileValue] = React.useState("")
+  const changesScrollRef = React.useRef<HTMLDivElement>(null)
+  const reviewContentRef = React.useRef<HTMLDivElement>(null)
+  const historyPanelRef = React.useRef<HTMLDivElement>(null)
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
@@ -2799,11 +2801,132 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   })
   const files = filesQuery.data
   const changedFiles = Array.isArray(files) ? files : []
-  const meta = changedFiles.length > 0 ? gitFilesSummaryText(changedFiles) : ""
 
   React.useEffect(() => {
+    setHistoryOpen(true)
+    setHistoryPanelHeight(undefined)
+    setDefaultHistoryPanelHeight(undefined)
     setOpenFiles([])
+    setStickyReviewFileValue("")
   }, [normalizedCwd])
+
+  React.useEffect(() => {
+    setVerticalResizeCursor(getSidebarVerticalResizeCursor())
+  }, [])
+
+  const updateStickyReviewFileHeader = (
+    scrollElement: HTMLDivElement | null
+  ) => {
+    if (!scrollElement || scrollElement.scrollTop <= 0) {
+      setStickyReviewFileValue((current) => (current ? "" : current))
+      return
+    }
+
+    const containerTop = scrollElement.getBoundingClientRect().top
+    const triggers = Array.from(
+      scrollElement.querySelectorAll<HTMLElement>("[data-review-file-trigger]")
+    )
+    let nextValue = ""
+
+    for (const trigger of triggers) {
+      const rect = trigger.getBoundingClientRect()
+      if (rect.top <= containerTop + 1 && rect.bottom > containerTop + 1) {
+        nextValue = trigger.dataset.reviewFileValue || ""
+      }
+    }
+
+    setStickyReviewFileValue((current) =>
+      current === nextValue ? current : nextValue
+    )
+  }
+
+  React.useEffect(() => {
+    updateStickyReviewFileHeader(changesScrollRef.current)
+  }, [openFiles])
+
+  const getHistoryPanelHeightBounds = () => {
+    const containerHeight =
+      reviewContentRef.current?.getBoundingClientRect().height || 0
+    if (containerHeight <= 0) {
+      return {
+        minHeight: GIT_HISTORY_PANEL_MIN_HEIGHT,
+        maxHeight: Number.POSITIVE_INFINITY,
+      }
+    }
+
+    const minHeight = Math.min(
+      GIT_HISTORY_PANEL_MIN_HEIGHT,
+      containerHeight / 2
+    )
+    return {
+      minHeight,
+      maxHeight: Math.max(minHeight, containerHeight - minHeight),
+    }
+  }
+
+  const startHistoryResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isMobile || event.button !== 0) return
+    event.preventDefault()
+
+    const { maxHeight, minHeight } = getHistoryPanelHeightBounds()
+    const startHeight =
+      historyPanelRef.current?.getBoundingClientRect().height || minHeight
+    const startY = event.clientY
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    const cursor = getSidebarVerticalResizeCursor()
+    const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
+
+    document.body.style.cursor = cursor
+    document.body.style.userSelect = "none"
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextHeight = startHeight - (moveEvent.clientY - startY)
+      setHistoryPanelHeight(
+        Math.min(maxHeight, Math.max(minHeight, nextHeight))
+      )
+    }
+    const handlePointerUp = () => {
+      cleanupGlobalResizeCursor()
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      document.removeEventListener("pointermove", handlePointerMove)
+      document.removeEventListener("pointerup", handlePointerUp)
+      document.removeEventListener("pointercancel", handlePointerUp)
+    }
+
+    document.addEventListener("pointermove", handlePointerMove)
+    document.addEventListener("pointerup", handlePointerUp)
+    document.addEventListener("pointercancel", handlePointerUp)
+  }
+
+  React.useEffect(() => {
+    if (isMobile || !historyOpen) return
+
+    const updateDefaultHistoryPanelHeight = () => {
+      const containerHeight =
+        reviewContentRef.current?.getBoundingClientRect().height || 0
+      const { maxHeight, minHeight } = getHistoryPanelHeightBounds()
+      const defaultHeight = containerHeight > 0 ? containerHeight * 0.5 : 0
+
+      setDefaultHistoryPanelHeight(
+        defaultHeight > 0
+          ? Math.min(maxHeight, Math.max(minHeight, defaultHeight))
+          : undefined
+      )
+      setHistoryPanelHeight((current) =>
+        typeof current === "number"
+          ? Math.min(maxHeight, Math.max(minHeight, current))
+          : current
+      )
+    }
+
+    updateDefaultHistoryPanelHeight()
+    window.addEventListener("resize", updateDefaultHistoryPanelHeight)
+    return () => {
+      window.removeEventListener("resize", updateDefaultHistoryPanelHeight)
+    }
+  }, [historyOpen, isMobile])
 
   const hasOpenFile = openFiles.length > 0
   const toggleAll = () => {
@@ -2811,15 +2934,20 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   }
 
   return (
-    <div className="h-full min-h-0 overflow-auto bg-background p-3">
-      <div className="mb-3 flex min-h-8 flex-wrap items-center justify-between gap-2">
+    <div
+      ref={reviewContentRef}
+      className="flex h-full min-h-0 flex-col bg-background"
+    >
+      <div className="shrink-0 border-b border-border/70 bg-background p-2">
+        <GitPanelToolbar
+          viewerContextId={viewerContextId}
+          cwd={normalizedCwd}
+          active={active}
+        />
+      </div>
+      <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <span>Git changes</span>
-          {meta ? (
-            <span className="text-xs font-medium text-muted-foreground">
-              {meta}
-            </span>
-          ) : null}
+          <span>Changes</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ToggleGroup
@@ -2858,42 +2986,111 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
           </Button>
         </div>
       </div>
-      {!normalizedCwd ? (
-        <GitSectionNote>No directory selected.</GitSectionNote>
-      ) : !viewerContextId ? (
-        <GitSectionNote>Waiting for viewer context…</GitSectionNote>
-      ) : filesQuery.isPending && typeof files === "undefined" ? (
-        <GitSectionNote>
-          <Spinner /> Loading changes…
-        </GitSectionNote>
-      ) : filesQuery.error ? (
-        <GitSectionNote tone="destructive">
-          {getErrorMessage(filesQuery.error, "Failed to load changes")}
-        </GitSectionNote>
-      ) : files === null ? (
-        <GitSectionNote>No git repository detected.</GitSectionNote>
-      ) : changedFiles.length > 0 ? (
-        <Accordion
-          multiple
-          value={openFiles}
-          onValueChange={setOpenFiles}
-          className="overflow-hidden rounded-xl border border-border/80"
+      <div
+        ref={changesScrollRef}
+        className="min-h-0 flex-1 overflow-auto"
+        onScroll={(event) => {
+          updateStickyReviewFileHeader(event.currentTarget)
+        }}
+      >
+        {!normalizedCwd ? (
+          <GitSectionNote>No directory selected.</GitSectionNote>
+        ) : !viewerContextId ? (
+          <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+        ) : filesQuery.isPending && typeof files === "undefined" ? (
+          <GitSectionNote>
+            <Spinner /> Loading changes…
+          </GitSectionNote>
+        ) : filesQuery.error ? (
+          <GitSectionNote tone="destructive">
+            {getErrorMessage(filesQuery.error, "Failed to load changes")}
+          </GitSectionNote>
+        ) : files === null ? (
+          <GitSectionNote>No git repository detected.</GitSectionNote>
+        ) : changedFiles.length > 0 ? (
+          <Accordion
+            multiple
+            value={openFiles}
+            onValueChange={setOpenFiles}
+            className="border-b border-border/80"
+          >
+            {changedFiles.map((file) => (
+              <ReviewFileAccordionItem
+                key={reviewFileValue(file)}
+                viewerContextId={viewerContextId}
+                cwd={normalizedCwd}
+                active={active}
+                diffStyle={diffStyle}
+                file={file}
+                open={openFiles.includes(reviewFileValue(file))}
+                stuck={stickyReviewFileValue === reviewFileValue(file)}
+              />
+            ))}
+          </Accordion>
+        ) : (
+          <GitSectionNote>Working tree clean.</GitSectionNote>
+        )}
+      </div>
+      {normalizedCwd &&
+      viewerContextId &&
+      files !== null &&
+      !filesQuery.error ? (
+        <div
+          ref={historyPanelRef}
+          className="relative flex max-h-[50%] shrink-0 flex-col overflow-hidden border-t border-border/70 bg-card/50 md:max-h-none"
+          style={
+            !isMobile && historyOpen
+              ? { height: historyPanelHeight ?? defaultHistoryPanelHeight }
+              : undefined
+          }
         >
-          {changedFiles.map((file) => (
-            <ReviewFileAccordionItem
-              key={reviewFileValue(file)}
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active}
-              diffStyle={diffStyle}
-              file={file}
-              open={openFiles.includes(reviewFileValue(file))}
+          {historyOpen ? (
+            <div
+              role="separator"
+              aria-label="Resize history panel"
+              aria-orientation="horizontal"
+              style={{ cursor: verticalResizeCursor }}
+              className={cn(
+                "absolute inset-x-0 top-0 z-10 hidden h-2 -translate-y-1/2 touch-none bg-transparent md:block",
+                verticalResizeCursor === "ns-resize"
+                  ? "cursor-ns-resize"
+                  : "cursor-row-resize"
+              )}
+              onPointerDown={startHistoryResize}
             />
-          ))}
-        </Accordion>
-      ) : (
-        <GitSectionNote>Working tree clean.</GitSectionNote>
-      )}
+          ) : null}
+          <button
+            type="button"
+            aria-expanded={historyOpen}
+            className="flex min-h-10 w-full shrink-0 items-center justify-between gap-3 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
+            onClick={() => {
+              setHistoryOpen((open) => !open)
+            }}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <GitCommitIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+                History
+              </span>
+            </span>
+            {historyOpen ? (
+              <ChevronsDownUpIcon className="size-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" />
+            )}
+          </button>
+          {historyOpen ? (
+            <div className="min-h-0 flex-1 overflow-auto border-t border-border/70">
+              <GitCommitsSection
+                viewerContextId={viewerContextId}
+                cwd={normalizedCwd}
+                active={active && historyOpen}
+                embedded
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2905,10 +3102,12 @@ function ReviewFileAccordionItem({
   diffStyle,
   file,
   open,
+  stuck,
 }: GitScopedProps & {
   diffStyle: ReviewDiffStyle
   file: GitChangeFile
   open: boolean
+  stuck: boolean
 }) {
   const normalizedCwd = normalizeCwd(cwd)
   const value = reviewFileValue(file)
@@ -2947,7 +3146,15 @@ function ReviewFileAccordionItem({
 
   return (
     <AccordionItem value={value} className="border-border/70">
-      <AccordionTrigger className="min-h-10 items-center gap-3 rounded-none px-3 py-2 font-mono text-[13px] hover:no-underline">
+      <AccordionTrigger
+        data-review-file-trigger
+        data-review-file-value={value}
+        headerClassName={cn(
+          "sticky top-0 z-20 bg-background transition-shadow",
+          stuck && "shadow-sm"
+        )}
+        className="min-h-10 items-center gap-3 rounded-none bg-background px-3 py-2 font-mono text-[13px] hover:no-underline"
+      >
         <span className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3">
           <GitFileStatus status={file.status} />
           <span className="min-w-0 truncate text-left">
@@ -2966,7 +3173,7 @@ function ReviewFileAccordionItem({
           <GitFileDiff file={file} />
         </span>
       </AccordionTrigger>
-      <AccordionContent className="border-t border-border/70 bg-background p-0">
+      <AccordionContent className="bg-background p-0">
         {previewPatch ? (
           diffQuery.isPending && !diffQuery.data ? (
             <div className="p-3">
@@ -3121,228 +3328,387 @@ export function GitFileViewerPanel({
   )
 }
 
-function GitBranchesControls({
-  branchScope,
-  countLabel,
-  setBranchScope,
-}: {
-  branchScope: BranchScope
-  countLabel: string
-  setBranchScope: React.Dispatch<React.SetStateAction<BranchScope>>
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      {countLabel ? (
-        <span className="min-w-0 truncate text-xs text-muted-foreground/80">
-          {countLabel}
-        </span>
-      ) : null}
-      <ToggleGroup
-        variant="outline"
-        size="sm"
-        value={[branchScope]}
-        onValueChange={(values) => {
-          const value = values[0]
-          if (value === "local" || value === "remote") {
-            setBranchScope(value)
-          }
-        }}
-      >
-        {(
-          [
-            ["local", "Local"],
-            ["remote", "Remote"],
-          ] as const
-        ).map(([value, label]) => (
-          <ToggleGroupItem
-            key={value}
-            value={value}
-            className="text-xs font-semibold"
-          >
-            {label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-    </div>
-  )
+type GitBranchDialogStage = "browse" | "create"
+
+type GitCheckoutBranchPayload = {
+  branch: string
+  create?: boolean
+  startPoint?: string
+  track?: boolean
 }
 
-function GitLocalBranchRow({ branch }: { branch: GitLocalBranch }) {
-  const trackText = gitLocalBranchTrackText(branch)
-  const relativeDateText = branch.current
-    ? "*"
-    : formatGitRelativeDateCompact(branch.relativeDate)
-  const title =
-    [branch.name, branch.upstream, branch.subject]
-      .filter(Boolean)
-      .join(" · ") || branch.name
-
-  return (
-    <li
-      title={title}
-      className="flex min-h-7 min-w-0 items-center gap-2 border-t border-border/70 py-1.5 font-mono text-[13px] leading-5 first:border-t-0"
-    >
-      <span
-        className={cn(
-          "w-[4ch] shrink-0 text-right text-muted-foreground/70 tabular-nums",
-          branch.current && "text-emerald-500"
-        )}
-      >
-        {relativeDateText}
-      </span>
-      <span className="min-w-0 truncate">
-        <span className={cn(branch.current && "text-emerald-500")}>
-          {branch.name}
-        </span>
-      </span>
-      {trackText ? (
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center whitespace-nowrap",
-            gitLocalBranchTrackClass(branch, trackText)
-          )}
-          title={trackText}
-        >
-          {trackText === "synced" ? (
-            <CheckIcon className="size-3.5" />
-          ) : (
-            trackText
-          )}
-        </span>
-      ) : null}
-    </li>
-  )
-}
-
-function GitRemoteBranchRow({ branch }: { branch: GitRemoteBranch }) {
-  const parts = gitRemoteBranchParts(branch.name)
-  const title =
-    [branch.name, branch.subject].filter(Boolean).join(" · ") || branch.name
-
-  return (
-    <li
-      title={title}
-      className="grid min-h-7 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-border/70 py-1.5 font-mono text-[13px] leading-5 first:border-t-0"
-    >
-      <span className="min-w-0 truncate">
-        {parts.remote ? (
-          <span className="text-muted-foreground/70">{parts.remote}/</span>
-        ) : null}
-        <span>{parts.branch || branch.name}</span>
-      </span>
-      <span className="inline-flex min-w-0 gap-2 justify-self-end whitespace-nowrap" />
-    </li>
-  )
-}
-
-function GitBranchesSection({
+function GitBranchDialog({
   viewerContextId,
   cwd,
   active,
-  flush = false,
+  gitStatus,
+  open,
+  onOpenChange,
 }: GitScopedProps & {
-  flush?: boolean
+  gitStatus: GitStatusValue | undefined
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
-  const [branchScope, setBranchScope] = React.useState<BranchScope>("local")
+  const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
+  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
   const normalizedCwd = normalizeCwd(cwd)
+  const [query, setQuery] = React.useState("")
+  const [stage, setStage] = React.useState<GitBranchDialogStage>("browse")
+  const [selectedValue, setSelectedValue] = React.useState("")
+  const [createBranchName, setCreateBranchName] = React.useState("")
   const branchesQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
       cwd: normalizedCwd,
       scope: "branches",
     }),
-    enabled: Boolean(active && viewerContextId && normalizedCwd),
-    select:
-      branchScope === "remote"
-        ? selectGitRemoteBranches
-        : selectGitLocalBranches,
+    enabled: Boolean(open && active && viewerContextId && normalizedCwd),
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
-  const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
-    enabled: Boolean(
-      active && branchScope === "local" && viewerContextId && normalizedCwd
-    ),
-    select: selectGitStatusSummary,
-    notifyOnChangeProps: ["data"],
-  })
-  const selectedBranches = branchesQuery.data
-  const localBranches =
-    branchScope === "local"
-      ? gitLocalBranchesForRender(
-          selectedBranches as Array<GitLocalBranch> | null | undefined,
-          statusQuery.data
-        )
-      : []
-  const remoteBranches =
-    branchScope === "remote" && Array.isArray(selectedBranches)
-      ? (selectedBranches as Array<GitRemoteBranch>)
-      : []
-  const visibleCount =
-    branchScope === "remote" ? remoteBranches.length : localBranches.length
-  const countLabel = Array.isArray(selectedBranches)
-    ? `${visibleCount} ${branchScope === "remote" ? "remote" : "local"}`
-    : ""
-
-  const controls = (
-    <GitBranchesControls
-      branchScope={branchScope}
-      countLabel={countLabel}
-      setBranchScope={setBranchScope}
-    />
+  const branchData = branchesQuery.data
+  const localBranches = gitLocalBranchesForRender(
+    branchData?.localBranches,
+    gitStatus
   )
-  const content = !normalizedCwd ? (
-    <GitSectionNote>No directory selected.</GitSectionNote>
-  ) : !viewerContextId ? (
-    <GitSectionNote>Waiting for viewer context…</GitSectionNote>
-  ) : branchesQuery.isPending && typeof selectedBranches === "undefined" ? (
-    <GitSectionNote>
-      <Spinner /> Loading branches…
-    </GitSectionNote>
-  ) : branchesQuery.error ? (
-    <GitSectionNote tone="destructive">
-      {getErrorMessage(branchesQuery.error, "Failed to load branches")}
-    </GitSectionNote>
-  ) : selectedBranches === null ? (
-    <GitSectionNote>No git repository detected.</GitSectionNote>
-  ) : branchScope === "remote" ? (
-    remoteBranches.length > 0 ? (
-      <ul className="m-0 grid list-none gap-0 p-0">
-        {remoteBranches.map((branch) => (
-          <GitRemoteBranchRow key={branch.name} branch={branch} />
-        ))}
-      </ul>
-    ) : (
-      <GitSectionNote>No remote branches.</GitSectionNote>
+  const remoteBranches = (branchData?.remoteBranches ?? []).filter(
+    (branch) => !branch.name.endsWith("/HEAD")
+  )
+  const localBranchNames = new Set(localBranches.map((branch) => branch.name))
+
+  React.useEffect(() => {
+    if (!open) {
+      setQuery("")
+      setStage("browse")
+      setSelectedValue("")
+      setCreateBranchName("")
+    }
+  }, [open])
+
+  React.useEffect(() => {
+    if (!open || selectedValue) return
+
+    const currentBranch = localBranches.find((branch) => branch.current)
+    setSelectedValue(
+      currentBranch
+        ? `local:${currentBranch.name}`
+        : localBranches[0]
+          ? `local:${localBranches[0].name}`
+          : remoteBranches[0]
+            ? `remote:${remoteBranches[0].name}`
+            : "action:create"
     )
-  ) : localBranches.length > 0 ? (
-    <ul className="m-0 grid list-none gap-0 p-0">
-      {localBranches.map((branch) => (
-        <GitLocalBranchRow key={branch.name} branch={branch} />
-      ))}
-    </ul>
-  ) : (
-    <GitSectionNote>No local branches.</GitSectionNote>
+  }, [localBranches, open, remoteBranches, selectedValue])
+
+  const checkoutMutation = useMutation({
+    mutationFn: async (payload: GitCheckoutBranchPayload) =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-checkout", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd: normalizedCwd, ...payload }),
+        }
+      ),
+    onSuccess: async (_response, payload) => {
+      await invalidateGitQueries({
+        queryClient,
+        viewerContextId,
+        cwd: normalizedCwd,
+      })
+      onOpenChange(false)
+      toast.success(
+        payload.create
+          ? `Created and switched to ${payload.branch}`
+          : `Switched to ${payload.branch}`
+      )
+    },
+    onError: (error, payload) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          payload.create ? "Failed to create branch" : "Failed to switch branch"
+        )
+      )
+    },
+  })
+
+  const switchLocalBranch = (branch: GitLocalBranch) => {
+    if (branch.current || checkoutMutation.isPending) return
+    checkoutMutation.mutate({ branch: branch.name })
+  }
+
+  const switchRemoteBranch = (branch: GitRemoteBranch) => {
+    if (checkoutMutation.isPending) return
+
+    const parts = gitRemoteBranchParts(branch.name)
+    const localName = parts.branch || branch.name
+    if (localBranchNames.has(localName)) {
+      checkoutMutation.mutate({ branch: localName })
+      return
+    }
+
+    checkoutMutation.mutate({
+      branch: localName,
+      create: true,
+      startPoint: branch.name,
+      track: true,
+    })
+  }
+
+  const createBranch = () => {
+    const branch = createBranchName.trim()
+    if (!branch || checkoutMutation.isPending) return
+    checkoutMutation.mutate({ branch, create: true })
+  }
+
+  const browseBody = (
+    <Command
+      shouldFilter
+      loop
+      value={selectedValue}
+      onValueChange={setSelectedValue}
+      onKeyDown={(event) => {
+        if (matchesShortcutEvent(event.nativeEvent, "Control+N")) {
+          event.preventDefault()
+          setStage("create")
+        }
+      }}
+      className="min-h-0 flex-1"
+    >
+      <CommandInput
+        autoFocus={shouldAutoFocus}
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search branches"
+        className="text-base md:text-sm"
+      />
+      <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,28rem)]">
+        <CommandEmpty>
+          {branchesQuery.isPending ? "Loading branches…" : "No branches found."}
+        </CommandEmpty>
+        <CommandGroup heading="Actions">
+          <CommandItem
+            value="action:create"
+            keywords={["new", "create", "branch"]}
+            onSelect={() => {
+              setStage("create")
+            }}
+          >
+            <GitBranchIcon className="size-4 text-muted-foreground" />
+            <span className="font-medium">Create new branch…</span>
+            <CommandShortcut>
+              {formatShortcutLabel("Control+N")}
+            </CommandShortcut>
+          </CommandItem>
+        </CommandGroup>
+        <CommandGroup heading={`Local branches · ${localBranches.length}`}>
+          {branchesQuery.isPending && localBranches.length === 0 ? (
+            <CommandItem value="loading:branches" disabled>
+              <Spinner className="size-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Loading branches…</span>
+            </CommandItem>
+          ) : null}
+          {localBranches.map((branch) => {
+            const trackText = gitLocalBranchTrackText(branch)
+            const relativeDateText = branch.current
+              ? "current"
+              : formatGitRelativeDateCompact(branch.relativeDate)
+            const title =
+              [branch.name, branch.upstream, branch.subject]
+                .filter(Boolean)
+                .join(" · ") || branch.name
+
+            return (
+              <CommandItem
+                key={branch.name}
+                value={`local:${branch.name}`}
+                keywords={[
+                  branch.name,
+                  branch.upstream ?? "",
+                  branch.subject ?? "",
+                ]}
+                disabled={checkoutMutation.isPending}
+                onSelect={() => switchLocalBranch(branch)}
+                className="items-start py-2"
+              >
+                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                  {branch.current ? (
+                    <CheckIcon className="size-3.5 text-emerald-500" />
+                  ) : null}
+                </span>
+                <div className="min-w-0 flex-1" title={title}>
+                  <div className="truncate font-mono text-[13px] font-medium">
+                    {branch.name}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {[branch.upstream, branch.subject]
+                      .filter(Boolean)
+                      .join(" · ") || "Local branch"}
+                  </div>
+                </div>
+                <CommandShortcut
+                  className={cn(
+                    "shrink-0 tracking-normal normal-case",
+                    trackText && gitLocalBranchTrackClass(branch, trackText)
+                  )}
+                >
+                  {trackText || relativeDateText}
+                </CommandShortcut>
+              </CommandItem>
+            )
+          })}
+        </CommandGroup>
+        <CommandGroup heading={`Remote branches · ${remoteBranches.length}`}>
+          {remoteBranches.map((branch) => {
+            const parts = gitRemoteBranchParts(branch.name)
+            const localName = parts.branch || branch.name
+            const localExists = localBranchNames.has(localName)
+
+            return (
+              <CommandItem
+                key={branch.name}
+                value={`remote:${branch.name}`}
+                keywords={[branch.name, localName, branch.subject ?? ""]}
+                disabled={checkoutMutation.isPending}
+                onSelect={() => switchRemoteBranch(branch)}
+                className="items-start py-2"
+              >
+                <GitBranchIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1" title={branch.name}>
+                  <div className="truncate font-mono text-[13px] font-medium">
+                    {parts.remote ? (
+                      <span className="text-muted-foreground/70">
+                        {parts.remote}/
+                      </span>
+                    ) : null}
+                    {parts.branch || branch.name}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {branch.subject || "Remote branch"}
+                  </div>
+                </div>
+                <CommandShortcut className="shrink-0 tracking-normal normal-case">
+                  {localExists ? "Switch" : "Track"}
+                </CommandShortcut>
+              </CommandItem>
+            )
+          })}
+        </CommandGroup>
+      </CommandList>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Enter</Kbd> Switch
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>{formatShortcutLabel("Control+N")}</Kbd> New branch
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Esc</Kbd> Close
+          </span>
+        </div>
+      )}
+    </Command>
   )
 
-  if (flush) {
-    return (
-      <section className="min-h-full bg-background">
-        <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background px-3">
-          <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
-            Branches
+  const createBody = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setStage("browse")}
+          aria-label="Back to branches"
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">Create branch</div>
+          <div className="truncate text-xs text-muted-foreground">
+            From the current HEAD
           </div>
-          <div className="shrink-0">{controls}</div>
         </div>
-        <div className="grid gap-2 px-3 py-2.5">{content}</div>
-      </section>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center gap-2 p-3">
+        <Input
+          autoFocus={shouldAutoFocus}
+          value={createBranchName}
+          onChange={(event) => setCreateBranchName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault()
+              event.stopPropagation()
+              setStage("browse")
+              return
+            }
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+            event.preventDefault()
+            event.stopPropagation()
+            createBranch()
+          }}
+          placeholder="branch-name"
+          className="min-w-0 flex-1"
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={!createBranchName.trim() || checkoutMutation.isPending}
+          onClick={createBranch}
+        >
+          {checkoutMutation.isPending ? <Spinner /> : null}
+          Create
+        </Button>
+      </div>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Enter</Kbd> Create
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Esc</Kbd> Back
+          </span>
+        </div>
+      )}
+    </div>
+  )
+
+  const branchDialogBody = stage === "create" ? createBody : browseBody
+
+  if (isMobile) {
+    return (
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        autoFocus={shouldAutoFocus}
+      >
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>Branches</DrawerTitle>
+            <DrawerDescription>
+              Switch branches or create a new branch.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {branchDialogBody}
+          </div>
+        </DrawerContent>
+      </Drawer>
     )
   }
 
   return (
-    <GitSection title="Branches" controls={controls}>
-      {content}
-    </GitSection>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Branches"
+      description="Switch branches or create a new branch."
+      className="sm:max-w-2xl"
+      initialFocus
+    >
+      {branchDialogBody}
+    </CommandDialog>
   )
 }
 
@@ -3472,8 +3838,10 @@ function GitCommitsSection({
   viewerContextId,
   cwd,
   active,
+  embedded = false,
   flush = false,
 }: GitScopedProps & {
+  embedded?: boolean
   flush?: boolean
 }) {
   const normalizedCwd = normalizeCwd(cwd)
@@ -3566,6 +3934,12 @@ function GitCommitsSection({
   ) : (
     <GitSectionNote>No commits on this branch yet.</GitSectionNote>
   )
+
+  if (embedded) {
+    return (
+      <div className="grid gap-2 overflow-x-auto px-3 py-2.5">{content}</div>
+    )
+  }
 
   if (flush) {
     return (
@@ -3992,15 +4366,6 @@ export function GitPanel({
             : "rounded-none border-0"
         )}
       >
-        {showToolbar ? (
-          <div className="shrink-0 border-b border-border/70 bg-background p-2">
-            <GitPanelToolbar
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active}
-            />
-          </div>
-        ) : null}
         <RightSidebarTabStrip
           activeFilePath={currentFilePath}
           activeTab={activeTab}
@@ -4024,24 +4389,6 @@ export function GitPanel({
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
               active={active && activeTab === "review"}
-            />
-          </div>
-        ) : activeTab === "branches" ? (
-          <div className="min-h-0 flex-1 overflow-auto">
-            <GitBranchesSection
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "branches"}
-              flush
-            />
-          </div>
-        ) : activeTab === "history" ? (
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <GitCommitsSection
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "history"}
-              flush
             />
           </div>
         ) : (

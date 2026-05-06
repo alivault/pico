@@ -15,9 +15,14 @@ export const Route = createFileRoute("/api/git-checkout")({
           const body = await readRequestJson<{
             cwd?: unknown
             branch?: unknown
+            create?: unknown
+            startPoint?: unknown
+            track?: unknown
           }>(request)
           const requestedCwd = typeof body.cwd === "string" ? body.cwd : ""
           const branch = typeof body.branch === "string" ? body.branch : ""
+          const startPoint =
+            typeof body.startPoint === "string" ? body.startPoint : ""
           if (!requestedCwd.trim()) throw new Error("cwd is required")
           if (!branch.trim()) throw new Error("branch is required")
 
@@ -25,7 +30,11 @@ export const Route = createFileRoute("/api/git-checkout")({
             await getPhiRuntime().resolveRequest(request)
           const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
-          const result = await checkoutDirectoryGitBranch(cwd, branch)
+          const result = await checkoutDirectoryGitBranch(cwd, branch, {
+            create: body.create === true,
+            startPoint,
+            track: body.track === true,
+          })
           return jsonResponse({
             ok: true,
             cwd,

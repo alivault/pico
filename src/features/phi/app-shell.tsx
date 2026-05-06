@@ -20,6 +20,7 @@ import type { DesktopNotificationPermission } from "@/features/phi/session-done-
 import {
   getSidebarHorizontalResizeCursor,
   getSidebarResizeTargetMinimumSize,
+  installGlobalResizeCursor,
   type SidebarHorizontalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import type {
@@ -3146,17 +3147,6 @@ function fitDesktopSidePanelWidths({
   }
 }
 
-function installAppShellGlobalResizeCursor(
-  cursor: SidebarHorizontalResizeCursor
-) {
-  const style = document.createElement("style")
-  style.dataset.appShellResizeCursor = "true"
-  style.textContent = `*, *:hover { cursor: ${cursor} !important; }`
-  document.head.append(style)
-
-  return () => style.remove()
-}
-
 function AppShellDesktopResizeHandle({
   label,
   max,
@@ -3243,8 +3233,7 @@ function AppShellDesktopResizeHandle({
         const cursor = getSidebarHorizontalResizeCursor()
         const previousCursor = document.body.style.cursor
         const previousUserSelect = document.body.style.userSelect
-        const cleanupGlobalResizeCursor =
-          installAppShellGlobalResizeCursor(cursor)
+        const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
 
         current.onResizeStart?.()
         document.body.style.userSelect = "none"

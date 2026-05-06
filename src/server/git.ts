@@ -1457,23 +1457,47 @@ export async function pullDirectoryGitChanges(
 
 export async function checkoutDirectoryGitBranch(
   cwd: string,
-  branch: string
+  branch: string,
+  options: {
+    create?: boolean
+    startPoint?: string
+    track?: boolean
+  } = {}
 ): Promise<GitActionResult> {
   const normalizedCwd = normalizeGitCwd(cwd)
   const normalizedBranch = typeof branch === "string" ? branch.trim() : ""
+  const normalizedStartPoint =
+    typeof options.startPoint === "string" ? options.startPoint.trim() : ""
   if (!normalizedCwd) throw new Error("cwd is required")
   if (!normalizedBranch) throw new Error("branch is required")
   if (normalizedBranch.startsWith("-")) throw new Error("Invalid branch name")
+  if (normalizedStartPoint.startsWith("-")) {
+    throw new Error("Invalid start point")
+  }
   if (!(await isInsideWorkTree(normalizedCwd))) {
     throw new Error("No git repository detected")
   }
 
-  const result = await runCommand("git", ["switch", normalizedBranch], {
+  const args = options.create
+    ? [
+        "switch",
+        "-c",
+        normalizedBranch,
+        ...(options.track ? ["--track"] : []),
+        ...(normalizedStartPoint ? [normalizedStartPoint] : []),
+      ]
+    : ["switch", normalizedBranch]
+  const result = await runCommand("git", args, {
     cwd: normalizedCwd,
     timeoutMs: GIT_ACTION_TIMEOUT_MS,
   })
   if (result.code !== 0) {
-    throw new Error(gitCommandErrorMessage("Failed to switch branch", result))
+    throw new Error(
+      gitCommandErrorMessage(
+        options.create ? "Failed to create branch" : "Failed to switch branch",
+        result
+      )
+    )
   }
 
   invalidateDirectoryGitCaches(normalizedCwd)
