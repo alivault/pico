@@ -1278,7 +1278,7 @@ function AppSidebarHeader({
             kbd={formatShortcutLabel("Control+D")}
           >
             <Button
-              variant="secondary"
+              variant="outline"
               size="icon"
               className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               onClick={onOpenAddDirectoryDialog}
