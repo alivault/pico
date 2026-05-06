@@ -36,6 +36,7 @@ import {
   CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  DiffIcon,
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
@@ -2949,12 +2950,16 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
         />
       </div>
       <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <span>Changes</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <DiffIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+            Diffs
+          </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ToggleGroup
             variant="outline"
+            size="sm"
             value={[diffStyle]}
             onValueChange={(values) => {
               const value = values[0]
@@ -2977,7 +2982,6 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
             variant="outline"
             size="sm"
             disabled={changedFiles.length === 0}
-            className="h-8 gap-2"
             onClick={toggleAll}
           >
             {hasOpenFile ? (
