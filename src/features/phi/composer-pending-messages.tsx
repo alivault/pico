@@ -138,7 +138,7 @@ export const ComposerPendingMessages = React.memo(
                               <div className="space-y-2">
                                 <Textarea
                                   value={editText}
-                                  className="min-h-20 resize-none text-sm"
+                                  className="min-h-20 resize-none text-base md:text-base"
                                   autoFocus
                                   placeholder={
                                     message.images.length > 0
