@@ -2054,6 +2054,22 @@ function ProjectFilesWorkspace({
             : "flex-1 overflow-hidden"
         )}
       >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 p-2">
+          <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+            {paths.length.toLocaleString()} files
+          </div>
+          <TitleTooltip title="Open file">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setOpenFileDialogOpen(true)
+              }}
+            >
+              Open File
+            </Button>
+          </TitleTooltip>
+        </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {!normalizedCwd ? (
             <GitSectionNote>No directory selected.</GitSectionNote>
@@ -2502,7 +2518,7 @@ function RightSidebarTabStrip({
   }
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 bg-background px-2">
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background p-2">
       {hasOpenFiles ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
       {!hasOpenFiles ? renderTab({ label: "Files", value: "files" }) : null}
@@ -3005,14 +3021,14 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
       ref={reviewContentRef}
       className="flex h-full min-h-0 flex-col bg-background"
     >
-      <div className="shrink-0 border-b border-border/70 bg-background p-2">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/70 bg-background p-2">
         <GitPanelToolbar
           viewerContextId={viewerContextId}
           cwd={normalizedCwd}
           active={active}
         />
       </div>
-      <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background p-2">
         <div className="flex min-w-0 items-center">
           <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
             Diffs

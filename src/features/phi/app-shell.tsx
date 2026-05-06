@@ -1929,7 +1929,7 @@ function AppShellTabsList({
   const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
   return (
-    <TabsList className="w-full rounded-none border-b border-border/70 bg-background group-data-horizontal/tabs:h-auto md:hidden">
+    <TabsList className="w-full gap-2 rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
       <TabsTrigger
         value="session"
         className="h-8 data-active:bg-muted dark:data-active:bg-muted"
