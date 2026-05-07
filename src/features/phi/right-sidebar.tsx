@@ -35,6 +35,7 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   ChevronsDownUpIcon,
+  CopyIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
   GitBranchIcon,
@@ -91,7 +92,12 @@ import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { TitleTooltip } from "@/components/ui/tooltip"
+import {
+  TitleTooltip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { showGitPushSuccessToast } from "@/features/phi/git-toast-utils"
 import {
@@ -762,18 +768,147 @@ function gitCommitsSummaryText(commits: Array<string>) {
   return count > 0 ? `${count} commit${count === 1 ? "" : "s"}` : ""
 }
 
+const GIT_COMMIT_FIELD_SEPARATOR = "\u001f"
+
 function parseGitCommitGraphLine(line: string) {
   const text = typeof line === "string" ? line : ""
-  if (!text.includes("\t")) {
-    return { graph: text, hash: "", subject: "" }
+  const tabIndex = text.indexOf("\t")
+  if (tabIndex < 0) {
+    return {
+      author: "",
+      graph: text,
+      hash: "",
+      fullHash: "",
+      parents: [] as Array<string>,
+      relativeDate: "",
+      stats: "",
+      subject: "",
+    }
   }
 
-  const [lead = "", ...subjectParts] = text.split("\t")
+  const lead = text.slice(0, tabIndex)
+  const metadata = text.slice(tabIndex + 1)
   const hashMatch = lead.match(/^(.*?)([0-9a-f]{5,40})$/i)
+  const metadataFields = metadata.split(GIT_COMMIT_FIELD_SEPARATOR)
+
+  if (metadataFields.length >= 5) {
+    const [
+      fullHash = "",
+      parentsText = "",
+      author = "",
+      relativeDate = "",
+      ...rest
+    ] = metadataFields
+    const stats = rest.length > 1 ? rest[rest.length - 1] || "" : ""
+    const subjectParts = stats ? rest.slice(0, -1) : rest
+
+    return {
+      author,
+      graph: hashMatch ? hashMatch[1] : lead,
+      hash: hashMatch ? hashMatch[2] : "",
+      fullHash,
+      parents: parentsText.split(/\s+/).filter(Boolean),
+      relativeDate,
+      stats,
+      subject: subjectParts.join(GIT_COMMIT_FIELD_SEPARATOR).trim(),
+    }
+  }
+
+  if (metadataFields.length >= 4) {
+    const [fullHash = "", author = "", relativeDate = "", ...rest] =
+      metadataFields
+    const stats = rest.length > 1 ? rest[rest.length - 1] || "" : ""
+    const subjectParts = stats ? rest.slice(0, -1) : rest
+
+    return {
+      author,
+      graph: hashMatch ? hashMatch[1] : lead,
+      hash: hashMatch ? hashMatch[2] : "",
+      fullHash,
+      parents: [],
+      relativeDate,
+      stats,
+      subject: subjectParts.join(GIT_COMMIT_FIELD_SEPARATOR).trim(),
+    }
+  }
+
+  const subjectParts = metadata.split("\t")
+  const [maybeFullHash = "", ...restSubjectParts] = subjectParts
+  const hasFullHash = Boolean(
+    hashMatch &&
+    subjectParts.length > 1 &&
+    /^[0-9a-f]{40}$/i.test(maybeFullHash)
+  )
   return {
+    author: "",
     graph: hashMatch ? hashMatch[1] : lead,
     hash: hashMatch ? hashMatch[2] : "",
-    subject: subjectParts.join("\t").trim(),
+    fullHash: hasFullHash ? maybeFullHash : hashMatch ? hashMatch[2] : "",
+    parents: [],
+    relativeDate: "",
+    stats: "",
+    subject: (hasFullHash ? restSubjectParts : subjectParts).join("\t").trim(),
+  }
+}
+
+function formatGitCommitTooltipTime(value: string) {
+  const text = value.trim()
+  if (!text) return ""
+
+  const compact = formatGitRelativeDateCompact(text)
+  if (!compact || compact === "now" || !/\bago$/i.test(text)) return compact
+  return `${compact} ago`
+}
+
+function gitCommitStatCount(stats: string, kind: "insertions" | "deletions") {
+  const pattern =
+    kind === "insertions" ? /(\d+) insertions?\(\+\)/ : /(\d+) deletions?\(-\)/
+  const match = stats.match(pattern)
+  return match ? Number(match[1]) : 0
+}
+
+async function copyRightSidebarTextToClipboard(text: string) {
+  if (!text) throw new Error("Nothing to copy")
+
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Fall through to the textarea fallback below.
+    }
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.readOnly = true
+  textarea.setAttribute("aria-hidden", "true")
+  textarea.style.position = "fixed"
+  textarea.style.top = "0"
+  textarea.style.left = "0"
+  textarea.style.width = "1px"
+  textarea.style.height = "1px"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+  document.body.appendChild(textarea)
+  textarea.select()
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Unable to copy text")
+    }
+  } finally {
+    textarea.remove()
+  }
+}
+
+async function copyGitCommitValue(text: string) {
+  try {
+    await copyRightSidebarTextToClipboard(text)
+    return true
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to copy"))
+    return false
   }
 }
 
@@ -3135,7 +3270,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
       !filesQuery.error ? (
         <div
           ref={historyPanelRef}
-          className="relative flex max-h-[50%] shrink-0 flex-col overflow-hidden border-t border-border/70 bg-card/50 md:max-h-none"
+          className="relative flex max-h-[50%] min-h-0 shrink-0 flex-col overflow-hidden border-t border-border/70 bg-card/50 md:max-h-none"
           style={
             !isMobile && historyOpen
               ? { height: historyPanelHeight ?? defaultHistoryPanelHeight }
@@ -3182,7 +3317,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
           {historyOpen ? (
             <div
               ref={historyScrollRef}
-              className="min-h-0 flex-1 overflow-auto border-t border-border/70"
+              className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain border-t border-border/70"
               onScroll={(event) => {
                 updateHistoryHeaderShadow(event.currentTarget)
               }}
@@ -3823,127 +3958,364 @@ function GitBranchDialog({
   )
 }
 
-type GitCommitPage = {
-  key: string
-  lines: Array<string>
+const GIT_GRAPH_LANE_COLORS = [
+  "#0ea5e9",
+  "#db2777",
+  "#22c55e",
+  "#f59e0b",
+  "#8b5cf6",
+  "#14b8a6",
+]
+
+function gitGraphLaneColor(index: number, active = false) {
+  if (active) return "#f87171"
+  return GIT_GRAPH_LANE_COLORS[index % GIT_GRAPH_LANE_COLORS.length]
 }
 
-type GitCommitPagesCache = {
-  commits: Array<string>
-  pages: Array<GitCommitPage>
+type GitCommitGraphRow = {
+  afterLanes: Array<string>
+  beforeLanes: Array<string>
+  commitLane: number
+  parsed: ReturnType<typeof parseGitCommitGraphLine>
 }
 
-function getGitCommitPages(
-  cache: GitCommitPagesCache,
-  commits: Array<string>,
-  pageSize: number
-): GitCommitPagesCache {
-  const previousCommits = cache.commits
-  const previousPages = cache.pages
-  const pages: Array<GitCommitPage> = []
+function buildGitCommitGraphRows(lines: Array<string>) {
+  const activeLanes: Array<string> = []
+  const rows: Array<GitCommitGraphRow> = []
+  let maxLaneCount = 1
 
-  for (let start = 0; start < commits.length; start += pageSize) {
-    const lines = commits.slice(start, start + pageSize)
-    const previousPage = previousPages[start / pageSize]
-    let reusePreviousPage = Boolean(previousPage)
-
-    if (reusePreviousPage) {
-      for (let index = 0; index < lines.length; index += 1) {
-        if (previousCommits[start + index] !== lines[index]) {
-          reusePreviousPage = false
-          break
-        }
-      }
+  for (const line of lines) {
+    const parsed = parseGitCommitGraphLine(line)
+    if (!parsed.fullHash) {
+      rows.push({
+        afterLanes: [...activeLanes],
+        beforeLanes: [...activeLanes],
+        commitLane: -1,
+        parsed,
+      })
+      continue
     }
 
-    pages.push(
-      reusePreviousPage && previousPage
-        ? previousPage
-        : {
-            key: `${start}:${lines[0] || ""}`,
-            lines,
-          }
-    )
+    let commitLane = activeLanes.indexOf(parsed.fullHash)
+    if (commitLane < 0) {
+      activeLanes.push(parsed.fullHash)
+      commitLane = activeLanes.length - 1
+    }
+
+    const beforeLanes = [...activeLanes]
+    const nextLanes = [...activeLanes]
+    const parents = parsed.parents.filter(Boolean)
+
+    if (parents.length > 0) {
+      nextLanes[commitLane] = parents[0]!
+      let insertAt = commitLane + 1
+      for (const parent of parents.slice(1)) {
+        const existingIndex = nextLanes.indexOf(parent)
+        if (existingIndex >= 0) continue
+        nextLanes.splice(insertAt, 0, parent)
+        insertAt += 1
+      }
+    } else {
+      nextLanes.splice(commitLane, 1)
+    }
+
+    rows.push({
+      afterLanes: nextLanes,
+      beforeLanes,
+      commitLane,
+      parsed,
+    })
+    activeLanes.splice(0, activeLanes.length, ...nextLanes)
+    maxLaneCount = Math.max(maxLaneCount, beforeLanes.length, nextLanes.length)
   }
 
-  return { commits, pages }
+  return { maxLaneCount, rows }
 }
 
-function sameGitCommitPageProps(
-  left: GitCommitPageProps,
-  right: GitCommitPageProps
-) {
-  return (
-    left.page === right.page && left.unpushedHashKey === right.unpushedHashKey
-  )
+function gitCommitGraphSegmentPath({
+  fromLane,
+  rowHeight,
+  toLane,
+  y1,
+  y2,
+}: {
+  fromLane: number
+  rowHeight: number
+  toLane: number
+  y1: number
+  y2: number
+}) {
+  const laneWidth = 14
+  const offsetX = 7
+  const x1 = fromLane * laneWidth + offsetX
+  const x2 = toLane * laneWidth + offsetX
+  if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`
+
+  const d = rowHeight * 0.8
+  return `M ${x1} ${y1} C ${x1} ${y1 + d}, ${x2} ${y2 - d}, ${x2} ${y2}`
 }
 
-function GitCommitRow({
-  line,
+function GitCommitPageGraph({
+  lines,
   unpushedCommitShortHashes,
 }: {
-  line: string
+  lines: Array<string>
   unpushedCommitShortHashes: Set<string>
 }) {
-  const parsed = parseGitCommitGraphLine(line)
-  const isUnpushed = Boolean(
-    parsed.hash && unpushedCommitShortHashes.has(parsed.hash)
-  )
+  const { maxLaneCount, rows } = buildGitCommitGraphRows(lines)
+  const rowHeight = 20
+  const laneWidth = 14
+  const offsetX = 7
+  const width = Math.max(24, maxLaneCount * laneWidth + 4)
+  const height = Math.max(rowHeight, rows.length * rowHeight)
+  const paths: Array<React.ReactElement> = []
+  const circles: Array<React.ReactElement> = []
+
+  rows.forEach((row, rowIndex) => {
+    const y = rowIndex * rowHeight + rowHeight / 2
+    const yNext = Math.min(height + 2, y + rowHeight)
+    const drawnSegments = new Set<string>()
+    const currentHash = row.parsed.fullHash
+    const parents = row.parsed.parents.filter(Boolean)
+
+    row.beforeLanes.forEach((hash, fromLane) => {
+      if (!hash || hash === currentHash) return
+      const toLane = row.afterLanes.indexOf(hash)
+      if (toLane < 0) return
+
+      const key = `${fromLane}:${toLane}:${hash}`
+      drawnSegments.add(key)
+      paths.push(
+        <path
+          key={`path:${rowIndex}:${key}`}
+          d={gitCommitGraphSegmentPath({
+            fromLane,
+            rowHeight,
+            toLane,
+            y1: y,
+            y2: yNext,
+          })}
+          fill="none"
+          stroke={gitGraphLaneColor(toLane)}
+          strokeLinecap="round"
+          strokeWidth="2"
+        />
+      )
+    })
+
+    if (row.commitLane >= 0) {
+      parents.forEach((parent, parentIndex) => {
+        const toLane = row.afterLanes.indexOf(parent)
+        if (toLane < 0) return
+
+        const key = `${row.commitLane}:${toLane}:${parent}`
+        if (!drawnSegments.has(key)) {
+          paths.push(
+            <path
+              key={`commit-path:${rowIndex}:${parentIndex}:${key}`}
+              d={gitCommitGraphSegmentPath({
+                fromLane: row.commitLane,
+                rowHeight,
+                toLane,
+                y1: y,
+                y2: yNext,
+              })}
+              fill="none"
+              stroke={gitGraphLaneColor(toLane)}
+              strokeLinecap="round"
+              strokeWidth="2"
+            />
+          )
+        }
+      })
+
+      const x = row.commitLane * laneWidth + offsetX
+      const active = Boolean(
+        row.parsed.hash && unpushedCommitShortHashes.has(row.parsed.hash)
+      )
+      circles.push(
+        <circle
+          key={`circle:${rowIndex}:${row.parsed.fullHash}`}
+          cx={x}
+          cy={y}
+          r="4"
+          fill={gitGraphLaneColor(row.commitLane, active)}
+        />
+      )
+    }
+  })
 
   return (
-    <div
-      title={line.replace(/\t+/g, " ").trim()}
-      className="flex min-w-max items-baseline font-mono text-[13px] leading-5"
+    <svg
+      aria-hidden
+      viewBox={`0 0 ${width} ${height}`}
+      className="pointer-events-none absolute top-0 left-0 overflow-visible"
+      style={{ width, height }}
     >
-      <span
-        className={cn(
-          "whitespace-pre text-muted-foreground/70",
-          isUnpushed && "text-red-400"
-        )}
-      >
-        {parsed.graph}
-      </span>
-      {parsed.hash ? (
-        <span
-          className={cn(
-            "whitespace-pre text-sky-500",
-            isUnpushed && "text-red-400"
-          )}
-        >
-          {parsed.hash}
-        </span>
-      ) : null}
+      {paths}
+      {circles}
+    </svg>
+  )
+}
+
+function GitCommitRow({ line }: { line: string }) {
+  const parsed = parseGitCommitGraphLine(line)
+  const [hashCopied, setHashCopied] = React.useState(false)
+  const hashCopiedResetRef = React.useRef<number | undefined>(undefined)
+  const title = parsed.subject.trim()
+  const time = formatGitCommitTooltipTime(parsed.relativeDate)
+  const insertions = gitCommitStatCount(parsed.stats, "insertions")
+  const deletions = gitCommitStatCount(parsed.stats, "deletions")
+  const shortHash = parsed.hash || parsed.fullHash.slice(0, 7)
+  React.useEffect(() => {
+    return () => {
+      if (typeof hashCopiedResetRef.current === "number") {
+        window.clearTimeout(hashCopiedResetRef.current)
+      }
+    }
+  }, [])
+
+  const copyFullHashInline = () => {
+    if (!parsed.fullHash) return
+
+    void copyGitCommitValue(parsed.fullHash).then((copied) => {
+      if (!copied) return
+      setHashCopied(true)
+      if (typeof hashCopiedResetRef.current === "number") {
+        window.clearTimeout(hashCopiedResetRef.current)
+      }
+      hashCopiedResetRef.current = window.setTimeout(() => {
+        setHashCopied(false)
+      }, 1200)
+    })
+  }
+
+  const row = (
+    <div className="flex h-5 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
       {parsed.subject ? (
-        <span className="whitespace-pre text-foreground">
-          {` ${parsed.subject}`}
+        <span className="min-w-0 flex-1 truncate text-foreground">
+          {parsed.subject}
         </span>
       ) : null}
     </div>
   )
-}
 
-type GitCommitPageProps = {
-  page: GitCommitPage
-  unpushedCommitShortHashes: Set<string>
-  unpushedHashKey: string
-}
+  if (!parsed.hash && !parsed.subject) return row
 
-const GitCommitPageRows = React.memo(function GitCommitPageRows({
-  page,
-  unpushedCommitShortHashes,
-}: GitCommitPageProps) {
-  return (
-    <>
-      {page.lines.map((line, index) => (
-        <GitCommitRow
-          key={`${index}:${line}`}
-          line={line}
-          unpushedCommitShortHashes={unpushedCommitShortHashes}
-        />
-      ))}
-    </>
+  const trigger = (
+    <div className="min-w-0">
+      {title ? (
+        <Tooltip>
+          <TooltipTrigger render={row} />
+          <TooltipContent
+            side="left"
+            align="center"
+            className="pointer-events-none w-[min(400px,calc(100vw-2rem))] max-w-[min(400px,calc(100vw-2rem))] items-start gap-2 font-mono"
+          >
+            <span className="flex max-w-full min-w-0 flex-col gap-1.5">
+              {parsed.author || time ? (
+                <span className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                  {parsed.author ? <span>{parsed.author}</span> : null}
+                  {parsed.author && time ? <span aria-hidden>·</span> : null}
+                  {time ? <span>{time}</span> : null}
+                </span>
+              ) : null}
+              <span className="block max-w-full break-words whitespace-normal text-foreground">
+                {title}
+              </span>
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-emerald-500">
+                  +{insertions} insertion{insertions === 1 ? "" : "s"}
+                </span>
+                <span className="text-red-400">
+                  -{deletions} deletion{deletions === 1 ? "" : "s"}
+                </span>
+              </span>
+              {parsed.fullHash ? (
+                <span className="flex max-w-full items-center gap-1.5 text-muted-foreground">
+                  <span className="min-w-0 truncate">{shortHash}</span>
+                  <button
+                    type="button"
+                    aria-label="Copy full commit hash"
+                    className="pointer-events-auto inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      copyFullHashInline()
+                    }}
+                  >
+                    {hashCopied ? (
+                      <CheckIcon className="size-3.5 text-emerald-500" />
+                    ) : (
+                      <CopyIcon className="size-3.5" />
+                    )}
+                  </button>
+                </span>
+              ) : null}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        row
+      )}
+    </div>
   )
-}, sameGitCommitPageProps)
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={trigger} />
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem
+          disabled={!parsed.fullHash}
+          onClick={() => {
+            void copyGitCommitValue(parsed.fullHash)
+          }}
+        >
+          <CopyIcon />
+          Copy commit hash
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={!parsed.subject}
+          onClick={() => {
+            void copyGitCommitValue(parsed.subject)
+          }}
+        >
+          <CopyIcon />
+          Copy commit message
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+function GitCommitRows({
+  lines,
+  unpushedCommitShortHashes,
+}: {
+  lines: Array<string>
+  unpushedCommitShortHashes: Set<string>
+}) {
+  const { maxLaneCount } = buildGitCommitGraphRows(lines)
+  const graphWidth = Math.max(24, maxLaneCount * 14 + 4)
+
+  return (
+    <div className="relative grid min-w-0 gap-0">
+      <GitCommitPageGraph
+        lines={lines}
+        unpushedCommitShortHashes={unpushedCommitShortHashes}
+      />
+      {lines.map((line, index) => (
+        <div
+          key={`${index}:${line}`}
+          className="min-w-0"
+          style={{ paddingLeft: graphWidth }}
+        >
+          <GitCommitRow line={line} />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function GitCommitsSection({
   viewerContextId,
@@ -3985,29 +4357,15 @@ function GitCommitsSection({
   const commits = commitsData?.commits
   const commitsHasMore = Boolean(commitsData?.commitsHasMore)
   const meta = Array.isArray(commits) ? gitCommitsSummaryText(commits) : ""
-  const unpushedHashKey = (commitsData?.unpushedCommitShortHashes ?? []).join(
-    "\n"
-  )
   const unpushedCommitShortHashes = new Set(
     commitsData?.unpushedCommitShortHashes ?? []
   )
-  const commitPagesCacheRef = React.useRef<GitCommitPagesCache>({
-    commits: [],
-    pages: [],
-  })
-  const commitPages = Array.isArray(commits)
-    ? (commitPagesCacheRef.current = getGitCommitPages(
-        commitPagesCacheRef.current,
-        commits,
-        GIT_COMMITS_PAGE_SIZE
-      )).pages
-    : []
-
   const content = !normalizedCwd ? (
     <GitSectionNote>No directory selected.</GitSectionNote>
   ) : !viewerContextId ? (
     <GitSectionNote>Waiting for viewer context…</GitSectionNote>
-  ) : commitsQuery.isPending && typeof commits === "undefined" ? (
+  ) : (commitsQuery.isPending && typeof commits === "undefined") ||
+    (commitsQuery.isFetching && commits === null) ? (
     <GitSectionNote>
       <Spinner /> Loading commits…
     </GitSectionNote>
@@ -4018,17 +4376,11 @@ function GitCommitsSection({
   ) : commits === null ? (
     <GitSectionNote>No git repository detected.</GitSectionNote>
   ) : Array.isArray(commits) && commits.length > 0 ? (
-    <div className="grid min-w-max gap-3">
-      <div className="grid gap-0.5">
-        {commitPages.map((page) => (
-          <GitCommitPageRows
-            key={page.key}
-            page={page}
-            unpushedCommitShortHashes={unpushedCommitShortHashes}
-            unpushedHashKey={unpushedHashKey}
-          />
-        ))}
-      </div>
+    <div className="grid min-w-0 gap-3">
+      <GitCommitRows
+        lines={commits}
+        unpushedCommitShortHashes={unpushedCommitShortHashes}
+      />
       {commitsHasMore ? (
         <button
           type="button"
@@ -4048,7 +4400,9 @@ function GitCommitsSection({
 
   if (embedded) {
     return (
-      <div className="grid gap-2 overflow-x-auto px-3 py-2.5">{content}</div>
+      <div className="grid min-w-0 gap-2 overflow-x-hidden px-3 py-2.5">
+        {content}
+      </div>
     )
   }
 
@@ -4067,7 +4421,7 @@ function GitCommitsSection({
             ) : null}
           </div>
         </div>
-        <div className="grid min-h-0 flex-1 gap-2 overflow-auto px-3 py-2.5">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-2 overflow-x-hidden overflow-y-auto px-3 py-2.5">
           {content}
         </div>
       </section>
@@ -4078,8 +4432,8 @@ function GitCommitsSection({
     <GitSection
       title="Commits"
       meta={meta}
-      className="overflow-x-auto"
-      bodyClassName="overflow-x-auto"
+      className="overflow-x-hidden"
+      bodyClassName="min-w-0 overflow-x-hidden"
     >
       {content}
     </GitSection>

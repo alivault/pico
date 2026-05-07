@@ -116,6 +116,7 @@ const GIT_COMMITS_DEFAULT_LIMIT = 50
 const GIT_COMMITS_MAX_LIMIT = 500
 const GIT_ACTION_TIMEOUT_MS = 120_000
 const GIT_PUSH_COMMIT_MESSAGE_LIMIT = 20
+const GIT_COMMIT_FIELD_SEPARATOR = "\u001f"
 const GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS = 18_000
 const GIT_COMMIT_MESSAGE_SYSTEM_PROMPT = `You write concise Git commit messages.
 
@@ -398,6 +399,50 @@ function limitGitCommitGraphLines(lines: Array<string>, limit: number) {
   }
 
   return { lines: limitedLines, hasMore: false }
+}
+
+function parseGitCommitShortstatMap(output: string) {
+  const statsByHash = new Map<string, string>()
+  let currentHash = ""
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    if (/^[0-9a-f]{40}$/i.test(line)) {
+      currentHash = line
+      continue
+    }
+
+    if (!currentHash) continue
+    if (
+      /files? changed/.test(line) ||
+      /insertions?\(\+\)/.test(line) ||
+      /deletions?\(-\)/.test(line)
+    ) {
+      statsByHash.set(currentHash, line)
+      currentHash = ""
+    }
+  }
+
+  return statsByHash
+}
+
+function enrichGitCommitGraphLinesWithStats(
+  lines: Array<string>,
+  statsByHash: Map<string, string>
+) {
+  if (statsByHash.size === 0) return lines
+
+  return lines.map((line) => {
+    const tabIndex = line.indexOf("\t")
+    if (tabIndex < 0) return line
+
+    const metadata = line.slice(tabIndex + 1)
+    const fullHash = metadata.split(GIT_COMMIT_FIELD_SEPARATOR)[0]?.trim()
+    const stats = fullHash ? statsByHash.get(fullHash) : undefined
+    return stats ? `${line}${GIT_COMMIT_FIELD_SEPARATOR}${stats}` : line
+  })
 }
 
 function gitCommandErrorMessage(
@@ -1192,15 +1237,30 @@ export async function readDirectoryGitCommits(
     return null
   }
 
-  const [commitsResult, unpushedResult] = await Promise.all([
+  const [commitsResult, statsResult, unpushedResult] = await Promise.all([
     runCommand(
       "git",
       [
         "log",
-        "--graph",
-        "--pretty=format:%h%x09%s",
-        "--abbrev-commit",
-        "--date-order",
+        "--pretty=format:%h%x09%H%x1f%P%x1f%an%x1f%ar%x1f%s",
+        "--topo-order",
+        "-n",
+        String(normalizedLimit + 1),
+        "--no-color",
+        "HEAD",
+      ],
+      {
+        cwd: normalizedCwd,
+        timeoutMs: 1_500,
+      }
+    ),
+    runCommand(
+      "git",
+      [
+        "log",
+        "--pretty=format:%H",
+        "--shortstat",
+        "--topo-order",
         "-n",
         String(normalizedLimit + 1),
         "--no-color",
@@ -1221,8 +1281,17 @@ export async function readDirectoryGitCommits(
     ),
   ])
 
+  const statsByHash =
+    statsResult.code === 0
+      ? parseGitCommitShortstatMap(statsResult.stdout)
+      : new Map<string, string>()
   const commitLines =
-    commitsResult.code === 0 ? parseCommandLines(commitsResult.stdout) : []
+    commitsResult.code === 0
+      ? enrichGitCommitGraphLinesWithStats(
+          parseCommandLines(commitsResult.stdout),
+          statsByHash
+        )
+      : []
   const limitedCommitLines = limitGitCommitGraphLines(
     commitLines,
     normalizedLimit
