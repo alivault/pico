@@ -217,7 +217,9 @@ The `/events` endpoint streams:
 Important current behavior:
 
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
-- initial session sync currently sends the full sanitized message list plus render-ready conversation items; do not assume a recent-history bootstrap unless that behavior is deliberately reintroduced
+- initial session sync sends render-ready conversation items, not the full sanitized message list; do not reintroduce full-history `messages` in live SSE payloads unless there is a deliberate reason
+- follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/phi/app-shell-utils.ts`, `src/lib/phi/index.ts`, and runtime patching together if changing this contract
+- avoid duplicating large payloads such as base64 images across both `messages` and `items` in `/events`; use `/api/session/history` for paginated raw history needs
 - `/api/session/history` still exists as a paginated history endpoint, but the current conversation UI does not lazy-load older messages on scroll
 - session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
 - if you update `sessionStateRef.current` directly, you must still publish the same state to `sessionStore` with `setSessionState()` or selector-driven UI such as the composer/model picker will stay stale
