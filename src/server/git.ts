@@ -1293,7 +1293,7 @@ export async function readDirectoryGitCommits(
       [
         "log",
         "--pretty=format:%h%x09%H%x1f%P%x1f%an%x1f%ar%x1f%s",
-        "--topo-order",
+        "--date-order",
         "-n",
         String(normalizedLimit + 1),
         "--no-color",
@@ -1310,7 +1310,7 @@ export async function readDirectoryGitCommits(
         "log",
         "--pretty=format:%H",
         "--shortstat",
-        "--topo-order",
+        "--date-order",
         "-n",
         String(normalizedLimit + 1),
         "--no-color",

@@ -3966,89 +3966,305 @@ const GIT_GRAPH_LANE_COLORS = [
   "#8b5cf6",
   "#14b8a6",
 ]
+const GIT_GRAPH_NULL_VERTEX_ID = -1
+const GIT_GRAPH_ROW_HEIGHT = 20
+const GIT_GRAPH_LANE_WIDTH = 14
+const GIT_GRAPH_OFFSET_X = 7
 
 function gitGraphLaneColor(index: number, active = false) {
   if (active) return "#f87171"
   return GIT_GRAPH_LANE_COLORS[index % GIT_GRAPH_LANE_COLORS.length]
 }
 
+type GitCommitGraphParsed = ReturnType<typeof parseGitCommitGraphLine>
+
+type GitCommitGraphPoint = {
+  x: number
+  y: number
+}
+
+type GitCommitGraphLine = {
+  p1: GitCommitGraphPoint
+  p2: GitCommitGraphPoint
+}
+
 type GitCommitGraphRow = {
-  afterLanes: Array<string>
-  beforeLanes: Array<string>
+  colour: number
   commitLane: number
-  parsed: ReturnType<typeof parseGitCommitGraphLine>
+  parsed: GitCommitGraphParsed
+}
+
+type GitCommitGraphConnection = {
+  connectsTo: GitCommitGraphVertex | null
+  onBranch: GitCommitGraphBranch
+}
+
+class GitCommitGraphBranch {
+  private readonly colour: number
+  private readonly lines: Array<GitCommitGraphLine> = []
+
+  constructor(colour: number) {
+    this.colour = colour
+  }
+
+  addLine(p1: GitCommitGraphPoint, p2: GitCommitGraphPoint) {
+    this.lines.push({ p1, p2 })
+  }
+
+  getColour() {
+    return this.colour
+  }
+
+  getLines() {
+    return this.lines
+  }
+}
+
+class GitCommitGraphVertex {
+  readonly id: number
+  private connections: Array<GitCommitGraphConnection | undefined> = []
+  private nextParent = 0
+  private nextX = 0
+  private onBranch: GitCommitGraphBranch | null = null
+  private parents: Array<GitCommitGraphVertex> = []
+  private x = 0
+
+  constructor(id: number) {
+    this.id = id
+  }
+
+  addParent(vertex: GitCommitGraphVertex) {
+    this.parents.push(vertex)
+  }
+
+  getNextParent() {
+    return this.parents[this.nextParent] ?? null
+  }
+
+  registerParentProcessed() {
+    this.nextParent += 1
+  }
+
+  isMerge() {
+    return this.parents.length > 1
+  }
+
+  addToBranch(branch: GitCommitGraphBranch, x: number) {
+    if (this.onBranch !== null) return
+
+    this.onBranch = branch
+    this.x = x
+  }
+
+  isNotOnBranch() {
+    return this.onBranch === null
+  }
+
+  getBranch() {
+    return this.onBranch
+  }
+
+  getPoint(): GitCommitGraphPoint {
+    return { x: this.x, y: this.id }
+  }
+
+  getNextPoint(): GitCommitGraphPoint {
+    return { x: this.nextX, y: this.id }
+  }
+
+  getPointConnectingTo(
+    vertex: GitCommitGraphVertex | null,
+    onBranch: GitCommitGraphBranch
+  ) {
+    for (let i = 0; i < this.connections.length; i++) {
+      const connection = this.connections[i]
+      if (
+        connection?.connectsTo === vertex &&
+        connection.onBranch === onBranch
+      ) {
+        return { x: i, y: this.id }
+      }
+    }
+
+    return null
+  }
+
+  registerUnavailablePoint(
+    x: number,
+    connectsToVertex: GitCommitGraphVertex | null,
+    onBranch: GitCommitGraphBranch
+  ) {
+    if (x !== this.nextX) return
+
+    this.nextX = x + 1
+    this.connections[x] = { connectsTo: connectsToVertex, onBranch }
+  }
 }
 
 function buildGitCommitGraphRows(lines: Array<string>) {
-  const activeLanes: Array<string> = []
-  const rows: Array<GitCommitGraphRow> = []
-  let maxLaneCount = 1
+  const parsedRows = lines.map((line) => parseGitCommitGraphLine(line))
+  const commitLookup = new Map<string, number>()
+  parsedRows.forEach((parsed, index) => {
+    if (parsed.fullHash) commitLookup.set(parsed.fullHash, index)
+  })
 
-  for (const line of lines) {
-    const parsed = parseGitCommitGraphLine(line)
-    if (!parsed.fullHash) {
-      rows.push({
-        afterLanes: [...activeLanes],
-        beforeLanes: [...activeLanes],
-        commitLane: -1,
-        parsed,
-      })
-      continue
-    }
+  const nullVertex = new GitCommitGraphVertex(GIT_GRAPH_NULL_VERTEX_ID)
+  const vertices = parsedRows.map(
+    (_parsed, index) => new GitCommitGraphVertex(index)
+  )
+  const branches: Array<GitCommitGraphBranch> = []
+  const availableColours: Array<number> = []
 
-    let commitLane = activeLanes.indexOf(parsed.fullHash)
-    if (commitLane < 0) {
-      activeLanes.push(parsed.fullHash)
-      commitLane = activeLanes.length - 1
-    }
+  parsedRows.forEach((parsed, index) => {
+    if (!parsed.fullHash) return
 
-    const beforeLanes = [...activeLanes]
-    const nextLanes = [...activeLanes]
-    const parents = parsed.parents.filter(Boolean)
-
-    if (parents.length > 0) {
-      nextLanes[commitLane] = parents[0]!
-      let insertAt = commitLane + 1
-      for (const parent of parents.slice(1)) {
-        const existingIndex = nextLanes.indexOf(parent)
-        if (existingIndex >= 0) continue
-        nextLanes.splice(insertAt, 0, parent)
-        insertAt += 1
+    const vertex = vertices[index]!
+    parsed.parents.forEach((parentHash) => {
+      const parentIndex = commitLookup.get(parentHash)
+      if (typeof parentIndex === "number") {
+        const parentVertex = vertices[parentIndex]!
+        vertex.addParent(parentVertex)
+      } else {
+        vertex.addParent(nullVertex)
       }
-    } else {
-      nextLanes.splice(commitLane, 1)
+    })
+  })
+
+  const getAvailableColour = (startAt: number) => {
+    for (let i = 0; i < availableColours.length; i++) {
+      if (startAt > (availableColours[i] ?? 0)) return i
     }
 
-    rows.push({
-      afterLanes: nextLanes,
-      beforeLanes,
-      commitLane,
-      parsed,
-    })
-    activeLanes.splice(0, activeLanes.length, ...nextLanes)
-    maxLaneCount = Math.max(maxLaneCount, beforeLanes.length, nextLanes.length)
+    availableColours.push(0)
+    return availableColours.length - 1
   }
 
-  return { maxLaneCount, rows }
+  const determinePath = (startAt: number) => {
+    let i = startAt
+    let vertex = vertices[i]!
+    let parentVertex = vertex.getNextParent()
+    let lastPoint = vertex.isNotOnBranch()
+      ? vertex.getNextPoint()
+      : vertex.getPoint()
+
+    if (
+      parentVertex !== null &&
+      parentVertex.id !== GIT_GRAPH_NULL_VERTEX_ID &&
+      vertex.isMerge() &&
+      !vertex.isNotOnBranch() &&
+      !parentVertex.isNotOnBranch()
+    ) {
+      const parentBranch = parentVertex.getBranch()!
+      let processedParent = false
+
+      for (i = startAt + 1; i < vertices.length; i++) {
+        const currentVertex = vertices[i]!
+        const pointToParent = currentVertex.getPointConnectingTo(
+          parentVertex,
+          parentBranch
+        )
+        const currentPoint = pointToParent ?? currentVertex.getNextPoint()
+        parentBranch.addLine(lastPoint, currentPoint)
+        currentVertex.registerUnavailablePoint(
+          currentPoint.x,
+          parentVertex,
+          parentBranch
+        )
+        lastPoint = currentPoint
+
+        if (pointToParent !== null) {
+          vertex.registerParentProcessed()
+          processedParent = true
+          break
+        }
+      }
+
+      if (!processedParent) vertex.registerParentProcessed()
+      return
+    }
+
+    const branch = new GitCommitGraphBranch(getAvailableColour(startAt))
+    vertex.addToBranch(branch, lastPoint.x)
+    vertex.registerUnavailablePoint(lastPoint.x, vertex, branch)
+
+    for (i = startAt + 1; i < vertices.length; i++) {
+      const currentVertex = vertices[i]!
+      const currentPoint =
+        parentVertex === currentVertex && !parentVertex.isNotOnBranch()
+          ? currentVertex.getPoint()
+          : currentVertex.getNextPoint()
+      branch.addLine(lastPoint, currentPoint)
+      currentVertex.registerUnavailablePoint(
+        currentPoint.x,
+        parentVertex,
+        branch
+      )
+      lastPoint = currentPoint
+
+      if (parentVertex === currentVertex) {
+        vertex.registerParentProcessed()
+        const parentVertexOnBranch = !parentVertex.isNotOnBranch()
+        parentVertex.addToBranch(branch, currentPoint.x)
+        vertex = parentVertex
+        parentVertex = vertex.getNextParent()
+        if (parentVertex === null || parentVertexOnBranch) break
+      }
+    }
+
+    if (
+      i === vertices.length &&
+      parentVertex !== null &&
+      parentVertex.id === GIT_GRAPH_NULL_VERTEX_ID
+    ) {
+      vertex.registerParentProcessed()
+    }
+
+    branches.push(branch)
+    availableColours[branch.getColour()] = i
+  }
+
+  let i = 0
+  while (i < vertices.length) {
+    const vertex = vertices[i]!
+    const parsed = parsedRows[i]!
+    if (
+      parsed.fullHash &&
+      (vertex.getNextParent() !== null || vertex.isNotOnBranch())
+    ) {
+      determinePath(i)
+    } else {
+      i += 1
+    }
+  }
+
+  const rows: Array<GitCommitGraphRow> = parsedRows.map((parsed, index) => {
+    const branch = vertices[index]?.getBranch() ?? null
+    return {
+      colour: branch?.getColour() ?? 0,
+      commitLane:
+        parsed.fullHash && branch ? vertices[index]!.getPoint().x : -1,
+      parsed,
+    }
+  })
+  const maxLaneCount = Math.max(
+    1,
+    ...vertices.map((vertex) => vertex.getNextPoint().x)
+  )
+
+  return { branches, maxLaneCount, rows }
 }
 
 function gitCommitGraphSegmentPath({
-  fromLane,
+  line,
   rowHeight,
-  toLane,
-  y1,
-  y2,
 }: {
-  fromLane: number
+  line: GitCommitGraphLine
   rowHeight: number
-  toLane: number
-  y1: number
-  y2: number
 }) {
-  const laneWidth = 14
-  const offsetX = 7
-  const x1 = fromLane * laneWidth + offsetX
-  const x2 = toLane * laneWidth + offsetX
+  const x1 = line.p1.x * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
+  const y1 = line.p1.y * rowHeight + rowHeight / 2
+  const x2 = line.p2.x * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
+  const y2 = line.p2.y * rowHeight + rowHeight / 2
   if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`
 
   const d = rowHeight * 0.8
@@ -4062,87 +4278,50 @@ function GitCommitPageGraph({
   lines: Array<string>
   unpushedCommitShortHashes: Set<string>
 }) {
-  const { maxLaneCount, rows } = buildGitCommitGraphRows(lines)
-  const rowHeight = 20
-  const laneWidth = 14
-  const offsetX = 7
-  const width = Math.max(24, maxLaneCount * laneWidth + 4)
-  const height = Math.max(rowHeight, rows.length * rowHeight)
+  const { branches, maxLaneCount, rows } = buildGitCommitGraphRows(lines)
+  const width = Math.max(24, maxLaneCount * GIT_GRAPH_LANE_WIDTH + 4)
+  const height = Math.max(
+    GIT_GRAPH_ROW_HEIGHT,
+    rows.length * GIT_GRAPH_ROW_HEIGHT
+  )
   const paths: Array<React.ReactElement> = []
   const circles: Array<React.ReactElement> = []
 
-  rows.forEach((row, rowIndex) => {
-    const y = rowIndex * rowHeight + rowHeight / 2
-    const yNext = Math.min(height + 2, y + rowHeight)
-    const drawnSegments = new Set<string>()
-    const currentHash = row.parsed.fullHash
-    const parents = row.parsed.parents.filter(Boolean)
-
-    row.beforeLanes.forEach((hash, fromLane) => {
-      if (!hash || hash === currentHash) return
-      const toLane = row.afterLanes.indexOf(hash)
-      if (toLane < 0) return
-
-      const key = `${fromLane}:${toLane}:${hash}`
-      drawnSegments.add(key)
+  branches.forEach((branch, branchIndex) => {
+    branch.getLines().forEach((line, lineIndex) => {
       paths.push(
         <path
-          key={`path:${rowIndex}:${key}`}
+          key={`path:${branchIndex}:${lineIndex}`}
           d={gitCommitGraphSegmentPath({
-            fromLane,
-            rowHeight,
-            toLane,
-            y1: y,
-            y2: yNext,
+            line,
+            rowHeight: GIT_GRAPH_ROW_HEIGHT,
           })}
           fill="none"
-          stroke={gitGraphLaneColor(toLane)}
+          stroke={gitGraphLaneColor(branch.getColour())}
           strokeLinecap="round"
           strokeWidth="2"
         />
       )
     })
+  })
 
-    if (row.commitLane >= 0) {
-      parents.forEach((parent, parentIndex) => {
-        const toLane = row.afterLanes.indexOf(parent)
-        if (toLane < 0) return
+  rows.forEach((row, rowIndex) => {
+    if (row.commitLane < 0) return
 
-        const key = `${row.commitLane}:${toLane}:${parent}`
-        if (!drawnSegments.has(key)) {
-          paths.push(
-            <path
-              key={`commit-path:${rowIndex}:${parentIndex}:${key}`}
-              d={gitCommitGraphSegmentPath({
-                fromLane: row.commitLane,
-                rowHeight,
-                toLane,
-                y1: y,
-                y2: yNext,
-              })}
-              fill="none"
-              stroke={gitGraphLaneColor(toLane)}
-              strokeLinecap="round"
-              strokeWidth="2"
-            />
-          )
-        }
-      })
-
-      const x = row.commitLane * laneWidth + offsetX
-      const active = Boolean(
-        row.parsed.hash && unpushedCommitShortHashes.has(row.parsed.hash)
-      )
-      circles.push(
-        <circle
-          key={`circle:${rowIndex}:${row.parsed.fullHash}`}
-          cx={x}
-          cy={y}
-          r="4"
-          fill={gitGraphLaneColor(row.commitLane, active)}
-        />
-      )
-    }
+    const x = row.commitLane * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
+    const y = rowIndex * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2
+    const active = Boolean(
+      row.parsed.hash && unpushedCommitShortHashes.has(row.parsed.hash)
+    )
+    circles.push(
+      <circle
+        key={`circle:${rowIndex}:${row.parsed.fullHash}`}
+        cx={x}
+        cy={y}
+        r="4"
+        fill={gitGraphLaneColor(row.colour, active)}
+      />
+    )
   })
 
   return (
@@ -4296,7 +4475,7 @@ function GitCommitRows({
   unpushedCommitShortHashes: Set<string>
 }) {
   const { maxLaneCount } = buildGitCommitGraphRows(lines)
-  const graphWidth = Math.max(24, maxLaneCount * 14 + 4)
+  const graphWidth = Math.max(24, maxLaneCount * GIT_GRAPH_LANE_WIDTH + 4)
 
   return (
     <div className="relative grid min-w-0 gap-0">
