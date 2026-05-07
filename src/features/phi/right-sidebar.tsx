@@ -1321,9 +1321,7 @@ export function GitPanelToolbar({
           }}
         />
         {active && refreshing ? (
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            <Spinner className="size-3" /> Updating
-          </span>
+          <Spinner className="size-3 shrink-0 text-muted-foreground" />
         ) : null}
       </div>
 
