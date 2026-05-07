@@ -113,7 +113,6 @@ export type GitFileReviewResult = {
 const GIT_STATUS_CACHE_TTL_MS = 5_000
 const GIT_CHANGES_CACHE_TTL_MS = 5_000
 const GIT_COMMITS_DEFAULT_LIMIT = 50
-const GIT_COMMITS_MAX_LIMIT = 500
 const GIT_ACTION_TIMEOUT_MS = 120_000
 const GIT_REPOSITORY_CHECK_TIMEOUT_MS = 5_000
 const GIT_PUSH_COMMIT_MESSAGE_LIMIT = 20
@@ -163,7 +162,7 @@ function normalizeGitCwd(cwd: string) {
 function normalizeGitCommitsLimit(limit: number | undefined) {
   if (!Number.isFinite(limit)) return GIT_COMMITS_DEFAULT_LIMIT
 
-  return Math.max(1, Math.min(GIT_COMMITS_MAX_LIMIT, Math.floor(limit || 0)))
+  return Math.max(1, Math.floor(limit || 0))
 }
 
 function gitCommitsCacheKey(cwd: string, limit: number) {

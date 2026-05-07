@@ -18,10 +18,12 @@ export const Route = createFileRoute("/api/git-changes")({
         const url = new URL(request.url)
         const requestedCwd = url.searchParams.get("cwd") || ""
         const scope = url.searchParams.get("scope") || "all"
-        const commitsLimitParam = Number(url.searchParams.get("commitsLimit"))
-        const commitsLimit = Number.isFinite(commitsLimitParam)
-          ? commitsLimitParam
-          : undefined
+        const commitsLimitValue = url.searchParams.get("commitsLimit")
+        const commitsLimitParam = Number(commitsLimitValue)
+        const commitsLimit =
+          commitsLimitValue !== null && Number.isFinite(commitsLimitParam)
+            ? commitsLimitParam
+            : undefined
         if (!requestedCwd.trim()) {
           return errorResponse("cwd is required")
         }

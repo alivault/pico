@@ -4508,6 +4508,7 @@ function GitCommitsSection({
 }) {
   const normalizedCwd = normalizeCwd(cwd)
   const [commitsLimit, setCommitsLimit] = React.useState(GIT_COMMITS_PAGE_SIZE)
+  const commitsLoadMoreRef = React.useRef<HTMLDivElement>(null)
   React.useEffect(() => {
     setCommitsLimit(GIT_COMMITS_PAGE_SIZE)
   }, [normalizedCwd])
@@ -4539,6 +4540,33 @@ function GitCommitsSection({
   const unpushedCommitShortHashes = new Set(
     commitsData?.unpushedCommitShortHashes ?? []
   )
+  React.useEffect(() => {
+    const target = commitsLoadMoreRef.current
+    if (
+      !target ||
+      !active ||
+      !commitsHasMore ||
+      commitsQuery.isFetching ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return
+    }
+
+    let requestedNextPage = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (!entry?.isIntersecting || requestedNextPage) return
+
+        requestedNextPage = true
+        setCommitsLimit((value) => value + GIT_COMMITS_PAGE_SIZE)
+      },
+      { rootMargin: "320px 0px" }
+    )
+    observer.observe(target)
+
+    return () => observer.disconnect()
+  }, [active, commitsHasMore, commitsQuery.isFetching, normalizedCwd])
   const content = !normalizedCwd ? (
     <GitSectionNote>No directory selected.</GitSectionNote>
   ) : !viewerContextId ? (
@@ -4561,16 +4589,18 @@ function GitCommitsSection({
         unpushedCommitShortHashes={unpushedCommitShortHashes}
       />
       {commitsHasMore ? (
-        <button
-          type="button"
-          className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-border/80 bg-background px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={commitsQuery.isFetching}
-          onClick={() => {
-            setCommitsLimit((value) => value + GIT_COMMITS_PAGE_SIZE)
-          }}
-        >
-          {commitsQuery.isFetching ? "Loading…" : "Load more"}
-        </button>
+        <div ref={commitsLoadMoreRef} className="flex">
+          <button
+            type="button"
+            className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-border/80 bg-background px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={commitsQuery.isFetching}
+            onClick={() => {
+              setCommitsLimit((value) => value + GIT_COMMITS_PAGE_SIZE)
+            }}
+          >
+            {commitsQuery.isFetching ? "Loading more…" : "Load more"}
+          </button>
+        </div>
       ) : null}
     </div>
   ) : (
