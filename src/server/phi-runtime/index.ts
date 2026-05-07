@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks"
 
 import type {
   ConversationItem,
+  ConversationItemsPatch,
   DirectoryState,
   ModelOption,
   SessionUiState,
@@ -275,6 +276,7 @@ type StateSyncJsonField =
 type StateSyncSnapshot = {
   scalarValues: Partial<Record<StateSyncScalarField, unknown>>
   jsonValues: Partial<Record<StateSyncJsonField, string>>
+  itemSignatures?: Array<string>
 }
 
 type SseClient = {
@@ -463,6 +465,65 @@ function stringifyStateSyncValue(value: unknown) {
   return value === undefined ? "__pi_undefined__" : JSON.stringify(value)
 }
 
+function sameStringValues(left: Array<string> = [], right: Array<string> = []) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+
+  return true
+}
+
+const conversationItemSignatureCache = new WeakMap<ConversationItem, string>()
+
+function conversationItemSignature(item: ConversationItem) {
+  const cached = conversationItemSignatureCache.get(item)
+  if (cached) return cached
+
+  const json = stringifyStateSyncValue(item)
+  const hash = createHash("sha1").update(json).digest("hex")
+  const signature = `${json.length}:${hash}`
+  conversationItemSignatureCache.set(item, signature)
+  return signature
+}
+
+function createConversationItemsPatch(
+  previousSignatures: Array<string>,
+  nextItems: Array<ConversationItem>,
+  nextSignatures: Array<string>
+): ConversationItemsPatch | null {
+  if (sameStringValues(previousSignatures, nextSignatures)) return null
+
+  let prefixLength = 0
+  const sharedLength = Math.min(
+    previousSignatures.length,
+    nextSignatures.length
+  )
+  while (
+    prefixLength < sharedLength &&
+    previousSignatures[prefixLength] === nextSignatures[prefixLength]
+  ) {
+    prefixLength += 1
+  }
+
+  let suffixLength = 0
+  while (
+    suffixLength < sharedLength - prefixLength &&
+    previousSignatures[previousSignatures.length - 1 - suffixLength] ===
+      nextSignatures[nextSignatures.length - 1 - suffixLength]
+  ) {
+    suffixLength += 1
+  }
+
+  return {
+    previousLength: previousSignatures.length,
+    start: prefixLength,
+    deleteCount: previousSignatures.length - prefixLength - suffixLength,
+    items: nextItems.slice(prefixLength, nextItems.length - suffixLength),
+  }
+}
+
 function createStateSyncSnapshot(payload: StateSyncPayload): StateSyncSnapshot {
   const scalarValues: Partial<Record<StateSyncScalarField, unknown>> = {}
   for (const field of STATE_SYNC_SCALAR_FIELDS) {
@@ -470,13 +531,21 @@ function createStateSyncSnapshot(payload: StateSyncPayload): StateSyncSnapshot {
   }
 
   const jsonValues: Partial<Record<StateSyncJsonField, string>> = {}
+  let itemSignatures: Array<string> | undefined
   for (const field of STATE_SYNC_JSON_FIELDS) {
+    if (field === "items" && Array.isArray(payload.items)) {
+      itemSignatures = payload.items.map((item) =>
+        conversationItemSignature(item)
+      )
+      continue
+    }
     jsonValues[field] = stringifyStateSyncValue(payload[field])
   }
 
   return {
     scalarValues,
     jsonValues,
+    itemSignatures,
   }
 }
 
@@ -505,6 +574,8 @@ function createStateSyncPatch(
   }
 
   for (const field of STATE_SYNC_JSON_FIELDS) {
+    if (field === "items") continue
+
     const nextValue = next[field]
     const nextJson = stringifyStateSyncValue(nextValue)
     if (previous.jsonValues[field] === nextJson) {
@@ -512,6 +583,28 @@ function createStateSyncPatch(
     }
     patch[field] = nextValue as never
     changed = true
+  }
+
+  if (Array.isArray(next.items)) {
+    const nextItemSignatures = next.items.map((item) =>
+      conversationItemSignature(item)
+    )
+    if (!sameStringValues(previous.itemSignatures, nextItemSignatures)) {
+      const itemPatch = previous.itemSignatures
+        ? createConversationItemsPatch(
+            previous.itemSignatures,
+            next.items,
+            nextItemSignatures
+          )
+        : null
+
+      if (itemPatch) {
+        patch.itemsPatch = itemPatch
+      } else {
+        patch.items = next.items
+      }
+      changed = true
+    }
   }
 
   return changed ? patch : null
@@ -1039,15 +1132,11 @@ export class PhiRuntime {
 
   private currentStatePayload(entry: SessionEntry): StateSyncPayload {
     const draft = this.isDraftEntry(entry)
-    const sanitizedMessages = entry.session.messages.map((message) =>
-      sanitizeSessionMessage(message)
-    )
-    const historyTotalCount = sanitizedMessages.length
+    const historyTotalCount = entry.session.messages.length
 
     return {
       type: "state_sync",
       sessionKey: entry.key,
-      messages: sanitizedMessages,
       items: entry.retainedConversationItems,
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)

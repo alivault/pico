@@ -204,6 +204,13 @@ export type AssistantItem = {
 
 export type ConversationItem = UserItem | AssistantItem
 
+export type ConversationItemsPatch = {
+  previousLength: number
+  start: number
+  deleteCount: number
+  items: Array<ConversationItem>
+}
+
 export type SessionUiState = {
   statuses: Record<string, string>
   title?: string
@@ -277,6 +284,7 @@ export type StateSyncPayload = {
   type: "state_sync"
   sessionKey?: string
   items?: Array<ConversationItem>
+  itemsPatch?: ConversationItemsPatch
   messages?: Array<MessagePayload>
   pendingUserMessages?: Array<PendingUserMessagePayload>
   draft?: boolean

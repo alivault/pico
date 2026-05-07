@@ -5,6 +5,7 @@ import {
   promptDraftKey,
   sameContextUsage,
   thinkingSummaryText,
+  type ConversationItem,
   type PromptImage,
   type SessionState,
 } from "@/lib/phi"
@@ -236,6 +237,48 @@ export async function readFileAsPromptImage(file: File) {
   } satisfies PromptImage
 }
 
+function isLocalOnlyConversationItem(item: ConversationItem) {
+  return (
+    item.kind === "user" && (Boolean(item.pendingId) || Boolean(item.queued))
+  )
+}
+
+function applyConversationItemsPatch(
+  previousItems: Array<ConversationItem>,
+  patch: Parameters<typeof buildItemsFromSync>[0]["itemsPatch"]
+) {
+  if (!patch) return previousItems
+
+  const authoritativeItems = previousItems.filter(
+    (item) => !isLocalOnlyConversationItem(item)
+  )
+  const previousLength = Number.isInteger(patch.previousLength)
+    ? patch.previousLength
+    : authoritativeItems.length
+  const start = Number.isInteger(patch.start) ? patch.start : -1
+  const deleteCount = Number.isInteger(patch.deleteCount)
+    ? patch.deleteCount
+    : -1
+  const items = Array.isArray(patch.items) ? patch.items : null
+
+  if (
+    previousLength !== authoritativeItems.length ||
+    start < 0 ||
+    start > authoritativeItems.length ||
+    deleteCount < 0 ||
+    start + deleteCount > authoritativeItems.length ||
+    !items
+  ) {
+    return previousItems
+  }
+
+  return [
+    ...authoritativeItems.slice(0, start),
+    ...items,
+    ...authoritativeItems.slice(start + deleteCount),
+  ]
+}
+
 export function updateStateFromSync(
   previous: SessionState,
   sync: Parameters<typeof buildItemsFromSync>[0]
@@ -256,8 +299,14 @@ export function updateStateFromSync(
     replacingSession &&
     previous.sessionKey === `optimistic:${nextDraftOwnerKey}`
   const previousItems = replacingOptimisticDraft ? previous.items : base.items
+  const syncForItems = sync.itemsPatch
+    ? {
+        ...sync,
+        items: applyConversationItemsPatch(previousItems, sync.itemsPatch),
+      }
+    : sync
   const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
-  const { items } = buildItemsFromSync(sync, previousItems)
+  const { items } = buildItemsFromSync(syncForItems, previousItems)
   const streaming =
     typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
   const compacting =
