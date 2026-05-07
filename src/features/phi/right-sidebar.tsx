@@ -34,6 +34,8 @@ import {
 import {
   ArrowLeftIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ChevronsDownUpIcon,
   CopyIcon,
   ChevronsUpDownIcon,
@@ -3343,9 +3345,9 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
               </span>
             </span>
             {historyOpen ? (
-              <ChevronsDownUpIcon className="size-4 shrink-0 text-muted-foreground" />
+              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" />
+              <ChevronUpIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
           </button>
           {historyOpen ? (
