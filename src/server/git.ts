@@ -1291,7 +1291,7 @@ export async function readDirectoryGitCommits(
       "git",
       [
         "log",
-        "--pretty=format:%h%x09%H%x1f%P%x1f%an%x1f%ar%x1f%s",
+        "--pretty=format:%h%x09%H%x1f%P%x1f%an%x1f%ar%x1f%aI%x1f%s",
         "--date-order",
         "-n",
         String(normalizedLimit + 1),

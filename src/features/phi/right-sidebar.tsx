@@ -92,12 +92,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import {
-  TitleTooltip,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/phi/app-shell-utils"
 import { showGitPushSuccessToast } from "@/features/phi/git-toast-utils"
 import {
@@ -781,6 +776,7 @@ function parseGitCommitGraphLine(line: string) {
       fullHash: "",
       parents: [] as Array<string>,
       relativeDate: "",
+      fullDate: "",
       stats: "",
       subject: "",
     }
@@ -797,10 +793,17 @@ function parseGitCommitGraphLine(line: string) {
       parentsText = "",
       author = "",
       relativeDate = "",
+      maybeFullDate = "",
       ...rest
     ] = metadataFields
-    const stats = rest.length > 1 ? rest[rest.length - 1] || "" : ""
-    const subjectParts = stats ? rest.slice(0, -1) : rest
+    const hasFullDate = /^\d{4}-\d{2}-\d{2}T/.test(maybeFullDate)
+    const fullDate = hasFullDate ? maybeFullDate : ""
+    const subjectAndStats = hasFullDate ? rest : [maybeFullDate, ...rest]
+    const stats =
+      subjectAndStats.length > 1
+        ? subjectAndStats[subjectAndStats.length - 1] || ""
+        : ""
+    const subjectParts = stats ? subjectAndStats.slice(0, -1) : subjectAndStats
 
     return {
       author,
@@ -809,16 +812,28 @@ function parseGitCommitGraphLine(line: string) {
       fullHash,
       parents: parentsText.split(/\s+/).filter(Boolean),
       relativeDate,
+      fullDate,
       stats,
       subject: subjectParts.join(GIT_COMMIT_FIELD_SEPARATOR).trim(),
     }
   }
 
   if (metadataFields.length >= 4) {
-    const [fullHash = "", author = "", relativeDate = "", ...rest] =
-      metadataFields
-    const stats = rest.length > 1 ? rest[rest.length - 1] || "" : ""
-    const subjectParts = stats ? rest.slice(0, -1) : rest
+    const [
+      fullHash = "",
+      author = "",
+      relativeDate = "",
+      maybeFullDate = "",
+      ...rest
+    ] = metadataFields
+    const hasFullDate = /^\d{4}-\d{2}-\d{2}T/.test(maybeFullDate)
+    const fullDate = hasFullDate ? maybeFullDate : ""
+    const subjectAndStats = hasFullDate ? rest : [maybeFullDate, ...rest]
+    const stats =
+      subjectAndStats.length > 1
+        ? subjectAndStats[subjectAndStats.length - 1] || ""
+        : ""
+    const subjectParts = stats ? subjectAndStats.slice(0, -1) : subjectAndStats
 
     return {
       author,
@@ -827,6 +842,7 @@ function parseGitCommitGraphLine(line: string) {
       fullHash,
       parents: [],
       relativeDate,
+      fullDate,
       stats,
       subject: subjectParts.join(GIT_COMMIT_FIELD_SEPARATOR).trim(),
     }
@@ -846,18 +862,32 @@ function parseGitCommitGraphLine(line: string) {
     fullHash: hasFullHash ? maybeFullHash : hashMatch ? hashMatch[2] : "",
     parents: [],
     relativeDate: "",
+    fullDate: "",
     stats: "",
     subject: (hasFullHash ? restSubjectParts : subjectParts).join("\t").trim(),
   }
 }
 
-function formatGitCommitTooltipTime(value: string) {
+function formatGitCommitDetailTime(value: string) {
   const text = value.trim()
   if (!text) return ""
 
   const compact = formatGitRelativeDateCompact(text)
   if (!compact || compact === "now" || !/\bago$/i.test(text)) return compact
   return `${compact} ago`
+}
+
+function formatGitCommitFullDate(value: string) {
+  const text = value.trim()
+  if (!text) return ""
+
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return text
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "full",
+    timeStyle: "long",
+  }).format(date)
 }
 
 function gitCommitStatCount(stats: string, kind: "insertions" | "deletions") {
@@ -3968,6 +3998,7 @@ const GIT_GRAPH_LANE_COLORS = [
 ]
 const GIT_GRAPH_NULL_VERTEX_ID = -1
 const GIT_GRAPH_ROW_HEIGHT = 20
+const GIT_GRAPH_COMMIT_DETAILS_HEIGHT = 150
 const GIT_GRAPH_LANE_WIDTH = 14
 const GIT_GRAPH_OFFSET_X = 7
 
@@ -4254,35 +4285,76 @@ function buildGitCommitGraphRows(lines: Array<string>) {
   return { branches, maxLaneCount, rows }
 }
 
+function gitCommitGraphRowValue(row: GitCommitGraphRow, index: number) {
+  return row.parsed.fullHash || `commit-row:${index}`
+}
+
+function gitCommitGraphRowHeights(
+  rows: Array<GitCommitGraphRow>,
+  openCommitValues: Array<string>
+) {
+  const openCommitValueSet = new Set(openCommitValues)
+
+  return rows.map((row, index) =>
+    openCommitValueSet.has(gitCommitGraphRowValue(row, index))
+      ? GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_COMMIT_DETAILS_HEIGHT
+      : GIT_GRAPH_ROW_HEIGHT
+  )
+}
+
+function gitCommitGraphRowTops(rowHeights: Array<number>) {
+  let top = 0
+  return rowHeights.map((height) => {
+    const rowTop = top
+    top += height
+    return rowTop
+  })
+}
+
+function gitCommitGraphTotalHeight(rowHeights: Array<number>) {
+  return rowHeights.reduce((total, height) => total + height, 0)
+}
+
+function gitCommitGraphRowCenter(rowTops: Array<number>, rowIndex: number) {
+  return (
+    (rowTops[rowIndex] ?? rowIndex * GIT_GRAPH_ROW_HEIGHT) +
+    GIT_GRAPH_ROW_HEIGHT / 2
+  )
+}
+
 function gitCommitGraphSegmentPath({
   line,
-  rowHeight,
+  rowTops,
 }: {
   line: GitCommitGraphLine
-  rowHeight: number
+  rowTops: Array<number>
 }) {
   const x1 = line.p1.x * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
-  const y1 = line.p1.y * rowHeight + rowHeight / 2
+  const y1 = gitCommitGraphRowCenter(rowTops, line.p1.y)
   const x2 = line.p2.x * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
-  const y2 = line.p2.y * rowHeight + rowHeight / 2
+  const y2 = gitCommitGraphRowCenter(rowTops, line.p2.y)
   if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`
 
-  const d = rowHeight * 0.8
+  const d = GIT_GRAPH_ROW_HEIGHT * 0.8
   return `M ${x1} ${y1} C ${x1} ${y1 + d}, ${x2} ${y2 - d}, ${x2} ${y2}`
 }
 
 function GitCommitPageGraph({
   lines,
+  openCommitValues,
   unpushedCommitShortHashes,
 }: {
   lines: Array<string>
+  openCommitValues: Array<string>
   unpushedCommitShortHashes: Set<string>
 }) {
   const { branches, maxLaneCount, rows } = buildGitCommitGraphRows(lines)
+  const rowHeights = gitCommitGraphRowHeights(rows, openCommitValues)
+  const rowTops = gitCommitGraphRowTops(rowHeights)
   const width = Math.max(24, maxLaneCount * GIT_GRAPH_LANE_WIDTH + 4)
   const height = Math.max(
     GIT_GRAPH_ROW_HEIGHT,
-    rows.length * GIT_GRAPH_ROW_HEIGHT
+    gitCommitGraphTotalHeight(rowHeights)
   )
   const paths: Array<React.ReactElement> = []
   const circles: Array<React.ReactElement> = []
@@ -4292,10 +4364,7 @@ function GitCommitPageGraph({
       paths.push(
         <path
           key={`path:${branchIndex}:${lineIndex}`}
-          d={gitCommitGraphSegmentPath({
-            line,
-            rowHeight: GIT_GRAPH_ROW_HEIGHT,
-          })}
+          d={gitCommitGraphSegmentPath({ line, rowTops })}
           fill="none"
           stroke={gitGraphLaneColor(branch.getColour())}
           strokeLinecap="round"
@@ -4309,7 +4378,7 @@ function GitCommitPageGraph({
     if (row.commitLane < 0) return
 
     const x = row.commitLane * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
-    const y = rowIndex * GIT_GRAPH_ROW_HEIGHT + GIT_GRAPH_ROW_HEIGHT / 2
+    const y = gitCommitGraphRowCenter(rowTops, rowIndex)
     const active = Boolean(
       row.parsed.hash && unpushedCommitShortHashes.has(row.parsed.hash)
     )
@@ -4328,7 +4397,7 @@ function GitCommitPageGraph({
     <svg
       aria-hidden
       viewBox={`0 0 ${width} ${height}`}
-      className="pointer-events-none absolute top-0 left-0 overflow-visible"
+      className="pointer-events-none absolute top-0 left-0 z-10 overflow-visible"
       style={{ width, height }}
     >
       {paths}
@@ -4337,12 +4406,21 @@ function GitCommitPageGraph({
   )
 }
 
-function GitCommitRow({ line }: { line: string }) {
+function GitCommitRow({
+  graphWidth,
+  line,
+  value,
+}: {
+  graphWidth: number
+  line: string
+  value: string
+}) {
   const parsed = parseGitCommitGraphLine(line)
   const [hashCopied, setHashCopied] = React.useState(false)
   const hashCopiedResetRef = React.useRef<number | undefined>(undefined)
   const title = parsed.subject.trim()
-  const time = formatGitCommitTooltipTime(parsed.relativeDate)
+  const time = formatGitCommitDetailTime(parsed.relativeDate)
+  const fullTime = formatGitCommitFullDate(parsed.fullDate)
   const insertions = gitCommitStatCount(parsed.stats, "insertions")
   const deletions = gitCommitStatCount(parsed.stats, "deletions")
   const shortHash = parsed.hash || parsed.fullHash.slice(0, 7)
@@ -4369,101 +4447,108 @@ function GitCommitRow({ line }: { line: string }) {
     })
   }
 
-  const row = (
-    <div className="flex h-5 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
-      {parsed.subject ? (
-        <span className="min-w-0 flex-1 truncate text-foreground">
-          {parsed.subject}
-        </span>
-      ) : null}
-    </div>
-  )
-
-  if (!parsed.hash && !parsed.subject) return row
+  if (!parsed.hash && !parsed.subject) {
+    return (
+      <div className="flex h-5 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
+        {parsed.subject ? (
+          <span className="min-w-0 flex-1 truncate text-foreground">
+            {parsed.subject}
+          </span>
+        ) : null}
+      </div>
+    )
+  }
 
   const trigger = (
-    <div className="min-w-0">
-      {title ? (
-        <Tooltip>
-          <TooltipTrigger render={row} />
-          <TooltipContent
-            side="left"
-            align="center"
-            className="pointer-events-none w-[min(400px,calc(100vw-2rem))] max-w-[min(400px,calc(100vw-2rem))] items-start gap-2 font-mono"
-          >
-            <span className="flex max-w-full min-w-0 flex-col gap-1.5">
-              {parsed.author || time ? (
-                <span className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-                  {parsed.author ? <span>{parsed.author}</span> : null}
-                  {parsed.author && time ? <span aria-hidden>·</span> : null}
-                  {time ? <span>{time}</span> : null}
-                </span>
-              ) : null}
-              <span className="block max-w-full break-words whitespace-normal text-foreground">
-                {title}
-              </span>
-              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-emerald-500">
-                  +{insertions} insertion{insertions === 1 ? "" : "s"}
-                </span>
-                <span className="text-red-400">
-                  -{deletions} deletion{deletions === 1 ? "" : "s"}
-                </span>
-              </span>
-              {parsed.fullHash ? (
-                <span className="flex max-w-full items-center gap-1.5 text-muted-foreground">
-                  <span className="min-w-0 truncate">{shortHash}</span>
-                  <button
-                    type="button"
-                    aria-label="Copy full commit hash"
-                    className="pointer-events-auto inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      copyFullHashInline()
-                    }}
-                  >
-                    {hashCopied ? (
-                      <CheckIcon className="size-3.5 text-emerald-500" />
-                    ) : (
-                      <CopyIcon className="size-3.5" />
-                    )}
-                  </button>
-                </span>
-              ) : null}
-            </span>
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        row
-      )}
-    </div>
+    <AccordionTrigger
+      headerClassName="min-w-0"
+      className="h-5 min-h-5 w-full items-center gap-2 rounded-none px-1.5 py-0 font-mono text-[13px] leading-5 font-normal transition-colors hover:bg-muted/50 hover:text-foreground hover:no-underline focus-visible:ring-0 aria-expanded:bg-muted aria-expanded:text-foreground **:data-[slot=accordion-trigger-icon]:size-4"
+    >
+      <span
+        className="min-w-0 flex-1 truncate text-foreground"
+        style={{ paddingLeft: graphWidth }}
+      >
+        {title || parsed.hash || "Commit"}
+      </span>
+    </AccordionTrigger>
   )
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger render={trigger} />
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem
-          disabled={!parsed.fullHash}
-          onClick={() => {
-            void copyGitCommitValue(parsed.fullHash)
-          }}
+    <AccordionItem value={value} className="border-0">
+      <ContextMenu>
+        <ContextMenuTrigger render={trigger} />
+        <ContextMenuContent className="w-52">
+          <ContextMenuItem
+            disabled={!parsed.fullHash}
+            onClick={() => {
+              void copyGitCommitValue(parsed.fullHash)
+            }}
+          >
+            <CopyIcon />
+            Copy commit hash
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!parsed.subject}
+            onClick={() => {
+              void copyGitCommitValue(parsed.subject)
+            }}
+          >
+            <CopyIcon />
+            Copy commit message
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <AccordionContent className="h-[150px] overflow-y-auto border-b border-border/70 bg-muted/20 pr-2 pb-2">
+        <div
+          className="grid content-start gap-1.5 pt-1 font-mono text-xs leading-4"
+          style={{ paddingLeft: graphWidth }}
         >
-          <CopyIcon />
-          Copy commit hash
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={!parsed.subject}
-          onClick={() => {
-            void copyGitCommitValue(parsed.subject)
-          }}
-        >
-          <CopyIcon />
-          Copy commit message
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+          {parsed.author || time ? (
+            <div className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+              {parsed.author ? <span>{parsed.author}</span> : null}
+              {parsed.author && time ? <span aria-hidden>·</span> : null}
+              {time ? (
+                <TitleTooltip title={fullTime} side="top">
+                  <span>{time}</span>
+                </TitleTooltip>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="max-w-full break-words whitespace-normal text-foreground">
+            {title || "No commit message"}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-emerald-500">
+              +{insertions} addition{insertions === 1 ? "" : "s"}
+            </span>
+            <span className="text-red-400">
+              -{deletions} deletion{deletions === 1 ? "" : "s"}
+            </span>
+          </div>
+          {parsed.fullHash ? (
+            <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+              <span className="min-w-0 truncate">{shortHash}</span>
+              <button
+                type="button"
+                aria-label="Copy full commit hash"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  copyFullHashInline()
+                }}
+              >
+                {hashCopied ? (
+                  <CheckIcon className="size-3.5 text-emerald-500" />
+                ) : (
+                  <CopyIcon className="size-3.5" />
+                )}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
   )
 }
 
@@ -4474,24 +4559,48 @@ function GitCommitRows({
   lines: Array<string>
   unpushedCommitShortHashes: Set<string>
 }) {
-  const { maxLaneCount } = buildGitCommitGraphRows(lines)
+  const { maxLaneCount, rows } = buildGitCommitGraphRows(lines)
   const graphWidth = Math.max(24, maxLaneCount * GIT_GRAPH_LANE_WIDTH + 4)
+  const rowValues = rows.map((row, index) => gitCommitGraphRowValue(row, index))
+  const [openCommitValues, setOpenCommitValues] = React.useState<Array<string>>(
+    []
+  )
+  const visibleOpenCommitValues = openCommitValues.filter((value) =>
+    rowValues.includes(value)
+  )
+  const rowHeights = gitCommitGraphRowHeights(rows, visibleOpenCommitValues)
 
   return (
-    <div className="relative grid min-w-0 gap-0">
+    <div className="relative min-w-0">
       <GitCommitPageGraph
         lines={lines}
+        openCommitValues={visibleOpenCommitValues}
         unpushedCommitShortHashes={unpushedCommitShortHashes}
       />
-      {lines.map((line, index) => (
-        <div
-          key={`${index}:${line}`}
-          className="min-w-0"
-          style={{ paddingLeft: graphWidth }}
-        >
-          <GitCommitRow line={line} />
-        </div>
-      ))}
+      <Accordion
+        multiple
+        value={visibleOpenCommitValues}
+        onValueChange={(values) => {
+          setOpenCommitValues(values.slice(-1))
+        }}
+        className="grid min-w-0 gap-0"
+      >
+        {lines.map((line, index) => (
+          <div
+            key={`${index}:${line}`}
+            className="min-w-0"
+            style={{
+              minHeight: rowHeights[index] ?? GIT_GRAPH_ROW_HEIGHT,
+            }}
+          >
+            <GitCommitRow
+              graphWidth={graphWidth}
+              line={line}
+              value={rowValues[index] ?? `${index}`}
+            />
+          </div>
+        ))}
+      </Accordion>
     </div>
   )
 }
@@ -4568,20 +4677,26 @@ function GitCommitsSection({
     return () => observer.disconnect()
   }, [active, commitsHasMore, commitsQuery.isFetching, normalizedCwd])
   const content = !normalizedCwd ? (
-    <GitSectionNote>No directory selected.</GitSectionNote>
+    <GitSectionNote className="px-3 py-2.5">
+      No directory selected.
+    </GitSectionNote>
   ) : !viewerContextId ? (
-    <GitSectionNote>Waiting for viewer context…</GitSectionNote>
+    <GitSectionNote className="px-3 py-2.5">
+      Waiting for viewer context…
+    </GitSectionNote>
   ) : (commitsQuery.isPending && typeof commits === "undefined") ||
     (commitsQuery.isFetching && commits === null) ? (
-    <GitSectionNote>
+    <GitSectionNote className="px-3 py-2.5">
       <Spinner /> Loading commits…
     </GitSectionNote>
   ) : commitsQuery.error ? (
-    <GitSectionNote tone="destructive">
+    <GitSectionNote tone="destructive" className="px-3 py-2.5">
       {getErrorMessage(commitsQuery.error, "Failed to load commits")}
     </GitSectionNote>
   ) : commits === null ? (
-    <GitSectionNote>No git repository detected.</GitSectionNote>
+    <GitSectionNote className="px-3 py-2.5">
+      No git repository detected.
+    </GitSectionNote>
   ) : Array.isArray(commits) && commits.length > 0 ? (
     <div className="grid min-w-0 gap-3">
       <GitCommitRows
@@ -4604,15 +4719,13 @@ function GitCommitsSection({
       ) : null}
     </div>
   ) : (
-    <GitSectionNote>No commits on this branch yet.</GitSectionNote>
+    <GitSectionNote className="px-3 py-2.5">
+      No commits on this branch yet.
+    </GitSectionNote>
   )
 
   if (embedded) {
-    return (
-      <div className="grid min-w-0 gap-2 overflow-x-hidden px-3 py-2.5">
-        {content}
-      </div>
-    )
+    return <div className="grid min-w-0 gap-2 overflow-x-hidden">{content}</div>
   }
 
   if (flush) {
@@ -4630,7 +4743,7 @@ function GitCommitsSection({
             ) : null}
           </div>
         </div>
-        <div className="grid min-h-0 min-w-0 flex-1 gap-2 overflow-x-hidden overflow-y-auto px-3 py-2.5">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-2 overflow-x-hidden overflow-y-auto">
           {content}
         </div>
       </section>
@@ -4642,7 +4755,7 @@ function GitCommitsSection({
       title="Commits"
       meta={meta}
       className="overflow-x-hidden"
-      bodyClassName="min-w-0 overflow-x-hidden"
+      bodyClassName="min-w-0 overflow-x-hidden p-0"
     >
       {content}
     </GitSection>
