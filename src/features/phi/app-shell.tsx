@@ -203,6 +203,7 @@ import {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
+  RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -218,6 +219,7 @@ import {
   readStoredCenterMessages,
   readStoredAutoScrollEnabled,
   readStoredRecentDirectories,
+  readStoredRightSidebarOpen,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
@@ -2005,8 +2007,6 @@ const AppShellGitPanelController = React.memo(
       (state) => state.fileTreeCollapsed
     )
 
-    if (!active) return null
-
     return (
       <RightSidebar
         viewerContextId={viewerContextId}
@@ -3160,7 +3160,7 @@ function AppShellDesktopGitPanel({
       aria-label="Right sidebar"
       aria-hidden={!active}
       data-state={active ? "open" : "closed"}
-      className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none data-[state=closed]:border-transparent"
     >
       <RightSidebar
         viewerContextId={viewerContextId}
@@ -3480,20 +3480,22 @@ function AppShellTabsController({
         />
       </div>
 
-      <div className={mobileGitClassName}>
-        <AppShellGitPanelController
-          viewerContextId={viewerContextId}
-          sessionStore={sessionStore}
-          active={isMobile && currentTab === "git"}
-          rightSidebarStore={rightSidebarStore}
-          onCloseAllFiles={onCloseAllFileViewTabs}
-          onCloseFile={onCloseFileViewTab}
-          onCloseFilesToRight={onCloseFileViewTabsToRight}
-          onCloseOtherFiles={onCloseOtherFileViewTabs}
-          onOpenFile={onOpenFileViewTab}
-          onReorderFiles={onReorderFileViewTabs}
-        />
-      </div>
+      {isMobile ? (
+        <div className={mobileGitClassName}>
+          <AppShellGitPanelController
+            viewerContextId={viewerContextId}
+            sessionStore={sessionStore}
+            active={currentTab === "git"}
+            rightSidebarStore={rightSidebarStore}
+            onCloseAllFiles={onCloseAllFileViewTabs}
+            onCloseFile={onCloseFileViewTab}
+            onCloseFilesToRight={onCloseFileViewTabsToRight}
+            onCloseOtherFiles={onCloseOtherFileViewTabs}
+            onOpenFile={onOpenFileViewTab}
+            onReorderFiles={onReorderFileViewTabs}
+          />
+        </div>
+      ) : null}
     </div>
   )
 
@@ -3506,14 +3508,6 @@ function AppShellTabsController({
     if (desktopSideWorkspaceOpen) {
       setDesktopGitPanelMounted(true)
     }
-
-    const timeoutId = window.setTimeout(() => {
-      if (!desktopSideWorkspaceOpen) {
-        setDesktopGitPanelMounted(false)
-      }
-    }, 220)
-
-    return () => window.clearTimeout(timeoutId)
   }, [desktopSideWorkspaceOpen, isMobile])
 
   React.useLayoutEffect(() => {
@@ -4502,7 +4496,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setStoreField(appUiStore, "gitPanelOpen", action)
+      const nextOpen = applyStoreAction(appUiStore.state.gitPanelOpen, action)
+      setStoreField(appUiStore, "gitPanelOpen", nextOpen)
+      safeLocalStorageSetItem(
+        RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
+        nextOpen ? "1" : "0"
+      )
     },
     [appUiStore]
   )
@@ -5491,6 +5490,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const replaceComposerDraftRef = useLatestRef(replaceComposerDraft)
 
   React.useEffect(() => {
+    setGitPanelOpen(readStoredRightSidebarOpen())
     setStoredDraftDirectory(readStoredDraftDirectory() || "")
     setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
     setSessionDoneDesktopNotificationsEnabled(

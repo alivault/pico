@@ -3045,6 +3045,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
   const historyPanelRef = React.useRef<HTMLDivElement>(null)
   const historyScrollRef = React.useRef<HTMLDivElement>(null)
+  const previousNormalizedCwdRef = React.useRef(normalizedCwd)
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
       viewerContextId,
@@ -3059,6 +3060,9 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
   const changedFiles = Array.isArray(files) ? files : []
 
   React.useEffect(() => {
+    if (previousNormalizedCwdRef.current === normalizedCwd) return
+    previousNormalizedCwdRef.current = normalizedCwd
+
     setHistoryOpen(true)
     setHistoryPanelHeight(undefined)
     setDefaultHistoryPanelHeight(undefined)
@@ -5131,8 +5135,11 @@ export function RightSidebar({
     if (!controlledActiveTab) {
       setUncontrolledActiveTab("review")
     }
-    setInlineActiveFilePath("")
   }, [controlledActiveTab, isMobile, normalizedCwd])
+
+  React.useEffect(() => {
+    setInlineActiveFilePath("")
+  }, [isMobile, normalizedCwd])
 
   return (
     <div className="h-full min-h-[520px] w-full min-w-0">
@@ -5166,7 +5173,7 @@ export function RightSidebar({
           onReorderFiles={onReorderFiles}
           showReview
         />
-        {activeTab === "review" ? (
+        <React.Activity mode={activeTab === "review" ? "visible" : "hidden"}>
           <div className="min-h-0 flex-1 overflow-hidden">
             <FileReviewContent
               viewerContextId={viewerContextId}
@@ -5174,7 +5181,8 @@ export function RightSidebar({
               active={active && activeTab === "review"}
             />
           </div>
-        ) : (
+        </React.Activity>
+        <React.Activity mode={activeTab === "files" ? "visible" : "hidden"}>
           <div className="min-h-0 flex-1 overflow-hidden">
             {previewMode === "external" && hasOpenFileTabs ? (
               <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -5222,7 +5230,7 @@ export function RightSidebar({
               />
             )}
           </div>
-        )}
+        </React.Activity>
         <ProjectOpenFileDialog
           open={openFileDialogOpen}
           onOpenChange={setOpenFileDialogOpen}

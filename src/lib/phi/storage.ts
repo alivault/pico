@@ -17,6 +17,7 @@ export const SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
 export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "phi-hide-tools"
 export const CENTER_MESSAGES_STORAGE_KEY = "phi-center-messages"
 export const AUTO_SCROLL_ENABLED_STORAGE_KEY = "phi-auto-scroll"
+export const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = "phi-right-sidebar-open"
 export const PROMPT_DRAFTS_STORAGE_KEY = "phi-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "phi-context-id"
 
@@ -241,6 +242,10 @@ export function readStoredCenterMessages() {
 export function readStoredAutoScrollEnabled() {
   const value = safeLocalStorageGetItem(AUTO_SCROLL_ENABLED_STORAGE_KEY)
   return value == null ? true : value !== "0"
+}
+
+export function readStoredRightSidebarOpen() {
+  return safeLocalStorageGetItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY) === "1"
 }
 
 export function readStoredSessionDoneSoundEnabled() {
