@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router"
 
-import type { GitCommitMessageResponse } from "@/lib/phi/api"
+import type { GitCommitMessageResponse } from "@/lib/pico/api"
 import { jsonResponse } from "@/server/http"
 import { generateDirectoryGitCommitMessage } from "@/server/git"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
@@ -17,8 +17,8 @@ export const Route = createFileRoute("/api/git-commit-message")({
           if (!requestedCwd.trim()) throw new Error("cwd is required")
 
           const { context, activeEntry } =
-            await getPhiRuntime().resolveRequest(request)
-          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
+            await getPicoRuntime().resolveRequest(request)
+          const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const result = await generateDirectoryGitCommitMessage(
             cwd,

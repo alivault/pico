@@ -36,7 +36,7 @@ const allowedHosts = Array.from(
 
 function devAssetFetchMetadataFallback(): Plugin {
   return {
-    name: "phi-dev-asset-fetch-metadata-fallback",
+    name: "pico-dev-asset-fetch-metadata-fallback",
     apply: "serve",
     enforce: "pre",
     configureServer(server) {
@@ -44,7 +44,7 @@ function devAssetFetchMetadataFallback(): Plugin {
         const acceptValues = request.headers.accept
           ?.split(",")
           .map((value) => value.trim())
-        const url = new URL(request.url ?? "/", "http://phi.local")
+        const url = new URL(request.url ?? "/", "http://pico.local")
         const path = url.pathname
         const hasFetchDest = Boolean(request.headers["sec-fetch-dest"])
         const acceptsCss = acceptValues?.some((value) =>
@@ -112,14 +112,14 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   server: {
-    port: 1618,
+    port: 3141,
     allowedHosts,
     fs: {
       allow: fsAllow,
     },
   },
   preview: {
-    port: 1618,
+    port: 3141,
     allowedHosts,
   },
   plugins: [

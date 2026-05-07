@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/session/history")({
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/session/history")({
           const limit = Number(url.searchParams.get("limit"))
 
           return jsonResponse(
-            await getPhiRuntime().getSessionHistory(request, {
+            await getPicoRuntime().getSessionHistory(request, {
               before: Number.isFinite(before) ? before : undefined,
               limit: Number.isFinite(limit) ? limit : undefined,
             })

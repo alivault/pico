@@ -9,7 +9,7 @@ import appCss from "../styles.css?url"
 
 const TANSTACK_DEVTOOLS_SETTINGS_KEY = "tanstack_devtools_settings"
 const TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY =
-  "phi-tanstack-devtools-defaults-v1"
+  "pico-tanstack-devtools-defaults-v1"
 const TANSTACK_DEVTOOLS_CONFIG = {
   position: "bottom-right",
   openHotkey: ["Control", "`"],
@@ -27,7 +27,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Phi",
+        title: "Pico",
       },
     ],
     links: [
@@ -37,11 +37,6 @@ export const Route = createRootRoute({
       },
       {
         rel: "icon",
-        type: "image/svg+xml",
-        href: "/favicon.svg",
-      },
-      {
-        rel: "alternate icon",
         type: "image/png",
         href: "/favicon.png",
       },

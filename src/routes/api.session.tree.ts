@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/session/tree")({
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/api/session/tree")({
       GET: async ({ request }) => {
         try {
           return jsonResponse(
-            await getPhiRuntime().getSessionTreeForRequest(request)
+            await getPicoRuntime().getSessionTreeForRequest(request)
           )
         } catch (error) {
           return routeErrorResponse(error, "Failed to read session tree")
@@ -26,7 +26,7 @@ export const Route = createFileRoute("/api/session/tree")({
             label?: unknown
           }>(request)
           return jsonResponse(
-            await getPhiRuntime().navigateSessionTree(request, body)
+            await getPicoRuntime().navigateSessionTree(request, body)
           )
         } catch (error) {
           return routeErrorResponse(error, "Failed to navigate session tree")

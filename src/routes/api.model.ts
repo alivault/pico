@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/model")({
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/model")({
             provider?: unknown
             modelId?: unknown
           }>(request)
-          return jsonResponse(await getPhiRuntime().setModel(request, body))
+          return jsonResponse(await getPicoRuntime().setModel(request, body))
         } catch (error) {
           return routeErrorResponse(error, "Failed to update model")
         }

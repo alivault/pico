@@ -185,7 +185,7 @@ async function fetchCodexUsage(): Promise<ProviderUsageSnapshot> {
   try {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${creds.token}`,
-      "User-Agent": "phi",
+      "User-Agent": "pico",
       Accept: "application/json",
     }
     if (creds.accountId) headers["ChatGPT-Account-Id"] = creds.accountId

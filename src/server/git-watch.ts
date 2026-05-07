@@ -143,7 +143,7 @@ export class GitWatchManager {
       watchers: new Set(),
       disposed: false,
       changeDebouncer: new Debouncer(() => {}, {
-        key: `phi.git-watch.${key}`,
+        key: `pico.git-watch.${key}`,
         wait: GIT_WATCH_DEBOUNCE_MS,
       }),
     }

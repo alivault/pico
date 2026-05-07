@@ -1,6 +1,6 @@
-# Phi
+# Pico
 
-Phi is the TanStack Start rewrite of the legacy `pi-web` browser app. It keeps the same local Phi workflow—directory-organized session browsing, a live conversation shell, tree navigation, session forking, git inspection, and bundled SDK-backed prompt execution—while moving the app to a TypeScript/TanStack/Vite+ stack.
+Pico is the TanStack Start rewrite of the legacy `pi-web` browser app. It keeps the same local Pico workflow—directory-organized session browsing, a live conversation shell, tree navigation, session forking, git inspection, and bundled SDK-backed prompt execution—while moving the app to a TypeScript/TanStack/Vite+ stack.
 
 The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web-legacy` and remains the parity reference until manual sign-off is recorded.
 
@@ -73,7 +73,7 @@ The legacy browser app is no longer in this repo. It now lives at `~/code/pi-web
 
 ### App shell and UI
 
-Main feature code lives in `src/features/phi`:
+Main feature code lives in `src/features/pico`:
 
 - `app-shell.tsx` — top-level shell orchestration, store/controller wiring, commands, tabs, notifications, and focused hook/dialog composition
 - `use-app-shell-session-sync.ts` — SSE session/state sync behavior plus batched git invalidations
@@ -87,17 +87,17 @@ Main feature code lives in `src/features/phi`:
 - `app-shell-command-palette.tsx` — command palette
 - `use-app-shell-shortcuts.ts` — TanStack Hotkeys-backed shortcut definitions
 - `tanstack-store-utils.ts` — TanStack Store helpers used by the shell stores
-- `pacer-utils.ts` — small Phi wrappers around TanStack Pacer primitives
+- `pacer-utils.ts` — small Pico wrappers around TanStack Pacer primitives
 - `git-panel.tsx` — git status/files/branches/commits tab plus commit, push, and pull actions
 - `session-done-notifications.ts` — sound and desktop notification helpers
 
 ### Shared client/server contracts
 
-- `src/lib/phi/index.ts` — UI domain types plus a barrel for storage, sync, and tree helpers
-- `src/lib/phi/storage.ts` — storage keys, prompt draft persistence, and settings storage helpers
-- `src/lib/phi/sync.ts` — state-sync item construction and message normalization helpers
-- `src/lib/phi/tree.ts` — session tree flattening and filtering helpers
-- `src/lib/phi/api.ts` — API request/response types and SSE payload contracts
+- `src/lib/pico/index.ts` — UI domain types plus a barrel for storage, sync, and tree helpers
+- `src/lib/pico/storage.ts` — storage keys, prompt draft persistence, and settings storage helpers
+- `src/lib/pico/sync.ts` — state-sync item construction and message normalization helpers
+- `src/lib/pico/tree.ts` — session tree flattening and filtering helpers
+- `src/lib/pico/api.ts` — API request/response types and SSE payload contracts
 
 ### Routing and providers
 
@@ -110,8 +110,8 @@ Main feature code lives in `src/features/phi`:
 
 - `src/routes/events.ts` — SSE event stream endpoint
 - `src/routes/api.*.ts` — server endpoints for prompts, sessions, tree actions, git, completions, settings, highlighting, and UI callbacks
-- `src/server/phi-runtime/index.ts` — runtime bridge between TanStack Start routes and the SDK session model
-- `src/server/phi-runtime/*` — focused runtime helpers for contexts, retained conversation windows, session lists, tree/fork, UI requests, and highlighting
+- `src/server/pico-runtime/index.ts` — runtime bridge between TanStack Start routes and the SDK session model
+- `src/server/pico-runtime/*` — focused runtime helpers for contexts, retained conversation windows, session lists, tree/fork, UI requests, and highlighting
 - `src/server/pi-sdk.ts`, `src/server/pi-sdk-path.ts`, and `src/server/pi-sdk-types.ts` — SDK loading, package resolution, settings-manager adaptation, and local adapter types
 - `src/server/session-naming.ts` — heuristic/LLM-backed automatic session naming helpers
 - `src/server/provider-usage.ts` — provider usage lookup for composer context/limit display
@@ -127,7 +127,7 @@ Main feature code lives in `src/features/phi`:
   - context usage publication throttling
   - client git invalidation batching
   - server git-watch debounce
-- TanStack Query remains the server-state/cache layer. Use `src/features/phi/query-keys.ts` for cached query keys and `buildRequestUrl()` for app-aware requests.
+- TanStack Query remains the server-state/cache layer. Use `src/features/pico/query-keys.ts` for cached query keys and `buildRequestUrl()` for app-aware requests.
 
 ## Key HTTP/SSE endpoints
 
@@ -190,7 +190,7 @@ pnpm update:pi
 
 Default dev port from `vite.config.ts`:
 
-- `1618`
+- `3141`
 
 ### Build
 
@@ -242,5 +242,5 @@ Repo snapshot reviewed on 2026-04-30:
 
 ## Notes
 
-- Storage keys use the `phi-*` prefix, including `phi-hide-tools`.
+- Storage keys use the `pico-*` prefix, including `pico-hide-tools`.
 - This repo currently does not include a separate `parity-checklist.md`; use the source layout above plus `~/code/pi-web-legacy` when auditing parity.

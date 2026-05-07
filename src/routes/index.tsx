@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { z } from "zod"
 
-import { PhiAppShell } from "@/features/phi/app-shell"
-import type { SelectSessionNavigationOptions } from "@/features/phi/app-shell"
+import { PicoAppShell } from "@/features/pico/app-shell"
+import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell"
 
 const indexSearchSchema = z.object({
   session: z.string().optional(),
@@ -18,7 +18,7 @@ function App() {
   const navigate = Route.useNavigate()
 
   return (
-    <PhiAppShell
+    <PicoAppShell
       sessionId={session}
       onSelectSession={(
         nextSessionId?: string,

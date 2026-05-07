@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
@@ -12,9 +12,9 @@ export const Route = createFileRoute("/api/directory/resolve")({
         try {
           const body = await readRequestJson<{ path?: unknown }>(request)
           const { context, activeEntry } =
-            await getPhiRuntime().resolveRequest(request)
+            await getPicoRuntime().resolveRequest(request)
           const pathInput = typeof body.path === "string" ? body.path : ""
-          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
+          const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           return jsonResponse({
             ok: true,
             path: await resolveDirectoryPath(pathInput, baseCwd),

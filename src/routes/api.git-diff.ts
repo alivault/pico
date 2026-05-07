@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { errorResponse, jsonResponse } from "@/server/http"
 import { readDirectoryGitFileDiff } from "@/server/git"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { routeErrorResponse } from "@/server/route-helpers"
 
@@ -22,8 +22,8 @@ export const Route = createFileRoute("/api/git-diff")({
 
         try {
           const { context, activeEntry } =
-            await getPhiRuntime().resolveRequest(request)
-          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
+            await getPicoRuntime().resolveRequest(request)
+          const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const diff = await readDirectoryGitFileDiff(cwd, requestedPath)
           return jsonResponse({

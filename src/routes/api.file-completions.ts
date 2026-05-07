@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { listFileReferenceEntries } from "@/server/project-paths"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
@@ -15,10 +15,10 @@ export const Route = createFileRoute("/api/file-completions")({
             isQuotedPrefix?: unknown
           }>(request)
           const { context, activeEntry } =
-            await getPhiRuntime().resolveRequest(request)
+            await getPicoRuntime().resolveRequest(request)
           const query = typeof body.query === "string" ? body.query : ""
           const isQuotedPrefix = Boolean(body.isQuotedPrefix)
-          const baseCwd = getPhiRuntime().getBaseCwd(activeEntry, context)
+          const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           const items = await listFileReferenceEntries(query, baseCwd, {
             isQuotedPrefix,
           })

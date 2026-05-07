@@ -1,13 +1,7 @@
 {
-  "short_name": "Phi",
-  "name": "Phi",
+  "short_name": "Pico",
+  "name": "Pico",
   "icons": [
-    {
-      "src": "favicon.svg",
-      "sizes": "32x32",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
     {
       "src": "favicon.png",
       "sizes": "32x32",
@@ -16,7 +10,7 @@
     },
     {
       "src": "apple-touch-icon.png",
-      "sizes": "256x256",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     }

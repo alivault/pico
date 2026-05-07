@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/session/delete")({
@@ -11,7 +11,7 @@ export const Route = createFileRoute("/api/session/delete")({
         try {
           const body = await readRequestJson<{ path?: unknown }>(request)
           return jsonResponse(
-            await getPhiRuntime().deleteSession(request, body)
+            await getPicoRuntime().deleteSession(request, body)
           )
         } catch (error) {
           return routeErrorResponse(error, "Failed to delete session")

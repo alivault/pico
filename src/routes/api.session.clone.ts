@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { getPhiRuntime } from "@/server/phi-runtime"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/session/clone")({
@@ -9,7 +9,7 @@ export const Route = createFileRoute("/api/session/clone")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          return jsonResponse(await getPhiRuntime().cloneSession(request))
+          return jsonResponse(await getPicoRuntime().cloneSession(request))
         } catch (error) {
           return routeErrorResponse(error, "Failed to clone session")
         }

@@ -164,7 +164,7 @@ async function executeEdit(
   }
 }
 
-export async function createPhiEditToolDefinition(
+export async function createPicoEditToolDefinition(
   sdk: PiSdkLike,
   cwd: string
 ): Promise<EditToolDefinition | undefined> {

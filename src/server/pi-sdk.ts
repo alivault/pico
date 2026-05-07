@@ -15,7 +15,7 @@ import type {
 } from "@/server/pi-sdk-types"
 
 const SELF_CONTAINED_SETTINGS_MANAGER = Symbol(
-  "phi.self-contained-settings-manager"
+  "pico.self-contained-settings-manager"
 )
 
 export { resolvePiSdkDir } from "@/server/pi-sdk-path"

@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file is the repo-specific guide for coding agents working in Phi.
+This file is the repo-specific guide for coding agents working in Pico.
 
 ## What this repo is
 
-This repo contains the current TanStack Start rewrite of the legacy browser app, now branded as Phi.
+This repo contains the current TanStack Start rewrite of the legacy browser app, now branded as Pico.
 
 Important parity/reference note:
 
@@ -58,7 +58,7 @@ pnpm check:fix
 
 Notes:
 
-- Dev server port is `1618` from `vite.config.ts`.
+- Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline validation command.
 - If you need to start, restart, or test a dev server / preview build, use the `zellij` `pi` session instead of creating an ad hoc long-lived server process.
 
@@ -66,65 +66,65 @@ Notes:
 
 ### Main app code
 
-- `src/features/phi/app-shell.tsx`
+- `src/features/pico/app-shell.tsx`
   - main application shell coordinator and store/controller wiring
   - composes tabs, command palette actions, focused hooks, and dialog controllers
-- `src/features/phi/use-app-shell-session-sync.ts`
+- `src/features/pico/use-app-shell-session-sync.ts`
   - SSE wiring and session/state sync behavior for the shell
-- `src/features/phi/use-app-shell-prompt-mutations.ts`
+- `src/features/pico/use-app-shell-prompt-mutations.ts`
   - prompt submission / abort / queue-related mutations
-- `src/features/phi/use-app-shell-session-mutations.ts`
+- `src/features/pico/use-app-shell-session-mutations.ts`
   - session creation, selection-adjacent mutations, and session action flows
-- `src/features/phi/use-app-shell-message-scroll.ts`
+- `src/features/pico/use-app-shell-message-scroll.ts`
   - scroll/jump behavior for the conversation pane
-- `src/features/phi/use-app-shell-shortcuts.ts`
+- `src/features/pico/use-app-shell-shortcuts.ts`
   - TanStack Hotkeys-backed keyboard shortcut handling for the shell
-- `src/features/phi/sidebar.tsx`
+- `src/features/pico/sidebar.tsx`
   - directory/session sidebar UI
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
   - inline sidebar search has been removed; the sidebar search affordance opens the sessions dialog
-- `src/features/phi/composer-panel.tsx`
+- `src/features/pico/composer-panel.tsx`
   - prompt composer, slash commands, completions, model/thinking pickers, queue/steer UX
-- `src/features/phi/composer-assist-menu.tsx` and `src/features/phi/use-composer-assist.ts`
+- `src/features/pico/composer-assist-menu.tsx` and `src/features/pico/use-composer-assist.ts`
   - slash command, path, and `@file` assist menu behavior
-- `src/features/phi/composer-context-usage-indicator.tsx`, `src/features/phi/composer-pending-messages.tsx`, and `src/features/phi/composer-pickers.tsx`
+- `src/features/pico/composer-context-usage-indicator.tsx`, `src/features/pico/composer-pending-messages.tsx`, and `src/features/pico/composer-pickers.tsx`
   - context/provider usage display, queued prompt controls, and picker subcomponents
-- `src/features/phi/conversation-view.tsx`
+- `src/features/pico/conversation-view.tsx`
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
-- `src/features/phi/app-shell-add-directory-dialog.tsx`, `src/features/phi/app-shell-auth-dialog.tsx`, `src/features/phi/app-shell-session-dialogs.tsx`, `src/features/phi/app-shell-sessions-dialog.tsx`, `src/features/phi/app-shell-settings-dialog.tsx`, `src/features/phi/app-shell-tree-dialog.tsx`, and `src/features/phi/app-shell-ui-request-dialog.tsx`
+- `src/features/pico/app-shell-add-directory-dialog.tsx`, `src/features/pico/app-shell-auth-dialog.tsx`, `src/features/pico/app-shell-session-dialogs.tsx`, `src/features/pico/app-shell-sessions-dialog.tsx`, `src/features/pico/app-shell-settings-dialog.tsx`, `src/features/pico/app-shell-tree-dialog.tsx`, and `src/features/pico/app-shell-ui-request-dialog.tsx`
   - focused dialog implementations hosted by the floating controller section in `app-shell.tsx`
   - auth dialogs are keyboard-first command surfaces on desktop and drawers on mobile
-- `src/features/phi/app-shell-dialogs.tsx`
+- `src/features/pico/app-shell-dialogs.tsx`
   - legacy/minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
-- `src/features/phi/app-shell-command-palette.tsx`
+- `src/features/pico/app-shell-command-palette.tsx`
   - command palette UI
-- `src/features/phi/git-panel.tsx`
+- `src/features/pico/git-panel.tsx`
   - git status/files/branches/commits tab plus commit, push, and pull actions
   - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
-- `src/features/phi/query-keys.ts`
+- `src/features/pico/query-keys.ts`
   - TanStack Query cache keys
-- `src/features/phi/tanstack-store-utils.ts`
-  - shared TanStack Store helpers (`createPhiStore`, `setStoreState`, `useSelector`, `batch`)
-- `src/features/phi/pacer-utils.ts`
-  - small Phi wrappers around TanStack Pacer primitives for named high-churn controls
-- `src/features/phi/app-shell-utils.ts`
+- `src/features/pico/tanstack-store-utils.ts`
+  - shared TanStack Store helpers (`createPicoStore`, `setStoreState`, `useSelector`, `batch`)
+- `src/features/pico/pacer-utils.ts`
+  - small Pico wrappers around TanStack Pacer primitives for named high-churn controls
+- `src/features/pico/app-shell-utils.ts`
   - request URL builder, fetch helper, image conversion, sync-state helpers
-- `src/features/phi/composer-utils.ts`
+- `src/features/pico/composer-utils.ts`
   - slash-command matching and completion parsing logic
 
 ### Shared types/contracts
 
-- `src/lib/phi/index.ts`
+- `src/lib/pico/index.ts`
   - domain types
   - thin barrel that re-exports shared storage/sync/tree helpers
-- `src/lib/phi/storage.ts`
+- `src/lib/pico/storage.ts`
   - storage keys, prompt draft persistence, and settings storage helpers
-- `src/lib/phi/sync.ts`
+- `src/lib/pico/sync.ts`
   - state-sync item construction and sync/message normalization helpers
-- `src/lib/phi/tree.ts`
+- `src/lib/pico/tree.ts`
   - session/tree flattening and filtering helpers
-- `src/lib/phi/api.ts`
+- `src/lib/pico/api.ts`
   - API response types
   - SSE event types
   - shared client/server payload contracts
@@ -141,20 +141,20 @@ Notes:
 
 ### Server/runtime
 
-- `src/server/phi-runtime/index.ts`
+- `src/server/pico-runtime/index.ts`
   - the core server-side runtime coordinator and bridge to the Pi SDK
   - owns the main state machine while delegating focused logic to runtime helper modules
-- `src/server/phi-runtime/contexts.ts`
+- `src/server/pico-runtime/contexts.ts`
   - SSE payload/client utilities and context/session activation helpers
-- `src/server/phi-runtime/session-list.ts`
+- `src/server/pico-runtime/session-list.ts`
   - session list/index merging, sorting, serialization, and directory revision helpers
-- `src/server/phi-runtime/tree-fork.ts`
+- `src/server/pico-runtime/tree-fork.ts`
   - session tree serialization and fork helper logic
-- `src/server/phi-runtime/ui-requests.ts`
+- `src/server/pico-runtime/ui-requests.ts`
   - pending UI request bridge helpers
-- `src/server/phi-runtime/highlight.ts`
+- `src/server/pico-runtime/highlight.ts`
   - syntax highlight payload helpers
-- `src/server/phi-runtime/conversation-retainer.ts`
+- `src/server/pico-runtime/conversation-retainer.ts`
   - render-optimized conversation item construction plus streaming conversation item helpers
 - `src/server/pi-sdk.ts`
   - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
@@ -189,9 +189,9 @@ The user-facing app is the `/` route. Most interaction happens inside the single
 
 ### 2) Viewer context is required
 
-The app uses a viewer context id stored in local storage (`phi-context-id`).
+The app uses a viewer context id stored in local storage (`pico-context-id`).
 
-Client requests should usually be built with `buildRequestUrl()` from `src/features/phi/app-shell-utils.ts`, which appends:
+Client requests should usually be built with `buildRequestUrl()` from `src/features/pico/app-shell-utils.ts`, which appends:
 
 - `context`
 - optionally `session`
@@ -218,7 +218,7 @@ Important current behavior:
 
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
 - initial session sync sends render-ready conversation items, not the full sanitized message list; do not reintroduce full-history `messages` in live SSE payloads unless there is a deliberate reason
-- follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/phi/app-shell-utils.ts`, `src/lib/phi/index.ts`, and runtime patching together if changing this contract
+- follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/pico/app-shell-utils.ts`, `src/lib/pico/index.ts`, and runtime patching together if changing this contract
 - avoid duplicating large payloads such as base64 images across both `messages` and `items` in `/events`; use `/api/session/history` for paginated raw history needs
 - `/api/session/history` still exists as a paginated history endpoint, but the current conversation UI does not lazy-load older messages on scroll
 - session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
@@ -228,16 +228,16 @@ If you change sync payload semantics, update the shared sync helpers instead of 
 
 ### 4) Runtime singleton owns server-side app behavior
 
-Most server routes are intentionally thin. They delegate to `getPhiRuntime()`.
+Most server routes are intentionally thin. They delegate to `getPicoRuntime()`.
 
-If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/phi-runtime/index.ts` or one of its focused helper modules.
+If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/pico-runtime/index.ts` or one of its focused helper modules.
 
 ### 5) Shared contracts are important
 
 If you change a runtime payload or route response shape:
 
-- update `src/lib/phi/api.ts`
-- update `src/lib/phi/index.ts` if domain/state helpers depend on it
+- update `src/lib/pico/api.ts`
+- update `src/lib/pico/index.ts` if domain/state helpers depend on it
 - update relevant renderers and client handlers
 
 Do not change server payloads silently.
@@ -279,7 +279,7 @@ When adding or editing a route:
 3. parse request JSON with `readRequestJson()` when needed
 4. return results with `jsonResponse()`
 5. handle failures with `routeErrorResponse()`
-6. delegate real logic to `getPhiRuntime()` or another server helper
+6. delegate real logic to `getPicoRuntime()` or another server helper
 
 Existing notable endpoints:
 
@@ -334,7 +334,7 @@ Prefer these existing helpers/patterns:
 - TanStack Query for cached server data
 - local React state for transient UI-only state
 
-Use query keys from `src/features/phi/query-keys.ts` when extending cached data. Git SSE refresh invalidations are batched with TanStack Pacer in `use-app-shell-session-sync.ts`; prefer extending that batching path over adding one invalidation per event.
+Use query keys from `src/features/pico/query-keys.ts` when extending cached data. Git SSE refresh invalidations are batched with TanStack Pacer in `use-app-shell-session-sync.ts`; prefer extending that batching path over adding one invalidation per event.
 
 ### Session selection
 
@@ -343,7 +343,7 @@ The selected session is route-linked via `?session=`.
 If you add a flow that creates/selects a session, make sure it stays compatible with:
 
 - route navigation in `src/routes/index.tsx`
-- `onSelectSession` in `PhiAppShell`
+- `onSelectSession` in `PicoAppShell`
 - runtime request resolution based on `context` + `session`
 
 ### Provider authentication
@@ -353,12 +353,12 @@ Provider auth is exposed through `/login` and `/logout`, command palette actions
 Important behavior:
 
 - Credentials are managed by the Pi SDK `AuthStorage` / `ModelRegistry`; do not add parallel browser credential storage.
-- Auth routes are thin and delegate to `getPhiRuntime()`:
+- Auth routes are thin and delegate to `getPicoRuntime()`:
   - `/api/auth/providers`
   - `/api/auth/api-key`
   - `/api/auth/oauth`
   - `/api/auth/logout`
-- Auth UI lives in `src/features/phi/app-shell-auth-dialog.tsx`; server-driven OAuth/device-code prompts flow through `src/features/phi/app-shell-ui-request-dialog.tsx` and `/api/ui/$id`.
+- Auth UI lives in `src/features/pico/app-shell-auth-dialog.tsx`; server-driven OAuth/device-code prompts flow through `src/features/pico/app-shell-ui-request-dialog.tsx` and `/api/ui/$id`.
 - Desktop auth flows should remain keyboard-first `CommandDialog` surfaces; mobile flows should use `Drawer` with explicit buttons for actions such as cancel/continue/save.
 - OAuth URLs should be opened or copied via command actions, not shown raw in toasts or inline visible text unless there is an explicit UX reason.
 - When auth is opened from Settings, closing the top-level login/logout dialog should return to Settings; substeps such as API-key entry should first go back to their provider list.
@@ -366,11 +366,11 @@ Important behavior:
 
 If you change auth contracts, update:
 
-- `src/lib/phi/api.ts`
-- `src/lib/phi/index.ts` for UI-request shape changes
+- `src/lib/pico/api.ts`
+- `src/lib/pico/index.ts` for UI-request shape changes
 - `src/server/pi-sdk-types.ts` for local SDK adapter type changes
-- `src/features/phi/app-shell-auth-dialog.tsx`
-- `src/features/phi/app-shell-ui-request-dialog.tsx`
+- `src/features/pico/app-shell-auth-dialog.tsx`
+- `src/features/pico/app-shell-ui-request-dialog.tsx`
 - the relevant `src/routes/api.auth.*.ts` route
 
 ### Composer behavior
@@ -389,9 +389,9 @@ Composer data flows through `composerStore` as `AppShellComposerSnapshot`, with 
 
 If you touch composer parsing or submission, inspect both:
 
-- `src/features/phi/composer-panel.tsx`
-- `src/features/phi/composer-utils.ts`
-- `src/features/phi/use-composer-assist.ts`
+- `src/features/pico/composer-panel.tsx`
+- `src/features/pico/composer-utils.ts`
+- `src/features/pico/use-composer-assist.ts`
 
 Path and `@file` completion requests are debounced with TanStack Pacer while preserving request-id stale-result guards.
 
@@ -401,11 +401,11 @@ The main conversation view currently receives full session history through `stat
 
 If you touch conversation/session sync behavior, inspect all of:
 
-- `src/features/phi/app-shell.tsx`
-- `src/features/phi/use-app-shell-session-sync.ts`
-- `src/features/phi/app-shell-utils.ts`
-- `src/lib/phi/sync.ts`
-- `src/server/phi-runtime/index.ts`
+- `src/features/pico/app-shell.tsx`
+- `src/features/pico/use-app-shell-session-sync.ts`
+- `src/features/pico/app-shell-utils.ts`
+- `src/lib/pico/sync.ts`
+- `src/server/pico-runtime/index.ts`
 - `src/routes/api.session.history.ts`
 
 Be careful not to break the distinction between:
@@ -430,16 +430,16 @@ Rendering/performance details:
 
 Prompt drafts are stored in session storage and keyed by session/file/draft target.
 
-If you change draft behavior, update helper logic in `src/lib/phi/storage.ts` (re-exported via `src/lib/phi/index.ts`) instead of adding duplicate storage code.
+If you change draft behavior, update helper logic in `src/lib/pico/storage.ts` (re-exported via `src/lib/pico/index.ts`) instead of adding duplicate storage code.
 
 ### Settings/state persistence
 
-Storage keys live in `src/lib/phi/storage.ts` and are re-exported via `src/lib/phi/index.ts`.
+Storage keys live in `src/lib/pico/storage.ts` and are re-exported via `src/lib/pico/index.ts`.
 
 Preserve existing key names when possible for backward compatibility, especially:
 
-- `phi-hide-tools`
-- other existing `phi-*` keys
+- `pico-hide-tools`
+- other existing `pico-*` keys
 
 Display and notification settings are mirrored through external stores in `app-shell.tsx`; persist changes via the storage helpers and publish to the relevant store instead of adding duplicate local state.
 
@@ -464,8 +464,8 @@ Do not create parallel global state for sessions in routes. The runtime already 
 
 If a route needs the current app context/session or base cwd, use:
 
-- `getPhiRuntime().resolveRequest(request)`
-- `getPhiRuntime().getBaseCwd(activeEntry, context)`
+- `getPicoRuntime().resolveRequest(request)`
+- `getPicoRuntime().getBaseCwd(activeEntry, context)`
 
 Do not manually reconstruct this logic.
 
@@ -479,9 +479,9 @@ If changing tree or fork behavior, review:
 - `navigateSessionTree`
 - `getForkableMessages`
 - `forkSession`
-- helpers in `src/server/phi-runtime/tree-fork.ts`
+- helpers in `src/server/pico-runtime/tree-fork.ts`
 
-with `src/server/phi-runtime/index.ts` remaining the coordinator.
+with `src/server/pico-runtime/index.ts` remaining the coordinator.
 
 ### Slash commands
 
@@ -495,7 +495,7 @@ If you add or change a slash command, update both sides:
 
 ### Generic UI requests
 
-Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/phi-runtime/ui-requests.ts`, and the pending UI request dialog/controller in `src/features/phi/app-shell-ui-request-dialog.tsx`.
+Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/pico-runtime/ui-requests.ts`, and the pending UI request dialog/controller in `src/features/pico/app-shell-ui-request-dialog.tsx`.
 
 If you touch extension/UI request flows, update both runtime and dialog handling.
 
@@ -555,23 +555,23 @@ The git panel renders files, branches, and commits sections together when the Gi
 If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
-- shared response types in `src/lib/phi/api.ts`
-- rendering in `src/features/phi/git-panel.tsx`
+- shared response types in `src/lib/pico/api.ts`
+- rendering in `src/features/pico/git-panel.tsx`
 
 ## Common change recipes
 
 ### Add a new API-backed action
 
-1. add/update runtime logic in `src/server/phi-runtime/index.ts` or a focused server helper
+1. add/update runtime logic in `src/server/pico-runtime/index.ts` or a focused server helper
 2. expose it through a route in `src/routes/api.*.ts`
-3. add/update response types in `src/lib/phi/api.ts`
+3. add/update response types in `src/lib/pico/api.ts`
 4. call it from the client with `buildRequestUrl()` + `fetchJson()`
 5. invalidate/query-refresh as needed
 6. run `pnpm check:fix`
 
 ### Add a new cached query
 
-1. add a key in `src/features/phi/query-keys.ts`
+1. add a key in `src/features/pico/query-keys.ts`
 2. fetch through `fetchJson()`
 3. include `viewerContextId` and relevant scope keys in the query key
 4. invalidate the query when mutations change underlying data
@@ -579,13 +579,13 @@ If you extend git UI, update:
 ### Add a new command palette action or shortcut
 
 1. update the command list in `app-shell.tsx`
-2. update keyboard handling in `src/features/phi/use-app-shell-shortcuts.ts` if a shortcut is needed
+2. update keyboard handling in `src/features/pico/use-app-shell-shortcuts.ts` if a shortcut is needed
 3. wire to existing mutations/actions or add the necessary behavior
 4. keep naming/description consistent with the rest of the app
 
 ### Add a new persistent setting
 
-1. define storage key + read helper in `src/lib/phi/storage.ts`
+1. define storage key + read helper in `src/lib/pico/storage.ts`
 2. wire state in `app-shell.tsx`
 3. expose controls in `app-shell-settings-dialog.tsx` if user-facing
 4. preserve existing keys when changing behavior rather than renaming casually
@@ -642,7 +642,7 @@ Be especially careful around these:
 Keep repo docs aligned with reality:
 
 - legacy app path is `~/code/pi-web-legacy`
-- dev port is `1618`
+- dev port is `3141`
 - there is currently no separate `parity-checklist.md` in this repo
 
 If README or future docs drift from the code, update them as part of the same change.
