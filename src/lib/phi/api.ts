@@ -239,6 +239,8 @@ export type SessionListEntry = {
   title: string
   modified?: string
   lastUserMessageAt?: string
+  lastMessageAt?: string
+  lastMessagePreview?: string
   messageCount?: number
   contextUsage?: SessionState["contextUsage"]
   streaming?: boolean

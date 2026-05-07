@@ -231,6 +231,12 @@ function sameSessionListEntries(
     if (leftEntry.lastUserMessageAt !== rightEntry.lastUserMessageAt) {
       return false
     }
+    if (leftEntry.lastMessageAt !== rightEntry.lastMessageAt) {
+      return false
+    }
+    if (leftEntry.lastMessagePreview !== rightEntry.lastMessagePreview) {
+      return false
+    }
     if (leftEntry.messageCount !== rightEntry.messageCount) return false
     if (!sameContextUsage(leftEntry.contextUsage, rightEntry.contextUsage)) {
       return false

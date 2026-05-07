@@ -35,6 +35,8 @@ export type SessionListInfoLike = {
   name?: string
   modified?: string | Date
   lastUserMessageAt?: string | Date
+  lastMessageAt?: string | Date
+  lastMessagePreview?: string
   messageCount?: number
   contextUsage?: {
     tokens?: number | null

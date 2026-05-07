@@ -178,36 +178,27 @@ function formatSidebarSessionTime(value?: string, now = Date.now()) {
   const diffMs = now - timestamp
   const past = diffMs >= 0
   const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
-  const suffix = past ? "ago" : "from now"
+  const prefix = past ? "" : "in "
 
-  if (seconds < 60) return `${seconds}s ${suffix}`
+  if (seconds < 60) return `${prefix}${seconds}s`
 
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ${suffix}`
+  if (minutes < 60) return `${prefix}${minutes}m`
 
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ${suffix}`
+  if (hours < 24) return `${prefix}${hours}h`
 
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ${suffix}`
+  if (days < 7) return `${prefix}${days}d`
 
   const weeks = Math.floor(days / 7)
-  if (weeks < 5) return `${weeks}w ${suffix}`
+  if (weeks < 5) return `${prefix}${weeks}w`
 
   const months = Math.floor(days / 30)
-  if (months < 12) return `${Math.max(1, months)}mo ${suffix}`
+  if (months < 12) return `${prefix}${Math.max(1, months)}mo`
 
   const years = Math.floor(days / 365)
-  return `${Math.max(1, years)}y ${suffix}`
-}
-
-function formatSessionMessageCount(value?: number) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return ""
-  }
-
-  const count = Math.floor(value)
-  return `${count.toLocaleString()} msg${count === 1 ? "" : "s"}`
+  return `${prefix}${Math.max(1, years)}y`
 }
 
 function isValidSidebarTimestamp(value?: string) {
@@ -624,10 +615,10 @@ function SidebarSessionItem({
   )
 
   if (!entry) return null
-  const timestamp = entry.lastUserMessageAt || entry.modified
+  const timestamp =
+    entry.lastMessageAt || entry.modified || entry.lastUserMessageAt
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
-  const messageCount = formatSessionMessageCount(entry.messageCount)
-  const hasMetaLine = hasTimestamp || Boolean(messageCount)
+  const lastMessagePreview = entry.lastMessagePreview?.trim() || ""
   const exactTimestamp =
     hasTimestamp && timestamp ? new Date(timestamp).toLocaleString() : undefined
   const showUnread = Boolean(entry.unread) && !entry.streaming
@@ -672,25 +663,26 @@ function SidebarSessionItem({
       ) : null}
       <span className="flex min-w-0 flex-1 items-start gap-2">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 truncate font-medium">{entry.title}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {entry.title}
+            </span>
+            {hasTimestamp ? (
+              <TitleTooltip
+                title={isMobile ? undefined : exactTimestamp}
+                side="right"
+                align="center"
+              >
+                <SidebarSessionTime
+                  value={timestamp}
+                  className="ml-auto shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
+                />
+              </TitleTooltip>
+            ) : null}
           </span>
-          {hasMetaLine ? (
+          {lastMessagePreview ? (
             <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
-              {hasTimestamp ? (
-                <TitleTooltip
-                  title={isMobile ? undefined : exactTimestamp}
-                  side="right"
-                  align="center"
-                >
-                  <SidebarSessionTime
-                    value={timestamp}
-                    className="inline-flex"
-                  />
-                </TitleTooltip>
-              ) : null}
-              {hasTimestamp && messageCount ? " · " : null}
-              {messageCount}
+              {lastMessagePreview}
             </span>
           ) : null}
         </span>
@@ -759,6 +751,8 @@ function sameDirectorySessionEntry(
     left.title === right.title &&
     left.modified === right.modified &&
     left.lastUserMessageAt === right.lastUserMessageAt &&
+    left.lastMessageAt === right.lastMessageAt &&
+    left.lastMessagePreview === right.lastMessagePreview &&
     left.messageCount === right.messageCount &&
     JSON.stringify(left.contextUsage ?? null) ===
       JSON.stringify(right.contextUsage ?? null) &&

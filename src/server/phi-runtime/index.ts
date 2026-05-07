@@ -42,6 +42,7 @@ import {
   compareSessionListEntriesByLastUserMessage,
   countFullTurnUserAndAssistantMessages,
   createDirectorySessionRevision,
+  getSessionLastCompleteMessageInfo,
   getSessionListTitle,
   laterModifiedTimestamp,
   listKnownDirectories,
@@ -1173,6 +1174,9 @@ export class PhiRuntime {
 
   private async sessionFallbackInfo(entry: SessionEntry) {
     const firstMessage = this.getSessionFirstMessage(entry)
+    const lastMessage = getSessionLastCompleteMessageInfo(
+      entry.session.messages
+    )
     return {
       path: entry.session.sessionFile,
       id: entry.session.sessionId,
@@ -1185,6 +1189,8 @@ export class PhiRuntime {
       }),
       modified: await this.sessionEntryModified(entry),
       lastUserMessageAt: this.getSessionLastUserMessageTimestamp(entry),
+      lastMessageAt: lastMessage.timestamp,
+      lastMessagePreview: lastMessage.preview,
       messageCount: countFullTurnUserAndAssistantMessages(
         entry.session.messages
       ),
@@ -1221,6 +1227,9 @@ export class PhiRuntime {
             ...entry,
             lastUserMessageAt:
               metrics?.lastUserMessageAt ?? entry.lastUserMessageAt,
+            lastMessageAt: metrics?.lastMessageAt ?? entry.lastMessageAt,
+            lastMessagePreview:
+              metrics?.lastMessagePreview ?? entry.lastMessagePreview,
             messageCount: metrics?.messageCount ?? entry.messageCount,
           }
         })
@@ -1387,6 +1396,8 @@ export class PhiRuntime {
       }),
       modified: normalizeModifiedTimestamp(entry.modified),
       lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
+      lastMessageAt: normalizeModifiedTimestamp(entry.lastMessageAt),
+      lastMessagePreview: normalizeSessionListTitle(entry.lastMessagePreview),
       messageCount: entry.messageCount,
       contextUsage: normalizeSessionListContextUsage(entry.contextUsage),
     }))

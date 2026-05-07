@@ -21,6 +21,71 @@ function completeTurnStopReason(value: unknown) {
   return typeof value === "string" && value !== "toolUse"
 }
 
+function extractSessionListMessageText(message: UnknownRecord) {
+  const content = message.content
+
+  if (typeof content === "string") return content
+  if (!Array.isArray(content)) return ""
+
+  return content
+    .filter((part) => isRecord(part) && part.type === "text")
+    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .join("\n")
+}
+
+function extractSessionListImagePreview(message: UnknownRecord) {
+  const content = message.content
+  if (!Array.isArray(content)) return ""
+
+  const imageCount = content.filter(
+    (part) => isRecord(part) && part.type === "image"
+  ).length
+  if (imageCount <= 0) return ""
+
+  return `${imageCount.toLocaleString()} image${imageCount === 1 ? "" : "s"}`
+}
+
+export function getSessionLastCompleteMessageInfo(messages: Array<unknown>) {
+  let preview = ""
+  let timestamp: string | undefined
+
+  const applyPreview = (message: UnknownRecord, nextPreview: string) => {
+    if (!nextPreview) return
+    preview = nextPreview
+    timestamp = normalizeModifiedTimestamp(message.timestamp) || timestamp
+  }
+
+  for (const message of messages) {
+    if (!isRecord(message)) continue
+
+    if (message.role === "user") {
+      applyPreview(
+        message,
+        normalizeSessionListTitle(extractSessionListMessageText(message)) ||
+          extractSessionListImagePreview(message)
+      )
+      continue
+    }
+
+    if (message.role !== "assistant") continue
+    if (!completeTurnStopReason(message.stopReason)) continue
+
+    applyPreview(
+      message,
+      normalizeSessionListTitle(extractSessionListMessageText(message))
+    )
+  }
+
+  return {
+    preview: preview || undefined,
+    timestamp,
+  }
+}
+
+export function getSessionLastCompleteMessagePreview(messages: Array<unknown>) {
+  return getSessionLastCompleteMessageInfo(messages).preview
+}
+
 function normalizeNonNegativeInteger(value: unknown) {
   const number = normalizeFiniteNumber(value)
   if (number == null || number < 0) return undefined
@@ -114,6 +179,10 @@ export function mergeSessionListEntry(
     target.lastUserMessageAt,
     fallback.lastUserMessageAt
   )
+  target.lastMessageAt = laterModifiedTimestamp(
+    target.lastMessageAt,
+    fallback.lastMessageAt
+  )
   const fallbackMessageCount = normalizeNonNegativeInteger(
     fallback.messageCount
   )
@@ -125,6 +194,11 @@ export function mergeSessionListEntry(
   target.contextUsage =
     normalizeSessionListContextUsage(fallback.contextUsage) ??
     normalizeSessionListContextUsage(target.contextUsage)
+  if (fallback.lastMessagePreview) {
+    target.lastMessagePreview = normalizeSessionListTitle(
+      fallback.lastMessagePreview
+    )
+  }
   if (fallback.firstMessage) {
     target.firstMessage = fallback.firstMessage
   }
@@ -214,10 +288,15 @@ export async function readSessionListMetrics(sessionPath: string) {
       const message = isRecord(entry.message) ? entry.message : undefined
       if (!message) continue
 
-      if (message.role === "user") {
-        const normalized =
-          normalizeModifiedTimestamp(message.timestamp) ||
-          normalizeModifiedTimestamp(entry.timestamp)
+      const messageWithTimestamp: UnknownRecord = {
+        ...message,
+        timestamp: message.timestamp ?? entry.timestamp,
+      }
+
+      if (messageWithTimestamp.role === "user") {
+        const normalized = normalizeModifiedTimestamp(
+          messageWithTimestamp.timestamp
+        )
         const timestamp = modifiedTimestampValue(normalized)
         if (timestamp && timestamp >= lastTimestamp) {
           lastTimestamp = timestamp
@@ -225,13 +304,20 @@ export async function readSessionListMetrics(sessionPath: string) {
         }
       }
 
-      if (message.role === "user" || message.role === "assistant") {
-        messages.push(message)
+      if (
+        messageWithTimestamp.role === "user" ||
+        messageWithTimestamp.role === "assistant"
+      ) {
+        messages.push(messageWithTimestamp)
       }
     }
 
+    const lastMessage = getSessionLastCompleteMessageInfo(messages)
+
     return {
       lastUserMessageAt: lastValue,
+      lastMessageAt: lastMessage.timestamp,
+      lastMessagePreview: lastMessage.preview,
       messageCount: countFullTurnUserAndAssistantMessages(messages),
     }
   } catch {
@@ -276,6 +362,8 @@ export function serializeSessionListEntry(options: {
     title: getSessionListTitle({ name, firstMessage: entry.firstMessage }),
     modified: normalizeModifiedTimestamp(entry.modified),
     lastUserMessageAt: normalizeModifiedTimestamp(entry.lastUserMessageAt),
+    lastMessageAt: normalizeModifiedTimestamp(entry.lastMessageAt),
+    lastMessagePreview: normalizeSessionListTitle(entry.lastMessagePreview),
     messageCount: normalizeNonNegativeInteger(entry.messageCount),
     contextUsage: normalizeSessionListContextUsage(entry.contextUsage),
     streaming: path ? streamingPaths.has(path) : false,
@@ -292,6 +380,8 @@ export function createDirectorySessionRevision(
     title?: string
     modified?: string
     lastUserMessageAt?: string
+    lastMessageAt?: string
+    lastMessagePreview?: string
     messageCount?: number
     contextUsage?: {
       tokens?: number
@@ -316,6 +406,10 @@ export function createDirectorySessionRevision(
     hash.update(String(entry.modified || ""))
     hash.update("\0")
     hash.update(String(entry.lastUserMessageAt || ""))
+    hash.update("\0")
+    hash.update(String(entry.lastMessageAt || ""))
+    hash.update("\0")
+    hash.update(String(entry.lastMessagePreview || ""))
     hash.update("\0")
     hash.update(String(entry.messageCount ?? ""))
     hash.update("\0")
