@@ -4000,7 +4000,7 @@ const GIT_GRAPH_NULL_VERTEX_ID = -1
 const GIT_GRAPH_ROW_HEIGHT = 20
 const GIT_GRAPH_COMMIT_DETAILS_HEIGHT = 150
 const GIT_GRAPH_LANE_WIDTH = 14
-const GIT_GRAPH_OFFSET_X = 7
+const GIT_GRAPH_OFFSET_X = 12
 
 function gitGraphLaneColor(index: number, active = false) {
   if (active) return "#f87171"
