@@ -1867,7 +1867,12 @@ export class PhiRuntime {
 
   private async handleGitWatchChange(change: GitWatchChange) {
     const previous = this.gitFingerprints.get(change.cwd)
-    const next = await readDirectoryGitFingerprint(change.cwd).catch(() => null)
+    let next: Awaited<ReturnType<typeof readDirectoryGitFingerprint>>
+    try {
+      next = await readDirectoryGitFingerprint(change.cwd)
+    } catch {
+      return
+    }
     this.gitFingerprints.set(change.cwd, next)
 
     if (previous !== undefined && this.sameGitFingerprint(previous, next)) {

@@ -3155,7 +3155,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
     return () => {
       window.removeEventListener("resize", updateDefaultHistoryPanelHeight)
     }
-  }, [historyOpen, isMobile])
+  }, [historyOpen, isMobile, normalizedCwd])
 
   const hasOpenFile = openFiles.length > 0
   const toggleAll = () => {

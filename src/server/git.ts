@@ -115,6 +115,7 @@ const GIT_CHANGES_CACHE_TTL_MS = 5_000
 const GIT_COMMITS_DEFAULT_LIMIT = 50
 const GIT_COMMITS_MAX_LIMIT = 500
 const GIT_ACTION_TIMEOUT_MS = 120_000
+const GIT_REPOSITORY_CHECK_TIMEOUT_MS = 5_000
 const GIT_PUSH_COMMIT_MESSAGE_LIMIT = 20
 const GIT_COMMIT_FIELD_SEPARATOR = "\u001f"
 const GIT_COMMIT_MESSAGE_DIFF_MAX_CHARS = 18_000
@@ -149,6 +150,11 @@ const gitCommitsCache = new Map<
   string,
   { value: GitCommitSummary | null; expiresAt: number }
 >()
+
+type GitWorkTreeCheck = {
+  inside: boolean
+  uncertain: boolean
+}
 
 function normalizeGitCwd(cwd: string) {
   return typeof cwd === "string" ? cwd.trim() : ""
@@ -758,17 +764,37 @@ function parseGitRemoteBranches(output: string) {
   return branches
 }
 
-async function isInsideWorkTree(cwd: string) {
+async function checkInsideWorkTree(cwd: string): Promise<GitWorkTreeCheck> {
   const insideWorkTree = await runCommand(
     "git",
     ["rev-parse", "--is-inside-work-tree"],
     {
       cwd,
-      timeoutMs: 1_500,
+      timeoutMs: GIT_REPOSITORY_CHECK_TIMEOUT_MS,
     }
   )
 
-  return insideWorkTree.code === 0 && insideWorkTree.stdout.trim() === "true"
+  if (insideWorkTree.code === 0) {
+    return {
+      inside: insideWorkTree.stdout.trim() === "true",
+      uncertain: false,
+    }
+  }
+
+  return {
+    inside: false,
+    uncertain: Boolean(insideWorkTree.timedOut || insideWorkTree.error),
+  }
+}
+
+async function isInsideWorkTree(cwd: string) {
+  return (await checkInsideWorkTree(cwd)).inside
+}
+
+function throwUncertainGitRepositoryCheck() {
+  throw new Error(
+    "Timed out checking whether the directory is a git repository"
+  )
 }
 
 export async function resolveDirectoryGitRepository(
@@ -835,7 +861,13 @@ export async function readDirectoryGitStatus(
     return cached.value
   }
 
-  if (!(await isInsideWorkTree(normalizedCwd))) {
+  const workTreeCheck = await checkInsideWorkTree(normalizedCwd)
+  if (!workTreeCheck.inside) {
+    if (workTreeCheck.uncertain) {
+      if (cached) return cached.value
+      throwUncertainGitRepositoryCheck()
+    }
+
     gitStatusCache.set(normalizedCwd, {
       value: null,
       expiresAt: Date.now() + GIT_STATUS_CACHE_TTL_MS,
@@ -912,7 +944,13 @@ export async function readDirectoryGitFiles(
     return cached.value
   }
 
-  if (!(await isInsideWorkTree(normalizedCwd))) {
+  const workTreeCheck = await checkInsideWorkTree(normalizedCwd)
+  if (!workTreeCheck.inside) {
+    if (workTreeCheck.uncertain) {
+      if (cached) return cached.value
+      throwUncertainGitRepositoryCheck()
+    }
+
     gitFilesCache.set(normalizedCwd, {
       value: null,
       expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
@@ -1154,7 +1192,13 @@ export async function readDirectoryGitBranches(
     return cached.value
   }
 
-  if (!(await isInsideWorkTree(normalizedCwd))) {
+  const workTreeCheck = await checkInsideWorkTree(normalizedCwd)
+  if (!workTreeCheck.inside) {
+    if (workTreeCheck.uncertain) {
+      if (cached) return cached.value
+      throwUncertainGitRepositoryCheck()
+    }
+
     gitBranchesCache.set(normalizedCwd, {
       value: null,
       expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
@@ -1229,7 +1273,13 @@ export async function readDirectoryGitCommits(
     return cached.value
   }
 
-  if (!(await isInsideWorkTree(normalizedCwd))) {
+  const workTreeCheck = await checkInsideWorkTree(normalizedCwd)
+  if (!workTreeCheck.inside) {
+    if (workTreeCheck.uncertain) {
+      if (cached) return cached.value
+      throwUncertainGitRepositoryCheck()
+    }
+
     gitCommitsCache.set(cacheKey, {
       value: null,
       expiresAt: Date.now() + GIT_CHANGES_CACHE_TTL_MS,
@@ -1692,7 +1742,9 @@ export async function readDirectoryGitFingerprint(cwd: string) {
   const normalizedCwd = typeof cwd === "string" ? cwd.trim() : ""
   if (!normalizedCwd) return null
 
-  if (!(await isInsideWorkTree(normalizedCwd))) {
+  const workTreeCheck = await checkInsideWorkTree(normalizedCwd)
+  if (!workTreeCheck.inside) {
+    if (workTreeCheck.uncertain) throwUncertainGitRepositoryCheck()
     return null
   }
 
