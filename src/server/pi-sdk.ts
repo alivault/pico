@@ -111,37 +111,41 @@ export async function loadPiSdk(): Promise<PiSdkLike> {
   return patchSdkForWorkerThreads(sdk)
 }
 
-function resolvePiAiEntry(sdkDir: string) {
-  const candidates = [
-    path.join(
-      sdkDir,
-      "node_modules",
-      "@mariozechner",
-      "pi-ai",
-      "dist",
-      "index.js"
-    ),
-  ]
+function getPiAiCandidates(sdkDir: string) {
+  const candidates: string[] = []
+  for (const scope of ["@earendil-works", "@mariozechner"]) {
+    candidates.push(
+      path.join(sdkDir, "node_modules", scope, "pi-ai", "dist", "index.js")
+    )
+  }
 
   try {
     const realSdkDir = fs.realpathSync(sdkDir)
+    for (const scope of ["@earendil-works", "@mariozechner"]) {
+      candidates.push(
+        path.join(
+          realSdkDir,
+          "node_modules",
+          scope,
+          "pi-ai",
+          "dist",
+          "index.js"
+        )
+      )
+    }
     candidates.push(
-      path.join(
-        realSdkDir,
-        "node_modules",
-        "@mariozechner",
-        "pi-ai",
-        "dist",
-        "index.js"
-      ),
       path.join(path.dirname(realSdkDir), "pi-ai", "dist", "index.js")
     )
   } catch {
-    // Fall back to the direct nested dependency path above.
+    // Fall back to the direct nested dependency paths above.
   }
 
   candidates.push(path.join(path.dirname(sdkDir), "pi-ai", "dist", "index.js"))
+  return candidates
+}
 
+function resolvePiAiEntry(sdkDir: string) {
+  const candidates = getPiAiCandidates(sdkDir)
   return (
     candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
   )

@@ -5,6 +5,8 @@ catalog:
 overrides:
   vite: "catalog:"
   vitest: "catalog:"
+  encoding-sniffer: 1.0.2
+  node-domexception: link:./vendor/node-domexception
 peerDependencyRules:
   allowAny:
     - vite

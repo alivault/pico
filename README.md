@@ -23,7 +23,7 @@ It gives you a persistent session browser, a live conversation shell, git tools,
 
 ## Built on Pi
 
-Pico runs Pi locally through the bundled `@mariozechner/pi-coding-agent` SDK dependency, pinned to `0.73.1` for reproducible installs. You do not need a separate global Pi install for normal use.
+Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.74.0` for reproducible installs. You do not need a separate global Pi install for normal use.
 
 If you intentionally want to test Pico against a different Pi SDK checkout or install, set:
 

@@ -24,16 +24,16 @@ When behavior is ambiguous, prefer the behavior currently documented in `README.
 - Vite+ + Nitro
 - Tailwind CSS v4
 - Base UI / shadcn-style component patterns
-- Pi SDK loaded from the repo-local `@mariozechner/pi-coding-agent` dependency by default
+- Pi SDK loaded from the repo-local `@earendil-works/pi-coding-agent` dependency by default
 
 ## Pi SDK dependency
 
-This app is intended to be self-contained and uses the repo-local `@mariozechner/pi-coding-agent` dependency by default.
+This app is intended to be self-contained and uses the repo-local `@earendil-works/pi-coding-agent` dependency by default.
 
 Resolution happens in `src/server/pi-sdk-path.ts` and tries, in order:
 
 1. `PI_REMOTE_PI_SDK_DIR` for explicit SDK override/testing
-2. the bundled `@mariozechner/pi-coding-agent` dependency from `node_modules`
+2. the bundled `@earendil-works/pi-coding-agent` dependency from `node_modules`
 
 Use `pnpm update:pi` to refresh the bundled SDK to the current npm `latest` release.
 

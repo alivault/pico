@@ -2,7 +2,10 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const PI_CODING_AGENT_PACKAGE = "@mariozechner/pi-coding-agent"
+const PI_CODING_AGENT_PACKAGES = [
+  "@earendil-works/pi-coding-agent",
+  "@mariozechner/pi-coding-agent",
+] as const
 
 function normalizeSdkDir(candidate: string | undefined) {
   if (!candidate) return undefined
@@ -24,10 +27,13 @@ function findNodeModulePackageDir(startDir: string | undefined) {
 
   let current = path.resolve(startDir)
   while (true) {
-    const candidate = normalizeSdkDir(
-      path.join(current, "node_modules", "@mariozechner", "pi-coding-agent")
-    )
-    if (candidate) return candidate
+    for (const packageName of PI_CODING_AGENT_PACKAGES) {
+      const [scope, name] = packageName.split("/") as [string, string]
+      const candidate = normalizeSdkDir(
+        path.join(current, "node_modules", scope, name)
+      )
+      if (candidate) return candidate
+    }
 
     const parent = path.dirname(current)
     if (parent === current) return undefined
@@ -37,17 +43,19 @@ function findNodeModulePackageDir(startDir: string | undefined) {
 
 function resolveFromBundledDependency() {
   try {
-    const entryUrl = (
-      import.meta as ImportMeta & {
-        resolve?: (specifier: string) => string
+    for (const packageName of PI_CODING_AGENT_PACKAGES) {
+      const entryUrl = (
+        import.meta as ImportMeta & {
+          resolve?: (specifier: string) => string
+        }
+      ).resolve?.(packageName)
+      if (entryUrl) {
+        const entry = entryUrl.startsWith("file:")
+          ? fileURLToPath(entryUrl)
+          : entryUrl
+        const sdkDir = normalizeSdkDir(path.dirname(path.dirname(entry)))
+        if (sdkDir) return sdkDir
       }
-    ).resolve?.(PI_CODING_AGENT_PACKAGE)
-    if (entryUrl) {
-      const entry = entryUrl.startsWith("file:")
-        ? fileURLToPath(entryUrl)
-        : entryUrl
-      const sdkDir = normalizeSdkDir(path.dirname(path.dirname(entry)))
-      if (sdkDir) return sdkDir
     }
   } catch {
     // Fall back to walking node_modules below. Some runners do not expose

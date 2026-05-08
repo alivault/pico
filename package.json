@@ -12,6 +12,7 @@
     "bin",
     "scripts/patch-react-jsx-dev-runtime.mjs",
     "public/screenshots",
+    "vendor/node-domexception",
     "README.md",
     "LICENSE"
   ],
@@ -39,11 +40,15 @@
     "format": "vp fmt",
     "check": "vp check",
     "check:fix": "vp check --fix",
-    "update:pi": "pnpm update @mariozechner/pi-coding-agent --latest"
+    "update:pi": "pnpm update @earendil-works/pi-coding-agent --latest"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.73.1",
+    "@earendil-works/pi-coding-agent": "0.74.0",
     "tslib": "^2.8.1"
+  },
+  "overrides": {
+    "encoding-sniffer": "1.0.2",
+    "node-domexception": "file:./vendor/node-domexception"
   },
   "devDependencies": {
     "@base-ui/react": "^1.4.0",
