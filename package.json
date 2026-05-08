@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
-    "pico-app": "./bin/pico.mjs"
+    "pico-app": "bin/pico.mjs"
   },
   "files": [
     ".output",
