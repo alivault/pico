@@ -163,11 +163,25 @@ function DirectoryPathLabel({ path }: { path: string }) {
 }
 
 type SessionClickModifiers = {
-  ctrlKey: boolean
+  multiSelectKey: boolean
   shiftKey: boolean
 }
 
 const EMPTY_DIRECTORY_SESSION_KEYS: Array<string> = []
+
+function isMacPlatform() {
+  if (typeof window === "undefined") return false
+
+  const platform = window.navigator.platform || window.navigator.userAgent
+  return /mac|iphone|ipad|ipod/i.test(platform)
+}
+
+function isSidebarMultiSelectModifier(event: {
+  ctrlKey: boolean
+  metaKey: boolean
+}) {
+  return isMacPlatform() ? event.metaKey : event.ctrlKey
+}
 
 function formatSidebarSessionTime(value?: string, now = Date.now()) {
   if (!value) return ""
@@ -638,7 +652,7 @@ function SidebarSessionItem({
       )}
       onClick={(event) => {
         onSessionClick?.(entry, {
-          ctrlKey: event.ctrlKey,
+          multiSelectKey: isSidebarMultiSelectModifier(event),
           shiftKey: event.shiftKey,
         })
         if (isMobile) {

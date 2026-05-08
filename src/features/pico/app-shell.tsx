@@ -8915,7 +8915,7 @@ function AppShellSidebarController({
 
   const handleSidebarSessionClick = (
     entry: SessionListEntry,
-    modifiers: { ctrlKey: boolean; shiftKey: boolean }
+    modifiers: { multiSelectKey: boolean; shiftKey: boolean }
   ) => {
     const key = sessionListEntryKey(entry)
 
@@ -8933,7 +8933,7 @@ function AppShellSidebarController({
       return
     }
 
-    if (modifiers.ctrlKey) {
+    if (modifiers.multiSelectKey) {
       setSidebarSelection(
         selectedSidebarSessionKeys.includes(key)
           ? selectedSidebarSessionKeys.filter(
