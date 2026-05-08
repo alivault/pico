@@ -2884,6 +2884,12 @@ export class PicoRuntime {
     return entry.pendingUserMessages
   }
 
+  private refreshRetainedConversationItems(entry: SessionEntry) {
+    entry.retainedConversationItems = createRetainedConversationState(
+      entry.session.messages.map((message) => sanitizeSessionMessage(message))
+    ).items
+  }
+
   private async bindSessionEntry(entry: SessionEntry) {
     const startedAt = performance.now()
     const unsubscribeStartedAt = performance.now()
@@ -2893,9 +2899,7 @@ export class PicoRuntime {
       ...this.sessionDebugDetails(entry),
     })
     const session = entry.session
-    entry.retainedConversationItems = createRetainedConversationState(
-      session.messages.map((message) => sanitizeSessionMessage(message))
-    ).items
+    this.refreshRetainedConversationItems(entry)
 
     const viewers = () =>
       [...this.contexts.values()].filter(
@@ -3090,6 +3094,7 @@ export class PicoRuntime {
           }
         ) => {
           const result = await session.navigateTree(targetId, navigateOptions)
+          this.refreshRetainedConversationItems(entry)
           if (result.editorText != null) {
             entry.uiState.editorText = result.editorText
           }
@@ -4006,6 +4011,7 @@ export class PicoRuntime {
       replaceInstructions: Boolean(body.replaceInstructions),
       label: typeof body.label === "string" ? body.label : undefined,
     })
+    this.refreshRetainedConversationItems(activeEntry)
 
     if (result.editorText != null) {
       activeEntry.uiState.editorText = result.editorText
