@@ -96,17 +96,21 @@ function ensureOnReleaseBranch() {
   return branch
 }
 
-function ensureUpToDate(branch) {
+function ensureBasedOnRemote(branch) {
   run("git", ["fetch", "origin", branch, "--tags"])
 
-  const localHead = run("git", ["rev-parse", "HEAD"], { capture: true }).stdout
-  const remoteHead = run("git", ["rev-parse", `origin/${branch}`], {
-    capture: true,
-  }).stdout
+  const result = run(
+    "git",
+    ["merge-base", "--is-ancestor", `origin/${branch}`, "HEAD"],
+    {
+      allowFailure: true,
+      capture: true,
+    }
+  )
 
-  if (localHead !== remoteHead) {
+  if (result.status !== 0) {
     throw new Error(
-      `Local ${branch} is not at origin/${branch}. Pull/rebase before releasing.`
+      `Local ${branch} is not based on origin/${branch}. Pull/rebase before releasing.`
     )
   }
 }
@@ -140,7 +144,7 @@ function ensureNpmVersionAvailable(name, version) {
 try {
   const branch = ensureOnReleaseBranch()
   ensureCleanWorkingTree()
-  ensureUpToDate(branch)
+  ensureBasedOnRemote(branch)
   ensureCleanWorkingTree()
 
   const packageJson = readPackageJson()
