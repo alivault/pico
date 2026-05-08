@@ -3,6 +3,8 @@ import {
   createFileTreeIconResolver,
   getBuiltInFileIconColor,
   getBuiltInSpriteSheet,
+  type FileTreeDirectoryHandle,
+  type FileTreeItemHandle,
 } from "@pierre/trees"
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
@@ -2121,17 +2123,44 @@ function ProjectFileTypeIcon({ path }: { path: string }) {
   )
 }
 
+function isFileTreeDirectoryHandle(
+  item: FileTreeItemHandle | null
+): item is FileTreeDirectoryHandle {
+  return item?.isDirectory() === true
+}
+
+function getProjectFileDirectoryPaths(paths: Array<string>) {
+  const directoryPaths = new Set<string>()
+
+  for (const path of paths) {
+    const parts = path.split("/").filter(Boolean)
+    for (let index = 1; index < parts.length; index += 1) {
+      directoryPaths.add(`${parts.slice(0, index).join("/")}/`)
+    }
+  }
+
+  return [...directoryPaths].sort(
+    (left, right) =>
+      right.split("/").length - left.split("/").length ||
+      right.length - left.length ||
+      right.localeCompare(left)
+  )
+}
+
 function ProjectFileTree({
+  collapseAllRevision,
   paths,
   selectedPath,
   onSelectFile,
 }: {
+  collapseAllRevision: number
   paths: Array<string>
   selectedPath: string
   onSelectFile: (path: string) => void
 }) {
   const validPathsRef = React.useRef(new Set(paths))
   const onSelectFileRef = React.useRef(onSelectFile)
+  const lastCollapseAllRevisionRef = React.useRef(0)
   validPathsRef.current = new Set(paths)
   onSelectFileRef.current = onSelectFile
 
@@ -2164,6 +2193,26 @@ function ProjectFileTree({
     item.select()
     item.focus()
   }, [model, selectedPath])
+
+  React.useEffect(() => {
+    if (
+      collapseAllRevision <= 0 ||
+      collapseAllRevision === lastCollapseAllRevisionRef.current ||
+      paths.length === 0
+    ) {
+      return
+    }
+
+    lastCollapseAllRevisionRef.current = collapseAllRevision
+
+    for (const directoryPath of getProjectFileDirectoryPaths(paths)) {
+      const item = model.getItem(directoryPath)
+      if (!isFileTreeDirectoryHandle(item) || !item.isExpanded()) continue
+      item.collapse()
+    }
+
+    model.focusNearestPath(selectedPath || model.getFocusedPath())
+  }, [collapseAllRevision, model, paths, selectedPath])
 
   const openFocusedFile = () => {
     window.requestAnimationFrame(() => {
@@ -2204,6 +2253,7 @@ function ProjectFilesWorkspace({
 }) {
   const normalizedCwd = normalizeCwd(cwd)
   const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
+  const [collapseAllRevision, setCollapseAllRevision] = React.useState(0)
   const showInlinePreview = previewMode === "inline" && Boolean(activeFilePath)
   const fileTreeQuery = useQuery({
     ...projectFileTreeQueryOptions({
@@ -2237,17 +2287,33 @@ function ProjectFilesWorkspace({
           <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
             {paths.length.toLocaleString()} files
           </div>
-          <TitleTooltip title="Open file">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setOpenFileDialogOpen(true)
-              }}
-            >
-              Open File
-            </Button>
-          </TitleTooltip>
+          <div className="flex shrink-0 items-center gap-2">
+            <TitleTooltip title="Collapse all folders">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Collapse all folders"
+                disabled={paths.length === 0}
+                onClick={() => {
+                  setCollapseAllRevision((revision) => revision + 1)
+                }}
+              >
+                <ChevronsDownUpIcon className="size-4" />
+              </Button>
+            </TitleTooltip>
+            <TitleTooltip title="Open file">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpenFileDialogOpen(true)
+                }}
+              >
+                Open File
+              </Button>
+            </TitleTooltip>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           {!normalizedCwd ? (
@@ -2265,6 +2331,7 @@ function ProjectFilesWorkspace({
             </GitSectionNote>
           ) : paths.length > 0 ? (
             <ProjectFileTree
+              collapseAllRevision={collapseAllRevision}
               paths={paths}
               selectedPath={activeFilePath}
               onSelectFile={onOpenFile}
