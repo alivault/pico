@@ -2304,17 +2304,15 @@ function ProjectFilesWorkspace({
                 <ChevronsDownUpIcon className="size-4" />
               </Button>
             </TitleTooltip>
-            <TitleTooltip title="Open file">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setOpenFileDialogOpen(true)
-                }}
-              >
-                Open File
-              </Button>
-            </TitleTooltip>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setOpenFileDialogOpen(true)
+              }}
+            >
+              Open File
+            </Button>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
