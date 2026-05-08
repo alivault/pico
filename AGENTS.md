@@ -635,7 +635,7 @@ pnpm version patch # or minor/major/prepatch
 git push origin main --follow-tags
 ```
 
-The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance, and creates a GitHub release with generated release notes.
+The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
 
 ## Validation expectations
 
