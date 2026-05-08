@@ -23,7 +23,7 @@ It gives you a persistent session browser, a live conversation shell, git tools,
 
 ## Built on Pi
 
-Pico runs Pi locally through the bundled `@mariozechner/pi-coding-agent` SDK dependency. You do not need a separate global Pi install for normal use.
+Pico runs Pi locally through the bundled `@mariozechner/pi-coding-agent` SDK dependency, pinned to `0.73.1` for reproducible installs. You do not need a separate global Pi install for normal use.
 
 If you intentionally want to test Pico against a different Pi SDK checkout or install, set:
 
@@ -39,13 +39,40 @@ pnpm update:pi
 
 ## Getting started
 
+Run Pico without cloning the repo:
+
+```bash
+npx @alivault/pico
+```
+
+Or install it globally:
+
+```bash
+npm install -g @alivault/pico
+pico-app
+```
+
+Pico starts locally and opens:
+
+```text
+http://localhost:3141
+```
+
+You can choose a different port with:
+
+```bash
+pico-app --port 3000
+```
+
+## Developing from source
+
 Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-Start Pico:
+Start Pico in development mode:
 
 ```bash
 pnpm dev
