@@ -64,6 +64,12 @@ You can choose a different port with:
 pico-app --port 3000
 ```
 
+Update a global install with:
+
+```bash
+pico-app update
+```
+
 ## Developing from source
 
 Install dependencies:

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import process from "node:process"
 import { dirname, join } from "node:path"
@@ -10,15 +10,24 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const packageJsonPath = join(packageRoot, "package.json")
 const serverEntry = join(packageRoot, ".output", "server", "index.mjs")
 
-function readPackageVersion() {
+function readPackageMetadata() {
   try {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"))
-    return typeof packageJson.version === "string"
-      ? packageJson.version
-      : "0.0.0"
+    return {
+      name:
+        typeof packageJson.name === "string"
+          ? packageJson.name
+          : "@alivault/pico",
+      version:
+        typeof packageJson.version === "string" ? packageJson.version : "0.0.0",
+    }
   } catch {
-    return "0.0.0"
+    return { name: "@alivault/pico", version: "0.0.0" }
   }
+}
+
+function readPackageVersion() {
+  return readPackageMetadata().version
 }
 
 function printHelp() {
@@ -26,6 +35,10 @@ function printHelp() {
 
 Usage:
   pico-app [options]
+  pico-app update
+
+Commands:
+  update           Update the globally installed Pico package to latest
 
 Options:
   --port <port>    Port to listen on (default: 3141)
@@ -50,6 +63,83 @@ function readOptionValue(args, index, name) {
     process.exit(1)
   }
   return value
+}
+
+function packageManagerCommandFor(packageName) {
+  const packageSpec = `${packageName}@latest`
+  const npmExecPath = process.env.npm_execpath || ""
+  const npmUserAgent = process.env.npm_config_user_agent || ""
+  const detectionText = `${npmExecPath} ${npmUserAgent}`.toLowerCase()
+  const packageRootSegments = packageRoot.split(/[\\/]+/)
+  const normalizedPackageRoot = packageRoot.replaceAll("\\", "/")
+  const isPnpmLayout =
+    packageRootSegments.includes(".pnpm") ||
+    normalizedPackageRoot.includes("/pnpm/global/")
+  const isBunLayout = normalizedPackageRoot.includes("/.bun/install/global/")
+  const isYarnLayout = normalizedPackageRoot.includes("/yarn/global/")
+
+  if (detectionText.includes("pnpm") || isPnpmLayout) {
+    return { command: "pnpm", args: ["add", "-g", packageSpec] }
+  }
+
+  if (detectionText.includes("bun") || isBunLayout) {
+    return { command: "bun", args: ["add", "-g", packageSpec] }
+  }
+
+  if (detectionText.includes("yarn") || isYarnLayout) {
+    return { command: "yarn", args: ["global", "add", packageSpec] }
+  }
+
+  return { command: "npm", args: ["install", "-g", packageSpec] }
+}
+
+function runUpdate(args) {
+  if (args.includes("--help")) {
+    console.log(`Pico self update
+
+Usage:
+  pico-app update
+
+Updates the globally installed Pico package to the latest npm release.`)
+    process.exit(0)
+  }
+
+  if (args.length > 0) {
+    console.error(`Unknown update option: ${args[0]}`)
+    console.error("Run `pico-app update --help` for usage.")
+    process.exit(1)
+  }
+
+  const metadata = readPackageMetadata()
+  const updateCommand = packageManagerCommandFor(metadata.name)
+
+  console.log(
+    `Updating ${metadata.name} from ${metadata.version} to latest with ${updateCommand.command}...`
+  )
+
+  const result = spawnSync(updateCommand.command, updateCommand.args, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  })
+
+  if (result.error) {
+    console.error(
+      `Failed to run ${updateCommand.command}: ${result.error.message}`
+    )
+    process.exit(1)
+  }
+
+  if (result.signal) {
+    process.kill(process.pid, result.signal)
+    return
+  }
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1)
+  }
+
+  console.log("Pico update complete.")
+  process.exit(0)
 }
 
 function parseArgs(args) {
@@ -150,7 +240,13 @@ function openBrowser(url) {
   child.unref()
 }
 
-const options = parseArgs(process.argv.slice(2))
+const args = process.argv.slice(2)
+
+if (args[0] === "update") {
+  runUpdate(args.slice(1))
+}
+
+const options = parseArgs(args)
 
 if (!existsSync(serverEntry)) {
   console.error("Pico server build was not found in this package.")
