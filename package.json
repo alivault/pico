@@ -11,6 +11,7 @@
     ".output",
     "bin",
     "scripts/patch-react-jsx-dev-runtime.mjs",
+    "scripts/release.mjs",
     "public/screenshots",
     "vendor/node-domexception",
     "README.md",
@@ -40,6 +41,7 @@
     "format": "vp fmt",
     "check": "vp check",
     "check:fix": "vp check --fix",
+    "release": "node ./scripts/release.mjs",
     "update:pi": "pnpm update @earendil-works/pi-coding-agent --latest"
   },
   "dependencies": {

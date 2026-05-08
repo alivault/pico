@@ -628,14 +628,10 @@ Release setup:
 Release process:
 
 ```bash
-pnpm check
-pnpm build
-pnpm version patch # or minor/major/prepatch
-
-git push origin main --follow-tags
+pnpm release patch # or minor/major
 ```
 
-The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
+The release script verifies a clean, up-to-date `main`, runs checks and build, bumps `package.json`, creates the matching `v*.*.*` tag, and pushes the branch plus tags. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
 
 ## Validation expectations
 

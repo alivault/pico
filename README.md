@@ -92,7 +92,20 @@ pnpm build      # build for production
 pnpm preview    # preview the production build
 pnpm check      # format/lint/typecheck
 pnpm check:fix  # format/lint/typecheck with fixes
+pnpm release patch # check, build, version, tag, and push a release
 ```
+
+## Releasing
+
+After committing changes, run one of:
+
+```bash
+pnpm release patch
+pnpm release minor
+pnpm release major
+```
+
+The release script verifies a clean, up-to-date `main`, runs checks and build, bumps `package.json`, creates the matching `v*.*.*` tag, and pushes the branch plus tags. The GitHub release workflow publishes the npm package from the pushed tag.
 
 ## Tech stack
 
