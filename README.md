@@ -4,6 +4,10 @@ Pico is a local, keyboard-friendly browser workspace for Pi coding-agent session
 
 It gives you a persistent session browser, a live conversation shell, git tools, and project-aware prompt helpers in one app.
 
+![Pico workspace showing the session browser, conversation shell, composer, and git tools](./public/screenshots/pico-workspace.png)
+
+![Pico workspace showing project-aware context and coding-agent workflow](./public/screenshots/pico-workspace-alt.png)
+
 ## What Pico gives you
 
 - A fast conversation shell for Pi sessions
