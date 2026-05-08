@@ -113,6 +113,12 @@ import {
   setDerivedScrollState,
 } from "@/features/pico/scroll-shadow-utils"
 import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
+import {
+  RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
+  RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
+  safeLocalStorageGetItem,
+  safeLocalStorageSetItem,
+} from "@/lib/pico"
 import type {
   GitActionResponse,
   GitChangeFile,
@@ -2835,9 +2841,27 @@ function RightSidebarTabStrip({
 
 function clampProjectFileTreeWidth(width: number) {
   if (!Number.isFinite(width)) return PROJECT_FILE_TREE_DEFAULT_WIDTH
-  return Math.min(
-    PROJECT_FILE_TREE_MAX_WIDTH,
-    Math.max(PROJECT_FILE_TREE_MIN_WIDTH, width)
+  return Math.round(
+    Math.min(
+      PROJECT_FILE_TREE_MAX_WIDTH,
+      Math.max(PROJECT_FILE_TREE_MIN_WIDTH, width)
+    )
+  )
+}
+
+function readStoredProjectFileTreeWidth() {
+  const storedWidth = safeLocalStorageGetItem(
+    RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY
+  )
+  if (storedWidth == null) return PROJECT_FILE_TREE_DEFAULT_WIDTH
+
+  return clampProjectFileTreeWidth(Number(storedWidth))
+}
+
+function storeProjectFileTreeWidth(width: number) {
+  safeLocalStorageSetItem(
+    RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
+    String(clampProjectFileTreeWidth(width))
   )
 }
 
@@ -2914,9 +2938,19 @@ function ProjectFileTreePane({
   onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
   previewMode: ProjectFilesPreviewMode
 }) {
-  const [fileTreeWidth, setFileTreeWidth] = React.useState(
+  const [fileTreeWidth, setFileTreeWidthState] = React.useState(
     PROJECT_FILE_TREE_DEFAULT_WIDTH
   )
+
+  React.useEffect(() => {
+    setFileTreeWidthState(readStoredProjectFileTreeWidth())
+  }, [])
+
+  const setFileTreeWidth = (nextWidth: number) => {
+    const width = clampProjectFileTreeWidth(nextWidth)
+    setFileTreeWidthState(width)
+    storeProjectFileTreeWidth(width)
+  }
 
   return (
     <div
@@ -3083,6 +3117,37 @@ function FileViewerTabStrip({
 type ReviewDiffStyle = "unified" | "split"
 
 const GIT_HISTORY_PANEL_MIN_HEIGHT = 160
+const GIT_HISTORY_PANEL_MAX_STORED_HEIGHT = 1600
+
+function clampStoredGitHistoryPanelHeight(height: number) {
+  if (!Number.isFinite(height)) return undefined
+
+  return Math.round(
+    Math.min(
+      GIT_HISTORY_PANEL_MAX_STORED_HEIGHT,
+      Math.max(GIT_HISTORY_PANEL_MIN_HEIGHT, height)
+    )
+  )
+}
+
+function readStoredGitHistoryPanelHeight() {
+  const storedHeight = safeLocalStorageGetItem(
+    RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY
+  )
+  if (storedHeight == null) return undefined
+
+  return clampStoredGitHistoryPanelHeight(Number(storedHeight))
+}
+
+function storeGitHistoryPanelHeight(height: number) {
+  const nextHeight = clampStoredGitHistoryPanelHeight(height)
+  if (typeof nextHeight !== "number") return
+
+  safeLocalStorageSetItem(
+    RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
+    String(nextHeight)
+  )
+}
 
 function reviewFileValue(file: GitChangeFile) {
   return `${file.status}:${file.previousPath || ""}:${file.path}`
@@ -3116,7 +3181,7 @@ function FileReviewContent({
   const [historyOpen, setHistoryOpen] = React.useState(true)
   const [historyPanelHeight, setHistoryPanelHeight] = React.useState<
     number | undefined
-  >(undefined)
+  >(() => readStoredGitHistoryPanelHeight())
   const [defaultHistoryPanelHeight, setDefaultHistoryPanelHeight] =
     React.useState<number | undefined>(undefined)
   const [verticalResizeCursor, setVerticalResizeCursor] =
@@ -3148,7 +3213,7 @@ function FileReviewContent({
     previousNormalizedCwdRef.current = normalizedCwd
 
     setHistoryOpen(true)
-    setHistoryPanelHeight(undefined)
+    setHistoryPanelHeight(readStoredGitHistoryPanelHeight())
     setDefaultHistoryPanelHeight(undefined)
     setOpenFiles([])
     setStickyReviewFileValue("")
@@ -3223,17 +3288,18 @@ function FileReviewContent({
     const previousUserSelect = document.body.style.userSelect
     const cursor = getSidebarVerticalResizeCursor()
     const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
+    let latestHeight = Math.min(maxHeight, Math.max(minHeight, startHeight))
 
     document.body.style.cursor = cursor
     document.body.style.userSelect = "none"
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const nextHeight = startHeight - (moveEvent.clientY - startY)
-      setHistoryPanelHeight(
-        Math.min(maxHeight, Math.max(minHeight, nextHeight))
-      )
+      latestHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
+      setHistoryPanelHeight(latestHeight)
     }
     const handlePointerUp = () => {
+      storeGitHistoryPanelHeight(latestHeight)
       cleanupGlobalResizeCursor()
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousUserSelect

@@ -18,6 +18,13 @@ export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pico-hide-tools"
 export const CENTER_MESSAGES_STORAGE_KEY = "pico-center-messages"
 export const AUTO_SCROLL_ENABLED_STORAGE_KEY = "pico-auto-scroll"
 export const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = "pico-right-sidebar-open"
+export const RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY =
+  "pico-right-sidebar-active-tab"
+export const RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY = "pico-right-sidebar-widths"
+export const RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY =
+  "pico-right-sidebar-file-tree-width"
+export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
+  "pico-right-sidebar-history-height"
 export const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 

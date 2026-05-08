@@ -204,7 +204,9 @@ import {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
+  RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
+  RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -226,6 +228,7 @@ import {
   readStoredSidebarDirectories,
   rememberStoredPromptDraft,
   promptDraftKey,
+  safeLocalStorageGetItem,
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
@@ -2042,7 +2045,7 @@ const AppShellGitPanelController = React.memo(
           setStoreField(rightSidebarStore, "fileActivePath", path)
         }}
         onActiveTabChange={(tab) => {
-          setStoreField(rightSidebarStore, "activeTab", tab)
+          setRightSidebarActiveTab(rightSidebarStore, tab)
         }}
         onCloseAllFiles={onCloseAllFiles}
         onCloseFile={onCloseFile}
@@ -3199,7 +3202,7 @@ function AppShellDesktopGitPanel({
           setStoreField(rightSidebarStore, "fileActivePath", path)
         }}
         onActiveTabChange={(tab) => {
-          setStoreField(rightSidebarStore, "activeTab", tab)
+          setRightSidebarActiveTab(rightSidebarStore, tab)
         }}
         onCloseAllFiles={onCloseAllFiles}
         onCloseFile={onCloseFile}
@@ -3220,6 +3223,78 @@ const DESKTOP_DEFAULT_FILE_VIEW_WIDTH = 520
 const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
 const DESKTOP_MIN_SESSION_WIDTH = 320
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
+const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
+
+type DesktopSidePanelWidths = {
+  fileViewWidth: number
+  gitPanelWidth: number
+}
+
+function defaultDesktopSidePanelWidths(): DesktopSidePanelWidths {
+  return {
+    fileViewWidth: DESKTOP_DEFAULT_FILE_VIEW_WIDTH,
+    gitPanelWidth: DESKTOP_DEFAULT_GIT_PANEL_WIDTH,
+  }
+}
+
+function clampStoredDesktopPanelWidth(value: unknown, fallback: number) {
+  const width = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(width)) return fallback
+
+  return Math.round(
+    Math.min(
+      DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH,
+      Math.max(DESKTOP_MIN_SIDE_PANEL_WIDTH, width)
+    )
+  )
+}
+
+function normalizeDesktopSidePanelWidths(
+  value: unknown
+): DesktopSidePanelWidths {
+  if (!value || typeof value !== "object")
+    return defaultDesktopSidePanelWidths()
+
+  const widths = value as Partial<Record<keyof DesktopSidePanelWidths, unknown>>
+  return {
+    fileViewWidth: clampStoredDesktopPanelWidth(
+      widths.fileViewWidth,
+      DESKTOP_DEFAULT_FILE_VIEW_WIDTH
+    ),
+    gitPanelWidth: clampStoredDesktopPanelWidth(
+      widths.gitPanelWidth,
+      DESKTOP_DEFAULT_GIT_PANEL_WIDTH
+    ),
+  }
+}
+
+function readStoredDesktopSidePanelWidths(): DesktopSidePanelWidths {
+  try {
+    const raw = safeLocalStorageGetItem(RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY)
+    if (!raw) return defaultDesktopSidePanelWidths()
+
+    return normalizeDesktopSidePanelWidths(JSON.parse(raw))
+  } catch {
+    return defaultDesktopSidePanelWidths()
+  }
+}
+
+function storeDesktopSidePanelWidths(widths: DesktopSidePanelWidths) {
+  safeLocalStorageSetItem(
+    RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY,
+    JSON.stringify(normalizeDesktopSidePanelWidths(widths))
+  )
+}
+
+function sameDesktopSidePanelWidths(
+  left: DesktopSidePanelWidths,
+  right: DesktopSidePanelWidths
+) {
+  return (
+    left.fileViewWidth === right.fileViewWidth &&
+    left.gitPanelWidth === right.gitPanelWidth
+  )
+}
 
 function clampDesktopPanelSize(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min
@@ -3468,15 +3543,61 @@ function AppShellTabsController({
   const desktopSideWorkspaceOpen = desktopFileViewOpen || desktopGitPanelOpen
   const desktopLayoutRef = React.useRef<HTMLDivElement | null>(null)
   const [desktopLayoutWidth, setDesktopLayoutWidth] = React.useState(0)
-  const [desktopFileViewWidth, setDesktopFileViewWidth] = React.useState(
-    DESKTOP_DEFAULT_FILE_VIEW_WIDTH
-  )
-  const [desktopGitPanelWidth, setDesktopGitPanelWidth] = React.useState(
-    DESKTOP_DEFAULT_GIT_PANEL_WIDTH
-  )
+  const [desktopSidePanelWidths, setDesktopSidePanelWidthsState] =
+    React.useState<DesktopSidePanelWidths>(() =>
+      defaultDesktopSidePanelWidths()
+    )
+  const desktopSidePanelWidthsLoadedRef = React.useRef(false)
+  const desktopSidePanelWidthsRef = React.useRef(desktopSidePanelWidths)
+  desktopSidePanelWidthsRef.current = desktopSidePanelWidths
+  const desktopFileViewWidth = desktopSidePanelWidths.fileViewWidth
+  const desktopGitPanelWidth = desktopSidePanelWidths.gitPanelWidth
+  const setDesktopSidePanelWidths = (
+    action: React.SetStateAction<DesktopSidePanelWidths>
+  ) => {
+    const current = desktopSidePanelWidthsRef.current
+    const next = normalizeDesktopSidePanelWidths(
+      applyStoreAction(current, action)
+    )
+    if (sameDesktopSidePanelWidths(current, next)) return
+
+    desktopSidePanelWidthsRef.current = next
+    setDesktopSidePanelWidthsState(next)
+    if (desktopSidePanelWidthsLoadedRef.current) {
+      storeDesktopSidePanelWidths(next)
+    }
+  }
+  const setDesktopFileViewWidth = (action: React.SetStateAction<number>) => {
+    setDesktopSidePanelWidths((current) => ({
+      ...current,
+      fileViewWidth: clampStoredDesktopPanelWidth(
+        applyStoreAction(current.fileViewWidth, action),
+        DESKTOP_DEFAULT_FILE_VIEW_WIDTH
+      ),
+    }))
+  }
+  const setDesktopGitPanelWidth = (action: React.SetStateAction<number>) => {
+    setDesktopSidePanelWidths((current) => ({
+      ...current,
+      gitPanelWidth: clampStoredDesktopPanelWidth(
+        applyStoreAction(current.gitPanelWidth, action),
+        DESKTOP_DEFAULT_GIT_PANEL_WIDTH
+      ),
+    }))
+  }
   const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
     React.useState(desktopGitPanelOpen)
   const [desktopPanelResizing, setDesktopPanelResizing] = React.useState(false)
+
+  React.useEffect(() => {
+    const storedWidths = readStoredDesktopSidePanelWidths()
+    desktopSidePanelWidthsLoadedRef.current = true
+    desktopSidePanelWidthsRef.current = storedWidths
+    setDesktopSidePanelWidthsState((current) =>
+      sameDesktopSidePanelWidths(current, storedWidths) ? current : storedWidths
+    )
+  }, [])
+
   const sessionPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className={sessionVisibleClassName}>
@@ -4238,9 +4359,31 @@ type AppShellRightSidebarState = {
   fileTreeCollapsed: boolean
 }
 
+function normalizeRightSidebarActiveTab(value: unknown): RightSidebarTabValue {
+  return value === "files" || value === "review" ? value : "review"
+}
+
+function readStoredRightSidebarActiveTab(): RightSidebarTabValue {
+  return normalizeRightSidebarActiveTab(
+    safeLocalStorageGetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY)
+  )
+}
+
+function storeRightSidebarActiveTab(tab: RightSidebarTabValue) {
+  safeLocalStorageSetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY, tab)
+}
+
+function setRightSidebarActiveTab(
+  store: PicoStore<AppShellRightSidebarState>,
+  tab: RightSidebarTabValue
+) {
+  setStoreField(store, "activeTab", tab)
+  storeRightSidebarActiveTab(tab)
+}
+
 function createInitialRightSidebarState(): AppShellRightSidebarState {
   return {
-    activeTab: "review",
+    activeTab: readStoredRightSidebarActiveTab(),
     fileActivePath: "",
     filePreviewPath: "",
     fileTabs: [],
@@ -4276,6 +4419,7 @@ function openRightSidebarFile(
 ) {
   if (!path) return
 
+  storeRightSidebarActiveTab("files")
   setStoreState(store, (state) => {
     const shouldPin =
       Boolean(options?.pin) ||
@@ -5337,7 +5481,7 @@ const AppShellSessionWorkspace = React.forwardRef<
   const toggleReviewPane = () => {
     const activeTab = rightSidebarStore.state.activeTab
     if (isMobile) {
-      setStoreField(rightSidebarStore, "activeTab", "review")
+      setRightSidebarActiveTab(rightSidebarStore, "review")
       setCurrentTab((tab) =>
         tab === "git" && activeTab === "review" ? "session" : "git"
       )
@@ -5350,7 +5494,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
 
     batch(() => {
-      setStoreField(rightSidebarStore, "activeTab", "review")
+      setRightSidebarActiveTab(rightSidebarStore, "review")
       setGitPanelOpen(true)
     })
   }
