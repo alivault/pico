@@ -62,6 +62,7 @@ type ComposerDisplaySettingsStore = PicoStore<{
 }>
 
 type ComposerPanelProps = {
+  activeSessionId?: string
   currentPendingMessages: Array<PendingComposerMessage>
   composerImages: Array<PromptImage>
   composerText: string
@@ -77,6 +78,7 @@ type ComposerPanelProps = {
   disabled?: boolean
   flush?: boolean
   topContent?: React.ReactNode
+  viewerContextId: string
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
@@ -277,6 +279,7 @@ export const ComposerPanel = React.forwardRef<
   ComposerPanelProps
 >(function ComposerPanelImpl(
   {
+    activeSessionId,
     currentPendingMessages,
     composerImages,
     composerText,
@@ -292,6 +295,7 @@ export const ComposerPanel = React.forwardRef<
     disabled = false,
     flush = false,
     topContent,
+    viewerContextId,
     fileInputRef,
     onComposerTextChange,
     onPickImages,
@@ -388,6 +392,7 @@ export const ComposerPanel = React.forwardRef<
           />
 
           <ComposerPickers
+            activeSessionId={activeSessionId}
             modelPickerOpen={modelPickerOpen}
             onModelPickerOpenChange={setModelPickerOpen}
             thinkingPickerOpen={thinkingPickerOpen}
@@ -397,6 +402,7 @@ export const ComposerPanel = React.forwardRef<
             contextUsageStore={contextUsageStore}
             sessionStore={sessionStore}
             disabled={disabled}
+            viewerContextId={viewerContextId}
             onSelectModel={onSelectModel}
             onSelectThinkingLevel={onSelectThinkingLevel}
           />

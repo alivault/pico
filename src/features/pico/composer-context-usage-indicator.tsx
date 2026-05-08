@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import type { SessionState } from "@/lib/pico"
+import { buildRequestUrl } from "@/features/pico/app-shell-utils"
 import {
   createPicoStore,
   useSelector,
@@ -132,9 +133,11 @@ type ContextUsageRing = {
 }
 
 type ComposerContextUsageIndicatorProps = {
+  activeSessionId?: string
   contextUsageStore?: ComposerContextUsageStore
   disabled?: boolean
   modelProvider?: string
+  viewerContextId: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -518,9 +521,11 @@ function getContextUsageRingGeometry(ringCount: number) {
 }
 
 export function ComposerContextUsageIndicator({
+  activeSessionId,
   contextUsageStore = emptyContextUsageStore,
   disabled = false,
   modelProvider,
+  viewerContextId,
 }: ComposerContextUsageIndicatorProps) {
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const useMobilePopover = useContextUsageMobilePopover()
@@ -529,13 +534,17 @@ export function ComposerContextUsageIndicator({
   >([])
 
   React.useEffect(() => {
-    if (!modelProvider) {
+    if (!modelProvider || !viewerContextId) {
       setProviderUsageWindows([])
       return
     }
 
     let cancelled = false
-    const url = `/api/provider-usage?provider=${encodeURIComponent(modelProvider)}`
+    const url = buildRequestUrl("/api/provider-usage", {
+      contextId: viewerContextId,
+      sessionId: activeSessionId,
+      searchParams: { provider: modelProvider },
+    })
 
     fetch(url)
       .then((response) => (response.ok ? response.json() : undefined))
@@ -553,7 +562,7 @@ export function ComposerContextUsageIndicator({
     return () => {
       cancelled = true
     }
-  }, [modelProvider, contextUsage?.tokens])
+  }, [activeSessionId, modelProvider, viewerContextId, contextUsage?.tokens])
 
   if (disabled) return null
   if (!contextUsage) return null

@@ -2987,6 +2987,7 @@ const AppShellComposerController = React.memo(
     return (
       <ComposerPanel
         ref={composerPanelRef}
+        activeSessionId={snapshot.activeSessionId}
         currentPendingMessages={snapshot.currentPendingMessages}
         composerImages={snapshot.composerImages}
         composerText={snapshot.composerText}
@@ -3002,6 +3003,7 @@ const AppShellComposerController = React.memo(
         disabled={snapshot.disabled}
         flush={Boolean(topContent)}
         topContent={topContent}
+        viewerContextId={snapshot.viewerContextId}
         fileInputRef={fileInputRef}
         onComposerTextChange={onComposerTextChange}
         onPickImages={onPickImages}

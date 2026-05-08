@@ -67,6 +67,7 @@ import {
 import { createPicoEditToolDefinition } from "@/server/pi-edit-tool"
 import { loadPiSdk, makeSelfContainedSettingsManager } from "@/server/pi-sdk"
 import { GitWatchManager, type GitWatchChange } from "@/server/git-watch"
+import { fetchProviderUsage } from "@/server/provider-usage"
 import {
   invalidateDirectoryGitCaches,
   readDirectoryGitFingerprint,
@@ -4609,6 +4610,14 @@ export class PicoRuntime {
 
     this.requireAuthStorage(activeEntry).logout(provider)
     return await this.finishAuthMutation(activeEntry, provider)
+  }
+
+  async getProviderUsage(request: Request, provider: string | undefined) {
+    const { activeEntry } = await this.resolveRequest(request)
+    return await fetchProviderUsage(
+      provider,
+      activeEntry.services.modelRegistry.authStorage
+    )
   }
 
   async loginProviderOAuth(request: Request, body: { provider?: unknown }) {

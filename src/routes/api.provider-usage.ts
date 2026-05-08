@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
 import { jsonResponse } from "@/server/http"
-import { fetchProviderUsage } from "@/server/provider-usage"
+import { getPicoRuntime } from "@/server/pico-runtime"
 import { routeErrorResponse } from "@/server/route-helpers"
 
 export const Route = createFileRoute("/api/provider-usage")({
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/provider-usage")({
         try {
           return jsonResponse({
             ok: true,
-            usage: await fetchProviderUsage(provider),
+            usage: await getPicoRuntime().getProviderUsage(request, provider),
           })
         } catch (error) {
           return routeErrorResponse(error, "Failed to read provider usage")

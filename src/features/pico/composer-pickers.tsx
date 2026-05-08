@@ -64,6 +64,7 @@ type ThinkingPickerState = {
 }
 
 type ComposerPickersProps = {
+  activeSessionId?: string
   modelPickerOpen: boolean
   onModelPickerOpenChange: (open: boolean) => void
   thinkingPickerOpen: boolean
@@ -73,6 +74,7 @@ type ComposerPickersProps = {
   contextUsageStore: ComposerContextUsageStore
   sessionStore: ComposerPickerSessionStore
   disabled?: boolean
+  viewerContextId: string
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
 }
@@ -228,13 +230,17 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
 
 const ComposerContextUsageIndicatorHost = React.memo(
   function ComposerContextUsageIndicatorHost({
+    activeSessionId,
     contextUsageStore,
     disabled,
     sessionStore,
+    viewerContextId,
   }: {
+    activeSessionId?: string
     contextUsageStore: ComposerContextUsageStore
     disabled: boolean
     sessionStore: ComposerPickerSessionStore
+    viewerContextId: string
   }) {
     const modelProvider = useSelector(
       sessionStore,
@@ -243,9 +249,11 @@ const ComposerContextUsageIndicatorHost = React.memo(
 
     return (
       <ComposerContextUsageIndicator
+        activeSessionId={activeSessionId}
         contextUsageStore={contextUsageStore}
         disabled={disabled}
         modelProvider={modelProvider}
+        viewerContextId={viewerContextId}
       />
     )
   }
@@ -315,6 +323,7 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
 })
 
 export const ComposerPickers = React.memo(function ComposerPickers({
+  activeSessionId,
   modelPickerOpen,
   onModelPickerOpenChange,
   thinkingPickerOpen,
@@ -324,6 +333,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   contextUsageStore,
   sessionStore,
   disabled = false,
+  viewerContextId,
   onSelectModel,
   onSelectThinkingLevel,
 }: ComposerPickersProps) {
@@ -360,9 +370,11 @@ export const ComposerPickers = React.memo(function ComposerPickers({
       </div>
 
       <ComposerContextUsageIndicatorHost
+        activeSessionId={activeSessionId}
         contextUsageStore={contextUsageStore}
         disabled={disabled}
         sessionStore={sessionStore}
+        viewerContextId={viewerContextId}
       />
     </div>
   )

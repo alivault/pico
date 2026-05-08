@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
+import type { AuthStorageLike } from "@/server/pi-sdk-types"
+
 export type ProviderUsageWindow = {
   label: string
   usedPercent: number
@@ -18,19 +20,17 @@ const PROVIDER_MAP: Record<string, string> = {
   "openai-codex": "codex",
 }
 
-function loadAuthJson(): Record<string, any> {
-  const authPath = join(homedir(), ".pi", "agent", "auth.json")
-  try {
-    if (existsSync(authPath)) {
-      return JSON.parse(readFileSync(authPath, "utf-8"))
-    }
-  } catch {}
-  return {}
+function getOAuthAccessToken(
+  authStorage: AuthStorageLike | undefined,
+  provider: string
+) {
+  const credential = authStorage?.get(provider)
+  return credential?.type === "oauth" ? credential.access : undefined
 }
 
-function getClaudeToken() {
-  const auth = loadAuthJson()
-  if (auth.anthropic?.access) return String(auth.anthropic.access)
+function getClaudeToken(authStorage: AuthStorageLike | undefined) {
+  const token = getOAuthAccessToken(authStorage, "anthropic")
+  if (token) return token
 
   try {
     const keychainData = execSync(
@@ -48,14 +48,17 @@ function getClaudeToken() {
   return undefined
 }
 
-function getCodexToken(): { token: string; accountId?: string } | undefined {
-  const auth = loadAuthJson()
-  if (auth["openai-codex"]?.access) {
+function getCodexToken(
+  authStorage: AuthStorageLike | undefined
+): { token: string; accountId?: string } | undefined {
+  const credential = authStorage?.get("openai-codex")
+  if (credential?.type === "oauth") {
     return {
-      token: String(auth["openai-codex"].access),
-      accountId: auth["openai-codex"]?.accountId
-        ? String(auth["openai-codex"].accountId)
-        : undefined,
+      token: credential.access,
+      accountId:
+        typeof credential.accountId === "string"
+          ? credential.accountId
+          : undefined,
     }
   }
 
@@ -136,8 +139,10 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
   }
 }
 
-async function fetchClaudeUsage(): Promise<ProviderUsageSnapshot> {
-  const token = getClaudeToken()
+async function fetchClaudeUsage(
+  authStorage: AuthStorageLike | undefined
+): Promise<ProviderUsageSnapshot> {
+  const token = getClaudeToken(authStorage)
   if (!token) return { windows: [] }
 
   try {
@@ -178,8 +183,10 @@ async function fetchClaudeUsage(): Promise<ProviderUsageSnapshot> {
   }
 }
 
-async function fetchCodexUsage(): Promise<ProviderUsageSnapshot> {
-  const creds = getCodexToken()
+async function fetchCodexUsage(
+  authStorage: AuthStorageLike | undefined
+): Promise<ProviderUsageSnapshot> {
+  const creds = getCodexToken(authStorage)
   if (!creds) return { windows: [] }
 
   try {
@@ -235,14 +242,15 @@ async function fetchCodexUsage(): Promise<ProviderUsageSnapshot> {
 }
 
 export async function fetchProviderUsage(
-  modelProvider: string | undefined
+  modelProvider: string | undefined,
+  authStorage?: AuthStorageLike
 ): Promise<ProviderUsageSnapshot> {
   const provider = modelProvider ? PROVIDER_MAP[modelProvider] : undefined
   switch (provider) {
     case "claude":
-      return fetchClaudeUsage()
+      return fetchClaudeUsage(authStorage)
     case "codex":
-      return fetchCodexUsage()
+      return fetchCodexUsage(authStorage)
     default:
       return { windows: [] }
   }
