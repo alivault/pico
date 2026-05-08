@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Publish npm package and GitHub release
+    runs-on: ubuntu-latest
+    environment: npm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read package metadata
+        id: package
+        shell: bash
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          expected_tag="v${{ steps.package.outputs.version }}"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version ${{ steps.package.outputs.version }}."
+            echo "Expected tag: $expected_tag"
+            exit 1
+          fi
+
+      - name: Check package
+        run: pnpm check
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Check npm publish status
+        id: npm_status
+        shell: bash
+        run: |
+          if npm view "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Choose npm dist tag
+        id: dist_tag
+        shell: bash
+        run: |
+          version="${{ steps.package.outputs.version }}"
+          if [[ "$version" == *-* ]]; then
+            echo "tag=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.npm_status.outputs.published != 'true'
+        run: pnpm publish --access public --no-git-checks --provenance --tag "${{ steps.dist_tag.outputs.tag }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
