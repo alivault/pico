@@ -17,6 +17,10 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  resizeRailPrimaryInteractiveClass,
+  sidebarOffcanvasResizeRailPrimaryInteractiveClass,
+} from "@/components/ui/resize-rail"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -464,9 +468,11 @@ function SidebarRail({
         } as React.CSSProperties
       }
       className={cn(
-        "absolute inset-y-0 z-40 hidden w-(--sidebar-rail-width) touch-none bg-transparent transition-all ease-linear select-none group-data-[side=left]:right-[calc(var(--sidebar-rail-width)*-1)] group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-px after:bg-transparent hover:bg-sidebar-border/30 hover:after:bg-muted-foreground/40 active:bg-sidebar-border/30 active:after:bg-muted-foreground/40 sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2 dark:hover:after:bg-sidebar-border dark:active:after:bg-sidebar-border",
+        "absolute inset-y-0 z-40 hidden w-(--sidebar-rail-width) touch-none bg-transparent transition-all ease-linear select-none group-data-[side=left]:right-[calc(var(--sidebar-rail-width)*-1)] group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-px after:bg-transparent sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
+        resizeRailPrimaryInteractiveClass,
         horizontalResizeCursorClass,
-        "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar-border/30 hover:group-data-[collapsible=offcanvas]:after:bg-muted-foreground/40 active:group-data-[collapsible=offcanvas]:after:bg-muted-foreground/40 dark:hover:group-data-[collapsible=offcanvas]:after:bg-sidebar-border dark:active:group-data-[collapsible=offcanvas]:after:bg-sidebar-border",
+        "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full",
+        sidebarOffcanvasResizeRailPrimaryInteractiveClass,
         "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
         "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
         className

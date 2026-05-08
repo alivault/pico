@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
@@ -3351,7 +3352,7 @@ function AppShellDesktopResizeHandle({
           cursor: horizontalResizeCursor,
         } as React.CSSProperties
       }
-      className={`absolute inset-y-0 left-0 z-20 w-(--resize-target-width) -translate-x-1/2 touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent hover:bg-sidebar-border/30 hover:after:bg-muted-foreground/40 focus-visible:bg-sidebar-border/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:after:bg-muted-foreground/40 active:bg-sidebar-border/30 active:after:bg-muted-foreground/40 dark:hover:after:bg-sidebar-border dark:focus-visible:after:bg-sidebar-border dark:active:after:bg-sidebar-border ${horizontalResizeCursorClass}`}
+      className={`absolute inset-y-0 left-0 z-20 w-(--resize-target-width) -translate-x-1/2 touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 ${resizeRailPrimaryInteractiveClass} ${horizontalResizeCursorClass}`}
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
         event.preventDefault()

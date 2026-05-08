@@ -91,6 +91,7 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -2790,7 +2791,10 @@ function FileTreeResizeHandle({
       aria-label="Resize file tree"
       aria-orientation="vertical"
       tabIndex={0}
-      className="absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-border/70 hover:bg-sidebar-border/30 hover:after:bg-muted-foreground/50 focus-visible:bg-sidebar-border/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:after:bg-muted-foreground/50 active:bg-sidebar-border/30 active:after:bg-muted-foreground/50"
+      className={cn(
+        "absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none bg-transparent outline-hidden after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-border/70 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
+        resizeRailPrimaryInteractiveClass
+      )}
       onKeyDown={(event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
         event.preventDefault()
@@ -3326,7 +3330,8 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
               aria-orientation="horizontal"
               style={{ cursor: verticalResizeCursor }}
               className={cn(
-                "absolute inset-x-0 top-0 z-10 hidden h-2 -translate-y-1/2 touch-none bg-transparent md:block",
+                "absolute inset-x-0 top-0 z-10 hidden h-2 -translate-y-1/2 touch-none bg-transparent after:absolute after:inset-x-0 after:top-1/2 after:h-px after:bg-transparent md:block",
+                resizeRailPrimaryInteractiveClass,
                 verticalResizeCursor === "ns-resize"
                   ? "cursor-ns-resize"
                   : "cursor-row-resize"
