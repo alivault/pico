@@ -122,6 +122,7 @@ export type UiRequest = {
   method:
     | "auth"
     | "auth_input"
+    | "auth_select"
     | "confirm"
     | "editor"
     | "input"

@@ -273,6 +273,67 @@ export function AppShellUiRequestDialog({
     )
   }
 
+  if (pendingUiRequest?.method === "auth_select") {
+    const cancelAuthAndReturn = () => {
+      onResolveUiRequest({ cancelled: true })
+      onAuthBack?.()
+    }
+    const options = pendingUiRequest.options ?? []
+
+    return renderAuthSurface(
+      true,
+      (open) => {
+        if (!open) cancelAuthAndReturn()
+      },
+      pendingUiRequest.title || "Log in to provider",
+      pendingUiRequest.message || "Choose how to continue login.",
+      <Command loop shouldFilter>
+        <CommandInput
+          autoFocus={!isMobile}
+          placeholder="Choose login option"
+          className="text-base md:text-sm"
+        />
+        <CommandList>
+          <CommandGroup heading={pendingUiRequest.message || "Login options"}>
+            {options.map((option) => {
+              const value = typeof option === "string" ? option : option.value
+              const label =
+                typeof option === "string"
+                  ? option
+                  : option.label || option.value
+              return (
+                <CommandItem
+                  key={value}
+                  value={value}
+                  keywords={[label]}
+                  onSelect={() => onResolveUiRequest({ value })}
+                >
+                  <span className="truncate font-medium">{label}</span>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        </CommandList>
+        {isMobile ? (
+          <div className="border-t border-border/70 p-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={cancelAuthAndReturn}
+            >
+              Cancel login
+            </Button>
+          </div>
+        ) : (
+          <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+            Use ↑/↓ to select, Enter to continue, and Esc to go back.
+          </div>
+        )}
+      </Command>
+    )
+  }
+
   if (pendingUiRequest?.method === "auth_input") {
     const allowEmpty = Boolean(pendingUiRequest.allowEmpty)
     const cancelAuthAndReturn = () => {

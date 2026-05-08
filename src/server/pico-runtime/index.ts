@@ -4635,11 +4635,15 @@ export class PicoRuntime {
         this.broadcastToViewers(sessionKey, payload),
     })
 
+    const loginAbortController = new AbortController()
+    const loginSignal = loginAbortController.signal
+
     const requestInput = async (payload: Record<string, unknown>) => {
       const value = await ui.createDialogPromise(
         undefined as string | undefined,
         {
           payload,
+          signal: loginSignal,
         },
         (response) => {
           if (response.cancelled) return undefined
@@ -4650,6 +4654,20 @@ export class PicoRuntime {
         throw new Error("Login cancelled")
       }
       return value
+    }
+
+    const requestSelection = async (payload: Record<string, unknown>) => {
+      return await ui.createDialogPromise(
+        undefined as string | undefined,
+        {
+          payload,
+          signal: loginSignal,
+        },
+        (response) => {
+          if (response.cancelled) return undefined
+          return typeof response.value === "string" ? response.value : undefined
+        }
+      )
     }
 
     let manualRedirect:
@@ -4685,7 +4703,8 @@ export class PicoRuntime {
     }
 
     this.activeOAuthLogins.set(loginKey, () => {
-      getManualRedirect().reject(new Error("Login cancelled"))
+      loginAbortController.abort()
+      manualRedirect?.reject(new Error("Login cancelled"))
     })
 
     try {
@@ -4704,6 +4723,7 @@ export class PicoRuntime {
                   authUrl: info.url,
                   authManualAllowed: Boolean(providerInfo.usesCallbackServer),
                 },
+                signal: loginSignal,
                 timeout: 10 * 60 * 1000,
               },
               (response) => {
@@ -4741,6 +4761,18 @@ export class PicoRuntime {
         onManualCodeInput: async () => {
           return await getManualRedirect().promise
         },
+        onSelect: async (prompt) => {
+          return await requestSelection({
+            method: "auth_select",
+            title: `Log in to ${providerInfo.name}`,
+            message: prompt.message,
+            options: prompt.options.map((option) => ({
+              value: option.id,
+              label: option.label,
+            })),
+          })
+        },
+        signal: loginSignal,
       })
 
       return await this.finishAuthMutation(activeEntry, provider)

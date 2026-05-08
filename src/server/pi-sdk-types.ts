@@ -168,6 +168,10 @@ export type AuthStorageLike = {
       }) => Promise<string>
       onProgress?: (message: string) => void
       onManualCodeInput?: () => Promise<string>
+      onSelect?: (prompt: {
+        message: string
+        options: Array<{ id: string; label: string }>
+      }) => Promise<string | undefined>
       signal?: AbortSignal
     }
   ): Promise<void>
