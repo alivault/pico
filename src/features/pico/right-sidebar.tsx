@@ -7,6 +7,7 @@ import {
   type FileTreeItemHandle,
 } from "@pierre/trees"
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
+import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import {
   closestCenter,
@@ -46,6 +47,7 @@ import {
   GitCommitIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  SquareArrowOutUpRightIcon,
   UploadIcon,
   WandSparklesIcon,
   XIcon,
@@ -3104,7 +3106,12 @@ function gitFileShouldPreviewPatch(file: GitChangeFile) {
   )
 }
 
-function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
+function FileReviewContent({
+  viewerContextId,
+  cwd,
+  active,
+  onOpenFile,
+}: GitScopedProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [diffStyle, setDiffStyle] = React.useState<ReviewDiffStyle>("unified")
@@ -3368,6 +3375,7 @@ function FileReviewContent({ viewerContextId, cwd, active }: GitScopedProps) {
                 file={file}
                 open={openFiles.includes(reviewFileValue(file))}
                 stuck={stickyReviewFileValue === reviewFileValue(file)}
+                onOpenFile={onOpenFile}
               />
             ))}
           </Accordion>
@@ -3458,6 +3466,7 @@ function ReviewFileAccordionItem({
   file,
   open,
   stuck,
+  onOpenFile,
 }: GitScopedProps & {
   diffStyle: ReviewDiffStyle
   file: GitChangeFile
@@ -3501,33 +3510,61 @@ function ReviewFileAccordionItem({
 
   return (
     <AccordionItem value={value} className="border-border/70">
-      <AccordionTrigger
-        data-review-file-trigger
-        data-review-file-value={value}
-        headerClassName={cn(
-          "sticky top-0 z-20 bg-background transition-shadow",
+      <AccordionPrimitive.Header
+        className={cn(
+          "group/review-file-header sticky top-0 z-20 flex bg-background transition-shadow",
           stuck && "shadow-sm"
         )}
-        className="min-h-10 items-center gap-3 rounded-none bg-background px-3 py-2 font-mono text-[13px] hover:no-underline"
       >
-        <span className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3">
-          <GitFileStatus status={file.status} />
-          <span className="min-w-0 truncate text-left">
-            {file.previousPath ? (
-              <>
-                <span className="text-muted-foreground">
-                  {file.previousPath}
-                </span>
-                <span className="text-muted-foreground/70"> → </span>
-                <span>{file.path}</span>
-              </>
-            ) : (
-              file.path
-            )}
+        <AccordionPrimitive.Trigger
+          data-review-file-trigger
+          data-review-file-value={value}
+          className="group/review-file-trigger relative flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-none border border-transparent bg-background px-3 py-2 text-left font-mono text-[13px] font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground"
+        >
+          <span className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3">
+            <GitFileStatus status={file.status} />
+            <span className="min-w-0 truncate text-left">
+              {file.previousPath ? (
+                <>
+                  <span className="text-muted-foreground">
+                    {file.previousPath}
+                  </span>
+                  <span className="text-muted-foreground/70"> → </span>
+                  <span>{file.path}</span>
+                </>
+              ) : (
+                file.path
+              )}
+            </span>
+            <GitFileDiff file={file} />
           </span>
-          <GitFileDiff file={file} />
-        </span>
-      </AccordionTrigger>
+          <ChevronDownIcon
+            data-slot="accordion-trigger-icon"
+            className="pointer-events-none size-4 shrink-0 group-aria-expanded/review-file-trigger:hidden"
+          />
+          <ChevronUpIcon
+            data-slot="accordion-trigger-icon"
+            className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
+          />
+        </AccordionPrimitive.Trigger>
+        {onOpenFile ? (
+          <TitleTooltip title="Open file" side="top">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Open ${file.path}`}
+              className="mr-2 self-center"
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenFile(file.path, { pin: true })
+              }}
+            >
+              <SquareArrowOutUpRightIcon className="size-3.5" />
+            </Button>
+          </TitleTooltip>
+        ) : null}
+      </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
         {previewPatch ? (
           diffQuery.isPending && !diffQuery.data ? (
@@ -5267,6 +5304,7 @@ export function RightSidebar({
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
               active={active && activeTab === "review"}
+              onOpenFile={openFile}
             />
           </div>
         </React.Activity>
