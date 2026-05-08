@@ -521,7 +521,7 @@ function AppShellSessionsDialog({
         >
           {loading && sortedSessionItems.length === 0 ? (
             <CommandItem value="loading:sessions" disabled>
-              <Spinner className="size-3.5 text-muted-foreground" />
+              <Spinner className="size-3.5 text-primary" />
               <span className="text-muted-foreground">Loading sessions…</span>
             </CommandItem>
           ) : null}
@@ -548,7 +548,7 @@ function AppShellSessionsDialog({
                 <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
                   {entry.streaming ? (
                     <Spinner
-                      className="size-3.5 text-muted-foreground"
+                      className="size-3.5 text-primary"
                       aria-label="Session streaming"
                     />
                   ) : showUnread ? (
