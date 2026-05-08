@@ -67,6 +67,10 @@ Notes:
 - `src/features/pico/app-shell.tsx`
   - main application shell coordinator and store/controller wiring
   - composes tabs, command palette actions, focused hooks, and dialog controllers
+- `src/features/pico/app-shell-sidebar-store.ts`
+  - directory/session sidebar store, derived sidebar snapshots, directory index merging, and sidebar session status overlays
+- `src/features/pico/app-shell-right-sidebar-state.ts`
+  - right-sidebar file tab/open-file state helpers used by the app shell
 - `src/features/pico/use-app-shell-session-sync.ts`
   - SSE wiring and session/state sync behavior for the shell
 - `src/features/pico/use-app-shell-prompt-mutations.ts`
@@ -103,7 +107,11 @@ Notes:
   - git status/files/branches/commits tab plus diff, review, commit, push, and pull actions
   - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
 - `src/features/pico/right-sidebar.tsx`
-  - secondary workspace sidebar for session/project-adjacent panels
+  - secondary workspace sidebar coordinator plus git/review panels and related git controls
+- `src/features/pico/right-sidebar-project-files.tsx`
+  - project file tree, file tab strip, file viewer, open-file dialog, and syntax-highlighted file preview
+- `src/features/pico/right-sidebar-types.ts`, `src/features/pico/right-sidebar-shared.ts`, and `src/features/pico/right-sidebar-section-note.tsx`
+  - shared right-sidebar types, path/error helpers, and section note UI used across right-sidebar modules
 - `src/features/pico/keyboard-shortcuts.ts`
   - shared shortcut descriptors and labels used by the shell UI
 - `src/features/pico/git-toast-utils.ts`, `src/features/pico/relative-time.tsx`, and `src/features/pico/scroll-shadow-utils.ts`
@@ -276,6 +284,9 @@ Notable current client-side state patterns:
   - The session-loading state intentionally hides the previous message stack while switching sessions.
 - `hiddenThinkingPreviewStore` and `workingStateStore` are narrow stores for footer/loading text.
 - `sidebarStore` keeps directory-keyed sidebar snapshots independent of the main workspace renders.
+  - Its store construction and sidebar session/index helpers live in `src/features/pico/app-shell-sidebar-store.ts` rather than inline in `app-shell.tsx`.
+- `rightSidebarStore` owns the right-sidebar active tab plus open file tabs, preview path, active file path, and file-tree collapsed state.
+  - Mutations for opening/closing/reordering right-sidebar files live in `src/features/pico/app-shell-right-sidebar-state.ts`.
 - `AppShellController` centralizes the active store/ref/action bundle used by imperative shell handles.
 
 When adding new workspace state, first decide whether it belongs in one of these stores or in a new narrow store. Use local React state only for truly local UI concerns.
