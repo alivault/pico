@@ -625,13 +625,22 @@ Release setup:
 - GitHub Actions environment: `npm`
 - the workflow uses OIDC (`id-token: write`), not an `NPM_TOKEN` secret
 
-Release process:
+Release process for agents:
+
+1. Make sure all intended changes are committed. The release script requires a clean working tree.
+2. Choose the semver bump from the committed changes:
+   - `patch` for fixes, dependency maintenance, docs, and internal automation
+   - `minor` for user-facing features or compatible behavior additions
+   - `major` only for breaking changes
+3. Run the release script from `main`:
 
 ```bash
 pnpm release patch # or minor/major
 ```
 
-The release script verifies a clean, up-to-date `main`, runs checks and build, bumps `package.json`, creates the matching `v*.*.*` tag, and pushes the branch plus tags. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
+The release script fetches `origin/main`, verifies local `main` is based on it (local commits ahead of origin are OK), checks that the target git tag and npm version do not already exist, runs `pnpm check` and `pnpm build`, bumps `package.json` via `pnpm version`, creates the matching `v*.*.*` tag, and pushes the branch plus tags.
+
+Do not run `pnpm version` or push release tags manually unless the release script is unsuitable and the user explicitly asks. The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
 
 ## Validation expectations
 
