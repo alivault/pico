@@ -2827,18 +2827,23 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   const labelText = userMessageLabel(item)
 
   return (
-    <div className="w-full rounded-xl border bg-primary/6 px-4 py-3">
+    <div className="w-full rounded-xl border border-primary bg-primary px-4 py-3 text-primary-foreground">
       {labelText ? (
         <div className="mb-2 flex items-center gap-2">
-          <Badge variant="outline">{labelText}</Badge>
+          <Badge
+            variant="outline"
+            className="border-primary-foreground/35 bg-primary-foreground/10 text-primary-foreground"
+          >
+            {labelText}
+          </Badge>
         </div>
       ) : null}
       {item.text ? (
-        <div className="text-sm break-words whitespace-pre-wrap text-foreground">
+        <div className="text-sm break-words whitespace-pre-wrap text-primary-foreground">
           {item.text}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">Image prompt</div>
+        <div className="text-sm text-primary-foreground/80">Image prompt</div>
       )}
       {item.images.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-3">
