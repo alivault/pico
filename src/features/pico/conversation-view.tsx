@@ -419,12 +419,20 @@ const CodeBlockCopyButton = React.memo(function CodeBlockCopyButton({
 })
 
 const CodeBlock = React.memo(function CodeBlock({
+  className,
   code,
   language,
+  onPreScroll,
+  preClassName,
+  preRef,
   streaming = false,
 }: {
+  className?: string
   code: string
   language?: string
+  onPreScroll?: React.UIEventHandler<HTMLPreElement>
+  preClassName?: string
+  preRef?: React.Ref<HTMLPreElement>
   streaming?: boolean
 }) {
   const [highlighted, setHighlighted] =
@@ -477,14 +485,26 @@ const CodeBlock = React.memo(function CodeBlock({
   ) : null
 
   return (
-    <div className="not-prose overflow-hidden rounded-xl border bg-muted/40">
+    <div
+      className={cn(
+        "not-prose overflow-hidden rounded-xl border bg-muted/40",
+        className
+      )}
+    >
       <div className="flex items-center justify-between gap-3 border-b bg-background/80 px-3 py-2 text-xs text-muted-foreground">
         <div className="truncate font-medium tracking-wide uppercase">
           {displayedLanguage || "code"}
         </div>
         <CodeBlockCopyButton code={code} />
       </div>
-      <pre className="overflow-x-auto bg-transparent px-4 py-3 text-[13px] leading-6 text-foreground">
+      <pre
+        ref={preRef}
+        onScroll={onPreScroll}
+        className={cn(
+          "overflow-x-auto bg-transparent px-4 py-3 text-[13px] leading-6 text-foreground",
+          preClassName
+        )}
+      >
         {highlightedContent || <code>{code}</code>}
       </pre>
     </div>
@@ -688,7 +708,8 @@ function toolCommandPreview(
     getToolArgText(args, "description") ||
     getToolArgText(args, "command") ||
     getToolArgText(args, "path") ||
-    getToolArgText(args, "filePath")
+    getToolArgText(args, "filePath") ||
+    getToolArgText(args, "file_path")
   )
 }
 
@@ -699,7 +720,9 @@ function toolReadLocation(
 
   const args = normalizeToolArgs(block.args)
   const filePath =
-    getToolArgText(args, "path") || getToolArgText(args, "filePath")
+    getToolArgText(args, "path") ||
+    getToolArgText(args, "filePath") ||
+    getToolArgText(args, "file_path")
   const offset = args?.offset
   const limit = args?.limit
 
@@ -719,12 +742,62 @@ function collapseToolPreview(text: string) {
   return text.replace(/\s+/g, " ").trim()
 }
 
+function countTextDisplayLines(text: string) {
+  if (!text) return 0
+  return text.split("\n").length
+}
+
+function formatCountLabel(
+  count: number,
+  singular: string,
+  plural = `${singular}s`
+) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+function getWriteToolPayload(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool" || block.name !== "write") return undefined
+
+  const args = normalizeToolArgs(block.args)
+  if (!args) return undefined
+
+  const path =
+    getToolArgText(args, "path") ||
+    getToolArgText(args, "filePath") ||
+    getToolArgText(args, "file_path")
+  const content = args.content
+
+  return {
+    content: typeof content === "string" ? content : undefined,
+    path,
+  }
+}
+
+function writeToolSummary(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  const payload = getWriteToolPayload(block)
+  if (!payload?.path) return ""
+  if (payload.content === undefined) return payload.path
+
+  return `${payload.path} · ${formatCountLabel(
+    countTextDisplayLines(payload.content),
+    "line"
+  )}`
+}
+
 function toolSummary(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   if (block.type !== "tool") return ""
   const preview =
-    block.name === "read" ? toolReadLocation(block) : toolCommandPreview(block)
+    block.name === "read"
+      ? toolReadLocation(block)
+      : block.name === "write"
+        ? writeToolSummary(block)
+        : toolCommandPreview(block)
   if (preview) return collapseToolPreview(preview)
   if (block.running) return "Running"
   if (block.isError) return "Failed"
@@ -2386,14 +2459,10 @@ function scrollElementToBottom(element: HTMLElement) {
   element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
 }
 
-function useRunningToolAutoScroll({
-  contentKey,
-  enabled,
-}: {
-  contentKey: string
-  enabled: boolean
-}) {
-  const scrollRef = React.useRef<HTMLDivElement>(null)
+function useRunningToolAutoScroll<
+  TElement extends HTMLElement = HTMLDivElement,
+>({ contentKey, enabled }: { contentKey: string; enabled: boolean }) {
+  const scrollRef = React.useRef<TElement>(null)
   const autoScrollRef = React.useRef(true)
   const wasEnabledRef = React.useRef(false)
 
@@ -2415,7 +2484,7 @@ function useRunningToolAutoScroll({
     }
   }, [contentKey, enabled])
 
-  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = (event: React.UIEvent<TElement>) => {
     if (!enabled) return
 
     const distance = scrollDistanceFromBottom(event.currentTarget)
@@ -2452,6 +2521,112 @@ function editToolOutputWithoutSuccessMessage(output: string) {
     )
     .join("\n")
     .trimEnd()
+}
+
+function writeToolOutputWithoutSuccessMessage(output: string) {
+  return output
+    .split("\n")
+    .filter((line) => !/^Successfully wrote \d+ bytes to .+$/.test(line))
+    .join("\n")
+    .trimEnd()
+}
+
+const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  bash: "bash",
+  c: "c",
+  cc: "c",
+  cjs: "javascript",
+  cpp: "c",
+  css: "css",
+  cxx: "c",
+  go: "go",
+  h: "c",
+  htm: "html",
+  html: "html",
+  java: "java",
+  js: "javascript",
+  json: "json",
+  jsonc: "jsonc",
+  jsx: "jsx",
+  mjs: "javascript",
+  md: "markdown",
+  mdx: "mdx",
+  py: "python",
+  rs: "rust",
+  sh: "bash",
+  ts: "typescript",
+  tsx: "tsx",
+  txt: "plaintext",
+  xml: "xml",
+  yaml: "yaml",
+  yml: "yaml",
+  zsh: "bash",
+} satisfies Record<string, string>
+
+const CODE_LANGUAGE_BY_FILENAME: Record<string, string> = {
+  dockerfile: "dockerfile",
+  makefile: "makefile",
+} satisfies Record<string, string>
+
+function codeLanguageFromPath(filePath: string) {
+  const fileName = filePath.replace(/\\/g, "/").split("/").pop()?.toLowerCase()
+  if (!fileName) return undefined
+
+  const filenameLanguage = CODE_LANGUAGE_BY_FILENAME[fileName]
+  if (filenameLanguage) return filenameLanguage
+
+  if (fileName.endsWith(".d.ts")) return "typescript"
+
+  const extension = fileName.includes(".") ? fileName.split(".").pop() : ""
+  return extension ? CODE_LANGUAGE_BY_EXTENSION[extension] : undefined
+}
+
+function WriteToolOutput({ block }: { block: AssistantToolBlock }) {
+  const payload = getWriteToolPayload(block)
+  const content = payload?.content
+  const extraOutput = writeToolOutputWithoutSuccessMessage(
+    block.output.trimEnd()
+  )
+  const autoScroll = useRunningToolAutoScroll<HTMLPreElement>({
+    contentKey: content || "",
+    enabled: block.running && content !== undefined,
+  })
+
+  if (block.isError) {
+    return (
+      <PlainToolOutput
+        isError
+        text={extraOutput || block.output.trimEnd() || "Write failed."}
+      />
+    )
+  }
+
+  if (!payload || content === undefined) {
+    return (
+      <PlainToolOutput
+        text={toolOutputText(block) || "No content available."}
+      />
+    )
+  }
+
+  const language = payload.path ? codeLanguageFromPath(payload.path) : undefined
+
+  return (
+    <div className="space-y-3">
+      <CodeBlock
+        className="flex max-h-96 flex-col rounded-lg"
+        code={content}
+        language={language}
+        onPreScroll={autoScroll.onScroll}
+        preClassName="min-h-0 overflow-auto"
+        preRef={autoScroll.ref}
+        streaming={block.running}
+      />
+      {extraOutput ? (
+        <PlainToolOutput isError={block.isError} text={extraOutput} />
+      ) : null}
+    </div>
+  )
 }
 
 function EditToolOutput({
@@ -2509,6 +2684,12 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
   })
   const isSuccessfulEditTool =
     block.name === "edit" && !block.running && !block.isError
+  const isSelfContainedWriteTool =
+    block.name === "write" &&
+    !block.isError &&
+    getWriteToolPayload(block)?.content !== undefined
+  const hasSelfContainedToolOutput =
+    isSuccessfulEditTool || isSelfContainedWriteTool
 
   return (
     <div className="border-t pt-3">
@@ -2516,8 +2697,12 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
         ref={block.name === "bash" ? autoScroll.ref : undefined}
         onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
         className={cn(
-          "max-h-96 overflow-auto rounded-lg border bg-background/80",
-          !isSuccessfulEditTool && "p-3"
+          isSelfContainedWriteTool
+            ? "overflow-hidden rounded-lg"
+            : "max-h-96 overflow-auto",
+          hasSelfContainedToolOutput
+            ? "rounded-lg"
+            : "rounded-lg border bg-background/80 p-3"
         )}
       >
         {block.name === "bash" ? (
@@ -2529,6 +2714,8 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
           >
             <AnsiText text={shellBodyText} />
           </pre>
+        ) : block.name === "write" ? (
+          <WriteToolOutput block={block} />
         ) : block.name === "edit" ? (
           <EditToolOutput block={block} />
         ) : (
