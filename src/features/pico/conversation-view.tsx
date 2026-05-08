@@ -2827,7 +2827,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   const labelText = userMessageLabel(item)
 
   return (
-    <div className="mr-2 ml-auto w-fit max-w-[80%]">
+    <div className="mr-7 ml-auto w-fit max-w-[80%]">
       <div className="relative rounded-3xl bg-primary px-5 py-2.5 text-primary-foreground before:absolute before:-right-1.75 before:bottom-0 before:h-5.5 before:w-4 before:rounded-bl-[16px_14px] before:bg-primary before:content-[''] after:absolute after:-right-6.5 after:bottom-0 after:h-6.25 after:w-6.5 after:rounded-bl-[10px] after:bg-background after:content-['']">
         {labelText ? (
           <div className="mb-2 flex items-center gap-2">

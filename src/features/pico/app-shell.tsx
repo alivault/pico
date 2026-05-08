@@ -1818,7 +1818,7 @@ const AppShellConversationFrame = React.forwardRef<
         tabIndex={0}
         role="region"
         aria-label="Conversation messages"
-        className="h-full overflow-auto overscroll-contain px-4 outline-none [overflow-anchor:none]"
+        className="h-full overflow-x-hidden overflow-y-auto overscroll-contain px-4 outline-none [overflow-anchor:none]"
       >
         <div ref={messagesContentRef} className="flex min-h-full flex-col">
           <ConversationScrollRevisionObserver
