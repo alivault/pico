@@ -106,22 +106,6 @@ Pico is built with:
 - Base UI / shadcn-style components
 - Pi SDK
 
-## Releasing
-
-Releases are published by the GitHub Actions workflow in `.github/workflows/release.yml` when a version tag is pushed.
-
-Before the first release, configure npm Trusted Publishing for this repository, workflow file `release.yml`, and GitHub Actions environment `npm`.
-
-```bash
-pnpm check
-pnpm build
-pnpm version patch # or minor/major/prepatch
-
-git push origin main --follow-tags
-```
-
-The pushed `vX.Y.Z` tag must match `package.json`. The workflow validates the package, builds it, publishes `@alivault/pico` to npm with provenance, and creates GitHub release notes.
-
 ## License
 
 Pico is licensed under AGPL-3.0-only. See [LICENSE](./LICENSE).

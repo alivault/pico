@@ -614,6 +614,29 @@ If you extend git UI, update:
 3. implement runtime handling in `runSlashCommand()`
 4. validate both typed entry and UI suggestion flows
 
+## Release workflow
+
+The public package is released through `.github/workflows/release.yml` on pushed `v*.*.*` tags.
+
+Release setup:
+
+- npm Trusted Publishing should be configured for repository `alivault/pico`
+- workflow filename: `release.yml`
+- GitHub Actions environment: `npm`
+- the workflow uses OIDC (`id-token: write`), not an `NPM_TOKEN` secret
+
+Release process:
+
+```bash
+pnpm check
+pnpm build
+pnpm version patch # or minor/major/prepatch
+
+git push origin main --follow-tags
+```
+
+The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance, and creates a GitHub release with generated release notes.
+
 ## Validation expectations
 
 At minimum after non-trivial changes:
