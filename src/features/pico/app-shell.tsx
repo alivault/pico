@@ -1145,6 +1145,7 @@ function conversationItemKey(item: ConversationItem, index: number) {
 
 function groupConversationItemsForRender(options: {
   items: Array<ConversationItem>
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
 }) {
@@ -1183,7 +1184,7 @@ function groupConversationItemsForRender(options: {
 
       pendingAssistantGroup.itemKeys.push(key)
       pendingAssistantVisible ||=
-        assistantMessageHasFooterMeta(item) ||
+        (!options.hideFooter && assistantMessageHasFooterMeta(item)) ||
         assistantMessageHasVisibleBlocks({
           item,
           hideThinking: options.hideThinking,
@@ -1256,6 +1257,7 @@ type ConversationItemsSnapshot = {
 }
 
 type ConversationGroupSubscription = {
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
   groups: Array<RenderConversationGroupDescriptor>
@@ -1275,6 +1277,7 @@ type ConversationItemsStore = {
   setItems: (items: Array<ConversationItem>) => void
   subscribe: (listener: () => void) => () => void
   subscribeGroups: (options: {
+    hideFooter: boolean
     hideThinking: boolean
     hideToolBlocks: boolean
     groups: Array<RenderConversationGroupDescriptor>
@@ -1372,6 +1375,7 @@ function createConversationItemsStore(
       for (const subscription of groupSubscriptions) {
         const nextGroups = groupConversationItemsForRender({
           items,
+          hideFooter: subscription.hideFooter,
           hideThinking: subscription.hideThinking,
           hideToolBlocks: subscription.hideToolBlocks,
         })
@@ -1403,8 +1407,15 @@ function createConversationItemsStore(
         listeners.delete(listener)
       }
     },
-    subscribeGroups: ({ hideThinking, hideToolBlocks, groups, listener }) => {
+    subscribeGroups: ({
+      hideFooter,
+      hideThinking,
+      hideToolBlocks,
+      groups,
+      listener,
+    }) => {
       const subscription: ConversationGroupSubscription = {
+        hideFooter,
         hideThinking,
         hideToolBlocks,
         groups,
@@ -1486,20 +1497,24 @@ function useConversationHasAssistantOutput(store: ConversationItemsStore) {
 }
 
 function useConversationGroupDescriptors({
+  hideFooter,
   hideThinking,
   hideToolBlocks,
   store,
 }: {
+  hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
   store: ConversationItemsStore
 }) {
   const cacheRef = React.useRef<{
+    hideFooter: boolean
     hideThinking: boolean
     hideToolBlocks: boolean
     revision: number
     groups: Array<RenderConversationGroupDescriptor>
   }>({
+    hideFooter,
     hideThinking,
     hideToolBlocks,
     revision: -1,
@@ -1511,6 +1526,7 @@ function useConversationGroupDescriptors({
     const cache = cacheRef.current
     if (
       cache.revision === snapshot.revision &&
+      cache.hideFooter === hideFooter &&
       cache.hideThinking === hideThinking &&
       cache.hideToolBlocks === hideToolBlocks
     ) {
@@ -1519,16 +1535,19 @@ function useConversationGroupDescriptors({
 
     const nextGroups = groupConversationItemsForRender({
       items: snapshot.items,
+      hideFooter,
       hideThinking,
       hideToolBlocks,
     })
     const groups =
+      cache.hideFooter === hideFooter &&
       cache.hideThinking === hideThinking &&
       cache.hideToolBlocks === hideToolBlocks
         ? reconcileRenderConversationGroupDescriptors(cache.groups, nextGroups)
         : nextGroups
 
     cacheRef.current = {
+      hideFooter,
       hideThinking,
       hideToolBlocks,
       revision: snapshot.revision,
@@ -1540,6 +1559,7 @@ function useConversationGroupDescriptors({
 
   const subscribe = (listener: () => void) =>
     store.subscribeGroups({
+      hideFooter,
       hideThinking,
       hideToolBlocks,
       groups: getSnapshot(),
@@ -2192,6 +2212,7 @@ function AppShellConversationItemGroups({
     : "w-full"
   const renderedConversationGroups = useConversationGroupDescriptors({
     store: conversationItemsStore,
+    hideFooter,
     hideThinking,
     hideToolBlocks,
   })
