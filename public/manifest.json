@@ -3,6 +3,12 @@
   "name": "Pico",
   "icons": [
     {
+      "src": "favicon.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
       "src": "favicon.png",
       "sizes": "32x32",
       "type": "image/png",
