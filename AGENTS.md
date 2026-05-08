@@ -4,13 +4,11 @@ This file is the repo-specific guide for coding agents working in Pico.
 
 ## What this repo is
 
-This repo contains the current TanStack Start rewrite of the legacy browser app, now branded as Pico.
+Pico is a local, keyboard-friendly browser workspace for Pi coding-agent sessions. It is published as the public `@alivault/pico` package and can be run directly with `npx @alivault/pico` or developed from source.
 
-Important parity/reference note:
+The app provides a persistent session browser, a live conversation shell, project-aware prompt helpers, provider authentication flows, git tooling, and settings around display, theme, and completion notifications.
 
-- The legacy app is **not** in this repo anymore.
-- The parity reference lives at `~/code/pi-web-legacy`.
-- When behavior is ambiguous, prefer matching the legacy app unless the user explicitly wants a deliberate change.
+When behavior is ambiguous, prefer the behavior currently documented in `README.md` and implemented in this repo. Do not rely on private checkouts, machine-local paths, or git history as product references.
 
 ## Stack
 
@@ -60,7 +58,7 @@ Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline validation command.
-- If you need to start, restart, or test a dev server / preview build, use the `zellij` `pi` session instead of creating an ad hoc long-lived server process.
+- Avoid leaving ad hoc long-lived dev/preview server processes running. Reuse an existing terminal/session manager if one is already set up by the user.
 
 ## Repo layout
 
@@ -95,13 +93,21 @@ Notes:
 - `src/features/pico/app-shell-add-directory-dialog.tsx`, `src/features/pico/app-shell-auth-dialog.tsx`, `src/features/pico/app-shell-session-dialogs.tsx`, `src/features/pico/app-shell-sessions-dialog.tsx`, `src/features/pico/app-shell-settings-dialog.tsx`, `src/features/pico/app-shell-tree-dialog.tsx`, and `src/features/pico/app-shell-ui-request-dialog.tsx`
   - focused dialog implementations hosted by the floating controller section in `app-shell.tsx`
   - auth dialogs are keyboard-first command surfaces on desktop and drawers on mobile
+- `src/features/pico/app-shell-dialog-types.ts`
+  - shared dialog/controller types for shell-hosted dialogs
 - `src/features/pico/app-shell-dialogs.tsx`
-  - legacy/minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
+  - minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
 - `src/features/pico/app-shell-command-palette.tsx`
   - command palette UI
 - `src/features/pico/git-panel.tsx`
-  - git status/files/branches/commits tab plus commit, push, and pull actions
+  - git status/files/branches/commits tab plus diff, review, commit, push, and pull actions
   - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
+- `src/features/pico/right-sidebar.tsx`
+  - secondary workspace sidebar for session/project-adjacent panels
+- `src/features/pico/keyboard-shortcuts.ts`
+  - shared shortcut descriptors and labels used by the shell UI
+- `src/features/pico/git-toast-utils.ts`, `src/features/pico/relative-time.tsx`, and `src/features/pico/scroll-shadow-utils.ts`
+  - focused UI helpers for git toasts, relative timestamps, and scroll affordances
 - `src/features/pico/query-keys.ts`
   - TanStack Query cache keys
 - `src/features/pico/tanstack-store-utils.ts`
@@ -166,10 +172,14 @@ Notes:
 - `src/server/provider-usage.ts`
   - provider usage lookup for composer context/limit display
 - `src/server/git.ts`
-  - native git inspection and git action helpers with short-lived caching
+  - native git inspection, diff/review, and git action helpers with short-lived caching
 - `src/server/git-watch.ts`
   - filesystem watcher that emits git refresh events for active directories
   - debounces filesystem bursts with TanStack Pacer
+- `src/server/pi-edit-tool.ts`
+  - Pico-specific integration/patching for Pi edit-tool behavior
+- `src/server/project-paths.ts`
+  - safe project path resolution helpers for file/tree APIs
 - `src/server/http.ts`
   - JSON/error response helpers
 - `src/server/route-helpers.ts`
@@ -294,24 +304,30 @@ Existing notable endpoints:
 - `/api/session/select`
 - `/api/session/rename`
 - `/api/session/delete`
-- `/api/sessions/delete`
+- `/api/session/clone`
 - `/api/session/fork`
 - `/api/session/tree`
 - `/api/session/tree/label`
 - `/api/session/history`
+- `/api/sessions/delete`
 - `/api/model`
 - `/api/thinking`
 - `/api/settings/hide-thinking`
 - `/api/slash-command`
 - `/api/path-completions`
 - `/api/file-completions`
+- `/api/files/read`
+- `/api/files/tree`
 - `/api/directory/resolve`
+- `/api/directory-search`
 - `/api/directory-sessions`
 - `/api/directory-sessions/cleanup`
 - `/api/directory-sessions-index`
 - `/api/directory-sessions-indexes`
 - `/api/git-status`
 - `/api/git-changes`
+- `/api/git-diff`
+- `/api/git-review`
 - `/api/git-commit-message`
 - `/api/git-commit`
 - `/api/git-checkout`
@@ -545,12 +561,13 @@ Current behavior includes:
 - remote branch info
 - recent commits
 - unpushed commit hashes
+- changed-file diffs and AI-assisted review
 - AI/heuristic commit message generation
 - commit, optional commit-and-push, push, and pull actions
-- short-lived caches for status/files/branches/commits
+- short-lived caches for status/files/branches/commits/diffs
 - filesystem git watching that emits debounced `git_changed` SSE notifications
 
-The git panel renders files, branches, and commits sections together when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
+The git panel renders files, branches, commits, diffs, and review affordances when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
 
 If you extend git UI, update:
 
@@ -634,15 +651,16 @@ Be especially careful around these:
 - changing storage keys unnecessarily
 - replacing named TanStack Pacer controls with ad hoc debounce/throttle/queue timers in high-churn paths
 - bypassing the runtime singleton with ad hoc server state
-- altering session tree/fork behavior without testing the dialog flows
-- assuming the legacy app is in this repo
+- altering session tree/fork/clone behavior without testing the dialog flows
+- relying on private machine-local paths, unpublished references, or git history for product behavior
 
 ## When documenting the app
 
-Keep repo docs aligned with reality:
+Keep public repo docs aligned with the implementation:
 
-- legacy app path is `~/code/pi-web-legacy`
 - dev port is `3141`
-- there is currently no separate `parity-checklist.md` in this repo
+- public package name is `@alivault/pico`
+- CLI binary is `pico-app`
+- bundled Pi SDK updates are handled by `pnpm update:pi`
 
 If README or future docs drift from the code, update them as part of the same change.

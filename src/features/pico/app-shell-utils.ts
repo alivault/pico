@@ -107,8 +107,8 @@ function isCurrentResponseBoundaryUser(item: SessionState["items"][number]) {
 }
 
 function latestCurrentTurnThinkingSummaryText(items: SessionState["items"]) {
-  // Match the legacy app's current-response scope: scan backwards until the
-  // latest real user turn, but ignore queued follow-ups/steering messages.
+  // Keep the current-response scope narrow: scan backwards until the latest
+  // real user turn, but ignore queued follow-ups/steering messages.
   for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
     const item = items[itemIndex]
     if (!item) continue
