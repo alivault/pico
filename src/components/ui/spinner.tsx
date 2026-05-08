@@ -37,7 +37,7 @@ function Spinner({
       role="status"
       aria-label={ariaLabel}
       className={cn(
-        "pointer-events-none inline-flex size-4 shrink-0 items-center justify-center font-mono leading-none text-current select-none",
+        "pointer-events-none inline-flex size-4 shrink-0 items-center justify-center font-mono leading-none text-primary select-none",
         className
       )}
       {...props}

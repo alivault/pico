@@ -7289,7 +7289,7 @@ const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
               <Spinner
-                className="size-3.5 shrink-0 text-muted-foreground"
+                className="size-3.5 shrink-0"
                 aria-label="Session streaming"
               />
             ) : null}

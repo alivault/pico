@@ -648,10 +648,7 @@ function SidebarSessionItem({
     >
       {entry.streaming ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
-          <Spinner
-            className="size-3.5 text-sidebar-foreground/60"
-            aria-label="Session streaming"
-          />
+          <Spinner className="size-3.5" aria-label="Session streaming" />
         </span>
       ) : showUnread ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
@@ -1010,7 +1007,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           </span>
         </span>
         {showHeaderLoadingSpinner ? (
-          <Spinner className="size-3.5 shrink-0 text-sidebar-foreground/50" />
+          <Spinner className="size-3.5 shrink-0" />
         ) : null}
       </button>
 

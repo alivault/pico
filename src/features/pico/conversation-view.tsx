@@ -85,7 +85,7 @@ function MarkdownCode({
   return (
     <code
       className={cn(
-        "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[#f19232] before:content-none after:content-none",
+        "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[var(--inline-code-foreground)] before:content-none after:content-none",
         className
       )}
       {...props}
