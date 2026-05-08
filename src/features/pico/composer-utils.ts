@@ -341,6 +341,11 @@ export function getPathCompletionQuery({
   const textBeforeCursor = value.slice(0, selectionStart)
   const quotedPrefix = extractQuotedCompletionPrefix(textBeforeCursor)
   if (quotedPrefix && !quotedPrefix.startsWith("@")) {
+    const rawPrefix = quotedPrefix.slice(1)
+    if (!force && !rawPrefix) {
+      return null
+    }
+
     const start = selectionStart - quotedPrefix.length
     const afterCursor = value.slice(selectionStart)
     const closingQuoteIndex = afterCursor.indexOf('"')
@@ -357,7 +362,7 @@ export function getPathCompletionQuery({
       start,
       end,
       prefix: quotedPrefix,
-      rawPrefix: quotedPrefix.slice(1),
+      rawPrefix,
       isQuotedPrefix: true,
       token: value.slice(start, end),
     }
