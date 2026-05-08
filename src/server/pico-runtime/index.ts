@@ -2201,7 +2201,7 @@ export class PicoRuntime {
   private async resolveRequestedEntry(
     url: URL,
     context: ContextState,
-    options?: { notifyOnActivate?: boolean }
+    options?: { notifyOnActivate?: boolean; preferActiveDraft?: boolean }
   ) {
     return await resolveRuntimeRequestedEntry({
       url,
@@ -2210,6 +2210,7 @@ export class PicoRuntime {
       ensureSessionEntryById: async (sessionId) =>
         await this.ensureSessionEntryById(sessionId),
       getActiveEntry: (activeContext) => this.getActiveEntry(activeContext),
+      isDraftEntry: (entry) => this.isDraftEntry(entry),
       getOrCreateDraftEntry: async (activeContext) =>
         await this.getOrCreateDraftEntry(activeContext),
       activateContextSession: async (activeContext, entry, activateOptions) =>
@@ -2219,12 +2220,13 @@ export class PicoRuntime {
           activateOptions
         ),
       notifyOnActivate: options?.notifyOnActivate,
+      preferActiveDraft: options?.preferActiveDraft,
     })
   }
 
   async resolveRequest(
     request: Request,
-    options?: { notifyOnActivate?: boolean }
+    options?: { notifyOnActivate?: boolean; preferActiveDraft?: boolean }
   ): Promise<ResolveRequestResult> {
     const startedAt = performance.now()
     const url = new URL(request.url)
@@ -2246,6 +2248,7 @@ export class PicoRuntime {
     try {
       const activeEntry = await this.resolveRequestedEntry(url, context, {
         notifyOnActivate: options?.notifyOnActivate ?? false,
+        preferActiveDraft: options?.preferActiveDraft ?? true,
       })
       this.logSessionLoadDebug("request_resolve:done", {
         pathname: url.pathname,
@@ -3366,7 +3369,9 @@ export class PicoRuntime {
 
   async createEventsResponse(request: Request) {
     const startedAt = performance.now()
-    const { url, context, activeEntry } = await this.resolveRequest(request)
+    const { url, context, activeEntry } = await this.resolveRequest(request, {
+      preferActiveDraft: false,
+    })
     context.sidebarBootstrapDirectories = normalizeRequestedDirectories(
       url.searchParams.getAll("sidebarDirectory")
     )
@@ -3491,7 +3496,9 @@ export class PicoRuntime {
       thinkingLevel?: unknown
     }
   ) {
-    const { context, activeEntry } = await this.resolveRequest(request)
+    const { context, activeEntry } = await this.resolveRequest(request, {
+      preferActiveDraft: true,
+    })
     const message = typeof body.message === "string" ? body.message : ""
     const images = normalizePromptImages(body.images)
     if (!message.trim() && images.length === 0) {

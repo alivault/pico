@@ -155,6 +155,7 @@ export async function resolveRequestedEntry<
   getSessionEntryByKey: (key: string) => E | undefined
   ensureSessionEntryById: (sessionId: string) => Promise<E | undefined>
   getActiveEntry: (context: C) => E | undefined
+  isDraftEntry: (entry: E) => boolean
   getOrCreateDraftEntry: (context: C) => Promise<E>
   activateContextSession: (
     context: C,
@@ -162,6 +163,7 @@ export async function resolveRequestedEntry<
     options?: { notify?: boolean }
   ) => Promise<void>
   notifyOnActivate?: boolean
+  preferActiveDraft?: boolean
 }) {
   const {
     url,
@@ -169,9 +171,11 @@ export async function resolveRequestedEntry<
     getSessionEntryByKey,
     ensureSessionEntryById,
     getActiveEntry,
+    isDraftEntry,
     getOrCreateDraftEntry,
     activateContextSession,
     notifyOnActivate = true,
+    preferActiveDraft = false,
   } = options
 
   const activateRequestedEntry = async (entry: E) => {
@@ -186,6 +190,13 @@ export async function resolveRequestedEntry<
     const requestedEntry = getSessionEntryByKey(requestedSessionKey)
     if (requestedEntry) {
       return await activateRequestedEntry(requestedEntry)
+    }
+  }
+
+  if (preferActiveDraft && context.draftKey) {
+    const draftEntry = getSessionEntryByKey(context.draftKey)
+    if (draftEntry && isDraftEntry(draftEntry)) {
+      return await activateRequestedEntry(draftEntry)
     }
   }
 

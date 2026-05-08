@@ -158,6 +158,36 @@ function createLocalPendingId() {
     .slice(2, 10)}`
 }
 
+function buildCurrentSessionRequestUrl(
+  path: string,
+  {
+    contextId,
+    sessionState,
+    fallbackSessionId,
+  }: {
+    contextId: string
+    sessionState: SessionState
+    fallbackSessionId?: string
+  }
+) {
+  const sessionKey =
+    sessionState.sessionKey &&
+    !sessionState.sessionKey.startsWith("optimistic:")
+      ? sessionState.sessionKey
+      : undefined
+  const shouldUseSessionKey = Boolean(
+    sessionKey && (sessionState.draft || !sessionState.sessionId)
+  )
+
+  return buildRequestUrl(path, {
+    contextId,
+    sessionId: shouldUseSessionKey
+      ? undefined
+      : (sessionState.sessionId ?? fallbackSessionId),
+    searchParams: shouldUseSessionKey ? { sessionKey } : undefined,
+  })
+}
+
 function isPendingPromptNotFoundError(error: unknown) {
   return (
     error instanceof Error &&
@@ -580,9 +610,10 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PromptResponse>(
-        buildRequestUrl("/api/prompt", {
+        buildCurrentSessionRequestUrl("/api/prompt", {
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
         }),
         {
           method: "POST",
@@ -895,9 +926,10 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<SimpleOkResponse>(
-        buildRequestUrl("/api/abort", {
+        buildCurrentSessionRequestUrl("/api/abort", {
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
         }),
         {
           method: "POST",
@@ -924,9 +956,10 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PendingMessagesResponse>(
-        buildRequestUrl("/api/pending-messages/reorder", {
+        buildCurrentSessionRequestUrl("/api/pending-messages/reorder", {
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
         }),
         {
           method: "POST",
@@ -985,9 +1018,10 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PendingMessageRemoveResponse>(
-        buildRequestUrl("/api/pending-message/remove", {
+        buildCurrentSessionRequestUrl("/api/pending-message/remove", {
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
         }),
         {
           method: "POST",
