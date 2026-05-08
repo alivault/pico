@@ -33,9 +33,6 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - name: Update npm
-        run: npm install -g npm@latest
-
       - name: Show tool versions
         run: |
           node --version
@@ -92,7 +89,7 @@ jobs:
 
       - name: Publish to npm
         if: steps.npm_status.outputs.published != 'true'
-        run: npm publish --access public --provenance --tag "${{ steps.dist_tag.outputs.tag }}"
+        run: npx --yes npm@latest publish --access public --provenance --tag "${{ steps.dist_tag.outputs.tag }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
