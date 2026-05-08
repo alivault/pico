@@ -20,17 +20,36 @@ const PROVIDER_MAP: Record<string, string> = {
   "openai-codex": "codex",
 }
 
-function getOAuthAccessToken(
+async function getOAuthAccessToken(
   authStorage: AuthStorageLike | undefined,
   provider: string
 ) {
   const credential = authStorage?.get(provider)
-  return credential?.type === "oauth" ? credential.access : undefined
+  if (credential?.type !== "oauth") return undefined
+
+  let token = credential.access
+  if (typeof authStorage?.getApiKey === "function") {
+    try {
+      token =
+        (await authStorage.getApiKey(provider, { includeFallback: false })) ||
+        token
+    } catch {
+      // Fall back to the currently stored token; the usage request below will
+      // safely return no usage if it has expired.
+    }
+  }
+
+  const refreshedCredential = authStorage?.get(provider)
+  return {
+    token,
+    credential:
+      refreshedCredential?.type === "oauth" ? refreshedCredential : credential,
+  }
 }
 
-function getClaudeToken(authStorage: AuthStorageLike | undefined) {
-  const token = getOAuthAccessToken(authStorage, "anthropic")
-  if (token) return token
+async function getClaudeToken(authStorage: AuthStorageLike | undefined) {
+  const result = await getOAuthAccessToken(authStorage, "anthropic")
+  if (result?.token) return result.token
 
   try {
     const keychainData = execSync(
@@ -48,16 +67,16 @@ function getClaudeToken(authStorage: AuthStorageLike | undefined) {
   return undefined
 }
 
-function getCodexToken(
+async function getCodexToken(
   authStorage: AuthStorageLike | undefined
-): { token: string; accountId?: string } | undefined {
-  const credential = authStorage?.get("openai-codex")
-  if (credential?.type === "oauth") {
+): Promise<{ token: string; accountId?: string } | undefined> {
+  const result = await getOAuthAccessToken(authStorage, "openai-codex")
+  if (result) {
     return {
-      token: credential.access,
+      token: result.token,
       accountId:
-        typeof credential.accountId === "string"
-          ? credential.accountId
+        typeof result.credential.accountId === "string"
+          ? result.credential.accountId
           : undefined,
     }
   }
@@ -142,7 +161,7 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
 async function fetchClaudeUsage(
   authStorage: AuthStorageLike | undefined
 ): Promise<ProviderUsageSnapshot> {
-  const token = getClaudeToken(authStorage)
+  const token = await getClaudeToken(authStorage)
   if (!token) return { windows: [] }
 
   try {
@@ -186,7 +205,7 @@ async function fetchClaudeUsage(
 async function fetchCodexUsage(
   authStorage: AuthStorageLike | undefined
 ): Promise<ProviderUsageSnapshot> {
-  const creds = getCodexToken(authStorage)
+  const creds = await getCodexToken(authStorage)
   if (!creds) return { windows: [] }
 
   try {

@@ -157,6 +157,10 @@ export type AuthStorageLike = {
     name: string
     usesCallbackServer?: boolean
   }>
+  getApiKey?(
+    providerId: string,
+    options?: { includeFallback?: boolean }
+  ): Promise<string | undefined>
   login(
     providerId: string,
     callbacks: {
