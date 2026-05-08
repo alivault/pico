@@ -77,4 +77,4 @@ Pico is built with:
 
 ## License
 
-Private project.
+Pico is licensed under AGPL-3.0-only. See [LICENSE](./LICENSE).
