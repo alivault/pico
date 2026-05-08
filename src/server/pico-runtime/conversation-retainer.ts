@@ -62,6 +62,46 @@ function streamingAssistantItem(items: Array<ConversationItem>) {
   return undefined
 }
 
+function rekeyAssistantBlock(
+  block: AssistantBlock,
+  previousRenderKey: string,
+  nextRenderKey: string
+) {
+  if (!previousRenderKey || previousRenderKey === nextRenderKey) return block
+
+  const replacePrefix = (value: string | undefined) =>
+    value?.startsWith(previousRenderKey)
+      ? `${nextRenderKey}${value.slice(previousRenderKey.length)}`
+      : value
+  const blockKey = replacePrefix(block.blockKey)
+  const renderKey = replacePrefix(block.renderKey)
+
+  if (blockKey === block.blockKey && renderKey === block.renderKey) {
+    return block
+  }
+
+  return {
+    ...block,
+    ...(blockKey ? { blockKey } : {}),
+    ...(renderKey ? { renderKey } : {}),
+  } satisfies AssistantBlock
+}
+
+function rekeyStreamingAssistantItem(item: AssistantItem, renderKey: string) {
+  const previousRenderKey = item.renderKey || item.itemKey || ""
+  if (previousRenderKey === renderKey && item.renderKey === renderKey) {
+    return item
+  }
+
+  return {
+    ...item,
+    renderKey,
+    blocks: item.blocks.map((block) =>
+      rekeyAssistantBlock(block, previousRenderKey, renderKey)
+    ),
+  } satisfies AssistantItem
+}
+
 function abortedAssistantMessage(event: RetainedSessionEvent) {
   const messages = Array.isArray(event.messages) ? event.messages : []
 
@@ -317,14 +357,36 @@ function appendCommittedMessage(
   const itemKey = nextMessageItemKey(state.items)
 
   if (message.role === "user") {
+    const item = {
+      kind: "user",
+      itemKey,
+      text: extractMessageText(message),
+      images: extractMessageImages(message),
+    } satisfies ConversationItem
+    const streamingIndex = state.items.findIndex(
+      (entry) => entry.kind === "assistant" && entry.streaming
+    )
+
+    if (streamingIndex < 0) {
+      state.items = [...state.items, item]
+      return
+    }
+
+    const streamingItem = state.items[streamingIndex]
+    const userMessageIndex = messageItemIndex(item)
+    const nextStreamingItem =
+      streamingItem?.kind === "assistant" && userMessageIndex >= 0
+        ? rekeyStreamingAssistantItem(
+            streamingItem,
+            `message:${userMessageIndex + 1}`
+          )
+        : streamingItem
+
     state.items = [
-      ...state.items,
-      {
-        kind: "user",
-        itemKey,
-        text: extractMessageText(message),
-        images: extractMessageImages(message),
-      },
+      ...state.items.slice(0, streamingIndex),
+      item,
+      ...(nextStreamingItem ? [nextStreamingItem] : []),
+      ...state.items.slice(streamingIndex + 1),
     ]
     return
   }

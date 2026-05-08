@@ -238,9 +238,11 @@ export async function readFileAsPromptImage(file: File) {
 }
 
 function isLocalOnlyConversationItem(item: ConversationItem) {
-  return (
-    item.kind === "user" && (Boolean(item.pendingId) || Boolean(item.queued))
-  )
+  if (item.kind === "user") {
+    return Boolean(item.pendingId) || Boolean(item.queued)
+  }
+
+  return item.kind === "assistant" && item.streaming && item.blocks.length === 0
 }
 
 function applyConversationItemsPatch(
@@ -262,20 +264,24 @@ function applyConversationItemsPatch(
   const items = Array.isArray(patch.items) ? patch.items : null
 
   if (
-    previousLength !== authoritativeItems.length ||
     start < 0 ||
     start > authoritativeItems.length ||
     deleteCount < 0 ||
-    start + deleteCount > authoritativeItems.length ||
     !items
   ) {
     return previousItems
   }
 
+  const effectiveDeleteCount =
+    previousLength === authoritativeItems.length &&
+    start + deleteCount <= authoritativeItems.length
+      ? deleteCount
+      : Math.min(deleteCount, authoritativeItems.length - start)
+
   return [
     ...authoritativeItems.slice(0, start),
     ...items,
-    ...authoritativeItems.slice(start + deleteCount),
+    ...authoritativeItems.slice(start + effectiveDeleteCount),
   ]
 }
 
@@ -299,19 +305,25 @@ export function updateStateFromSync(
     replacingSession &&
     previous.sessionKey === `optimistic:${nextDraftOwnerKey}`
   const previousItems = replacingOptimisticDraft ? previous.items : base.items
-  const syncForItems = sync.itemsPatch
-    ? {
-        ...sync,
-        items: applyConversationItemsPatch(previousItems, sync.itemsPatch),
-      }
-    : sync
-  const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
-  const { items } = buildItemsFromSync(syncForItems, previousItems)
   const streaming =
     typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
   const compacting =
     typeof sync.compacting === "boolean" ? sync.compacting : base.compacting
   const draft = typeof sync.draft === "boolean" ? sync.draft : base.draft
+  const syncForItems = sync.itemsPatch
+    ? {
+        ...sync,
+        draft,
+        streaming,
+        items: applyConversationItemsPatch(previousItems, sync.itemsPatch),
+      }
+    : {
+        ...sync,
+        draft,
+        streaming,
+      }
+  const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
+  const { items } = buildItemsFromSync(syncForItems, previousItems)
   const historyOffset =
     typeof sync.historyOffset === "number"
       ? sync.historyOffset

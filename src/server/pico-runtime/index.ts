@@ -3612,22 +3612,25 @@ export class PicoRuntime {
         ...promptOptions,
         preflightResult: settlePromptPreflight,
       })
+      const finishPromptIfIdle = async () => {
+        if (!activeEntry.streamingState || activeEntry.session.isStreaming) {
+          return
+        }
+
+        activeEntry.streamingState = false
+        this.reconcilePendingUserMessages(activeEntry)
+        await this.broadcastEntryState(activeEntry)
+        await this.broadcastSessionsAll()
+      }
 
       void promptPromise
-        .then(async () => {
-          activeEntry.streamingState = false
-          this.reconcilePendingUserMessages(activeEntry)
-          await this.broadcastEntryState(activeEntry)
-          await this.broadcastSessionsAll()
+        .then(() => {
+          // Successful runs are finalized by session events. The SDK prompt
+          // promise can resolve before the final message_end/agent_end events
+          // reach our retained conversation, so do not publish completion here.
         })
         .catch(async (error) => {
-          const endedRun = !activeEntry.session.isStreaming
-          if (endedRun) {
-            activeEntry.streamingState = false
-            this.reconcilePendingUserMessages(activeEntry)
-            await this.broadcastEntryState(activeEntry)
-            await this.broadcastSessionsAll()
-          }
+          await finishPromptIfIdle()
           console.error("[pico] prompt error", error)
           this.broadcastToViewers(activeEntry.key, {
             type: "request_error",
