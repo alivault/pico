@@ -4,7 +4,6 @@ import {
   ImagePlusIcon,
   ListEndIcon,
   ListStartIcon,
-  LoaderCircleIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react"
@@ -20,6 +19,7 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
@@ -905,11 +905,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                 runPrimaryComposerAction(undefined)
               }}
             >
-              {blockInitialSubmit ? (
-                <LoaderCircleIcon className="animate-spin" />
-              ) : (
-                <ArrowUpIcon />
-              )}
+              {blockInitialSubmit ? <Spinner /> : <ArrowUpIcon />}
             </Button>
           </TitleTooltip>
         ) : null}

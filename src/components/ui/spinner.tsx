@@ -1,14 +1,51 @@
-import { cn } from "@/lib/utils"
-import { Loader2Icon } from "lucide-react"
+import * as React from "react"
 
-function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
+import { cn } from "@/lib/utils"
+
+const BRAILLE_SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const
+
+function Spinner({
+  className,
+  "aria-label": ariaLabel = "Loading",
+  ...props
+}: React.ComponentProps<"span">) {
+  const [frameIndex, setFrameIndex] = React.useState(0)
+
+  React.useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
+    const intervalId = window.setInterval(() => {
+      setFrameIndex((current) => (current + 1) % BRAILLE_SPINNER_FRAMES.length)
+    }, 80)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
   return (
-    <Loader2Icon
+    <span
       role="status"
-      aria-label="Loading"
-      className={cn("size-4 animate-spin", className)}
+      aria-label={ariaLabel}
+      className={cn(
+        "pointer-events-none inline-flex size-4 shrink-0 items-center justify-center font-mono leading-none text-current select-none",
+        className
+      )}
       {...props}
-    />
+    >
+      <span aria-hidden="true" className="leading-none">
+        {BRAILLE_SPINNER_FRAMES[frameIndex]}
+      </span>
+    </span>
   )
 }
 
