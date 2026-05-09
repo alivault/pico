@@ -11,13 +11,52 @@ import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { routeErrorResponse } from "@/server/route-helpers"
 
+type GitChangesScope = "all" | "files" | "branches" | "commits"
+
+const GIT_CHANGES_SCOPES = new Set<string>([
+  "all",
+  "files",
+  "branches",
+  "commits",
+])
+
+function isGitChangesScope(value: string | null): value is GitChangesScope {
+  return Boolean(value && GIT_CHANGES_SCOPES.has(value))
+}
+
+function getGitChangesScope(url: URL): GitChangesScope {
+  const gitScope = url.searchParams.get("gitScope")
+  if (isGitChangesScope(gitScope)) return gitScope
+
+  const legacyScope = url.searchParams.get("scope")
+  return isGitChangesScope(legacyScope) ? legacyScope : "all"
+}
+
+function getRuntimeRequestForGitChanges(request: Request, url: URL) {
+  const legacyScope = url.searchParams.get("scope")
+  if (url.searchParams.has("gitScope") || !isGitChangesScope(legacyScope)) {
+    return request
+  }
+
+  // Older clients used `scope` for the git subsection. The runtime also uses
+  // `scope` as the session cwd, so strip the legacy git value before resolving
+  // app context to avoid creating/activating sessions in cwd names like
+  // "commits".
+  const runtimeUrl = new URL(url)
+  runtimeUrl.searchParams.delete("scope")
+  return new Request(runtimeUrl.toString(), {
+    headers: request.headers,
+    method: request.method,
+  })
+}
+
 export const Route = createFileRoute("/api/git-changes")({
   server: {
     handlers: {
       GET: async ({ request }) => {
         const url = new URL(request.url)
         const requestedCwd = url.searchParams.get("cwd") || ""
-        const scope = url.searchParams.get("scope") || "all"
+        const gitScope = getGitChangesScope(url)
         const commitsLimitValue = url.searchParams.get("commitsLimit")
         const commitsLimitParam = Number(commitsLimitValue)
         const commitsLimit =
@@ -29,11 +68,12 @@ export const Route = createFileRoute("/api/git-changes")({
         }
 
         try {
+          const runtimeRequest = getRuntimeRequestForGitChanges(request, url)
           const { context, activeEntry } =
-            await getPicoRuntime().resolveRequest(request)
+            await getPicoRuntime().resolveRequest(runtimeRequest)
           const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
-          if (scope === "files") {
+          if (gitScope === "files") {
             const files = await readDirectoryGitFiles(cwd)
             return jsonResponse({
               ok: true,
@@ -48,7 +88,7 @@ export const Route = createFileRoute("/api/git-changes")({
             })
           }
 
-          if (scope === "branches") {
+          if (gitScope === "branches") {
             const branches = await readDirectoryGitBranches(cwd)
             return jsonResponse({
               ok: true,
@@ -71,7 +111,7 @@ export const Route = createFileRoute("/api/git-changes")({
             })
           }
 
-          if (scope === "commits") {
+          if (gitScope === "commits") {
             const commits = await readDirectoryGitCommits(cwd, {
               limit: commitsLimit,
             })

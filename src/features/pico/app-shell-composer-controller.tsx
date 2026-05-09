@@ -101,7 +101,7 @@ function gitBranchesQueryOptions({
     queryFn: () =>
       fetchJson<GitChangesData>(
         buildRequestUrl(
-          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=branches`,
+          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&gitScope=branches`,
           {
             contextId: viewerContextId,
           }

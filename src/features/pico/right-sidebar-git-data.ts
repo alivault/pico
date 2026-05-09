@@ -75,7 +75,7 @@ export function gitChangesQueryOptions({
     queryFn: () =>
       fetchJson<GitChangesData>(
         buildRequestUrl(
-          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&scope=${scope}${
+          `/api/git-changes?cwd=${encodeURIComponent(cwd)}&gitScope=${scope}${
             scope === "commits"
               ? `&commitsLimit=${encodeURIComponent(
                   String(commitsLimit ?? GIT_COMMITS_PAGE_SIZE)
