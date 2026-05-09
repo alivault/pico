@@ -40,6 +40,7 @@ export type AppShellSessionHeaderActions = {
   onForkSession: () => void | Promise<unknown>
   onRenameSession: () => void
   onRunCompact: () => void | Promise<unknown>
+  onToggleCurrentSessionPinned: () => void
   onToggleHideThinking: () => void | Promise<unknown>
   onToggleHideToolBlocks: () => void
   onTreeSession: () => void | Promise<unknown>
@@ -51,6 +52,7 @@ type AppShellSessionHeaderProps = {
   displaySessionCwd?: string
   gitPanelOpen: boolean
   loadingDisplaySessionTitle: string
+  currentSessionPinned: boolean
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
@@ -65,6 +67,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   displaySessionCwd,
   gitPanelOpen,
   loadingDisplaySessionTitle,
+  currentSessionPinned,
   displaySettingsStore,
   isSessionViewLoading,
   newSessionDirectoryOptions,
@@ -219,6 +222,18 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 </DropdownMenuSub>
               ) : null}
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!sessionHeaderState.sessionHasFile}
+                onClick={() => {
+                  actionsRef.current.onToggleCurrentSessionPinned()
+                }}
+              >
+                <span>
+                  {currentSessionPinned
+                    ? "Unpin from sidebar"
+                    : "Pin to sidebar"}
+                </span>
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
                   void actionsRef.current.onRunCompact()

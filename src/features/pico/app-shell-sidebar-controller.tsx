@@ -26,11 +26,14 @@ import {
 import {
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
+  PINNED_SESSIONS_STORAGE_KEY,
   safeLocalStorageSetItem,
   sessionListEntryKey,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
 } from "@/lib/pico"
 import type { SessionListEntry } from "@/lib/pico/api"
+
+const PINNED_SESSION_STORE_DIRECTORY = "__pico_pinned_sessions__"
 
 function findSidebarSessionSelectionKey(
   entriesByKey: Map<string, SessionListEntry>,
@@ -95,6 +98,13 @@ export function AppShellSidebarController({
     (snapshot) => snapshot.derived.filteredDirectorySessions,
     sameSessionEntryRecord
   )
+  const pinnedSidebarSessions = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.pinnedSidebarSessions
+  )
+  const pinnedSidebarSessionKeys = pinnedSidebarSessions
+    .map((entry) => sessionListEntryKey(entry))
+    .filter(Boolean)
   const sidebarSessionEntriesByKey = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.sidebarSessionEntriesByKey,
@@ -229,10 +239,20 @@ export function AppShellSidebarController({
 
   React.useLayoutEffect(() => {
     directorySessionsStore.setData(
-      filteredDirectorySessions,
+      pinnedSidebarSessions.length > 0
+        ? {
+            ...filteredDirectorySessions,
+            [PINNED_SESSION_STORE_DIRECTORY]: pinnedSidebarSessions,
+          }
+        : filteredDirectorySessions,
       directoryIndexLoading
     )
-  }, [directoryIndexLoading, directorySessionsStore, filteredDirectorySessions])
+  }, [
+    directoryIndexLoading,
+    directorySessionsStore,
+    filteredDirectorySessions,
+    pinnedSidebarSessions,
+  ])
 
   React.useEffect(() => {
     let timeoutId = 0
@@ -660,6 +680,24 @@ export function AppShellSidebarController({
     })
   }
 
+  const togglePinnedSession = (entry: SessionListEntry) => {
+    const key = sessionListEntryKey(entry)
+    if (!key) return
+
+    sidebarStore.setPinnedSidebarSessionKeys((current) => {
+      const currentKeys = normalizeSessionSelectionKeys(current)
+      const nextKeys = currentKeys.includes(key)
+        ? currentKeys.filter((currentKey) => currentKey !== key)
+        : [key, ...currentKeys]
+
+      safeLocalStorageSetItem(
+        PINNED_SESSIONS_STORAGE_KEY,
+        JSON.stringify(nextKeys)
+      )
+      return nextKeys
+    })
+  }
+
   const setSidebarSelection = (nextKeys: Array<string>, anchorKey = "") => {
     const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
     const nextAnchor =
@@ -755,6 +793,7 @@ export function AppShellSidebarController({
       selectedSessionKeys={selectedSidebarSessionKeys}
       activeSessionId={activeSidebarSessionId || undefined}
       activeSessionKey={activeSidebarSessionKey || undefined}
+      pinnedSessionKeys={pinnedSidebarSessionKeys}
       emptyStateText={emptySidebarStateText}
       onCreateSession={() => {
         void sessionWorkspaceRef.current?.createSession(undefined, {
@@ -777,6 +816,7 @@ export function AppShellSidebarController({
       onDeleteSession={(entry) => {
         sessionWorkspaceRef.current?.openDeleteDialog([entry])
       }}
+      onTogglePinnedSession={togglePinnedSession}
       onCreateSessionInDirectory={(directory) => {
         void sessionWorkspaceRef.current?.createSession(directory, {
           closeMobileSidebar: true,

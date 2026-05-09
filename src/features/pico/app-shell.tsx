@@ -146,6 +146,7 @@ import {
   CENTER_MESSAGES_STORAGE_KEY,
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
+  PINNED_SESSIONS_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
@@ -156,6 +157,7 @@ import {
   createContextId,
   createInitialSessionState,
   getSessionTitle,
+  normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   normalizeThemeMode,
   promptDraftKey,
@@ -163,6 +165,7 @@ import {
   readStoredCenterMessages,
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
+  readStoredPinnedSessionKeys,
   readStoredRecentDirectories,
   readStoredRightSidebarOpen,
   readStoredSessionDoneDesktopNotificationsEnabled,
@@ -170,6 +173,7 @@ import {
   readStoredSidebarDirectories,
   rememberStoredPromptDraft,
   safeLocalStorageSetItem,
+  sessionListEntryKey,
 } from "@/lib/pico"
 import type {
   ConversationItem,
@@ -1161,6 +1165,17 @@ const AppShellSessionWorkspace = React.forwardRef<
   }
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
+  const currentSessionPinKey = sessionListEntryKey({
+    path: sessionState.sessionFile,
+    id: activeSessionId,
+  })
+  const currentSessionPinned = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) =>
+      currentSessionPinKey
+        ? snapshot.state.pinnedSidebarSessionKeys.includes(currentSessionPinKey)
+        : false
+  )
   const currentSessionQueryScope = sessionScrollKey(sessionState)
   const contextUsageSessionScopeRef = React.useRef("")
   React.useLayoutEffect(() => {
@@ -2753,12 +2768,35 @@ const AppShellSessionWorkspace = React.forwardRef<
     sessionIsStreaming: sessionStateRef.current.streaming,
     sidebarSessionEntriesByKey,
   })
+  const toggleCurrentSessionPinned = () => {
+    const currentState = sessionStateRef.current
+    const key = sessionListEntryKey({
+      path: currentState.sessionFile,
+      id: currentState.sessionId,
+    })
+    if (!key) return
+
+    sidebarStore.setPinnedSidebarSessionKeys((current) => {
+      const currentKeys = normalizeSessionSelectionKeys(current)
+      const nextKeys = currentKeys.includes(key)
+        ? currentKeys.filter((currentKey) => currentKey !== key)
+        : [key, ...currentKeys]
+
+      safeLocalStorageSetItem(
+        PINNED_SESSIONS_STORAGE_KEY,
+        JSON.stringify(nextKeys)
+      )
+      return nextKeys
+    })
+  }
+
   const sessionHeaderActionsRef = useLatestRef<AppShellSessionHeaderActions>({
     createSession,
     onDeleteCurrentSession: openDeleteDialogForCurrentSession,
     onForkSession: openForkDialog,
     onRenameSession: openRenameDialog,
     onRunCompact: runCompact,
+    onToggleCurrentSessionPinned: toggleCurrentSessionPinned,
     onToggleHideThinking: toggleHideThinking,
     onToggleHideToolBlocks: toggleHideToolBlocks,
     onTreeSession: openTreeDialog,
@@ -2865,6 +2903,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         displaySessionCwd={displaySessionCwd}
         gitPanelOpen={gitPanelOpen}
         loadingDisplaySessionTitle={loadingDisplaySessionTitle}
+        currentSessionPinned={currentSessionPinned}
         displaySettingsStore={displaySettingsStore}
         isSessionViewLoading={isSessionViewLoading}
         newSessionDirectoryOptions={newSessionDirectoryOptions}
@@ -3011,13 +3050,15 @@ export function PicoAppShell({
       0,
       INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
     )
+    const nextPinnedSessionKeys = readStoredPinnedSessionKeys()
     sidebarStore.setSidebarState((current) => {
       if (
         sameStringArray(current.sidebarDirectories, nextDirectories) &&
         sameStringArray(
           current.initialSidebarBootstrapDirectories,
           nextBootstrapDirectories
-        )
+        ) &&
+        sameStringArray(current.pinnedSidebarSessionKeys, nextPinnedSessionKeys)
       ) {
         return current
       }
@@ -3025,6 +3066,7 @@ export function PicoAppShell({
       return {
         sidebarDirectories: nextDirectories,
         initialSidebarBootstrapDirectories: nextBootstrapDirectories,
+        pinnedSidebarSessionKeys: nextPinnedSessionKeys,
       }
     })
   }, [sidebarStore])

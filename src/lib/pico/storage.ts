@@ -9,6 +9,7 @@ export const THEME_STORAGE_KEY = "pico-theme"
 export const DRAFT_DIRECTORY_STORAGE_KEY = "pico-draft-directory"
 export const SIDEBAR_DIRECTORIES_STORAGE_KEY = "pico-sidebar-directories"
 export const COLLAPSED_DIRECTORIES_STORAGE_KEY = "pico-collapsed-directories"
+export const PINNED_SESSIONS_STORAGE_KEY = "pico-pinned-sessions"
 export const RECENT_DIRECTORIES_STORAGE_KEY = "pico-recent-directories"
 export const RECENT_DIRECTORIES_LIMIT = 8
 export const SESSION_DONE_SOUND_ENABLED_STORAGE_KEY = "pico-session-done-sound"
@@ -172,6 +173,16 @@ export function readStoredSidebarDirectories() {
     }
   } catch {
     return { directories: [], hasStoredValue: false }
+  }
+}
+
+export function readStoredPinnedSessionKeys() {
+  try {
+    const raw = safeLocalStorageGetItem(PINNED_SESSIONS_STORAGE_KEY)
+    if (!raw) return []
+    return normalizeSessionSelectionKeys(JSON.parse(raw))
+  } catch {
+    return []
   }
 }
 

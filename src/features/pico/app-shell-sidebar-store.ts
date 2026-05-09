@@ -28,6 +28,7 @@ type AppShellSidebarSnapshot = {
   directoryStateByPath: Map<string, DirectoryState>
   directoryIndexes: Record<string, Array<SessionListEntry>>
   sidebarSessions: Array<SessionListEntry>
+  pinnedSidebarSessions: Array<SessionListEntry>
   selectedSidebarSessions: Array<SessionListEntry>
   sidebarSessionEntriesByKey: Map<string, SessionListEntry>
 }
@@ -44,6 +45,7 @@ type AppShellSidebarState = {
   sidebarSessionStatusByKey: SidebarSessionStatusMap
   sidebarDeferredDirectoryLoadingReady: boolean
   sessionSearch: string
+  pinnedSidebarSessionKeys: Array<string>
   selectedSidebarSessionKeys: Array<string>
   sidebarSessionSelectionAnchor: string
 }
@@ -87,6 +89,9 @@ export type AppShellSidebarStore = PicoStore<AppShellSidebarStoreSnapshot> & {
     React.SetStateAction<boolean>
   >
   setSessionSearch: React.Dispatch<React.SetStateAction<string>>
+  setPinnedSidebarSessionKeys: React.Dispatch<
+    React.SetStateAction<Array<string>>
+  >
   setSelectedSidebarSessionKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -397,6 +402,7 @@ function createInitialSidebarState(): AppShellSidebarState {
     sidebarSessionStatusByKey: {},
     sidebarDeferredDirectoryLoadingReady: false,
     sessionSearch: "",
+    pinnedSidebarSessionKeys: [],
     selectedSidebarSessionKeys: [],
     sidebarSessionSelectionAnchor: "",
   }
@@ -491,6 +497,11 @@ function computeAppShellSidebarDerived(
   }
 
   const sidebarSessions = Array.from(sidebarSessionEntriesByKey.values())
+  const pinnedSidebarSessions = state.pinnedSidebarSessionKeys
+    .map((key) => sidebarSessionEntriesByKey.get(key))
+    .filter((entry): entry is SessionListEntry =>
+      Boolean(entry?.path || entry?.id)
+    )
   const selectedSidebarSessions = state.selectedSidebarSessionKeys
     .map((key) => sidebarSessionEntriesByKey.get(key))
     .filter((entry): entry is SessionListEntry =>
@@ -498,6 +509,7 @@ function computeAppShellSidebarDerived(
     )
   const workspaceVersion = [
     baseSidebarDirectories.join("\n"),
+    state.pinnedSidebarSessionKeys.join("\n"),
     state.selectedSidebarSessionKeys.join("\n"),
   ].join("\0")
 
@@ -507,6 +519,7 @@ function computeAppShellSidebarDerived(
     directoryIndexes: sidebarDirectoryIndexes,
     sidebarDirectoryIndexes,
     sidebarSessions,
+    pinnedSidebarSessions,
     selectedSidebarSessions,
     sidebarSessionEntriesByKey,
     visibleDirectories,
@@ -631,6 +644,18 @@ export function createAppShellSidebarStore(): AppShellSidebarStore {
       )
       if (sessionSearch === store.state.state.sessionSearch) return
       setSidebarState({ sessionSearch })
+    },
+    setPinnedSidebarSessionKeys: (action) => {
+      const pinnedSidebarSessionKeys = applyStoreAction(
+        store.state.state.pinnedSidebarSessionKeys,
+        action
+      )
+      if (
+        pinnedSidebarSessionKeys === store.state.state.pinnedSidebarSessionKeys
+      ) {
+        return
+      }
+      setSidebarState({ pinnedSidebarSessionKeys })
     },
     setSelectedSidebarSessionKeys: (action) => {
       const selectedSidebarSessionKeys = applyStoreAction(
