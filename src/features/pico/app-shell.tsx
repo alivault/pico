@@ -3072,7 +3072,7 @@ export function PicoAppShell({
   }, [sidebarStore])
 
   return (
-    <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:2.75rem]">
+    <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:3rem]">
       <AppShellSessionWorkspace
         ref={sessionWorkspaceRef}
         viewerContextId={viewerContextId}

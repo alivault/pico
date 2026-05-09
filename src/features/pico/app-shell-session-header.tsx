@@ -104,7 +104,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     : getCurrentSessionTitleFromState(sessionHeaderState)
 
   return (
-    <div className="sticky top-0 z-50 flex min-h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
+    <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
       <div className="relative flex w-full items-center gap-1">
         <SidebarTrigger
           variant={sidebarOpen ? "secondary" : "ghost"}
