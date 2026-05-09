@@ -8,7 +8,8 @@ import {
   type AppShellSessionContentProps,
 } from "@/features/pico/app-shell-session-content"
 import type { AppShellUiState } from "@/features/pico/app-shell-types"
-import { GitTabStatusText, RightSidebar } from "@/features/pico/right-sidebar"
+import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
+import { RightSidebar } from "@/features/pico/right-sidebar"
 import {
   selectRightSidebarHasVisibleFiles,
   selectRightSidebarVisibleFileTabs,

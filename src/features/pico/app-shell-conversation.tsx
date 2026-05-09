@@ -24,7 +24,7 @@ import {
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import type { AppShellWorkingState } from "@/features/pico/app-shell-working-state"
-import { DraftGitStatusBadge } from "@/features/pico/right-sidebar"
+import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import {
   AssistantMessagesStoreCard,

@@ -27,7 +27,7 @@ import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import {
   HeaderGitActions,
   HeaderGitStatusText,
-} from "@/features/pico/right-sidebar"
+} from "@/features/pico/right-sidebar-git-header-actions"
 import {
   useSelector,
   type PicoStore,

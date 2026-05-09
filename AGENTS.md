@@ -117,11 +117,13 @@ Notes:
   - git status/files/branches/commits tab plus diff, review, commit, push, and pull actions
   - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
 - `src/features/pico/right-sidebar.tsx`
-  - secondary workspace sidebar coordinator plus git/review panels and related git controls
+  - secondary workspace sidebar coordinator that switches between project files and git review panels
 - `src/features/pico/right-sidebar-project-files.tsx`
   - project file tree, file tab strip, file viewer, open-file dialog, and syntax-highlighted file preview
-- `src/features/pico/right-sidebar-types.ts`, `src/features/pico/right-sidebar-shared.ts`, and `src/features/pico/right-sidebar-section-note.tsx`
-  - shared right-sidebar types, path/error helpers, and section note UI used across right-sidebar modules
+- `src/features/pico/right-sidebar-git-data.ts`, `src/features/pico/right-sidebar-git-toolbar.tsx`, `src/features/pico/right-sidebar-git-header-actions.tsx`, `src/features/pico/right-sidebar-git-commit-dialog.tsx`, `src/features/pico/right-sidebar-git-branch-dialog.tsx`, `src/features/pico/right-sidebar-git-review.tsx`, and `src/features/pico/right-sidebar-git-commits.tsx`
+  - git query options/helpers, toolbar/header actions, commit and branch dialogs, file diff/review UI, and commit history graph rendering
+- `src/features/pico/right-sidebar-types.ts`, `src/features/pico/right-sidebar-shared.ts`, `src/features/pico/right-sidebar-section-note.tsx`, and `src/features/pico/right-sidebar-git-section.tsx`
+  - shared right-sidebar types, path/error helpers, section note UI, and git section card UI used across right-sidebar modules
 - `src/features/pico/keyboard-shortcuts.ts`
   - shared shortcut descriptors and labels used by the shell UI
 - `src/features/pico/git-toast-utils.ts`, `src/features/pico/relative-time.tsx`, and `src/features/pico/scroll-shadow-utils.ts`

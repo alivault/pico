@@ -42,7 +42,7 @@ import type {
   AppShellNotificationState,
   SelectSessionNavigationOptions,
 } from "@/features/pico/app-shell-types"
-import { GitCommitDialogController } from "@/features/pico/right-sidebar"
+import { GitCommitDialogController } from "@/features/pico/right-sidebar-git-commit-dialog"
 import type { GitCommitDialogControllerHandle } from "@/features/pico/right-sidebar-types"
 import {
   DeleteOldDirectorySessionsDialogController,
