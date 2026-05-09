@@ -544,6 +544,7 @@ Code style conventions already used in the repo:
 - use `import * as React from "react"`
 - do not add `React.memo`, `useMemo`, or `useCallback` just for render-performance optimization; React Compiler should handle routine memoization, so prefer state locality and simpler component boundaries first
 - prefer `@/*` imports over deep relative imports
+- avoid adding feature-level barrel/re-export modules for extracted code; import directly from the focused module instead (the existing `src/lib/pico/index.ts` public contract is an exception)
 - prefer narrow types and `satisfies` where useful
 - keep client/server/shared types explicit rather than using loose `any`
 - reuse existing UI primitives and helpers before creating new abstractions

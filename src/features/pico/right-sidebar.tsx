@@ -127,12 +127,6 @@ import {
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
 
-export { GitFileViewerPanel } from "@/features/pico/right-sidebar-project-files"
-export type {
-  GitCommitDialogControllerHandle,
-  RightSidebarTabValue,
-} from "@/features/pico/right-sidebar-types"
-
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 type GitCommitMessageData = Extract<GitCommitMessageResponse, { ok: true }>

@@ -159,8 +159,8 @@ import {
   HeaderGitActions,
   HeaderGitStatusText,
   RightSidebar,
-  type GitCommitDialogControllerHandle,
 } from "@/features/pico/right-sidebar"
+import type { GitCommitDialogControllerHandle } from "@/features/pico/right-sidebar-types"
 import {
   closeAllRightSidebarFiles,
   closeOtherRightSidebarFiles,
