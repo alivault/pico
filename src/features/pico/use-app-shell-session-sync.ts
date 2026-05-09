@@ -3,7 +3,7 @@ import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell"
+import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 import type { PromptImage, SessionState, StateSyncPayload } from "@/lib/pico"
 import type {
   ExtensionUiEvent,

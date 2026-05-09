@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { z } from "zod"
 
 import { PicoAppShell } from "@/features/pico/app-shell"
-import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell"
+import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 
 const indexSearchSchema = z.object({
   session: z.string().optional(),

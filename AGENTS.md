@@ -65,8 +65,18 @@ Notes:
 ### Main app code
 
 - `src/features/pico/app-shell.tsx`
-  - main application shell coordinator and store/controller wiring
-  - composes tabs, command palette actions, focused hooks, and dialog controllers
+  - main application shell workspace coordinator and top-level store/controller wiring
+  - wires extracted shell controllers, command actions, mutations, shortcuts, and root layout
+- `src/features/pico/app-shell-common.ts`, `src/features/pico/app-shell-types.ts`, and `src/features/pico/app-shell-working-state.ts`
+  - shared app-shell helpers, cross-module shell types, and compaction/working-state labels/comparators
+- `src/features/pico/app-shell-composer-state.ts` and `src/features/pico/app-shell-composer-controller.tsx`
+  - composer snapshot types/comparators, optimistic prompt helpers, new-session branch/directory selectors, and composer panel controller
+- `src/features/pico/app-shell-conversation-store.ts` and `src/features/pico/app-shell-conversation.tsx`
+  - render-optimized conversation item store, group subscriptions, conversation frame, empty/loading states, and working footer
+- `src/features/pico/app-shell-session-content.tsx`, `src/features/pico/app-shell-desktop-layout.tsx`, and `src/features/pico/app-shell-session-header.tsx`
+  - session/composer composition, desktop right-sidebar resizing/layout, mobile tabs, and sticky session header UI
+- `src/features/pico/app-shell-floating-controllers.tsx` and `src/features/pico/app-shell-sidebar-controller.tsx`
+  - dialog/controller host wiring and session sidebar synchronization/selection behavior
 - `src/features/pico/app-shell-sidebar-store.ts`
   - directory/session sidebar store, derived sidebar snapshots, directory index merging, and sidebar session status overlays
 - `src/features/pico/app-shell-right-sidebar-state.ts`
@@ -95,12 +105,12 @@ Notes:
   - message rendering, markdown, code blocks, tool cards, compaction cards
   - includes assistant block subscriptions and deferred syntax highlighting
 - `src/features/pico/app-shell-add-directory-dialog.tsx`, `src/features/pico/app-shell-auth-dialog.tsx`, `src/features/pico/app-shell-session-dialogs.tsx`, `src/features/pico/app-shell-sessions-dialog.tsx`, `src/features/pico/app-shell-settings-dialog.tsx`, `src/features/pico/app-shell-tree-dialog.tsx`, and `src/features/pico/app-shell-ui-request-dialog.tsx`
-  - focused dialog implementations hosted by the floating controller section in `app-shell.tsx`
+  - focused dialog implementations hosted by `app-shell-floating-controllers.tsx`
   - auth dialogs are keyboard-first command surfaces on desktop and drawers on mobile
 - `src/features/pico/app-shell-dialog-types.ts`
   - shared dialog/controller types for shell-hosted dialogs
 - `src/features/pico/app-shell-dialogs.tsx`
-  - minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell.tsx`
+  - minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell-floating-controllers.tsx`
 - `src/features/pico/app-shell-command-palette.tsx`
   - command palette UI
 - `src/features/pico/git-panel.tsx`
