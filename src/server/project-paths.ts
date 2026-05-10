@@ -640,6 +640,7 @@ async function searchDirectoriesInRoot({
     "--type",
     "d",
     "--full-path",
+    "--ignore-case",
     "--exclude",
     ".git",
     "--exclude",
