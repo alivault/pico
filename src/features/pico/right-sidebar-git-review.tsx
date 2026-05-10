@@ -617,21 +617,20 @@ function ReviewFileAccordionItem({
           />
         </AccordionPrimitive.Trigger>
         {onOpenFile ? (
-          <TitleTooltip title="Open file" side="top">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Open ${file.path}`}
-              className="mr-2 self-center"
-              onClick={(event) => {
-                event.stopPropagation()
-                onOpenFile(file.path, { pin: true })
-              }}
-            >
-              <SquareArrowOutUpRightIcon className="size-3.5" />
-            </Button>
-          </TitleTooltip>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Open ${file.path}`}
+            title="Open file"
+            className="mr-2 self-center"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenFile(file.path, { pin: true })
+            }}
+          >
+            <SquareArrowOutUpRightIcon className="size-3.5" />
+          </Button>
         ) : null}
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
