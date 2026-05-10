@@ -476,8 +476,8 @@ export function useAppShellShortcuts({
         },
       },
     })),
-    ...(["Delete", "Backspace"] as const).map((hotkey) => ({
-      hotkey,
+    {
+      hotkey: "Delete",
       callback: handleSidebarDelete,
       options: {
         meta: {
@@ -486,7 +486,7 @@ export function useAppShellShortcuts({
             "Open the delete dialog for focused or selected sessions.",
         },
       },
-    })),
+    },
     {
       hotkey: { key: "Enter", ctrl: true },
       callback: handleFocusPrompt,
