@@ -370,6 +370,21 @@ export function FileReviewContent({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <TitleTooltip title={hasOpenFile ? "Collapse all" : "Expand all"}>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={hasOpenFile ? "Collapse all" : "Expand all"}
+              disabled={changedFiles.length === 0}
+              onClick={toggleAll}
+            >
+              {hasOpenFile ? (
+                <ChevronsDownUpIcon className="size-4" />
+              ) : (
+                <ChevronsUpDownIcon className="size-4" />
+              )}
+            </Button>
+          </TitleTooltip>
           <ToggleGroup
             variant="outline"
             value={[diffStyle]}
@@ -386,18 +401,6 @@ export function FileReviewContent({
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <Button
-            variant="outline"
-            disabled={changedFiles.length === 0}
-            onClick={toggleAll}
-          >
-            {hasOpenFile ? (
-              <ChevronsDownUpIcon className="size-4" />
-            ) : (
-              <ChevronsUpDownIcon className="size-4" />
-            )}
-            {hasOpenFile ? "Collapse all" : "Expand all"}
-          </Button>
         </div>
       </div>
       <div
