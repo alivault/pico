@@ -27,6 +27,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { useQuery } from "@tanstack/react-query"
 import {
+  ArrowLeftIcon,
   ChevronsDownUpIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -51,6 +52,13 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -65,6 +73,7 @@ import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import {
   getErrorMessage,
   normalizeCwd,
@@ -84,6 +93,7 @@ import type {
   ProjectFileReadResponse,
   ProjectFileTreeResponse,
 } from "@/lib/pico/api"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { installGlobalResizeCursor } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
 
@@ -413,7 +423,8 @@ export function ProjectFilesWorkspace({
   const normalizedCwd = normalizeCwd(cwd)
   const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
   const [collapseAllRevision, setCollapseAllRevision] = React.useState(0)
-  const showInlinePreview = previewMode === "inline" && Boolean(activeFilePath)
+  const inlinePreview = previewMode === "inline"
+  const showInlinePreview = inlinePreview && Boolean(activeFilePath)
   const fileTreeQuery = useQuery({
     ...projectFileTreeQueryOptions({
       viewerContextId,
@@ -429,19 +440,10 @@ export function ProjectFilesWorkspace({
     <div
       className={cn(
         "h-full min-h-0 overflow-hidden",
-        showInlinePreview
-          ? "grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
-          : "flex flex-col"
+        inlinePreview ? "relative flex flex-col" : "flex flex-col"
       )}
     >
-      <div
-        className={cn(
-          "flex min-h-0 flex-col bg-background",
-          showInlinePreview
-            ? "border-b border-border/70"
-            : "flex-1 overflow-hidden"
-        )}
-      >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 p-2">
           <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
             {paths.length.toLocaleString()} files
@@ -498,28 +500,36 @@ export function ProjectFilesWorkspace({
           )}
         </div>
       </div>
-      {showInlinePreview ? (
-        <div className="flex min-h-0 flex-col overflow-hidden bg-background">
-          <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3 text-xs font-medium text-muted-foreground">
-            <span className="min-w-0 truncate" title={activeFilePath}>
+      {inlinePreview ? (
+        <div
+          aria-hidden={!showInlinePreview}
+          inert={!showInlinePreview}
+          className={cn(
+            "absolute inset-0 z-20 flex min-h-0 flex-col overflow-hidden bg-background transition-transform duration-200 ease-out",
+            showInlinePreview
+              ? "translate-x-0 shadow-xl"
+              : "pointer-events-none translate-x-full"
+          )}
+        >
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 px-2 text-xs font-medium text-muted-foreground">
+            <button
+              type="button"
+              aria-label="Back to file tree"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={onCloseFile}
+            >
+              <ArrowLeftIcon className="size-4" />
+              <span>Files</span>
+            </button>
+            <span className="min-w-0 flex-1 truncate" title={activeFilePath}>
               {activeFilePath}
             </span>
-            <TitleTooltip title="Close file preview">
-              <button
-                type="button"
-                aria-label="Close file preview"
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                onClick={onCloseFile}
-              >
-                <XIcon className="size-4" />
-              </button>
-            </TitleTooltip>
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
             <ProjectFileContent
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
-              active={active}
+              active={active && showInlinePreview}
               path={activeFilePath}
             />
           </div>
@@ -547,10 +557,64 @@ export function ProjectOpenFileDialog({
   onOpenFile: (path: string) => void
 }) {
   const [query, setQuery] = React.useState("")
+  const isMobile = useIsMobile()
+  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
 
   React.useEffect(() => {
     if (!open) setQuery("")
   }, [open])
+
+  const commandBody = (
+    <Command shouldFilter className={cn(isMobile && "min-h-0 flex-1")}>
+      <ProjectFileIconSprite />
+      <CommandInput
+        autoFocus={shouldAutoFocus}
+        value={query}
+        onValueChange={setQuery}
+        placeholder="Search files…"
+        className="text-base md:text-sm"
+      />
+      <CommandList className={cn(isMobile && "max-h-none min-h-0 flex-1")}>
+        <CommandEmpty>No files found.</CommandEmpty>
+        <CommandGroup heading="Files">
+          {paths.map((path) => (
+            <CommandItem
+              key={path}
+              value={path}
+              keywords={[path]}
+              onSelect={() => {
+                onOpenFile(path)
+                onOpenChange(false)
+              }}
+            >
+              <ProjectFileTypeIcon path={path} />
+              <span className="min-w-0 truncate font-mono text-xs">{path}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  )
+
+  if (isMobile) {
+    return (
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        autoFocus={shouldAutoFocus}
+      >
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>Open Files</DrawerTitle>
+            <DrawerDescription>Search project files to open.</DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {commandBody}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
 
   return (
     <CommandDialog
@@ -559,35 +623,7 @@ export function ProjectOpenFileDialog({
       title="Open Files"
       description="Search project files to open."
     >
-      <Command shouldFilter>
-        <ProjectFileIconSprite />
-        <CommandInput
-          value={query}
-          onValueChange={setQuery}
-          placeholder="Search files…"
-        />
-        <CommandList>
-          <CommandEmpty>No files found.</CommandEmpty>
-          <CommandGroup heading="Files">
-            {paths.map((path) => (
-              <CommandItem
-                key={path}
-                value={path}
-                keywords={[path]}
-                onSelect={() => {
-                  onOpenFile(path)
-                  onOpenChange(false)
-                }}
-              >
-                <ProjectFileTypeIcon path={path} />
-                <span className="min-w-0 truncate font-mono text-xs">
-                  {path}
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </Command>
+      {commandBody}
     </CommandDialog>
   )
 }
