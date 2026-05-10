@@ -263,6 +263,10 @@ const GIT_FILE_TREE_UNSAFE_CSS = `
   [data-file-tree-virtualized-scroll='true'] {
     padding-inline: 0 16px;
   }
+
+  [data-file-tree-search-input] {
+    font-size: 16px;
+  }
 `
 
 const PROJECT_FILE_ICON_SPRITE_SHEET = getBuiltInSpriteSheet("complete")
@@ -306,6 +310,14 @@ function isFileTreeDirectoryHandle(
   item: FileTreeItemHandle | null
 ): item is FileTreeDirectoryHandle {
   return item?.isDirectory() === true
+}
+
+function isProjectFileTreeItemEvent(event: React.SyntheticEvent) {
+  const path = event.nativeEvent.composedPath()
+  return path.some(
+    (target) =>
+      target instanceof Element && target.getAttribute("data-type") === "item"
+  )
 }
 
 function getProjectFileTreeGitStatusFromPorcelain(
@@ -461,9 +473,13 @@ function ProjectFileTree({
     <PierreFileTree
       model={model}
       className="block h-full min-h-0 w-full overflow-hidden"
-      onClick={openFocusedFile}
+      onClick={(event) => {
+        if (!isProjectFileTreeItemEvent(event)) return
+        openFocusedFile()
+      }}
       onKeyUp={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return
+        if (!isProjectFileTreeItemEvent(event)) return
         openFocusedFile()
       }}
     />
