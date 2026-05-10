@@ -3,7 +3,7 @@ import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import {
   ChevronDownIcon,
-  ChevronUpIcon,
+  ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   SquareArrowOutUpRightIcon,
@@ -505,7 +505,7 @@ export function FileReviewContent({
             {historyOpen ? (
               <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronUpIcon className="size-4 shrink-0 text-muted-foreground" />
+              <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
           </button>
           {historyOpen ? (
@@ -610,11 +610,11 @@ function ReviewFileAccordionItem({
             </span>
             <GitFileDiff file={file} />
           </span>
-          <ChevronDownIcon
+          <ChevronRightIcon
             data-slot="accordion-trigger-icon"
             className="pointer-events-none size-4 shrink-0 group-aria-expanded/review-file-trigger:hidden"
           />
-          <ChevronUpIcon
+          <ChevronDownIcon
             data-slot="accordion-trigger-icon"
             className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
           />

@@ -8,7 +8,6 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ChevronUpIcon,
   CopyIcon,
 } from "lucide-react"
 
@@ -2280,8 +2279,8 @@ function ToolBlockCardContent({
         {header.editStats ? (
           <EditDiffStatCountsView stats={header.editStats} />
         ) : null}
-        <ChevronDownIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
-        <ChevronUpIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
+        <ChevronRightIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
+        <ChevronDownIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
       </CollapsibleTrigger>
 
       {isOpen && bodyBlock ? (
@@ -2380,8 +2379,8 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
             {header.summary}
           </span>
         </span>
-        <ChevronDownIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
-        <ChevronUpIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
+        <ChevronRightIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
+        <ChevronDownIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
       </CollapsibleTrigger>
 
       {isOpen ? (
