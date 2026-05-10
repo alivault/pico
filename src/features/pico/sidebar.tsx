@@ -1044,7 +1044,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     )
 
   const directoryHeader = (
-    <div className="flex items-center gap-2 rounded-lg px-2">
+    <div className="flex items-center gap-2 rounded-lg">
       <CollapsibleTrigger
         type="button"
         className={cn(
@@ -1062,7 +1062,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         <span className="max-w-full min-w-0">
           <DirectoryPathLabel path={directory} />
         </span>
-        {!searchActive ? (
+        {!searchActive && !overlay ? (
           collapsed ? (
             <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directory-label:opacity-100 group-focus-visible/directory-label:opacity-100" />
           ) : (
@@ -1137,7 +1137,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         if (searchActive || overlay) return
         collapsedDirectoryStore.setCollapsed(directory, !open)
       }}
-      className={cn("rounded-lg py-1", isDragging && !overlay && "opacity-0")}
+      className={cn(
+        "rounded-lg py-1",
+        overlay && "bg-sidebar shadow-lg ring-1 ring-sidebar-border/70",
+        isDragging && !overlay && "opacity-0"
+      )}
     >
       <SidebarGroup className="py-0">
         {hasDirectoryActions && !isMobile ? (
@@ -1172,70 +1176,72 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           directoryHeader
         )}
 
-        <CollapsibleContent>
-          <SidebarGroupContent>
-            {showLoadingState ? (
-              <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
-                {showLoadingSpinner ? (
-                  <Spinner />
-                ) : (
-                  <span className="size-4" aria-hidden="true" />
-                )}
-                Loading sessions…
-              </div>
-            ) : unpinnedSessionKeys.length > 0 ? (
-              <div className="flex flex-col">
-                <SidebarMenu>
-                  {visibleSessionKeys.map((entryKey) => (
-                    <SidebarSessionItem
-                      key={entryKey}
-                      entryKey={entryKey}
-                      directorySessionsStore={directorySessionsStore}
-                      activeSessionStore={activeSessionStore}
-                      selectedSessionKeyStore={selectedSessionKeyStore}
-                      isPinned={pinnedSessionKeys.includes(entryKey)}
-                      isMobile={isMobile}
-                      overlay={overlay}
-                      setOpenMobile={setOpenMobile}
-                      onSessionClick={onSessionClick}
-                      onRenameSession={onRenameSession}
-                      onDeleteSession={onDeleteSession}
-                      onTogglePinnedSession={onTogglePinnedSession}
-                    />
-                  ))}
-                </SidebarMenu>
+        {!overlay ? (
+          <CollapsibleContent>
+            <SidebarGroupContent>
+              {showLoadingState ? (
+                <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
+                  {showLoadingSpinner ? (
+                    <Spinner />
+                  ) : (
+                    <span className="size-4" aria-hidden="true" />
+                  )}
+                  Loading sessions…
+                </div>
+              ) : unpinnedSessionKeys.length > 0 ? (
+                <div className="flex flex-col">
+                  <SidebarMenu>
+                    {visibleSessionKeys.map((entryKey) => (
+                      <SidebarSessionItem
+                        key={entryKey}
+                        entryKey={entryKey}
+                        directorySessionsStore={directorySessionsStore}
+                        activeSessionStore={activeSessionStore}
+                        selectedSessionKeyStore={selectedSessionKeyStore}
+                        isPinned={pinnedSessionKeys.includes(entryKey)}
+                        isMobile={isMobile}
+                        overlay={overlay}
+                        setOpenMobile={setOpenMobile}
+                        onSessionClick={onSessionClick}
+                        onRenameSession={onRenameSession}
+                        onDeleteSession={onDeleteSession}
+                        onTogglePinnedSession={onTogglePinnedSession}
+                      />
+                    ))}
+                  </SidebarMenu>
 
-                {hasMoreSessions && !overlay ? (
-                  <Button
-                    variant="ghost"
-                    className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                    onClick={() => {
-                      setRenderCount((current) =>
-                        Math.min(
-                          unpinnedSessionKeys.length,
-                          current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                  {hasMoreSessions ? (
+                    <Button
+                      variant="ghost"
+                      className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                      onClick={() => {
+                        setRenderCount((current) =>
+                          Math.min(
+                            unpinnedSessionKeys.length,
+                            current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                          )
                         )
-                      )
-                    }}
-                  >
-                    Show{" "}
-                    {Math.min(
-                      DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                      unpinnedSessionKeys.length - visibleCount
-                    )}{" "}
-                    more
-                  </Button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="px-2 py-2 text-sm text-sidebar-foreground/70">
-                {searchActive
-                  ? "No matching unpinned sessions."
-                  : "No unpinned sessions."}
-              </div>
-            )}
-          </SidebarGroupContent>
-        </CollapsibleContent>
+                      }}
+                    >
+                      Show{" "}
+                      {Math.min(
+                        DIRECTORY_SESSION_LOAD_MORE_COUNT,
+                        unpinnedSessionKeys.length - visibleCount
+                      )}{" "}
+                      more
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="px-2 py-2 text-sm text-sidebar-foreground/70">
+                  {searchActive
+                    ? "No matching unpinned sessions."
+                    : "No unpinned sessions."}
+                </div>
+              )}
+            </SidebarGroupContent>
+          </CollapsibleContent>
+        ) : null}
       </SidebarGroup>
     </Collapsible>
   )
@@ -1392,7 +1398,7 @@ function AppSidebarHeader({
 }: AppSidebarHeaderProps) {
   return (
     <SidebarHeader className="gap-2 border-b border-sidebar-border/70">
-      <SidebarMenu>
+      <SidebarMenu className="gap-1">
         <SidebarMenuItem>
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
@@ -1812,7 +1818,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter className="gap-2 border-t border-sidebar-border/70">
-        <SidebarMenu>
+        <SidebarMenu className="gap-1">
           <SidebarMenuItem>
             <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
               <CommandIcon />
