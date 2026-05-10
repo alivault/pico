@@ -5,6 +5,7 @@ import {
   getBuiltInSpriteSheet,
   type FileTreeDirectoryHandle,
   type FileTreeItemHandle,
+  type GitStatusEntry,
 } from "@pierre/trees"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import {
@@ -72,6 +73,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { picoQueryKeys } from "@/features/pico/query-keys"
+import { gitChangesQueryOptions } from "@/features/pico/right-sidebar-git-data"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
 import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import {
@@ -89,6 +91,7 @@ import {
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type {
+  GitChangeFile,
   HighlightResponse,
   ProjectFileReadResponse,
   ProjectFileTreeResponse,
@@ -99,6 +102,9 @@ import { cn } from "@/lib/utils"
 
 type ProjectFileTreeData = Extract<ProjectFileTreeResponse, { ok: true }>
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
+
+const EMPTY_PROJECT_FILE_PATHS: Array<string> = []
+const EMPTY_GIT_CHANGE_FILES: Array<GitChangeFile> = []
 
 const PROJECT_FILE_QUERY_STALE_TIME_MS = 1000 * 30
 const PROJECT_FILE_QUERY_GC_TIME_MS = 1000 * 60 * 10
@@ -248,10 +254,14 @@ const GIT_FILE_TREE_UNSAFE_CSS = `
     --trees-bg-override: var(--background);
     --trees-fg-override: var(--foreground);
     --trees-border-color-override: var(--border);
-    --trees-muted-fg-override: var(--muted-foreground);
+    --trees-fg-muted-override: var(--muted-foreground);
     --trees-selected-bg-override: var(--accent);
     --trees-selected-fg-override: var(--accent-foreground);
     --trees-padding-inline-override: 0px;
+  }
+
+  [data-file-tree-virtualized-scroll='true'] {
+    padding-inline: 0 16px;
   }
 `
 
@@ -298,6 +308,55 @@ function isFileTreeDirectoryHandle(
   return item?.isDirectory() === true
 }
 
+function getProjectFileTreeGitStatusFromPorcelain(
+  status: string
+): GitStatusEntry["status"] {
+  const indexStatus = status[0] || " "
+  const worktreeStatus = status[1] || " "
+
+  if (status === "??") return "untracked"
+  if (status === "!!") return "ignored"
+  if (indexStatus === "R" || worktreeStatus === "R") return "renamed"
+  if (indexStatus === "C" || worktreeStatus === "C") return "renamed"
+  if (indexStatus === "D" || worktreeStatus === "D") return "deleted"
+  if (indexStatus === "A" || worktreeStatus === "A") return "added"
+
+  return "modified"
+}
+
+function getProjectFileTreeGitStatus(
+  files: Array<GitChangeFile>
+): Array<GitStatusEntry> {
+  return files.map((file) => ({
+    path: file.path,
+    status: getProjectFileTreeGitStatusFromPorcelain(file.status),
+  }))
+}
+
+function getProjectFileTreePaths(
+  paths: Array<string>,
+  files: Array<GitChangeFile>
+) {
+  if (files.length === 0) return paths
+
+  const pathSet = new Set(paths)
+  let addedPath = false
+
+  for (const file of files) {
+    if (getProjectFileTreeGitStatusFromPorcelain(file.status) !== "deleted") {
+      continue
+    }
+    if (!file.path || pathSet.has(file.path)) continue
+
+    pathSet.add(file.path)
+    addedPath = true
+  }
+
+  if (!addedPath) return paths
+
+  return [...pathSet]
+}
+
 function getProjectFileDirectoryPaths(paths: Array<string>) {
   const directoryPaths = new Set<string>()
 
@@ -318,11 +377,13 @@ function getProjectFileDirectoryPaths(paths: Array<string>) {
 
 function ProjectFileTree({
   collapseAllRevision,
+  gitStatus,
   paths,
   selectedPath,
   onSelectFile,
 }: {
   collapseAllRevision: number
+  gitStatus: Array<GitStatusEntry>
   paths: Array<string>
   selectedPath: string
   onSelectFile: (path: string) => void
@@ -336,6 +397,7 @@ function ProjectFileTree({
   const { model } = useFileTree({
     paths,
     flattenEmptyDirectories: true,
+    gitStatus,
     initialExpansion: 1,
     initialSelectedPaths: selectedPath ? [selectedPath] : [],
     onSelectionChange: (selectedPaths) => {
@@ -350,6 +412,10 @@ function ProjectFileTree({
   React.useEffect(() => {
     model.resetPaths(paths)
   }, [model, paths])
+
+  React.useEffect(() => {
+    model.setGitStatus(gitStatus)
+  }, [gitStatus, model])
 
   React.useEffect(() => {
     if (!selectedPath) return
@@ -434,7 +500,26 @@ export function ProjectFilesWorkspace({
     select: (data) => data.paths,
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
-  const paths = fileTreeQuery.data ?? []
+  const gitFilesQuery = useQuery({
+    ...gitChangesQueryOptions({
+      viewerContextId,
+      cwd: normalizedCwd,
+      scope: "files",
+    }),
+    enabled: Boolean(active && viewerContextId && normalizedCwd),
+    select: (data) => data.files ?? [],
+    notifyOnChangeProps: ["data"],
+  })
+  const projectPaths = fileTreeQuery.data ?? EMPTY_PROJECT_FILE_PATHS
+  const gitFiles = gitFilesQuery.data ?? EMPTY_GIT_CHANGE_FILES
+  const paths = React.useMemo(
+    () => getProjectFileTreePaths(projectPaths, gitFiles),
+    [gitFiles, projectPaths]
+  )
+  const gitStatus = React.useMemo(
+    () => getProjectFileTreeGitStatus(gitFiles),
+    [gitFiles]
+  )
 
   return (
     <div
@@ -491,6 +576,7 @@ export function ProjectFilesWorkspace({
           ) : paths.length > 0 ? (
             <ProjectFileTree
               collapseAllRevision={collapseAllRevision}
+              gitStatus={gitStatus}
               paths={paths}
               selectedPath={activeFilePath}
               onSelectFile={onOpenFile}
