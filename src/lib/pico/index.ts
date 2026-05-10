@@ -18,12 +18,21 @@ export {
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  APPLIED_THEME_CLASSES,
+  APPLIED_THEME_STORAGE_KEY,
+  THEME_COLOR_MODES,
+  THEME_COLOR_MODE_STORAGE_KEY,
+  THEME_FAMILIES,
   THEME_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
   loadStoredPromptDrafts,
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
+  appliedThemeClass,
+  normalizeAppliedThemeClass,
+  normalizeThemeColorMode,
+  normalizeThemeFamily,
   normalizeThemeMode,
   promptDraftKey,
   readStoredAutoScrollEnabled,
@@ -39,6 +48,7 @@ export {
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
   readStoredTheme,
+  readStoredThemeColorMode,
   rememberStoredPromptDraft,
   resolvedThemeMode,
   safeLocalStorageGetItem,
@@ -46,6 +56,8 @@ export {
   safeSessionStorageGetItem,
   safeSessionStorageSetItem,
   sessionListEntryKey,
+  themeColorModeLabel,
+  themeFamilyLabel,
   themeModeLabel,
 } from "@/lib/pico/storage"
 export {
@@ -70,8 +82,15 @@ export { filterFlatTree, flattenTree } from "@/lib/pico/tree"
 export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
 
-export type ThemeMode = "system" | "light" | "dark"
-export type ResolvedThemeMode = Exclude<ThemeMode, "system">
+export type ThemeFamily = "default" | "flexoki"
+export type ThemeMode = ThemeFamily
+export type ThemeColorMode = "auto" | "light" | "dark"
+export type ResolvedThemeMode = Exclude<ThemeColorMode, "auto">
+export type AppliedThemeClass =
+  | "light"
+  | "dark"
+  | "flexoki-light"
+  | "flexoki-dark"
 export type StreamingBehavior = "followUp" | "steer"
 
 export type PromptImage = {

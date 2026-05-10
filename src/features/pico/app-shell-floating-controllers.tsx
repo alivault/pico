@@ -58,7 +58,7 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState, ThemeMode } from "@/lib/pico"
+import type { SessionState, ThemeColorMode, ThemeFamily } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import type {
   DirectorySearchResponse,
@@ -77,7 +77,8 @@ type AppShellFloatingControllersProps = {
   commandPaletteOpenRef: React.RefObject<boolean>
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
   currentSessionQueryScope: string
-  currentTheme: ThemeMode
+  currentTheme: ThemeFamily
+  currentThemeColorMode: ThemeColorMode
   authDialogRef: React.RefObject<AppShellAuthDialogHandle | null>
   authOpenRef: React.RefObject<boolean>
   deleteDialogRef: React.RefObject<DeleteSessionsDialogHandle | null>
@@ -104,7 +105,8 @@ type AppShellFloatingControllersProps = {
     sessionId?: string,
     options?: SelectSessionNavigationOptions
   ) => void
-  onThemeChange: (value: ThemeMode) => void
+  onThemeChange: (value: ThemeFamily) => void
+  onThemeColorModeChange: (value: ThemeColorMode) => void
   recentDirectoriesStore: PicoStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
@@ -124,6 +126,7 @@ type AppShellFloatingControllersProps = {
   uiRequestDialogRef: React.RefObject<AppShellUiRequestDialogHandle | null>
   uiRequestOpenRef: React.RefObject<boolean>
   viewerContextId: string
+  systemTheme?: string
 }
 
 const AppShellCommandPaletteHost = React.memo(
@@ -419,6 +422,7 @@ const AppShellSettingsDialogHost = React.memo(
   function AppShellSettingsDialogHost({
     authDialogRef,
     currentTheme,
+    currentThemeColorMode,
     displaySettingsStore,
     notificationStore,
     onAutoScrollEnabledChange,
@@ -428,13 +432,16 @@ const AppShellSettingsDialogHost = React.memo(
     onSessionDoneDesktopNotificationsEnabledChange,
     onSessionDoneSoundEnabledChange,
     onThemeChange,
+    onThemeColorModeChange,
     sessionStore,
     settingsDialogRef,
     settingsOpenRef,
+    systemTheme,
   }: Pick<
     AppShellFloatingControllersProps,
     | "authDialogRef"
     | "currentTheme"
+    | "currentThemeColorMode"
     | "displaySettingsStore"
     | "notificationStore"
     | "onAutoScrollEnabledChange"
@@ -444,9 +451,11 @@ const AppShellSettingsDialogHost = React.memo(
     | "onSessionDoneDesktopNotificationsEnabledChange"
     | "onSessionDoneSoundEnabledChange"
     | "onThemeChange"
+    | "onThemeColorModeChange"
     | "sessionStore"
     | "settingsDialogRef"
     | "settingsOpenRef"
+    | "systemTheme"
   >) {
     const hideThinkingBlocks = useSelector(
       sessionStore,
@@ -481,7 +490,10 @@ const AppShellSettingsDialogHost = React.memo(
         ref={settingsDialogRef}
         openStateRef={settingsOpenRef}
         currentTheme={currentTheme}
+        currentThemeColorMode={currentThemeColorMode}
         onThemeChange={onThemeChange}
+        onThemeColorModeChange={onThemeColorModeChange}
+        systemTheme={systemTheme}
         hideThinkingBlocks={hideThinkingBlocks}
         onHideThinkingBlocksChange={onHideThinkingBlocksChange}
         hideToolBlocks={hideToolBlocks}
@@ -545,6 +557,7 @@ export const AppShellFloatingControllers = React.memo(
     commandPaletteRef,
     currentSessionQueryScope,
     currentTheme,
+    currentThemeColorMode,
     authDialogRef,
     authOpenRef,
     deleteDialogRef,
@@ -567,6 +580,7 @@ export const AppShellFloatingControllers = React.memo(
     onSessionDoneSoundEnabledChange,
     onSessionDialogSelect,
     onThemeChange,
+    onThemeColorModeChange,
     recentDirectoriesStore,
     renameDialogRef,
     renameOpenRef,
@@ -584,6 +598,7 @@ export const AppShellFloatingControllers = React.memo(
     uiRequestDialogRef,
     uiRequestOpenRef,
     viewerContextId,
+    systemTheme,
   }: AppShellFloatingControllersProps) {
     return (
       <>
@@ -673,6 +688,7 @@ export const AppShellFloatingControllers = React.memo(
         <AppShellSettingsDialogHost
           authDialogRef={authDialogRef}
           currentTheme={currentTheme}
+          currentThemeColorMode={currentThemeColorMode}
           displaySettingsStore={displaySettingsStore}
           notificationStore={notificationStore}
           onAutoScrollEnabledChange={onAutoScrollEnabledChange}
@@ -684,9 +700,11 @@ export const AppShellFloatingControllers = React.memo(
           }
           onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
           onThemeChange={onThemeChange}
+          onThemeColorModeChange={onThemeColorModeChange}
           sessionStore={sessionStore}
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}
+          systemTheme={systemTheme}
         />
 
         <AppShellUiRequestDialogHost

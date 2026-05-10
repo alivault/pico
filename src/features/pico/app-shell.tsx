@@ -1,7 +1,6 @@
 import * as React from "react"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
 import {
@@ -126,6 +125,7 @@ import {
   type DesktopNotificationPermission,
 } from "@/features/pico/session-done-notifications"
 import { useAppShellPromptMutations } from "@/features/pico/use-app-shell-prompt-mutations"
+import { usePicoTheme } from "@/features/pico/use-pico-theme"
 import { useAppShellSessionMutations } from "@/features/pico/use-app-shell-session-mutations"
 import { useAppShellSessionSync } from "@/features/pico/use-app-shell-session-sync"
 import {
@@ -159,7 +159,6 @@ import {
   getSessionTitle,
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
-  normalizeThemeMode,
   promptDraftKey,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
@@ -180,7 +179,8 @@ import type {
   PromptImage,
   SessionState,
   StreamingBehavior,
-  ThemeMode,
+  ThemeColorMode,
+  ThemeFamily,
 } from "@/lib/pico"
 import type {
   ExtensionUiEvent,
@@ -1002,8 +1002,13 @@ const AppShellSessionWorkspace = React.forwardRef<
     [conversationItemsStore]
   )
 
-  const { setTheme, theme } = useTheme()
-  const currentTheme = normalizeThemeMode(theme)
+  const {
+    colorMode: currentThemeColorMode,
+    setColorMode,
+    setThemeFamily,
+    systemTheme,
+    themeFamily: currentTheme,
+  } = usePicoTheme()
   const { initialLoadingSessionId, loadingSessionId } = useSelector(
     appUiStore,
     (state) => ({
@@ -2381,8 +2386,12 @@ const AppShellSessionWorkspace = React.forwardRef<
     }
   }
 
-  const handleThemeChange = (value: ThemeMode) => {
-    setTheme(value)
+  const handleThemeChange = (value: ThemeFamily) => {
+    setThemeFamily(value)
+  }
+
+  const handleThemeColorModeChange = (value: ThemeColorMode) => {
+    setColorMode(value)
   }
 
   const composerSnapshot = {
@@ -2964,6 +2973,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         commandPaletteRef={commandPaletteRef}
         currentSessionQueryScope={currentSessionQueryScope}
         currentTheme={currentTheme}
+        currentThemeColorMode={currentThemeColorMode}
         authDialogRef={authDialogRef}
         authOpenRef={authOpenRef}
         deleteDialogRef={deleteDialogRef}
@@ -2992,6 +3002,8 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
         onSessionDialogSelect={handleSelectSession}
         onThemeChange={handleThemeChange}
+        onThemeColorModeChange={handleThemeColorModeChange}
+        systemTheme={systemTheme}
         recentDirectoriesStore={recentDirectoriesStore}
         renameDialogRef={renameDialogRef}
         renameOpenRef={renameOpenRef}

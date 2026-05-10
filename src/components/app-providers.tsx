@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { THEME_STORAGE_KEY } from "@/lib/pico"
+import { APPLIED_THEME_CLASSES, APPLIED_THEME_STORAGE_KEY } from "@/lib/pico"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -22,7 +22,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
-        storageKey={THEME_STORAGE_KEY}
+        storageKey={APPLIED_THEME_STORAGE_KEY}
+        themes={[...APPLIED_THEME_CLASSES]}
       >
         <TooltipProvider delay={150}>
           {children}

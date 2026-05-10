@@ -4,7 +4,7 @@
 @import "@fontsource-variable/inter";
 
 @plugin "@tailwindcss/typography";
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .flexoki-dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
@@ -160,6 +160,105 @@
   --code-variable: oklch(0.79 0.12 20);
   --code-symbol: oklch(0.83 0.11 95);
   --code-selection: oklch(0.32 0.03 264);
+}
+
+/* Flexoki palette: https://github.com/kepano/flexoki */
+.flexoki-light {
+  color-scheme: light;
+  --background: #fffcf0;
+  --foreground: #100f0f;
+  --card: #fffcf0;
+  --card-foreground: #100f0f;
+  --popover: #fffcf0;
+  --popover-foreground: #100f0f;
+  --primary: #205ea6;
+  --primary-foreground: #fffcf0;
+  --secondary: #f2f0e5;
+  --secondary-foreground: #100f0f;
+  --muted: #f2f0e5;
+  --muted-foreground: #6f6e69;
+  --accent: #e6e4d9;
+  --accent-foreground: #100f0f;
+  --success: #66800b;
+  --warning: #ad8301;
+  --danger: #af3029;
+  --inline-code-foreground: #bc5215;
+  --destructive: #af3029;
+  --border: #dad8ce;
+  --input: #cecdc3;
+  --ring: #205ea6;
+  --chart-1: #205ea6;
+  --chart-2: #66800b;
+  --chart-3: #bc5215;
+  --chart-4: #5e409d;
+  --chart-5: #a02f6f;
+  --sidebar: var(--background);
+  --sidebar-foreground: #100f0f;
+  --sidebar-primary: #205ea6;
+  --sidebar-primary-foreground: #fffcf0;
+  --sidebar-accent: #e6e4d9;
+  --sidebar-accent-foreground: #100f0f;
+  --sidebar-border: #dad8ce;
+  --sidebar-ring: #205ea6;
+  --code-fg: #100f0f;
+  --code-comment: #878580;
+  --code-keyword: #5e409d;
+  --code-string: #66800b;
+  --code-number: #bc5215;
+  --code-title: #205ea6;
+  --code-meta: #24837b;
+  --code-variable: #af3029;
+  --code-symbol: #ad8301;
+  --code-selection: #e6e4d9;
+}
+
+.flexoki-dark {
+  color-scheme: dark;
+  --background: #100f0f;
+  --foreground: #cecdc3;
+  --card: #1c1b1a;
+  --card-foreground: #cecdc3;
+  --popover: #1c1b1a;
+  --popover-foreground: #cecdc3;
+  --primary: #4385be;
+  --primary-foreground: #100f0f;
+  --secondary: #282726;
+  --secondary-foreground: #cecdc3;
+  --muted: #282726;
+  --muted-foreground: #878580;
+  --accent: #343331;
+  --accent-foreground: #cecdc3;
+  --success: #879a39;
+  --warning: #d0a215;
+  --danger: #d14d41;
+  --inline-code-foreground: #da702c;
+  --destructive: #d14d41;
+  --border: #343331;
+  --input: #403e3c;
+  --ring: #4385be;
+  --chart-1: #4385be;
+  --chart-2: #879a39;
+  --chart-3: #da702c;
+  --chart-4: #8b7ec8;
+  --chart-5: #ce5d97;
+  --sidebar: var(--background);
+  --sidebar-foreground: #cecdc3;
+  --sidebar-primary: #4385be;
+  --sidebar-primary-foreground: #100f0f;
+  --sidebar-accent: #282726;
+  --sidebar-accent-foreground: #cecdc3;
+  --sidebar-border: #343331;
+  --sidebar-ring: #4385be;
+  --code-fg: #cecdc3;
+  --code-comment: #878580;
+  --code-keyword: #8b7ec8;
+  --code-string: #879a39;
+  --code-number: #da702c;
+  --code-title: #4385be;
+  --code-meta: #3aa99f;
+  --code-variable: #d14d41;
+  --code-symbol: #d0a215;
+  --code-selection: #343331;
 }
 
 @layer base {

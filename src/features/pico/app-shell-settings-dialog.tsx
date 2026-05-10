@@ -1,8 +1,17 @@
 import * as React from "react"
+import { ArrowLeftIcon } from "lucide-react"
 
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
-import type { ThemeMode } from "@/lib/pico"
+import {
+  THEME_COLOR_MODES,
+  THEME_FAMILIES,
+  themeColorModeLabel,
+  themeFamilyLabel,
+  type ThemeColorMode,
+  type ThemeFamily,
+} from "@/lib/pico"
 
+import { Button } from "@/components/ui/button"
 import {
   Command,
   CommandDialog,
@@ -22,7 +31,10 @@ import {
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 
-const THEME_OPTIONS: Array<ThemeMode> = ["system", "light", "dark"]
+const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
+const THEME_COLOR_MODE_OPTIONS: Array<ThemeColorMode> = [...THEME_COLOR_MODES]
+
+type SettingsDialogStage = "browse" | "theme"
 
 type SettingsCommand = {
   id: string
@@ -56,19 +68,30 @@ function desktopNotificationPermissionLabel(
   return "Desktop notifications will ask for browser permission when enabled."
 }
 
-function formatThemeMode(theme: ThemeMode) {
-  return `${theme[0].toUpperCase()}${theme.slice(1)}`
-}
-
 function formatToggleValue(enabled: boolean) {
   return enabled ? "On" : "Off"
 }
 
-function nextThemeMode(currentTheme: ThemeMode) {
-  const currentIndex = THEME_OPTIONS.indexOf(currentTheme)
-  const nextIndex = (currentIndex + 1) % THEME_OPTIONS.length
+function nextThemeColorMode(currentMode: ThemeColorMode) {
+  const currentIndex = THEME_COLOR_MODE_OPTIONS.indexOf(currentMode)
+  const nextIndex = (currentIndex + 1) % THEME_COLOR_MODE_OPTIONS.length
 
-  return THEME_OPTIONS[nextIndex] ?? "system"
+  return THEME_COLOR_MODE_OPTIONS[nextIndex] ?? "auto"
+}
+
+function themeDescription(theme: ThemeFamily) {
+  switch (theme) {
+    case "default":
+      return "Use Pico's default palette."
+    case "flexoki":
+      return "Use Flexoki's warm paper and inky dark palettes."
+    default:
+      return "Use this theme."
+  }
+}
+
+function themeKeywords(theme: ThemeFamily) {
+  return [theme, themeFamilyLabel(theme), themeDescription(theme)]
 }
 
 function settingsCommandKeywords(command: SettingsCommand) {
@@ -105,8 +128,11 @@ export type AppShellSettingsDialogHandle = {
 type AppShellSettingsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  currentTheme: ThemeMode
-  onThemeChange: (value: ThemeMode) => void
+  currentTheme: ThemeFamily
+  currentThemeColorMode: ThemeColorMode
+  onThemeChange: (value: ThemeFamily) => void
+  onThemeColorModeChange: (value: ThemeColorMode) => void
+  systemTheme?: string
   hideThinkingBlocks: boolean
   onHideThinkingBlocksChange: (hidden: boolean) => void
   hideToolBlocks: boolean
@@ -128,7 +154,10 @@ export function AppShellSettingsDialog({
   open,
   onOpenChange,
   currentTheme,
+  currentThemeColorMode,
   onThemeChange,
+  onThemeColorModeChange,
+  systemTheme,
   hideThinkingBlocks,
   onHideThinkingBlocksChange,
   hideToolBlocks,
@@ -146,7 +175,11 @@ export function AppShellSettingsDialog({
   onLogoutProviders,
 }: AppShellSettingsDialogProps) {
   const [query, setQuery] = React.useState("")
+  const [themeQuery, setThemeQuery] = React.useState("")
+  const [stage, setStage] = React.useState<SettingsDialogStage>("browse")
   const [selectedCommandId, setSelectedCommandId] = React.useState("theme")
+  const [selectedTheme, setSelectedTheme] =
+    React.useState<ThemeFamily>(currentTheme)
   const isMobile = useIsMobile()
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
@@ -158,10 +191,19 @@ export function AppShellSettingsDialog({
         {
           id: "theme",
           title: "Theme",
-          description: "Cycle between system, light, and dark mode.",
-          valueLabel: formatThemeMode(currentTheme),
-          keywords: ["color", "mode", "system", "light", "dark"],
-          onSelect: () => onThemeChange(nextThemeMode(currentTheme)),
+          description: "Choose between Default and Flexoki.",
+          valueLabel: themeFamilyLabel(currentTheme),
+          keywords: ["color", "mode", "default", "flexoki"],
+          onSelect: () => setStage("theme"),
+        },
+        {
+          id: "theme-color-mode",
+          title: "Light/dark mode",
+          description: "Follow OS appearance, or force light or dark mode.",
+          valueLabel: themeColorModeLabel(currentThemeColorMode, systemTheme),
+          keywords: ["auto", "system", "light", "dark", "mode", "color"],
+          onSelect: () =>
+            onThemeColorModeChange(nextThemeColorMode(currentThemeColorMode)),
         },
       ],
     },
@@ -264,10 +306,19 @@ export function AppShellSettingsDialog({
   ]
 
   React.useEffect(() => {
-    if (!open && query) {
-      setQuery("")
+    if (!open) {
+      if (query) setQuery("")
+      if (themeQuery) setThemeQuery("")
+      setStage("browse")
+      return
     }
-  }, [open, query])
+  }, [open, query, themeQuery])
+
+  React.useEffect(() => {
+    if (stage === "theme") {
+      setSelectedTheme(currentTheme)
+    }
+  }, [currentTheme, stage])
 
   const handleSelect = (command: SettingsCommand) => {
     void Promise.resolve(command.onSelect()).catch((error: unknown) => {
@@ -275,7 +326,12 @@ export function AppShellSettingsDialog({
     })
   }
 
-  const settingsCommandBody = (
+  const handleThemeSelect = (theme: ThemeFamily) => {
+    setSelectedTheme(theme)
+    onThemeChange(theme)
+  }
+
+  const settingsBrowseBody = (
     <Command
       shouldFilter
       filter={settingsCommandFilter}
@@ -318,10 +374,85 @@ export function AppShellSettingsDialog({
         ))}
       </CommandList>
       <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-        Use ↑/↓ to select, Enter to cycle or toggle, and Esc to close.
+        Use ↑/↓ to select, Enter to open or toggle, and Esc to close.
       </div>
     </Command>
   )
+
+  const settingsThemeBody = (
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return
+        event.preventDefault()
+        event.stopPropagation()
+        setStage("browse")
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setStage("browse")}
+          aria-label="Back to settings"
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">Choose theme</div>
+          <div className="truncate text-xs text-muted-foreground">
+            Current: {themeFamilyLabel(currentTheme)}
+          </div>
+        </div>
+      </div>
+      <Command
+        shouldFilter
+        loop
+        value={selectedTheme}
+        onValueChange={(value) => setSelectedTheme(value as ThemeFamily)}
+        className="min-h-0 flex-1 rounded-none!"
+      >
+        <CommandInput
+          autoFocus={!isMobile}
+          value={themeQuery}
+          onValueChange={setThemeQuery}
+          placeholder="Search themes"
+          className="text-base md:text-sm"
+        />
+        <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,28rem)]">
+          <CommandEmpty>No themes found.</CommandEmpty>
+          <CommandGroup heading="Themes">
+            {THEME_OPTIONS.map((theme) => (
+              <CommandItem
+                key={theme}
+                value={theme}
+                keywords={themeKeywords(theme)}
+                onSelect={() => handleThemeSelect(theme)}
+                data-checked={theme === currentTheme ? true : undefined}
+                className="items-start py-2"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">
+                    {themeFamilyLabel(theme)}
+                  </span>
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
+                    {themeDescription(theme)}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+        <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+          Use ↑/↓ to select, Enter to choose, and Esc to go back.
+        </div>
+      </Command>
+    </div>
+  )
+
+  const settingsCommandBody =
+    stage === "theme" ? settingsThemeBody : settingsBrowseBody
 
   if (isMobile) {
     return (
@@ -344,7 +475,7 @@ export function AppShellSettingsDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Settings"
-      description="Search settings. Press Enter on a setting to cycle or toggle it."
+      description="Search settings. Press Enter on a setting to open or toggle it."
       className="sm:max-w-2xl"
       initialFocus
     >
