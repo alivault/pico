@@ -107,6 +107,7 @@ type AppShellFloatingControllersProps = {
   ) => void
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
+  onThemePreviewChange: (value: ThemeFamily) => void
   recentDirectoriesStore: PicoStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
@@ -433,6 +434,7 @@ const AppShellSettingsDialogHost = React.memo(
     onSessionDoneSoundEnabledChange,
     onThemeChange,
     onThemeColorModeChange,
+    onThemePreviewChange,
     sessionStore,
     settingsDialogRef,
     settingsOpenRef,
@@ -452,6 +454,7 @@ const AppShellSettingsDialogHost = React.memo(
     | "onSessionDoneSoundEnabledChange"
     | "onThemeChange"
     | "onThemeColorModeChange"
+    | "onThemePreviewChange"
     | "sessionStore"
     | "settingsDialogRef"
     | "settingsOpenRef"
@@ -493,6 +496,7 @@ const AppShellSettingsDialogHost = React.memo(
         currentThemeColorMode={currentThemeColorMode}
         onThemeChange={onThemeChange}
         onThemeColorModeChange={onThemeColorModeChange}
+        onThemePreviewChange={onThemePreviewChange}
         systemTheme={systemTheme}
         hideThinkingBlocks={hideThinkingBlocks}
         onHideThinkingBlocksChange={onHideThinkingBlocksChange}
@@ -581,6 +585,7 @@ export const AppShellFloatingControllers = React.memo(
     onSessionDialogSelect,
     onThemeChange,
     onThemeColorModeChange,
+    onThemePreviewChange,
     recentDirectoriesStore,
     renameDialogRef,
     renameOpenRef,
@@ -701,6 +706,7 @@ export const AppShellFloatingControllers = React.memo(
           onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
           onThemeChange={onThemeChange}
           onThemeColorModeChange={onThemeColorModeChange}
+          onThemePreviewChange={onThemePreviewChange}
           sessionStore={sessionStore}
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}

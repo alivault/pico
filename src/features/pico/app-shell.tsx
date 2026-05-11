@@ -1004,6 +1004,7 @@ const AppShellSessionWorkspace = React.forwardRef<
 
   const {
     colorMode: currentThemeColorMode,
+    previewThemeFamily,
     setColorMode,
     setThemeFamily,
     systemTheme,
@@ -2390,6 +2391,10 @@ const AppShellSessionWorkspace = React.forwardRef<
     setThemeFamily(value)
   }
 
+  const handleThemePreviewChange = (value: ThemeFamily) => {
+    previewThemeFamily(value)
+  }
+
   const handleThemeColorModeChange = (value: ThemeColorMode) => {
     setColorMode(value)
   }
@@ -3003,6 +3008,7 @@ const AppShellSessionWorkspace = React.forwardRef<
         onSessionDialogSelect={handleSelectSession}
         onThemeChange={handleThemeChange}
         onThemeColorModeChange={handleThemeColorModeChange}
+        onThemePreviewChange={handleThemePreviewChange}
         systemTheme={systemTheme}
         recentDirectoriesStore={recentDirectoriesStore}
         renameDialogRef={renameDialogRef}

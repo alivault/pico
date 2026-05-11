@@ -132,6 +132,7 @@ type AppShellSettingsDialogProps = {
   currentThemeColorMode: ThemeColorMode
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
+  onThemePreviewChange: (value: ThemeFamily) => void
   systemTheme?: string
   hideThinkingBlocks: boolean
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -157,6 +158,7 @@ export function AppShellSettingsDialog({
   currentThemeColorMode,
   onThemeChange,
   onThemeColorModeChange,
+  onThemePreviewChange,
   systemTheme,
   hideThinkingBlocks,
   onHideThinkingBlocksChange,
@@ -180,6 +182,7 @@ export function AppShellSettingsDialog({
   const [selectedCommandId, setSelectedCommandId] = React.useState("theme")
   const [selectedTheme, setSelectedTheme] =
     React.useState<ThemeFamily>(currentTheme)
+  const themePreviewInitialRef = React.useRef<ThemeFamily>(currentTheme)
   const isMobile = useIsMobile()
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
@@ -194,7 +197,11 @@ export function AppShellSettingsDialog({
           description: "Choose between Default and Flexoki.",
           valueLabel: themeFamilyLabel(currentTheme),
           keywords: ["color", "mode", "default", "flexoki"],
-          onSelect: () => setStage("theme"),
+          onSelect: () => {
+            themePreviewInitialRef.current = currentTheme
+            setSelectedTheme(currentTheme)
+            setStage("theme")
+          },
         },
         {
           id: "theme-color-mode",
@@ -306,13 +313,16 @@ export function AppShellSettingsDialog({
   ]
 
   React.useEffect(() => {
-    if (!open) {
-      if (query) setQuery("")
-      if (themeQuery) setThemeQuery("")
-      setStage("browse")
-      return
+    if (open) return
+
+    if (stage === "theme") {
+      onThemePreviewChange(themePreviewInitialRef.current)
     }
-  }, [open, query, themeQuery])
+
+    if (query) setQuery("")
+    if (themeQuery) setThemeQuery("")
+    setStage("browse")
+  }, [onThemePreviewChange, open, query, stage, themeQuery])
 
   React.useEffect(() => {
     if (stage === "theme") {
@@ -326,9 +336,24 @@ export function AppShellSettingsDialog({
     })
   }
 
+  const handleThemePreview = (theme: ThemeFamily) => {
+    if (!THEME_OPTIONS.includes(theme)) return
+
+    setSelectedTheme(theme)
+    onThemePreviewChange(theme)
+  }
+
   const handleThemeSelect = (theme: ThemeFamily) => {
     setSelectedTheme(theme)
+    themePreviewInitialRef.current = theme
     onThemeChange(theme)
+  }
+
+  const cancelThemePreview = () => {
+    const initialTheme = themePreviewInitialRef.current
+    setSelectedTheme(initialTheme)
+    onThemePreviewChange(initialTheme)
+    setStage("browse")
   }
 
   const settingsBrowseBody = (
@@ -386,7 +411,7 @@ export function AppShellSettingsDialog({
         if (event.key !== "Escape") return
         event.preventDefault()
         event.stopPropagation()
-        setStage("browse")
+        cancelThemePreview()
       }}
     >
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
@@ -394,7 +419,7 @@ export function AppShellSettingsDialog({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setStage("browse")}
+          onClick={cancelThemePreview}
           aria-label="Back to settings"
         >
           <ArrowLeftIcon />
@@ -410,7 +435,7 @@ export function AppShellSettingsDialog({
         shouldFilter
         loop
         value={selectedTheme}
-        onValueChange={(value) => setSelectedTheme(value as ThemeFamily)}
+        onValueChange={(value) => handleThemePreview(value as ThemeFamily)}
         className="min-h-0 flex-1 rounded-none!"
       >
         <CommandInput
@@ -428,6 +453,7 @@ export function AppShellSettingsDialog({
                 key={theme}
                 value={theme}
                 keywords={themeKeywords(theme)}
+                onMouseEnter={() => handleThemePreview(theme)}
                 onSelect={() => handleThemeSelect(theme)}
                 data-checked={theme === currentTheme ? true : undefined}
                 className="items-start py-2"

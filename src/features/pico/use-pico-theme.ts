@@ -35,6 +35,10 @@ export function usePicoTheme() {
     safeLocalStorageSetItem(APPLIED_THEME_STORAGE_KEY, appliedTheme)
   }, [appliedTheme, setTheme])
 
+  const previewThemeFamily = (value: ThemeFamily) => {
+    setThemeFamilyState(normalizeThemeFamily(value))
+  }
+
   const setThemeFamily = (value: ThemeFamily) => {
     const nextTheme = normalizeThemeFamily(value)
     setThemeFamilyState(nextTheme)
@@ -50,6 +54,7 @@ export function usePicoTheme() {
   return {
     appliedTheme,
     colorMode,
+    previewThemeFamily,
     setColorMode,
     setThemeFamily,
     systemTheme,
