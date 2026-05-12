@@ -19,9 +19,11 @@ import { Route as ApiPathCompletionsRouteImport } from './routes/api.path-comple
 import { Route as ApiModelRouteImport } from './routes/api.model'
 import { Route as ApiHighlightRouteImport } from './routes/api.highlight'
 import { Route as ApiGitStatusRouteImport } from './routes/api.git-status'
+import { Route as ApiGitStageRouteImport } from './routes/api.git-stage'
 import { Route as ApiGitReviewRouteImport } from './routes/api.git-review'
 import { Route as ApiGitPushRouteImport } from './routes/api.git-push'
 import { Route as ApiGitPullRouteImport } from './routes/api.git-pull'
+import { Route as ApiGitDiscardRouteImport } from './routes/api.git-discard'
 import { Route as ApiGitDiffRouteImport } from './routes/api.git-diff'
 import { Route as ApiGitCommitMessageRouteImport } from './routes/api.git-commit-message'
 import { Route as ApiGitCommitRouteImport } from './routes/api.git-commit'
@@ -106,6 +108,11 @@ const ApiGitStatusRoute = ApiGitStatusRouteImport.update({
   path: '/api/git-status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGitStageRoute = ApiGitStageRouteImport.update({
+  id: '/api/git-stage',
+  path: '/api/git-stage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGitReviewRoute = ApiGitReviewRouteImport.update({
   id: '/api/git-review',
   path: '/api/git-review',
@@ -119,6 +126,11 @@ const ApiGitPushRoute = ApiGitPushRouteImport.update({
 const ApiGitPullRoute = ApiGitPullRouteImport.update({
   id: '/api/git-pull',
   path: '/api/git-pull',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitDiscardRoute = ApiGitDiscardRouteImport.update({
+  id: '/api/git-discard',
+  path: '/api/git-discard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGitDiffRoute = ApiGitDiffRouteImport.update({
@@ -305,9 +317,11 @@ export interface FileRoutesByFullPath {
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-diff': typeof ApiGitDiffRoute
+  '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
   '/api/git-review': typeof ApiGitReviewRoute
+  '/api/git-stage': typeof ApiGitStageRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -353,9 +367,11 @@ export interface FileRoutesByTo {
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-diff': typeof ApiGitDiffRoute
+  '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
   '/api/git-review': typeof ApiGitReviewRoute
+  '/api/git-stage': typeof ApiGitStageRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -402,9 +418,11 @@ export interface FileRoutesById {
   '/api/git-commit': typeof ApiGitCommitRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
   '/api/git-diff': typeof ApiGitDiffRoute
+  '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
   '/api/git-push': typeof ApiGitPushRoute
   '/api/git-review': typeof ApiGitReviewRoute
+  '/api/git-stage': typeof ApiGitStageRoute
   '/api/git-status': typeof ApiGitStatusRoute
   '/api/highlight': typeof ApiHighlightRoute
   '/api/model': typeof ApiModelRoute
@@ -452,9 +470,11 @@ export interface FileRouteTypes {
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-diff'
+    | '/api/git-discard'
     | '/api/git-pull'
     | '/api/git-push'
     | '/api/git-review'
+    | '/api/git-stage'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -500,9 +520,11 @@ export interface FileRouteTypes {
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-diff'
+    | '/api/git-discard'
     | '/api/git-pull'
     | '/api/git-push'
     | '/api/git-review'
+    | '/api/git-stage'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -548,9 +570,11 @@ export interface FileRouteTypes {
     | '/api/git-commit'
     | '/api/git-commit-message'
     | '/api/git-diff'
+    | '/api/git-discard'
     | '/api/git-pull'
     | '/api/git-push'
     | '/api/git-review'
+    | '/api/git-stage'
     | '/api/git-status'
     | '/api/highlight'
     | '/api/model'
@@ -597,9 +621,11 @@ export interface RootRouteChildren {
   ApiGitCommitRoute: typeof ApiGitCommitRoute
   ApiGitCommitMessageRoute: typeof ApiGitCommitMessageRoute
   ApiGitDiffRoute: typeof ApiGitDiffRoute
+  ApiGitDiscardRoute: typeof ApiGitDiscardRoute
   ApiGitPullRoute: typeof ApiGitPullRoute
   ApiGitPushRoute: typeof ApiGitPushRoute
   ApiGitReviewRoute: typeof ApiGitReviewRoute
+  ApiGitStageRoute: typeof ApiGitStageRoute
   ApiGitStatusRoute: typeof ApiGitStatusRoute
   ApiHighlightRoute: typeof ApiHighlightRoute
   ApiModelRoute: typeof ApiModelRoute
@@ -702,6 +728,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGitStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/git-stage': {
+      id: '/api/git-stage'
+      path: '/api/git-stage'
+      fullPath: '/api/git-stage'
+      preLoaderRoute: typeof ApiGitStageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/git-review': {
       id: '/api/git-review'
       path: '/api/git-review'
@@ -721,6 +754,13 @@ declare module '@tanstack/react-router' {
       path: '/api/git-pull'
       fullPath: '/api/git-pull'
       preLoaderRoute: typeof ApiGitPullRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-discard': {
+      id: '/api/git-discard'
+      path: '/api/git-discard'
+      fullPath: '/api/git-discard'
+      preLoaderRoute: typeof ApiGitDiscardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/git-diff': {
@@ -994,9 +1034,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGitCommitRoute: ApiGitCommitRoute,
   ApiGitCommitMessageRoute: ApiGitCommitMessageRoute,
   ApiGitDiffRoute: ApiGitDiffRoute,
+  ApiGitDiscardRoute: ApiGitDiscardRoute,
   ApiGitPullRoute: ApiGitPullRoute,
   ApiGitPushRoute: ApiGitPushRoute,
   ApiGitReviewRoute: ApiGitReviewRoute,
+  ApiGitStageRoute: ApiGitStageRoute,
   ApiGitStatusRoute: ApiGitStatusRoute,
   ApiHighlightRoute: ApiHighlightRoute,
   ApiModelRoute: ApiModelRoute,

@@ -6,9 +6,12 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  SquareArrowOutUpRightIcon,
+  FileInputIcon,
+  PlusIcon,
+  Undo2Icon,
 } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
 import {
   Accordion,
@@ -20,6 +23,7 @@ import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
+import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
 import {
   GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD,
@@ -33,6 +37,7 @@ import {
   gitFileStatusTone,
   gitFileStatusToneClass,
   gitFileStatusTooltip,
+  invalidateGitQueries,
   selectGitFiles,
 } from "@/features/pico/right-sidebar-git-data"
 import { GitPanelToolbar } from "@/features/pico/right-sidebar-git-toolbar"
@@ -52,7 +57,7 @@ import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
 } from "@/lib/pico"
-import type { GitChangeFile } from "@/lib/pico/api"
+import type { GitActionResponse, GitChangeFile } from "@/lib/pico/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   getSidebarVerticalResizeCursor,
@@ -546,6 +551,7 @@ function ReviewFileAccordionItem({
   stuck: boolean
 }) {
   const normalizedCwd = normalizeCwd(cwd)
+  const queryClient = useQueryClient()
   const value = reviewFileValue(file)
   const [fullContextRequested, setFullContextRequested] = React.useState(false)
   const previewPatch = gitFileShouldPreviewPatch(file) && !fullContextRequested
@@ -575,6 +581,64 @@ function ReviewFileAccordionItem({
   const oldContent = reviewQuery.data?.oldContent ?? ""
   const newContent = reviewQuery.data?.newContent ?? ""
   const patch = diffQuery.data?.patch ?? ""
+  const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
+  const canStage = worktreeStatus !== " " || indexStatus === "?"
+
+  const invalidateChangedFileQueries = async () => {
+    await invalidateGitQueries({
+      queryClient,
+      viewerContextId,
+      cwd: normalizedCwd,
+    })
+  }
+
+  const stageMutation = useMutation({
+    mutationFn: async () =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-stage", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            cwd: normalizedCwd,
+            path: file.path,
+            previousPath: file.previousPath,
+          }),
+        }
+      ),
+    onSuccess: async () => {
+      await invalidateChangedFileQueries()
+      toast.success("Staged changes", { description: file.path })
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Failed to stage changes"))
+    },
+  })
+
+  const discardMutation = useMutation({
+    mutationFn: async () =>
+      await fetchJson<GitActionResponse>(
+        buildRequestUrl("/api/git-discard", { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            cwd: normalizedCwd,
+            path: file.path,
+            previousPath: file.previousPath,
+            status: file.status,
+          }),
+        }
+      ),
+    onSuccess: async () => {
+      await invalidateChangedFileQueries()
+      toast.success("Discarded changes", { description: file.path })
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Failed to discard changes"))
+    },
+  })
+  const actionPending = stageMutation.isPending || discardMutation.isPending
 
   React.useEffect(() => {
     setFullContextRequested(false)
@@ -619,22 +683,59 @@ function ReviewFileAccordionItem({
             className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
           />
         </AccordionPrimitive.Trigger>
-        {onOpenFile ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Open ${file.path}`}
-            title="Open file"
-            className="mr-2 self-center"
-            onClick={(event) => {
-              event.stopPropagation()
-              onOpenFile(file.path, { pin: true })
-            }}
-          >
-            <SquareArrowOutUpRightIcon className="size-3.5" />
-          </Button>
-        ) : null}
+        <div className="mr-2 flex self-center overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-sm">
+          {onOpenFile ? (
+            <TitleTooltip title="Open file" side="top">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Open ${file.path}`}
+                className="rounded-none border-0"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onOpenFile(file.path, { pin: true })
+                }}
+              >
+                <FileInputIcon className="size-3.5" />
+              </Button>
+            </TitleTooltip>
+          ) : null}
+          <TitleTooltip title="Discard changes" side="top">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Discard changes to ${file.path}`}
+              className="rounded-none border-0 border-l border-border/70 text-muted-foreground hover:text-destructive"
+              disabled={actionPending || !viewerContextId || !normalizedCwd}
+              onClick={(event) => {
+                event.stopPropagation()
+                discardMutation.mutate()
+              }}
+            >
+              <Undo2Icon className="size-3.5" />
+            </Button>
+          </TitleTooltip>
+          <TitleTooltip title="Stage changes" side="top">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Stage changes to ${file.path}`}
+              className="rounded-none border-0 border-l border-border/70 text-muted-foreground hover:text-emerald-500"
+              disabled={
+                actionPending || !canStage || !viewerContextId || !normalizedCwd
+              }
+              onClick={(event) => {
+                event.stopPropagation()
+                stageMutation.mutate()
+              }}
+            >
+              <PlusIcon className="size-3.5" />
+            </Button>
+          </TitleTooltip>
+        </div>
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
         {previewPatch ? (

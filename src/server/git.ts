@@ -1406,6 +1406,87 @@ export async function readDirectoryGitChanges(
   return value
 }
 
+function uniqueGitActionPaths(paths: Array<string | undefined>) {
+  return Array.from(
+    new Set(paths.filter((path) => Boolean(path)))
+  ) as Array<string>
+}
+
+export async function stageDirectoryGitFile(
+  cwd: string,
+  path: string,
+  previousPath?: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedPath = assertGitFilePath(path)
+  const normalizedPreviousPath = previousPath
+    ? assertGitFilePath(previousPath)
+    : undefined
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const paths = uniqueGitActionPaths([normalizedPreviousPath, normalizedPath])
+  const result = await runCommand("git", ["add", "-A", "--", ...paths], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to stage changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+export async function discardDirectoryGitFile(
+  cwd: string,
+  path: string,
+  previousPath?: string,
+  status?: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedPath = assertGitFilePath(path)
+  const normalizedPreviousPath = previousPath
+    ? assertGitFilePath(previousPath)
+    : undefined
+  const normalizedStatus = typeof status === "string" ? status.slice(0, 2) : ""
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const paths = uniqueGitActionPaths([normalizedPreviousPath, normalizedPath])
+  const result =
+    normalizedStatus === "??"
+      ? await runCommand("git", ["clean", "-f", "--", normalizedPath], {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        })
+      : await runCommand(
+          "git",
+          [
+            "restore",
+            "--source=HEAD",
+            "--staged",
+            "--worktree",
+            "--",
+            ...paths,
+          ],
+          {
+            cwd: normalizedCwd,
+            timeoutMs: GIT_ACTION_TIMEOUT_MS,
+          }
+        )
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to discard changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
 export async function commitDirectoryGitChanges(
   cwd: string,
   message: string,
