@@ -1442,12 +1442,11 @@ function AppSidebarDirectoriesHeader({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    <SidebarGroupLabel
-      render={
-        <CollapsibleTrigger className="group/directories-label justify-between gap-3" />
-      }
-    >
-      <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+    <SidebarGroupLabel className="justify-between gap-3">
+      <CollapsibleTrigger
+        type="button"
+        className="group/directories-label flex min-w-0 flex-1 items-center gap-2 text-left outline-hidden"
+      >
         <span className="min-w-0 truncate">
           {searchActive
             ? `${matchingSessionCount} matching session${matchingSessionCount === 1 ? "" : "s"}`
@@ -1455,18 +1454,20 @@ function AppSidebarDirectoriesHeader({
         </span>
         {!searchActive ? (
           collapsed ? (
-            <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directories-label:opacity-100 group-focus-visible/directories-label:opacity-100" />
+            <ChevronRightIcon className="size-4 shrink-0 text-sidebar-foreground/60" />
           ) : (
-            <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directories-label:opacity-100 group-focus-visible/directories-label:opacity-100" />
+            <ChevronDownIcon className="size-4 shrink-0 text-sidebar-foreground/60" />
           )
         ) : null}
-      </span>
+      </CollapsibleTrigger>
       <span className="flex items-center gap-1">
-        <DirectoryCollapseAllButton
-          searchActive={searchActive}
-          visibleDirectories={visibleDirectories}
-          collapsedDirectoryStore={collapsedDirectoryStore}
-        />
+        {!collapsed ? (
+          <DirectoryCollapseAllButton
+            searchActive={searchActive}
+            visibleDirectories={visibleDirectories}
+            collapsedDirectoryStore={collapsedDirectoryStore}
+          />
+        ) : null}
         <TitleTooltip
           title="Add directory"
           kbd={formatShortcutLabel("Control+D")}
