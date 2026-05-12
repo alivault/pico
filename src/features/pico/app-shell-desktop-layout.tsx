@@ -524,7 +524,7 @@ export function AppShellTabsController({
     sessionStore,
     (sessionState) => sessionState.draft
   )
-  const showTabsList = !isDraftSession || isSessionViewLoading
+  const showTabsList = isMobile || !isDraftSession || isSessionViewLoading
   const sessionVisibleClassName =
     currentTab === "git"
       ? "hidden min-h-0 flex-1 flex-col md:flex"
