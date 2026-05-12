@@ -640,6 +640,21 @@ function ReviewFileAccordionItem({
   })
   const actionPending = stageMutation.isPending || discardMutation.isPending
 
+  const openFile = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation()
+    onOpenFile?.(file.path, { pin: true })
+  }
+
+  const discardFileChanges = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation()
+    discardMutation.mutate()
+  }
+
+  const stageFileChanges = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation()
+    stageMutation.mutate()
+  }
+
   React.useEffect(() => {
     setFullContextRequested(false)
   }, [value])
@@ -683,7 +698,7 @@ function ReviewFileAccordionItem({
             className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
           />
         </AccordionPrimitive.Trigger>
-        <div className="mr-2 flex self-center overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-sm">
+        <div className="mr-2 hidden self-center overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-sm md:flex">
           {onOpenFile ? (
             <TitleTooltip title="Open file" side="top">
               <Button
@@ -692,10 +707,7 @@ function ReviewFileAccordionItem({
                 size="icon-xs"
                 aria-label={`Open ${file.path}`}
                 className="rounded-none border-0"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onOpenFile(file.path, { pin: true })
-                }}
+                onClick={openFile}
               >
                 <FileInputIcon className="size-3.5" />
               </Button>
@@ -709,10 +721,7 @@ function ReviewFileAccordionItem({
               aria-label={`Discard changes to ${file.path}`}
               className="rounded-none border-0 border-l border-border/70 text-muted-foreground hover:text-destructive"
               disabled={actionPending || !viewerContextId || !normalizedCwd}
-              onClick={(event) => {
-                event.stopPropagation()
-                discardMutation.mutate()
-              }}
+              onClick={discardFileChanges}
             >
               <Undo2Icon className="size-3.5" />
             </Button>
@@ -727,10 +736,7 @@ function ReviewFileAccordionItem({
               disabled={
                 actionPending || !canStage || !viewerContextId || !normalizedCwd
               }
-              onClick={(event) => {
-                event.stopPropagation()
-                stageMutation.mutate()
-              }}
+              onClick={stageFileChanges}
             >
               <PlusIcon className="size-3.5" />
             </Button>
@@ -738,6 +744,44 @@ function ReviewFileAccordionItem({
         </div>
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
+        <div className="flex gap-2 border-b border-border/70 bg-card/40 p-2 md:hidden">
+          {onOpenFile ? (
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={`Open ${file.path}`}
+              className="min-w-0 flex-1"
+              onClick={openFile}
+            >
+              <FileInputIcon className="size-3.5" />
+              <span>Open file</span>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={`Discard changes to ${file.path}`}
+            className="min-w-0 flex-1 text-muted-foreground hover:text-destructive"
+            disabled={actionPending || !viewerContextId || !normalizedCwd}
+            onClick={discardFileChanges}
+          >
+            <Undo2Icon className="size-3.5" />
+            <span>Discard</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={`Stage changes to ${file.path}`}
+            className="min-w-0 flex-1 text-muted-foreground hover:text-emerald-500"
+            disabled={
+              actionPending || !canStage || !viewerContextId || !normalizedCwd
+            }
+            onClick={stageFileChanges}
+          >
+            <PlusIcon className="size-3.5" />
+            <span>Stage</span>
+          </Button>
+        </div>
         {previewPatch ? (
           diffQuery.isPending && !diffQuery.data ? (
             <div className="p-3">
