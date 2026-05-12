@@ -44,7 +44,7 @@ const GIT_GRAPH_LANE_COLORS = [
   "#14b8a6",
 ]
 const GIT_GRAPH_NULL_VERTEX_ID = -1
-const GIT_GRAPH_ROW_HEIGHT = 20
+const GIT_GRAPH_ROW_HEIGHT = 32
 const GIT_GRAPH_COMMIT_DETAILS_HEIGHT = 150
 const GIT_GRAPH_LANE_WIDTH = 14
 const GIT_GRAPH_OFFSET_X = 12
@@ -496,7 +496,7 @@ function GitCommitRow({
 
   if (!parsed.hash && !parsed.subject) {
     return (
-      <div className="flex h-5 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
+      <div className="flex h-8 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
         {parsed.subject ? (
           <span className="min-w-0 flex-1 truncate text-foreground">
             {parsed.subject}
@@ -509,7 +509,7 @@ function GitCommitRow({
   const trigger = (
     <AccordionTrigger
       headerClassName="min-w-0"
-      className="h-5 min-h-5 w-full items-center gap-2 rounded-none px-1.5 py-0 font-mono text-[13px] leading-5 font-normal transition-colors hover:bg-muted/50 hover:text-foreground hover:no-underline focus-visible:ring-0 aria-expanded:bg-muted aria-expanded:text-foreground **:data-[slot=accordion-trigger-icon]:size-4"
+      className="h-8 min-h-8 w-full items-center gap-2 rounded-none px-1.5 py-0 font-mono text-[13px] leading-5 font-normal transition-colors hover:bg-muted/50 hover:text-foreground hover:no-underline focus-visible:ring-0 aria-expanded:bg-muted aria-expanded:text-foreground **:data-[slot=accordion-trigger-icon]:size-4"
     >
       <span
         className="min-w-0 flex-1 truncate text-foreground"
