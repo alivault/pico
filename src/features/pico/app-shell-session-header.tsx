@@ -38,6 +38,7 @@ export type AppShellSessionHeaderActions = {
   createSession: (cwdOverride?: string) => void | Promise<unknown>
   onDeleteCurrentSession: () => void
   onForkSession: () => void | Promise<unknown>
+  onMoveCurrentSession: (directory: string) => void | Promise<unknown>
   onRenameSession: () => void
   onRunCompact: () => void | Promise<unknown>
   onToggleCurrentSessionPinned: () => void
@@ -102,6 +103,9 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
+  const moveSessionDirectoryOptions = newSessionDirectoryOptions.filter(
+    (option) => option.path !== displaySessionCwd
+  )
 
   return (
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
@@ -231,6 +235,36 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                     : "Pin to sidebar"}
                 </span>
               </DropdownMenuItem>
+              {moveSessionDirectoryOptions.length > 0 ? (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    disabled={!sessionHeaderState.sessionHasFile}
+                  >
+                    Move to…
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-72">
+                    {moveSessionDirectoryOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.path}
+                        onClick={() => {
+                          void actionsRef.current.onMoveCurrentSession(
+                            option.path
+                          )
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            {option.label}
+                          </span>
+                          <span className="truncate">
+                            {formatDisplayPath(option.path)}
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => {
                   void actionsRef.current.onRunCompact()

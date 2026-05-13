@@ -816,6 +816,12 @@ export function AppShellSidebarController({
       onDeleteSession={(entry) => {
         sessionWorkspaceRef.current?.openDeleteDialog([entry])
       }}
+      onMoveSession={(entry, directory) => {
+        void sessionWorkspaceRef.current?.moveSessionToDirectory(
+          entry,
+          directory
+        )
+      }}
       onTogglePinnedSession={togglePinnedSession}
       onCreateSessionInDirectory={(directory) => {
         void sessionWorkspaceRef.current?.createSession(directory, {

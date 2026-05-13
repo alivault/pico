@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, rename, stat, unlink } from "node:fs/promises"
+import {
+  mkdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, join, resolve as resolvePath } from "node:path"
 import { performance } from "node:perf_hooks"
@@ -140,6 +147,69 @@ function debugJson(details: Record<string, unknown>) {
   } catch {
     return JSON.stringify({ details: "[unserializable]" })
   }
+}
+
+function defaultSessionDirectoryForCwd(agentDir: string, cwd: string) {
+  const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`
+  return join(agentDir, "sessions", safePath)
+}
+
+function splitSessionFileLines(content: string) {
+  const lines = content.split("\n")
+  if (lines.at(-1) === "") {
+    lines.pop()
+  }
+  return lines
+}
+
+function updateSessionFileCwdContent(content: string, nextCwd: string) {
+  const lines = splitSessionFileLines(content)
+  const headerIndex = lines.findIndex((line) => line.trim())
+  if (headerIndex < 0) {
+    throw new Error("Session file is empty")
+  }
+
+  let header: unknown
+  try {
+    header = JSON.parse(lines[headerIndex] || "")
+  } catch {
+    throw new Error("Session file header is invalid")
+  }
+  if (!header || typeof header !== "object") {
+    throw new Error("Session file header is invalid")
+  }
+  if ((header as { type?: unknown }).type !== "session") {
+    throw new Error("Session file header is missing")
+  }
+
+  lines[headerIndex] = JSON.stringify({
+    ...(header as Record<string, unknown>),
+    cwd: nextCwd,
+  })
+  return `${lines.join("\n")}\n`
+}
+
+async function uniqueSessionMovePath(
+  sessionPath: string,
+  targetDirectory: string
+) {
+  const targetPath = join(targetDirectory, basename(sessionPath))
+  if (resolvePath(targetPath) === resolvePath(sessionPath)) return targetPath
+
+  try {
+    await stat(targetPath)
+  } catch (error) {
+    const code = (error as { code?: string } | undefined)?.code
+    if (code === "ENOENT") return targetPath
+    throw error
+  }
+
+  const extension = ".jsonl"
+  const fileName = basename(sessionPath)
+  const stem = fileName.endsWith(extension)
+    ? fileName.slice(0, -extension.length)
+    : fileName
+  return join(targetDirectory, `${stem}-${randomUUID()}${extension}`)
 }
 
 const identityTheme = {
@@ -4263,6 +4333,131 @@ export class PicoRuntime {
     this.invalidateSessionIndexCache()
     await this.broadcastSessionsAll()
     return { ok: true, name: nextName }
+  }
+
+  private async writeMovedSessionFile(
+    sessionPath: string,
+    nextCwd: string,
+    targetSessionDirectory: string
+  ) {
+    const sourcePath = resolvePath(sessionPath)
+    const targetPath = resolvePath(
+      await uniqueSessionMovePath(sourcePath, targetSessionDirectory)
+    )
+    const currentContent = await readFile(sourcePath, "utf8")
+    const nextContent = updateSessionFileCwdContent(currentContent, nextCwd)
+
+    if (targetPath === sourcePath) {
+      await writeFile(sourcePath, nextContent)
+      return targetPath
+    }
+
+    await writeFile(targetPath, nextContent, { flag: "wx" })
+    try {
+      await unlink(sourcePath)
+    } catch (error) {
+      await unlink(targetPath).catch(() => undefined)
+      throw error
+    }
+    return targetPath
+  }
+
+  async moveSession(request: Request, body: { path?: unknown; cwd?: unknown }) {
+    await this.resolveRequest(request)
+    const sessionPath = typeof body.path === "string" ? body.path.trim() : ""
+    const nextCwd = typeof body.cwd === "string" ? body.cwd.trim() : ""
+    if (!sessionPath) {
+      throw new Error("path is required")
+    }
+    if (!nextCwd) {
+      throw new Error("cwd is required")
+    }
+
+    const nextCwdStats = await stat(nextCwd)
+    if (!nextCwdStats.isDirectory()) {
+      throw new Error("Destination must be a directory")
+    }
+
+    const loadedEntries = [...this.sessionEntries.values()].filter(
+      (entry) => this.getSessionPath(entry) === sessionPath
+    )
+    for (const loadedEntry of loadedEntries) {
+      if (this.isSessionBusyForDone(loadedEntry)) {
+        throw new Error("Wait for the session to finish before moving it.")
+      }
+    }
+
+    const sdk = await this.getSdk()
+    const targetSessionDirectory = defaultSessionDirectoryForCwd(
+      sdk.getAgentDir(),
+      nextCwd
+    )
+    await mkdir(targetSessionDirectory, { recursive: true })
+
+    const previousPath = resolvePath(sessionPath)
+    const previousEntry = loadedEntries[0]
+    const previousCwd = previousEntry?.cwd || ""
+    const affectedContexts = [...this.contexts.values()]
+      .map((context) => ({
+        context,
+        wasActive: loadedEntries.some(
+          (entry) => context.activeKey === entry.key
+        ),
+        wasDraft: loadedEntries.some((entry) => context.draftKey === entry.key),
+      }))
+      .filter((entry) => entry.wasActive || entry.wasDraft)
+
+    const nextPath = await this.writeMovedSessionFile(
+      previousPath,
+      nextCwd,
+      targetSessionDirectory
+    )
+
+    for (const loadedEntry of loadedEntries) {
+      await this.disposeSessionEntry(loadedEntry)
+    }
+
+    let nextEntry: SessionEntry | undefined
+    if (affectedContexts.some((entry) => entry.wasActive)) {
+      nextEntry = await this.ensureSessionEntryByPath(nextPath)
+      for (const affected of affectedContexts) {
+        if (affected.wasDraft) {
+          affected.context.draftKey = undefined
+        }
+        if (affected.wasActive) {
+          await this.activateContextSession(affected.context, nextEntry, {
+            refreshSessions: false,
+          })
+        }
+      }
+    } else {
+      for (const affected of affectedContexts) {
+        if (affected.wasDraft) {
+          affected.context.draftKey = undefined
+        }
+      }
+    }
+
+    for (const context of this.contexts.values()) {
+      if (context.unreadFinished.delete(previousPath)) {
+        context.unreadFinished.add(nextPath)
+      }
+    }
+
+    this.invalidateSessionIndexCache()
+    await this.broadcastSessionsAll()
+    if (nextEntry) {
+      await this.broadcastEntryState(nextEntry)
+    }
+    return {
+      ok: true,
+      previousPath,
+      previousCwd,
+      path: nextPath,
+      cwd: nextCwd,
+      sessionId:
+        nextEntry?.session.sessionId || previousEntry?.session.sessionId,
+    }
   }
 
   private async trashOrDeleteSessionFile(sessionPath: string) {

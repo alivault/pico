@@ -7,6 +7,7 @@ import type {
   CloneSessionResponse,
   DeleteSessionsResponse,
   DirectorySessionsIndexSnapshot,
+  MoveSessionResponse,
   RenameSessionResponse,
   SessionListEntry,
   SessionsEvent,
@@ -14,11 +15,16 @@ import type {
 } from "@/lib/pico/api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { sessionListEntryKey } from "@/lib/pico"
+import {
+  PINNED_SESSIONS_STORAGE_KEY,
+  safeLocalStorageSetItem,
+  sessionListEntryKey,
+} from "@/lib/pico"
 
 type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
 type RenameSessionResponseData = Extract<RenameSessionResponse, { ok: true }>
+type MoveSessionResponseData = Extract<MoveSessionResponse, { ok: true }>
 type DirectoryIndexDataByPath = Record<string, DirectorySessionsIndexSnapshot>
 
 type SidebarSelectionSnapshot = {
@@ -203,6 +209,27 @@ function optimisticSelectionAfterDelete(
   }
 }
 
+function replaceSessionKey(
+  keys: Array<string>,
+  previousKey: string,
+  nextKey: string
+) {
+  if (!previousKey || !nextKey || previousKey === nextKey) return keys
+
+  let changed = false
+  const seen = new Set<string>()
+  const nextKeys: Array<string> = []
+  for (const key of keys) {
+    const nextValue = key === previousKey ? nextKey : key
+    if (nextValue !== key) changed = true
+    if (!nextValue || seen.has(nextValue)) continue
+    seen.add(nextValue)
+    nextKeys.push(nextValue)
+  }
+
+  return changed ? nextKeys : keys
+}
+
 type UseAppShellSessionMutationsOptions = {
   viewerContextId: string
   activeSessionId?: string
@@ -222,6 +249,9 @@ type UseAppShellSessionMutationsOptions = {
     React.SetStateAction<Array<string>>
   >
   setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
+  setPinnedSidebarSessionKeys: React.Dispatch<
+    React.SetStateAction<Array<string>>
+  >
   setCompactWorkingState: (running: boolean) => void
   isCompactAbortRequested: () => boolean
 }
@@ -239,6 +269,7 @@ export function useAppShellSessionMutations({
   optimisticallyClearActiveDeletedSession,
   setSelectedSidebarSessionKeys,
   setSidebarSessionSelectionAnchor,
+  setPinnedSidebarSessionKeys,
   setCompactWorkingState,
   isCompactAbortRequested,
 }: UseAppShellSessionMutationsOptions) {
@@ -607,6 +638,91 @@ export function useAppShellSessionMutations({
     ]
   )
 
+  const moveSessionMutation = useMutation({
+    mutationFn: async ({ path, cwd }: { path: string; cwd: string }) => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<MoveSessionResponseData>(
+        buildRequestUrl("/api/session/move", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path, cwd }),
+        }
+      )
+    },
+  })
+
+  const moveSessionPath = React.useCallback(
+    async (entry: SessionListEntry, directory: string) => {
+      if (!viewerContextId || !entry.path) return false
+
+      const nextDirectory = directory.trim()
+      if (!nextDirectory) {
+        toast.error("Directory is required")
+        return false
+      }
+      if (entry.cwd === nextDirectory) return false
+
+      try {
+        const response = await moveSessionMutation.mutateAsync({
+          path: entry.path,
+          cwd: nextDirectory,
+        })
+        const previousKey = sessionListEntryKey({
+          path: response.previousPath || entry.path,
+        })
+        const nextKey = sessionListEntryKey({
+          path: response.path,
+          id: response.sessionId || entry.id,
+        })
+
+        setSelectedSidebarSessionKeys((current) =>
+          replaceSessionKey(current, previousKey, nextKey)
+        )
+        setSidebarSessionSelectionAnchor((current) =>
+          current === previousKey ? nextKey : current
+        )
+        setPinnedSidebarSessionKeys((current) => {
+          const next = replaceSessionKey(current, previousKey, nextKey)
+          if (next !== current) {
+            safeLocalStorageSetItem(
+              PINNED_SESSIONS_STORAGE_KEY,
+              JSON.stringify(next)
+            )
+          }
+          return next
+        })
+        setSessionState((current) =>
+          current.sessionFile === response.previousPath
+            ? { ...current, cwd: response.cwd, sessionFile: response.path }
+            : current
+        )
+
+        toast.success("Moved session")
+        return true
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to move session"
+        )
+        return false
+      }
+    },
+    [
+      moveSessionMutation,
+      setPinnedSidebarSessionKeys,
+      setSelectedSidebarSessionKeys,
+      setSessionState,
+      setSidebarSessionSelectionAnchor,
+      viewerContextId,
+    ]
+  )
+
   const deleteSessionMutation = useMutation({
     mutationFn: async (paths: Array<string>) => {
       if (!viewerContextId) {
@@ -763,6 +879,7 @@ export function useAppShellSessionMutations({
   return {
     cycleThinkingLevel,
     deleteSessions,
+    moveSessionPath,
     renameSessionPath,
     runClone,
     runCompact,

@@ -19,6 +19,10 @@ export type AppShellSessionWorkspaceHandle = {
   openCommandPalette: () => void
   openDeleteDialog: (targets: Array<SessionListEntry>) => void
   openDeleteOldDirectorySessionsDialog: (directory: string) => void
+  moveSessionToDirectory: (
+    entry: SessionListEntry,
+    directory: string
+  ) => Promise<boolean>
   openRenameDialogForEntry: (entry: SessionListEntry) => void
   openSessionsDialog: () => void
   openSettingsDialog: () => void

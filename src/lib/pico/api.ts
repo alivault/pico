@@ -429,6 +429,17 @@ export type RenameSessionResponse =
     }
   | ApiErrorResponse
 
+export type MoveSessionResponse =
+  | {
+      ok: true
+      previousPath: string
+      previousCwd?: string
+      path: string
+      cwd: string
+      sessionId?: string
+    }
+  | ApiErrorResponse
+
 export type DeleteSessionResponse =
   | {
       ok: true
