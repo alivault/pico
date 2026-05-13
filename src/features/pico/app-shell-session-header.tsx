@@ -39,6 +39,7 @@ export type AppShellSessionHeaderActions = {
   onDeleteCurrentSession: () => void
   onForkSession: () => void | Promise<unknown>
   onMoveCurrentSession: (directory: string) => void | Promise<unknown>
+  onMoveCurrentSessionToAnyDirectory: () => void
   onRenameSession: () => void
   onRunCompact: () => void | Promise<unknown>
   onToggleCurrentSessionPinned: () => void
@@ -235,13 +236,9 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                     : "Pin to sidebar"}
                 </span>
               </DropdownMenuItem>
-              {moveSessionDirectoryOptions.length > 0 ? (
+              {sessionHeaderState.sessionHasFile ? (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger
-                    disabled={!sessionHeaderState.sessionHasFile}
-                  >
-                    Move to…
-                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger>Move to…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
                     {moveSessionDirectoryOptions.map((option) => (
                       <DropdownMenuItem
@@ -262,6 +259,13 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                         </div>
                       </DropdownMenuItem>
                     ))}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        actionsRef.current.onMoveCurrentSessionToAnyDirectory()
+                      }}
+                    >
+                      Other directory…
+                    </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               ) : null}

@@ -23,6 +23,7 @@ export type AppShellSessionWorkspaceHandle = {
     entry: SessionListEntry,
     directory: string
   ) => Promise<boolean>
+  openMoveSessionDirectoryDialogForEntry: (entry: SessionListEntry) => void
   openRenameDialogForEntry: (entry: SessionListEntry) => void
   openSessionsDialog: () => void
   openSettingsDialog: () => void

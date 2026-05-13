@@ -52,6 +52,7 @@ type UseAppShellShortcutsOptions = {
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   gitCommitOpenRef: React.RefObject<boolean>
+  moveSessionDirectoryOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
   renameOpenRef: React.RefObject<boolean>
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
@@ -110,6 +111,7 @@ export function useAppShellShortcuts({
   deleteOpenRef,
   forkOpenRef,
   gitCommitOpenRef,
+  moveSessionDirectoryOpenRef,
   pendingUiRequestOpenRef,
   renameOpenRef,
   sessionSearchInputRef,
@@ -130,6 +132,7 @@ export function useAppShellShortcuts({
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
+      moveSessionDirectoryOpenRef.current ||
       treeOpenRef.current ||
       sessionsOpenRef.current ||
       settingsOpenRef.current ||

@@ -168,6 +168,7 @@ type AppShellAddDirectoryDialogProps = {
   recentDirectories: Array<string>
   knownDirectories: Array<string>
   useForNewSession?: boolean
+  useForMoveSession?: boolean
   onAddDirectoryPath: (path: string) => void
   onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
@@ -183,6 +184,7 @@ export function AppShellAddDirectoryDialog({
   recentDirectories,
   knownDirectories,
   useForNewSession = false,
+  useForMoveSession = false,
   onAddDirectoryPath,
   onRequestPathCompletions,
   onSearchDirectories,
@@ -305,18 +307,32 @@ export function AppShellAddDirectoryDialog({
     hasDirectoryMatches ||
     hasPathCompletionResults ||
     hasDirectorySearchResults
-  const addPathDescription = useForNewSession
-    ? "Add to sidebar and use for this new session."
-    : "Resolve and add this path to the sidebar."
-  const openedDescription = useForNewSession
-    ? "Use for this new session."
-    : "Expand and show it in the sidebar."
-  const currentDescription = useForNewSession
-    ? "Use the current Pico working directory for this new session."
-    : "Use the current Pico working directory."
-  const addKnownDescription = useForNewSession
-    ? "Add to sidebar and use for this new session."
-    : ""
+  const addPathDescription = useForMoveSession
+    ? "Resolve and move this session to this directory."
+    : useForNewSession
+      ? "Add to sidebar and use for this new session."
+      : "Resolve and add this path to the sidebar."
+  const openedDescription = useForMoveSession
+    ? "Move this session here."
+    : useForNewSession
+      ? "Use for this new session."
+      : "Expand and show it in the sidebar."
+  const currentDescription = useForMoveSession
+    ? "Move this session to the current Pico working directory."
+    : useForNewSession
+      ? "Use the current Pico working directory for this new session."
+      : "Use the current Pico working directory."
+  const addKnownDescription = useForMoveSession
+    ? "Move this session here."
+    : useForNewSession
+      ? "Add to sidebar and use for this new session."
+      : ""
+  const manualGroupHeading = useForMoveSession ? "Move to path" : "Add path"
+  const manualPathPrefix = useForMoveSession ? "Move to" : "Add"
+  const dialogTitle = useForMoveSession ? "Move session" : "Add directory"
+  const dialogDescription = useForMoveSession
+    ? "Search recent and known directories or paste any path to move this session."
+    : "Search recent and known directories or add a new path to the sidebar."
 
   React.useEffect(() => {
     if (!shouldShowPathCompletions) {
@@ -612,13 +628,16 @@ export function AppShellAddDirectoryDialog({
           </CommandGroup>
         ) : null}
         {manualPath ? (
-          <CommandGroup heading="Add path">
+          <CommandGroup heading={manualGroupHeading}>
             <CommandItem
               value={`add ${manualPath}`}
               onSelect={() => onAddDirectoryPath(manualPath)}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <DirectoryPathLabel path={manualPath} prefix={<>Add&nbsp;</>} />
+                <DirectoryPathLabel
+                  path={manualPath}
+                  prefix={<>{manualPathPrefix}&nbsp;</>}
+                />
                 <span className="truncate text-xs text-muted-foreground">
                   {addPathDescription}
                 </span>
@@ -731,11 +750,8 @@ export function AppShellAddDirectoryDialog({
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
-            <DrawerTitle>Add directory</DrawerTitle>
-            <DrawerDescription>
-              Search recent and known directories or add a new path to the
-              sidebar.
-            </DrawerDescription>
+            <DrawerTitle>{dialogTitle}</DrawerTitle>
+            <DrawerDescription>{dialogDescription}</DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             {directoryPicker}
@@ -749,8 +765,8 @@ export function AppShellAddDirectoryDialog({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add directory"
-      description="Search recent and known directories or add a new path to the sidebar."
+      title={dialogTitle}
+      description={dialogDescription}
       className="sm:max-w-2xl"
       initialFocus
     >
@@ -766,6 +782,7 @@ type AppShellAddDirectoryDialogControllerProps = {
   recentDirectories: Array<string>
   knownDirectories: Array<string>
   useForNewSession?: boolean
+  useForMoveSession?: boolean
   onAddDirectoryPath: (
     path: string
   ) => Promise<boolean | string> | boolean | string | void
@@ -781,6 +798,7 @@ export function AppShellAddDirectoryDialogController({
   recentDirectories,
   knownDirectories,
   useForNewSession,
+  useForMoveSession,
   onAddDirectoryPath,
   onRequestPathCompletions,
   onSearchDirectories,
@@ -831,6 +849,7 @@ export function AppShellAddDirectoryDialogController({
       recentDirectories={recentDirectories}
       knownDirectories={knownDirectories}
       useForNewSession={useForNewSession}
+      useForMoveSession={useForMoveSession}
       onAddDirectoryPath={(path) => {
         void addDirectoryPath(path)
       }}

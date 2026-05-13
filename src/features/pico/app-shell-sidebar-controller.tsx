@@ -822,6 +822,11 @@ export function AppShellSidebarController({
           directory
         )
       }}
+      onMoveSessionAnyDirectory={(entry) => {
+        sessionWorkspaceRef.current?.openMoveSessionDirectoryDialogForEntry(
+          entry
+        )
+      }}
       onTogglePinnedSession={togglePinnedSession}
       onCreateSessionInDirectory={(directory) => {
         void sessionWorkspaceRef.current?.createSession(directory, {

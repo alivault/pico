@@ -673,6 +673,12 @@ const AppShellSessionWorkspace = React.forwardRef<
   const addDirectoryDialogRef =
     React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
   const addDirectoryOpenRef = React.useRef(false)
+  const moveSessionDirectoryDialogRef =
+    React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
+  const moveSessionDirectoryOpenRef = React.useRef(false)
+  const moveSessionDirectoryTargetRef = React.useRef<SessionListEntry | null>(
+    null
+  )
   const renameDialogRef = React.useRef<RenameSessionDialogHandle | null>(null)
   const renameOpenRef = React.useRef(false)
   const deleteDialogRef = React.useRef<DeleteSessionsDialogHandle | null>(null)
@@ -1522,23 +1528,41 @@ const AppShellSessionWorkspace = React.forwardRef<
     deleteOldDirectorySessionsDialogRef.current?.open(directory)
   }
 
-  const openDeleteDialogForCurrentSession = () => {
+  const currentSessionListEntry = () => {
     const currentState = sessionStateRef.current
-    if (!currentState.sessionFile) return
+    if (!currentState.sessionFile) return undefined
 
-    openDeleteDialog([
-      {
-        path: currentState.sessionFile,
-        id: currentState.sessionId,
-        title: getCurrentSessionTitleFromState(currentState),
-        name: currentState.sessionName,
-        modified: currentState.modified,
-      },
-    ])
+    return {
+      path: currentState.sessionFile,
+      id: currentState.sessionId,
+      cwd: currentState.cwd,
+      title: getCurrentSessionTitleFromState(currentState),
+      name: currentState.sessionName,
+      modified: currentState.modified,
+    } satisfies SessionListEntry
+  }
+
+  const openDeleteDialogForCurrentSession = () => {
+    const currentEntry = currentSessionListEntry()
+    if (!currentEntry) return
+
+    openDeleteDialog([currentEntry])
   }
 
   const openAddDirectoryDialog = () => {
     addDirectoryDialogRef.current?.open()
+  }
+
+  const openMoveSessionDirectoryDialogForEntry = (entry: SessionListEntry) => {
+    if (!entry.path) return
+    moveSessionDirectoryTargetRef.current = entry
+    moveSessionDirectoryDialogRef.current?.open()
+  }
+
+  const openMoveSessionDirectoryDialogForCurrentSession = () => {
+    const currentEntry = currentSessionListEntry()
+    if (!currentEntry) return
+    openMoveSessionDirectoryDialogForEntry(currentEntry)
   }
 
   const openForkDialog = async () => {
@@ -2302,7 +2326,24 @@ const AppShellSessionWorkspace = React.forwardRef<
   const moveSessionToDirectory = async (
     entry: SessionListEntry,
     directory: string
-  ) => await moveSessionPath(entry, directory)
+  ) => {
+    const moved = await moveSessionPath(entry, directory)
+    if (moved) {
+      rememberRecentDirectory(directory)
+    }
+    return moved
+  }
+
+  const moveSessionDirectoryTargetToPath = async (directory: string) => {
+    const target = moveSessionDirectoryTargetRef.current
+    if (!target) return false
+
+    const moved = await moveSessionToDirectory(target, directory)
+    if (moved) {
+      moveSessionDirectoryTargetRef.current = null
+    }
+    return moved
+  }
 
   const moveCurrentSessionToDirectory = async (directory: string) => {
     const currentState = sessionStateRef.current
@@ -2888,6 +2929,8 @@ const AppShellSessionWorkspace = React.forwardRef<
     onDeleteCurrentSession: openDeleteDialogForCurrentSession,
     onForkSession: openForkDialog,
     onMoveCurrentSession: moveCurrentSessionToDirectory,
+    onMoveCurrentSessionToAnyDirectory:
+      openMoveSessionDirectoryDialogForCurrentSession,
     onRenameSession: openRenameDialog,
     onRunCompact: runCompact,
     onToggleCurrentSessionPinned: toggleCurrentSessionPinned,
@@ -2903,6 +2946,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     deleteOpenRef,
     forkOpenRef,
     gitCommitOpenRef,
+    moveSessionDirectoryOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     renameOpenRef,
     sessionSearchInputRef,
@@ -2945,6 +2989,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       openDeleteDialog,
       moveSessionToDirectory,
       openDeleteOldDirectorySessionsDialog,
+      openMoveSessionDirectoryDialogForEntry,
       openRenameDialogForEntry,
       openSessionsDialog,
       openSettingsDialog,
@@ -2965,6 +3010,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         openDeleteOldDirectorySessionsDialog,
       moveSessionToDirectory:
         actions?.moveSessionToDirectory ?? moveSessionToDirectory,
+      openMoveSessionDirectoryDialogForEntry:
+        actions?.openMoveSessionDirectoryDialogForEntry ??
+        openMoveSessionDirectoryDialogForEntry,
       openRenameDialogForEntry:
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
       openSessionsDialog: actions?.openSessionsDialog ?? openSessionsDialog,
@@ -2979,6 +3027,7 @@ const AppShellSessionWorkspace = React.forwardRef<
     moveSessionToDirectory,
     openDeleteDialog,
     openDeleteOldDirectorySessionsDialog,
+    openMoveSessionDirectoryDialogForEntry,
     openRenameDialogForEntry,
     openSessionsDialog,
     openSettingsDialog,
@@ -3079,6 +3128,9 @@ const AppShellSessionWorkspace = React.forwardRef<
         gitCommitOpenRef={gitCommitOpenRef}
         displaySettingsStore={displaySettingsStore}
         knownDirectories={knownDirectories}
+        moveSessionDirectoryDialogRef={moveSessionDirectoryDialogRef}
+        moveSessionDirectoryOpenRef={moveSessionDirectoryOpenRef}
+        moveSessionDirectoryTargetToPath={moveSessionDirectoryTargetToPath}
         onAutoScrollEnabledChange={setAutoScroll}
         onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {

@@ -95,6 +95,11 @@ type AppShellFloatingControllersProps = {
   gitCommitOpenRef: React.RefObject<boolean>
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   knownDirectories: Array<string>
+  moveSessionDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
+  moveSessionDirectoryOpenRef: React.RefObject<boolean>
+  moveSessionDirectoryTargetToPath: React.ComponentProps<
+    typeof AppShellAddDirectoryDialogController
+  >["onAddDirectoryPath"]
   onAutoScrollEnabledChange: (enabled: boolean) => void
   onCenterMessagesChange: (centered: boolean) => void
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -288,6 +293,80 @@ const AppShellAddDirectoryDialogHost = React.memo(
         knownDirectories={knownDirectories}
         useForNewSession={useForNewSession}
         onAddDirectoryPath={addDirectoryPath}
+        onRequestPathCompletions={requestPathCompletions}
+        onSearchDirectories={searchDirectories}
+      />
+    )
+  }
+)
+
+const AppShellMoveSessionDirectoryDialogHost = React.memo(
+  function AppShellMoveSessionDirectoryDialogHost({
+    activeSessionId,
+    baseSidebarDirectories,
+    knownDirectories,
+    moveSessionDirectoryDialogRef,
+    moveSessionDirectoryOpenRef,
+    moveSessionDirectoryTargetToPath,
+    recentDirectoriesStore,
+    sessionCwd,
+    viewerContextId,
+  }: Pick<
+    AppShellFloatingControllersProps,
+    | "activeSessionId"
+    | "baseSidebarDirectories"
+    | "knownDirectories"
+    | "moveSessionDirectoryDialogRef"
+    | "moveSessionDirectoryOpenRef"
+    | "moveSessionDirectoryTargetToPath"
+    | "recentDirectoriesStore"
+    | "sessionCwd"
+    | "viewerContextId"
+  >) {
+    const recentDirectories = useSelector(recentDirectoriesStore)
+    const requestPathCompletions = useStableEvent(async (prefix: string) => {
+      if (!viewerContextId) return []
+
+      const response = await fetchJson<PathCompletionsResponse>(
+        buildRequestUrl("/api/path-completions", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prefix }),
+        }
+      )
+      return isApiErrorResponse(response) ? [] : response.items
+    })
+    const searchDirectories = useStableEvent(async (query: string) => {
+      if (!viewerContextId) return []
+
+      const response = await fetchJson<DirectorySearchResponse>(
+        buildRequestUrl("/api/directory-search", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ query }),
+        }
+      )
+      return isApiErrorResponse(response) ? [] : response.items
+    })
+
+    return (
+      <AppShellAddDirectoryDialogController
+        ref={moveSessionDirectoryDialogRef}
+        openStateRef={moveSessionDirectoryOpenRef}
+        openedDirectories={baseSidebarDirectories}
+        currentDirectory={sessionCwd}
+        recentDirectories={recentDirectories}
+        knownDirectories={knownDirectories}
+        useForMoveSession
+        onAddDirectoryPath={moveSessionDirectoryTargetToPath}
         onRequestPathCompletions={requestPathCompletions}
         onSearchDirectories={searchDirectories}
       />
@@ -576,6 +655,9 @@ export const AppShellFloatingControllers = React.memo(
     gitCommitOpenRef,
     displaySettingsStore,
     knownDirectories,
+    moveSessionDirectoryDialogRef,
+    moveSessionDirectoryOpenRef,
+    moveSessionDirectoryTargetToPath,
     onAutoScrollEnabledChange,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
@@ -650,6 +732,18 @@ export const AppShellFloatingControllers = React.memo(
           recentDirectoriesStore={recentDirectoriesStore}
           sessionCwd={sessionCwd}
           sessionStore={sessionStore}
+          viewerContextId={viewerContextId}
+        />
+
+        <AppShellMoveSessionDirectoryDialogHost
+          activeSessionId={activeSessionId}
+          baseSidebarDirectories={baseSidebarDirectories}
+          knownDirectories={knownDirectories}
+          moveSessionDirectoryDialogRef={moveSessionDirectoryDialogRef}
+          moveSessionDirectoryOpenRef={moveSessionDirectoryOpenRef}
+          moveSessionDirectoryTargetToPath={moveSessionDirectoryTargetToPath}
+          recentDirectoriesStore={recentDirectoriesStore}
+          sessionCwd={sessionCwd}
           viewerContextId={viewerContextId}
         />
 

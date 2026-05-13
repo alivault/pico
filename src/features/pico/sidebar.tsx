@@ -463,6 +463,7 @@ type AppSidebarProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
+  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onDeleteOldSessionsInDirectory?: (directory: string) => void
@@ -635,6 +636,7 @@ type SidebarSessionItemProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
+  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
 }
 
@@ -652,6 +654,7 @@ function SidebarSessionItem({
   onRenameSession,
   onDeleteSession,
   onMoveSession,
+  onMoveSessionAnyDirectory,
   onTogglePinnedSession,
 }: SidebarSessionItemProps) {
   const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
@@ -689,14 +692,16 @@ function SidebarSessionItem({
   const availableMoveTargetDirectories = moveTargetDirectories.filter(
     (directory) => directory && directory !== entry.cwd
   )
+  const canMoveAnyDirectory = Boolean(entry.path && onMoveSessionAnyDirectory)
   const hasMoveTargets =
     Boolean(entry.path && onMoveSession) &&
     availableMoveTargetDirectories.length > 0
+  const hasMoveActions = hasMoveTargets || canMoveAnyDirectory
   const hasSessionActions =
     Boolean(
       onTogglePinnedSession ||
       (entry.path && (onRenameSession || onDeleteSession)) ||
-      hasMoveTargets
+      hasMoveActions
     ) && !overlay
 
   const sessionButton = (
@@ -798,7 +803,7 @@ function SidebarSessionItem({
                 {isPinned ? "Unpin" : "Pin to sidebar"}
               </ContextMenuItem>
             ) : null}
-            {hasMoveTargets ? (
+            {hasMoveActions ? (
               <ContextMenuSub>
                 <ContextMenuSubTrigger>Move to…</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-72">
@@ -812,6 +817,13 @@ function SidebarSessionItem({
                       </span>
                     </ContextMenuItem>
                   ))}
+                  {canMoveAnyDirectory ? (
+                    <ContextMenuItem
+                      onClick={() => onMoveSessionAnyDirectory?.(entry)}
+                    >
+                      Other directory…
+                    </ContextMenuItem>
+                  ) : null}
                 </ContextMenuSubContent>
               </ContextMenuSub>
             ) : null}
@@ -1042,6 +1054,7 @@ type DirectorySessionGroupProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
+  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onDeleteOldSessionsInDirectory?: (directory: string) => void
@@ -1069,6 +1082,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   onRenameSession,
   onDeleteSession,
   onMoveSession,
+  onMoveSessionAnyDirectory,
   onTogglePinnedSession,
   onCreateSessionInDirectory,
   onDeleteOldSessionsInDirectory,
@@ -1277,6 +1291,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                         onRenameSession={onRenameSession}
                         onDeleteSession={onDeleteSession}
                         onMoveSession={onMoveSession}
+                        onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                         onTogglePinnedSession={onTogglePinnedSession}
                       />
                     ))}
@@ -1336,6 +1351,7 @@ type PinnedSessionGroupProps = {
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
+  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
 }
 
@@ -1353,6 +1369,7 @@ function PinnedSessionGroup({
   onRenameSession,
   onDeleteSession,
   onMoveSession,
+  onMoveSessionAnyDirectory,
   onTogglePinnedSession,
 }: PinnedSessionGroupProps) {
   const collapsed = useDirectoryCollapsed(
@@ -1413,6 +1430,7 @@ function PinnedSessionGroup({
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
                   onMoveSession={onMoveSession}
+                  onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                   onTogglePinnedSession={onTogglePinnedSession}
                 />
               ))}
@@ -1584,6 +1602,7 @@ export function AppSidebar({
   onRenameSession,
   onDeleteSession,
   onMoveSession,
+  onMoveSessionAnyDirectory,
   onTogglePinnedSession,
   onCreateSessionInDirectory,
   onDeleteOldSessionsInDirectory,
@@ -1903,6 +1922,9 @@ export function AppSidebar({
                                 onRenameSession={onRenameSession}
                                 onDeleteSession={onDeleteSession}
                                 onMoveSession={onMoveSession}
+                                onMoveSessionAnyDirectory={
+                                  onMoveSessionAnyDirectory
+                                }
                                 onTogglePinnedSession={onTogglePinnedSession}
                                 onCreateSessionInDirectory={
                                   onCreateSessionInDirectory
@@ -1946,6 +1968,7 @@ export function AppSidebar({
                 onRenameSession={onRenameSession}
                 onDeleteSession={onDeleteSession}
                 onMoveSession={onMoveSession}
+                onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                 onTogglePinnedSession={onTogglePinnedSession}
                 onCreateSessionInDirectory={onCreateSessionInDirectory}
                 onDeleteOldSessionsInDirectory={onDeleteOldSessionsInDirectory}
@@ -1971,6 +1994,7 @@ export function AppSidebar({
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
                   onMoveSession={onMoveSession}
+                  onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                   onTogglePinnedSession={onTogglePinnedSession}
                 />
               </SidebarMenu>
