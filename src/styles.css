@@ -273,6 +273,44 @@
   }
 }
 
+.pico-spinner-braille::before {
+  animation: pico-braille-spinner 0.8s linear infinite;
+  content: "⠋";
+}
+
+@keyframes pico-braille-spinner {
+  0% {
+    content: "⠋";
+  }
+  10% {
+    content: "⠙";
+  }
+  20% {
+    content: "⠹";
+  }
+  30% {
+    content: "⠸";
+  }
+  40% {
+    content: "⠼";
+  }
+  50% {
+    content: "⠴";
+  }
+  60% {
+    content: "⠦";
+  }
+  70% {
+    content: "⠧";
+  }
+  80% {
+    content: "⠇";
+  }
+  90% {
+    content: "⠏";
+  }
+}
+
 .sh__line {
   display: block;
   color: var(--sh-identifier);
