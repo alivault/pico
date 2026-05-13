@@ -1575,6 +1575,61 @@ const AppShellSessionWorkspace = React.forwardRef<
     composerPanelRef.current?.openModelPicker()
   }
   const focusPromptRef = useLatestRef(focusPrompt)
+  const promptFocusAfterDialogCloseTimeoutRef = React.useRef<number | null>(
+    null
+  )
+
+  React.useEffect(() => {
+    const hasOpenDialogSurface = () => {
+      if (
+        addDirectoryOpenRef.current ||
+        authOpenRef.current ||
+        commandPaletteOpenRef.current ||
+        deleteOldDirectorySessionsOpenRef.current ||
+        deleteOpenRef.current ||
+        forkOpenRef.current ||
+        gitCommitOpenRef.current ||
+        renameOpenRef.current ||
+        sessionsOpenRef.current ||
+        settingsOpenRef.current ||
+        treeOpenRef.current ||
+        uiRequestOpenRef.current
+      ) {
+        return true
+      }
+
+      if (typeof document === "undefined") return false
+
+      return Boolean(
+        document.querySelector(
+          '[data-slot="dialog-content"][data-open], [data-slot="drawer-content"][data-state="open"]'
+        )
+      )
+    }
+
+    const handleDialogClosed = () => {
+      if (promptFocusAfterDialogCloseTimeoutRef.current !== null) {
+        window.clearTimeout(promptFocusAfterDialogCloseTimeoutRef.current)
+      }
+
+      promptFocusAfterDialogCloseTimeoutRef.current = window.setTimeout(() => {
+        promptFocusAfterDialogCloseTimeoutRef.current = null
+        if (hasOpenDialogSurface()) return
+
+        focusPromptRef.current()
+      }, 0)
+    }
+
+    window.addEventListener("pico:dialog-closed", handleDialogClosed)
+
+    return () => {
+      window.removeEventListener("pico:dialog-closed", handleDialogClosed)
+      if (promptFocusAfterDialogCloseTimeoutRef.current !== null) {
+        window.clearTimeout(promptFocusAfterDialogCloseTimeoutRef.current)
+        promptFocusAfterDialogCloseTimeoutRef.current = null
+      }
+    }
+  }, [focusPromptRef])
   const [promptFocusRequest, setPromptFocusRequest] = React.useState({
     sessionId: "",
     nonce: 0,

@@ -3,14 +3,36 @@ import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
 
+const PICO_DIALOG_CLOSED_EVENT = "pico:dialog-closed"
+
+function dispatchDrawerClosedEvent() {
+  if (typeof window === "undefined") return
+
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent(PICO_DIALOG_CLOSED_EVENT))
+  }, 160)
+}
+
 function Drawer({
   shouldScaleBackground = false,
+  open,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
+  const wasOpenRef = React.useRef(open === true)
+
+  React.useLayoutEffect(() => {
+    const nextOpen = open === true
+    if (!nextOpen && wasOpenRef.current) {
+      dispatchDrawerClosedEvent()
+    }
+    wasOpenRef.current = nextOpen
+  }, [open])
+
   return (
     <DrawerPrimitive.Root
       data-slot="drawer"
       shouldScaleBackground={shouldScaleBackground}
+      open={open}
       {...props}
     />
   )

@@ -7,6 +7,16 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+const PICO_DIALOG_CLOSED_EVENT = "pico:dialog-closed"
+
+function dispatchDialogClosedEvent() {
+  if (typeof window === "undefined") return
+
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent(PICO_DIALOG_CLOSED_EVENT))
+  }, 160)
+}
+
 function blurFocusedElementOutsideDialog() {
   if (typeof document === "undefined") return
 
@@ -24,6 +34,9 @@ function Dialog({ open, ...props }: DialogPrimitive.Root.Props) {
     const nextOpen = open === true
     if (nextOpen && !wasOpenRef.current) {
       blurFocusedElementOutsideDialog()
+    }
+    if (!nextOpen && wasOpenRef.current) {
+      dispatchDialogClosedEvent()
     }
     wasOpenRef.current = nextOpen
   }, [open])

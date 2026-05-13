@@ -127,15 +127,6 @@ function formatSessionTime(value?: string, now = Date.now()) {
   return `${Math.max(1, years)}y ${suffix}`
 }
 
-function formatSessionMessageCount(value?: number) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return ""
-  }
-
-  const count = Math.floor(value)
-  return `${count.toLocaleString()} msg${count === 1 ? "" : "s"}`
-}
-
 function sessionActivityTime(entry: SessionListEntry) {
   const timestamp = entry.lastUserMessageAt || entry.modified
   if (!timestamp) return 0
@@ -197,14 +188,9 @@ function applySessionStatus(
 }
 
 function sessionSearchKeywords(entry: SessionListEntry, directory: string) {
-  return [
-    entry.title,
-    entry.name,
-    entry.path,
-    entry.cwd,
-    directory,
-    formatSessionMessageCount(entry.messageCount),
-  ].filter(Boolean) as Array<string>
+  return [entry.title, entry.name, entry.path, entry.cwd, directory].filter(
+    Boolean
+  ) as Array<string>
 }
 
 function isActiveSession(
@@ -517,7 +503,7 @@ function AppShellSessionsDialog({
           {loading ? "Loading sessions…" : "No sessions found."}
         </CommandEmpty>
         <CommandGroup
-          heading={`${scope === "all" ? "All sessions" : `Current directory · ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`}
+          heading={`${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`}
         >
           {loading && sortedSessionItems.length === 0 ? (
             <CommandItem value="loading:sessions" disabled>
@@ -529,7 +515,6 @@ function AppShellSessionsDialog({
             const entryKey = sessionListEntryKey(entry)
             const timestamp = entry.lastUserMessageAt || entry.modified
             const sessionTime = formatSessionTime(timestamp)
-            const messageCount = formatSessionMessageCount(entry.messageCount)
             const active = isActiveSession(
               entry,
               activeSessionId,
@@ -563,22 +548,22 @@ function AppShellSessionsDialog({
                   <span className="line-clamp-1 text-xs text-muted-foreground">
                     {tildePath(entry.cwd || directory)}
                   </span>
-                  {sessionTime || messageCount ? (
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {sessionTime ? (
                     <span className="truncate text-[11px] text-muted-foreground/70">
                       {sessionTime}
-                      {sessionTime && messageCount ? " · " : null}
-                      {messageCount}
                     </span>
                   ) : null}
+                  <CommandShortcut
+                    className={cn(
+                      "ml-0 shrink-0 tracking-normal normal-case",
+                      !active && "opacity-0"
+                    )}
+                  >
+                    Current
+                  </CommandShortcut>
                 </div>
-                <CommandShortcut
-                  className={cn(
-                    "shrink-0 tracking-normal normal-case",
-                    !active && "opacity-0"
-                  )}
-                >
-                  Current
-                </CommandShortcut>
               </CommandItem>
             )
           })}
