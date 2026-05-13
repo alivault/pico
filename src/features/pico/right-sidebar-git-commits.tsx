@@ -389,11 +389,11 @@ function gitCommitGraphSegmentPath({
 function GitCommitPageGraph({
   lines,
   openCommitValues,
-  unpushedCommitShortHashes,
+  unpushedCommitHashes,
 }: {
   lines: Array<string>
   openCommitValues: Array<string>
-  unpushedCommitShortHashes: Set<string>
+  unpushedCommitHashes: Set<string>
 }) {
   const { branches, maxLaneCount, rows } = buildGitCommitGraphRows(lines)
   const rowHeights = gitCommitGraphRowHeights(rows, openCommitValues)
@@ -427,7 +427,7 @@ function GitCommitPageGraph({
     const x = row.commitLane * GIT_GRAPH_LANE_WIDTH + GIT_GRAPH_OFFSET_X
     const y = gitCommitGraphRowCenter(rowTops, rowIndex)
     const active = Boolean(
-      row.parsed.hash && unpushedCommitShortHashes.has(row.parsed.hash)
+      row.parsed.fullHash && unpushedCommitHashes.has(row.parsed.fullHash)
     )
     circles.push(
       <circle
@@ -601,10 +601,10 @@ function GitCommitRow({
 
 function GitCommitRows({
   lines,
-  unpushedCommitShortHashes,
+  unpushedCommitHashes,
 }: {
   lines: Array<string>
-  unpushedCommitShortHashes: Set<string>
+  unpushedCommitHashes: Set<string>
 }) {
   const { maxLaneCount, rows } = buildGitCommitGraphRows(lines)
   const graphWidth = Math.max(24, maxLaneCount * GIT_GRAPH_LANE_WIDTH + 4)
@@ -622,7 +622,7 @@ function GitCommitRows({
       <GitCommitPageGraph
         lines={lines}
         openCommitValues={visibleOpenCommitValues}
-        unpushedCommitShortHashes={unpushedCommitShortHashes}
+        unpushedCommitHashes={unpushedCommitHashes}
       />
       <Accordion
         multiple
@@ -693,9 +693,7 @@ export function GitCommitsSection({
   const commits = commitsData?.commits
   const commitsHasMore = Boolean(commitsData?.commitsHasMore)
   const meta = Array.isArray(commits) ? gitCommitsSummaryText(commits) : ""
-  const unpushedCommitShortHashes = new Set(
-    commitsData?.unpushedCommitShortHashes ?? []
-  )
+  const unpushedCommitHashes = new Set(commitsData?.unpushedCommitHashes ?? [])
   React.useEffect(() => {
     const target = commitsLoadMoreRef.current
     if (
@@ -748,7 +746,7 @@ export function GitCommitsSection({
     <div className="grid min-w-0 gap-3">
       <GitCommitRows
         lines={commits}
-        unpushedCommitShortHashes={unpushedCommitShortHashes}
+        unpushedCommitHashes={unpushedCommitHashes}
       />
       {commitsHasMore ? (
         <div ref={commitsLoadMoreRef} className="flex">

@@ -84,7 +84,7 @@ export const Route = createFileRoute("/api/git-changes")({
               commits: [],
               commitsHasMore: false,
               commitsLimit: 0,
-              unpushedCommitShortHashes: [],
+              unpushedCommitHashes: [],
             })
           }
 
@@ -107,7 +107,7 @@ export const Route = createFileRoute("/api/git-changes")({
               commits: [],
               commitsHasMore: false,
               commitsLimit: 0,
-              unpushedCommitShortHashes: [],
+              unpushedCommitHashes: [],
             })
           }
 
@@ -128,10 +128,8 @@ export const Route = createFileRoute("/api/git-changes")({
                   : [],
               commitsHasMore: Boolean(commits?.commitsHasMore),
               commitsLimit: commits?.commitsLimit ?? 0,
-              unpushedCommitShortHashes: Array.isArray(
-                commits?.unpushedCommitShortHashes
-              )
-                ? commits.unpushedCommitShortHashes
+              unpushedCommitHashes: Array.isArray(commits?.unpushedCommitHashes)
+                ? commits.unpushedCommitHashes
                 : commits === null
                   ? null
                   : [],
@@ -164,10 +162,10 @@ export const Route = createFileRoute("/api/git-changes")({
                 : [],
             commitsHasMore: Boolean(gitChanges?.commitsHasMore),
             commitsLimit: gitChanges?.commitsLimit ?? 0,
-            unpushedCommitShortHashes: Array.isArray(
-              gitChanges?.unpushedCommitShortHashes
+            unpushedCommitHashes: Array.isArray(
+              gitChanges?.unpushedCommitHashes
             )
-              ? gitChanges.unpushedCommitShortHashes
+              ? gitChanges.unpushedCommitHashes
               : gitChanges === null
                 ? null
                 : [],

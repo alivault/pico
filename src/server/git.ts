@@ -60,7 +60,7 @@ export type GitCommitSummary = {
   commits: Array<string>
   commitsHasMore: boolean
   commitsLimit: number
-  unpushedCommitShortHashes: Array<string>
+  unpushedCommitHashes: Array<string>
 }
 
 export type GitChangesSummary = {
@@ -70,7 +70,7 @@ export type GitChangesSummary = {
   commits: Array<string>
   commitsHasMore: boolean
   commitsLimit: number
-  unpushedCommitShortHashes: Array<string>
+  unpushedCommitHashes: Array<string>
 }
 
 export type GitRepositoryFingerprint = {
@@ -1320,14 +1320,12 @@ export async function readDirectoryGitCommits(
         timeoutMs: 1_500,
       }
     ),
-    runCommand(
-      "git",
-      ["rev-list", "--abbrev-commit", "--abbrev=7", "@{upstream}..HEAD"],
-      {
-        cwd: normalizedCwd,
-        timeoutMs: 1_500,
-      }
-    ),
+    // Keep full hashes here. Abbreviated hash lengths can differ between
+    // commands/config, which makes UI membership checks flaky.
+    runCommand("git", ["rev-list", "@{upstream}..HEAD"], {
+      cwd: normalizedCwd,
+      timeoutMs: 1_500,
+    }),
   ])
 
   const statsByHash =
@@ -1349,7 +1347,7 @@ export async function readDirectoryGitCommits(
     commits: limitedCommitLines.lines,
     commitsHasMore: limitedCommitLines.hasMore,
     commitsLimit: normalizedLimit,
-    unpushedCommitShortHashes:
+    unpushedCommitHashes:
       unpushedResult.code === 0
         ? parseCommandLines(unpushedResult.stdout, { trim: true })
         : [],
@@ -1395,7 +1393,7 @@ export async function readDirectoryGitChanges(
           commits: commits.commits,
           commitsHasMore: commits.commitsHasMore,
           commitsLimit: commits.commitsLimit,
-          unpushedCommitShortHashes: commits.unpushedCommitShortHashes,
+          unpushedCommitHashes: commits.unpushedCommitHashes,
         }
 
   gitChangesCache.set(normalizedCwd, {

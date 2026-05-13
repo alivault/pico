@@ -135,7 +135,7 @@ export type GitChangesResponse =
       commits: Array<string> | null
       commitsHasMore: boolean
       commitsLimit: number
-      unpushedCommitShortHashes: Array<string> | null
+      unpushedCommitHashes: Array<string> | null
     }
   | ApiErrorResponse
 
