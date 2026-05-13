@@ -501,6 +501,11 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     hasDraftTextRef.current
   )
   const refreshAssistStateRef = React.useRef<() => void>(() => {})
+  const assistPointerSelectionSuppressedRef = React.useRef(false)
+  const [
+    assistPointerSelectionSuppressed,
+    setAssistPointerSelectionSuppressed,
+  ] = React.useState(false)
 
   const syncDraftToParent = (text: string, skillName?: string) => {
     onComposerTextChange(serializeComposerDraft({ text, skillName }))
@@ -613,6 +618,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
   const hasSubmittableContent = hasDraftText || composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
+  const setAssistPointerSelectionSuppressedValue = (next: boolean) => {
+    assistPointerSelectionSuppressedRef.current = next
+    setAssistPointerSelectionSuppressed(next)
+  }
   const blockInitialSubmit = isSubmitting && !acceptFollowUps
   const handleComposerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -711,6 +720,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       (event.key === "ArrowDown" || event.key === "ArrowUp")
     ) {
       event.preventDefault()
+      setAssistPointerSelectionSuppressedValue(true)
       moveCompletionSelection(event.key === "ArrowDown" ? 1 : -1)
       return
     }
@@ -721,6 +731,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       (event.key === "ArrowDown" || event.key === "ArrowUp")
     ) {
       event.preventDefault()
+      setAssistPointerSelectionSuppressedValue(true)
       moveSlashSelection(event.key === "ArrowDown" ? 1 : -1)
       return
     }
@@ -729,12 +740,16 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       const direction = moveDownShortcut ? 1 : -1
       if (visibleCompletion) {
         event.preventDefault()
+        event.stopPropagation()
+        setAssistPointerSelectionSuppressedValue(true)
         moveCompletionSelection(direction)
         return
       }
 
       if (slashMenuState) {
         event.preventDefault()
+        event.stopPropagation()
+        setAssistPointerSelectionSuppressedValue(true)
         moveSlashSelection(direction)
       }
     }
@@ -805,6 +820,26 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     }
   }
 
+  const handleHoverCompletion = (index: number) => {
+    if (assistPointerSelectionSuppressedRef.current) return
+    selectCompletionIndex(index)
+  }
+
+  const handleMoveCompletion = (index: number) => {
+    setAssistPointerSelectionSuppressedValue(false)
+    selectCompletionIndex(index)
+  }
+
+  const handleHoverSlashCommand = (index: number) => {
+    if (assistPointerSelectionSuppressedRef.current) return
+    selectSlashIndex(index)
+  }
+
+  const handleMoveSlashCommand = (index: number) => {
+    setAssistPointerSelectionSuppressedValue(false)
+    selectSlashIndex(index)
+  }
+
   return (
     <div
       className="relative min-h-[90px] cursor-text overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 pt-3 pb-14"
@@ -815,9 +850,12 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
           visibleCompletion={visibleCompletion}
           slashMenuState={slashMenuState}
           slashSelectionStore={slashSelectionStore}
-          onHoverCompletion={selectCompletionIndex}
+          pointerSelectionSuppressed={assistPointerSelectionSuppressed}
+          onHoverCompletion={handleHoverCompletion}
+          onMoveCompletion={handleMoveCompletion}
           onApplyCompletion={applyCompletion}
-          onHoverSlashCommand={selectSlashIndex}
+          onHoverSlashCommand={handleHoverSlashCommand}
+          onMoveSlashCommand={handleMoveSlashCommand}
           onApplySlashSuggestion={applySlashSuggestion}
         />
 

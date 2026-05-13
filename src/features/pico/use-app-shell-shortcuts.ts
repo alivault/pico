@@ -313,7 +313,7 @@ export function useAppShellShortcuts({
         : event.key.toLowerCase()
     const context = getShortcutContext(event)
 
-    if (context.blockingModalOpen) return
+    if (context.blockingModalOpen || event.defaultPrevented) return
 
     if (key === "\\") {
       event.preventDefault()

@@ -1,7 +1,5 @@
 import * as React from "react"
 
-import { CheckIcon } from "lucide-react"
-
 import type { CompletionItem } from "@/lib/pico/api"
 
 import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
@@ -22,9 +20,12 @@ type ComposerAssistMenuProps = {
   visibleCompletion: ComposerVisibleCompletion | null
   slashMenuState: ComposerSlashMenuState | null
   slashSelectionStore: ComposerAssistSelectionStore
+  pointerSelectionSuppressed: boolean
   onHoverCompletion: (index: number) => void
+  onMoveCompletion: (index: number) => void
   onApplyCompletion: (item: CompletionItem) => void
   onHoverSlashCommand: (index: number) => void
+  onMoveSlashCommand: (index: number) => void
   onApplySlashSuggestion: (command: SlashCommandDescriptor) => void
 }
 
@@ -32,9 +33,12 @@ export function ComposerAssistMenu({
   visibleCompletion,
   slashMenuState,
   slashSelectionStore,
+  pointerSelectionSuppressed,
   onHoverCompletion,
+  onMoveCompletion,
   onApplyCompletion,
   onHoverSlashCommand,
+  onMoveSlashCommand,
   onApplySlashSuggestion,
 }: ComposerAssistMenuProps) {
   const scrollAreaRef = React.useRef<HTMLDivElement>(null)
@@ -74,10 +78,17 @@ export function ComposerAssistMenu({
                   data-composer-assist-selected={selected ? "true" : undefined}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                    selected ? "bg-muted" : "hover:bg-muted/70"
+                    selected
+                      ? "bg-muted"
+                      : pointerSelectionSuppressed
+                        ? ""
+                        : "hover:bg-muted/70"
                   )}
                   onMouseEnter={() => {
                     onHoverCompletion(index)
+                  }}
+                  onMouseMove={() => {
+                    onMoveCompletion(index)
                   }}
                   onClick={() => {
                     onApplyCompletion(item)
@@ -93,7 +104,6 @@ export function ComposerAssistMenu({
                       </span>
                     ) : null}
                   </span>
-                  {selected ? <CheckIcon className="mt-0.5 shrink-0" /> : null}
                 </button>
               )
             })}
@@ -115,10 +125,17 @@ export function ComposerAssistMenu({
                   data-composer-assist-selected={selected ? "true" : undefined}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                    selected ? "bg-muted" : "hover:bg-muted/70"
+                    selected
+                      ? "bg-muted"
+                      : pointerSelectionSuppressed
+                        ? ""
+                        : "hover:bg-muted/70"
                   )}
                   onMouseEnter={() => {
                     onHoverSlashCommand(index)
+                  }}
+                  onMouseMove={() => {
+                    onMoveSlashCommand(index)
                   }}
                   onClick={() => {
                     onApplySlashSuggestion(command)
@@ -134,7 +151,6 @@ export function ComposerAssistMenu({
                       </span>
                     ) : null}
                   </span>
-                  {selected ? <CheckIcon className="mt-0.5 shrink-0" /> : null}
                 </button>
               )
             })}
