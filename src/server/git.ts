@@ -9,7 +9,7 @@ function gitTextContains(text: string, query: string) {
   return text.indexOf(query) >= 0
 }
 
-export type GitStatusSummary = {
+type GitStatusSummary = {
   branch?: string
   detached: boolean
   revision?: string
@@ -31,7 +31,7 @@ export type GitChangeFile = {
   sizeBytes?: number
 }
 
-export type GitLocalBranch = {
+type GitLocalBranch = {
   name: string
   current: boolean
   upstream?: string
@@ -44,7 +44,7 @@ export type GitLocalBranch = {
   committerDate?: string
 }
 
-export type GitRemoteBranch = {
+type GitRemoteBranch = {
   name: string
   hash?: string
   subject?: string
@@ -52,19 +52,19 @@ export type GitRemoteBranch = {
   committerDate?: string
 }
 
-export type GitBranchSummary = {
+type GitBranchSummary = {
   localBranches: Array<GitLocalBranch>
   remoteBranches: Array<GitRemoteBranch>
 }
 
-export type GitCommitSummary = {
+type GitCommitSummary = {
   commits: Array<string>
   commitsHasMore: boolean
   commitsLimit: number
   unpushedCommitHashes: Array<string>
 }
 
-export type GitChangesSummary = {
+type GitChangesSummary = {
   files: Array<GitChangeFile>
   localBranches: Array<GitLocalBranch>
   remoteBranches: Array<GitRemoteBranch>
@@ -109,7 +109,7 @@ export type GitCommitActionKind =
   | "drop"
   | "squash"
 
-export type GitResetMode = "soft" | "mixed" | "hard"
+type GitResetMode = "soft" | "mixed" | "hard"
 
 export type GitCommitDiffMode = "commit" | "head" | "previous"
 
@@ -223,14 +223,6 @@ export function invalidateDirectoryGitCaches(cwd: string) {
   gitFilesCache.delete(normalizedCwd)
   gitBranchesCache.delete(normalizedCwd)
   invalidateDirectoryGitCommitsCache(normalizedCwd)
-}
-
-export function invalidateAllDirectoryGitCaches() {
-  gitStatusCache.clear()
-  gitChangesCache.clear()
-  gitFilesCache.clear()
-  gitBranchesCache.clear()
-  gitCommitsCache.clear()
 }
 
 async function runCommand(

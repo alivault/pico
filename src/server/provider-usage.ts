@@ -5,13 +5,13 @@ import { join } from "node:path"
 
 import type { AuthStorageLike } from "@/server/pi-sdk-types"
 
-export type ProviderUsageWindow = {
+type ProviderUsageWindow = {
   label: string
   usedPercent: number
   resetsIn?: string
 }
 
-export type ProviderUsageSnapshot = {
+type ProviderUsageSnapshot = {
   windows: Array<ProviderUsageWindow>
 }
 

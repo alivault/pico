@@ -178,10 +178,6 @@ export function deriveHeuristicSessionNameAttempt(
   }
 }
 
-export function deriveHeuristicSessionName(text: string, imageCount: number) {
-  return deriveHeuristicSessionNameAttempt(text, imageCount).name
-}
-
 export function summarizePromptContent(content: unknown) {
   if (typeof content === "string") {
     return { text: content, imageCount: 0 }

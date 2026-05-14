@@ -1,4 +1,4 @@
-export type UnknownRecord = Record<string, unknown>
+type UnknownRecord = Record<string, unknown>
 
 export type PromptImageInputLike = {
   type: "image"
@@ -19,7 +19,7 @@ export type ModelLike = {
   reasoning?: boolean
 }
 
-export type SkillLike = {
+type SkillLike = {
   name: string
   description?: string
   sourceInfo?: {
@@ -68,7 +68,7 @@ export type SessionEventLike = UnknownRecord & {
   message?: MessageLike
 }
 
-export type SessionTreeEntryLike = UnknownRecord & {
+type SessionTreeEntryLike = UnknownRecord & {
   id?: unknown
   parentId?: unknown
   timestamp?: unknown
@@ -118,7 +118,7 @@ export type SettingsManagerLike = {
   getThemePaths?(): string[]
 }
 
-export type ModelRegistryAuthResult =
+type ModelRegistryAuthResult =
   | {
       ok: true
       apiKey?: string
@@ -129,7 +129,7 @@ export type ModelRegistryAuthResult =
       error?: string
     }
 
-export type AuthCredentialLike =
+type AuthCredentialLike =
   | {
       type: "api_key"
       key: string
@@ -190,7 +190,7 @@ export type ModelRegistryLike = {
   getApiKeyAndHeaders(model: ModelLike): Promise<ModelRegistryAuthResult>
 }
 
-export type ResourceLoaderLike = {
+type ResourceLoaderLike = {
   getSkills(): {
     skills: Array<SkillLike>
   }
@@ -353,7 +353,7 @@ export type PiSdkLike = {
   }
 }
 
-export type PiAiRequestLike = {
+type PiAiRequestLike = {
   systemPrompt: string
   messages: Array<{
     role: string
@@ -365,9 +365,9 @@ export type PiAiRequestLike = {
   }>
 }
 
-export type PiAiResponseBlockLike = MessageContentPartLike
+type PiAiResponseBlockLike = MessageContentPartLike
 
-export type PiAiResponseLike = UnknownRecord & {
+type PiAiResponseLike = UnknownRecord & {
   content?: Array<PiAiResponseBlockLike>
 }
 

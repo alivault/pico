@@ -85,10 +85,6 @@ export function getSessionLastCompleteMessageInfo(messages: Array<unknown>) {
   }
 }
 
-export function getSessionLastCompleteMessagePreview(messages: Array<unknown>) {
-  return getSessionLastCompleteMessageInfo(messages).preview
-}
-
 function normalizeNonNegativeInteger(value: unknown) {
   const number = normalizeFiniteNumber(value)
   if (number == null || number < 0) return undefined
@@ -324,10 +320,6 @@ export async function readSessionListMetrics(sessionPath: string) {
   } catch {
     return undefined
   }
-}
-
-export async function readSessionLastUserMessageTimestamp(sessionPath: string) {
-  return (await readSessionListMetrics(sessionPath))?.lastUserMessageAt
 }
 
 export function listKnownDirectories(options: {

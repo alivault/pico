@@ -228,15 +228,6 @@ export function matchingSlashCommands(
     .map((entry) => entry.command)
 }
 
-export function slashCommandQueryMatch(value = "") {
-  const text = typeof value === "string" ? value : ""
-  const match = text.match(/^(\s*)\/(\S*)(\s*)$/)
-  if (!match) return null
-  return {
-    leadingWhitespace: match[1] || "",
-  }
-}
-
 function findLastPathCompletionDelimiter(text = "") {
   for (let index = text.length - 1; index >= 0; index -= 1) {
     if (PATH_COMPLETION_DELIMITERS.has(text[index] || "")) {

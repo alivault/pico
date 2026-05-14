@@ -25,7 +25,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
 export function promptImageKey(
@@ -2410,43 +2409,6 @@ const CompactionBlockCard = React.memo(function CompactionBlockCard({
   )
 })
 
-export function MessagesWorkingIndicator({
-  state,
-}: {
-  state: {
-    label: string
-    summary?: string
-    done?: boolean
-  }
-}) {
-  const visibleLabel = state.done ? "Done" : state.label
-
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "flex w-full items-start gap-3 rounded-xl px-1 py-1 text-sm",
-        state.done ? "text-muted-foreground" : "text-muted-foreground"
-      )}
-    >
-      <span className="mt-0.5 inline-flex items-center justify-center">
-        {state.done ? (
-          <CheckIcon className="size-4 text-emerald-600" />
-        ) : (
-          <Spinner />
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="font-medium text-foreground">{visibleLabel}</div>
-        {state.summary ? (
-          <div className="truncate text-muted-foreground">{state.summary}</div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
 export const UserMessageCard = React.memo(function UserMessageCard({
   item,
 }: {
@@ -2826,78 +2788,3 @@ export function AssistantMessagesStoreCard({
     </div>
   )
 }
-
-const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
-  items,
-  hideThinking,
-  hideToolBlocks,
-}: {
-  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
-  hideThinking: boolean
-  hideToolBlocks: boolean
-}) {
-  const snapshot = {
-    items,
-    hideThinking,
-    hideToolBlocks,
-  } satisfies AssistantMessagesSnapshot
-  const blocks = visibleAssistantBlocksFromSnapshot(snapshot)
-
-  const shellSnapshot = assistantMessagesShellSnapshotFromBlocks(
-    snapshot,
-    blocks
-  )
-
-  const assistantBlockStoreRef = React.useRef<AssistantBlockStore | null>(null)
-  if (!assistantBlockStoreRef.current) {
-    assistantBlockStoreRef.current = createAssistantBlockStore(blocks)
-  }
-  const assistantBlockStore = assistantBlockStoreRef.current
-
-  React.useLayoutEffect(() => {
-    assistantBlockStore.setBlocks(blocks)
-  }, [assistantBlockStore, blocks])
-
-  if (blocks.length === 0 && !shellSnapshot.hasFooter) {
-    return null
-  }
-
-  return (
-    <div
-      className="flex flex-col gap-4"
-      data-conversation-assistant-group="true"
-      data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
-    >
-      {shellSnapshot.hasBlocks ? (
-        <AssistantBlockGroupsView
-          anchorBlockKey={shellSnapshot.anchorBlockKey}
-          store={assistantBlockStore}
-          streaming={shellSnapshot.streaming}
-        />
-      ) : null}
-      <AssistantMessageFooter
-        copyText={shellSnapshot.copyText}
-        modelLabel={shellSnapshot.modelLabel}
-        streaming={shellSnapshot.streaming}
-      />
-    </div>
-  )
-})
-
-export const AssistantMessageCard = React.memo(function AssistantMessageCard({
-  item,
-  hideThinking,
-  hideToolBlocks,
-}: {
-  item: Extract<ConversationItem, { kind: "assistant" }>
-  hideThinking: boolean
-  hideToolBlocks: boolean
-}) {
-  return (
-    <AssistantMessagesCard
-      items={[item]}
-      hideThinking={hideThinking}
-      hideToolBlocks={hideToolBlocks}
-    />
-  )
-})

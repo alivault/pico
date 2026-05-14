@@ -57,6 +57,4 @@ export function setStoreField<T extends object, K extends keyof T>(
   })
 }
 
-export const objectIs = Object.is
-
 export { batch, shallow, useSelector }
