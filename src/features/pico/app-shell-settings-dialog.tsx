@@ -36,6 +36,57 @@ const THEME_COLOR_MODE_OPTIONS: Array<ThemeColorMode> = [...THEME_COLOR_MODES]
 
 type SettingsDialogStage = "browse" | "theme"
 
+type SettingsDialogState = {
+  query: string
+  themeQuery: string
+  stage: SettingsDialogStage
+  selectedCommandId: string
+  selectedTheme: ThemeFamily
+}
+
+type SettingsDialogAction =
+  | { type: "reset"; currentTheme: ThemeFamily }
+  | { type: "set-query"; query: string }
+  | { type: "set-theme-query"; themeQuery: string }
+  | { type: "set-selected-command-id"; selectedCommandId: string }
+  | { type: "open-theme"; currentTheme: ThemeFamily }
+  | { type: "close-theme"; selectedTheme: ThemeFamily }
+  | { type: "preview-theme"; selectedTheme: ThemeFamily }
+
+function createInitialSettingsDialogState(
+  currentTheme: ThemeFamily
+): SettingsDialogState {
+  return {
+    query: "",
+    themeQuery: "",
+    stage: "browse",
+    selectedCommandId: "theme",
+    selectedTheme: currentTheme,
+  }
+}
+
+function settingsDialogReducer(
+  state: SettingsDialogState,
+  action: SettingsDialogAction
+): SettingsDialogState {
+  switch (action.type) {
+    case "reset":
+      return createInitialSettingsDialogState(action.currentTheme)
+    case "set-query":
+      return { ...state, query: action.query }
+    case "set-theme-query":
+      return { ...state, themeQuery: action.themeQuery }
+    case "set-selected-command-id":
+      return { ...state, selectedCommandId: action.selectedCommandId }
+    case "open-theme":
+      return { ...state, stage: "theme", selectedTheme: action.currentTheme }
+    case "close-theme":
+      return { ...state, stage: "browse", selectedTheme: action.selectedTheme }
+    case "preview-theme":
+      return { ...state, selectedTheme: action.selectedTheme }
+  }
+}
+
 type SettingsCommand = {
   id: string
   title: string
@@ -151,14 +202,34 @@ type AppShellSettingsDialogProps = {
   onLogoutProviders: () => void
 }
 
-function AppShellSettingsDialog({
-  open,
-  onOpenChange,
+type SettingsCommandGroupsOptions = Pick<
+  AppShellSettingsDialogProps,
+  | "currentTheme"
+  | "currentThemeColorMode"
+  | "systemTheme"
+  | "hideThinkingBlocks"
+  | "onHideThinkingBlocksChange"
+  | "hideToolBlocks"
+  | "onHideToolBlocksChange"
+  | "centerMessages"
+  | "onCenterMessagesChange"
+  | "autoScrollEnabled"
+  | "onAutoScrollEnabledChange"
+  | "sessionDoneSoundEnabled"
+  | "onSessionDoneSoundEnabledChange"
+  | "sessionDoneDesktopNotificationsEnabled"
+  | "onSessionDoneDesktopNotificationsEnabledChange"
+  | "desktopNotificationPermission"
+  | "onLoginProviders"
+  | "onLogoutProviders"
+> & {
+  onThemeCommand: () => void
+  onThemeColorModeCommand: () => void
+}
+
+function getSettingsCommandGroups({
   currentTheme,
   currentThemeColorMode,
-  onThemeChange,
-  onThemeColorModeChange,
-  onThemePreviewChange,
   systemTheme,
   hideThinkingBlocks,
   onHideThinkingBlocksChange,
@@ -175,19 +246,14 @@ function AppShellSettingsDialog({
   desktopNotificationPermission,
   onLoginProviders,
   onLogoutProviders,
-}: AppShellSettingsDialogProps) {
-  const [query, setQuery] = React.useState("")
-  const [themeQuery, setThemeQuery] = React.useState("")
-  const [stage, setStage] = React.useState<SettingsDialogStage>("browse")
-  const [selectedCommandId, setSelectedCommandId] = React.useState("theme")
-  const [selectedTheme, setSelectedTheme] =
-    React.useState<ThemeFamily>(currentTheme)
-  const themePreviewInitialRef = React.useRef<ThemeFamily>(currentTheme)
-  const isMobile = useIsMobile()
+  onThemeCommand,
+  onThemeColorModeCommand,
+}: SettingsCommandGroupsOptions): Array<SettingsCommandGroup> {
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
   )
-  const settingGroups: Array<SettingsCommandGroup> = [
+
+  return [
     {
       heading: "Appearance",
       commands: [
@@ -197,11 +263,7 @@ function AppShellSettingsDialog({
           description: "Choose between Default and Flexoki.",
           valueLabel: themeFamilyLabel(currentTheme),
           keywords: ["color", "mode", "default", "flexoki"],
-          onSelect: () => {
-            themePreviewInitialRef.current = currentTheme
-            setSelectedTheme(currentTheme)
-            setStage("theme")
-          },
+          onSelect: onThemeCommand,
         },
         {
           id: "theme-color-mode",
@@ -209,8 +271,7 @@ function AppShellSettingsDialog({
           description: "Follow OS appearance, or force light or dark mode.",
           valueLabel: themeColorModeLabel(currentThemeColorMode, systemTheme),
           keywords: ["auto", "system", "light", "dark", "mode", "color"],
-          onSelect: () =>
-            onThemeColorModeChange(nextThemeColorMode(currentThemeColorMode)),
+          onSelect: onThemeColorModeCommand,
         },
       ],
     },
@@ -311,63 +372,37 @@ function AppShellSettingsDialog({
       ],
     },
   ]
+}
 
-  React.useEffect(() => {
-    if (open) return
+type SettingsBrowseBodyProps = {
+  query: string
+  selectedCommandId: string
+  settingGroups: Array<SettingsCommandGroup>
+  onQueryChange: (query: string) => void
+  onSelectedCommandIdChange: (commandId: string) => void
+  onSelectCommand: (command: SettingsCommand) => void
+}
 
-    if (stage === "theme") {
-      onThemePreviewChange(themePreviewInitialRef.current)
-    }
-
-    if (query) setQuery("")
-    if (themeQuery) setThemeQuery("")
-    setStage("browse")
-  }, [onThemePreviewChange, open, query, stage, themeQuery])
-
-  React.useEffect(() => {
-    if (stage === "theme") {
-      setSelectedTheme(currentTheme)
-    }
-  }, [currentTheme, stage])
-
-  const handleSelect = (command: SettingsCommand) => {
-    void Promise.resolve(command.onSelect()).catch((error: unknown) => {
-      console.error(error)
-    })
-  }
-
-  const handleThemePreview = (theme: ThemeFamily) => {
-    if (!THEME_OPTIONS.includes(theme)) return
-
-    setSelectedTheme(theme)
-    onThemePreviewChange(theme)
-  }
-
-  const handleThemeSelect = (theme: ThemeFamily) => {
-    setSelectedTheme(theme)
-    themePreviewInitialRef.current = theme
-    onThemeChange(theme)
-  }
-
-  const cancelThemePreview = () => {
-    const initialTheme = themePreviewInitialRef.current
-    setSelectedTheme(initialTheme)
-    onThemePreviewChange(initialTheme)
-    setStage("browse")
-  }
-
-  const settingsBrowseBody = (
+function SettingsBrowseBody({
+  query,
+  selectedCommandId,
+  settingGroups,
+  onQueryChange,
+  onSelectedCommandIdChange,
+  onSelectCommand,
+}: SettingsBrowseBodyProps) {
+  return (
     <Command
       shouldFilter
       filter={settingsCommandFilter}
       loop
       value={selectedCommandId}
-      onValueChange={setSelectedCommandId}
+      onValueChange={onSelectedCommandIdChange}
       className="min-h-0 flex-1"
     >
       <CommandInput
         value={query}
-        onValueChange={setQuery}
+        onValueChange={onQueryChange}
         placeholder="Search settings"
         className="text-base md:text-sm"
       />
@@ -380,7 +415,7 @@ function AppShellSettingsDialog({
                 key={command.id}
                 value={command.id}
                 keywords={settingsCommandKeywords(command)}
-                onSelect={() => handleSelect(command)}
+                onSelect={() => onSelectCommand(command)}
                 className="items-start py-2"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -402,8 +437,28 @@ function AppShellSettingsDialog({
       </div>
     </Command>
   )
+}
 
-  const settingsThemeBody = (
+type SettingsThemeBodyProps = {
+  currentTheme: ThemeFamily
+  selectedTheme: ThemeFamily
+  themeQuery: string
+  onThemeQueryChange: (query: string) => void
+  onThemePreview: (theme: ThemeFamily) => void
+  onThemeSelect: (theme: ThemeFamily) => void
+  onCancelThemePreview: () => void
+}
+
+function SettingsThemeBody({
+  currentTheme,
+  selectedTheme,
+  themeQuery,
+  onThemeQueryChange,
+  onThemePreview,
+  onThemeSelect,
+  onCancelThemePreview,
+}: SettingsThemeBodyProps) {
+  return (
     <div
       role="presentation"
       className="flex min-h-0 flex-1 flex-col"
@@ -411,7 +466,7 @@ function AppShellSettingsDialog({
         if (event.key !== "Escape") return
         event.preventDefault()
         event.stopPropagation()
-        cancelThemePreview()
+        onCancelThemePreview()
       }}
     >
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
@@ -419,7 +474,7 @@ function AppShellSettingsDialog({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={cancelThemePreview}
+          onClick={onCancelThemePreview}
           aria-label="Back to settings"
         >
           <ArrowLeftIcon />
@@ -435,12 +490,12 @@ function AppShellSettingsDialog({
         shouldFilter
         loop
         value={selectedTheme}
-        onValueChange={(value) => handleThemePreview(value as ThemeFamily)}
+        onValueChange={(value) => onThemePreview(value as ThemeFamily)}
         className="min-h-0 flex-1 rounded-none!"
       >
         <CommandInput
           value={themeQuery}
-          onValueChange={setThemeQuery}
+          onValueChange={onThemeQueryChange}
           placeholder="Search themes"
           className="text-base md:text-sm"
         />
@@ -452,8 +507,8 @@ function AppShellSettingsDialog({
                 key={theme}
                 value={theme}
                 keywords={themeKeywords(theme)}
-                onMouseEnter={() => handleThemePreview(theme)}
-                onSelect={() => handleThemeSelect(theme)}
+                onMouseEnter={() => onThemePreview(theme)}
+                onSelect={() => onThemeSelect(theme)}
                 data-checked={theme === currentTheme ? true : undefined}
                 className="items-start py-2"
               >
@@ -475,9 +530,143 @@ function AppShellSettingsDialog({
       </Command>
     </div>
   )
+}
 
-  const settingsCommandBody =
-    stage === "theme" ? settingsThemeBody : settingsBrowseBody
+function SettingsDialogBody({
+  stage,
+  browseBodyProps,
+  themeBodyProps,
+}: {
+  stage: SettingsDialogStage
+  browseBodyProps: SettingsBrowseBodyProps
+  themeBodyProps: SettingsThemeBodyProps
+}) {
+  if (stage === "theme") {
+    return <SettingsThemeBody {...themeBodyProps} />
+  }
+
+  return <SettingsBrowseBody {...browseBodyProps} />
+}
+
+function AppShellSettingsDialog({
+  open,
+  onOpenChange,
+  currentTheme,
+  currentThemeColorMode,
+  onThemeChange,
+  onThemeColorModeChange,
+  onThemePreviewChange,
+  systemTheme,
+  hideThinkingBlocks,
+  onHideThinkingBlocksChange,
+  hideToolBlocks,
+  onHideToolBlocksChange,
+  centerMessages,
+  onCenterMessagesChange,
+  autoScrollEnabled,
+  onAutoScrollEnabledChange,
+  sessionDoneSoundEnabled,
+  onSessionDoneSoundEnabledChange,
+  sessionDoneDesktopNotificationsEnabled,
+  onSessionDoneDesktopNotificationsEnabledChange,
+  desktopNotificationPermission,
+  onLoginProviders,
+  onLogoutProviders,
+}: AppShellSettingsDialogProps) {
+  const [state, dispatch] = React.useReducer(
+    settingsDialogReducer,
+    currentTheme,
+    createInitialSettingsDialogState
+  )
+  const themePreviewInitialRef = React.useRef<ThemeFamily>(currentTheme)
+  const isMobile = useIsMobile()
+
+  React.useEffect(() => {
+    if (open) return
+
+    if (state.stage === "theme") {
+      onThemePreviewChange(themePreviewInitialRef.current)
+    }
+
+    dispatch({ type: "reset", currentTheme })
+  }, [currentTheme, onThemePreviewChange, open, state.stage])
+
+  const handleSelect = (command: SettingsCommand) => {
+    void Promise.resolve(command.onSelect()).catch((error: unknown) => {
+      console.error(error)
+    })
+  }
+
+  const handleThemePreview = (theme: ThemeFamily) => {
+    if (!THEME_OPTIONS.includes(theme)) return
+
+    dispatch({ type: "preview-theme", selectedTheme: theme })
+    onThemePreviewChange(theme)
+  }
+
+  const handleThemeSelect = (theme: ThemeFamily) => {
+    dispatch({ type: "preview-theme", selectedTheme: theme })
+    themePreviewInitialRef.current = theme
+    onThemeChange(theme)
+  }
+
+  const cancelThemePreview = () => {
+    const initialTheme = themePreviewInitialRef.current
+    dispatch({ type: "close-theme", selectedTheme: initialTheme })
+    onThemePreviewChange(initialTheme)
+  }
+
+  const settingGroups = getSettingsCommandGroups({
+    currentTheme,
+    currentThemeColorMode,
+    systemTheme,
+    hideThinkingBlocks,
+    onHideThinkingBlocksChange,
+    hideToolBlocks,
+    onHideToolBlocksChange,
+    centerMessages,
+    onCenterMessagesChange,
+    autoScrollEnabled,
+    onAutoScrollEnabledChange,
+    sessionDoneSoundEnabled,
+    onSessionDoneSoundEnabledChange,
+    sessionDoneDesktopNotificationsEnabled,
+    onSessionDoneDesktopNotificationsEnabledChange,
+    desktopNotificationPermission,
+    onLoginProviders,
+    onLogoutProviders,
+    onThemeCommand: () => {
+      themePreviewInitialRef.current = currentTheme
+      dispatch({ type: "open-theme", currentTheme })
+    },
+    onThemeColorModeCommand: () =>
+      onThemeColorModeChange(nextThemeColorMode(currentThemeColorMode)),
+  })
+
+  const settingsCommandBody = (
+    <SettingsDialogBody
+      stage={state.stage}
+      browseBodyProps={{
+        query: state.query,
+        selectedCommandId: state.selectedCommandId,
+        settingGroups,
+        onQueryChange: (query) => dispatch({ type: "set-query", query }),
+        onSelectedCommandIdChange: (selectedCommandId) =>
+          dispatch({ type: "set-selected-command-id", selectedCommandId }),
+        onSelectCommand: handleSelect,
+      }}
+      themeBodyProps={{
+        currentTheme,
+        selectedTheme: state.selectedTheme,
+        themeQuery: state.themeQuery,
+        onThemeQueryChange: (themeQuery) =>
+          dispatch({ type: "set-theme-query", themeQuery }),
+        onThemePreview: handleThemePreview,
+        onThemeSelect: handleThemeSelect,
+        onCancelThemePreview: cancelThemePreview,
+      }}
+    />
+  )
 
   if (isMobile) {
     return (
@@ -508,6 +697,7 @@ function AppShellSettingsDialog({
     </CommandDialog>
   )
 }
+
 type AppShellSettingsDialogControllerProps = Omit<
   AppShellSettingsDialogProps,
   "open" | "onOpenChange"

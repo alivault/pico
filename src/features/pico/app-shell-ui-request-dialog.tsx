@@ -44,6 +44,487 @@ type AppShellUiRequestDialogProps = {
   onAuthBack?: () => void
 }
 
+type UiOption = NonNullable<ExtensionUiEvent["options"]>[number]
+
+function uiOptionValue(option: UiOption) {
+  return typeof option === "string" ? option : option.value
+}
+
+function uiOptionLabel(option: UiOption) {
+  return typeof option === "string" ? option : option.label || option.value
+}
+
+type AuthRequestSurfaceProps = {
+  open: boolean
+  isMobile: boolean
+  title: string
+  description: string
+  children: React.ReactNode
+  onOpenChange: (open: boolean) => void
+}
+
+function AuthRequestSurface({
+  open,
+  isMobile,
+  title,
+  description,
+  children,
+  onOpenChange,
+}: AuthRequestSurfaceProps) {
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>{title}</DrawerTitle>
+            <DrawerDescription>{description}</DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-xl"
+      initialFocus
+    >
+      {children}
+    </CommandDialog>
+  )
+}
+
+function AuthManualRedirectForm({
+  isMobile,
+  pendingUiValue,
+  onPendingUiValueChange,
+  onBack,
+  onSubmit,
+}: {
+  isMobile: boolean
+  pendingUiValue: string
+  onPendingUiValueChange: (value: string) => void
+  onBack: () => void
+  onSubmit: () => void
+}) {
+  return (
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!pendingUiValue.trim()) return
+        onSubmit()
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          onBack()
+        }
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onBack}
+          aria-label="Back to login actions"
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">Paste redirect URL</div>
+          <div className="truncate text-xs text-muted-foreground">
+            Fallback only: paste the full localhost callback URL.
+          </div>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center p-3">
+        <Input
+          value={pendingUiValue}
+          onChange={(event) => onPendingUiValueChange(event.target.value)}
+          placeholder="Final redirected URL"
+          className="min-w-0 flex-1"
+        />
+      </div>
+      {isMobile ? (
+        <div className="border-t border-border/70 p-3">
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!pendingUiValue.trim()}
+          >
+            Submit URL
+          </Button>
+        </div>
+      ) : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Enter</Kbd>
+            Submit URL
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Esc</Kbd>
+            Back
+          </span>
+        </div>
+      )}
+    </form>
+  )
+}
+
+function AuthDesktopHint({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
+      {children}
+    </div>
+  )
+}
+
+function AuthMobileCancelButton({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div className="border-t border-border/70 p-3">
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={onCancel}
+      >
+        Cancel login
+      </Button>
+    </div>
+  )
+}
+
+function AuthLoginActions({
+  request,
+  isMobile,
+  onManualMode,
+  onCancel,
+}: {
+  request: ExtensionUiEvent & { method: "auth"; authUrl: string }
+  isMobile: boolean
+  onManualMode: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Command loop shouldFilter>
+      <CommandInput
+        placeholder="Choose login action"
+        className="text-base md:text-sm"
+      />
+      <CommandList>
+        <CommandGroup heading={request.title || "Provider login"}>
+          <CommandItem
+            value="open-login-page"
+            keywords={["open", "browser", "login", "page"]}
+            onSelect={() => {
+              window.open(request.authUrl, "_blank", "noopener,noreferrer")
+            }}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium">Open login page</span>
+              <span className="line-clamp-2 text-xs text-muted-foreground">
+                Continue OAuth in your browser. Keep Pico open while the
+                provider redirects back.
+              </span>
+            </div>
+            <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
+              Enter
+            </CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="copy-login-link"
+            keywords={["copy", "link", "url", "login"]}
+            onSelect={() => {
+              void navigator.clipboard.writeText(request.authUrl)
+              toast.success("Login link copied")
+            }}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium">Copy login link</span>
+              <span className="line-clamp-2 text-xs text-muted-foreground">
+                Copy the browser login link without showing the full URL.
+              </span>
+            </div>
+          </CommandItem>
+          {request.authManualAllowed ? (
+            <CommandItem
+              value="paste-redirect-url"
+              keywords={["paste", "redirect", "manual", "fallback"]}
+              onSelect={onManualMode}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate font-medium">
+                  Paste redirect URL manually
+                </span>
+                <span className="line-clamp-2 text-xs text-muted-foreground">
+                  Fallback only: use this if the browser reaches a localhost
+                  callback URL but cannot connect.
+                </span>
+              </div>
+            </CommandItem>
+          ) : null}
+        </CommandGroup>
+      </CommandList>
+      {isMobile ? (
+        <AuthMobileCancelButton onCancel={onCancel} />
+      ) : (
+        <AuthDesktopHint>
+          Use ↑/↓ to select, Enter to run an action, and Esc to go back.
+        </AuthDesktopHint>
+      )}
+    </Command>
+  )
+}
+
+function AuthSelectOptions({
+  request,
+  isMobile,
+  onCancel,
+  onResolveUiRequest,
+}: {
+  request: ExtensionUiEvent & { method: "auth_select" }
+  isMobile: boolean
+  onCancel: () => void
+  onResolveUiRequest: (body: Record<string, unknown>) => void
+}) {
+  return (
+    <Command loop shouldFilter>
+      <CommandInput
+        placeholder="Choose login option"
+        className="text-base md:text-sm"
+      />
+      <CommandList>
+        <CommandGroup heading={request.message || "Login options"}>
+          {(request.options ?? []).map((option) => {
+            const value = uiOptionValue(option)
+            const label = uiOptionLabel(option)
+            return (
+              <CommandItem
+                key={value}
+                value={value}
+                keywords={[label]}
+                onSelect={() => onResolveUiRequest({ value })}
+              >
+                <span className="truncate font-medium">{label}</span>
+              </CommandItem>
+            )
+          })}
+        </CommandGroup>
+      </CommandList>
+      {isMobile ? (
+        <AuthMobileCancelButton onCancel={onCancel} />
+      ) : (
+        <AuthDesktopHint>
+          Use ↑/↓ to select, Enter to continue, and Esc to go back.
+        </AuthDesktopHint>
+      )}
+    </Command>
+  )
+}
+
+function AuthInputForm({
+  request,
+  isMobile,
+  pendingUiValue,
+  onPendingUiValueChange,
+  onCancel,
+  onResolveUiRequest,
+}: {
+  request: ExtensionUiEvent & { method: "auth_input" }
+  isMobile: boolean
+  pendingUiValue: string
+  onPendingUiValueChange: (value: string) => void
+  onCancel: () => void
+  onResolveUiRequest: (body: Record<string, unknown>) => void
+}) {
+  const allowEmpty = Boolean(request.allowEmpty)
+
+  return (
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!allowEmpty && !pendingUiValue.trim()) return
+        onResolveUiRequest({ value: pendingUiValue })
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          onCancel()
+        }
+      }}
+    >
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onCancel}
+          aria-label="Back to login providers"
+        >
+          <ArrowLeftIcon />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">
+            {request.title || "Log in to provider"}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {request.message || "Enter the requested login information."}
+          </div>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center p-3">
+        <Input
+          value={pendingUiValue}
+          onChange={(event) => onPendingUiValueChange(event.target.value)}
+          placeholder={request.placeholder}
+          className="min-w-0 flex-1"
+        />
+      </div>
+      {isMobile ? (
+        <div className="space-y-2 border-t border-border/70 p-3">
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!allowEmpty && !pendingUiValue.trim()}
+          >
+            Continue login
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={onCancel}
+          >
+            Cancel login
+          </Button>
+        </div>
+      ) : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Enter</Kbd>
+            Continue login
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Esc</Kbd>
+            Back
+          </span>
+        </div>
+      )}
+    </form>
+  )
+}
+
+function GenericUiRequestDialog({
+  pendingUiRequest,
+  pendingUiValue,
+  onPendingUiValueChange,
+  onResolveUiRequest,
+}: AppShellUiRequestDialogProps) {
+  return (
+    <Dialog
+      open={Boolean(pendingUiRequest)}
+      onOpenChange={(open) => {
+        if (!open && pendingUiRequest) {
+          onResolveUiRequest({ cancelled: true })
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{pendingUiRequest?.title || "Pico request"}</DialogTitle>
+          {pendingUiRequest?.message ? (
+            <DialogDescription>{pendingUiRequest.message}</DialogDescription>
+          ) : null}
+        </DialogHeader>
+        <GenericUiRequestBody
+          pendingUiRequest={pendingUiRequest}
+          pendingUiValue={pendingUiValue}
+          onPendingUiValueChange={onPendingUiValueChange}
+          onResolveUiRequest={onResolveUiRequest}
+        />
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onResolveUiRequest({ cancelled: true })}
+          >
+            Cancel
+          </Button>
+          {pendingUiRequest?.method === "confirm" ? (
+            <Button onClick={() => onResolveUiRequest({ confirmed: true })}>
+              Confirm
+            </Button>
+          ) : null}
+          {pendingUiRequest?.method === "input" ||
+          pendingUiRequest?.method === "editor" ? (
+            <Button
+              onClick={() => onResolveUiRequest({ value: pendingUiValue })}
+            >
+              Submit response
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function GenericUiRequestBody({
+  pendingUiRequest,
+  pendingUiValue,
+  onPendingUiValueChange,
+  onResolveUiRequest,
+}: Omit<AppShellUiRequestDialogProps, "onAuthBack">) {
+  if (
+    pendingUiRequest?.method === "input" ||
+    pendingUiRequest?.method === "editor"
+  ) {
+    const InputComponent =
+      pendingUiRequest.method === "editor" ? Textarea : Input
+    return (
+      <InputComponent
+        value={pendingUiValue}
+        onChange={(event) => onPendingUiValueChange(event.target.value)}
+        placeholder={pendingUiRequest.placeholder}
+      />
+    )
+  }
+
+  if (pendingUiRequest?.method === "select") {
+    return (
+      <div className="space-y-2">
+        {pendingUiRequest.options?.map((option) => {
+          const value = uiOptionValue(option)
+          const label = uiOptionLabel(option)
+          return (
+            <Button
+              key={value}
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => onResolveUiRequest({ value })}
+            >
+              {label}
+            </Button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return null
+}
+
 function AppShellUiRequestDialog({
   pendingUiRequest,
   pendingUiValue,
@@ -58,447 +539,131 @@ function AppShellUiRequestDialog({
     setAuthManualMode(false)
   }, [pendingUiRequest?.id])
 
-  const renderAuthSurface = (
-    open: boolean,
-    onOpenChange: (open: boolean) => void,
-    title: string,
-    description: string,
-    body: React.ReactNode
-  ) => {
-    if (isMobile) {
+  const cancelAuthAndReturn = () => {
+    onResolveUiRequest({ cancelled: true })
+    onAuthBack?.()
+  }
+
+  if (pendingUiRequest?.method === "auth" && pendingUiRequest.authUrl) {
+    const authRequest = pendingUiRequest as ExtensionUiEvent & {
+      method: "auth"
+      authUrl: string
+    }
+
+    if (authManualMode) {
       return (
-        <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
-          <DrawerContent className="max-h-[90svh] overflow-hidden">
-            <DrawerHeader>
-              <DrawerTitle>{title}</DrawerTitle>
-              <DrawerDescription>{description}</DrawerDescription>
-            </DrawerHeader>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
-              {body}
-            </div>
-          </DrawerContent>
-        </Drawer>
+        <AuthRequestSurface
+          open
+          isMobile={isMobile}
+          onOpenChange={(open) => {
+            if (!open) setAuthManualMode(false)
+          }}
+          title="Paste redirect URL"
+          description="Paste the final redirected URL from the browser address bar."
+        >
+          <AuthManualRedirectForm
+            isMobile={isMobile}
+            pendingUiValue={pendingUiValue}
+            onPendingUiValueChange={onPendingUiValueChange}
+            onBack={() => setAuthManualMode(false)}
+            onSubmit={() => onResolveUiRequest({ value: pendingUiValue })}
+          />
+        </AuthRequestSurface>
       )
     }
 
     return (
-      <CommandDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title={title}
-        description={description}
-        className="sm:max-w-xl"
-        initialFocus
+      <AuthRequestSurface
+        open
+        isMobile={isMobile}
+        onOpenChange={(open) => {
+          if (!open) cancelAuthAndReturn()
+        }}
+        title={authRequest.title || "Log in to provider"}
+        description={
+          authRequest.message ||
+          "Open the login page, then complete login in your browser."
+        }
       >
-        {body}
-      </CommandDialog>
-    )
-  }
-
-  if (pendingUiRequest?.method === "auth" && pendingUiRequest.authUrl) {
-    const cancelAuthAndReturn = () => {
-      onResolveUiRequest({ cancelled: true })
-      onAuthBack?.()
-    }
-
-    if (authManualMode) {
-      return renderAuthSurface(
-        true,
-        (open) => {
-          if (!open) setAuthManualMode(false)
-        },
-        "Paste redirect URL",
-        "Paste the final redirected URL from the browser address bar.",
-        <form
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!pendingUiValue.trim()) return
-            onResolveUiRequest({ value: pendingUiValue })
+        <AuthLoginActions
+          request={authRequest}
+          isMobile={isMobile}
+          onManualMode={() => {
+            onPendingUiValueChange("")
+            setAuthManualMode(true)
           }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault()
-              event.stopPropagation()
-              setAuthManualMode(false)
-            }
-          }}
-        >
-          <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setAuthManualMode(false)}
-              aria-label="Back to login actions"
-            >
-              <ArrowLeftIcon />
-            </Button>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">
-                Paste redirect URL
-              </div>
-              <div className="truncate text-xs text-muted-foreground">
-                Fallback only: paste the full localhost callback URL.
-              </div>
-            </div>
-          </div>
-          <div className="flex min-h-0 flex-1 items-center p-3">
-            <Input
-              value={pendingUiValue}
-              onChange={(event) => onPendingUiValueChange(event.target.value)}
-              placeholder="Final redirected URL"
-              className="min-w-0 flex-1"
-            />
-          </div>
-          {isMobile ? (
-            <div className="border-t border-border/70 p-3">
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={!pendingUiValue.trim()}
-              >
-                Submit URL
-              </Button>
-            </div>
-          ) : (
-            <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Enter</Kbd>
-                Submit URL
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Esc</Kbd>
-                Back
-              </span>
-            </div>
-          )}
-        </form>
-      )
-    }
-
-    return renderAuthSurface(
-      true,
-      (open) => {
-        if (!open) cancelAuthAndReturn()
-      },
-      pendingUiRequest.title || "Log in to provider",
-      pendingUiRequest.message ||
-        "Open the login page, then complete login in your browser.",
-      <Command loop shouldFilter>
-        <CommandInput
-          placeholder="Choose login action"
-          className="text-base md:text-sm"
+          onCancel={cancelAuthAndReturn}
         />
-        <CommandList>
-          <CommandGroup heading={pendingUiRequest.title || "Provider login"}>
-            <CommandItem
-              value="open-login-page"
-              keywords={["open", "browser", "login", "page"]}
-              onSelect={() => {
-                window.open(
-                  pendingUiRequest.authUrl,
-                  "_blank",
-                  "noopener,noreferrer"
-                )
-              }}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">Open login page</span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">
-                  Continue OAuth in your browser. Keep Pico open while the
-                  provider redirects back.
-                </span>
-              </div>
-              <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
-                Enter
-              </CommandShortcut>
-            </CommandItem>
-            <CommandItem
-              value="copy-login-link"
-              keywords={["copy", "link", "url", "login"]}
-              onSelect={() => {
-                void navigator.clipboard.writeText(pendingUiRequest.authUrl!)
-                toast.success("Login link copied")
-              }}
-            >
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">Copy login link</span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">
-                  Copy the browser login link without showing the full URL.
-                </span>
-              </div>
-            </CommandItem>
-            {pendingUiRequest.authManualAllowed && (
-              <CommandItem
-                value="paste-redirect-url"
-                keywords={["paste", "redirect", "manual", "fallback"]}
-                onSelect={() => {
-                  onPendingUiValueChange("")
-                  setAuthManualMode(true)
-                }}
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">
-                    Paste redirect URL manually
-                  </span>
-                  <span className="line-clamp-2 text-xs text-muted-foreground">
-                    Fallback only: use this if the browser reaches a localhost
-                    callback URL but cannot connect.
-                  </span>
-                </div>
-              </CommandItem>
-            )}
-          </CommandGroup>
-        </CommandList>
-        {isMobile ? (
-          <div className="border-t border-border/70 p-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={cancelAuthAndReturn}
-            >
-              Cancel login
-            </Button>
-          </div>
-        ) : (
-          <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-            Use ↑/↓ to select, Enter to run an action, and Esc to go back.
-          </div>
-        )}
-      </Command>
+      </AuthRequestSurface>
     )
   }
 
   if (pendingUiRequest?.method === "auth_select") {
-    const cancelAuthAndReturn = () => {
-      onResolveUiRequest({ cancelled: true })
-      onAuthBack?.()
+    const authSelectRequest = pendingUiRequest as ExtensionUiEvent & {
+      method: "auth_select"
     }
-    const options = pendingUiRequest.options ?? []
 
-    return renderAuthSurface(
-      true,
-      (open) => {
-        if (!open) cancelAuthAndReturn()
-      },
-      pendingUiRequest.title || "Log in to provider",
-      pendingUiRequest.message || "Choose how to continue login.",
-      <Command loop shouldFilter>
-        <CommandInput
-          placeholder="Choose login option"
-          className="text-base md:text-sm"
+    return (
+      <AuthRequestSurface
+        open
+        isMobile={isMobile}
+        onOpenChange={(open) => {
+          if (!open) cancelAuthAndReturn()
+        }}
+        title={authSelectRequest.title || "Log in to provider"}
+        description={
+          authSelectRequest.message || "Choose how to continue login."
+        }
+      >
+        <AuthSelectOptions
+          request={authSelectRequest}
+          isMobile={isMobile}
+          onCancel={cancelAuthAndReturn}
+          onResolveUiRequest={onResolveUiRequest}
         />
-        <CommandList>
-          <CommandGroup heading={pendingUiRequest.message || "Login options"}>
-            {options.map((option) => {
-              const value = typeof option === "string" ? option : option.value
-              const label =
-                typeof option === "string"
-                  ? option
-                  : option.label || option.value
-              return (
-                <CommandItem
-                  key={value}
-                  value={value}
-                  keywords={[label]}
-                  onSelect={() => onResolveUiRequest({ value })}
-                >
-                  <span className="truncate font-medium">{label}</span>
-                </CommandItem>
-              )
-            })}
-          </CommandGroup>
-        </CommandList>
-        {isMobile ? (
-          <div className="border-t border-border/70 p-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={cancelAuthAndReturn}
-            >
-              Cancel login
-            </Button>
-          </div>
-        ) : (
-          <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-            Use ↑/↓ to select, Enter to continue, and Esc to go back.
-          </div>
-        )}
-      </Command>
+      </AuthRequestSurface>
     )
   }
 
   if (pendingUiRequest?.method === "auth_input") {
-    const allowEmpty = Boolean(pendingUiRequest.allowEmpty)
-    const cancelAuthAndReturn = () => {
-      onResolveUiRequest({ cancelled: true })
-      onAuthBack?.()
+    const authInputRequest = pendingUiRequest as ExtensionUiEvent & {
+      method: "auth_input"
     }
 
-    return renderAuthSurface(
-      true,
-      (open) => {
-        if (!open) cancelAuthAndReturn()
-      },
-      pendingUiRequest.title || "Log in to provider",
-      pendingUiRequest.message || "Enter the requested login information.",
-      <form
-        className="flex min-h-0 flex-1 flex-col"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!allowEmpty && !pendingUiValue.trim()) return
-          onResolveUiRequest({ value: pendingUiValue })
+    return (
+      <AuthRequestSurface
+        open
+        isMobile={isMobile}
+        onOpenChange={(open) => {
+          if (!open) cancelAuthAndReturn()
         }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault()
-            event.stopPropagation()
-            cancelAuthAndReturn()
-          }
-        }}
+        title={authInputRequest.title || "Log in to provider"}
+        description={
+          authInputRequest.message || "Enter the requested login information."
+        }
       >
-        <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={cancelAuthAndReturn}
-            aria-label="Back to login providers"
-          >
-            <ArrowLeftIcon />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">
-              {pendingUiRequest.title || "Log in to provider"}
-            </div>
-            <div className="truncate text-xs text-muted-foreground">
-              {pendingUiRequest.message ||
-                "Enter the requested login information."}
-            </div>
-          </div>
-        </div>
-        <div className="flex min-h-0 flex-1 items-center p-3">
-          <Input
-            value={pendingUiValue}
-            onChange={(event) => onPendingUiValueChange(event.target.value)}
-            placeholder={pendingUiRequest.placeholder}
-            className="min-w-0 flex-1"
-          />
-        </div>
-        {isMobile ? (
-          <div className="space-y-2 border-t border-border/70 p-3">
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!allowEmpty && !pendingUiValue.trim()}
-            >
-              Continue login
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={cancelAuthAndReturn}
-            >
-              Cancel login
-            </Button>
-          </div>
-        ) : (
-          <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-            <span className="inline-flex items-center gap-1">
-              <Kbd>Enter</Kbd>
-              Continue login
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Kbd>Esc</Kbd>
-              Back
-            </span>
-          </div>
-        )}
-      </form>
+        <AuthInputForm
+          request={authInputRequest}
+          isMobile={isMobile}
+          pendingUiValue={pendingUiValue}
+          onPendingUiValueChange={onPendingUiValueChange}
+          onCancel={cancelAuthAndReturn}
+          onResolveUiRequest={onResolveUiRequest}
+        />
+      </AuthRequestSurface>
     )
   }
 
   return (
-    <Dialog
-      open={Boolean(pendingUiRequest)}
-      onOpenChange={(open) => {
-        if (!open && pendingUiRequest) {
-          onResolveUiRequest({ cancelled: true })
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{pendingUiRequest?.title || "Pico request"}</DialogTitle>
-          {pendingUiRequest?.message && (
-            <DialogDescription>{pendingUiRequest.message}</DialogDescription>
-          )}
-        </DialogHeader>
-        {(pendingUiRequest?.method === "input" ||
-          pendingUiRequest?.method === "editor") &&
-          (pendingUiRequest.method === "editor" ? (
-            <Textarea
-              value={pendingUiValue}
-              onChange={(event) => onPendingUiValueChange(event.target.value)}
-              placeholder={pendingUiRequest.placeholder}
-            />
-          ) : (
-            <Input
-              value={pendingUiValue}
-              onChange={(event) => onPendingUiValueChange(event.target.value)}
-              placeholder={pendingUiRequest.placeholder}
-            />
-          ))}
-        {pendingUiRequest?.method === "select" && (
-          <div className="space-y-2">
-            {pendingUiRequest.options?.map((option) => {
-              const value = typeof option === "string" ? option : option.value
-              const label =
-                typeof option === "string"
-                  ? option
-                  : option.label || option.value
-              return (
-                <Button
-                  key={value}
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => onResolveUiRequest({ value })}
-                >
-                  {label}
-                </Button>
-              )
-            })}
-          </div>
-        )}
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onResolveUiRequest({ cancelled: true })}
-          >
-            Cancel
-          </Button>
-          {pendingUiRequest?.method === "confirm" && (
-            <Button onClick={() => onResolveUiRequest({ confirmed: true })}>
-              Confirm
-            </Button>
-          )}
-          {(pendingUiRequest?.method === "input" ||
-            pendingUiRequest?.method === "editor") && (
-            <Button
-              onClick={() => onResolveUiRequest({ value: pendingUiValue })}
-            >
-              Submit response
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <GenericUiRequestDialog
+      pendingUiRequest={pendingUiRequest}
+      pendingUiValue={pendingUiValue}
+      onPendingUiValueChange={onPendingUiValueChange}
+      onResolveUiRequest={onResolveUiRequest}
+    />
   )
 }
+
 export type AppShellUiRequestDialogHandle = {
   open: (request: ExtensionUiEvent) => void
   close: () => void

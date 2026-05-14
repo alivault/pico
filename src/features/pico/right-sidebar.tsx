@@ -110,6 +110,115 @@ function createGitCommitDiffTab(
   }
 }
 
+type RightSidebarLocalState = {
+  uncontrolledActiveTab: RightSidebarTabValue
+  inlineActiveFilePath: string
+  openFileDialogOpen: boolean
+  commitDiffTabs: Array<GitCommitDiffTab>
+  activeCommitDiffKey: string
+}
+
+type RightSidebarLocalAction =
+  | { type: "set-active-tab"; tab: RightSidebarTabValue }
+  | { type: "set-inline-active-file"; path: string }
+  | { type: "set-open-file-dialog-open"; open: boolean }
+  | { type: "upsert-commit-diff-tab"; tab: GitCommitDiffTab }
+  | { type: "set-active-commit-diff-key"; key: string }
+  | { type: "close-commit-diff-keys"; keys: Array<string> }
+  | { type: "close-other-commit-diffs"; key: string }
+  | { type: "reorder-commit-diffs"; keys: Array<string> }
+  | { type: "reset-navigation"; resetActiveTab: boolean }
+
+const initialRightSidebarLocalState = {
+  uncontrolledActiveTab: "review",
+  inlineActiveFilePath: "",
+  openFileDialogOpen: false,
+  commitDiffTabs: [],
+  activeCommitDiffKey: "",
+} satisfies RightSidebarLocalState
+
+function rightSidebarLocalReducer(
+  state: RightSidebarLocalState,
+  action: RightSidebarLocalAction
+): RightSidebarLocalState {
+  switch (action.type) {
+    case "set-active-tab":
+      return { ...state, uncontrolledActiveTab: action.tab }
+    case "set-inline-active-file":
+      return { ...state, inlineActiveFilePath: action.path }
+    case "set-open-file-dialog-open":
+      return { ...state, openFileDialogOpen: action.open }
+    case "upsert-commit-diff-tab":
+      return {
+        ...state,
+        commitDiffTabs: state.commitDiffTabs.some(
+          (existing) => existing.key === action.tab.key
+        )
+          ? state.commitDiffTabs.map((existing) =>
+              existing.key === action.tab.key ? action.tab : existing
+            )
+          : [...state.commitDiffTabs, action.tab],
+        activeCommitDiffKey: action.tab.key,
+        uncontrolledActiveTab: "commit-diff",
+      }
+    case "set-active-commit-diff-key":
+      return { ...state, activeCommitDiffKey: action.key }
+    case "close-commit-diff-keys": {
+      const keySet = new Set(action.keys)
+      const firstClosedIndex = state.commitDiffTabs.findIndex((tab) =>
+        keySet.has(tab.key)
+      )
+      const nextTabs = state.commitDiffTabs.filter(
+        (tab) => !keySet.has(tab.key)
+      )
+      const nextActive = keySet.has(state.activeCommitDiffKey)
+        ? nextTabs[Math.max(0, firstClosedIndex - 1)] || nextTabs[0]
+        : undefined
+      return {
+        ...state,
+        commitDiffTabs: nextTabs,
+        activeCommitDiffKey: keySet.has(state.activeCommitDiffKey)
+          ? nextActive?.key || ""
+          : state.activeCommitDiffKey,
+        uncontrolledActiveTab: nextActive
+          ? state.uncontrolledActiveTab
+          : state.uncontrolledActiveTab === "commit-diff"
+            ? "review"
+            : state.uncontrolledActiveTab,
+      }
+    }
+    case "close-other-commit-diffs":
+      return {
+        ...state,
+        commitDiffTabs: state.commitDiffTabs.filter(
+          (tab) => tab.key === action.key
+        ),
+        activeCommitDiffKey: action.key,
+        uncontrolledActiveTab: "commit-diff",
+      }
+    case "reorder-commit-diffs": {
+      const byKey = new Map(state.commitDiffTabs.map((tab) => [tab.key, tab]))
+      const ordered = action.keys.flatMap((key) => {
+        const tab = byKey.get(key)
+        return tab ? [tab] : []
+      })
+      const keySet = new Set(action.keys)
+      const missing = state.commitDiffTabs.filter((tab) => !keySet.has(tab.key))
+      return { ...state, commitDiffTabs: [...ordered, ...missing] }
+    }
+    case "reset-navigation":
+      return {
+        ...state,
+        inlineActiveFilePath: "",
+        commitDiffTabs: [],
+        activeCommitDiffKey: "",
+        uncontrolledActiveTab: action.resetActiveTab
+          ? "review"
+          : state.uncontrolledActiveTab,
+      }
+  }
+}
+
 function commitFileDiffValue(fileDiff: FileDiffMetadata, index: number) {
   return `${index}:${fileDiff.prevName || ""}:${fileDiff.name}`
 }
@@ -500,27 +609,26 @@ export function RightSidebar({
 }: RightSidebarProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
-  const [uncontrolledActiveTab, setUncontrolledActiveTab] =
-    React.useState<RightSidebarTabValue>("review")
-  const activeTab = controlledActiveTab ?? uncontrolledActiveTab
+  const [localState, dispatchLocal] = React.useReducer(
+    rightSidebarLocalReducer,
+    initialRightSidebarLocalState
+  )
+  const activeTab = controlledActiveTab ?? localState.uncontrolledActiveTab
+  const activeTabRef = React.useRef(activeTab)
+  activeTabRef.current = activeTab
   const setActiveTab = (tab: RightSidebarTabValue) => {
-    setUncontrolledActiveTab(tab)
+    dispatchLocal({ type: "set-active-tab", tab })
     onActiveTabChange?.(tab)
   }
-  const [inlineActiveFilePath, setInlineActiveFilePath] = React.useState("")
-  const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
-  const [commitDiffTabs, setCommitDiffTabs] = React.useState<
-    Array<GitCommitDiffTab>
-  >([])
-  const [activeCommitDiffKey, setActiveCommitDiffKey] = React.useState("")
   const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
   const panelHasCardChrome = showToolbar && !isMobile
   const currentFilePath =
-    previewMode === "inline" ? inlineActiveFilePath : activeFilePath
+    previewMode === "inline" ? localState.inlineActiveFilePath : activeFilePath
   const hasOpenFileTabs = fileTabs.length > 0
   const activeCommitDiffTab =
-    commitDiffTabs.find((tab) => tab.key === activeCommitDiffKey) ??
-    commitDiffTabs[0]
+    localState.commitDiffTabs.find(
+      (tab) => tab.key === localState.activeCommitDiffKey
+    ) ?? localState.commitDiffTabs[0]
   const fileDialogTreeQuery = useQuery({
     ...projectFileTreeQueryOptions({
       viewerContextId,
@@ -538,7 +646,7 @@ export function RightSidebar({
     if (!path) return
     setActiveTab("files")
     if (previewMode === "inline") {
-      setInlineActiveFilePath(path)
+      dispatchLocal({ type: "set-inline-active-file", path })
       return
     }
     onOpenFile?.(path, options)
@@ -549,27 +657,20 @@ export function RightSidebar({
     if (!request.commit) return
 
     const tab = createGitCommitDiffTab(request)
-    setCommitDiffTabs((current) =>
-      current.some((existing) => existing.key === tab.key)
-        ? current.map((existing) => (existing.key === tab.key ? tab : existing))
-        : [...current, tab]
-    )
-    setActiveCommitDiffKey(tab.key)
-    setActiveTab("commit-diff")
+    dispatchLocal({ type: "upsert-commit-diff-tab", tab })
+    onActiveTabChange?.("commit-diff")
   }
 
   const closeCommitDiffKeys = (keys: Array<string>) => {
     const keySet = new Set(keys)
-    setCommitDiffTabs((current) => {
-      const firstClosedIndex = current.findIndex((tab) => keySet.has(tab.key))
-      const next = current.filter((tab) => !keySet.has(tab.key))
-      if (keySet.has(activeCommitDiffKey)) {
-        const nextActive = next[Math.max(0, firstClosedIndex - 1)] || next[0]
-        setActiveCommitDiffKey(nextActive?.key || "")
-        if (!nextActive) setActiveTab("review")
-      }
-      return next
-    })
+    const closingActiveTab = keySet.has(localState.activeCommitDiffKey)
+    const nextTabs = localState.commitDiffTabs.filter(
+      (tab) => !keySet.has(tab.key)
+    )
+    dispatchLocal({ type: "close-commit-diff-keys", keys })
+    if (closingActiveTab && nextTabs.length === 0) {
+      onActiveTabChange?.("review")
+    }
   }
 
   const closeCommitDiff = (key: string) => {
@@ -577,47 +678,35 @@ export function RightSidebar({
   }
 
   const closeOtherCommitDiffs = (key: string) => {
-    setCommitDiffTabs((current) => current.filter((tab) => tab.key === key))
-    setActiveCommitDiffKey(key)
-    setActiveTab("commit-diff")
+    dispatchLocal({ type: "close-other-commit-diffs", key })
+    onActiveTabChange?.("commit-diff")
   }
 
   const closeCommitDiffsToRight = (key: string) => {
-    const index = commitDiffTabs.findIndex((tab) => tab.key === key)
+    const index = localState.commitDiffTabs.findIndex((tab) => tab.key === key)
     if (index < 0) return
-    closeCommitDiffKeys(commitDiffTabs.slice(index + 1).map((tab) => tab.key))
+    closeCommitDiffKeys(
+      localState.commitDiffTabs.slice(index + 1).map((tab) => tab.key)
+    )
   }
 
   const closeAllCommitDiffs = () => {
-    closeCommitDiffKeys(commitDiffTabs.map((tab) => tab.key))
+    closeCommitDiffKeys(localState.commitDiffTabs.map((tab) => tab.key))
   }
 
   const reorderCommitDiffs = (keys: Array<string>) => {
-    setCommitDiffTabs((current) => {
-      const byKey = new Map(current.map((tab) => [tab.key, tab]))
-      const ordered = keys
-        .map((key) => byKey.get(key))
-        .filter((tab): tab is GitCommitDiffTab => Boolean(tab))
-      const missing = current.filter((tab) => !keys.includes(tab.key))
-      return [...ordered, ...missing]
-    })
+    dispatchLocal({ type: "reorder-commit-diffs", keys })
   }
 
   React.useEffect(() => {
-    if (!controlledActiveTab) {
-      setUncontrolledActiveTab("review")
+    dispatchLocal({
+      type: "reset-navigation",
+      resetActiveTab: !controlledActiveTab,
+    })
+    if (activeTabRef.current === "commit-diff") {
+      onActiveTabChange?.("review")
     }
-  }, [controlledActiveTab, isMobile, normalizedCwd])
-
-  React.useEffect(() => {
-    setInlineActiveFilePath("")
-  }, [isMobile, normalizedCwd])
-
-  React.useEffect(() => {
-    setCommitDiffTabs([])
-    setActiveCommitDiffKey("")
-    if (activeTab === "commit-diff") setActiveTab("review")
-  }, [normalizedCwd])
+  }, [controlledActiveTab, isMobile, normalizedCwd, onActiveTabChange])
 
   return (
     <div className="h-full min-h-[520px] w-full min-w-0">
@@ -638,10 +727,12 @@ export function RightSidebar({
           activeCommitDiffKey={activeCommitDiffTab?.key || ""}
           activeFilePath={currentFilePath}
           activeTab={activeTab}
-          commitDiffTabs={commitDiffTabs}
+          commitDiffTabs={localState.commitDiffTabs}
           filePreviewPath={filePreviewPath}
           fileTabs={fileTabs}
-          onActiveCommitDiffChange={setActiveCommitDiffKey}
+          onActiveCommitDiffChange={(key) =>
+            dispatchLocal({ type: "set-active-commit-diff-key", key })
+          }
           onActiveFileChange={onActiveFileChange}
           onActiveTabChange={setActiveTab}
           onCloseAllCommitDiffs={closeAllCommitDiffs}
@@ -653,7 +744,7 @@ export function RightSidebar({
           onCloseOtherCommitDiffs={closeOtherCommitDiffs}
           onCloseOtherFiles={onCloseOtherFiles}
           onOpenFileDialog={() => {
-            setOpenFileDialogOpen(true)
+            dispatchLocal({ type: "set-open-file-dialog-open", open: true })
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
@@ -736,7 +827,7 @@ export function RightSidebar({
                 active={active && activeTab === "files"}
                 activeFilePath={currentFilePath}
                 onCloseFile={() => {
-                  setInlineActiveFilePath("")
+                  dispatchLocal({ type: "set-inline-active-file", path: "" })
                 }}
                 onOpenFile={openFile}
                 previewMode={previewMode}
@@ -745,8 +836,10 @@ export function RightSidebar({
           </div>
         </React.Activity>
         <ProjectOpenFileDialog
-          open={openFileDialogOpen}
-          onOpenChange={setOpenFileDialogOpen}
+          open={localState.openFileDialogOpen}
+          onOpenChange={(open) =>
+            dispatchLocal({ type: "set-open-file-dialog-open", open })
+          }
           paths={fileDialogPaths}
           onOpenFile={(path) => {
             openFile(path, { pin: true })
