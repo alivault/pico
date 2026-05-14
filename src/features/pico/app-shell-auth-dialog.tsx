@@ -152,6 +152,65 @@ function ProviderCommandItem({
   )
 }
 
+type AuthDialogMode = "closed" | "login" | "logout" | "apiKey"
+
+type AuthDialogState = {
+  mode: AuthDialogMode
+  selectedApiKeyProvider: AuthProviderOption | null
+  apiKey: string
+}
+
+type AuthDialogAction =
+  | { type: "loginOpened" }
+  | { type: "logoutOpened" }
+  | { type: "apiKeyOpened"; provider: AuthProviderOption }
+  | { type: "apiKeyChanged"; apiKey: string }
+  | { type: "closed" }
+
+const initialAuthDialogState: AuthDialogState = {
+  mode: "closed",
+  selectedApiKeyProvider: null,
+  apiKey: "",
+}
+
+function authDialogReducer(
+  state: AuthDialogState,
+  action: AuthDialogAction
+): AuthDialogState {
+  switch (action.type) {
+    case "loginOpened":
+      return {
+        mode: "login",
+        selectedApiKeyProvider: null,
+        apiKey: "",
+      }
+    case "logoutOpened":
+      return {
+        mode: "logout",
+        selectedApiKeyProvider: null,
+        apiKey: "",
+      }
+    case "apiKeyOpened":
+      return {
+        mode: "apiKey",
+        selectedApiKeyProvider: action.provider,
+        apiKey: "",
+      }
+    case "apiKeyChanged":
+      return state.apiKey === action.apiKey
+        ? state
+        : { ...state, apiKey: action.apiKey }
+    case "closed":
+      return state.mode === "closed" &&
+        !state.selectedApiKeyProvider &&
+        !state.apiKey
+        ? state
+        : initialAuthDialogState
+    default:
+      return state
+  }
+}
+
 export function AppShellAuthDialogController({
   ref,
   openStateRef,
@@ -160,12 +219,14 @@ export function AppShellAuthDialogController({
 }: AppShellAuthDialogControllerProps) {
   const isMobile = useIsMobile()
   const queryClient = useQueryClient()
-  const [loginOpen, setLoginOpen] = React.useState(false)
-  const [logoutOpen, setLogoutOpen] = React.useState(false)
-  const [apiKeyOpen, setApiKeyOpen] = React.useState(false)
-  const [selectedApiKeyProvider, setSelectedApiKeyProvider] =
-    React.useState<AuthProviderOption | null>(null)
-  const [apiKey, setApiKey] = React.useState("")
+  const [state, dispatch] = React.useReducer(
+    authDialogReducer,
+    initialAuthDialogState
+  )
+  const { apiKey, selectedApiKeyProvider } = state
+  const loginOpen = state.mode === "login"
+  const logoutOpen = state.mode === "logout"
+  const apiKeyOpen = state.mode === "apiKey"
   const openRef = React.useRef(false)
   const returnOnCloseRef = React.useRef<(() => void) | null>(null)
 
@@ -178,21 +239,12 @@ export function AppShellAuthDialogController({
     }
   }, [authDialogOpen, openStateRef])
 
-  const closeApiKeyDialog = () => {
-    setApiKeyOpen(false)
-    setSelectedApiKeyProvider(null)
-    setApiKey("")
-  }
-
   const backToLoginProviders = () => {
-    closeApiKeyDialog()
-    setLoginOpen(true)
+    dispatch({ type: "loginOpened" })
   }
 
   const closeAllDialogs = (options?: { returnToOrigin?: boolean }) => {
-    setLoginOpen(false)
-    setLogoutOpen(false)
-    closeApiKeyDialog()
+    dispatch({ type: "closed" })
 
     const returnOnClose = returnOnCloseRef.current
     returnOnCloseRef.current = null
@@ -313,14 +365,7 @@ export function AppShellAuthDialogController({
         if (options?.returnOnClose) {
           returnOnCloseRef.current = options.returnOnClose
         }
-        closeApiKeyDialog()
-        if (mode === "logout") {
-          setLoginOpen(false)
-          setLogoutOpen(true)
-        } else {
-          setLogoutOpen(false)
-          setLoginOpen(true)
-        }
+        dispatch({ type: mode === "logout" ? "logoutOpened" : "loginOpened" })
       },
       close: () => closeAllDialogs(),
       isOpen: () => openRef.current,
@@ -335,15 +380,12 @@ export function AppShellAuthDialogController({
 
   const selectLoginProvider = (provider: AuthProviderOption) => {
     if (provider.authType === "oauth") {
-      setLoginOpen(false)
+      dispatch({ type: "closed" })
       oauthMutation.mutate({ provider: provider.id })
       return
     }
 
-    setSelectedApiKeyProvider(provider)
-    setApiKey("")
-    setLoginOpen(false)
-    setApiKeyOpen(true)
+    dispatch({ type: "apiKeyOpened", provider })
   }
 
   const submitApiKey = (event: React.FormEvent<HTMLFormElement>) => {
@@ -442,7 +484,7 @@ export function AppShellAuthDialogController({
                 disabled={logoutMutation.isPending}
                 onSelect={() => {
                   if (logoutMutation.isPending) return
-                  setLogoutOpen(false)
+                  dispatch({ type: "closed" })
                   logoutMutation.mutate({ provider: provider.id })
                 }}
               />
@@ -507,7 +549,9 @@ export function AppShellAuthDialogController({
         <Input
           type="password"
           value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
+          onChange={(event) => {
+            dispatch({ type: "apiKeyChanged", apiKey: event.target.value })
+          }}
           placeholder={
             selectedApiKeyProvider
               ? `Enter ${selectedApiKeyProvider.name} API key`
@@ -549,7 +593,7 @@ export function AppShellAuthDialogController({
         isMobile={isMobile}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) closeAndReturnToOrigin()
-          else setLoginOpen(true)
+          else dispatch({ type: "loginOpened" })
         }}
         title="Login to provider"
         description="Search providers and press Enter to configure authentication."
@@ -561,7 +605,7 @@ export function AppShellAuthDialogController({
         isMobile={isMobile}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) closeAndReturnToOrigin()
-          else setLogoutOpen(true)
+          else dispatch({ type: "logoutOpened" })
         }}
         title="Logout from provider"
         description="Search saved provider credentials and press Enter to remove them."
@@ -573,7 +617,9 @@ export function AppShellAuthDialogController({
         isMobile={isMobile}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) backToLoginProviders()
-          else setApiKeyOpen(true)
+          else if (selectedApiKeyProvider) {
+            dispatch({ type: "apiKeyOpened", provider: selectedApiKeyProvider })
+          }
         }}
         title={
           selectedApiKeyProvider
