@@ -67,6 +67,7 @@ type GitCommitDialogState = {
   selectedCommandId: string
   stage: GitCommitDialogStage
   pendingRun: GitCommitPendingRun
+  generating: boolean
 }
 
 type GitCommitDialogAction =
@@ -77,6 +78,7 @@ type GitCommitDialogAction =
   | { type: "set-message"; message: string; generatedReason?: string }
   | { type: "set-include-unstaged"; includeUnstaged: boolean }
   | { type: "set-pending-run"; pendingRun: GitCommitPendingRun }
+  | { type: "set-generating"; generating: boolean }
   | { type: "apply-generated-message"; generated: GitCommitMessageData }
   | { type: "clear-message" }
 
@@ -88,6 +90,7 @@ const initialGitCommitDialogState = {
   selectedCommandId: "commit",
   stage: "browse",
   pendingRun: null,
+  generating: false,
 } satisfies GitCommitDialogState
 
 function gitCommitDialogReducer(
@@ -113,6 +116,8 @@ function gitCommitDialogReducer(
       return { ...state, includeUnstaged: action.includeUnstaged }
     case "set-pending-run":
       return { ...state, pendingRun: action.pendingRun }
+    case "set-generating":
+      return { ...state, generating: action.generating }
     case "apply-generated-message":
       return {
         ...state,
@@ -582,23 +587,17 @@ export function GitCommitDialog({
     }
   }
 
-  const generateMutation = useMutation({
-    mutationFn: async () =>
-      await fetchJson<GitCommitMessageData>(
-        buildRequestUrl("/api/git-commit-message", {
-          contextId: viewerContextId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd }),
-        }
-      ),
-    onSuccess: applyGeneratedMessage,
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Failed to generate commit message"))
-    },
-  })
+  const requestGeneratedCommitMessage = async () =>
+    await fetchJson<GitCommitMessageData>(
+      buildRequestUrl("/api/git-commit-message", {
+        contextId: viewerContextId,
+      }),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cwd }),
+      }
+    )
 
   const commitMutation = useMutation({
     mutationFn: async ({
@@ -660,8 +659,7 @@ export function GitCommitDialog({
   })
 
   const committing = commitMutation.isPending
-  const generating = generateMutation.isPending
-  const busy = committing || generating
+  const busy = committing || state.generating
 
   React.useEffect(() => {
     if (!open) dispatch({ type: "reset-transient" })
@@ -670,7 +668,15 @@ export function GitCommitDialog({
   const generateCommitMessage = () => {
     if (busy || !cwd || files.length === 0) return
 
-    generateMutation.mutate()
+    dispatch({ type: "set-generating", generating: true })
+    void requestGeneratedCommitMessage()
+      .then(applyGeneratedMessage)
+      .catch((error: unknown) => {
+        toast.error(getErrorMessage(error, "Failed to generate commit message"))
+      })
+      .finally(() => {
+        dispatch({ type: "set-generating", generating: false })
+      })
   }
 
   const continueCommit = async (push: boolean, forcePush = false) => {
@@ -684,11 +690,16 @@ export function GitCommitDialog({
     let commitMessage = state.message.trim()
     if (!commitMessage) {
       try {
-        const generated = await generateMutation.mutateAsync()
+        dispatch({ type: "set-generating", generating: true })
+        const generated = await requestGeneratedCommitMessage()
         commitMessage = generated.message.trim()
-      } catch {
+        applyGeneratedMessage(generated)
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Failed to generate commit message"))
         dispatch({ type: "set-pending-run", pendingRun: null })
         return
+      } finally {
+        dispatch({ type: "set-generating", generating: false })
       }
     }
 
@@ -749,7 +760,7 @@ export function GitCommitDialog({
         message: state.message,
         generatedReason: state.generatedReason,
         busy,
-        generating,
+        generating: state.generating,
         canGenerate: Boolean(cwd && files.length > 0),
         onMessageChange: (message) =>
           dispatch({ type: "set-message", message, generatedReason: "" }),
