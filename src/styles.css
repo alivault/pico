@@ -275,39 +275,39 @@
 
 .pico-spinner-braille::before {
   animation: pico-braille-spinner 0.8s linear infinite;
-  content: "⠋";
+  content: "\280b";
 }
 
 @keyframes pico-braille-spinner {
   0% {
-    content: "⠋";
+    content: "\280b";
   }
   10% {
-    content: "⠙";
+    content: "\2819";
   }
   20% {
-    content: "⠹";
+    content: "\2839";
   }
   30% {
-    content: "⠸";
+    content: "\2838";
   }
   40% {
-    content: "⠼";
+    content: "\283c";
   }
   50% {
-    content: "⠴";
+    content: "\2834";
   }
   60% {
-    content: "⠦";
+    content: "\2826";
   }
   70% {
-    content: "⠧";
+    content: "\2827";
   }
   80% {
-    content: "⠇";
+    content: "\2807";
   }
   90% {
-    content: "⠏";
+    content: "\280f";
   }
 }
 
