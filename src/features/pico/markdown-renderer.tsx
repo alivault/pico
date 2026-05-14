@@ -135,10 +135,8 @@ function collectCompleteFencedCodeRanges(markdown: string) {
     start: number
   } | null = null
 
-  while (lineStart <= markdown.length) {
-    const nextNewline = markdown.indexOf("\n", lineStart)
-    const rawLineEnd = nextNewline === -1 ? markdown.length : nextNewline
-    const rawLine = markdown.slice(lineStart, rawLineEnd)
+  for (const rawLine of markdown.split("\n")) {
+    const rawLineEnd = lineStart + rawLine.length
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine
 
     if (!fence) {
@@ -169,8 +167,7 @@ function collectCompleteFencedCodeRanges(markdown: string) {
       }
     }
 
-    if (nextNewline === -1) break
-    lineStart = nextNewline + 1
+    lineStart = rawLineEnd + 1
   }
 
   return ranges
@@ -431,27 +428,30 @@ export const CodeBlock = React.memo(function CodeBlock({
   preRef?: React.Ref<HTMLPreElement>
   streaming?: boolean
 }) {
-  const [highlighted, setHighlighted] =
-    React.useState<HighlightResponse | null>(null)
+  const [highlightResult, setHighlightResult] = React.useState<{
+    code: string
+    language: string
+    payload: HighlightResponse
+  } | null>(null)
 
   React.useEffect(() => {
+    if (!language || streaming) return
+
     let cancelled = false
 
-    if (!language || streaming) {
-      setHighlighted(null)
-      return
-    }
-
-    setHighlighted(null)
     void getHighlightedCode(code, language)
       .then((payload) => {
         if (!cancelled) {
-          setHighlighted(payload)
+          setHighlightResult({ code, language, payload })
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setHighlighted({ ok: true, unavailable: true })
+          setHighlightResult({
+            code,
+            language,
+            payload: { ok: true, unavailable: true },
+          })
         }
       })
 
@@ -460,6 +460,12 @@ export const CodeBlock = React.memo(function CodeBlock({
     }
   }, [code, language, streaming])
 
+  const highlighted =
+    !streaming &&
+    highlightResult?.code === code &&
+    highlightResult.language === language
+      ? highlightResult.payload
+      : null
   const renderedLanguage =
     highlighted && "language" in highlighted && highlighted.language
       ? highlighted.language
