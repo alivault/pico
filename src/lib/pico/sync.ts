@@ -640,14 +640,11 @@ function mutateToolBlockInItems(
     const item = items[index]
     if (item?.kind !== "assistant") continue
 
-    const block = item.blocks.find(
-      (entry): entry is ToolBlock =>
-        entry.type === "tool" && entry.callId === callId
-    )
-
-    if (!block) continue
-    mutate(block)
-    return
+    for (const block of item.blocks) {
+      if (block.type !== "tool" || block.callId !== callId) continue
+      mutate(block)
+      return
+    }
   }
 }
 

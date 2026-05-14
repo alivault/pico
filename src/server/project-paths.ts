@@ -35,6 +35,10 @@ function displayPath(value = "") {
   return String(value).replace(/\\/g, "/")
 }
 
+function projectPathTextContains(text: string, query: string) {
+  return text.indexOf(query) >= 0
+}
+
 function expandHomeDirectory(inputPath: string) {
   if (inputPath === "~") return os.homedir()
   if (inputPath.startsWith("~/")) return `${os.homedir()}${inputPath.slice(1)}`
@@ -171,7 +175,10 @@ export async function listPathCompletionEntries(
 
     if (displayPrefix.endsWith("/") || displayPrefix.endsWith("\\")) {
       completionPath = `${displayPrefix}${entry.name}`
-    } else if (displayPrefix.includes("/") || displayPrefix.includes("\\")) {
+    } else if (
+      projectPathTextContains(displayPrefix, "/") ||
+      projectPathTextContains(displayPrefix, "\\")
+    ) {
       if (displayPrefix === "~") {
         completionPath = `~/${entry.name}`
       } else if (displayPrefix.startsWith("~/")) {
@@ -305,7 +312,7 @@ async function runFdSearch(command: string, args: string[]) {
         if (
           normalizedPath === ".git" ||
           normalizedPath.startsWith(".git/") ||
-          normalizedPath.includes("/.git/")
+          projectPathTextContains(normalizedPath, "/.git/")
         ) {
           continue
         }
@@ -327,7 +334,7 @@ function escapePathQueryRegex(value = "") {
 
 function buildFdPathQuery(query = "") {
   const normalized = displayPath(query)
-  if (!normalized.includes("/")) {
+  if (!projectPathTextContains(normalized, "/")) {
     return normalized
   }
 
@@ -387,7 +394,7 @@ async function walkDirectoryWithFallback(
 
       if (
         !normalizedQuery ||
-        displayValue.toLowerCase().includes(normalizedQuery)
+        projectPathTextContains(displayValue.toLowerCase(), normalizedQuery)
       ) {
         matches.push({
           path: displayValue,
@@ -612,7 +619,9 @@ async function searchDirectoriesWithFallback({
 
       const fullPath = join(current.directory, entry.name)
       const relativePath = `${displayPath(path.relative(root, fullPath))}/`
-      if (relativePath.toLowerCase().includes(normalizedQuery)) {
+      if (
+        projectPathTextContains(relativePath.toLowerCase(), normalizedQuery)
+      ) {
         results.push({ path: relativePath, isDirectory: true })
       }
       queue.push({ directory: fullPath, depth: current.depth + 1 })

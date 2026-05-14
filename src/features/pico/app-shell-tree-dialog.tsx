@@ -325,12 +325,10 @@ function treeDialogPassesFilter(
 function treeDialogRootNodes(flatTree: Array<FlatTreeNode>) {
   const nodeById = new Map(flatTree.map((node) => [node.id, node]))
 
-  return flatTree
-    .filter((node) => {
-      const parentId = node.parentId ?? null
-      return parentId === null || !nodeById.has(parentId)
-    })
-    .map((node) => node.node)
+  return flatTree.flatMap((node) => {
+    const parentId = node.parentId ?? null
+    return parentId === null || !nodeById.has(parentId) ? [node.node] : []
+  })
 }
 
 function treeDialogActivePathIds(

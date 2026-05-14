@@ -3,10 +3,11 @@ import { readFile, stat } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 
 import { loadPiAi } from "@/server/pi-sdk"
-import type {
-  MessageContentPartLike,
-  ModelRegistryLike,
-} from "@/server/pi-sdk-types"
+import type { ModelRegistryLike } from "@/server/pi-sdk-types"
+
+function gitTextContains(text: string, query: string) {
+  return text.indexOf(query) >= 0
+}
 
 export type GitStatusSummary = {
   branch?: string
@@ -649,7 +650,7 @@ function parseGitNumstatEntries(output: string) {
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index]
-    if (typeof entry !== "string" || !entry.includes("\t")) continue
+    if (typeof entry !== "string" || !gitTextContains(entry, "\t")) continue
 
     const [addedRaw = "", deletedRaw = "", ...pathParts] = entry.split("\t")
     let filePath = pathParts.join("\t")
@@ -819,7 +820,7 @@ function parseGitRemoteBranches(output: string) {
     const branchName = typeof name === "string" ? name.trim() : ""
     if (
       !branchName ||
-      !branchName.includes("/") ||
+      !gitTextContains(branchName, "/") ||
       /\/HEAD$/i.test(branchName)
     ) {
       continue
@@ -2258,11 +2259,11 @@ export async function generateDirectoryGitCommitMessage(
 
     const raw = Array.isArray(response?.content)
       ? response.content
-          .filter(
-            (block): block is MessageContentPartLike & { text: string } =>
-              block?.type === "text" && typeof block.text === "string"
+          .flatMap((block) =>
+            block?.type === "text" && typeof block.text === "string"
+              ? [block.text]
+              : []
           )
-          .map((block) => block.text)
           .join("\n")
       : ""
     const message = cleanupCommitMessageCandidate(raw)

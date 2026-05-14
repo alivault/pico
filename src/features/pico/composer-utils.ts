@@ -160,6 +160,10 @@ function slashCommandSearchCandidates(command: SlashCommandDescriptor) {
   return candidates.filter(Boolean)
 }
 
+function composerTextContains(text: string, query: string) {
+  return text.indexOf(query) >= 0
+}
+
 function slashCommandMatchRank(command: SlashCommandDescriptor, query: string) {
   const rawQuery = typeof query === "string" ? query.trim().toLowerCase() : ""
   if (!rawQuery) return command.kind === "builtin" ? 0 : 10
@@ -183,11 +187,14 @@ function slashCommandMatchRank(command: SlashCommandDescriptor, query: string) {
       bestRank = Math.min(bestRank, 2)
       continue
     }
-    if (rawCandidate.includes(rawQuery)) {
+    if (composerTextContains(rawCandidate, rawQuery)) {
       bestRank = Math.min(bestRank, 3)
       continue
     }
-    if (normalizedQuery && normalizedCandidate.includes(normalizedQuery)) {
+    if (
+      normalizedQuery &&
+      composerTextContains(normalizedCandidate, normalizedQuery)
+    ) {
       bestRank = Math.min(bestRank, 4)
       continue
     }

@@ -240,9 +240,14 @@ function updateToolBlock(
     const item = state.items[itemIndex]
     if (item?.kind !== "assistant") continue
 
-    const blockIndex = item.blocks.findIndex(
-      (block) => block.type === "tool" && block.callId === callId
-    )
+    let blockIndex = -1
+    for (let index = item.blocks.length - 1; index >= 0; index -= 1) {
+      const block = item.blocks[index]
+      if (block?.type === "tool" && block.callId === callId) {
+        blockIndex = index
+        break
+      }
+    }
     if (blockIndex < 0) continue
 
     const block = item.blocks[blockIndex]
@@ -508,29 +513,27 @@ export function applyRetainedConversationEvent(
       return
     }
 
-    state.items = state.items
-      .filter(
-        (entry) =>
-          !(
-            entry.kind === "assistant" &&
-            entry.streaming &&
-            entry.blocks.length === 0
-          )
-      )
-      .map((entry) => {
-        if (entry.kind !== "assistant") return entry
-        if (!entry.streaming && entry.done !== false) return entry
+    state.items = state.items.flatMap((entry) => {
+      if (
+        entry.kind === "assistant" &&
+        entry.streaming &&
+        entry.blocks.length === 0
+      ) {
+        return []
+      }
+      if (entry.kind !== "assistant") return entry
+      if (!entry.streaming && entry.done !== false) return entry
 
-        return {
-          ...entry,
-          streaming: false,
-          done: true,
-          blocks: entry.blocks.map((block) =>
-            block.type === "tool" && block.running
-              ? { ...block, running: false }
-              : block
-          ),
-        } satisfies AssistantItem
-      })
+      return {
+        ...entry,
+        streaming: false,
+        done: true,
+        blocks: entry.blocks.map((block) =>
+          block.type === "tool" && block.running
+            ? { ...block, running: false }
+            : block
+        ),
+      } satisfies AssistantItem
+    })
   }
 }

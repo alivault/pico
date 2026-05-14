@@ -1830,9 +1830,9 @@ export function GitCommitsSection({
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     placeholderData: (previousData, previousQuery) => {
       const previousKey = previousQuery?.queryKey
-      const sameCommitScope = commitsScopeQueryKey.every(
-        (part, index) => previousKey?.[index] === part
-      )
+      const sameCommitScope =
+        previousKey?.length === commitsScopeQueryKey.length &&
+        commitsScopeQueryKey.every((part, index) => previousKey[index] === part)
       return sameCommitScope ? previousData : undefined
     },
     notifyOnChangeProps: ["data", "isFetching", "isPending", "error"],

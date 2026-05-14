@@ -995,13 +995,15 @@ function assistantCopyTextFromItems(
 ) {
   return items
     .flatMap((item) =>
-      item.blocks
-        .map((block) => {
-          if (block.type === "text") return block.text
-          if (block.type === "compaction") return block.summary
-          return ""
-        })
-        .filter((text) => text.trim())
+      item.blocks.flatMap((block) => {
+        const text =
+          block.type === "text"
+            ? block.text
+            : block.type === "compaction"
+              ? block.summary
+              : ""
+        return text.trim() ? [text] : []
+      })
     )
     .join("\n\n")
     .trim()
@@ -1088,9 +1090,10 @@ function createAssistantBlockStore(
   return {
     getBlock: (key) => snapshot.blockByKey.get(key),
     getBlocks: (keys) =>
-      keys
-        .map((key) => snapshot.blockByKey.get(key))
-        .filter((block): block is AssistantConversationBlock => Boolean(block)),
+      keys.flatMap((key) => {
+        const block = snapshot.blockByKey.get(key)
+        return block ? [block] : []
+      }),
     getGroups: () => snapshot.groups,
     setBlocks: (blocks) => {
       const previousSnapshot = snapshot
@@ -1364,6 +1367,13 @@ function useAssistantToolGroupHeader(
   )
 }
 
+function sameReferenceSequence<T>(left: Array<T>, right: Array<T>) {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => item === right[index])
+  )
+}
+
 function useAssistantToolGroupBodyBlocks(
   store: AssistantBlockStore,
   keys: Array<string>,
@@ -1380,10 +1390,8 @@ function useAssistantToolGroupBodyBlocks(
     const blocks = assistantToolBlocksFromStore(store, keys)
     const cache = cacheRef.current
     if (
-      cache.keys.length === keys.length &&
-      cache.keys.every((key, index) => key === keys[index]) &&
-      cache.blocks.length === blocks.length &&
-      cache.blocks.every((block, index) => block === blocks[index])
+      sameReferenceSequence(cache.keys, keys) &&
+      sameReferenceSequence(cache.blocks, blocks)
     ) {
       return cache.blocks
     }

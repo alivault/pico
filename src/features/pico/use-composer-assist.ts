@@ -157,11 +157,12 @@ function sameSlashMenuState(
     left.rawValue !== right.rawValue ||
     left.name !== right.name ||
     left.args !== right.args ||
-    left.hasArguments !== right.hasArguments ||
-    left.commands.length !== right.commands.length
+    left.hasArguments !== right.hasArguments
   ) {
     return false
   }
+
+  if (left.commands.length !== right.commands.length) return false
 
   return left.commands.every((command, index) => {
     const other = right.commands[index]

@@ -57,6 +57,10 @@ import { cn } from "@/lib/utils"
 type GitCommitDiffData = Extract<GitCommitDiffResponse, { ok: true }>
 type CommitDiffStyle = "unified" | "split"
 
+const EMPTY_RIGHT_SIDEBAR_FILE_TABS: NonNullable<
+  RightSidebarProps["fileTabs"]
+> = []
+
 function gitCommitDiffTabKey(
   commit: string,
   mode: GitCommitDiffMode,
@@ -594,7 +598,7 @@ export function RightSidebar({
   activeFilePath = "",
   activeTab: controlledActiveTab,
   filePreviewPath = "",
-  fileTabs = [],
+  fileTabs = EMPTY_RIGHT_SIDEBAR_FILE_TABS,
   fileTreeCollapsed = false,
   onActiveFileChange,
   onActiveTabChange,

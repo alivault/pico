@@ -23,6 +23,10 @@ type DirectorySessionsIndexesData = Extract<
   { ok: true }
 >
 
+function sidebarTextContains(text: string, query: string) {
+  return text.indexOf(query) >= 0
+}
+
 type AppShellSidebarSnapshot = {
   baseSidebarDirectories: Array<string>
   directoryStateByPath: Map<string, DirectoryState>
@@ -464,7 +468,7 @@ function computeAppShellSidebarDerived(
       continue
     }
 
-    const directoryMatches = directory.toLowerCase().includes(query)
+    const directoryMatches = sidebarTextContains(directory.toLowerCase(), query)
     const filteredSessions = directoryMatches
       ? sessions
       : sessions.filter((entry) => {
@@ -472,7 +476,7 @@ function computeAppShellSidebarDerived(
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
-          return haystack.includes(query)
+          return sidebarTextContains(haystack, query)
         })
 
     if (directoryMatches || filteredSessions.length > 0) {

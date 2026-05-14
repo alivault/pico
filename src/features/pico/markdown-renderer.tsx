@@ -122,6 +122,10 @@ function parseCodeLanguage(className?: string) {
   return match?.[1]
 }
 
+function markdownTextContains(text: string, query: string) {
+  return text.indexOf(query) >= 0
+}
+
 function collectCompleteFencedCodeRanges(markdown: string) {
   const ranges: Array<MarkdownFenceRange> = []
   let lineStart = 0
@@ -144,7 +148,7 @@ function collectCompleteFencedCodeRanges(markdown: string) {
         const char = marker[0] as "`" | "~"
         const info = opening[2] || ""
 
-        if (char !== "`" || !info.includes("`")) {
+        if (char !== "`" || !markdownTextContains(info, "`")) {
           fence = {
             char,
             length: marker.length,

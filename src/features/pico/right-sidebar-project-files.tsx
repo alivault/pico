@@ -107,6 +107,8 @@ type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
 
 const EMPTY_PROJECT_FILE_PATHS: Array<string> = []
 const EMPTY_GIT_CHANGE_FILES: Array<GitChangeFile> = []
+const EMPTY_RIGHT_SIDEBAR_FILE_TABS: Array<string> = []
+const EMPTY_COMMIT_DIFF_TABS: Array<GitCommitDiffTab> = []
 
 const PROJECT_FILE_QUERY_STALE_TIME_MS = 1000 * 30
 const PROJECT_FILE_QUERY_GC_TIME_MS = 1000 * 60 * 10
@@ -1148,9 +1150,9 @@ export function RightSidebarTabStrip({
   activeCommitDiffKey = "",
   activeFilePath,
   activeTab,
-  commitDiffTabs = [],
+  commitDiffTabs = EMPTY_COMMIT_DIFF_TABS,
   filePreviewPath = "",
-  fileTabs = [],
+  fileTabs = EMPTY_RIGHT_SIDEBAR_FILE_TABS,
   onActiveCommitDiffChange,
   onActiveFileChange,
   onActiveTabChange,

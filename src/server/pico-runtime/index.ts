@@ -482,11 +482,12 @@ function sanitizeSessionMessage(message: MessageLike) {
       ? (message.metadata as Record<string, unknown>)
       : undefined
   const sanitizedContent = Array.isArray(message?.content)
-    ? message.content
-        .map((part) =>
-          sanitizeMessageContentPart(part as MessageContentPartLike)
+    ? message.content.flatMap((part) => {
+        const sanitizedPart = sanitizeMessageContentPart(
+          part as MessageContentPartLike
         )
-        .filter((part): part is NonNullable<typeof part> => Boolean(part))
+        return sanitizedPart ? [sanitizedPart] : []
+      })
     : typeof message?.content === "string"
       ? message.content
       : undefined
@@ -695,8 +696,8 @@ function normalizePromptImages(rawImages: unknown) {
   if (!Array.isArray(rawImages)) return []
 
   return rawImages
-    .map((image) => {
-      if (!image || typeof image !== "object") return undefined
+    .flatMap((image) => {
+      if (!image || typeof image !== "object") return []
 
       const mimeType =
         typeof (image as { mimeType?: unknown }).mimeType === "string"
@@ -707,15 +708,16 @@ function normalizePromptImages(rawImages: unknown) {
           ? (image as { data: string }).data.trim()
           : ""
 
-      if (!mimeType || !/^image\//i.test(mimeType) || !data) return undefined
+      if (!mimeType || !/^image\//i.test(mimeType) || !data) return []
 
-      return {
-        type: "image",
-        mimeType,
-        data,
-      } satisfies PromptImageInput
+      return [
+        {
+          type: "image",
+          mimeType,
+          data,
+        } satisfies PromptImageInput,
+      ]
     })
-    .filter((image): image is PromptImageInput => Boolean(image))
     .slice(0, 8)
 }
 
@@ -1022,8 +1024,10 @@ class PicoRuntime {
   private listAvailableModels(entry: SessionEntry) {
     return entry.services.modelRegistry
       .getAvailable()
-      .map((model) => serializeModel(model))
-      .filter((model): model is ModelOption => Boolean(model))
+      .flatMap((model) => {
+        const serializedModel = serializeModel(model)
+        return serializedModel ? [serializedModel] : []
+      })
       .sort((left, right) => {
         const providerCompare = (left.provider || "").localeCompare(
           right.provider || ""
@@ -1380,19 +1384,15 @@ class PicoRuntime {
     allSessions: Array<SessionListInfoLike>,
     directoryPath: string
   ) {
-    const sessions = allSessions
-      .filter((entry) => entry.cwd === directoryPath)
-      .map((entry) => ({ ...entry }))
+    const sessions = allSessions.flatMap((entry) =>
+      entry.cwd === directoryPath ? [{ ...entry }] : []
+    )
 
     const byPath = new Map(
-      sessions
-        .filter((entry) => entry.path)
-        .map((entry) => [entry.path as string, entry])
+      sessions.flatMap((entry) => (entry.path ? [[entry.path, entry]] : []))
     )
     const byId = new Map(
-      sessions
-        .filter((entry) => entry.id)
-        .map((entry) => [entry.id as string, entry])
+      sessions.flatMap((entry) => (entry.id ? [[entry.id, entry]] : []))
     )
 
     for (const entry of this.sessionEntries.values()) {
@@ -1429,9 +1429,9 @@ class PicoRuntime {
 
   private buildStreamingPaths() {
     return new Set(
-      [...this.sessionEntries.values()]
-        .filter((entry) => this.getEntryStreamingState(entry))
-        .map((entry) => this.getSessionPath(entry))
+      [...this.sessionEntries.values()].flatMap((entry) =>
+        this.getEntryStreamingState(entry) ? [this.getSessionPath(entry)] : []
+      )
     )
   }
 
@@ -2847,13 +2847,15 @@ class PicoRuntime {
       streamingBehavior?: "steer" | "followUp"
       text: string
     }> = Array.isArray(pendingMessagesUpdate)
-      ? pendingMessagesUpdate
-          .map((message) => {
-            const hasImages = hasOwnProperty(message, "images")
-            const hasText = hasOwnProperty(message, "text")
-            return {
-              pendingId:
-                typeof message?.pendingId === "string" ? message.pendingId : "",
+      ? pendingMessagesUpdate.flatMap((message) => {
+          const pendingId =
+            typeof message?.pendingId === "string" ? message.pendingId : ""
+          if (!pendingId) return []
+          const hasImages = hasOwnProperty(message, "images")
+          const hasText = hasOwnProperty(message, "text")
+          return [
+            {
+              pendingId,
               hasImages,
               hasText,
               images: hasImages ? normalizePromptImages(message?.images) : [],
@@ -2864,9 +2866,9 @@ class PicoRuntime {
                 hasText && typeof message?.text === "string"
                   ? message.text
                   : "",
-            }
-          })
-          .filter((message) => Boolean(message.pendingId))
+            },
+          ]
+        })
       : []
 
     if (normalizedUpdates.length !== pendingMessages.length) {
@@ -3996,10 +3998,10 @@ class PicoRuntime {
     return {
       leafId,
       streamingEntryId,
-      tree: (manager.getTree() || [])
-        .map((node) => serializeSessionTreeNode(node))
-        .filter((node): node is TreeNode => Boolean(node))
-        .map((node) => markStreamingNode(node)),
+      tree: (manager.getTree() || []).flatMap((node) => {
+        const treeNode = serializeSessionTreeNode(node)
+        return treeNode ? [markStreamingNode(treeNode)] : []
+      }),
     }
   }
 
@@ -4397,15 +4399,15 @@ class PicoRuntime {
     const previousPath = resolvePath(sessionPath)
     const previousEntry = loadedEntries[0]
     const previousCwd = previousEntry?.cwd || ""
-    const affectedContexts = [...this.contexts.values()]
-      .map((context) => ({
-        context,
-        wasActive: loadedEntries.some(
-          (entry) => context.activeKey === entry.key
-        ),
-        wasDraft: loadedEntries.some((entry) => context.draftKey === entry.key),
-      }))
-      .filter((entry) => entry.wasActive || entry.wasDraft)
+    const affectedContexts = [...this.contexts.values()].flatMap((context) => {
+      const wasActive = loadedEntries.some(
+        (entry) => context.activeKey === entry.key
+      )
+      const wasDraft = loadedEntries.some(
+        (entry) => context.draftKey === entry.key
+      )
+      return wasActive || wasDraft ? [{ context, wasActive, wasDraft }] : []
+    })
 
     const nextPath = await this.writeMovedSessionFile(
       previousPath,
@@ -4521,32 +4523,35 @@ class PicoRuntime {
     )
     const streamingPaths = this.buildStreamingPaths()
     const activeKeys = new Set(
-      [...this.contexts.values()].map((ctx) => ctx.activeKey).filter(Boolean)
+      [...this.contexts.values()].flatMap((ctx) =>
+        ctx.activeKey ? [ctx.activeKey] : []
+      )
     )
     const activePaths = new Set(
-      [...this.sessionEntries.values()]
-        .filter((entry) => activeKeys.has(entry.key))
-        .map((entry) => this.getSessionPath(entry))
+      [...this.sessionEntries.values()].flatMap((entry) =>
+        activeKeys.has(entry.key) ? [this.getSessionPath(entry)] : []
+      )
     )
     const includeActiveSession = body.includeActiveSession === true
 
-    const matchingSessions = directorySessions
-      .map((entry) => {
-        const activityAt =
-          normalizeModifiedTimestamp(entry.lastUserMessageAt) ||
-          normalizeModifiedTimestamp(entry.modified)
-        return {
-          ...this.serializeSessionListEntry(entry, context, streamingPaths),
-          activityAt,
-        }
-      })
-      .filter((entry) => {
-        if (!entry.path) return false
-        if (streamingPaths.has(entry.path)) return false
-        if (!includeActiveSession && activePaths.has(entry.path)) return false
-        const activityTime = modifiedTimestampValue(entry.activityAt)
-        return activityTime > 0 && activityTime < cutoffTime
-      })
+    const matchingSessions = directorySessions.flatMap((entry) => {
+      const activityAt =
+        normalizeModifiedTimestamp(entry.lastUserMessageAt) ||
+        normalizeModifiedTimestamp(entry.modified)
+      const serializedEntry = {
+        ...this.serializeSessionListEntry(entry, context, streamingPaths),
+        activityAt,
+      }
+      if (!serializedEntry.path) return []
+      if (streamingPaths.has(serializedEntry.path)) return []
+      if (!includeActiveSession && activePaths.has(serializedEntry.path)) {
+        return []
+      }
+      const activityTime = modifiedTimestampValue(serializedEntry.activityAt)
+      return activityTime > 0 && activityTime < cutoffTime
+        ? [serializedEntry]
+        : []
+    })
 
     if (body.dryRun !== false) {
       return {
@@ -4559,18 +4564,20 @@ class PicoRuntime {
       }
     }
 
-    const deletedSessionIds = matchingSessions
-      .map((session) => session.id)
-      .filter((id): id is string => Boolean(id))
-    const matchingPaths = matchingSessions
-      .map((session) => session.path)
-      .filter((path): path is string => Boolean(path))
+    const deletedSessionIds = matchingSessions.flatMap((session) =>
+      session.id ? [session.id] : []
+    )
+    const matchingPaths = matchingSessions.flatMap((session) =>
+      session.path ? [session.path] : []
+    )
     const matchingPathSet = new Set(matchingPaths)
 
     await Promise.all(
-      [...this.sessionEntries.values()]
-        .filter((entry) => matchingPathSet.has(this.getSessionPath(entry)))
-        .map((entry) => this.disposeSessionEntry(entry))
+      [...this.sessionEntries.values()].flatMap((entry) =>
+        matchingPathSet.has(this.getSessionPath(entry))
+          ? [this.disposeSessionEntry(entry)]
+          : []
+      )
     )
 
     for (const ctx of this.contexts.values()) {
@@ -4601,10 +4608,11 @@ class PicoRuntime {
   async deleteSessions(request: Request, body: { paths?: unknown }) {
     const { context } = await this.resolveRequest(request)
     const paths = Array.isArray(body.paths)
-      ? body.paths
-          .filter((path): path is string => typeof path === "string")
-          .map((path) => path.trim())
-          .filter(Boolean)
+      ? body.paths.flatMap((path) => {
+          if (typeof path !== "string") return []
+          const trimmedPath = path.trim()
+          return trimmedPath ? [trimmedPath] : []
+        })
       : []
     const sessionPaths = [...new Set(paths)]
     if (sessionPaths.length === 0) {
@@ -4743,16 +4751,22 @@ class PicoRuntime {
       .sort((left, right) => left.name.localeCompare(right.name))
 
     const apiKeyOptions = Array.from(providerIds)
-      .filter((providerId) => {
-        if (BUILT_IN_API_KEY_LOGIN_PROVIDERS.has(providerId)) return true
-        return !oauthProviderIds.has(providerId)
+      .flatMap((providerId) => {
+        if (
+          !BUILT_IN_API_KEY_LOGIN_PROVIDERS.has(providerId) &&
+          oauthProviderIds.has(providerId)
+        ) {
+          return []
+        }
+        return [
+          {
+            id: providerId,
+            name: getApiKeyProviderDisplayName(providerId),
+            authType: "api_key" as const,
+            ...authStatus(providerId),
+          },
+        ]
       })
-      .map((providerId) => ({
-        id: providerId,
-        name: getApiKeyProviderDisplayName(providerId),
-        authType: "api_key" as const,
-        ...authStatus(providerId),
-      }))
       .sort((left, right) => left.name.localeCompare(right.name))
 
     const nameByProvider = new Map(

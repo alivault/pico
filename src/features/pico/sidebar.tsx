@@ -321,9 +321,10 @@ function SidebarSessionTime({
 }
 
 function directoryOrderEqual(left: Array<string>, right: Array<string>) {
-  if (left.length !== right.length) return false
-
-  return left.every((directory, index) => directory === right[index])
+  return (
+    left.length === right.length &&
+    left.every((directory, index) => directory === right[index])
+  )
 }
 
 type CollapsedDirectoryState = Record<string, boolean>

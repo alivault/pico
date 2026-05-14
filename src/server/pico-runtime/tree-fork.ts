@@ -249,9 +249,12 @@ export function serializeSessionTreeNode(
     serialized.entry.name = typeof entry.name === "string" ? entry.name : ""
   }
 
-  serialized.children = (Array.isArray(node.children) ? node.children : [])
-    .map((child) => serializeSessionTreeNode(child))
-    .filter((child): child is TreeNode => Boolean(child))
+  serialized.children = (
+    Array.isArray(node.children) ? node.children : []
+  ).flatMap((child) => {
+    const treeNode = serializeSessionTreeNode(child)
+    return treeNode ? [treeNode] : []
+  })
 
   return serialized
 }
@@ -259,13 +262,12 @@ export function serializeSessionTreeNode(
 export function extractForkableUserMessages(entry: ForkableSessionEntry) {
   const messages = entry.session.getUserMessagesForForking?.()
   if (Array.isArray(messages) && messages.length > 0) {
-    return messages
-      .map((message) => ({
-        entryId:
-          typeof message.entryId === "string" ? message.entryId.trim() : "",
-        text: typeof message.text === "string" ? message.text.trim() : "",
-      }))
-      .filter((message) => Boolean(message.entryId && message.text))
+    return messages.flatMap((message) => {
+      const entryId =
+        typeof message.entryId === "string" ? message.entryId.trim() : ""
+      const text = typeof message.text === "string" ? message.text.trim() : ""
+      return entryId && text ? [{ entryId, text }] : []
+    })
   }
 
   const manager = entry.session.sessionManager
@@ -314,9 +316,9 @@ export async function createForkedInMemorySessionManager(options: {
     throw new Error(`Entry ${leafId} not found`)
   }
 
-  const pathWithoutLabels = branchEntries
-    .filter((branchEntry) => branchEntry?.type !== "label")
-    .map((branchEntry) => cloneSessionData(branchEntry))
+  const pathWithoutLabels = branchEntries.flatMap((branchEntry) =>
+    branchEntry?.type !== "label" ? [cloneSessionData(branchEntry)] : []
+  )
   const header = cloneSessionData(
     sourceManager.getHeader?.() ?? nextManager.fileEntries?.[0]
   )
