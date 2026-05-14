@@ -119,6 +119,8 @@ export class GitWatchManager {
 
   private async resolveDirectory(state: DirectoryWatchState) {
     const generation = state.generation
+    if (this.directories.get(state.cwd) !== state) return
+
     const repository = await resolveDirectoryGitRepository(state.cwd).catch(
       () => null
     )

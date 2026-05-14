@@ -167,6 +167,14 @@ function storeGitHistoryPanelHeight(height: number) {
   )
 }
 
+function subscribeSidebarVerticalResizeCursor() {
+  return () => {}
+}
+
+function getServerSidebarVerticalResizeCursor(): SidebarVerticalResizeCursor {
+  return "row-resize"
+}
+
 function reviewFileValue(file: GitChangeFile) {
   return `${file.status}:${file.previousPath || ""}:${file.path}`
 }
@@ -207,8 +215,11 @@ export function FileReviewContent({
   >(() => readStoredGitHistoryPanelHeight())
   const [defaultHistoryPanelHeight, setDefaultHistoryPanelHeight] =
     React.useState<number | undefined>(undefined)
-  const [verticalResizeCursor, setVerticalResizeCursor] =
-    React.useState<SidebarVerticalResizeCursor>("row-resize")
+  const verticalResizeCursor = React.useSyncExternalStore(
+    subscribeSidebarVerticalResizeCursor,
+    getSidebarVerticalResizeCursor,
+    getServerSidebarVerticalResizeCursor
+  )
   const [openFiles, setOpenFiles] = React.useState<Array<string>>([])
   const [stickyReviewFileValue, setStickyReviewFileValue] = React.useState("")
   const [historyHeaderShadowed, setHistoryHeaderShadowed] =
@@ -242,10 +253,6 @@ export function FileReviewContent({
     setStickyReviewFileValue("")
     setHistoryHeaderShadowed(false)
   }, [normalizedCwd])
-
-  React.useEffect(() => {
-    setVerticalResizeCursor(getSidebarVerticalResizeCursor())
-  }, [])
 
   const updateStickyReviewFileHeader = (
     scrollElement: HTMLDivElement | null

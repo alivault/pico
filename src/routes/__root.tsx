@@ -97,48 +97,60 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   )
 }
 
-function AppTanStackDevtools() {
-  const [isReady, setIsReady] = React.useState(false)
+function subscribeTanStackDevtoolsReady() {
+  return () => {}
+}
 
-  React.useEffect(() => {
-    try {
-      const defaultsApplied = window.localStorage.getItem(
-        TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY
+function getTanStackDevtoolsReadySnapshot() {
+  try {
+    const defaultsApplied = window.localStorage.getItem(
+      TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY
+    )
+
+    if (defaultsApplied !== "true") {
+      const rawSettings = window.localStorage.getItem(
+        TANSTACK_DEVTOOLS_SETTINGS_KEY
       )
+      const parsedSettings = rawSettings
+        ? (JSON.parse(rawSettings) as unknown)
+        : undefined
+      const existingSettings =
+        parsedSettings &&
+        typeof parsedSettings === "object" &&
+        !Array.isArray(parsedSettings)
+          ? parsedSettings
+          : {}
 
-      if (defaultsApplied !== "true") {
-        const rawSettings = window.localStorage.getItem(
-          TANSTACK_DEVTOOLS_SETTINGS_KEY
-        )
-        const parsedSettings = rawSettings
-          ? (JSON.parse(rawSettings) as unknown)
-          : undefined
-        const existingSettings =
-          parsedSettings &&
-          typeof parsedSettings === "object" &&
-          !Array.isArray(parsedSettings)
-            ? parsedSettings
-            : {}
-
-        window.localStorage.setItem(
-          TANSTACK_DEVTOOLS_SETTINGS_KEY,
-          JSON.stringify({
-            ...existingSettings,
-            openHotkey: TANSTACK_DEVTOOLS_CONFIG.openHotkey,
-            triggerHidden: TANSTACK_DEVTOOLS_CONFIG.triggerHidden,
-          })
-        )
-        window.localStorage.setItem(
-          TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY,
-          "true"
-        )
-      }
-    } catch {
-      // Ignore unavailable localStorage or malformed persisted devtools settings.
+      window.localStorage.setItem(
+        TANSTACK_DEVTOOLS_SETTINGS_KEY,
+        JSON.stringify({
+          ...existingSettings,
+          openHotkey: TANSTACK_DEVTOOLS_CONFIG.openHotkey,
+          triggerHidden: TANSTACK_DEVTOOLS_CONFIG.triggerHidden,
+        })
+      )
+      window.localStorage.setItem(
+        TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY,
+        "true"
+      )
     }
+  } catch {
+    // Ignore unavailable localStorage or malformed persisted devtools settings.
+  }
 
-    setIsReady(true)
-  }, [])
+  return true
+}
+
+function getTanStackDevtoolsServerSnapshot() {
+  return false
+}
+
+function AppTanStackDevtools() {
+  const isReady = React.useSyncExternalStore(
+    subscribeTanStackDevtoolsReady,
+    getTanStackDevtoolsReadySnapshot,
+    getTanStackDevtoolsServerSnapshot
+  )
 
   if (!isReady) return null
 

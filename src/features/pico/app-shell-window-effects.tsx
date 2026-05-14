@@ -25,6 +25,53 @@ import type { SessionDoneEvent } from "@/lib/pico/api"
 const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_STREAMING_INTERVAL_MS = 500
 
+function getIsPageForeground() {
+  if (typeof document === "undefined") return true
+
+  return document.visibilityState === "visible" && document.hasFocus()
+}
+
+function getWindowTitleUnreadCount(
+  sidebarUnreadVersion: string,
+  backgroundCurrentSessionUnreadKey: string
+) {
+  const unreadKeys = new Set(
+    sidebarUnreadVersion ? sidebarUnreadVersion.split("\n") : []
+  )
+
+  if (backgroundCurrentSessionUnreadKey) {
+    unreadKeys.add(backgroundCurrentSessionUnreadKey)
+  }
+
+  return unreadKeys.size
+}
+
+function setPicoDocumentTitle({
+  backgroundCurrentSessionUnreadKey,
+  currentPageTitle,
+  sessionStreaming,
+  sidebarUnreadVersion,
+  titleStreamingFrameIndex,
+}: {
+  backgroundCurrentSessionUnreadKey: string
+  currentPageTitle: string
+  sessionStreaming: boolean
+  sidebarUnreadVersion: string
+  titleStreamingFrameIndex: number
+}) {
+  const streamingPrefix = sessionStreaming
+    ? `${TITLE_STREAMING_FRAMES[titleStreamingFrameIndex]} `
+    : ""
+  const nextTitle = `${streamingPrefix}${currentPageTitle}`
+  const unreadSessionCount = getWindowTitleUnreadCount(
+    sidebarUnreadVersion,
+    backgroundCurrentSessionUnreadKey
+  )
+
+  document.title =
+    unreadSessionCount > 0 ? `(${unreadSessionCount}) ${nextTitle}` : nextTitle
+}
+
 export function AppShellWindowEffectsHost({
   isSessionViewLoading,
   loadingDisplaySessionTitle,
@@ -132,24 +179,63 @@ function AppShellWindowEffects({
   onConsumeSessionDoneEvents: (ids: Array<string>) => void
   onSelectSession: (nextSessionId?: string) => void
 }) {
-  const [isPageForeground, setIsPageForeground] = React.useState(() =>
-    typeof document === "undefined"
-      ? true
-      : document.visibilityState === "visible" && document.hasFocus()
+  const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
+    snapshot.derived.sidebarSessions
+      .flatMap((session) => {
+        if (!session.unread) return []
+        const key = sessionNotificationKey(session)
+        return key ? [key] : []
+      })
+      .sort()
+      .join("\n")
   )
-  const [titleStreamingFrameIndex, setTitleStreamingFrameIndex] =
-    React.useState(0)
-  const [
-    backgroundCurrentSessionUnreadKey,
-    setBackgroundCurrentSessionUnreadKey,
-  ] = React.useState("")
+  const isPageForegroundRef = React.useRef(getIsPageForeground())
+  const titleStreamingFrameIndexRef = React.useRef(0)
+  const backgroundCurrentSessionUnreadKeyRef = React.useRef("")
+  const titleSnapshotRef = React.useRef({
+    currentPageTitle,
+    sessionStreaming,
+    sidebarUnreadVersion,
+  })
   const processedSessionDoneEventIdsRef = React.useRef<Set<string>>(new Set())
+
+  const updateDocumentTitle = () => {
+    setPicoDocumentTitle({
+      ...titleSnapshotRef.current,
+      backgroundCurrentSessionUnreadKey:
+        backgroundCurrentSessionUnreadKeyRef.current,
+      titleStreamingFrameIndex: titleStreamingFrameIndexRef.current,
+    })
+  }
+
+  React.useEffect(() => {
+    titleSnapshotRef.current = {
+      currentPageTitle,
+      sessionStreaming,
+      sidebarUnreadVersion,
+    }
+    updateDocumentTitle()
+  }, [currentPageTitle, sessionStreaming, sidebarUnreadVersion])
 
   React.useEffect(() => {
     const syncPageForeground = () => {
-      setIsPageForeground(
-        document.visibilityState === "visible" && document.hasFocus()
-      )
+      const isPageForeground = getIsPageForeground()
+      isPageForegroundRef.current = isPageForeground
+
+      if (isPageForeground || !activeSessionNotificationKey) {
+        backgroundCurrentSessionUnreadKeyRef.current = ""
+        updateDocumentTitle()
+        return
+      }
+
+      const currentBackgroundKey = backgroundCurrentSessionUnreadKeyRef.current
+      if (
+        currentBackgroundKey &&
+        currentBackgroundKey !== activeSessionNotificationKey
+      ) {
+        backgroundCurrentSessionUnreadKeyRef.current = ""
+        updateDocumentTitle()
+      }
     }
 
     syncPageForeground()
@@ -162,29 +248,20 @@ function AppShellWindowEffects({
       window.removeEventListener("blur", syncPageForeground)
       document.removeEventListener("visibilitychange", syncPageForeground)
     }
-  }, [])
-
-  React.useEffect(() => {
-    if (isPageForeground || !activeSessionNotificationKey) {
-      setBackgroundCurrentSessionUnreadKey("")
-      return
-    }
-
-    setBackgroundCurrentSessionUnreadKey((current) =>
-      current && current !== activeSessionNotificationKey ? "" : current
-    )
-  }, [activeSessionNotificationKey, isPageForeground])
+  }, [activeSessionNotificationKey])
 
   React.useEffect(() => {
     if (!sessionStreaming) {
-      setTitleStreamingFrameIndex(0)
+      titleStreamingFrameIndexRef.current = 0
+      updateDocumentTitle()
       return
     }
 
     const intervalId = window.setInterval(() => {
-      setTitleStreamingFrameIndex(
-        (current) => (current + 1) % TITLE_STREAMING_FRAMES.length
-      )
+      titleStreamingFrameIndexRef.current =
+        (titleStreamingFrameIndexRef.current + 1) %
+        TITLE_STREAMING_FRAMES.length
+      updateDocumentTitle()
     }, TITLE_STREAMING_INTERVAL_MS)
 
     return () => {
@@ -218,10 +295,12 @@ function AppShellWindowEffects({
       const label = doneEventLabel(event)
       const body = event.cwd || sessionCwd || "Open Pico to continue"
       const tag = event.sessionPath || event.sessionId || event.id
+      const isPageForeground = isPageForegroundRef.current
 
       if (matchesCurrentSession) {
         if (!isPageForeground && key) {
-          setBackgroundCurrentSessionUnreadKey(key)
+          backgroundCurrentSessionUnreadKeyRef.current = key
+          updateDocumentTitle()
         }
 
         if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
@@ -280,51 +359,12 @@ function AppShellWindowEffects({
   }, [
     activeSessionKey,
     activeSessionNotificationKey,
-    isPageForeground,
     onConsumeSessionDoneEvents,
     onSelectSession,
     sessionCwd,
     sessionDoneDesktopNotificationsEnabled,
     sessionDoneEvents,
     sessionDoneSoundEnabled,
-  ])
-
-  const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
-    snapshot.derived.sidebarSessions
-      .flatMap((session) => {
-        if (!session.unread) return []
-        const key = sessionNotificationKey(session)
-        return key ? [key] : []
-      })
-      .sort()
-      .join("\n")
-  )
-  const unreadSessionCount = (() => {
-    const unreadKeys = new Set(
-      sidebarUnreadVersion ? sidebarUnreadVersion.split("\n") : []
-    )
-
-    if (backgroundCurrentSessionUnreadKey) {
-      unreadKeys.add(backgroundCurrentSessionUnreadKey)
-    }
-
-    return unreadKeys.size
-  })()
-
-  React.useEffect(() => {
-    const streamingPrefix = sessionStreaming
-      ? `${TITLE_STREAMING_FRAMES[titleStreamingFrameIndex]} `
-      : ""
-    const nextTitle = `${streamingPrefix}${currentPageTitle}`
-    document.title =
-      unreadSessionCount > 0
-        ? `(${unreadSessionCount}) ${nextTitle}`
-        : nextTitle
-  }, [
-    currentPageTitle,
-    sessionStreaming,
-    titleStreamingFrameIndex,
-    unreadSessionCount,
   ])
 
   return null

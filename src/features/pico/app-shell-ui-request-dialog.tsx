@@ -533,7 +533,10 @@ function AppShellUiRequestDialog({
   onAuthBack,
 }: AppShellUiRequestDialogProps) {
   const isMobile = useIsMobile()
-  const [authManualMode, setAuthManualMode] = React.useState(false)
+  const [authManualMode, setAuthManualMode] = React.useReducer(
+    (_current: boolean, next: boolean) => next,
+    false
+  )
 
   React.useEffect(() => {
     setAuthManualMode(false)

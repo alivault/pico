@@ -1430,11 +1430,27 @@ function readStoredProjectFileTreeWidth() {
   return clampProjectFileTreeWidth(Number(storedWidth))
 }
 
+const projectFileTreeWidthListeners = new Set<() => void>()
+
+function subscribeProjectFileTreeWidth(listener: () => void) {
+  projectFileTreeWidthListeners.add(listener)
+  return () => {
+    projectFileTreeWidthListeners.delete(listener)
+  }
+}
+
+function readServerProjectFileTreeWidth() {
+  return PROJECT_FILE_TREE_DEFAULT_WIDTH
+}
+
 function storeProjectFileTreeWidth(width: number) {
   safeLocalStorageSetItem(
     RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
     String(clampProjectFileTreeWidth(width))
   )
+  for (const listener of projectFileTreeWidthListeners) {
+    listener()
+  }
 }
 
 function FileTreeResizeHandle({
@@ -1514,18 +1530,14 @@ export function ProjectFileTreePane({
   onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
   previewMode: ProjectFilesPreviewMode
 }) {
-  const [fileTreeWidth, setFileTreeWidthState] = React.useState(
-    PROJECT_FILE_TREE_DEFAULT_WIDTH
+  const fileTreeWidth = React.useSyncExternalStore(
+    subscribeProjectFileTreeWidth,
+    readStoredProjectFileTreeWidth,
+    readServerProjectFileTreeWidth
   )
 
-  React.useEffect(() => {
-    setFileTreeWidthState(readStoredProjectFileTreeWidth())
-  }, [])
-
   const setFileTreeWidth = (nextWidth: number) => {
-    const width = clampProjectFileTreeWidth(nextWidth)
-    setFileTreeWidthState(width)
-    storeProjectFileTreeWidth(width)
+    storeProjectFileTreeWidth(nextWidth)
   }
 
   return (

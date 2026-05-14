@@ -1666,11 +1666,32 @@ function AppShellSessionWorkspace({
       }
     }
   }, [focusPromptRef])
-  const [promptFocusRequest, setPromptFocusRequest] = React.useState({
+  const promptFocusRequestRef = React.useRef({
     sessionId: "",
     nonce: 0,
   })
+  const promptFocusRequestTimeoutRef = React.useRef<number | null>(null)
   const lastAutoFocusedSessionKeyRef = React.useRef<string | null>(null)
+
+  const schedulePromptFocusRequest = () => {
+    if (promptFocusRequestTimeoutRef.current !== null) {
+      window.clearTimeout(promptFocusRequestTimeoutRef.current)
+    }
+
+    promptFocusRequestTimeoutRef.current = window.setTimeout(() => {
+      promptFocusRequestTimeoutRef.current = null
+      focusPromptRef.current()
+    }, 50)
+  }
+
+  React.useEffect(() => {
+    return () => {
+      if (promptFocusRequestTimeoutRef.current !== null) {
+        window.clearTimeout(promptFocusRequestTimeoutRef.current)
+        promptFocusRequestTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   React.useEffect(() => {
     if (
@@ -1708,6 +1729,7 @@ function AppShellSessionWorkspace({
   ])
 
   React.useEffect(() => {
+    const promptFocusRequest = promptFocusRequestRef.current
     if (!promptFocusRequest.nonce || isSessionViewLoading) return
     if (
       promptFocusRequest.sessionId &&
@@ -1716,19 +1738,8 @@ function AppShellSessionWorkspace({
       return
     }
 
-    const timeoutId = window.setTimeout(() => {
-      focusPromptRef.current()
-    }, 50)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [
-    focusPromptRef,
-    isSessionViewLoading,
-    promptFocusRequest,
-    sessionState.sessionId,
-  ])
+    schedulePromptFocusRequest()
+  }, [isSessionViewLoading, sessionState.sessionId])
 
   const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
     setSessionDoneSoundEnabled(enabled)
@@ -1804,10 +1815,10 @@ function AppShellSessionWorkspace({
       pendingRouteSessionPathRef.current =
         options?.sessionPath?.trim() || undefined
       if (nextSessionId) {
-        setPromptFocusRequest((current) => ({
+        promptFocusRequestRef.current = {
           sessionId: nextSessionId,
-          nonce: current.nonce + 1,
-        }))
+          nonce: promptFocusRequestRef.current.nonce + 1,
+        }
       }
       setLoadingSessionId((current) => {
         if (!nextSessionId) {
