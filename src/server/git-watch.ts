@@ -124,9 +124,9 @@ export class GitWatchManager {
     const repository = await resolveDirectoryGitRepository(state.cwd).catch(
       () => null
     )
+    if (!repository) return
     if (this.directories.get(state.cwd) !== state) return
     if (state.generation !== generation) return
-    if (!repository) return
 
     const repoKey = repositoryWatchKey(repository)
     state.repoKey = repoKey
