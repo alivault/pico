@@ -293,28 +293,14 @@ function toolCallText(
   }
 }
 
-function toolEditDetailsText(
-  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number],
-  key: "patch" | "diff"
-) {
-  if (block.type !== "tool" || block.name !== "edit") return ""
-
-  if (!block.details || typeof block.details !== "object") return ""
-
-  const details = block.details as Partial<Record<"patch" | "diff", unknown>>
-  return typeof details[key] === "string" ? details[key].trimEnd() : ""
-}
-
 function toolPatchText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
-  return toolEditDetailsText(block, "patch")
-}
+  if (block.type !== "tool" || block.name !== "edit") return ""
+  if (!block.details || typeof block.details !== "object") return ""
 
-function toolLegacyDiffText(
-  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
-) {
-  return toolEditDetailsText(block, "diff")
+  const details = block.details as Partial<Record<"patch", unknown>>
+  return typeof details.patch === "string" ? details.patch.trimEnd() : ""
 }
 
 function toolOutputText(
@@ -323,7 +309,7 @@ function toolOutputText(
   if (block.type !== "tool") return ""
 
   const parts: Array<string> = []
-  const diff = toolPatchText(block) || toolLegacyDiffText(block)
+  const diff = toolPatchText(block)
   const output = block.output.trimEnd()
 
   if (diff) {
@@ -1233,7 +1219,7 @@ function buildToolBlockHeaderSnapshot(
     summary: toolSummary(block),
     editStats:
       block.name === "edit" && !block.running
-        ? getEditDiffStats(toolPatchText(block) || toolLegacyDiffText(block))
+        ? getEditDiffStats(toolPatchText(block))
         : null,
     openStateKey: rememberedToolCollapsibleStateKey(block),
   }
@@ -2072,16 +2058,14 @@ function EditToolOutput({
   }
 }) {
   const patch = toolPatchText(block)
-  const legacyDiff = toolLegacyDiffText(block)
-  const diff = patch || legacyDiff
   const output = editToolOutputWithoutSuccessMessage(block.output.trimEnd())
-  const extraOutput = output && output !== diff ? output : ""
+  const extraOutput = output && output !== patch ? output : ""
   const fallbackOutput = editToolOutputWithoutSuccessMessage(
     toolOutputText(block)
   )
   const didSucceed = !block.running && !block.isError
 
-  if (!diff) {
+  if (!patch) {
     return (
       <PlainToolOutput
         isError={block.isError}
@@ -2092,11 +2076,7 @@ function EditToolOutput({
 
   return (
     <div className="space-y-3">
-      {patch ? (
-        <EditDiffBlock isBorderless={didSucceed} patch={patch} />
-      ) : (
-        <PlainToolOutput text={legacyDiff} />
-      )}
+      <EditDiffBlock isBorderless={didSucceed} patch={patch} />
       {extraOutput ? (
         <PlainToolOutput isError={block.isError} text={extraOutput} />
       ) : null}
