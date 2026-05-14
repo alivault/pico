@@ -39,7 +39,7 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
   )
 }
 
-function BreadcrumbLink({
+export function BreadcrumbLink({
   className,
   render,
   ...props
@@ -90,7 +90,7 @@ function BreadcrumbSeparator({
   )
 }
 
-function BreadcrumbEllipsis({
+export function BreadcrumbEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
@@ -115,8 +115,6 @@ export {
   Breadcrumb,
   BreadcrumbList,
   BreadcrumbItem,
-  BreadcrumbLink,
   BreadcrumbPage,
   BreadcrumbSeparator,
-  BreadcrumbEllipsis,
 }

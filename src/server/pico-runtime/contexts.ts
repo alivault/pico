@@ -30,7 +30,7 @@ export function resolveScopeCwd(
   return normalizeSessionScope(scope ?? null, defaultCwd)
 }
 
-export function getSsePayloadText(payload: unknown) {
+function getSsePayloadText(payload: unknown) {
   const json = JSON.stringify(payload)
   const lines = json.split(/\r?\n/)
   return `${lines.map((line) => `data: ${line}`).join("\n")}\n\n`

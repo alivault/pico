@@ -132,7 +132,7 @@ function CommandGroup({
   )
 }
 
-function CommandSeparator({
+export function CommandSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
@@ -193,5 +193,4 @@ export {
   CommandGroup,
   CommandItem,
   CommandShortcut,
-  CommandSeparator,
 }

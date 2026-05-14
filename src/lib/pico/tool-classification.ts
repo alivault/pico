@@ -19,7 +19,7 @@ const SHELL_COMMAND_WRAPPER_NAMES = new Set([
   "time",
 ])
 
-export function normalizeToolArgs(args: unknown) {
+function normalizeToolArgs(args: unknown) {
   if (!args) return undefined
   if (typeof args === "object") {
     return args as Record<string, unknown>
@@ -36,7 +36,7 @@ export function normalizeToolArgs(args: unknown) {
   }
 }
 
-export function getToolArgText(
+function getToolArgText(
   args: Record<string, unknown> | undefined,
   key: string
 ) {
@@ -58,10 +58,7 @@ function toolCommandPreviewFromArgs(args: unknown) {
   )
 }
 
-export function rawShellCommandTextFromTool(
-  name: string | undefined,
-  args: unknown
-) {
+function rawShellCommandTextFromTool(name: string | undefined, args: unknown) {
   if (name !== "bash") return ""
 
   if (typeof args === "string") {
@@ -124,7 +121,7 @@ function shellCommandNameFromSegment(segment: string) {
   return ""
 }
 
-export function exploreShellCommandNameFromTool(
+function exploreShellCommandNameFromTool(
   name: string | undefined,
   args: unknown
 ) {

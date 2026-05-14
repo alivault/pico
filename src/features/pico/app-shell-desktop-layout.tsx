@@ -450,16 +450,20 @@ function AppShellDesktopResizeHandle({
         const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
 
         current.onResizeStart?.()
-        document.body.style.userSelect = "none"
-        document.body.style.cursor = cursor
+        Object.assign(document.body.style, {
+          userSelect: "none",
+          cursor,
+        })
 
         const handlePointerMove = (moveEvent: PointerEvent) => {
           resizeTo(startSize + startX - moveEvent.clientX)
         }
         const handlePointerUp = () => {
           cleanupGlobalResizeCursor()
-          document.body.style.userSelect = previousUserSelect
-          document.body.style.cursor = previousCursor
+          Object.assign(document.body.style, {
+            userSelect: previousUserSelect,
+            cursor: previousCursor,
+          })
           document.removeEventListener("pointermove", handlePointerMove)
           document.removeEventListener("pointerup", handlePointerUp)
           document.removeEventListener("pointercancel", handlePointerUp)

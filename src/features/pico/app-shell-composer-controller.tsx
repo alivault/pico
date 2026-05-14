@@ -397,7 +397,6 @@ export function NewSessionComposerSelectors({
             }}
           >
             <Input
-              autoFocus
               value={createBranchName}
               onChange={(event) => setCreateBranchName(event.target.value)}
               placeholder="branch-name"

@@ -139,7 +139,6 @@ export const ComposerPendingMessages = React.memo(
                                 <Textarea
                                   value={editText}
                                   className="min-h-20 resize-none text-base md:text-base"
-                                  autoFocus
                                   placeholder={
                                     message.images.length > 0
                                       ? "Optional text for this image prompt"

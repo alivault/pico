@@ -22,8 +22,9 @@ export function extractMessageText(message: MessageLike | undefined) {
   if (!Array.isArray(content)) return ""
 
   return content
-    .filter((part) => part?.type === "text" && typeof part.text === "string")
-    .map((part) => part.text)
+    .flatMap((part) =>
+      part?.type === "text" && typeof part.text === "string" ? [part.text] : []
+    )
     .join(" ")
     .trim()
 }
@@ -33,14 +34,14 @@ function extractSessionContentText(content: unknown) {
   if (!Array.isArray(content)) return ""
 
   const text = content
-    .filter(
-      (part): part is { type: string; text: string } =>
-        Boolean(part) &&
-        typeof part === "object" &&
-        (part as { type?: unknown }).type === "text" &&
-        typeof (part as { text?: unknown }).text === "string"
+    .flatMap((part) =>
+      part &&
+      typeof part === "object" &&
+      (part as { type?: unknown }).type === "text" &&
+      typeof (part as { text?: unknown }).text === "string"
+        ? [(part as { text: string }).text]
+        : []
     )
-    .map((part) => part.text)
     .join(" ")
     .trim()
 

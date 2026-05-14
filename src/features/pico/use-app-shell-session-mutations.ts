@@ -768,9 +768,10 @@ export function useAppShellSessionMutations({
       if (orderedPaths.length === 0) return false
 
       const deletedKeys = new Set(
-        orderedTargets
-          .map((target) => sessionListEntryKey(target))
-          .filter(Boolean)
+        orderedTargets.flatMap((target) => {
+          const key = sessionListEntryKey(target)
+          return key ? [key] : []
+        })
       )
       const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
       const previousSessionsEvent = getSessionsEvent()

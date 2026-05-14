@@ -101,7 +101,7 @@ export type AppShellComposerSnapshot = {
 export const EMPTY_COMPOSER_IMAGES: Array<PromptImage> = []
 export const EMPTY_COMPOSER_PENDING_MESSAGES: Array<PendingComposerMessage> = []
 
-export function sameComposerPromptImages(
+function sameComposerPromptImages(
   left: Array<PromptImage>,
   right: Array<PromptImage>
 ) {
@@ -120,7 +120,7 @@ export function sameComposerPromptImages(
   return true
 }
 
-export function sameComposerPendingMessages(
+function sameComposerPendingMessages(
   left: Array<PendingComposerMessage>,
   right: Array<PendingComposerMessage>
 ) {

@@ -33,7 +33,6 @@ import {
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
-import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/pico"
 import { cn } from "@/lib/utils"
@@ -238,7 +237,6 @@ function AppShellSessionsDialog({
   onError,
 }: AppShellSessionsDialogProps) {
   const isMobile = useIsMobile()
-  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
   const [query, setQuery] = React.useState("")
   const [scope, setScope] = React.useState<SessionsDialogScope>("current")
   const [stage, setStage] = React.useState<SessionsDialogStage>("browse")
@@ -292,7 +290,7 @@ function AppShellSessionsDialog({
       key: sessionListEntryKey(entry),
     }))
   )
-  const sortedSessionItems = [...flatSessions].sort(
+  const sortedSessionItems = flatSessions.toSorted(
     (left, right) =>
       sessionActivityTime(right.entry) - sessionActivityTime(left.entry)
   )
@@ -490,7 +488,6 @@ function AppShellSessionsDialog({
       className="min-h-0 flex-1"
     >
       <CommandInput
-        autoFocus={shouldAutoFocus}
         value={query}
         onValueChange={setQuery}
         placeholder={
@@ -613,7 +610,6 @@ function AppShellSessionsDialog({
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <Input
-          autoFocus={shouldAutoFocus}
           value={renameValue}
           onChange={(event) => setRenameValue(event.target.value)}
           onKeyDown={(event) => {
@@ -647,6 +643,7 @@ function AppShellSessionsDialog({
 
   const sessionsDeleteBody = (
     <div
+      role="presentation"
       className="flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -705,11 +702,7 @@ function AppShellSessionsDialog({
 
   if (isMobile) {
     return (
-      <Drawer
-        open={open}
-        onOpenChange={onOpenChange}
-        autoFocus={shouldAutoFocus}
-      >
+      <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Sessions</DrawerTitle>

@@ -702,7 +702,7 @@ export function ComposerContextUsageIndicator({
           side="top"
           align="end"
           sideOffset={8}
-          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-secondary px-3 py-3 text-sm text-secondary-foreground"
+          className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-secondary p-3 text-sm text-secondary-foreground"
         >
           {content}
         </PopoverContent>
@@ -717,7 +717,7 @@ export function ComposerContextUsageIndicator({
         side="top"
         align="end"
         sideOffset={8}
-        className="w-72 max-w-none flex-col items-stretch gap-2 rounded-xl px-3 py-3 text-sm"
+        className="w-72 max-w-none flex-col items-stretch gap-2 rounded-xl p-3 text-sm"
       >
         {content}
       </TooltipContent>

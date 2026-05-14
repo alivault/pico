@@ -18,8 +18,6 @@ const SELF_CONTAINED_SETTINGS_MANAGER = Symbol(
   "pico.self-contained-settings-manager"
 )
 
-export { resolvePiSdkDir } from "@/server/pi-sdk-path"
-
 type SessionRuntimeServices = SessionServicesLike & {
   cwd: string
   agentDir: string

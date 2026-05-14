@@ -291,9 +291,11 @@ function AppShellWindowEffects({
 
   const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
     snapshot.derived.sidebarSessions
-      .filter((session) => session.unread)
-      .map((session) => sessionNotificationKey(session))
-      .filter(Boolean)
+      .flatMap((session) => {
+        if (!session.unread) return []
+        const key = sessionNotificationKey(session)
+        return key ? [key] : []
+      })
       .sort()
       .join("\n")
   )

@@ -4,7 +4,10 @@ import type { GitActionResponse } from "@/lib/pico/api"
 
 function formatPushedCommitMessages(messages: Array<string> | undefined) {
   const commitMessages = Array.isArray(messages)
-    ? messages.map((message) => message.trim()).filter(Boolean)
+    ? messages.flatMap((message) => {
+        const trimmedMessage = message.trim()
+        return trimmedMessage ? [trimmedMessage] : []
+      })
     : []
 
   if (commitMessages.length === 0) return undefined

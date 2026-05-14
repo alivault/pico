@@ -312,8 +312,10 @@ export function FileReviewContent({
     const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
     let latestHeight = Math.min(maxHeight, Math.max(minHeight, startHeight))
 
-    document.body.style.cursor = cursor
-    document.body.style.userSelect = "none"
+    Object.assign(document.body.style, {
+      cursor,
+      userSelect: "none",
+    })
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const nextHeight = startHeight - (moveEvent.clientY - startY)
@@ -323,8 +325,10 @@ export function FileReviewContent({
     const handlePointerUp = () => {
       storeGitHistoryPanelHeight(latestHeight)
       cleanupGlobalResizeCursor()
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
+      Object.assign(document.body.style, {
+        cursor: previousCursor,
+        userSelect: previousUserSelect,
+      })
       document.removeEventListener("pointermove", handlePointerMove)
       document.removeEventListener("pointerup", handlePointerUp)
       document.removeEventListener("pointercancel", handlePointerUp)

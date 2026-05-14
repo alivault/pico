@@ -44,7 +44,7 @@ export function formatFolderName(value: string | undefined) {
   return parts[parts.length - 1] || path
 }
 
-export function finishedSessionLabel(title: string) {
+function finishedSessionLabel(title: string) {
   return title !== "New session"
     ? `Session finished: ${title}`
     : "Session finished"

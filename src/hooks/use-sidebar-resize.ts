@@ -243,8 +243,10 @@ export function useSidebarResize({
       window.removeEventListener("pointercancel", handlePointerUp)
       cleanupGlobalResizeCursor?.()
       cancelSidebarWidthPreview(dragState)
-      document.body.style.cursor = dragState.previousCursor
-      document.body.style.userSelect = dragState.previousUserSelect
+      Object.assign(document.body.style, {
+        cursor: dragState.previousCursor,
+        userSelect: dragState.previousUserSelect,
+      })
       if (dragState.moved) optionsRef.current.onResizeActiveChange(false)
       cleanupResizeRef.current = null
     }
@@ -255,8 +257,10 @@ export function useSidebarResize({
       skipNextClickRef.current = true
       optionsRef.current.onResizeActiveChange(true)
       cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
-      document.body.style.cursor = cursor
-      document.body.style.userSelect = "none"
+      Object.assign(document.body.style, {
+        cursor,
+        userSelect: "none",
+      })
     }
 
     const collapseSidebar = (clientX: number) => {

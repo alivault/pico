@@ -28,8 +28,11 @@ function extractSessionListMessageText(message: UnknownRecord) {
   if (!Array.isArray(content)) return ""
 
   return content
-    .filter((part) => isRecord(part) && part.type === "text")
-    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .flatMap((part) =>
+      isRecord(part) && part.type === "text"
+        ? [typeof part.text === "string" ? part.text : ""]
+        : []
+    )
     .join("\n")
 }
 
@@ -144,7 +147,7 @@ export function laterModifiedTimestamp(...values: Array<unknown>) {
   return nextValue
 }
 
-export function normalizeSessionListName(value: unknown) {
+function normalizeSessionListName(value: unknown) {
   const normalized = typeof value === "string" ? normalizeWhitespace(value) : ""
   return normalized || undefined
 }
@@ -205,9 +208,7 @@ export function mergeSessionListEntry(
   return target
 }
 
-export function sessionListLastUserMessageTimestampValue(
-  entry: SessionListInfoLike
-) {
+function sessionListLastUserMessageTimestampValue(entry: SessionListInfoLike) {
   return (
     modifiedTimestampValue(entry.lastUserMessageAt) ||
     modifiedTimestampValue(entry.modified)

@@ -169,25 +169,21 @@ function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
   )
 }
 
-const AppShellConversationFrame = React.forwardRef<
-  AppShellConversationFrameHandle,
-  {
-    autoScrollEnabled: boolean
-    children: React.ReactNode
-    conversationItemsStore: ConversationItemsStore
-    isSessionViewLoading: boolean
-    sessionState: AppShellConversationSessionState
-  }
->(function AppShellConversationFrameImpl(
-  {
-    autoScrollEnabled,
-    children,
-    conversationItemsStore,
-    isSessionViewLoading,
-    sessionState,
-  },
-  ref
-) {
+function AppShellConversationFrame({
+  autoScrollEnabled,
+  children,
+  conversationItemsStore,
+  isSessionViewLoading,
+  ref,
+  sessionState,
+}: {
+  autoScrollEnabled: boolean
+  children: React.ReactNode
+  conversationItemsStore: ConversationItemsStore
+  isSessionViewLoading: boolean
+  ref?: React.Ref<AppShellConversationFrameHandle>
+  sessionState: AppShellConversationSessionState
+}) {
   const {
     bottomRef,
     jumpToNextMessage,
@@ -261,7 +257,7 @@ const AppShellConversationFrame = React.forwardRef<
       ) : null}
     </div>
   )
-})
+}
 
 function AppShellWorkingIndicatorLabel({
   fallbackLabel,
@@ -296,7 +292,7 @@ function AppShellMessagesWorkingIndicator({
     <div
       role="status"
       aria-live="polite"
-      className="flex w-full items-start gap-3 rounded-xl px-1 py-1 text-sm text-muted-foreground"
+      className="flex w-full items-start gap-3 rounded-xl p-1 text-sm text-muted-foreground"
     >
       <span className="mt-0.5 inline-flex items-center justify-center">
         {state.done ? (
@@ -429,7 +425,7 @@ function ConversationAssistantGroupView({
   store: ConversationItemsStore
 }) {
   const itemKeys = useConversationAssistantGroupItemKeys(store, groupKey)
-  const syncAfterConversationContentChange = React.useContext(
+  const syncAfterConversationContentChange = React.use(
     ConversationContentChangeContext
   )
   const assistantMessagesStoreRef =

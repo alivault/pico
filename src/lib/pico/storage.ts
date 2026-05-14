@@ -46,7 +46,7 @@ export const RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY =
   "pico-right-sidebar-file-tree-width"
 export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
   "pico-right-sidebar-history-height"
-export const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
+const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 
 export function createContextId() {
@@ -79,7 +79,7 @@ export function safeLocalStorageSetItem(key: string, value: string) {
   }
 }
 
-export function safeSessionStorageGetItem(key: string) {
+function safeSessionStorageGetItem(key: string) {
   try {
     return window.sessionStorage.getItem(key)
   } catch {
@@ -87,7 +87,7 @@ export function safeSessionStorageGetItem(key: string) {
   }
 }
 
-export function safeSessionStorageSetItem(key: string, value: string) {
+function safeSessionStorageSetItem(key: string, value: string) {
   try {
     window.sessionStorage.setItem(key, value)
     return true
@@ -140,7 +140,7 @@ export function promptDraftKey(target: PromptDraftTarget = {}) {
   return `draft:${target.cwd?.trim() || "default"}`
 }
 
-export function loadStoredPromptDrafts() {
+function loadStoredPromptDrafts() {
   try {
     const raw = safeSessionStorageGetItem(PROMPT_DRAFTS_STORAGE_KEY)
     if (!raw) return {}
@@ -215,9 +215,10 @@ export function readStoredCollapsedDirectories() {
     if (!parsed || typeof parsed !== "object") return {}
 
     return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([key, value]) => [key.trim(), Boolean(value)])
-        .filter(([key]) => Boolean(key))
+      Object.entries(parsed).flatMap(([key, value]) => {
+        const normalizedKey = key.trim()
+        return normalizedKey ? [[normalizedKey, Boolean(value)]] : []
+      })
     ) as Record<string, boolean>
   } catch {
     return {}
@@ -263,7 +264,7 @@ export function normalizeAppliedThemeClass(value: unknown): AppliedThemeClass {
     : "light"
 }
 
-export function resolvedThemeMode(
+function resolvedThemeMode(
   mode: ThemeColorMode,
   systemTheme?: string
 ): ResolvedThemeMode {

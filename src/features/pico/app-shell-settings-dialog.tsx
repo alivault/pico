@@ -151,7 +151,7 @@ type AppShellSettingsDialogProps = {
   onLogoutProviders: () => void
 }
 
-export function AppShellSettingsDialog({
+function AppShellSettingsDialog({
   open,
   onOpenChange,
   currentTheme,
@@ -366,7 +366,6 @@ export function AppShellSettingsDialog({
       className="min-h-0 flex-1"
     >
       <CommandInput
-        autoFocus={!isMobile}
         value={query}
         onValueChange={setQuery}
         placeholder="Search settings"
@@ -406,6 +405,7 @@ export function AppShellSettingsDialog({
 
   const settingsThemeBody = (
     <div
+      role="presentation"
       className="flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key !== "Escape") return
@@ -439,7 +439,6 @@ export function AppShellSettingsDialog({
         className="min-h-0 flex-1 rounded-none!"
       >
         <CommandInput
-          autoFocus={!isMobile}
           value={themeQuery}
           onValueChange={setThemeQuery}
           placeholder="Search themes"

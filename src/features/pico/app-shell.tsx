@@ -231,20 +231,17 @@ type AppShellSessionWorkspaceProps = {
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
 }
 
-const AppShellSessionWorkspace = React.forwardRef<
-  AppShellSessionWorkspaceHandle,
-  AppShellSessionWorkspaceProps
->(function AppShellSessionWorkspaceImpl(
-  {
-    viewerContextId,
-    sessionId,
-    onSelectSession,
-    sidebar,
-    sidebarStore,
-    sessionSearchInputRef,
-  },
-  ref
-) {
+function AppShellSessionWorkspace({
+  viewerContextId,
+  sessionId,
+  onSelectSession,
+  sidebar,
+  sidebarStore,
+  sessionSearchInputRef,
+  ref,
+}: AppShellSessionWorkspaceProps & {
+  ref?: React.Ref<AppShellSessionWorkspaceHandle>
+}) {
   const queryClient = useQueryClient()
   const initialSessionStateRef = React.useRef<SessionState | null>(null)
   if (!initialSessionStateRef.current) {
@@ -3166,7 +3163,7 @@ const AppShellSessionWorkspace = React.forwardRef<
       />
     </>
   )
-})
+}
 
 export function PicoAppShell({
   sessionId,

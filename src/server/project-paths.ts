@@ -31,11 +31,11 @@ export type CompletionEntry = {
   isDirectory: boolean
 }
 
-export function displayPath(value = "") {
+function displayPath(value = "") {
   return String(value).replace(/\\/g, "/")
 }
 
-export function expandHomeDirectory(inputPath: string) {
+function expandHomeDirectory(inputPath: string) {
   if (inputPath === "~") return os.homedir()
   if (inputPath.startsWith("~/")) return `${os.homedir()}${inputPath.slice(1)}`
   return inputPath

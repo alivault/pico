@@ -9,7 +9,9 @@ function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
 }
 
-function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props) {
+export function ContextMenuPortal({
+  ...props
+}: ContextMenuPrimitive.Portal.Props) {
   return (
     <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />
   )
@@ -158,7 +160,7 @@ function ContextMenuSubContent({
   )
 }
 
-function ContextMenuCheckboxItem({
+export function ContextMenuCheckboxItem({
   className,
   children,
   checked,
@@ -191,7 +193,7 @@ function ContextMenuCheckboxItem({
   )
 }
 
-function ContextMenuRadioGroup({
+export function ContextMenuRadioGroup({
   ...props
 }: ContextMenuPrimitive.RadioGroup.Props) {
   return (
@@ -202,7 +204,7 @@ function ContextMenuRadioGroup({
   )
 }
 
-function ContextMenuRadioItem({
+export function ContextMenuRadioItem({
   className,
   children,
   inset,
@@ -246,7 +248,7 @@ function ContextMenuSeparator({
   )
 }
 
-function ContextMenuShortcut({
+export function ContextMenuShortcut({
   className,
   children,
   ...props
@@ -267,17 +269,12 @@ function ContextMenuShortcut({
 
 export {
   ContextMenu,
-  ContextMenuPortal,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuLabel,
   ContextMenuItem,
-  ContextMenuCheckboxItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubTrigger,
   ContextMenuSubContent,

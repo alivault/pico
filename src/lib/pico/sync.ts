@@ -70,8 +70,7 @@ export function extractMessageText(message: { content?: unknown }) {
   if (!Array.isArray(message?.content)) return ""
 
   return message.content
-    .filter((part) => part?.type === "text")
-    .map((part) => part.text || "")
+    .flatMap((part) => (part?.type === "text" ? [part.text || ""] : []))
     .join("\n")
 }
 
@@ -81,21 +80,20 @@ export function extractToolText(
   if (!result || !Array.isArray(result.content)) return ""
 
   return result.content
-    .filter(
-      (part): part is MessageContentPart & { text: string } =>
-        part?.type === "text" && typeof part.text === "string"
+    .flatMap((part) =>
+      part?.type === "text" && typeof part.text === "string" ? [part.text] : []
     )
-    .map((part) => part.text)
     .join("\n")
 }
 
 export function extractMessageImages(message: { content?: unknown }) {
   if (!Array.isArray(message?.content)) return []
 
-  return message.content
-    .filter((part) => part?.type === "image")
-    .map((part) => normalizePromptImage(part))
-    .filter((part): part is PromptImage => Boolean(part))
+  return message.content.flatMap((part) => {
+    if (part?.type !== "image") return []
+    const image = normalizePromptImage(part)
+    return image ? [image] : []
+  })
 }
 
 function normalizeStreamingBehavior(
@@ -354,7 +352,7 @@ function withConversationItemRenderKey<T extends ConversationItem>(
   return { ...item, renderKey } as T
 }
 
-export function reconcileConversationItems(
+function reconcileConversationItems(
   previousItems: Array<ConversationItem>,
   nextItems: Array<ConversationItem>
 ) {
@@ -1195,7 +1193,7 @@ export function buildItemsFromSync(
   }
 }
 
-export function sanitizeThinkingSummaryText(value: unknown) {
+function sanitizeThinkingSummaryText(value: unknown) {
   if (typeof value !== "string") return ""
 
   let text = value.replace(/\r\n?/g, "\n")
@@ -1224,7 +1222,7 @@ export function sanitizeThinkingSummaryText(value: unknown) {
   return text
 }
 
-export function primaryThinkingSummaryText(value: unknown) {
+function primaryThinkingSummaryText(value: unknown) {
   if (typeof value !== "string") return ""
 
   const normalized = value.replace(/\r\n?/g, "\n")
@@ -1240,14 +1238,14 @@ export function primaryThinkingSummaryText(value: unknown) {
   return sanitizeThinkingSummaryText(normalized)
 }
 
-export function meaningfulHiddenThinkingLabel(value: unknown) {
+function meaningfulHiddenThinkingLabel(value: unknown) {
   const label = sanitizeThinkingSummaryText(value)
   return label && label !== "Thinking..." && label !== "Thinking"
     ? label
     : undefined
 }
 
-export function truncateThinkingSummary(text: string, maxLength = 140) {
+function truncateThinkingSummary(text: string, maxLength = 140) {
   const normalized = text.replace(/\s+/g, " ").trim()
   if (!normalized) return ""
   if (normalized.length <= maxLength) return normalized

@@ -90,7 +90,7 @@ type MarkdownPreProps = React.ComponentProps<"pre"> & {
 }
 
 function MarkdownPre({ children, node, ...props }: MarkdownPreProps) {
-  const { completedFenceRanges, streaming } = React.useContext(
+  const { completedFenceRanges, streaming } = React.use(
     MarkdownRenderingContext
   )
   const codeElement = getCodeBlockChild(children)
@@ -338,15 +338,17 @@ function copyTextWithTextarea(text: string) {
   textarea.value = text
   textarea.readOnly = true
   textarea.setAttribute("aria-hidden", "true")
-  textarea.style.position = "fixed"
-  textarea.style.top = "0"
-  textarea.style.left = "0"
-  textarea.style.width = "1px"
-  textarea.style.height = "1px"
-  textarea.style.padding = "0"
-  textarea.style.border = "0"
-  textarea.style.opacity = "0"
-  textarea.style.pointerEvents = "none"
+  Object.assign(textarea.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    border: "0",
+    opacity: "0",
+    pointerEvents: "none",
+  })
 
   document.body.append(textarea)
   textarea.focus()

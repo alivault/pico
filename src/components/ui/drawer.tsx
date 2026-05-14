@@ -38,7 +38,7 @@ function Drawer({
   )
 }
 
-function DrawerTrigger({
+export function DrawerTrigger({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
   return <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />
@@ -50,7 +50,7 @@ function DrawerPortal({
   return <DrawerPrimitive.Portal data-slot="drawer-portal" {...props} />
 }
 
-function DrawerClose({
+export function DrawerClose({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Close>) {
   return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />
@@ -149,10 +149,6 @@ function DrawerDescription({
 
 export {
   Drawer,
-  DrawerTrigger,
-  DrawerPortal,
-  DrawerClose,
-  DrawerOverlay,
   DrawerContent,
   DrawerHeader,
   DrawerFooter,

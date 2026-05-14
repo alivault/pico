@@ -1656,7 +1656,6 @@ function GitCommitRow({
               <Textarea
                 value={formDialog.value}
                 rows={4}
-                autoFocus
                 onChange={(event) => {
                   setFormDialog((current) =>
                     current
@@ -1668,7 +1667,6 @@ function GitCommitRow({
             ) : (
               <Input
                 value={formDialog?.value || ""}
-                autoFocus
                 onChange={(event) => {
                   setFormDialog((current) =>
                     current
@@ -1771,7 +1769,7 @@ function GitCommitRows({
       >
         {lines.map((line, index) => (
           <div
-            key={`${index}:${line}`}
+            key={rowValues[index] ?? line}
             className="min-w-0"
             style={{
               minHeight: rowHeights[index] ?? GIT_GRAPH_ROW_HEIGHT,

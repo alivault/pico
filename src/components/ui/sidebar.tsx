@@ -121,7 +121,7 @@ function useLatestRef<T>(value: T) {
 }
 
 function useSidebar() {
-  const context = React.useContext(SidebarContext)
+  const context = React.use(SidebarContext)
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.")
   }
@@ -495,7 +495,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   )
 }
 
-function SidebarInput({
+export function SidebarInput({
   className,
   ...props
 }: React.ComponentProps<typeof Input>) {
@@ -531,7 +531,7 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function SidebarSeparator({
+export function SidebarSeparator({
   className,
   ...props
 }: React.ComponentProps<typeof Separator>) {
@@ -594,7 +594,7 @@ function SidebarGroupLabel({
   })
 }
 
-function SidebarGroupAction({
+export function SidebarGroupAction({
   className,
   render,
   ...props
@@ -731,7 +731,7 @@ function SidebarMenuButton({
   )
 }
 
-function SidebarMenuAction({
+export function SidebarMenuAction({
   className,
   render,
   showOnHover = false,
@@ -761,7 +761,7 @@ function SidebarMenuAction({
   })
 }
 
-function SidebarMenuBadge({
+export function SidebarMenuBadge({
   className,
   ...props
 }: React.ComponentProps<"div">) {
@@ -778,7 +778,7 @@ function SidebarMenuBadge({
   )
 }
 
-function SidebarMenuSkeleton({
+export function SidebarMenuSkeleton({
   className,
   showIcon = false,
   ...props
@@ -816,7 +816,10 @@ function SidebarMenuSkeleton({
   )
 }
 
-function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
+export function SidebarMenuSub({
+  className,
+  ...props
+}: React.ComponentProps<"ul">) {
   return (
     <ul
       data-slot="sidebar-menu-sub"
@@ -830,7 +833,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   )
 }
 
-function SidebarMenuSubItem({
+export function SidebarMenuSubItem({
   className,
   ...props
 }: React.ComponentProps<"li">) {
@@ -844,7 +847,7 @@ function SidebarMenuSubItem({
   )
 }
 
-function SidebarMenuSubButton({
+export function SidebarMenuSubButton({
   render,
   size = "md",
   isActive = false,
@@ -881,25 +884,15 @@ export {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarInput,
-  SIDEBAR_WIDTH,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 }

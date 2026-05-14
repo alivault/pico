@@ -174,7 +174,7 @@ type AppShellAddDirectoryDialogProps = {
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
-export function AppShellAddDirectoryDialog({
+function AppShellAddDirectoryDialog({
   open,
   onOpenChange,
   directoryInput,
@@ -258,18 +258,18 @@ export function AppShellAddDirectoryDialog({
     directoryMatchesQuery(currentDirectory, directoryQuery)
       ? [currentDirectory]
       : []
-  const recentMatching = recentDirectories
-    .filter((directoryPath) => !openedSet.has(directoryPath))
-    .filter((directoryPath) =>
+  const recentMatching = recentDirectories.filter(
+    (directoryPath) =>
+      !openedSet.has(directoryPath) &&
       directoryMatchesQuery(directoryPath, directoryQuery)
-    )
-  const knownMatching = knownDirectories
-    .filter((directoryPath) => !openedSet.has(directoryPath))
-    .filter((directoryPath) => directoryPath !== currentDirectory)
-    .filter((directoryPath) => !recentSet.has(directoryPath))
-    .filter((directoryPath) =>
+  )
+  const knownMatching = knownDirectories.filter(
+    (directoryPath) =>
+      !openedSet.has(directoryPath) &&
+      directoryPath !== currentDirectory &&
+      !recentSet.has(directoryPath) &&
       directoryMatchesQuery(directoryPath, directoryQuery)
-    )
+  )
   const manualPath =
     directoryQuery &&
     !directoryDialogHasExactMatch(
@@ -564,7 +564,6 @@ export function AppShellAddDirectoryDialog({
       className="min-h-0 flex-1 rounded-lg"
     >
       <CommandInput
-        autoFocus={!isMobile}
         value={directoryInput}
         onValueChange={onDirectoryInputChange}
         onKeyDown={handleDirectoryInputKeyDown}

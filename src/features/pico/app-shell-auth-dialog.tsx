@@ -313,7 +313,6 @@ export function AppShellAuthDialogController({
   const loginCommandBody = (
     <Command loop shouldFilter className="min-h-0 flex-1">
       <CommandInput
-        autoFocus={!isMobile}
         placeholder="Search login providers"
         className="text-base md:text-sm"
       />
@@ -375,7 +374,6 @@ export function AppShellAuthDialogController({
   const logoutCommandBody = (
     <Command loop shouldFilter className="min-h-0 flex-1">
       <CommandInput
-        autoFocus={!isMobile}
         placeholder="Search logged-in providers"
         className="text-base md:text-sm"
       />
@@ -471,7 +469,6 @@ export function AppShellAuthDialogController({
               : "Enter API key"
           }
           autoComplete="off"
-          autoFocus={!isMobile}
           className="min-w-0 flex-1"
         />
       </div>

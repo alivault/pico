@@ -100,10 +100,10 @@ export function serializeComposerDraft({
 export function formatComposerSkillName(skillName = "") {
   return skillName
     .split(/[-_]+/)
-    .filter(Boolean)
-    .map((part) => {
-      if (part.length <= 3) return part.toUpperCase()
-      return `${part.charAt(0).toUpperCase()}${part.slice(1)}`
+    .flatMap((part) => {
+      if (!part) return []
+      if (part.length <= 3) return [part.toUpperCase()]
+      return [`${part.charAt(0).toUpperCase()}${part.slice(1)}`]
     })
     .join(" ")
 }
@@ -129,13 +129,13 @@ export function parseSlashCommandInput(value = ""): SlashCommandInput | null {
   }
 }
 
-export function normalizeSlashSearchValue(value = "") {
+function normalizeSlashSearchValue(value = "") {
   return String(value)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")
 }
 
-export function isSlashSubsequenceMatch(query: string, target: string) {
+function isSlashSubsequenceMatch(query: string, target: string) {
   if (!query) return true
   let queryIndex = 0
   for (const char of target) {
@@ -147,7 +147,7 @@ export function isSlashSubsequenceMatch(query: string, target: string) {
   return false
 }
 
-export function slashCommandSearchCandidates(command: SlashCommandDescriptor) {
+function slashCommandSearchCandidates(command: SlashCommandDescriptor) {
   const candidates = [command.name, command.description || ""]
   if (command.kind === "skill") {
     candidates.push(
@@ -160,10 +160,7 @@ export function slashCommandSearchCandidates(command: SlashCommandDescriptor) {
   return candidates.filter(Boolean)
 }
 
-export function slashCommandMatchRank(
-  command: SlashCommandDescriptor,
-  query: string
-) {
+function slashCommandMatchRank(command: SlashCommandDescriptor, query: string) {
   const rawQuery = typeof query === "string" ? query.trim().toLowerCase() : ""
   if (!rawQuery) return command.kind === "builtin" ? 0 : 10
 

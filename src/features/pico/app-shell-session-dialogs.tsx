@@ -40,7 +40,6 @@ import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
-import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
@@ -61,7 +60,7 @@ type RenameSessionDialogProps = {
   onRenameSession: () => void
 }
 
-export function RenameSessionDialog({
+function RenameSessionDialog({
   open,
   onOpenChange,
   renameValue,
@@ -214,7 +213,7 @@ type DeleteSessionsDialogProps = {
   onDeleteSession: () => void
 }
 
-export function DeleteSessionsDialog({
+function DeleteSessionsDialog({
   open,
   onOpenChange,
   title,
@@ -632,7 +631,7 @@ type ForkSessionDialogProps = {
   onForkFromMessage: (entryId: string) => void
 }
 
-export function ForkSessionDialog({
+function ForkSessionDialog({
   open,
   onOpenChange,
   forkLoading,
@@ -641,7 +640,6 @@ export function ForkSessionDialog({
 }: ForkSessionDialogProps) {
   const [forkQuery, setForkQuery] = React.useState("")
   const isMobile = useIsMobile()
-  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
 
   React.useEffect(() => {
     if (!open && forkQuery) {
@@ -656,7 +654,6 @@ export function ForkSessionDialog({
   const forkDialogBody = (
     <Command shouldFilter={false} loop className="min-h-0 flex-1 rounded-lg">
       <CommandInput
-        autoFocus={shouldAutoFocus}
         value={forkQuery}
         onValueChange={setForkQuery}
         placeholder="Search fork points"
@@ -710,11 +707,7 @@ export function ForkSessionDialog({
 
   if (isMobile) {
     return (
-      <Drawer
-        open={open}
-        onOpenChange={onOpenChange}
-        autoFocus={shouldAutoFocus}
-      >
+      <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Fork session</DrawerTitle>

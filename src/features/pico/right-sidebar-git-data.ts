@@ -23,8 +23,8 @@ export type GitCommitMessageData = Extract<
 >
 export type GitFileDiffData = Extract<GitFileDiffResponse, { ok: true }>
 export type GitFileReviewData = Extract<GitFileReviewResponse, { ok: true }>
-export const GIT_QUERY_STALE_TIME_MS = 1000 * 30
-export const GIT_QUERY_GC_TIME_MS = 1000 * 60 * 10
+const GIT_QUERY_STALE_TIME_MS = 1000 * 30
+const GIT_QUERY_GC_TIME_MS = 1000 * 60 * 10
 export const GIT_COMMITS_PAGE_SIZE = 50
 export const GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES = 10_000
 export const GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD = 100
@@ -256,7 +256,7 @@ export function gitStatusHasDiverged(gitStatus: GitStatusValue | undefined) {
 
 export type GitFileStatusColumn = "index" | "worktree"
 
-export const GIT_CONFLICT_STATUS_DESCRIPTIONS: Record<string, string> = {
+const GIT_CONFLICT_STATUS_DESCRIPTIONS: Record<string, string> = {
   AA: "Conflict: added by both sides",
   AU: "Conflict: added by us",
   DD: "Conflict: deleted by both sides",
@@ -451,7 +451,7 @@ export function gitRemoteBranchParts(name: string | undefined) {
   }
 }
 
-export function gitCommitEntryCount(commits: Array<string>) {
+function gitCommitEntryCount(commits: Array<string>) {
   return commits.reduce(
     (count, line) => count + (line.includes("\t") ? 1 : 0),
     0
@@ -463,7 +463,7 @@ export function gitCommitsSummaryText(commits: Array<string>) {
   return count > 0 ? `${count} commit${count === 1 ? "" : "s"}` : ""
 }
 
-export const GIT_COMMIT_FIELD_SEPARATOR = "\u001f"
+const GIT_COMMIT_FIELD_SEPARATOR = "\u001f"
 
 export function parseGitCommitGraphLine(line: string) {
   const text = typeof line === "string" ? line : ""
@@ -577,6 +577,11 @@ export function formatGitCommitDetailTime(value: string) {
   return `${compact} ago`
 }
 
+const gitCommitFullDateFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "full",
+  timeStyle: "long",
+})
+
 export function formatGitCommitFullDate(value: string) {
   const text = value.trim()
   if (!text) return ""
@@ -584,10 +589,7 @@ export function formatGitCommitFullDate(value: string) {
   const date = new Date(text)
   if (Number.isNaN(date.getTime())) return text
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "full",
-    timeStyle: "long",
-  }).format(date)
+  return gitCommitFullDateFormatter.format(date)
 }
 
 export function gitCommitStatCount(
@@ -600,7 +602,7 @@ export function gitCommitStatCount(
   return match ? Number(match[1]) : 0
 }
 
-export async function copyRightSidebarTextToClipboard(text: string) {
+async function copyRightSidebarTextToClipboard(text: string) {
   if (!text) throw new Error("Nothing to copy")
 
   if (window.isSecureContext && navigator.clipboard?.writeText) {
@@ -616,13 +618,15 @@ export async function copyRightSidebarTextToClipboard(text: string) {
   textarea.value = text
   textarea.readOnly = true
   textarea.setAttribute("aria-hidden", "true")
-  textarea.style.position = "fixed"
-  textarea.style.top = "0"
-  textarea.style.left = "0"
-  textarea.style.width = "1px"
-  textarea.style.height = "1px"
-  textarea.style.opacity = "0"
-  textarea.style.pointerEvents = "none"
+  Object.assign(textarea.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "1px",
+    height: "1px",
+    opacity: "0",
+    pointerEvents: "none",
+  })
   document.body.appendChild(textarea)
   textarea.select()
 

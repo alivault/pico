@@ -139,7 +139,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
     const normalizedQuery = modelQuery.trim().toLowerCase()
     const modelOptions =
       availableModels.length > 0 ? availableModels : model ? [model] : []
-    const nextModels = [...modelOptions].sort(
+    const nextModels = modelOptions.toSorted(
       (left, right) =>
         (left.provider || "").localeCompare(right.provider || "") ||
         (left.name || left.id).localeCompare(right.name || right.id)

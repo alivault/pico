@@ -1,6 +1,6 @@
 import { errorResponse } from "@/server/http"
 
-export function formatRouteError(error: unknown) {
+function formatRouteError(error: unknown) {
   if (error instanceof Error && error.message.trim()) {
     return error.message
   }
@@ -12,7 +12,7 @@ export function formatRouteError(error: unknown) {
   return "Unknown error"
 }
 
-export function inferRouteErrorStatus(message: string) {
+function inferRouteErrorStatus(message: string) {
   const normalized = message.toLowerCase()
 
   if (

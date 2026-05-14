@@ -260,12 +260,11 @@ function useComposerSlashCommands({
 }
 
 function getClipboardImageFiles(data: DataTransfer) {
-  const itemFiles = Array.from(data.items)
-    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-    .map((item) => item.getAsFile())
-    .filter(
-      (file): file is File => file !== null && file.type.startsWith("image/")
-    )
+  const itemFiles = Array.from(data.items).flatMap((item) => {
+    if (item.kind !== "file" || !item.type.startsWith("image/")) return []
+    const file = item.getAsFile()
+    return file?.type.startsWith("image/") ? [file] : []
+  })
 
   if (itemFiles.length > 0) {
     return itemFiles
@@ -274,45 +273,42 @@ function getClipboardImageFiles(data: DataTransfer) {
   return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
 }
 
-export const ComposerPanel = React.forwardRef<
-  ComposerPanelHandle,
-  ComposerPanelProps
->(function ComposerPanelImpl(
-  {
-    activeSessionId,
-    currentPendingMessages,
-    composerImages,
-    composerText,
-    composerSkill,
-    composerSyncNonce,
-    centerMessages,
-    contextUsageStore,
-    displaySettingsStore,
-    sessionStore,
-    isSubmitting,
-    isStreaming,
-    awaitingFirstTurn,
-    disabled = false,
-    flush = false,
-    topContent,
-    viewerContextId,
-    fileInputRef,
-    onComposerTextChange,
-    onPickImages,
-    onRemoveComposerImage,
-    onSubmitPrompt,
-    onAbort,
-    onEditPendingMessage,
-    onRemovePendingMessage,
-    onReorderPending,
-    onRunBuiltinSlashCommand,
-    onSelectModel,
-    onSelectThinkingLevel,
-    requestPathCompletions,
-    requestFileCompletions,
-  },
-  ref
-) {
+export function ComposerPanel({
+  activeSessionId,
+  currentPendingMessages,
+  composerImages,
+  composerText,
+  composerSkill,
+  composerSyncNonce,
+  centerMessages,
+  contextUsageStore,
+  displaySettingsStore,
+  sessionStore,
+  isSubmitting,
+  isStreaming,
+  awaitingFirstTurn,
+  disabled = false,
+  flush = false,
+  topContent,
+  viewerContextId,
+  fileInputRef,
+  onComposerTextChange,
+  onPickImages,
+  onRemoveComposerImage,
+  onSubmitPrompt,
+  onAbort,
+  onEditPendingMessage,
+  onRemovePendingMessage,
+  onReorderPending,
+  onRunBuiltinSlashCommand,
+  onSelectModel,
+  onSelectThinkingLevel,
+  requestPathCompletions,
+  requestFileCompletions,
+  ref,
+}: ComposerPanelProps & {
+  ref?: React.Ref<ComposerPanelHandle>
+}) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
   const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
   const [thinkingPickerOpen, setThinkingPickerOpen] = React.useState(false)
@@ -428,7 +424,7 @@ export const ComposerPanel = React.forwardRef<
   if (flush) return content
 
   return <div className="p-4">{content}</div>
-})
+}
 
 const ComposerAttachments = React.memo(function ComposerAttachments({
   images,
@@ -842,6 +838,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
   return (
     <div
+      role="presentation"
       className="relative min-h-[90px] cursor-text overflow-visible rounded-t-[18px] border-b border-border/70 bg-card px-3 pt-3 pb-14"
       onMouseDown={handleComposerMouseDown}
     >
@@ -906,7 +903,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                     ? `Ask with ${formatComposerSkillName(draftSkill)}…`
                     : "Ask anything…"
               }
-              className="max-h-[min(40dvh,18rem)] min-h-[22px] max-w-full min-w-0 flex-1 basis-[min(240px,100%)] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
+              className="max-h-[min(40dvh,18rem)] min-h-[22px] max-w-full min-w-0 flex-1 basis-[min(240px,100%)] resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />
           </div>
         </div>

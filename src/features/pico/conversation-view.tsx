@@ -62,27 +62,6 @@ function assistantBlockKey(
   }
 }
 
-export function conversationItemSignature(item: ConversationItem) {
-  const itemKey = item.renderKey || item.itemKey || ""
-
-  if (item.kind === "user") {
-    return `user:${itemKey}:${item.pendingId || ""}:${item.text}:${item.images
-      .map((image) => promptImageKey(image))
-      .join(",")}:${item.streamingBehavior || ""}:${item.queued ? "1" : "0"}`
-  }
-
-  const blockSignature = item.blocks
-    .map((block) => block.renderKey || assistantBlockKey(block))
-    .join("|")
-  const modelSignature = [
-    item.model?.provider || "",
-    item.model?.id || "",
-  ].join(":")
-  const doneSignature = item.done === false ? "0" : "1"
-
-  return `assistant:${itemKey}:${blockSignature}:${item.streaming ? "1" : "0"}:${doneSignature}:${modelSignature}`
-}
-
 function userMessageLabel(item: Extract<ConversationItem, { kind: "user" }>) {
   if (item.streamingBehavior === "steer") return "Steer"
   if (item.queued || item.streamingBehavior === "followUp") return "Queue"
@@ -1801,8 +1780,11 @@ function AnsiText({ text }: { text: string }) {
 
   return (
     <>
-      {segments.map((segment, index) => (
-        <span key={index} style={ansiSegmentStyle(segment.style)}>
+      {segments.map((segment) => (
+        <span
+          key={`${segment.text}-${JSON.stringify(segment.style ?? {})}`}
+          style={ansiSegmentStyle(segment.style)}
+        >
           {segment.text}
         </span>
       ))}
@@ -2837,7 +2819,7 @@ export function AssistantMessagesStoreCard({
   )
 }
 
-export const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
+const AssistantMessagesCard = React.memo(function AssistantMessagesCard({
   items,
   hideThinking,
   hideToolBlocks,

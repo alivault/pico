@@ -14,7 +14,7 @@ export function ProjectFileIconSprite() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none block h-0 w-0 overflow-hidden"
+      className="pointer-events-none block size-0 overflow-hidden"
       dangerouslySetInnerHTML={{ __html: PROJECT_FILE_ICON_SPRITE_SHEET }}
     />
   )

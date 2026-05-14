@@ -58,6 +58,10 @@ function InputGroupAddon({
         }
         e.currentTarget.parentElement?.querySelector("input")?.focus()
       }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.currentTarget.parentElement?.querySelector("input")?.focus()
+      }}
       {...props}
     />
   )
@@ -81,7 +85,7 @@ const inputGroupButtonVariants = cva(
   }
 )
 
-function InputGroupButton({
+export function InputGroupButton({
   className,
   type = "button",
   variant = "ghost",
@@ -102,7 +106,10 @@ function InputGroupButton({
   )
 }
 
-function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
+export function InputGroupText({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
   return (
     <span
       className={cn(
@@ -114,7 +121,7 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function InputGroupInput({
+export function InputGroupInput({
   className,
   ...props
 }: React.ComponentProps<"input">) {
@@ -130,7 +137,7 @@ function InputGroupInput({
   )
 }
 
-function InputGroupTextarea({
+export function InputGroupTextarea({
   className,
   ...props
 }: React.ComponentProps<"textarea">) {
@@ -146,11 +153,4 @@ function InputGroupTextarea({
   )
 }
 
-export {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupText,
-  InputGroupInput,
-  InputGroupTextarea,
-}
+export { InputGroup, InputGroupAddon }

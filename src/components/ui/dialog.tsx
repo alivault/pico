@@ -48,7 +48,7 @@ function Dialog({
   return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />
 }
 
-function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+export function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 
@@ -56,7 +56,7 @@ function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
-function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+export function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
@@ -184,13 +184,9 @@ function DialogDescription({
 
 export {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
-  DialogTrigger,
 }

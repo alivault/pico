@@ -27,7 +27,7 @@ export type HighlightPayload =
 
 type SugarHighOptions = Parameters<typeof sugarHigh>[1]
 
-export function normalizeHighlightLanguage(language: unknown) {
+function normalizeHighlightLanguage(language: unknown) {
   const normalized =
     typeof language === "string"
       ? language
@@ -70,7 +70,7 @@ export function normalizeHighlightLanguage(language: unknown) {
   }
 }
 
-export function countTextLines(text: string) {
+function countTextLines(text: string) {
   let lines = 1
   for (let index = 0; index < text.length; index += 1) {
     if (text.charCodeAt(index) === 10) lines += 1
@@ -78,7 +78,7 @@ export function countTextLines(text: string) {
   return lines
 }
 
-export function getSugarHighOptions(
+function getSugarHighOptions(
   language: string
 ): SugarHighOptions | null | undefined {
   switch (language) {

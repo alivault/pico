@@ -69,7 +69,10 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   )
 }
 
-function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
+export function TabsContent({
+  className,
+  ...props
+}: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
@@ -79,4 +82,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export { Tabs, TabsList, TabsTrigger }

@@ -347,7 +347,6 @@ export function GitCommitDialog({
       className="min-h-0 flex-1 rounded-none md:rounded-xl"
     >
       <CommandInput
-        autoFocus={!isMobile}
         value={query}
         onValueChange={setQuery}
         placeholder="Search commit actions"
@@ -486,7 +485,6 @@ export function GitCommitDialog({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
         <Textarea
-          autoFocus={!isMobile}
           id="git-commit-message"
           value={message}
           onChange={(event) => {
@@ -579,17 +577,17 @@ export function GitCommitDialog({
   )
 }
 
-export const GitCommitDialogController = React.forwardRef<
-  GitCommitDialogControllerHandle,
-  {
-    viewerContextId: string
-    cwd?: string
-    openStateRef: React.RefObject<boolean>
-  }
->(function GitCommitDialogControllerImpl(
-  { viewerContextId, cwd, openStateRef },
-  ref
-) {
+export function GitCommitDialogController({
+  viewerContextId,
+  cwd,
+  openStateRef,
+  ref,
+}: {
+  viewerContextId: string
+  cwd?: string
+  openStateRef: React.RefObject<boolean>
+  ref?: React.Ref<GitCommitDialogControllerHandle>
+}) {
   const normalizedCwd = normalizeCwd(cwd)
   const [open, setOpen] = React.useState(false)
   const statusQuery = useQuery({
@@ -651,4 +649,4 @@ export const GitCommitDialogController = React.forwardRef<
       onOpenChange={setDialogOpen}
     />
   )
-})
+}

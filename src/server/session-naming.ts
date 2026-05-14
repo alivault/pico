@@ -1,10 +1,7 @@
 import { basename } from "node:path"
 
 import { loadPiAi } from "@/server/pi-sdk"
-import type {
-  MessageContentPartLike,
-  ModelRegistryLike,
-} from "@/server/pi-sdk-types"
+import type { ModelRegistryLike } from "@/server/pi-sdk-types"
 
 const MAX_SESSION_NAME_LENGTH = 48
 const MAX_SESSION_NAME_WORDS = 6
@@ -214,7 +211,7 @@ export function summarizePromptContent(content: unknown) {
   return { text, imageCount }
 }
 
-export function buildSessionNamePrompt(
+function buildSessionNamePrompt(
   prompt: string,
   cwdBasename: string,
   imageCount: number
@@ -295,11 +292,11 @@ export async function generateSessionNameWithLlm(
 
   const raw = Array.isArray(response?.content)
     ? response.content
-        .filter(
-          (block): block is MessageContentPartLike & { text: string } =>
-            block?.type === "text" && typeof block.text === "string"
+        .flatMap((block) =>
+          block?.type === "text" && typeof block.text === "string"
+            ? [block.text]
+            : []
         )
-        .map((block) => block.text)
         .join(" ")
     : ""
 

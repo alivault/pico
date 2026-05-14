@@ -83,7 +83,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
         {reactScanScriptSrc ? (
-          <script type="module" src={reactScanScriptSrc} />
+          <script type="module" src={reactScanScriptSrc} defer />
         ) : null}
       </head>
       <body className="h-svh overflow-hidden bg-background text-foreground antialiased">

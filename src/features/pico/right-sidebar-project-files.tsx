@@ -77,7 +77,6 @@ import {
 } from "@/features/pico/right-sidebar-file-icons"
 import { gitChangesQueryOptions } from "@/features/pico/right-sidebar-git-data"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
-import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import {
   getErrorMessage,
   normalizeCwd,
@@ -345,7 +344,7 @@ function getProjectFileDirectoryPaths(paths: Array<string>) {
     }
   }
 
-  return [...directoryPaths].sort(
+  return Array.from(directoryPaths).toSorted(
     (left, right) =>
       right.split("/").length - left.split("/").length ||
       right.length - left.length ||
@@ -626,7 +625,6 @@ export function ProjectOpenFileDialog({
 }) {
   const [query, setQuery] = React.useState("")
   const isMobile = useIsMobile()
-  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
 
   React.useEffect(() => {
     if (!open) setQuery("")
@@ -636,7 +634,6 @@ export function ProjectOpenFileDialog({
     <Command shouldFilter className={cn(isMobile && "min-h-0 flex-1")}>
       <ProjectFileIconSprite />
       <CommandInput
-        autoFocus={shouldAutoFocus}
         value={query}
         onValueChange={setQuery}
         placeholder="Search files…"
@@ -666,11 +663,7 @@ export function ProjectOpenFileDialog({
 
   if (isMobile) {
     return (
-      <Drawer
-        open={open}
-        onOpenChange={onOpenChange}
-        autoFocus={shouldAutoFocus}
-      >
+      <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Open Files</DrawerTitle>
@@ -1474,16 +1467,20 @@ function FileTreeResizeHandle({
         const cleanupGlobalResizeCursor =
           installGlobalResizeCursor("col-resize")
 
-        document.body.style.cursor = "col-resize"
-        document.body.style.userSelect = "none"
+        Object.assign(document.body.style, {
+          cursor: "col-resize",
+          userSelect: "none",
+        })
 
         const handlePointerMove = (moveEvent: PointerEvent) => {
           resizeTo(startWidth + moveEvent.clientX - startX)
         }
         const handlePointerUp = () => {
           cleanupGlobalResizeCursor()
-          document.body.style.cursor = previousCursor
-          document.body.style.userSelect = previousUserSelect
+          Object.assign(document.body.style, {
+            cursor: previousCursor,
+            userSelect: previousUserSelect,
+          })
           document.removeEventListener("pointermove", handlePointerMove)
           document.removeEventListener("pointerup", handlePointerUp)
           document.removeEventListener("pointercancel", handlePointerUp)

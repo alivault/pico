@@ -102,9 +102,10 @@ export function AppShellSidebarController({
     sidebarStore,
     (snapshot) => snapshot.derived.pinnedSidebarSessions
   )
-  const pinnedSidebarSessionKeys = pinnedSidebarSessions
-    .map((entry) => sessionListEntryKey(entry))
-    .filter(Boolean)
+  const pinnedSidebarSessionKeys = pinnedSidebarSessions.flatMap((entry) => {
+    const key = sessionListEntryKey(entry)
+    return key ? [key] : []
+  })
   const sidebarSessionEntriesByKey = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.sidebarSessionEntriesByKey,

@@ -387,7 +387,7 @@ function treeDialogFlattenTree({
     containsActive.set(node, hasActive)
   }
 
-  const orderedRoots = [...roots].sort(
+  const orderedRoots = roots.toSorted(
     (a, b) =>
       Number(Boolean(containsActive.get(b))) -
       Number(Boolean(containsActive.get(a)))
@@ -742,45 +742,6 @@ function treeDialogFindBranchSegmentStart(
   }
 }
 
-function treeDialogLegacyIconSvg(
-  name:
-    | "gutter"
-    | "connector-tee"
-    | "connector-elbow"
-    | "leaf-line"
-    | "fold-open"
-    | "fold-closed"
-    | "active-path"
-) {
-  const wrap = (body: string, viewBox = "0 0 10 24") =>
-    `<svg class="size-full block" viewBox="${viewBox}" fill="none" aria-hidden="true">${body}</svg>`
-
-  switch (name) {
-    case "gutter":
-      return wrap('<path d="M5 0V24" stroke="currentColor" stroke-width="1"/>')
-    case "connector-tee":
-      return wrap(
-        '<path d="M5 0V24M5 12H10" stroke="currentColor" stroke-width="1"/>'
-      )
-    case "connector-elbow":
-      return wrap(
-        '<path d="M5 0V12M5 12H10" stroke="currentColor" stroke-width="1"/>'
-      )
-    case "leaf-line":
-      return wrap('<path d="M0 12H10" stroke="currentColor" stroke-width="1"/>')
-    case "fold-open":
-      return wrap(
-        '<rect x="0.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1"/><path d="M2.5 12H7.5" stroke="currentColor" stroke-width="1"/>'
-      )
-    case "fold-closed":
-      return wrap(
-        '<rect x="0.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1"/><path d="M2.5 12H7.5M5 9.5V14.5" stroke="currentColor" stroke-width="1"/>'
-      )
-    case "active-path":
-      return wrap('<circle cx="5" cy="12" r="2.25" fill="currentColor"/>')
-  }
-}
-
 function TreeHierarchyIcon({
   name,
   className,
@@ -796,14 +757,47 @@ function TreeHierarchyIcon({
   className?: string
 }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "block h-6 w-2.5 [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
-        className
-      )}
-      dangerouslySetInnerHTML={{ __html: treeDialogLegacyIconSvg(name) }}
-    />
+    <span aria-hidden="true" className={cn("block h-6 w-2.5", className)}>
+      <svg className="block size-full" viewBox="0 0 10 24" fill="none">
+        {name === "gutter" ? (
+          <path d="M5 0V24" stroke="currentColor" strokeWidth={1} />
+        ) : null}
+        {name === "connector-tee" ? (
+          <path d="M5 0V24M5 12H10" stroke="currentColor" strokeWidth={1} />
+        ) : null}
+        {name === "connector-elbow" ? (
+          <path d="M5 0V12M5 12H10" stroke="currentColor" strokeWidth={1} />
+        ) : null}
+        {name === "leaf-line" ? (
+          <path d="M0 12H10" stroke="currentColor" strokeWidth={1} />
+        ) : null}
+        {name === "fold-open" || name === "fold-closed" ? (
+          <>
+            <rect
+              x="0.5"
+              y="7.5"
+              width="9"
+              height="9"
+              rx="1.5"
+              stroke="currentColor"
+              strokeWidth={1}
+            />
+            <path
+              d={
+                name === "fold-closed"
+                  ? "M2.5 12H7.5M5 9.5V14.5"
+                  : "M2.5 12H7.5"
+              }
+              stroke="currentColor"
+              strokeWidth={1}
+            />
+          </>
+        ) : null}
+        {name === "active-path" ? (
+          <circle cx="5" cy="12" r="2.25" fill="currentColor" />
+        ) : null}
+      </svg>
+    </span>
   )
 }
 
@@ -828,9 +822,9 @@ function TreeCommandPrefix({
 
   return (
     <span className="inline-flex h-6 shrink-0 items-stretch text-muted-foreground">
-      {Array.from({ length: totalCells }, (_, index) => {
-        const level = Math.floor(index / 3)
-        const positionInLevel = index % 3
+      {Array.from({ length: totalCells }, (_, cellOffset) => {
+        const level = Math.floor(cellOffset / 3)
+        const positionInLevel = cellOffset % 3
         const gutter = node.gutters.find(
           (candidate) => candidate.position === level
         )
@@ -838,7 +832,7 @@ function TreeCommandPrefix({
         if (gutter) {
           return (
             <span
-              key={`${node.id}-gutter-${index}`}
+              key={`${node.id}-gutter-${level}-${positionInLevel}`}
               className="flex h-6 w-2.5 items-center justify-center"
             >
               {positionInLevel === 0 && gutter.show ? (
@@ -852,7 +846,7 @@ function TreeCommandPrefix({
           if (positionInLevel === 0) {
             return (
               <span
-                key={`${node.id}-connector-${index}`}
+                key={`${node.id}-connector-${level}-${positionInLevel}`}
                 className="flex h-6 w-2.5 items-center justify-center"
               >
                 <TreeHierarchyIcon
@@ -865,7 +859,7 @@ function TreeCommandPrefix({
           if (positionInLevel === 1) {
             return (
               <span
-                key={`${node.id}-marker-${index}`}
+                key={`${node.id}-marker-${level}-${positionInLevel}`}
                 className="flex h-6 w-2.5 items-center justify-center"
               >
                 <TreeHierarchyIcon
@@ -884,7 +878,7 @@ function TreeCommandPrefix({
 
         return (
           <span
-            key={`${node.id}-empty-${index}`}
+            key={`${node.id}-empty-${level}-${positionInLevel}`}
             className="block h-6 w-2.5 shrink-0"
           />
         )
@@ -1329,7 +1323,6 @@ function TreeBrowsePanel({
       >
         <CommandInput
           ref={treeSearchInputRef}
-          autoFocus={!isMobile}
           value={treeQuery}
           onValueChange={onTreeQueryChange}
           placeholder="Search tree"
@@ -1737,7 +1730,6 @@ function TreeLabelPanel({
             event.preventDefault()
             void onSave(event.currentTarget.value)
           }}
-          autoFocus
           className="min-w-0 flex-1"
         />
       </div>
@@ -1775,7 +1767,7 @@ type AppShellTreeDialogProps = {
   onSaveTreeLabel: (label: string) => Promise<void> | void
 }
 
-export function AppShellTreeDialog({
+function AppShellTreeDialog({
   open,
   onOpenChange,
   treeLoading,
@@ -2081,7 +2073,7 @@ export function AppShellTreeDialog({
                 The streaming node is marked with the spinner in the tree.
               </div>
             </div>
-            <div className="flex flex-col-reverse gap-2 border-t border-border/70 px-3 py-3 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 border-t border-border/70 p-3 sm:flex-row sm:justify-end">
               <Button
                 variant="outline"
                 onClick={() => setTreeStage("browse")}
@@ -2131,11 +2123,10 @@ export function AppShellTreeDialog({
                   treeSubmitting ||
                   activeSessionStreaming
                 }
-                autoFocus
               />
             </div>
             {isMobile ? (
-              <div className="flex flex-col-reverse gap-2 border-t border-border/70 px-3 py-3 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-border/70 p-3 sm:flex-row sm:justify-end">
                 <Button
                   variant="outline"
                   onClick={() => setTreeStage("actions")}

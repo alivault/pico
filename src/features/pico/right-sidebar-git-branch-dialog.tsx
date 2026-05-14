@@ -29,7 +29,6 @@ import {
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
-import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
 import {
   formatGitRelativeDateCompact,
   gitChangesQueryOptions,
@@ -82,7 +81,6 @@ export function GitBranchDialog({
 }) {
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
-  const shouldAutoFocus = useCommandSurfaceAutoFocus(isMobile)
   const normalizedCwd = normalizeCwd(cwd)
   const [query, setQuery] = React.useState("")
   const [stage, setStage] = React.useState<GitBranchDialogStage>("browse")
@@ -208,7 +206,6 @@ export function GitBranchDialog({
       className="min-h-0 flex-1"
     >
       <CommandInput
-        autoFocus={shouldAutoFocus}
         value={query}
         onValueChange={setQuery}
         placeholder="Search branches"
@@ -367,7 +364,6 @@ export function GitBranchDialog({
       </div>
       <div className="flex min-h-0 flex-1 items-center gap-2 p-3">
         <Input
-          autoFocus={shouldAutoFocus}
           value={createBranchName}
           onChange={(event) => setCreateBranchName(event.target.value)}
           onKeyDown={(event) => {
@@ -411,11 +407,7 @@ export function GitBranchDialog({
 
   if (isMobile) {
     return (
-      <Drawer
-        open={open}
-        onOpenChange={onOpenChange}
-        autoFocus={shouldAutoFocus}
-      >
+      <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Branches</DrawerTitle>

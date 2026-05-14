@@ -7,7 +7,6 @@ export {
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   PINNED_SESSIONS_STORAGE_KEY,
-  PROMPT_DRAFTS_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY,
@@ -26,14 +25,11 @@ export {
   THEME_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
-  loadStoredPromptDrafts,
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   appliedThemeClass,
-  normalizeAppliedThemeClass,
   normalizeThemeColorMode,
   normalizeThemeFamily,
-  normalizeThemeMode,
   promptDraftKey,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
@@ -50,34 +46,22 @@ export {
   readStoredTheme,
   readStoredThemeColorMode,
   rememberStoredPromptDraft,
-  resolvedThemeMode,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-  safeSessionStorageGetItem,
-  safeSessionStorageSetItem,
   sessionListEntryKey,
   themeColorModeLabel,
   themeFamilyLabel,
-  themeModeLabel,
 } from "@/lib/pico/storage"
 export {
-  assistantBlocksFromMessage,
   buildItemsFromSync,
   createCompactionSummaryItem,
   createInitialSessionState,
-  extractMessageImages,
-  extractMessageText,
-  extractToolText,
-  meaningfulHiddenThinkingLabel,
   normalizePromptImage,
   previewUrlForImage,
-  primaryThinkingSummaryText,
   sameContextUsage,
-  sanitizeThinkingSummaryText,
   thinkingSummaryText,
-  truncateThinkingSummary,
 } from "@/lib/pico/sync"
-export { filterFlatTree, flattenTree } from "@/lib/pico/tree"
+export { flattenTree } from "@/lib/pico/tree"
 
 export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5

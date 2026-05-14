@@ -100,9 +100,9 @@ function TitleTooltip({
       >
         {rows ? (
           <span className="flex flex-col gap-1">
-            {rows.map((row, index) => (
+            {rows.map((row, rowOffset) => (
               <span
-                key={index}
+                key={`tooltip-row-${rowOffset}`}
                 className="flex items-center justify-between gap-3"
               >
                 <span className="min-w-0">{row.title}</span>

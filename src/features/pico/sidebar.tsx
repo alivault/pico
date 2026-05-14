@@ -914,9 +914,10 @@ function buildDirectorySessionKeys(
   const sessionKeysByDirectory: Record<string, Array<string>> = {}
 
   for (const [directory, sessions] of Object.entries(sessionsByDirectory)) {
-    sessionKeysByDirectory[directory] = sessions
-      .map((entry) => sessionListEntryKey(entry))
-      .filter(Boolean)
+    sessionKeysByDirectory[directory] = sessions.flatMap((entry) => {
+      const key = sessionListEntryKey(entry)
+      return key ? [key] : []
+    })
   }
 
   return sessionKeysByDirectory
@@ -1264,7 +1265,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <CollapsibleContent>
             <SidebarGroupContent>
               {showLoadingState ? (
-                <div className="flex items-center gap-2 px-2 py-2 text-sm text-sidebar-foreground/70">
+                <div className="flex items-center gap-2 p-2 text-sm text-sidebar-foreground/70">
                   {showLoadingSpinner ? (
                     <Spinner />
                   ) : (
@@ -1320,7 +1321,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   ) : null}
                 </div>
               ) : (
-                <div className="px-2 py-2 text-sm text-sidebar-foreground/70">
+                <div className="p-2 text-sm text-sidebar-foreground/70">
                   {searchActive
                     ? "No matching unpinned sessions."
                     : "No unpinned sessions."}
@@ -1498,7 +1499,7 @@ function AppSidebarHeader({
         <SidebarMenuItem>
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
-            <span>Search sessions...</span>
+            <span>Search sessions…</span>
             <span className="ml-auto hidden items-center md:flex">
               <Kbd>{formatShortcutLabel("Control+S")}</Kbd>
             </span>
@@ -1871,7 +1872,7 @@ export function AppSidebar({
               <CollapsibleContent>
                 <SidebarGroupContent>
                   {visibleDirectories.length === 0 ? (
-                    <div className="px-2 py-2">
+                    <div className="p-2">
                       <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
                         <EmptyHeader>
                           <EmptyMedia variant="icon">

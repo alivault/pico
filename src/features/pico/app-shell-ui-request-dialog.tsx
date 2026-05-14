@@ -44,7 +44,7 @@ type AppShellUiRequestDialogProps = {
   onAuthBack?: () => void
 }
 
-export function AppShellUiRequestDialog({
+function AppShellUiRequestDialog({
   pendingUiRequest,
   pendingUiValue,
   onPendingUiValueChange,
@@ -148,7 +148,6 @@ export function AppShellUiRequestDialog({
               value={pendingUiValue}
               onChange={(event) => onPendingUiValueChange(event.target.value)}
               placeholder="Final redirected URL"
-              autoFocus={!isMobile}
               className="min-w-0 flex-1"
             />
           </div>
@@ -188,7 +187,6 @@ export function AppShellUiRequestDialog({
         "Open the login page, then complete login in your browser.",
       <Command loop shouldFilter>
         <CommandInput
-          autoFocus={!isMobile}
           placeholder="Choose login action"
           className="text-base md:text-sm"
         />
@@ -289,7 +287,6 @@ export function AppShellUiRequestDialog({
       pendingUiRequest.message || "Choose how to continue login.",
       <Command loop shouldFilter>
         <CommandInput
-          autoFocus={!isMobile}
           placeholder="Choose login option"
           className="text-base md:text-sm"
         />
@@ -388,7 +385,6 @@ export function AppShellUiRequestDialog({
             value={pendingUiValue}
             onChange={(event) => onPendingUiValueChange(event.target.value)}
             placeholder={pendingUiRequest.placeholder}
-            autoFocus={!isMobile}
             className="min-w-0 flex-1"
           />
         </div>
@@ -399,7 +395,7 @@ export function AppShellUiRequestDialog({
               className="w-full"
               disabled={!allowEmpty && !pendingUiValue.trim()}
             >
-              Continue
+              Continue login
             </Button>
             <Button
               type="button"
@@ -414,7 +410,7 @@ export function AppShellUiRequestDialog({
           <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
             <span className="inline-flex items-center gap-1">
               <Kbd>Enter</Kbd>
-              Continue
+              Continue login
             </span>
             <span className="inline-flex items-center gap-1">
               <Kbd>Esc</Kbd>
@@ -495,7 +491,7 @@ export function AppShellUiRequestDialog({
             <Button
               onClick={() => onResolveUiRequest({ value: pendingUiValue })}
             >
-              Submit
+              Submit response
             </Button>
           )}
         </DialogFooter>

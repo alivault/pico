@@ -797,7 +797,7 @@ function normalizeClientPendingId(value: unknown) {
   return pendingId
 }
 
-export class PicoRuntime {
+class PicoRuntime {
   private readonly encoder = new TextEncoder()
   private readonly contexts = new Map<string, ContextState>()
   private readonly sessionEntries = new Map<string, SessionEntry>()
