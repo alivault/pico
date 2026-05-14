@@ -1741,6 +1741,92 @@ function TreeLabelPanel({
   )
 }
 
+type TreeDialogState = {
+  filterMode: TreeFilterMode
+  stage: TreeStage
+  foldedNodeIds: Set<string>
+}
+
+type TreeDialogAction =
+  | { type: "opened" }
+  | { type: "filterModeChanged"; filterMode: TreeFilterMode }
+  | { type: "filterModeToggled"; filterMode: TreeFilterMode }
+  | { type: "foldedNodeIdsChanged"; foldedNodeIds: Set<string> }
+  | { type: "foldsReset" }
+  | { type: "stageChanged"; stage: TreeStage }
+  | { type: "nodeSelected"; stage: TreeStage }
+  | { type: "selectedNodeMissing" }
+  | { type: "abortCompleted" }
+  | { type: "backRequested" }
+
+const initialTreeDialogState: TreeDialogState = {
+  filterMode: "no-tools",
+  stage: "browse",
+  foldedNodeIds: new Set(),
+}
+
+function treeDialogReducer(
+  state: TreeDialogState,
+  action: TreeDialogAction
+): TreeDialogState {
+  switch (action.type) {
+    case "opened":
+      return {
+        filterMode: "no-tools",
+        stage: "browse",
+        foldedNodeIds: new Set(),
+      }
+    case "filterModeChanged":
+      return state.filterMode === action.filterMode
+        ? state
+        : {
+            ...state,
+            filterMode: action.filterMode,
+            foldedNodeIds: new Set(),
+          }
+    case "filterModeToggled": {
+      const filterMode = toggleTreeFilterMode(
+        state.filterMode,
+        action.filterMode
+      )
+      return state.filterMode === filterMode
+        ? state
+        : {
+            ...state,
+            filterMode,
+            foldedNodeIds: new Set(),
+          }
+    }
+    case "foldedNodeIdsChanged":
+      return state.foldedNodeIds === action.foldedNodeIds
+        ? state
+        : { ...state, foldedNodeIds: action.foldedNodeIds }
+    case "foldsReset":
+      return state.foldedNodeIds.size === 0
+        ? state
+        : { ...state, foldedNodeIds: new Set() }
+    case "stageChanged":
+      return state.stage === action.stage
+        ? state
+        : { ...state, stage: action.stage }
+    case "nodeSelected":
+      return state.stage === action.stage
+        ? state
+        : { ...state, stage: action.stage }
+    case "selectedNodeMissing":
+      return state.stage === "browse" ? state : { ...state, stage: "browse" }
+    case "abortCompleted":
+      return state.stage === "abort" ? { ...state, stage: "actions" } : state
+    case "backRequested":
+      return {
+        ...state,
+        stage: state.stage === "custom" ? "actions" : "browse",
+      }
+    default:
+      return state
+  }
+}
+
 type AppShellTreeDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1785,18 +1871,18 @@ function AppShellTreeDialog({
   onAbortStreamingSession,
   onSaveTreeLabel,
 }: AppShellTreeDialogProps) {
-  const [treeFilterMode, setTreeFilterMode] =
-    React.useState<TreeFilterMode>("no-tools")
-  const [treeStage, setTreeStage] = React.useState<TreeStage>("browse")
-  const [foldedTreeNodeIds, setFoldedTreeNodeIds] = React.useState(
-    () => new Set<string>()
+  const [state, dispatch] = React.useReducer(
+    treeDialogReducer,
+    initialTreeDialogState
   )
+  const {
+    filterMode: treeFilterMode,
+    stage: treeStage,
+    foldedNodeIds: foldedTreeNodeIds,
+  } = state
   const treeCustomSummaryRef = React.useRef<HTMLTextAreaElement | null>(null)
   const treeWasOpenRef = React.useRef(false)
-  const treeFoldResetRef = React.useRef({
-    filterMode: treeFilterMode,
-    query: treeQuery,
-  })
+  const treeQueryResetRef = React.useRef(treeQuery)
   const isMobile = useIsMobile()
 
   const treeViewModel = React.useMemo(
@@ -1823,33 +1909,23 @@ function AppShellTreeDialog({
 
     if (!open || wasOpen) return
 
-    setTreeFilterMode("no-tools")
-    setTreeStage("browse")
-    setFoldedTreeNodeIds(new Set())
+    dispatch({ type: "opened" })
   }, [open, selectedTreeNodeId, treeLeafId])
 
   React.useEffect(() => {
-    const previous = treeFoldResetRef.current
-    treeFoldResetRef.current = {
-      filterMode: treeFilterMode,
-      query: treeQuery,
-    }
+    const previousQuery = treeQueryResetRef.current
+    treeQueryResetRef.current = treeQuery
 
-    if (
-      previous.filterMode === treeFilterMode &&
-      previous.query === treeQuery
-    ) {
-      return
-    }
+    if (previousQuery === treeQuery) return
 
-    setFoldedTreeNodeIds(new Set())
-  }, [treeFilterMode, treeQuery])
+    dispatch({ type: "foldsReset" })
+  }, [treeQuery])
 
   React.useEffect(() => {
     if (!open) return
 
     if (treeStage !== "browse" && !selectedTreeNode) {
-      setTreeStage("browse")
+      dispatch({ type: "selectedNodeMissing" })
     }
   }, [open, selectedTreeNode, treeStage])
 
@@ -1874,9 +1950,7 @@ function AppShellTreeDialog({
         ) {
           event.preventDefault()
           event.stopPropagation()
-          setTreeFilterMode((currentMode) =>
-            toggleTreeFilterMode(currentMode, nextMode)
-          )
+          dispatch({ type: "filterModeToggled", filterMode: nextMode })
           return
         }
       }
@@ -1903,14 +1977,14 @@ function AppShellTreeDialog({
       if (treeStage === "custom" || treeStage === "label") {
         event.preventDefault()
         event.stopPropagation()
-        setTreeStage(treeStage === "custom" ? "actions" : "browse")
+        dispatch({ type: "backRequested" })
         return
       }
 
       if (treeStage === "actions") {
         event.preventDefault()
         event.stopPropagation()
-        setTreeStage("browse")
+        dispatch({ type: "stageChanged", stage: "browse" })
       }
     }
 
@@ -1944,7 +2018,7 @@ function AppShellTreeDialog({
   React.useEffect(() => {
     if (!open || treeStage !== "abort" || activeSessionStreaming) return
 
-    setTreeStage("actions")
+    dispatch({ type: "abortCompleted" })
   }, [activeSessionStreaming, open, treeStage])
 
   const selectTreeNode = (nodeId: string) => {
@@ -1953,7 +2027,10 @@ function AppShellTreeDialog({
 
     onSelectedTreeNodeIdChange(nodeId)
     onSelectedTreeNodeLabelChange(node.label || "")
-    setTreeStage(activeSessionStreaming ? "abort" : "actions")
+    dispatch({
+      type: "nodeSelected",
+      stage: activeSessionStreaming ? "abort" : "actions",
+    })
   }
 
   const labelTreeNode = (nodeId: string) => {
@@ -1964,7 +2041,7 @@ function AppShellTreeDialog({
 
     onSelectedTreeNodeIdChange(nodeId)
     onSelectedTreeNodeLabelChange(node.label || "")
-    setTreeStage("label")
+    dispatch({ type: "stageChanged", stage: "label" })
   }
 
   const canNavigateSelectedNode = Boolean(
@@ -2005,7 +2082,9 @@ function AppShellTreeDialog({
         key={open ? "open" : "closed"}
         isMobile={isMobile}
         treeFilterMode={treeFilterMode}
-        onTreeFilterModeChange={setTreeFilterMode}
+        onTreeFilterModeChange={(filterMode) => {
+          dispatch({ type: "filterModeChanged", filterMode })
+        }}
         treeLoading={treeLoading}
         treeSubmitting={treeSubmitting}
         treeLeafId={treeLeafId}
@@ -2014,7 +2093,9 @@ function AppShellTreeDialog({
         onTreeQueryChange={onTreeQueryChange}
         treeViewModel={treeViewModel}
         foldedTreeNodeIds={foldedTreeNodeIds}
-        onFoldedTreeNodeIdsChange={setFoldedTreeNodeIds}
+        onFoldedTreeNodeIdsChange={(foldedNodeIds) => {
+          dispatch({ type: "foldedNodeIdsChanged", foldedNodeIds })
+        }}
         selectedTreeNodeId={selectedTreeNodeId}
         onSelectTreeNode={selectTreeNode}
         onLabelTreeNode={labelTreeNode}
@@ -2025,9 +2106,9 @@ function AppShellTreeDialog({
           <Button
             size="icon-sm"
             variant="ghost"
-            onClick={() =>
-              setTreeStage(treeStage === "custom" ? "actions" : "browse")
-            }
+            onClick={() => {
+              dispatch({ type: "backRequested" })
+            }}
             disabled={treeSubmitting || treeAborting}
             aria-label={treeStage === "custom" ? "Back" : "Back to tree"}
           >
@@ -2058,7 +2139,9 @@ function AppShellTreeDialog({
             activeSessionStreaming={activeSessionStreaming}
             selectedTreeNodeId={selectedTreeNodeId}
             onNavigateTreeNode={onNavigateTreeNode}
-            onCustomPrompt={() => setTreeStage("custom")}
+            onCustomPrompt={() => {
+              dispatch({ type: "stageChanged", stage: "custom" })
+            }}
           />
         ) : treeStage === "abort" ? (
           <div className="flex min-h-0 flex-1 flex-col">
@@ -2074,7 +2157,9 @@ function AppShellTreeDialog({
             <div className="flex flex-col-reverse gap-2 border-t border-border/70 p-3 sm:flex-row sm:justify-end">
               <Button
                 variant="outline"
-                onClick={() => setTreeStage("browse")}
+                onClick={() => {
+                  dispatch({ type: "stageChanged", stage: "browse" })
+                }}
                 disabled={treeAborting}
               >
                 Back
@@ -2085,7 +2170,7 @@ function AppShellTreeDialog({
                 onClick={() => {
                   void Promise.resolve(onAbortStreamingSession())
                     .then(() => {
-                      setTreeStage("actions")
+                      dispatch({ type: "stageChanged", stage: "actions" })
                     })
                     .catch(() => {})
                 }}
@@ -2105,7 +2190,7 @@ function AppShellTreeDialog({
             onSave={(label) => {
               onSelectedTreeNodeLabelChange(label)
               void Promise.resolve(onSaveTreeLabel(label)).then(() => {
-                setTreeStage("browse")
+                dispatch({ type: "stageChanged", stage: "browse" })
               })
             }}
           />
@@ -2127,7 +2212,9 @@ function AppShellTreeDialog({
               <div className="flex flex-col-reverse gap-2 border-t border-border/70 p-3 sm:flex-row sm:justify-end">
                 <Button
                   variant="outline"
-                  onClick={() => setTreeStage("actions")}
+                  onClick={() => {
+                    dispatch({ type: "stageChanged", stage: "actions" })
+                  }}
                   disabled={treeSubmitting}
                 >
                   Back
