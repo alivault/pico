@@ -378,50 +378,77 @@ async function readDirectoryEntries(directory: string) {
   }
 }
 
+async function walkDirectoryFallbackLayer({
+  baseDir,
+  normalizedQuery,
+  currentDirs,
+  matches,
+  maxResults,
+}: {
+  baseDir: string
+  normalizedQuery: string
+  currentDirs: Array<string>
+  matches: Array<{ path: string; isDirectory: boolean }>
+  maxResults: number
+}) {
+  if (currentDirs.length === 0 || matches.length >= maxResults) return
+
+  const directoryEntries = await Promise.all(
+    currentDirs.map(async (currentDir) => ({
+      currentDir,
+      entries: await readDirectoryEntries(currentDir),
+    }))
+  )
+  const nextDirs: Array<string> = []
+
+  for (const { currentDir, entries } of directoryEntries) {
+    for (const entry of entries) {
+      if (matches.length >= maxResults) break
+      if (WALK_IGNORE_DIRECTORIES.has(entry.name)) continue
+
+      const fullPath = join(currentDir, entry.name)
+      const relativePath = displayPath(path.relative(baseDir, fullPath))
+      const isDirectory = entry.isDirectory()
+      const displayValue = isDirectory ? `${relativePath}/` : relativePath
+
+      if (
+        !normalizedQuery ||
+        projectPathTextContains(displayValue.toLowerCase(), normalizedQuery)
+      ) {
+        matches.push({
+          path: displayValue,
+          isDirectory,
+        })
+      }
+
+      if (isDirectory) {
+        nextDirs.push(fullPath)
+      }
+    }
+  }
+
+  await walkDirectoryFallbackLayer({
+    baseDir,
+    normalizedQuery,
+    currentDirs: nextDirs,
+    matches,
+    maxResults,
+  })
+}
+
 async function walkDirectoryWithFallback(
   baseDir: string,
   query = "",
   maxResults = 100
 ) {
-  const queue = [baseDir]
   const matches: Array<{ path: string; isDirectory: boolean }> = []
-  const normalizedQuery = displayPath(query).toLowerCase()
-
-  while (queue.length > 0 && matches.length < maxResults) {
-    const currentDirs = queue.splice(0)
-    const directoryEntries = await Promise.all(
-      currentDirs.map(async (currentDir) => ({
-        currentDir,
-        entries: await readDirectoryEntries(currentDir),
-      }))
-    )
-
-    for (const { currentDir, entries } of directoryEntries) {
-      for (const entry of entries) {
-        if (matches.length >= maxResults) break
-        if (WALK_IGNORE_DIRECTORIES.has(entry.name)) continue
-
-        const fullPath = join(currentDir, entry.name)
-        const relativePath = displayPath(path.relative(baseDir, fullPath))
-        const isDirectory = entry.isDirectory()
-        const displayValue = isDirectory ? `${relativePath}/` : relativePath
-
-        if (
-          !normalizedQuery ||
-          projectPathTextContains(displayValue.toLowerCase(), normalizedQuery)
-        ) {
-          matches.push({
-            path: displayValue,
-            isDirectory,
-          })
-        }
-
-        if (isDirectory) {
-          queue.push(fullPath)
-        }
-      }
-    }
-  }
+  await walkDirectoryFallbackLayer({
+    baseDir,
+    normalizedQuery: displayPath(query).toLowerCase(),
+    currentDirs: [baseDir],
+    matches,
+    maxResults,
+  })
 
   return matches
 }
@@ -593,6 +620,61 @@ function directorySearchScore({
   return score - depth * 5
 }
 
+async function searchDirectoriesFallbackLayer({
+  root,
+  normalizedQuery,
+  currentDirectories,
+  results,
+  maxResults,
+}: {
+  root: string
+  normalizedQuery: string
+  currentDirectories: Array<{ directory: string; depth: number }>
+  results: Array<{ path: string; isDirectory: boolean }>
+  maxResults: number
+}) {
+  const eligibleDirectories = currentDirectories.filter(
+    (current) => current.depth < DIRECTORY_SEARCH_MAX_DEPTH
+  )
+  if (eligibleDirectories.length === 0 || results.length >= maxResults) return
+
+  const directoryEntries = await Promise.all(
+    eligibleDirectories.map(async (current) => ({
+      current,
+      entries: await readDirectoryEntries(current.directory),
+    }))
+  )
+  const nextDirectories: Array<{ directory: string; depth: number }> = []
+
+  for (const { current, entries } of directoryEntries) {
+    for (const entry of entries) {
+      if (results.length >= maxResults) break
+      if (!entry.isDirectory()) continue
+      if (DIRECTORY_SEARCH_IGNORE_DIRECTORIES.has(entry.name)) continue
+      if (!normalizedQuery.startsWith(".") && entry.name.startsWith(".")) {
+        continue
+      }
+
+      const fullPath = join(current.directory, entry.name)
+      const relativePath = `${displayPath(path.relative(root, fullPath))}/`
+      if (
+        projectPathTextContains(relativePath.toLowerCase(), normalizedQuery)
+      ) {
+        results.push({ path: relativePath, isDirectory: true })
+      }
+      nextDirectories.push({ directory: fullPath, depth: current.depth + 1 })
+    }
+  }
+
+  await searchDirectoriesFallbackLayer({
+    root,
+    normalizedQuery,
+    currentDirectories: nextDirectories,
+    results,
+    maxResults,
+  })
+}
+
 async function searchDirectoriesWithFallback({
   root,
   query,
@@ -602,43 +684,14 @@ async function searchDirectoriesWithFallback({
   query: string
   maxResults: number
 }) {
-  const normalizedQuery = query.trim().toLowerCase()
   const results: Array<{ path: string; isDirectory: boolean }> = []
-  const queue: Array<{ directory: string; depth: number }> = [
-    { directory: root, depth: 0 },
-  ]
-
-  while (queue.length > 0 && results.length < maxResults) {
-    const currentDirectories = queue
-      .splice(0)
-      .filter((current) => current.depth < DIRECTORY_SEARCH_MAX_DEPTH)
-    const directoryEntries = await Promise.all(
-      currentDirectories.map(async (current) => ({
-        current,
-        entries: await readDirectoryEntries(current.directory),
-      }))
-    )
-
-    for (const { current, entries } of directoryEntries) {
-      for (const entry of entries) {
-        if (results.length >= maxResults) break
-        if (!entry.isDirectory()) continue
-        if (DIRECTORY_SEARCH_IGNORE_DIRECTORIES.has(entry.name)) continue
-        if (!normalizedQuery.startsWith(".") && entry.name.startsWith(".")) {
-          continue
-        }
-
-        const fullPath = join(current.directory, entry.name)
-        const relativePath = `${displayPath(path.relative(root, fullPath))}/`
-        if (
-          projectPathTextContains(relativePath.toLowerCase(), normalizedQuery)
-        ) {
-          results.push({ path: relativePath, isDirectory: true })
-        }
-        queue.push({ directory: fullPath, depth: current.depth + 1 })
-      }
-    }
-  }
+  await searchDirectoriesFallbackLayer({
+    root,
+    normalizedQuery: query.trim().toLowerCase(),
+    currentDirectories: [{ directory: root, depth: 0 }],
+    results,
+    maxResults,
+  })
 
   return results
 }
