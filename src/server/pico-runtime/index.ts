@@ -310,6 +310,7 @@ type SessionEntry = {
 type ContextState = {
   id: string
   clients: Set<SseClient>
+  activeRevision: number
   activeKey?: string
   draftKey?: string
   sessionScope: string
@@ -318,6 +319,7 @@ type ContextState = {
 }
 
 type StateSyncScalarField =
+  | "activationRevision"
   | "sessionKey"
   | "draft"
   | "streaming"
@@ -369,6 +371,7 @@ type ResolveRequestResult = {
 }
 
 const STATE_SYNC_SCALAR_FIELDS = [
+  "activationRevision",
   "sessionKey",
   "draft",
   "streaming",
@@ -633,11 +636,12 @@ function createStateSyncPatch(
   let changed = false
   const patch: StateSyncPayload = {
     type: "state_sync",
+    activationRevision: next.activationRevision,
     sessionKey: next.sessionKey,
   }
 
   for (const field of STATE_SYNC_SCALAR_FIELDS) {
-    if (field === "sessionKey") continue
+    if (field === "activationRevision" || field === "sessionKey") continue
     const nextValue = next[field]
     if (Object.is(previous.scalarValues[field], nextValue)) {
       continue
@@ -1060,6 +1064,7 @@ class PicoRuntime {
     const next: ContextState = {
       id,
       clients: new Set(),
+      activeRevision: 0,
       activeKey: undefined,
       draftKey: undefined,
       sessionScope: process.cwd(),
@@ -1208,12 +1213,16 @@ class PicoRuntime {
     return lastValue
   }
 
-  private currentStatePayload(entry: SessionEntry): StateSyncPayload {
+  private currentStatePayload(
+    entry: SessionEntry,
+    context: ContextState
+  ): StateSyncPayload {
     const draft = this.isDraftEntry(entry)
     const historyTotalCount = entry.session.messages.length
 
     return {
       type: "state_sync",
+      activationRevision: context.activeRevision,
       sessionKey: entry.key,
       items: entry.retainedConversationItems,
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
@@ -1794,7 +1803,7 @@ class PicoRuntime {
 
     const startedAt = performance.now()
     const payloadStartedAt = performance.now()
-    const payload = this.currentStatePayload(entry)
+    const payload = this.currentStatePayload(entry, context)
     const payloadDurationMs = roundedDurationMs(payloadStartedAt)
     let sentCount = 0
     for (const client of context.clients) {
@@ -2144,6 +2153,7 @@ class PicoRuntime {
   ) {
     const previousActiveKey = context.activeKey
     const startedAt = performance.now()
+    context.activeRevision += 1
     await activateRuntimeContextSession({
       context,
       entry,
@@ -2177,6 +2187,7 @@ class PicoRuntime {
     this.syncGitWatchDirectories()
     this.logSessionLoadDebug("context_session:activate", {
       contextId: context.id,
+      activeRevision: context.activeRevision,
       previousActiveKey,
       notify: options?.notify !== false,
       statusDurationMs,
@@ -3488,7 +3499,7 @@ class PicoRuntime {
             this.sendStatePayloadToClient(
               context,
               client,
-              this.currentStatePayload(activeEntry),
+              this.currentStatePayload(activeEntry, context),
               {
                 forceFull: true,
               }

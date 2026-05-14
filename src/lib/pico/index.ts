@@ -294,6 +294,7 @@ type PendingUserMessagePayload = UnknownRecord & {
 
 export type StateSyncPayload = {
   type: "state_sync"
+  activationRevision?: number
   sessionKey?: string
   items?: Array<ConversationItem>
   itemsPatch?: ConversationItemsPatch

@@ -538,6 +538,7 @@ export function useAppShellSessionSync({
     (sessionState) => sessionState.sessionId
   )
   const syncedSessionIdRef = React.useRef(syncedSessionId)
+  const latestActivationRevisionRef = React.useRef(0)
   const observedRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const syncedSessionDraft = useSelector(
     sessionStore,
@@ -745,6 +746,17 @@ export function useAppShellSessionSync({
       const payload = JSON.parse(event.data) as PicoServerEvent
 
       if (isStateSyncEvent(payload)) {
+        const activationRevision = payload.activationRevision
+        if (
+          typeof activationRevision === "number" &&
+          activationRevision < latestActivationRevisionRef.current
+        ) {
+          return
+        }
+        if (typeof activationRevision === "number") {
+          latestActivationRevisionRef.current = activationRevision
+        }
+
         hasReceivedStateSyncRef.current = true
         const previousState = sessionStateRef.current
         if (
