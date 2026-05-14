@@ -259,6 +259,61 @@ function useComposerSlashCommands({
   )
 }
 
+type ComposerPickerState = {
+  modelPickerOpen: boolean
+  thinkingPickerOpen: boolean
+  modelQuery: string
+}
+
+type ComposerPickerAction =
+  | { type: "openModel" }
+  | { type: "openThinking" }
+  | { type: "setModelOpen"; open: boolean }
+  | { type: "setThinkingOpen"; open: boolean }
+  | { type: "setModelQuery"; query: string }
+  | { type: "syncDisabled"; disabled: boolean }
+
+const INITIAL_COMPOSER_PICKER_STATE: ComposerPickerState = {
+  modelPickerOpen: false,
+  thinkingPickerOpen: false,
+  modelQuery: "",
+}
+
+function composerPickerReducer(
+  state: ComposerPickerState,
+  action: ComposerPickerAction
+): ComposerPickerState {
+  switch (action.type) {
+    case "openModel":
+      return { ...state, modelPickerOpen: true, thinkingPickerOpen: false }
+    case "openThinking":
+      return { ...state, modelPickerOpen: false, thinkingPickerOpen: true }
+    case "setModelOpen":
+      return {
+        ...state,
+        modelPickerOpen: action.open,
+        modelQuery: action.open ? state.modelQuery : "",
+      }
+    case "setThinkingOpen":
+      return { ...state, thinkingPickerOpen: action.open }
+    case "setModelQuery":
+      return { ...state, modelQuery: action.query }
+    case "syncDisabled":
+      if (action.disabled) {
+        return {
+          ...state,
+          modelPickerOpen: false,
+          thinkingPickerOpen: false,
+          modelQuery: "",
+        }
+      }
+      if (!state.modelPickerOpen && state.modelQuery) {
+        return { ...state, modelQuery: "" }
+      }
+      return state
+  }
+}
+
 function getClipboardImageFiles(data: DataTransfer) {
   const itemFiles = Array.from(data.items).flatMap((item) => {
     if (item.kind !== "file" || !item.type.startsWith("image/")) return []
@@ -310,9 +365,11 @@ export function ComposerPanel({
   ref?: React.Ref<ComposerPanelHandle>
 }) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
-  const [thinkingPickerOpen, setThinkingPickerOpen] = React.useState(false)
-  const [modelQuery, setModelQuery] = React.useState("")
+  const [pickerState, dispatchPickerState] = React.useReducer(
+    composerPickerReducer,
+    INITIAL_COMPOSER_PICKER_STATE
+  )
+  const { modelPickerOpen, thinkingPickerOpen, modelQuery } = pickerState
 
   React.useImperativeHandle(
     ref,
@@ -321,27 +378,17 @@ export function ComposerPanel({
         promptRef.current?.focus(options)
       },
       openModelPicker: () => {
-        setThinkingPickerOpen(false)
-        setModelPickerOpen(true)
+        dispatchPickerState({ type: "openModel" })
       },
       openThinkingPicker: () => {
-        setModelPickerOpen(false)
-        setThinkingPickerOpen(true)
+        dispatchPickerState({ type: "openThinking" })
       },
     }),
     []
   )
 
   React.useEffect(() => {
-    if (disabled) {
-      setModelPickerOpen(false)
-      setThinkingPickerOpen(false)
-      return
-    }
-
-    if (!modelPickerOpen) {
-      setModelQuery("")
-    }
+    dispatchPickerState({ type: "syncDisabled", disabled })
   }, [disabled, modelPickerOpen])
 
   const composerColumnClassName =
@@ -390,11 +437,17 @@ export function ComposerPanel({
           <ComposerPickers
             activeSessionId={activeSessionId}
             modelPickerOpen={modelPickerOpen}
-            onModelPickerOpenChange={setModelPickerOpen}
+            onModelPickerOpenChange={(open) =>
+              dispatchPickerState({ type: "setModelOpen", open })
+            }
             thinkingPickerOpen={thinkingPickerOpen}
-            onThinkingPickerOpenChange={setThinkingPickerOpen}
+            onThinkingPickerOpenChange={(open) =>
+              dispatchPickerState({ type: "setThinkingOpen", open })
+            }
             modelQuery={modelQuery}
-            onModelQueryChange={setModelQuery}
+            onModelQueryChange={(query) =>
+              dispatchPickerState({ type: "setModelQuery", query })
+            }
             contextUsageStore={contextUsageStore}
             sessionStore={sessionStore}
             disabled={disabled}

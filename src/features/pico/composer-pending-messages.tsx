@@ -44,6 +44,48 @@ type ComposerPendingMessagesProps = {
   onReorderPending: (pendingId: string, direction: -1 | 1) => void
 }
 
+type PendingMessageEditState = {
+  editingPendingId: string | null
+  editText: string
+  editError: string | null
+}
+
+type PendingMessageEditAction =
+  | { type: "begin"; message: PendingComposerMessage }
+  | { type: "cancel" }
+  | { type: "text"; text: string }
+  | { type: "error"; error: string }
+
+const EMPTY_PENDING_MESSAGE_EDIT_STATE: PendingMessageEditState = {
+  editingPendingId: null,
+  editText: "",
+  editError: null,
+}
+
+function pendingMessageEditReducer(
+  state: PendingMessageEditState,
+  action: PendingMessageEditAction
+): PendingMessageEditState {
+  switch (action.type) {
+    case "begin":
+      return {
+        editingPendingId: action.message.pendingId,
+        editText: action.message.text,
+        editError: null,
+      }
+    case "cancel":
+      return EMPTY_PENDING_MESSAGE_EDIT_STATE
+    case "text":
+      return {
+        ...state,
+        editText: action.text,
+        editError: state.editError ? null : state.editError,
+      }
+    case "error":
+      return { ...state, editError: action.error }
+  }
+}
+
 export const ComposerPendingMessages = React.memo(
   function ComposerPendingMessages({
     currentPendingMessages,
@@ -51,11 +93,11 @@ export const ComposerPendingMessages = React.memo(
     onRemovePendingMessage,
     onReorderPending,
   }: ComposerPendingMessagesProps) {
-    const [editingPendingId, setEditingPendingId] = React.useState<
-      string | null
-    >(null)
-    const [editText, setEditText] = React.useState("")
-    const [editError, setEditError] = React.useState<string | null>(null)
+    const [editState, dispatchEditState] = React.useReducer(
+      pendingMessageEditReducer,
+      EMPTY_PENDING_MESSAGE_EDIT_STATE
+    )
+    const { editingPendingId, editText, editError } = editState
 
     const editingMessage = editingPendingId
       ? currentPendingMessages.find(
@@ -66,9 +108,7 @@ export const ComposerPendingMessages = React.memo(
     React.useEffect(() => {
       if (!editingPendingId) return
       if (editingMessage) return
-      setEditingPendingId(null)
-      setEditText("")
-      setEditError(null)
+      dispatchEditState({ type: "cancel" })
     }, [editingMessage, editingPendingId])
 
     if (currentPendingMessages.length === 0) {
@@ -76,20 +116,19 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const beginEdit = (message: PendingComposerMessage) => {
-      setEditingPendingId(message.pendingId)
-      setEditText(message.text)
-      setEditError(null)
+      dispatchEditState({ type: "begin", message })
     }
 
     const cancelEdit = () => {
-      setEditingPendingId(null)
-      setEditText("")
-      setEditError(null)
+      dispatchEditState({ type: "cancel" })
     }
 
     const saveEdit = (message: PendingComposerMessage) => {
       if (!editText.trim() && message.images.length === 0) {
-        setEditError("Enter a message or keep at least one image.")
+        dispatchEditState({
+          type: "error",
+          error: "Enter a message or keep at least one image.",
+        })
         return
       }
 
@@ -146,8 +185,10 @@ export const ComposerPendingMessages = React.memo(
                                   }
                                   aria-invalid={Boolean(editError)}
                                   onChange={(event) => {
-                                    setEditText(event.target.value)
-                                    if (editError) setEditError(null)
+                                    dispatchEditState({
+                                      type: "text",
+                                      text: event.target.value,
+                                    })
                                   }}
                                   onKeyDown={(event) => {
                                     if (
