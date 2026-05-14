@@ -617,9 +617,15 @@ export function RightSidebar({
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
   )
+  const hasControlledActiveTab = controlledActiveTab !== undefined
   const activeTab = controlledActiveTab ?? localState.uncontrolledActiveTab
   const activeTabRef = React.useRef(activeTab)
   activeTabRef.current = activeTab
+  const activeTabChangeEffectEvent = React.useEffectEvent(
+    (tab: RightSidebarTabValue) => {
+      onActiveTabChange?.(tab)
+    }
+  )
   const setActiveTab = (tab: RightSidebarTabValue) => {
     dispatchLocal({ type: "set-active-tab", tab })
     onActiveTabChange?.(tab)
@@ -705,12 +711,12 @@ export function RightSidebar({
   React.useEffect(() => {
     dispatchLocal({
       type: "reset-navigation",
-      resetActiveTab: !controlledActiveTab,
+      resetActiveTab: !hasControlledActiveTab,
     })
     if (activeTabRef.current === "commit-diff") {
-      onActiveTabChange?.("review")
+      activeTabChangeEffectEvent("review")
     }
-  }, [controlledActiveTab, isMobile, normalizedCwd, onActiveTabChange])
+  }, [hasControlledActiveTab, isMobile, normalizedCwd])
 
   return (
     <div className="h-full min-h-[520px] w-full min-w-0">
