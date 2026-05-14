@@ -3,6 +3,7 @@ import { ArrowLeftIcon } from "lucide-react"
 
 import type {
   DirectorySessionsIndexesResponse,
+  DirectorySessionsIndexSnapshot,
   SessionListEntry,
   SessionStatusEvent,
 } from "@/lib/pico/api"
@@ -221,6 +222,206 @@ function FooterKbd({ children }: { children: React.ReactNode }) {
   return <Kbd>{children}</Kbd>
 }
 
+type SessionsDialogState = {
+  query: string
+  scope: SessionsDialogScope
+  stage: SessionsDialogStage
+  selectedSessionKey: string
+  renameValue: string
+  localSessionNames: Record<string, string>
+  loadedSessionsByPath: Record<string, Array<SessionListEntry>>
+  loadingByPath: Record<string, boolean>
+}
+
+type SessionsDialogAction =
+  | { type: "closed" }
+  | { type: "queryChanged"; query: string }
+  | { type: "scopeToggled" }
+  | { type: "selectedSessionChanged"; key: string }
+  | { type: "browseRequested" }
+  | { type: "renameRequested"; value: string }
+  | { type: "renameValueChanged"; value: string }
+  | { type: "renameSaved"; path: string; name: string }
+  | { type: "deleteRequested" }
+  | { type: "deleteSaved"; path: string }
+  | { type: "directoriesLoadingStarted"; directories: Array<string> }
+  | {
+      type: "directoriesLoadingFinished"
+      directories: Array<string>
+      directoryIndexes?: Record<string, DirectorySessionsIndexSnapshot>
+    }
+  | { type: "visibleSelectionChanged"; key: string }
+
+const initialSessionsDialogState: SessionsDialogState = {
+  query: "",
+  scope: "current",
+  stage: "browse",
+  selectedSessionKey: "",
+  renameValue: "",
+  localSessionNames: {},
+  loadedSessionsByPath: {},
+  loadingByPath: {},
+}
+
+function sessionsDialogReducer(
+  state: SessionsDialogState,
+  action: SessionsDialogAction
+): SessionsDialogState {
+  switch (action.type) {
+    case "closed":
+      if (
+        state.query === "" &&
+        state.scope === "current" &&
+        state.stage === "browse" &&
+        state.renameValue === ""
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        query: "",
+        scope: "current",
+        stage: "browse",
+        renameValue: "",
+      }
+    case "queryChanged":
+      return state.query === action.query
+        ? state
+        : { ...state, query: action.query }
+    case "scopeToggled":
+      return {
+        ...state,
+        scope: state.scope === "current" ? "all" : "current",
+      }
+    case "selectedSessionChanged":
+      return state.selectedSessionKey === action.key
+        ? state
+        : { ...state, selectedSessionKey: action.key }
+    case "browseRequested":
+      return state.stage === "browse" ? state : { ...state, stage: "browse" }
+    case "renameRequested":
+      return {
+        ...state,
+        renameValue: action.value,
+        stage: "rename",
+      }
+    case "renameValueChanged":
+      return state.renameValue === action.value
+        ? state
+        : { ...state, renameValue: action.value }
+    case "renameSaved":
+      return {
+        ...state,
+        localSessionNames: {
+          ...state.localSessionNames,
+          [action.path]: action.name,
+        },
+        stage: "browse",
+      }
+    case "deleteRequested":
+      return state.stage === "delete" ? state : { ...state, stage: "delete" }
+    case "deleteSaved": {
+      const loadedSessionsByPath: Record<string, Array<SessionListEntry>> = {}
+      let sessionsChanged = false
+
+      for (const [directory, sessions] of Object.entries(
+        state.loadedSessionsByPath
+      )) {
+        const filteredSessions = sessions.filter(
+          (entry) => entry.path !== action.path
+        )
+        loadedSessionsByPath[directory] = filteredSessions
+        if (filteredSessions.length !== sessions.length) sessionsChanged = true
+      }
+
+      let localSessionNames = state.localSessionNames
+      if (
+        Object.prototype.hasOwnProperty.call(
+          state.localSessionNames,
+          action.path
+        )
+      ) {
+        localSessionNames = { ...state.localSessionNames }
+        delete localSessionNames[action.path]
+      }
+
+      return {
+        ...state,
+        loadedSessionsByPath: sessionsChanged
+          ? loadedSessionsByPath
+          : state.loadedSessionsByPath,
+        localSessionNames,
+        selectedSessionKey: "",
+        stage: "browse",
+      }
+    }
+    case "directoriesLoadingStarted": {
+      let changed = false
+      const loadingByPath = { ...state.loadingByPath }
+      for (const directory of action.directories) {
+        if (loadingByPath[directory]) continue
+        loadingByPath[directory] = true
+        changed = true
+      }
+
+      return changed ? { ...state, loadingByPath } : state
+    }
+    case "directoriesLoadingFinished": {
+      let loadingChanged = false
+      const loadingByPath = { ...state.loadingByPath }
+      for (const directory of action.directories) {
+        if (!Object.prototype.hasOwnProperty.call(loadingByPath, directory)) {
+          continue
+        }
+        delete loadingByPath[directory]
+        loadingChanged = true
+      }
+
+      let loadedSessionsByPath = state.loadedSessionsByPath
+      if (action.directoryIndexes) {
+        loadedSessionsByPath = { ...state.loadedSessionsByPath }
+        for (const directory of action.directories) {
+          loadedSessionsByPath[directory] =
+            action.directoryIndexes[directory]?.sessions || []
+        }
+      }
+
+      if (
+        !loadingChanged &&
+        loadedSessionsByPath === state.loadedSessionsByPath
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        loadingByPath: loadingChanged ? loadingByPath : state.loadingByPath,
+        loadedSessionsByPath,
+      }
+    }
+    case "visibleSelectionChanged": {
+      const renameValue = state.stage === "browse" ? state.renameValue : ""
+      if (
+        state.selectedSessionKey === action.key &&
+        state.stage === "browse" &&
+        state.renameValue === renameValue
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        selectedSessionKey: action.key,
+        stage: "browse",
+        renameValue,
+      }
+    }
+    default:
+      return state
+  }
+}
+
 function AppShellSessionsDialog({
   open,
   onOpenChange,
@@ -237,20 +438,20 @@ function AppShellSessionsDialog({
   onError,
 }: AppShellSessionsDialogProps) {
   const isMobile = useIsMobile()
-  const [query, setQuery] = React.useState("")
-  const [scope, setScope] = React.useState<SessionsDialogScope>("current")
-  const [stage, setStage] = React.useState<SessionsDialogStage>("browse")
-  const [selectedSessionKey, setSelectedSessionKey] = React.useState("")
-  const [renameValue, setRenameValue] = React.useState("")
-  const [localSessionNames, setLocalSessionNames] = React.useState<
-    Record<string, string>
-  >({})
-  const [loadedSessionsByPath, setLoadedSessionsByPath] = React.useState<
-    Record<string, Array<SessionListEntry>>
-  >({})
-  const [loadingByPath, setLoadingByPath] = React.useState<
-    Record<string, boolean>
-  >({})
+  const [state, dispatch] = React.useReducer(
+    sessionsDialogReducer,
+    initialSessionsDialogState
+  )
+  const {
+    query,
+    scope,
+    stage,
+    selectedSessionKey,
+    renameValue,
+    localSessionNames,
+    loadedSessionsByPath,
+    loadingByPath,
+  } = state
   const normalizedCurrentDirectory = currentDirectory.trim()
   const allDirectories = normalizeDirectories([
     normalizedCurrentDirectory,
@@ -300,14 +501,8 @@ function AppShellSessionsDialog({
   const loading = visibleGroups.some((group) => group.loading)
 
   React.useEffect(() => {
-    if (!open) {
-      if (query) setQuery("")
-      setScope("current")
-      setStage("browse")
-      setRenameValue("")
-      return
-    }
-  }, [open, query])
+    if (!open) dispatch({ type: "closed" })
+  }, [open])
 
   React.useEffect(() => {
     if (!open || !viewerContextId || scopedDirectories.length === 0) return
@@ -322,33 +517,24 @@ function AppShellSessionsDialog({
 
     if (missingDirectories.length === 0) return
 
-    setLoadingByPath((current) => {
-      const next = { ...current }
-      for (const directory of missingDirectories) next[directory] = true
-      return next
+    dispatch({
+      type: "directoriesLoadingStarted",
+      directories: missingDirectories,
     })
 
     void fetchDirectorySessionsIndexes(viewerContextId, missingDirectories)
       .then((response) => {
-        if (!response.ok) return
-
-        setLoadedSessionsByPath((current) => {
-          const next = { ...current }
-          for (const directory of missingDirectories) {
-            next[directory] =
-              response.directoryIndexes[directory]?.sessions || []
-          }
-          return next
+        dispatch({
+          type: "directoriesLoadingFinished",
+          directories: missingDirectories,
+          directoryIndexes: response.ok ? response.directoryIndexes : undefined,
         })
       })
       .catch((error: unknown) => {
         onError?.(error)
-      })
-      .finally(() => {
-        setLoadingByPath((current) => {
-          const next = { ...current }
-          for (const directory of missingDirectories) delete next[directory]
-          return next
+        dispatch({
+          type: "directoriesLoadingFinished",
+          directories: missingDirectories,
         })
       })
   }, [
@@ -368,26 +554,23 @@ function AppShellSessionsDialog({
     )
     if (selectedStillVisible) return
 
-    if (stage !== "browse") {
-      setStage("browse")
-      setRenameValue("")
-    }
-
     const activeSession = flatSessions.find((session) =>
       isActiveSession(session.entry, activeSessionId, activeSessionPath)
     )
-    setSelectedSessionKey(activeSession?.key || flatSessions[0]?.key || "")
+    dispatch({
+      type: "visibleSelectionChanged",
+      key: activeSession?.key || flatSessions[0]?.key || "",
+    })
   }, [
     activeSessionId,
     activeSessionPath,
     flatSessions,
     open,
     selectedSessionKey,
-    stage,
   ])
 
   const toggleScope = () => {
-    setScope((current) => (current === "current" ? "all" : "current"))
+    dispatch({ type: "scopeToggled" })
   }
 
   const selectSession = (entry: SessionListEntry) => {
@@ -398,8 +581,7 @@ function AppShellSessionsDialog({
 
   const renameSelectedSession = () => {
     if (!selectedSession?.path) return
-    setRenameValue(selectedSession.title)
-    setStage("rename")
+    dispatch({ type: "renameRequested", value: selectedSession.title })
   }
 
   const saveSelectedSessionRename = async () => {
@@ -410,16 +592,12 @@ function AppShellSessionsDialog({
     const success = await Promise.resolve(onRenameSession(targetPath, nextName))
     if (success === false) return
 
-    setLocalSessionNames((current) => ({
-      ...current,
-      [targetPath]: nextName,
-    }))
-    setStage("browse")
+    dispatch({ type: "renameSaved", path: targetPath, name: nextName })
   }
 
   const deleteSelectedSession = () => {
     if (!selectedSession?.path) return
-    setStage("delete")
+    dispatch({ type: "deleteRequested" })
   }
 
   const confirmDeleteSelectedSession = async () => {
@@ -430,31 +608,7 @@ function AppShellSessionsDialog({
     const success = await Promise.resolve(onDeleteSession([target]))
     if (success === false) return
 
-    setLoadedSessionsByPath((current) => {
-      const next: Record<string, Array<SessionListEntry>> = {}
-      let changed = false
-
-      for (const [directory, sessions] of Object.entries(current)) {
-        const filteredSessions = sessions.filter(
-          (entry) => entry.path !== targetPath
-        )
-        next[directory] = filteredSessions
-        if (filteredSessions.length !== sessions.length) changed = true
-      }
-
-      return changed ? next : current
-    })
-    setLocalSessionNames((current) => {
-      if (!Object.prototype.hasOwnProperty.call(current, targetPath)) {
-        return current
-      }
-
-      const next = { ...current }
-      delete next[targetPath]
-      return next
-    })
-    setSelectedSessionKey("")
-    setStage("browse")
+    dispatch({ type: "deleteSaved", path: targetPath })
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -483,13 +637,17 @@ function AppShellSessionsDialog({
       shouldFilter
       loop
       value={selectedSessionKey}
-      onValueChange={setSelectedSessionKey}
+      onValueChange={(key) => {
+        dispatch({ type: "selectedSessionChanged", key })
+      }}
       onKeyDown={handleKeyDown}
       className="min-h-0 flex-1"
     >
       <CommandInput
         value={query}
-        onValueChange={setQuery}
+        onValueChange={(nextQuery) => {
+          dispatch({ type: "queryChanged", query: nextQuery })
+        }}
         placeholder={
           scope === "all" ? "Search all sessions" : "Search sessions"
         }
@@ -596,7 +754,9 @@ function AppShellSessionsDialog({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setStage("browse")}
+          onClick={() => {
+            dispatch({ type: "browseRequested" })
+          }}
           aria-label="Back to sessions"
         >
           <ArrowLeftIcon />
@@ -611,12 +771,17 @@ function AppShellSessionsDialog({
       <div className="flex min-h-0 flex-1 items-center p-3">
         <Input
           value={renameValue}
-          onChange={(event) => setRenameValue(event.target.value)}
+          onChange={(event) => {
+            dispatch({
+              type: "renameValueChanged",
+              value: event.target.value,
+            })
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault()
               event.stopPropagation()
-              setStage("browse")
+              dispatch({ type: "browseRequested" })
               return
             }
             if (event.key !== "Enter" || event.nativeEvent.isComposing) return
@@ -649,7 +814,7 @@ function AppShellSessionsDialog({
         if (event.key === "Escape") {
           event.preventDefault()
           event.stopPropagation()
-          setStage("browse")
+          dispatch({ type: "browseRequested" })
           return
         }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
@@ -663,7 +828,9 @@ function AppShellSessionsDialog({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setStage("browse")}
+          onClick={() => {
+            dispatch({ type: "browseRequested" })
+          }}
           aria-label="Back to sessions"
         >
           <ArrowLeftIcon />
