@@ -1148,14 +1148,13 @@ export async function readDirectoryGitFileReview(
     return null
   }
 
-  const oldContent = await readGitHeadFileContent(
-    normalizedCwd,
-    normalizedPreviousPath || normalizedPath
-  )
-  const newContent = await readWorktreeFileContent(
-    normalizedCwd,
-    normalizedPath
-  )
+  const [oldContent, newContent] = await Promise.all([
+    readGitHeadFileContent(
+      normalizedCwd,
+      normalizedPreviousPath || normalizedPath
+    ),
+    readWorktreeFileContent(normalizedCwd, normalizedPath),
+  ])
 
   return {
     path: normalizedPath,
@@ -1675,6 +1674,22 @@ async function readUnpushedCommitMessages(cwd: string) {
     : []
 }
 
+type GitPushCommandContext = {
+  force: boolean
+  pushedCommitMessages: Array<string>
+}
+
+async function runGitPushCommand(cwd: string, context: GitPushCommandContext) {
+  return await runCommand(
+    "git",
+    context.force ? ["push", "--force-with-lease"] : ["push"],
+    {
+      cwd,
+      timeoutMs: GIT_ACTION_TIMEOUT_MS,
+    }
+  )
+}
+
 export async function pushDirectoryGitChanges(
   cwd: string,
   { force = false }: { force?: boolean } = {}
@@ -1686,14 +1701,8 @@ export async function pushDirectoryGitChanges(
   }
 
   const pushedCommitMessages = await readUnpushedCommitMessages(normalizedCwd)
-  const result = await runCommand(
-    "git",
-    force ? ["push", "--force-with-lease"] : ["push"],
-    {
-      cwd: normalizedCwd,
-      timeoutMs: GIT_ACTION_TIMEOUT_MS,
-    }
-  )
+  const pushContext = { force, pushedCommitMessages }
+  const result = await runGitPushCommand(normalizedCwd, pushContext)
   if (result.code !== 0) {
     throw new Error(
       gitCommandErrorMessage(
