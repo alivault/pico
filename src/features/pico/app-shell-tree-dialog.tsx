@@ -1929,6 +1929,8 @@ function AppShellTreeDialog({
     }
   }, [open, selectedTreeNode, treeStage])
 
+  const navigateTreeNodeEffectEvent = React.useEffectEvent(onNavigateTreeNode)
+
   React.useEffect(() => {
     if (!open) return
 
@@ -1966,7 +1968,7 @@ function AppShellTreeDialog({
         ) {
           event.preventDefault()
           event.stopPropagation()
-          void onNavigateTreeNode(selectedTreeNodeId, {
+          void navigateTreeNodeEffectEvent(selectedTreeNodeId, {
             summarize: true,
             customInstructions: treeCustomSummaryRef.current?.value ?? "",
           })
@@ -1993,7 +1995,6 @@ function AppShellTreeDialog({
       window.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [
-    onNavigateTreeNode,
     open,
     selectedTreeNodeId,
     treeFilterMode,
