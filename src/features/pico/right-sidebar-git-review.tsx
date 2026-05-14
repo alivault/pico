@@ -167,6 +167,127 @@ function storeGitHistoryPanelHeight(height: number) {
   )
 }
 
+type FileReviewState = {
+  diffStyle: ReviewDiffStyle
+  historyOpen: boolean
+  historyPanelHeight?: number
+  defaultHistoryPanelHeight?: number
+  openFiles: Array<string>
+  stickyReviewFileValue: string
+  historyHeaderShadowed: boolean
+}
+
+type FileReviewAction =
+  | { type: "diffStyleChanged"; diffStyle: ReviewDiffStyle }
+  | { type: "historyOpenToggled" }
+  | { type: "historyPanelHeightChanged"; height: number }
+  | {
+      type: "historyPanelLayoutChanged"
+      defaultHeight?: number
+      maxHeight: number
+      minHeight: number
+    }
+  | { type: "openFilesChanged"; openFiles: Array<string> }
+  | { type: "cwdChanged"; historyPanelHeight?: number }
+  | {
+      type: "stickyReviewFileValueChanged"
+      value: React.SetStateAction<string>
+    }
+  | {
+      type: "historyHeaderShadowedChanged"
+      value: React.SetStateAction<boolean>
+    }
+
+const initialFileReviewState: FileReviewState = {
+  diffStyle: "unified",
+  historyOpen: true,
+  historyPanelHeight: undefined,
+  defaultHistoryPanelHeight: undefined,
+  openFiles: [],
+  stickyReviewFileValue: "",
+  historyHeaderShadowed: false,
+}
+
+function applyStateAction<T>(current: T, value: React.SetStateAction<T>) {
+  return typeof value === "function"
+    ? (value as (current: T) => T)(current)
+    : value
+}
+
+function fileReviewReducer(
+  state: FileReviewState,
+  action: FileReviewAction
+): FileReviewState {
+  switch (action.type) {
+    case "diffStyleChanged":
+      return state.diffStyle === action.diffStyle
+        ? state
+        : { ...state, diffStyle: action.diffStyle }
+    case "historyOpenToggled":
+      return { ...state, historyOpen: !state.historyOpen }
+    case "historyPanelHeightChanged":
+      return Object.is(state.historyPanelHeight, action.height)
+        ? state
+        : { ...state, historyPanelHeight: action.height }
+    case "historyPanelLayoutChanged": {
+      const historyPanelHeight =
+        typeof state.historyPanelHeight === "number"
+          ? Math.min(
+              action.maxHeight,
+              Math.max(action.minHeight, state.historyPanelHeight)
+            )
+          : state.historyPanelHeight
+
+      if (
+        Object.is(state.defaultHistoryPanelHeight, action.defaultHeight) &&
+        Object.is(state.historyPanelHeight, historyPanelHeight)
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        defaultHistoryPanelHeight: action.defaultHeight,
+        historyPanelHeight,
+      }
+    }
+    case "openFilesChanged":
+      return state.openFiles === action.openFiles
+        ? state
+        : { ...state, openFiles: action.openFiles }
+    case "cwdChanged":
+      return {
+        ...state,
+        historyOpen: true,
+        historyPanelHeight: action.historyPanelHeight,
+        defaultHistoryPanelHeight: undefined,
+        openFiles: [],
+        stickyReviewFileValue: "",
+        historyHeaderShadowed: false,
+      }
+    case "stickyReviewFileValueChanged": {
+      const stickyReviewFileValue = applyStateAction(
+        state.stickyReviewFileValue,
+        action.value
+      )
+      return Object.is(state.stickyReviewFileValue, stickyReviewFileValue)
+        ? state
+        : { ...state, stickyReviewFileValue }
+    }
+    case "historyHeaderShadowedChanged": {
+      const historyHeaderShadowed = applyStateAction(
+        state.historyHeaderShadowed,
+        action.value
+      )
+      return Object.is(state.historyHeaderShadowed, historyHeaderShadowed)
+        ? state
+        : { ...state, historyHeaderShadowed }
+    }
+    default:
+      return state
+  }
+}
+
 function subscribeSidebarVerticalResizeCursor() {
   return () => {}
 }
@@ -208,22 +329,38 @@ export function FileReviewContent({
 }) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
-  const [diffStyle, setDiffStyle] = React.useState<ReviewDiffStyle>("unified")
-  const [historyOpen, setHistoryOpen] = React.useState(true)
-  const [historyPanelHeight, setHistoryPanelHeight] = React.useState<
-    number | undefined
-  >(() => readStoredGitHistoryPanelHeight())
-  const [defaultHistoryPanelHeight, setDefaultHistoryPanelHeight] =
-    React.useState<number | undefined>(undefined)
+  const [state, dispatch] = React.useReducer(
+    fileReviewReducer,
+    initialFileReviewState,
+    (initialState) => ({
+      ...initialState,
+      historyPanelHeight: readStoredGitHistoryPanelHeight(),
+    })
+  )
+  const {
+    diffStyle,
+    historyOpen,
+    historyPanelHeight,
+    defaultHistoryPanelHeight,
+    openFiles,
+    stickyReviewFileValue,
+    historyHeaderShadowed,
+  } = state
   const verticalResizeCursor = React.useSyncExternalStore(
     subscribeSidebarVerticalResizeCursor,
     getSidebarVerticalResizeCursor,
     getServerSidebarVerticalResizeCursor
   )
-  const [openFiles, setOpenFiles] = React.useState<Array<string>>([])
-  const [stickyReviewFileValue, setStickyReviewFileValue] = React.useState("")
-  const [historyHeaderShadowed, setHistoryHeaderShadowed] =
-    React.useState(false)
+  const setStickyReviewFileValue: React.Dispatch<
+    React.SetStateAction<string>
+  > = (value) => {
+    dispatch({ type: "stickyReviewFileValueChanged", value })
+  }
+  const setHistoryHeaderShadowed: React.Dispatch<
+    React.SetStateAction<boolean>
+  > = (value) => {
+    dispatch({ type: "historyHeaderShadowedChanged", value })
+  }
   const changesScrollRef = React.useRef<HTMLDivElement>(null)
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
   const historyPanelRef = React.useRef<HTMLDivElement>(null)
@@ -246,12 +383,10 @@ export function FileReviewContent({
     if (previousNormalizedCwdRef.current === normalizedCwd) return
     previousNormalizedCwdRef.current = normalizedCwd
 
-    setHistoryOpen(true)
-    setHistoryPanelHeight(readStoredGitHistoryPanelHeight())
-    setDefaultHistoryPanelHeight(undefined)
-    setOpenFiles([])
-    setStickyReviewFileValue("")
-    setHistoryHeaderShadowed(false)
+    dispatch({
+      type: "cwdChanged",
+      historyPanelHeight: readStoredGitHistoryPanelHeight(),
+    })
   }, [normalizedCwd])
 
   const updateStickyReviewFileHeader = (
@@ -328,7 +463,7 @@ export function FileReviewContent({
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const nextHeight = startHeight - (moveEvent.clientY - startY)
       latestHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
-      setHistoryPanelHeight(latestHeight)
+      dispatch({ type: "historyPanelHeightChanged", height: latestHeight })
     }
     const handlePointerUp = () => {
       storeGitHistoryPanelHeight(latestHeight)
@@ -356,16 +491,15 @@ export function FileReviewContent({
       const { maxHeight, minHeight } = getHistoryPanelHeightBounds()
       const defaultHeight = containerHeight > 0 ? containerHeight * 0.5 : 0
 
-      setDefaultHistoryPanelHeight(
-        defaultHeight > 0
-          ? Math.min(maxHeight, Math.max(minHeight, defaultHeight))
-          : undefined
-      )
-      setHistoryPanelHeight((current) =>
-        typeof current === "number"
-          ? Math.min(maxHeight, Math.max(minHeight, current))
-          : current
-      )
+      dispatch({
+        type: "historyPanelLayoutChanged",
+        defaultHeight:
+          defaultHeight > 0
+            ? Math.min(maxHeight, Math.max(minHeight, defaultHeight))
+            : undefined,
+        maxHeight,
+        minHeight,
+      })
     }
 
     updateDefaultHistoryPanelHeight()
@@ -377,7 +511,10 @@ export function FileReviewContent({
 
   const hasOpenFile = openFiles.length > 0
   const toggleAll = () => {
-    setOpenFiles(hasOpenFile ? [] : changedFiles.map(reviewFileValue))
+    dispatch({
+      type: "openFilesChanged",
+      openFiles: hasOpenFile ? [] : changedFiles.map(reviewFileValue),
+    })
   }
 
   return (
@@ -421,7 +558,7 @@ export function FileReviewContent({
             onValueChange={(values) => {
               const value = values[0]
               if (value === "unified" || value === "split") {
-                setDiffStyle(value)
+                dispatch({ type: "diffStyleChanged", diffStyle: value })
               }
             }}
           >
@@ -464,7 +601,12 @@ export function FileReviewContent({
           <Accordion
             multiple
             value={openFiles}
-            onValueChange={setOpenFiles}
+            onValueChange={(nextOpenFiles) => {
+              dispatch({
+                type: "openFilesChanged",
+                openFiles: nextOpenFiles,
+              })
+            }}
             className="border-b border-border/80"
           >
             {changedFiles.map((file) => (
@@ -525,7 +667,7 @@ export function FileReviewContent({
               historyHeaderShadowed && "shadow-sm"
             )}
             onClick={() => {
-              setHistoryOpen((open) => !open)
+              dispatch({ type: "historyOpenToggled" })
             }}
           >
             <span className="flex min-w-0 items-center">
