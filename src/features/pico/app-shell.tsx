@@ -1398,6 +1398,11 @@ function AppShellSessionWorkspace({
         }
       ),
     onSuccess: async (response, cwd) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitActionQueries(cwd)
       showGitPushSuccessToast({ response })
     },
@@ -1422,6 +1427,11 @@ function AppShellSessionWorkspace({
         }
       ),
     onSuccess: async (response, cwd) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitActionQueries(cwd)
       showGitPushSuccessToast({ response, force: true })
     },
@@ -1448,6 +1458,11 @@ function AppShellSessionWorkspace({
         }
       ),
     onSuccess: async (_response, cwd) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitActionQueries(cwd)
       toast.success("Pulled changes")
     },

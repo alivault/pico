@@ -1203,6 +1203,11 @@ function GitCommitRow({
       )
     },
     onSuccess: async (_response, request) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitQueries({ queryClient, viewerContextId, cwd })
       toast.success(request.label || commitActionToastLabel(request.action))
     },
@@ -1228,6 +1233,11 @@ function GitCommitRow({
       )
     },
     onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitQueries({ queryClient, viewerContextId, cwd })
       toast.success("Created and checked out branch")
     },

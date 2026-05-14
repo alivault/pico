@@ -151,6 +151,11 @@ export function HeaderGitActions({
       )
     },
     onSuccess: async (response, action) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitQueries({
         queryClient,
         viewerContextId,

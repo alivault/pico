@@ -30,6 +30,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   formatShortcutLabel,
   matchesShortcutEvent,
@@ -618,6 +619,11 @@ export function GitCommitDialog({
     onSuccess: async (_response, variables) => {
       dispatch({ type: "clear-message" })
       onOpenChange(false)
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitQueries({ queryClient, viewerContextId, cwd })
       toast.success(
         variables.forcePush

@@ -455,6 +455,15 @@ export function DeleteOldDirectorySessionsDialogController({
         }
       )
     },
+    onSuccess: async (_response, dryRun) => {
+      if (dryRun) return
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.directorySessionsIndex(
+          viewerContextId,
+          directory
+        ),
+      })
+    },
   })
 
   const previewCleanup = async () => {
@@ -804,6 +813,13 @@ export function ForkSessionDialogController({
           body: JSON.stringify({ entryId }),
         }
       )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey,
+        exact: true,
+        refetchType: "active",
+      })
     },
   })
 

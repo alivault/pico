@@ -218,12 +218,6 @@ export function AppShellAuthDialogController({
     },
   })
 
-  const invalidateProviders = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
-    })
-  }
-
   const apiKeyMutation = useMutation({
     mutationFn: async ({
       provider,
@@ -246,7 +240,9 @@ export function AppShellAuthDialogController({
     },
     onSuccess: async (_response, variables) => {
       toast.success(`Saved API key for ${variables.provider}`)
-      await invalidateProviders()
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+      })
       closeAllDialogs()
     },
     onError: (error) => {
@@ -272,7 +268,9 @@ export function AppShellAuthDialogController({
     },
     onSuccess: async (_response, variables) => {
       toast.success(`Logged in to ${variables.provider}`)
-      await invalidateProviders()
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+      })
       closeAllDialogs()
     },
     onError: (error) => {
@@ -298,7 +296,9 @@ export function AppShellAuthDialogController({
     },
     onSuccess: async (_response, variables) => {
       toast.success(`Logged out of ${variables.provider}`)
-      await invalidateProviders()
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+      })
       closeAllDialogs()
     },
     onError: (error) => {

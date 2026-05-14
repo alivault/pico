@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { SessionState } from "@/lib/pico"
@@ -273,6 +273,7 @@ export function useAppShellSessionMutations({
   setCompactWorkingState,
   isCompactAbortRequested,
 }: UseAppShellSessionMutationsOptions) {
+  const queryClient = useQueryClient()
   const thinkingLevelRequestIdRef = React.useRef(0)
   const thinkingLevelSyncTimerRef = React.useRef<ReturnType<
     typeof setTimeout
@@ -522,6 +523,12 @@ export function useAppShellSessionMutations({
         }
       )
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        refetchType: "active",
+      })
+    },
   })
 
   const renameSessionPath = React.useCallback(
@@ -656,6 +663,12 @@ export function useAppShellSessionMutations({
         }
       )
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        refetchType: "active",
+      })
+    },
   })
 
   const moveSessionPath = React.useCallback(
@@ -740,6 +753,12 @@ export function useAppShellSessionMutations({
           body: JSON.stringify({ paths }),
         }
       )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        refetchType: "active",
+      })
     },
   })
 

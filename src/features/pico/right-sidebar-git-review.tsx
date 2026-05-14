@@ -24,6 +24,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   ProjectFileIconSprite,
   ProjectFileTypeIcon,
@@ -626,6 +627,11 @@ function ReviewFileAccordionItem({
         }
       ),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateChangedFileQueries()
       toast.success("Staged changes", { description: file.path })
     },
@@ -650,6 +656,11 @@ function ReviewFileAccordionItem({
         }
       ),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateChangedFileQueries()
       toast.success("Discarded changes", { description: file.path })
     },

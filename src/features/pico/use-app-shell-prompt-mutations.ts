@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
@@ -12,6 +12,7 @@ import type {
 } from "@/lib/pico/api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys, picoSessionScopeKey } from "@/features/pico/query-keys"
 import {
   useSelector,
   type PicoStore,
@@ -278,6 +279,7 @@ export function useAppShellPromptMutations({
   setIsSubmitting,
   setComposerImages,
 }: UseAppShellPromptMutationsOptions) {
+  const queryClient = useQueryClient()
   const draftSessionLoadingOwnerKeyRef = React.useRef(
     draftSessionLoadingOwnerKey
   )
@@ -381,6 +383,15 @@ export function useAppShellPromptMutations({
           body: JSON.stringify({ path: requestedPath }),
         }
       )
+    },
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.directorySessionsIndex(
+          viewerContextId,
+          response.path
+        ),
+        refetchType: "active",
+      })
     },
   })
 
@@ -627,6 +638,15 @@ export function useAppShellPromptMutations({
           }),
         }
       )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.sessionTree(
+          viewerContextId,
+          picoSessionScopeKey(sessionStateRef.current)
+        ),
+        refetchType: "active",
+      })
     },
   })
 
@@ -936,6 +956,15 @@ export function useAppShellPromptMutations({
         }
       )
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.sessionTree(
+          viewerContextId,
+          picoSessionScopeKey(sessionStateRef.current)
+        ),
+        refetchType: "active",
+      })
+    },
   })
 
   const abortSession = React.useCallback(async () => {
@@ -967,6 +996,15 @@ export function useAppShellPromptMutations({
           body: JSON.stringify({ pendingMessages: nextPendingMessages }),
         }
       )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.sessionTree(
+          viewerContextId,
+          picoSessionScopeKey(sessionStateRef.current)
+        ),
+        refetchType: "active",
+      })
     },
   })
 
@@ -1029,6 +1067,15 @@ export function useAppShellPromptMutations({
           body: JSON.stringify({ pendingId }),
         }
       )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.sessionTree(
+          viewerContextId,
+          picoSessionScopeKey(sessionStateRef.current)
+        ),
+        refetchType: "active",
+      })
     },
   })
 

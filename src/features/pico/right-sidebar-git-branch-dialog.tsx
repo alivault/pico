@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   formatShortcutLabel,
   matchesShortcutEvent,
@@ -525,6 +526,11 @@ export function GitBranchDialog({
         }
       ),
     onSuccess: async (_response, payload) => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        exact: true,
+        refetchType: "active",
+      })
       await invalidateGitQueries({
         queryClient,
         viewerContextId,
