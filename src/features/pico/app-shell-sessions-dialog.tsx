@@ -499,6 +499,9 @@ function AppShellSessionsDialog({
     ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
     : undefined
   const loading = visibleGroups.some((group) => group.loading)
+  const browseInputRef = React.useRef<HTMLInputElement | null>(null)
+  const deletePanelRef = React.useRef<HTMLDivElement | null>(null)
+  const previousStageRef = React.useRef(stage)
 
   React.useEffect(() => {
     if (!open) dispatch({ type: "closed" })
@@ -569,6 +572,32 @@ function AppShellSessionsDialog({
     selectedSessionKey,
   ])
 
+  React.useEffect(() => {
+    const previousStage = previousStageRef.current
+    previousStageRef.current = stage
+    if (!open || stage !== "browse" || previousStage === "browse") return
+
+    const frame = window.requestAnimationFrame(() => {
+      browseInputRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [open, stage])
+
+  React.useEffect(() => {
+    if (!open || stage !== "delete") return
+
+    const frame = window.requestAnimationFrame(() => {
+      deletePanelRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [open, stage])
+
   const toggleScope = () => {
     dispatch({ type: "scopeToggled" })
   }
@@ -611,6 +640,29 @@ function AppShellSessionsDialog({
     dispatch({ type: "deleteSaved", path: targetPath })
   }
 
+  React.useEffect(() => {
+    if (!open || stage !== "delete") return
+
+    const handleDeleteKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        event.stopPropagation()
+        dispatch({ type: "browseRequested" })
+        return
+      }
+
+      if (event.key !== "Enter" || event.isComposing) return
+      event.preventDefault()
+      event.stopPropagation()
+      void confirmDeleteSelectedSession()
+    }
+
+    window.addEventListener("keydown", handleDeleteKeyDown, true)
+    return () => {
+      window.removeEventListener("keydown", handleDeleteKeyDown, true)
+    }
+  }, [confirmDeleteSelectedSession, open, stage])
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     const key = event.key.toLowerCase()
 
@@ -644,6 +696,7 @@ function AppShellSessionsDialog({
       className="min-h-0 flex-1"
     >
       <CommandInput
+        ref={browseInputRef}
         value={query}
         onValueChange={(nextQuery) => {
           dispatch({ type: "queryChanged", query: nextQuery })
@@ -808,8 +861,10 @@ function AppShellSessionsDialog({
 
   const sessionsDeleteBody = (
     <div
+      ref={deletePanelRef}
       role="presentation"
-      className="flex min-h-0 flex-1 flex-col"
+      tabIndex={-1}
+      className="flex min-h-0 flex-1 flex-col outline-none"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault()

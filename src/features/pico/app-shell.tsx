@@ -1615,34 +1615,34 @@ function AppShellSessionWorkspace({
     null
   )
 
-  React.useEffect(() => {
-    const hasOpenDialogSurface = () => {
-      if (
-        addDirectoryOpenRef.current ||
-        authOpenRef.current ||
-        commandPaletteOpenRef.current ||
-        deleteOldDirectorySessionsOpenRef.current ||
-        deleteOpenRef.current ||
-        forkOpenRef.current ||
-        gitCommitOpenRef.current ||
-        renameOpenRef.current ||
-        sessionsOpenRef.current ||
-        settingsOpenRef.current ||
-        treeOpenRef.current ||
-        uiRequestOpenRef.current
-      ) {
-        return true
-      }
-
-      if (typeof document === "undefined") return false
-
-      return Boolean(
-        document.querySelector(
-          '[data-slot="dialog-content"][data-open], [data-slot="drawer-content"][data-state="open"]'
-        )
-      )
+  const hasOpenDialogSurface = () => {
+    if (
+      addDirectoryOpenRef.current ||
+      authOpenRef.current ||
+      commandPaletteOpenRef.current ||
+      deleteOldDirectorySessionsOpenRef.current ||
+      deleteOpenRef.current ||
+      forkOpenRef.current ||
+      gitCommitOpenRef.current ||
+      renameOpenRef.current ||
+      sessionsOpenRef.current ||
+      settingsOpenRef.current ||
+      treeOpenRef.current ||
+      uiRequestOpenRef.current
+    ) {
+      return true
     }
 
+    if (typeof document === "undefined") return false
+
+    return Boolean(
+      document.querySelector(
+        '[data-slot="dialog-content"][data-open], [data-slot="drawer-content"][data-state="open"]'
+      )
+    )
+  }
+
+  React.useEffect(() => {
     const handleDialogClosed = () => {
       if (promptFocusAfterDialogCloseTimeoutRef.current !== null) {
         window.clearTimeout(promptFocusAfterDialogCloseTimeoutRef.current)
@@ -1680,6 +1680,8 @@ function AppShellSessionWorkspace({
 
     promptFocusRequestTimeoutRef.current = window.setTimeout(() => {
       promptFocusRequestTimeoutRef.current = null
+      if (hasOpenDialogSurface()) return
+
       focusPromptRef.current()
     }, 50)
   }
@@ -1713,7 +1715,7 @@ function AppShellSessionWorkspace({
   }, [focusPromptRef, openMobile, openMobileSettled])
 
   React.useEffect(() => {
-    if (isSessionViewLoading) return
+    if (isSessionViewLoading || hasOpenDialogSurface()) return
 
     const sessionFocusKey =
       sessionState.sessionKey || sessionState.sessionId || "draft"
@@ -1730,7 +1732,13 @@ function AppShellSessionWorkspace({
 
   React.useEffect(() => {
     const promptFocusRequest = promptFocusRequestRef.current
-    if (!promptFocusRequest.nonce || isSessionViewLoading) return
+    if (
+      !promptFocusRequest.nonce ||
+      isSessionViewLoading ||
+      hasOpenDialogSurface()
+    ) {
+      return
+    }
     if (
       promptFocusRequest.sessionId &&
       sessionState.sessionId !== promptFocusRequest.sessionId
