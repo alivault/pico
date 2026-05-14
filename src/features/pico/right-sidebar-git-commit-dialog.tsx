@@ -575,6 +575,13 @@ export function GitCommitDialog({
     : gitStatus?.branch || "Unknown branch"
   const canForcePush = gitStatusHasDiverged(gitStatus)
 
+  const applyGeneratedMessage = (generated: GitCommitMessageData) => {
+    dispatch({ type: "apply-generated-message", generated })
+    if (generated.source !== "ai" && generated.reason) {
+      toast.info(`Using heuristic message: ${generated.reason}`)
+    }
+  }
+
   const generateMutation = useMutation({
     mutationFn: async () =>
       await fetchJson<GitCommitMessageData>(
@@ -587,6 +594,7 @@ export function GitCommitDialog({
           body: JSON.stringify({ cwd }),
         }
       ),
+    onSuccess: applyGeneratedMessage,
     onError: (error) => {
       toast.error(getErrorMessage(error, "Failed to generate commit message"))
     },
@@ -659,19 +667,10 @@ export function GitCommitDialog({
     if (!open) dispatch({ type: "reset-transient" })
   }, [open])
 
-  const applyGeneratedMessage = (generated: GitCommitMessageData) => {
-    dispatch({ type: "apply-generated-message", generated })
-    if (generated.source !== "ai" && generated.reason) {
-      toast.info(`Using heuristic message: ${generated.reason}`)
-    }
-  }
-
   const generateCommitMessage = () => {
     if (busy || !cwd || files.length === 0) return
 
-    generateMutation.mutate(undefined, {
-      onSuccess: applyGeneratedMessage,
-    })
+    generateMutation.mutate()
   }
 
   const continueCommit = async (push: boolean, forcePush = false) => {
@@ -687,7 +686,6 @@ export function GitCommitDialog({
       try {
         const generated = await generateMutation.mutateAsync()
         commitMessage = generated.message.trim()
-        applyGeneratedMessage(generated)
       } catch {
         dispatch({ type: "set-pending-run", pendingRun: null })
         return
