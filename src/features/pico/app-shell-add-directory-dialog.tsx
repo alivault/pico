@@ -158,6 +158,95 @@ export type AppShellAddDirectoryDialogHandle = {
   isOpen: () => boolean
 }
 
+type AddDirectoryDialogState = {
+  pathCompletionItems: Array<CompletionItem>
+  pathCompletionLoading: boolean
+  directorySearchItems: Array<CompletionItem>
+  directorySearchLoading: boolean
+  selectedCommandValue: string
+}
+
+type AddDirectoryDialogAction =
+  | { type: "pathCompletionsStarted" }
+  | { type: "pathCompletionsFinished"; items: Array<CompletionItem> }
+  | { type: "pathCompletionsReset" }
+  | { type: "directorySearchStarted" }
+  | { type: "directorySearchFinished"; items: Array<CompletionItem> }
+  | { type: "directorySearchReset" }
+  | { type: "selectedCommandValueChanged"; value: string }
+
+const initialAddDirectoryDialogState: AddDirectoryDialogState = {
+  pathCompletionItems: [],
+  pathCompletionLoading: false,
+  directorySearchItems: [],
+  directorySearchLoading: false,
+  selectedCommandValue: "",
+}
+
+function addDirectoryDialogReducer(
+  state: AddDirectoryDialogState,
+  action: AddDirectoryDialogAction
+): AddDirectoryDialogState {
+  switch (action.type) {
+    case "pathCompletionsStarted":
+      return {
+        ...state,
+        pathCompletionLoading: true,
+        pathCompletionItems: [],
+      }
+    case "pathCompletionsFinished":
+      return {
+        ...state,
+        pathCompletionLoading: false,
+        pathCompletionItems: action.items,
+      }
+    case "pathCompletionsReset":
+      if (
+        !state.pathCompletionLoading &&
+        state.pathCompletionItems.length === 0
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        pathCompletionLoading: false,
+        pathCompletionItems: [],
+      }
+    case "directorySearchStarted":
+      return {
+        ...state,
+        directorySearchLoading: true,
+        directorySearchItems: [],
+      }
+    case "directorySearchFinished":
+      return {
+        ...state,
+        directorySearchLoading: false,
+        directorySearchItems: action.items,
+      }
+    case "directorySearchReset":
+      if (
+        !state.directorySearchLoading &&
+        state.directorySearchItems.length === 0
+      ) {
+        return state
+      }
+
+      return {
+        ...state,
+        directorySearchLoading: false,
+        directorySearchItems: [],
+      }
+    case "selectedCommandValueChanged":
+      return state.selectedCommandValue === action.value
+        ? state
+        : { ...state, selectedCommandValue: action.value }
+    default:
+      return state
+  }
+}
+
 type AppShellAddDirectoryDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -195,17 +284,17 @@ function AppShellAddDirectoryDialog({
   const directorySearchRequestIdRef = React.useRef(0)
   const requestPathCompletionsRef = React.useRef(onRequestPathCompletions)
   const searchDirectoriesRef = React.useRef(onSearchDirectories)
-  const [pathCompletionItems, setPathCompletionItems] = React.useState<
-    Array<CompletionItem>
-  >([])
-  const [pathCompletionLoading, setPathCompletionLoading] =
-    React.useState(false)
-  const [directorySearchItems, setDirectorySearchItems] = React.useState<
-    Array<CompletionItem>
-  >([])
-  const [directorySearchLoading, setDirectorySearchLoading] =
-    React.useState(false)
-  const [selectedCommandValue, setSelectedCommandValue] = React.useState("")
+  const [state, dispatch] = React.useReducer(
+    addDirectoryDialogReducer,
+    initialAddDirectoryDialogState
+  )
+  const {
+    pathCompletionItems,
+    pathCompletionLoading,
+    directorySearchItems,
+    directorySearchLoading,
+    selectedCommandValue,
+  } = state
   directoryInputRef.current = directoryInput
   requestPathCompletionsRef.current = onRequestPathCompletions
   searchDirectoriesRef.current = onSearchDirectories
@@ -338,16 +427,14 @@ function AppShellAddDirectoryDialog({
     if (!shouldShowPathCompletions) {
       pathCompletionRequestIdRef.current += 1
       pathCompletionDebouncer.cancel()
-      setPathCompletionLoading(false)
-      setPathCompletionItems((current) => (current.length === 0 ? current : []))
+      dispatch({ type: "pathCompletionsReset" })
       return
     }
 
     const requestedPrefix = directoryQuery
     const requestId = pathCompletionRequestIdRef.current + 1
     pathCompletionRequestIdRef.current = requestId
-    setPathCompletionLoading(true)
-    setPathCompletionItems((current) => (current.length === 0 ? current : []))
+    dispatch({ type: "pathCompletionsStarted" })
 
     const load = async () => {
       try {
@@ -360,20 +447,15 @@ function AppShellAddDirectoryDialog({
           return
         }
 
-        setPathCompletionItems(
-          (completions ?? []).filter(
+        dispatch({
+          type: "pathCompletionsFinished",
+          items: (completions ?? []).filter(
             (item) => item.isDirectory && item.value.trim() !== requestedPrefix
-          )
-        )
+          ),
+        })
       } catch {
         if (requestId === pathCompletionRequestIdRef.current) {
-          setPathCompletionItems((current) =>
-            current.length === 0 ? current : []
-          )
-        }
-      } finally {
-        if (requestId === pathCompletionRequestIdRef.current) {
-          setPathCompletionLoading(false)
+          dispatch({ type: "pathCompletionsReset" })
         }
       }
     }
@@ -385,18 +467,14 @@ function AppShellAddDirectoryDialog({
     if (!shouldShowDirectorySearch) {
       directorySearchRequestIdRef.current += 1
       directorySearchDebouncer.cancel()
-      setDirectorySearchLoading(false)
-      setDirectorySearchItems((current) =>
-        current.length === 0 ? current : []
-      )
+      dispatch({ type: "directorySearchReset" })
       return
     }
 
     const requestedQuery = directoryQuery
     const requestId = directorySearchRequestIdRef.current + 1
     directorySearchRequestIdRef.current = requestId
-    setDirectorySearchLoading(true)
-    setDirectorySearchItems((current) => (current.length === 0 ? current : []))
+    dispatch({ type: "directorySearchStarted" })
 
     const load = async () => {
       try {
@@ -409,18 +487,13 @@ function AppShellAddDirectoryDialog({
           return
         }
 
-        setDirectorySearchItems(
-          (completions ?? []).filter((item) => item.isDirectory)
-        )
+        dispatch({
+          type: "directorySearchFinished",
+          items: (completions ?? []).filter((item) => item.isDirectory),
+        })
       } catch {
         if (requestId === directorySearchRequestIdRef.current) {
-          setDirectorySearchItems((current) =>
-            current.length === 0 ? current : []
-          )
-        }
-      } finally {
-        if (requestId === directorySearchRequestIdRef.current) {
-          setDirectorySearchLoading(false)
+          dispatch({ type: "directorySearchReset" })
         }
       }
     }
@@ -453,7 +526,10 @@ function AppShellAddDirectoryDialog({
       return
     }
 
-    setSelectedCommandValue(commandValues[0] || "")
+    dispatch({
+      type: "selectedCommandValueChanged",
+      value: commandValues[0] || "",
+    })
   }, [commandValues, selectedCommandValue])
 
   const selectedPathCompletionItem = pathCompletionItems.find(
@@ -560,7 +636,9 @@ function AppShellAddDirectoryDialog({
       shouldFilter={false}
       loop
       value={selectedCommandValue}
-      onValueChange={setSelectedCommandValue}
+      onValueChange={(value) => {
+        dispatch({ type: "selectedCommandValueChanged", value })
+      }}
       className="min-h-0 flex-1 rounded-lg"
     >
       <CommandInput
