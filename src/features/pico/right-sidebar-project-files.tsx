@@ -178,10 +178,32 @@ function isMarkdownFilePath(path: string) {
   return extension === "md" || extension === "markdown"
 }
 
+type ProjectFileHighlightAction =
+  | { type: "clear" }
+  | { type: "loaded"; payload: HighlightResponse }
+  | { type: "unavailable" }
+
 function hasHighlightHtml(
   payload: HighlightResponse | null
 ): payload is Extract<HighlightResponse, { html: string }> {
   return Boolean(payload && "html" in payload && payload.html)
+}
+
+function projectFileHighlightReducer(
+  current: HighlightResponse | null,
+  action: ProjectFileHighlightAction
+) {
+  switch (action.type) {
+    case "clear":
+      return current ? null : current
+    case "loaded":
+      return action.payload
+    case "unavailable":
+      return { ok: true, unavailable: true } satisfies HighlightResponse
+    default:
+      action satisfies never
+      return current
+  }
 }
 
 async function getHighlightedProjectFile(code: string, language?: string) {
@@ -719,24 +741,30 @@ export function ProjectFileContent({
     ? markdownViewModes[path] || "preview"
     : "source"
   const showMarkdownPreview = isMarkdownFile && markdownViewMode === "preview"
-  const [highlighted, setHighlighted] =
-    React.useState<HighlightResponse | null>(null)
+  const [highlighted, dispatchHighlighted] = React.useReducer(
+    projectFileHighlightReducer,
+    null
+  )
 
   React.useEffect(() => {
     let cancelled = false
 
     if (!active || !content || !language || showMarkdownPreview) {
-      setHighlighted(null)
+      dispatchHighlighted({ type: "clear" })
       return
     }
 
-    setHighlighted(null)
+    dispatchHighlighted({ type: "clear" })
     void getHighlightedProjectFile(content, language)
       .then((payload) => {
-        if (!cancelled) setHighlighted(payload)
+        if (!cancelled) {
+          dispatchHighlighted({ type: "loaded", payload })
+        }
       })
       .catch(() => {
-        if (!cancelled) setHighlighted({ ok: true, unavailable: true })
+        if (!cancelled) {
+          dispatchHighlighted({ type: "unavailable" })
+        }
       })
 
     return () => {
