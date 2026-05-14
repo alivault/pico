@@ -77,4 +77,18 @@ export const picoQueryKeys = {
     ["pico", "session-tree", viewerContextId, sessionScopeKey] as const,
   forkableMessages: (viewerContextId: string, sessionScopeKey: string) =>
     ["pico", "forkable-messages", viewerContextId, sessionScopeKey] as const,
+  providerUsage: (
+    viewerContextId: string,
+    sessionId: string,
+    provider: string,
+    tokenRevision: number | null
+  ) =>
+    [
+      "pico",
+      "provider-usage",
+      viewerContextId,
+      sessionId,
+      provider,
+      tokenRevision,
+    ] as const,
 } as const

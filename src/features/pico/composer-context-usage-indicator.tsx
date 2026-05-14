@@ -1,7 +1,9 @@
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import type { SessionState } from "@/lib/pico"
-import { buildRequestUrl } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   createPicoStore,
   useSelector,
@@ -124,6 +126,13 @@ type ProviderUsageWindow = {
   label: string
   usedPercent: number
   resetsIn?: string
+}
+
+type ProviderUsageResponse = {
+  ok: true
+  usage?: {
+    windows?: Array<ProviderUsageWindow>
+  }
 }
 
 type ContextUsageRing = {
@@ -529,40 +538,28 @@ export function ComposerContextUsageIndicator({
 }: ComposerContextUsageIndicatorProps) {
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const useMobilePopover = useContextUsageMobilePopover()
-  const [providerUsageWindows, setProviderUsageWindows] = React.useState<
-    Array<ProviderUsageWindow>
-  >([])
+  const providerUsageQuery = useQuery({
+    enabled: Boolean(modelProvider && viewerContextId),
+    queryKey: picoQueryKeys.providerUsage(
+      viewerContextId,
+      activeSessionId || "",
+      modelProvider || "",
+      contextUsage?.tokens ?? null
+    ),
+    queryFn: async () => {
+      if (!modelProvider) return []
 
-  React.useEffect(() => {
-    if (!modelProvider || !viewerContextId) {
-      setProviderUsageWindows([])
-      return
-    }
-
-    let cancelled = false
-    const url = buildRequestUrl("/api/provider-usage", {
-      contextId: viewerContextId,
-      sessionId: activeSessionId,
-      searchParams: { provider: modelProvider },
-    })
-
-    fetch(url)
-      .then((response) => (response.ok ? response.json() : undefined))
-      .then((data) => {
-        if (cancelled) return
-        const windows = Array.isArray(data?.usage?.windows)
-          ? data.usage.windows
-          : []
-        setProviderUsageWindows(windows)
-      })
-      .catch(() => {
-        if (!cancelled) setProviderUsageWindows([])
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [activeSessionId, modelProvider, viewerContextId, contextUsage?.tokens])
+      const data = await fetchJson<ProviderUsageResponse>(
+        buildRequestUrl("/api/provider-usage", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+          searchParams: { provider: modelProvider },
+        })
+      )
+      return data.usage?.windows ?? []
+    },
+  })
+  const providerUsageWindows = providerUsageQuery.data ?? []
 
   if (disabled) return null
   if (!contextUsage) return null
