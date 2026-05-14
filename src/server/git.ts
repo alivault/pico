@@ -98,6 +98,34 @@ export type GitCommitMessageResult = {
   reason?: string
 }
 
+export type GitCommitActionKind =
+  | "checkout"
+  | "cherry-pick"
+  | "revert"
+  | "tag"
+  | "reset"
+  | "rebase"
+  | "drop"
+  | "squash"
+
+export type GitResetMode = "soft" | "mixed" | "hard"
+
+export type GitCommitDiffMode = "commit" | "head" | "previous"
+
+export type GitCommitDiffResult = {
+  commit: string
+  mode: GitCommitDiffMode
+  title: string
+  path?: string
+  previousPath?: string
+  patch: string
+}
+
+export type GitCommitRemoteUrlResult = {
+  commit: string
+  remoteUrl: string
+}
+
 export type GitFileDiffResult = {
   path: string
   patch: string
@@ -577,6 +605,33 @@ function parseGitStatusEntries(output: string) {
   return files
 }
 
+function parseGitNameStatusEntries(output: string) {
+  const entries = parseCommandNullList(output)
+  const files: Array<GitChangeFile> = []
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const status = entries[index]
+    if (typeof status !== "string" || !status) continue
+
+    const isRenamedOrCopied = status.startsWith("R") || status.startsWith("C")
+    const previousPath = isRenamedOrCopied ? entries[index + 1] : undefined
+    const filePath = isRenamedOrCopied ? entries[index + 2] : entries[index + 1]
+    index += isRenamedOrCopied ? 2 : 1
+
+    if (typeof filePath !== "string" || !filePath) continue
+
+    files.push({
+      status: /^[RC]\d+/.test(status) ? status.slice(0, 1) : status,
+      path: filePath,
+      ...(typeof previousPath === "string" && previousPath
+        ? { previousPath }
+        : {}),
+    })
+  }
+
+  return files
+}
+
 function parseGitNumstatEntries(output: string) {
   const entries = parseCommandNullList(output)
   const diffs = new Map<
@@ -720,6 +775,29 @@ function assertGitFilePath(path: string) {
     throw new Error("file path must stay inside the repository")
   }
   return normalizedPath.replaceAll("\\", "/")
+}
+
+function assertGitCommitHash(commit: string) {
+  const normalizedCommit = typeof commit === "string" ? commit.trim() : ""
+  if (!normalizedCommit) throw new Error("commit is required")
+  if (!/^[0-9a-f]{5,40}$/i.test(normalizedCommit)) {
+    throw new Error("commit must be a valid hash")
+  }
+  return normalizedCommit
+}
+
+function assertGitTagName(tagName: string) {
+  const normalizedTagName = typeof tagName === "string" ? tagName.trim() : ""
+  if (!normalizedTagName) throw new Error("tag name is required")
+  if (normalizedTagName.startsWith("-") || /\s/.test(normalizedTagName)) {
+    throw new Error("Invalid tag name")
+  }
+  return normalizedTagName
+}
+
+function normalizeGitResetMode(mode: string | undefined): GitResetMode {
+  if (mode === "soft" || mode === "mixed" || mode === "hard") return mode
+  throw new Error("reset mode must be soft, mixed, or hard")
 }
 
 function parseGitRemoteBranches(output: string) {
@@ -1692,6 +1770,389 @@ export async function checkoutDirectoryGitBranch(
     throw new Error(
       gitCommandErrorMessage(
         options.create ? "Failed to create branch" : "Failed to switch branch",
+        result
+      )
+    )
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+function gitCommitActionLabel(action: GitCommitActionKind) {
+  switch (action) {
+    case "checkout":
+      return "checkout commit"
+    case "cherry-pick":
+      return "cherry-pick commit"
+    case "revert":
+      return "revert commit"
+    case "tag":
+      return "tag commit"
+    case "reset":
+      return "reset branch"
+    case "rebase":
+      return "rebase branch"
+    case "drop":
+      return "drop commit"
+    case "squash":
+      return "squash commits"
+  }
+}
+
+function remoteBaseUrlFromGitUrl(remoteUrl: string) {
+  const trimmed = remoteUrl.trim()
+  if (!trimmed) return ""
+
+  const scpLikeMatch = trimmed.match(/^git@([^:]+):(.+)$/)
+  if (scpLikeMatch) {
+    const host = scpLikeMatch[1]
+    const path = scpLikeMatch[2]?.replace(/\.git$/i, "")
+    return host && path ? `https://${host}/${path}` : ""
+  }
+
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol === "ssh:" && url.username === "git") {
+      return `https://${url.host}${url.pathname.replace(/\.git$/i, "")}`
+    }
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      url.username = ""
+      url.password = ""
+      url.pathname = url.pathname.replace(/\.git$/i, "")
+      url.search = ""
+      url.hash = ""
+      return url.toString().replace(/\/$/, "")
+    }
+  } catch {
+    // Fall through to no URL.
+  }
+
+  return ""
+}
+
+function commitUrlPathForHost(host: string, commit: string) {
+  return host.toLowerCase().includes("gitlab")
+    ? `/-/commit/${commit}`
+    : `/commit/${commit}`
+}
+
+async function readPrimaryRemoteName(cwd: string) {
+  const branchResult = await runCommand(
+    "git",
+    ["symbolic-ref", "--quiet", "--short", "HEAD"],
+    { cwd, timeoutMs: 1_500 }
+  )
+  const branch = branchResult.code === 0 ? branchResult.stdout.trim() : ""
+  if (branch) {
+    const branchRemoteResult = await runCommand(
+      "git",
+      ["config", "--get", `branch.${branch}.remote`],
+      { cwd, timeoutMs: 1_500 }
+    )
+    const branchRemote = branchRemoteResult.stdout.trim()
+    if (branchRemoteResult.code === 0 && branchRemote) return branchRemote
+  }
+
+  const pushDefaultResult = await runCommand(
+    "git",
+    ["config", "--get", "remote.pushDefault"],
+    { cwd, timeoutMs: 1_500 }
+  )
+  const pushDefault = pushDefaultResult.stdout.trim()
+  if (pushDefaultResult.code === 0 && pushDefault) return pushDefault
+
+  return "origin"
+}
+
+export async function readDirectoryGitCommitFiles(
+  cwd: string,
+  commit: string
+): Promise<Array<GitChangeFile> | null> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedCommit = assertGitCommitHash(commit)
+  if (!normalizedCwd) return null
+  if (!(await isInsideWorkTree(normalizedCwd))) return null
+
+  const [statusResult, numstatResult] = await Promise.all([
+    runCommand(
+      "git",
+      [
+        "show",
+        "--name-status",
+        "-z",
+        "--find-renames=50%",
+        "--format=",
+        normalizedCommit,
+      ],
+      { cwd: normalizedCwd, timeoutMs: 10_000 }
+    ),
+    runCommand(
+      "git",
+      [
+        "show",
+        "--numstat",
+        "-z",
+        "--find-renames=50%",
+        "--format=",
+        normalizedCommit,
+      ],
+      { cwd: normalizedCwd, timeoutMs: 10_000 }
+    ),
+  ])
+
+  if (statusResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to read commit files", statusResult)
+    )
+  }
+  if (numstatResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to read commit file stats", numstatResult)
+    )
+  }
+
+  const stats = parseGitNumstatEntries(numstatResult.stdout)
+  return parseGitNameStatusEntries(statusResult.stdout).map((file) => ({
+    ...file,
+    ...stats.get(file.path),
+  }))
+}
+
+export async function readDirectoryGitCommitDiff(
+  cwd: string,
+  commit: string,
+  mode: GitCommitDiffMode = "commit",
+  path?: string,
+  previousPath?: string
+): Promise<GitCommitDiffResult | null> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedCommit = assertGitCommitHash(commit)
+  const normalizedPath = path ? assertGitFilePath(path) : undefined
+  const normalizedPreviousPath = previousPath
+    ? assertGitFilePath(previousPath)
+    : undefined
+  if (!normalizedCwd) return null
+  if (!(await isInsideWorkTree(normalizedCwd))) return null
+
+  const pathArgs = normalizedPath
+    ? ["--", ...uniqueGitActionPaths([normalizedPreviousPath, normalizedPath])]
+    : []
+  const args =
+    mode === "head"
+      ? [
+          "diff",
+          "--patch",
+          "--no-color",
+          "--no-ext-diff",
+          "--find-renames=50%",
+          `${normalizedCommit}..HEAD`,
+          ...pathArgs,
+        ]
+      : mode === "previous"
+        ? [
+            "diff",
+            "--patch",
+            "--no-color",
+            "--no-ext-diff",
+            "--find-renames=50%",
+            `${normalizedCommit}^`,
+            normalizedCommit,
+            ...pathArgs,
+          ]
+        : [
+            "show",
+            "--patch",
+            "--no-color",
+            "--no-ext-diff",
+            "--find-renames=50%",
+            "--format=",
+            normalizedCommit,
+            ...pathArgs,
+          ]
+  const result = await runCommand("git", args, {
+    cwd: normalizedCwd,
+    timeoutMs: 30_000,
+  })
+  if (result.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to read commit diff", result)
+    )
+  }
+
+  const title =
+    mode === "head"
+      ? `${normalizedCommit.slice(0, 7)}..HEAD`
+      : mode === "previous"
+        ? `${normalizedCommit.slice(0, 7)}^..${normalizedCommit.slice(0, 7)}`
+        : normalizedCommit.slice(0, 7)
+
+  return {
+    commit: normalizedCommit,
+    mode,
+    title: normalizedPath ? `${title}:${normalizedPath}` : title,
+    ...(normalizedPath ? { path: normalizedPath } : {}),
+    ...(normalizedPreviousPath ? { previousPath: normalizedPreviousPath } : {}),
+    patch: result.stdout.trim(),
+  }
+}
+
+export async function readDirectoryGitCommitRemoteUrl(
+  cwd: string,
+  commit: string
+): Promise<GitCommitRemoteUrlResult | null> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedCommit = assertGitCommitHash(commit)
+  if (!normalizedCwd) return null
+  if (!(await isInsideWorkTree(normalizedCwd))) return null
+
+  const remote = await readPrimaryRemoteName(normalizedCwd)
+  const remoteResult = await runCommand("git", ["remote", "get-url", remote], {
+    cwd: normalizedCwd,
+    timeoutMs: 1_500,
+  })
+  if (remoteResult.code !== 0 || !remoteResult.stdout.trim()) {
+    throw new Error("No remote URL found")
+  }
+
+  const baseUrl = remoteBaseUrlFromGitUrl(remoteResult.stdout)
+  if (!baseUrl) throw new Error("Remote URL cannot be opened in the browser")
+
+  const url = new URL(baseUrl)
+  return {
+    commit: normalizedCommit,
+    remoteUrl: `${baseUrl}${commitUrlPathForHost(url.host, normalizedCommit)}`,
+  }
+}
+
+export async function runDirectoryGitCommitAction(
+  cwd: string,
+  action: GitCommitActionKind,
+  commit: string,
+  options: {
+    tagName?: string
+    resetMode?: string
+    message?: string
+  } = {}
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedCommit = assertGitCommitHash(commit)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  let result: Awaited<ReturnType<typeof runCommand>>
+  switch (action) {
+    case "checkout":
+      result = await runCommand(
+        "git",
+        ["switch", "--detach", normalizedCommit],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+      break
+    case "cherry-pick":
+      result = await runCommand("git", ["cherry-pick", normalizedCommit], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+      break
+    case "revert":
+      result = await runCommand(
+        "git",
+        ["revert", "--no-edit", normalizedCommit],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+      break
+    case "tag": {
+      const tagName = assertGitTagName(options.tagName || "")
+      result = await runCommand("git", ["tag", tagName, normalizedCommit], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+      break
+    }
+    case "reset": {
+      const mode = normalizeGitResetMode(options.resetMode)
+      result = await runCommand(
+        "git",
+        ["reset", `--${mode}`, normalizedCommit],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+      break
+    }
+    case "rebase":
+      result = await runCommand("git", ["rebase", normalizedCommit], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+      break
+    case "drop":
+      result = await runCommand(
+        "git",
+        ["rebase", "--onto", `${normalizedCommit}^`, normalizedCommit, "HEAD"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+      break
+    case "squash": {
+      const message = cleanupCommitMessageCandidate(options.message || "")
+      if (!message) throw new Error("commit message is required")
+      const resetResult = await runCommand(
+        "git",
+        ["reset", "--soft", normalizedCommit],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+      if (resetResult.code !== 0) {
+        throw new Error(
+          gitCommandErrorMessage("Failed to squash commits", resetResult)
+        )
+      }
+
+      const stagedResult = await runCommand(
+        "git",
+        ["diff", "--cached", "--quiet"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: 5_000,
+        }
+      )
+      if (stagedResult.code === 0) {
+        throw new Error("No commits after this commit to squash")
+      }
+
+      result = await runCommand("git", ["commit", "-m", message], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+      result.stdout = [resetResult.stdout, result.stdout]
+        .filter(Boolean)
+        .join("\n")
+      result.stderr = [resetResult.stderr, result.stderr]
+        .filter(Boolean)
+        .join("\n")
+      break
+    }
+  }
+
+  if (result.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage(
+        `Failed to ${gitCommitActionLabel(action)}`,
         result
       )
     )

@@ -25,7 +25,11 @@ import { Route as ApiGitPushRouteImport } from './routes/api.git-push'
 import { Route as ApiGitPullRouteImport } from './routes/api.git-pull'
 import { Route as ApiGitDiscardRouteImport } from './routes/api.git-discard'
 import { Route as ApiGitDiffRouteImport } from './routes/api.git-diff'
+import { Route as ApiGitCommitRemoteUrlRouteImport } from './routes/api.git-commit-remote-url'
 import { Route as ApiGitCommitMessageRouteImport } from './routes/api.git-commit-message'
+import { Route as ApiGitCommitFilesRouteImport } from './routes/api.git-commit-files'
+import { Route as ApiGitCommitDiffRouteImport } from './routes/api.git-commit-diff'
+import { Route as ApiGitCommitActionRouteImport } from './routes/api.git-commit-action'
 import { Route as ApiGitCommitRouteImport } from './routes/api.git-commit'
 import { Route as ApiGitCheckoutRouteImport } from './routes/api.git-checkout'
 import { Route as ApiGitChangesRouteImport } from './routes/api.git-changes'
@@ -139,9 +143,29 @@ const ApiGitDiffRoute = ApiGitDiffRouteImport.update({
   path: '/api/git-diff',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGitCommitRemoteUrlRoute = ApiGitCommitRemoteUrlRouteImport.update({
+  id: '/api/git-commit-remote-url',
+  path: '/api/git-commit-remote-url',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGitCommitMessageRoute = ApiGitCommitMessageRouteImport.update({
   id: '/api/git-commit-message',
   path: '/api/git-commit-message',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitCommitFilesRoute = ApiGitCommitFilesRouteImport.update({
+  id: '/api/git-commit-files',
+  path: '/api/git-commit-files',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitCommitDiffRoute = ApiGitCommitDiffRouteImport.update({
+  id: '/api/git-commit-diff',
+  path: '/api/git-commit-diff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGitCommitActionRoute = ApiGitCommitActionRouteImport.update({
+  id: '/api/git-commit-action',
+  path: '/api/git-commit-action',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGitCommitRoute = ApiGitCommitRouteImport.update({
@@ -321,7 +345,11 @@ export interface FileRoutesByFullPath {
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
+  '/api/git-commit-action': typeof ApiGitCommitActionRoute
+  '/api/git-commit-diff': typeof ApiGitCommitDiffRoute
+  '/api/git-commit-files': typeof ApiGitCommitFilesRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-commit-remote-url': typeof ApiGitCommitRemoteUrlRoute
   '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -372,7 +400,11 @@ export interface FileRoutesByTo {
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
+  '/api/git-commit-action': typeof ApiGitCommitActionRoute
+  '/api/git-commit-diff': typeof ApiGitCommitDiffRoute
+  '/api/git-commit-files': typeof ApiGitCommitFilesRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-commit-remote-url': typeof ApiGitCommitRemoteUrlRoute
   '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -424,7 +456,11 @@ export interface FileRoutesById {
   '/api/git-changes': typeof ApiGitChangesRoute
   '/api/git-checkout': typeof ApiGitCheckoutRoute
   '/api/git-commit': typeof ApiGitCommitRoute
+  '/api/git-commit-action': typeof ApiGitCommitActionRoute
+  '/api/git-commit-diff': typeof ApiGitCommitDiffRoute
+  '/api/git-commit-files': typeof ApiGitCommitFilesRoute
   '/api/git-commit-message': typeof ApiGitCommitMessageRoute
+  '/api/git-commit-remote-url': typeof ApiGitCommitRemoteUrlRoute
   '/api/git-diff': typeof ApiGitDiffRoute
   '/api/git-discard': typeof ApiGitDiscardRoute
   '/api/git-pull': typeof ApiGitPullRoute
@@ -477,7 +513,11 @@ export interface FileRouteTypes {
     | '/api/git-changes'
     | '/api/git-checkout'
     | '/api/git-commit'
+    | '/api/git-commit-action'
+    | '/api/git-commit-diff'
+    | '/api/git-commit-files'
     | '/api/git-commit-message'
+    | '/api/git-commit-remote-url'
     | '/api/git-diff'
     | '/api/git-discard'
     | '/api/git-pull'
@@ -528,7 +568,11 @@ export interface FileRouteTypes {
     | '/api/git-changes'
     | '/api/git-checkout'
     | '/api/git-commit'
+    | '/api/git-commit-action'
+    | '/api/git-commit-diff'
+    | '/api/git-commit-files'
     | '/api/git-commit-message'
+    | '/api/git-commit-remote-url'
     | '/api/git-diff'
     | '/api/git-discard'
     | '/api/git-pull'
@@ -579,7 +623,11 @@ export interface FileRouteTypes {
     | '/api/git-changes'
     | '/api/git-checkout'
     | '/api/git-commit'
+    | '/api/git-commit-action'
+    | '/api/git-commit-diff'
+    | '/api/git-commit-files'
     | '/api/git-commit-message'
+    | '/api/git-commit-remote-url'
     | '/api/git-diff'
     | '/api/git-discard'
     | '/api/git-pull'
@@ -631,7 +679,11 @@ export interface RootRouteChildren {
   ApiGitChangesRoute: typeof ApiGitChangesRoute
   ApiGitCheckoutRoute: typeof ApiGitCheckoutRoute
   ApiGitCommitRoute: typeof ApiGitCommitRoute
+  ApiGitCommitActionRoute: typeof ApiGitCommitActionRoute
+  ApiGitCommitDiffRoute: typeof ApiGitCommitDiffRoute
+  ApiGitCommitFilesRoute: typeof ApiGitCommitFilesRoute
   ApiGitCommitMessageRoute: typeof ApiGitCommitMessageRoute
+  ApiGitCommitRemoteUrlRoute: typeof ApiGitCommitRemoteUrlRoute
   ApiGitDiffRoute: typeof ApiGitDiffRoute
   ApiGitDiscardRoute: typeof ApiGitDiscardRoute
   ApiGitPullRoute: typeof ApiGitPullRoute
@@ -783,11 +835,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGitDiffRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/git-commit-remote-url': {
+      id: '/api/git-commit-remote-url'
+      path: '/api/git-commit-remote-url'
+      fullPath: '/api/git-commit-remote-url'
+      preLoaderRoute: typeof ApiGitCommitRemoteUrlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/git-commit-message': {
       id: '/api/git-commit-message'
       path: '/api/git-commit-message'
       fullPath: '/api/git-commit-message'
       preLoaderRoute: typeof ApiGitCommitMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-commit-files': {
+      id: '/api/git-commit-files'
+      path: '/api/git-commit-files'
+      fullPath: '/api/git-commit-files'
+      preLoaderRoute: typeof ApiGitCommitFilesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-commit-diff': {
+      id: '/api/git-commit-diff'
+      path: '/api/git-commit-diff'
+      fullPath: '/api/git-commit-diff'
+      preLoaderRoute: typeof ApiGitCommitDiffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/git-commit-action': {
+      id: '/api/git-commit-action'
+      path: '/api/git-commit-action'
+      fullPath: '/api/git-commit-action'
+      preLoaderRoute: typeof ApiGitCommitActionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/git-commit': {
@@ -1052,7 +1132,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGitChangesRoute: ApiGitChangesRoute,
   ApiGitCheckoutRoute: ApiGitCheckoutRoute,
   ApiGitCommitRoute: ApiGitCommitRoute,
+  ApiGitCommitActionRoute: ApiGitCommitActionRoute,
+  ApiGitCommitDiffRoute: ApiGitCommitDiffRoute,
+  ApiGitCommitFilesRoute: ApiGitCommitFilesRoute,
   ApiGitCommitMessageRoute: ApiGitCommitMessageRoute,
+  ApiGitCommitRemoteUrlRoute: ApiGitCommitRemoteUrlRoute,
   ApiGitDiffRoute: ApiGitDiffRoute,
   ApiGitDiscardRoute: ApiGitDiscardRoute,
   ApiGitPullRoute: ApiGitPullRoute,

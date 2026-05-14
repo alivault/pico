@@ -11,6 +11,17 @@ export function hasScrolledContent(scrollElement: HTMLElement | null) {
   return Boolean(scrollElement && scrollElement.scrollTop > 0)
 }
 
+export function hasRemainingScrollContent(scrollElement: HTMLElement | null) {
+  if (!scrollElement) return false
+
+  return (
+    scrollElement.scrollHeight -
+      scrollElement.clientHeight -
+      scrollElement.scrollTop >
+    1
+  )
+}
+
 export function getStuckScrollTriggerValue({
   getValue,
   scrollElement,

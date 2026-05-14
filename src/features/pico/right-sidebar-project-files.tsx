@@ -1,8 +1,5 @@
 import * as React from "react"
 import {
-  createFileTreeIconResolver,
-  getBuiltInFileIconColor,
-  getBuiltInSpriteSheet,
   type FileTreeDirectoryHandle,
   type FileTreeItemHandle,
   type GitStatusEntry,
@@ -30,6 +27,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
   ChevronsDownUpIcon,
+  FileDiffIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   XIcon,
@@ -73,6 +71,10 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { picoQueryKeys } from "@/features/pico/query-keys"
+import {
+  ProjectFileIconSprite,
+  ProjectFileTypeIcon,
+} from "@/features/pico/right-sidebar-file-icons"
 import { gitChangesQueryOptions } from "@/features/pico/right-sidebar-git-data"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
 import { useCommandSurfaceAutoFocus } from "@/features/pico/use-command-surface-autofocus"
@@ -81,6 +83,7 @@ import {
   normalizeCwd,
 } from "@/features/pico/right-sidebar-shared"
 import type {
+  GitCommitDiffTab,
   GitScopedProps,
   OpenProjectFileOptions,
   RightSidebarTabValue,
@@ -268,43 +271,6 @@ const GIT_FILE_TREE_UNSAFE_CSS = `
     font-size: 16px;
   }
 `
-
-const PROJECT_FILE_ICON_SPRITE_SHEET = getBuiltInSpriteSheet("complete")
-const projectFileIconResolver = createFileTreeIconResolver({
-  set: "complete",
-  colored: true,
-})
-
-function ProjectFileIconSprite() {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none block h-0 w-0 overflow-hidden"
-      dangerouslySetInnerHTML={{ __html: PROJECT_FILE_ICON_SPRITE_SHEET }}
-    />
-  )
-}
-
-function ProjectFileTypeIcon({ path }: { path: string }) {
-  const icon = projectFileIconResolver.resolveIcon("file-tree-icon-file", path)
-  const color = icon.token ? getBuiltInFileIconColor(icon.token) : undefined
-
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4 shrink-0 text-muted-foreground"
-      data-icon-name={icon.remappedFrom ?? icon.name}
-      data-icon-token={icon.token}
-      focusable="false"
-      style={color ? { color } : undefined}
-      viewBox={icon.viewBox ?? `0 0 ${icon.width ?? 16} ${icon.height ?? 16}`}
-      width={icon.width ?? 16}
-      height={icon.height ?? 16}
-    >
-      <use href={`#${icon.name.replace(/^#/, "")}`} />
-    </svg>
-  )
-}
 
 function isFileTreeDirectoryHandle(
   item: FileTreeItemHandle | null
@@ -885,7 +851,7 @@ function FileViewerTabContent({
   const tab = (
     <div
       className={cn(
-        "inline-flex h-8 max-w-56 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         active && "bg-muted text-foreground",
         dragging && "border-transparent shadow-none ring-0"
       )}
@@ -947,6 +913,22 @@ function FileViewerTabContent({
   )
 }
 
+function fileViewerTabId(path: string) {
+  return `file:${path}`
+}
+
+function commitDiffViewerTabId(key: string) {
+  return `commit-diff:${key}`
+}
+
+function filePathFromViewerTabId(id: string) {
+  return id.startsWith("file:") ? id.slice("file:".length) : ""
+}
+
+function commitDiffKeyFromViewerTabId(id: string) {
+  return id.startsWith("commit-diff:") ? id.slice("commit-diff:".length) : ""
+}
+
 function SortableFileViewerTab(props: {
   active: boolean
   index: number
@@ -967,7 +949,7 @@ function SortableFileViewerTab(props: {
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id: props.path })
+  } = useSortable({ id: fileViewerTabId(props.path) })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -979,6 +961,142 @@ function SortableFileViewerTab(props: {
       className={cn("shrink-0", isDragging && "opacity-0")}
     >
       <FileViewerTabContent
+        {...props}
+        dragAttributes={attributes}
+        dragListeners={listeners}
+      />
+    </div>
+  )
+}
+
+function CommitDiffViewerTab({
+  active,
+  dragging = false,
+  dragListeners,
+  dragAttributes,
+  index,
+  onActiveCommitDiffChange,
+  onActiveTabChange,
+  onCloseAllCommitDiffs,
+  onCloseCommitDiff,
+  onCloseCommitDiffsToRight,
+  onCloseOtherCommitDiffs,
+  tab,
+  tabCount,
+}: {
+  active: boolean
+  dragging?: boolean
+  dragListeners?: ReturnType<typeof useSortable>["listeners"]
+  dragAttributes?: ReturnType<typeof useSortable>["attributes"]
+  index: number
+  onActiveCommitDiffChange?: (key: string) => void
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllCommitDiffs?: () => void
+  onCloseCommitDiff?: (key: string) => void
+  onCloseCommitDiffsToRight?: (key: string) => void
+  onCloseOtherCommitDiffs?: (key: string) => void
+  tab: GitCommitDiffTab
+  tabCount: number
+}) {
+  const tabNode = (
+    <div
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        active && "bg-muted text-foreground",
+        dragging && "border-transparent shadow-none ring-0"
+      )}
+      {...dragAttributes}
+      {...dragListeners}
+    >
+      <button
+        type="button"
+        title={tab.title}
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left"
+        onClick={() => {
+          onActiveCommitDiffChange?.(tab.key)
+          onActiveTabChange("commit-diff")
+        }}
+      >
+        {tab.path ? (
+          <ProjectFileTypeIcon path={tab.path} />
+        ) : (
+          <FileDiffIcon className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="block min-w-0 truncate">{tab.title}</span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${tab.title}`}
+        className="mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => {
+          onCloseCommitDiff?.(tab.key)
+        }}
+      >
+        <XIcon className="size-3" />
+      </button>
+    </div>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={tabNode} />
+      <ContextMenuContent className="w-44">
+        <ContextMenuItem onClick={() => onCloseCommitDiff?.(tab.key)}>
+          Close
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={tabCount <= 1}
+          onClick={() => onCloseOtherCommitDiffs?.(tab.key)}
+        >
+          Close others
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={index >= tabCount - 1}
+          onClick={() => onCloseCommitDiffsToRight?.(tab.key)}
+        >
+          Close to the right
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onCloseAllCommitDiffs?.()}>
+          Close all
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+function SortableCommitDiffViewerTab(props: {
+  active: boolean
+  index: number
+  onActiveCommitDiffChange?: (key: string) => void
+  onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllCommitDiffs?: () => void
+  onCloseCommitDiff?: (key: string) => void
+  onCloseCommitDiffsToRight?: (key: string) => void
+  onCloseOtherCommitDiffs?: (key: string) => void
+  tab: GitCommitDiffTab
+  tabCount: number
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: commitDiffViewerTabId(props.tab.key) })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  } satisfies React.CSSProperties
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("shrink-0", isDragging && "opacity-0")}
+    >
+      <CommitDiffViewerTab
         {...props}
         dragAttributes={attributes}
         dragListeners={listeners}
@@ -1014,33 +1132,70 @@ function FileViewerTabOverlay({
   )
 }
 
+function CommitDiffViewerTabOverlay({
+  active,
+  tab,
+}: {
+  active: boolean
+  tab: GitCommitDiffTab
+}) {
+  return (
+    <CommitDiffViewerTab
+      active={active}
+      dragging
+      index={0}
+      onActiveTabChange={() => {}}
+      tab={tab}
+      tabCount={1}
+    />
+  )
+}
+
 export function RightSidebarTabStrip({
+  activeCommitDiffKey = "",
   activeFilePath,
   activeTab,
+  commitDiffTabs = [],
   filePreviewPath = "",
   fileTabs = [],
+  onActiveCommitDiffChange,
   onActiveFileChange,
   onActiveTabChange,
+  onCloseAllCommitDiffs,
   onCloseAllFiles,
+  onCloseCommitDiff,
+  onCloseCommitDiffsToRight,
   onCloseFile,
   onCloseFilesToRight,
+  onCloseOtherCommitDiffs,
   onCloseOtherFiles,
   onOpenFileDialog,
+  onReorderCommitDiffs,
   onReorderFiles,
+  showHistory = false,
   showReview = false,
 }: {
+  activeCommitDiffKey?: string
   activeFilePath?: string
   activeTab: RightSidebarTabValue
+  commitDiffTabs?: Array<GitCommitDiffTab>
   filePreviewPath?: string
   fileTabs?: Array<string>
+  onActiveCommitDiffChange?: (key: string) => void
   onActiveFileChange?: (path: string) => void
   onActiveTabChange: (tab: RightSidebarTabValue) => void
+  onCloseAllCommitDiffs?: () => void
   onCloseAllFiles?: () => void
+  onCloseCommitDiff?: (key: string) => void
+  onCloseCommitDiffsToRight?: (key: string) => void
   onCloseFile?: (path: string) => void
   onCloseFilesToRight?: (path: string) => void
+  onCloseOtherCommitDiffs?: (key: string) => void
   onCloseOtherFiles?: (path: string) => void
   onOpenFileDialog?: () => void
+  onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
+  showHistory?: boolean
   showReview?: boolean
 }) {
   const renderTab = ({
@@ -1069,43 +1224,86 @@ export function RightSidebarTabStrip({
     )
   }
 
-  const [activeDragPath, setActiveDragPath] = React.useState("")
+  const fileTabIds = fileTabs.map(fileViewerTabId)
+  const commitDiffTabIds = commitDiffTabs.map((tab) =>
+    commitDiffViewerTabId(tab.key)
+  )
+  const availableMixedTabIds = [...fileTabIds, ...commitDiffTabIds]
+  const availableMixedTabIdSet = new Set(availableMixedTabIds)
+  const [mixedTabOrder, setMixedTabOrder] = React.useState<Array<string>>([])
+  const [activeDragTabId, setActiveDragTabId] = React.useState("")
+  const mixedTabIds = [
+    ...mixedTabOrder.filter((id) => availableMixedTabIdSet.has(id)),
+    ...availableMixedTabIds.filter((id) => !mixedTabOrder.includes(id)),
+  ]
   const hasOpenFiles = fileTabs.length > 0
+  const hasOpenCommitDiffs = commitDiffTabs.length > 0
+  const hasFileTypeIconTabs =
+    hasOpenFiles || commitDiffTabs.some((tab) => Boolean(tab.path))
+  const hasMixedTabs = mixedTabIds.length > 0
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
     })
   )
+
+  React.useEffect(() => {
+    setMixedTabOrder((current) => {
+      const next = [
+        ...current.filter((id) => availableMixedTabIdSet.has(id)),
+        ...availableMixedTabIds.filter((id) => !current.includes(id)),
+      ]
+      return next.length === current.length &&
+        next.every((id, index) => id === current[index])
+        ? current
+        : next
+    })
+  }, [availableMixedTabIds.join("\0")])
+
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragPath(String(event.active.id))
+    setActiveDragTabId(String(event.active.id))
   }
   const handleDragEnd = (event: DragEndEvent) => {
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ""
-    if (!activeId || !overId || activeId === overId) return
+    if (!activeId || !overId || activeId === overId) {
+      setActiveDragTabId("")
+      return
+    }
 
-    const oldIndex = fileTabs.indexOf(activeId)
-    const newIndex = fileTabs.indexOf(overId)
-    if (oldIndex === -1 || newIndex === -1) return
+    const oldIndex = mixedTabIds.indexOf(activeId)
+    const newIndex = mixedTabIds.indexOf(overId)
+    if (oldIndex === -1 || newIndex === -1) {
+      setActiveDragTabId("")
+      return
+    }
 
-    onReorderFiles?.(arrayMove(fileTabs, oldIndex, newIndex))
-    setActiveDragPath("")
+    const nextMixedTabIds = arrayMove(mixedTabIds, oldIndex, newIndex)
+    setMixedTabOrder(nextMixedTabIds)
+    onReorderFiles?.(
+      nextMixedTabIds.map(filePathFromViewerTabId).filter(Boolean)
+    )
+    onReorderCommitDiffs?.(
+      nextMixedTabIds.map(commitDiffKeyFromViewerTabId).filter(Boolean)
+    )
+    setActiveDragTabId("")
   }
   const handleDragCancel = () => {
-    setActiveDragPath("")
+    setActiveDragTabId("")
   }
 
   return (
     <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background p-2">
-      {hasOpenFiles ? <ProjectFileIconSprite /> : null}
+      {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
+      {showHistory ? renderTab({ label: "History", value: "history" }) : null}
       {!hasOpenFiles ? renderTab({ label: "Files", value: "files" }) : null}
-      {hasOpenFiles ? (
+      {hasOpenFiles || hasOpenCommitDiffs ? (
         <span className="mx-1 shrink-0 text-xs text-border" aria-hidden="true">
           |
         </span>
       ) : null}
-      {hasOpenFiles ? (
+      {hasMixedTabs ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -1114,36 +1312,83 @@ export function RightSidebarTabStrip({
           onDragCancel={handleDragCancel}
         >
           <SortableContext
-            items={fileTabs}
+            items={mixedTabIds}
             strategy={horizontalListSortingStrategy}
           >
-            {fileTabs.map((path, index) => (
-              <SortableFileViewerTab
-                key={path}
-                active={activeTab === "files" && activeFilePath === path}
-                index={index}
-                onActiveFileChange={onActiveFileChange}
-                onActiveTabChange={onActiveTabChange}
-                onCloseAllFiles={onCloseAllFiles}
-                onCloseFile={onCloseFile}
-                onCloseFilesToRight={onCloseFilesToRight}
-                onCloseOtherFiles={onCloseOtherFiles}
-                path={path}
-                preview={filePreviewPath === path}
-                tabCount={fileTabs.length}
-              />
-            ))}
+            {mixedTabIds.map((id) => {
+              const path = filePathFromViewerTabId(id)
+              if (path) {
+                return (
+                  <SortableFileViewerTab
+                    key={id}
+                    active={activeTab === "files" && activeFilePath === path}
+                    index={fileTabs.indexOf(path)}
+                    onActiveFileChange={onActiveFileChange}
+                    onActiveTabChange={onActiveTabChange}
+                    onCloseAllFiles={onCloseAllFiles}
+                    onCloseFile={onCloseFile}
+                    onCloseFilesToRight={onCloseFilesToRight}
+                    onCloseOtherFiles={onCloseOtherFiles}
+                    path={path}
+                    preview={filePreviewPath === path}
+                    tabCount={fileTabs.length}
+                  />
+                )
+              }
+
+              const commitDiffKey = commitDiffKeyFromViewerTabId(id)
+              const tab = commitDiffTabs.find(
+                (candidate) => candidate.key === commitDiffKey
+              )
+              if (!tab) return null
+
+              return (
+                <SortableCommitDiffViewerTab
+                  key={id}
+                  active={
+                    activeTab === "commit-diff" &&
+                    activeCommitDiffKey === tab.key
+                  }
+                  index={commitDiffTabs.findIndex(
+                    (candidate) => candidate.key === tab.key
+                  )}
+                  onActiveCommitDiffChange={onActiveCommitDiffChange}
+                  onActiveTabChange={onActiveTabChange}
+                  onCloseAllCommitDiffs={onCloseAllCommitDiffs}
+                  onCloseCommitDiff={onCloseCommitDiff}
+                  onCloseCommitDiffsToRight={onCloseCommitDiffsToRight}
+                  onCloseOtherCommitDiffs={onCloseOtherCommitDiffs}
+                  tab={tab}
+                  tabCount={commitDiffTabs.length}
+                />
+              )
+            })}
           </SortableContext>
           <DragOverlay
             dropAnimation={null}
             modifiers={FILE_TAB_DRAG_OVERLAY_MODIFIERS}
           >
-            {activeDragPath ? (
+            {filePathFromViewerTabId(activeDragTabId) ? (
               <FileViewerTabOverlay
                 activeFilePath={activeFilePath}
-                activePath={activeDragPath}
+                activePath={filePathFromViewerTabId(activeDragTabId)}
                 filePreviewPath={filePreviewPath}
                 fileTabs={fileTabs}
+              />
+            ) : commitDiffKeyFromViewerTabId(activeDragTabId) ? (
+              <CommitDiffViewerTabOverlay
+                active={
+                  activeTab === "commit-diff" &&
+                  activeCommitDiffKey ===
+                    commitDiffKeyFromViewerTabId(activeDragTabId)
+                }
+                tab={
+                  commitDiffTabs.find(
+                    (candidate) =>
+                      candidate.key ===
+                      commitDiffKeyFromViewerTabId(activeDragTabId)
+                  ) || commitDiffTabs[0]
+                }
               />
             ) : null}
           </DragOverlay>
@@ -1399,7 +1644,7 @@ function FileViewerTabStrip({
           <div
             key={path}
             className={cn(
-              "inline-flex h-8 max-w-56 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
               active && "bg-muted text-foreground"
             )}
           >

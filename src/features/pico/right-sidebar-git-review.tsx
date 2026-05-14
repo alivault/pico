@@ -2,11 +2,11 @@ import * as React from "react"
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import {
+  ArrowUpRightIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  FileInputIcon,
   PlusIcon,
   Undo2Icon,
 } from "lucide-react"
@@ -24,6 +24,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  ProjectFileIconSprite,
+  ProjectFileTypeIcon,
+} from "@/features/pico/right-sidebar-file-icons"
 import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
 import {
   GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD,
@@ -46,7 +50,10 @@ import {
   getErrorMessage,
   normalizeCwd,
 } from "@/features/pico/right-sidebar-shared"
-import type { GitScopedProps } from "@/features/pico/right-sidebar-types"
+import type {
+  GitCommitDiffTabRequest,
+  GitScopedProps,
+} from "@/features/pico/right-sidebar-types"
 import {
   getStuckScrollTriggerValue,
   hasScrolledContent,
@@ -183,8 +190,13 @@ export function FileReviewContent({
   viewerContextId,
   cwd,
   active,
+  onOpenCommitDiff,
   onOpenFile,
-}: GitScopedProps) {
+  showEmbeddedHistory = true,
+}: GitScopedProps & {
+  onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
+  showEmbeddedHistory?: boolean
+}) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [diffStyle, setDiffStyle] = React.useState<ReviewDiffStyle>("unified")
@@ -361,6 +373,7 @@ export function FileReviewContent({
       ref={reviewContentRef}
       className="flex h-full min-h-0 flex-col bg-background"
     >
+      <ProjectFileIconSprite />
       <div className="flex min-h-12 shrink-0 flex-col justify-center gap-2 border-b border-border/70 bg-background p-2">
         <GitPanelToolbar
           viewerContextId={viewerContextId}
@@ -462,7 +475,8 @@ export function FileReviewContent({
           </GitSectionNote>
         )}
       </div>
-      {normalizedCwd &&
+      {showEmbeddedHistory &&
+      normalizedCwd &&
       viewerContextId &&
       files !== null &&
       !filesQuery.error ? (
@@ -526,6 +540,7 @@ export function FileReviewContent({
                 cwd={normalizedCwd}
                 active={active && historyOpen}
                 embedded
+                onOpenCommitDiff={onOpenCommitDiff}
               />
             </div>
           ) : null}
@@ -672,8 +687,9 @@ function ReviewFileAccordionItem({
           data-review-file-value={value}
           className="group/review-file-trigger relative flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-none border border-transparent bg-background px-3 py-2 text-left font-mono text-[13px] font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground"
         >
-          <span className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-3">
+          <span className="grid min-w-0 flex-1 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2">
             <GitFileStatus status={file.status} />
+            <ProjectFileTypeIcon path={file.path} />
             <span className="min-w-0 truncate text-left">
               {file.previousPath ? (
                 <>
@@ -698,53 +714,9 @@ function ReviewFileAccordionItem({
             className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
           />
         </AccordionPrimitive.Trigger>
-        <div className="mr-2 hidden self-center overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-sm md:flex">
-          {onOpenFile ? (
-            <TitleTooltip title="Open file" side="top">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Open ${file.path}`}
-                className="rounded-none border-0"
-                onClick={openFile}
-              >
-                <FileInputIcon className="size-3.5" />
-              </Button>
-            </TitleTooltip>
-          ) : null}
-          <TitleTooltip title="Discard changes" side="top">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Discard changes to ${file.path}`}
-              className="rounded-none border-0 border-l border-border/70 text-muted-foreground hover:text-destructive"
-              disabled={actionPending || !viewerContextId || !normalizedCwd}
-              onClick={discardFileChanges}
-            >
-              <Undo2Icon className="size-3.5" />
-            </Button>
-          </TitleTooltip>
-          <TitleTooltip title="Stage changes" side="top">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Stage changes to ${file.path}`}
-              className="rounded-none border-0 border-l border-border/70 text-muted-foreground hover:text-emerald-500"
-              disabled={
-                actionPending || !canStage || !viewerContextId || !normalizedCwd
-              }
-              onClick={stageFileChanges}
-            >
-              <PlusIcon className="size-3.5" />
-            </Button>
-          </TitleTooltip>
-        </div>
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
-        <div className="flex gap-2 border-b border-border/70 bg-card/40 p-2 md:hidden">
+        <div className="flex gap-2 border-b border-border/70 bg-card/40 p-2">
           {onOpenFile ? (
             <Button
               type="button"
@@ -753,7 +725,7 @@ function ReviewFileAccordionItem({
               className="min-w-0 flex-1"
               onClick={openFile}
             >
-              <FileInputIcon className="size-3.5" />
+              <ArrowUpRightIcon className="size-3.5" />
               <span>Open file</span>
             </Button>
           ) : null}

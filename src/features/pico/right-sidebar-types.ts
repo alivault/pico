@@ -1,10 +1,37 @@
-import type { GitStatusSummary } from "@/lib/pico/api"
+import type { GitCommitDiffMode, GitStatusSummary } from "@/lib/pico/api"
 
 export type GitStatusValue = GitStatusSummary | null
 export type GitRemoteAction = "push" | "force-push" | "pull"
 export type OpenProjectFileOptions = { pin?: boolean }
 
-export type RightSidebarTabValue = "files" | "review"
+export type GitCommitDiffTab = {
+  key: string
+  commit: string
+  shortHash: string
+  title: string
+  mode: GitCommitDiffMode
+  path?: string
+  previousPath?: string
+  leftRevisionLabel?: string
+  rightRevisionLabel?: string
+}
+
+export type GitCommitDiffTabRequest = {
+  commit: string
+  shortHash: string
+  subject: string
+  mode: GitCommitDiffMode
+  path?: string
+  previousPath?: string
+  leftRevisionLabel?: string
+  rightRevisionLabel?: string
+}
+
+export type RightSidebarTabValue =
+  | "files"
+  | "review"
+  | "history"
+  | "commit-diff"
 
 export type RightSidebarProps = {
   viewerContextId: string

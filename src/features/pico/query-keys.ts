@@ -44,6 +44,26 @@ export const picoQueryKeys = {
     ["pico", "git-branches", viewerContextId, cwd] as const,
   gitCommits: (viewerContextId: string, cwd: string) =>
     ["pico", "git-commits", viewerContextId, cwd] as const,
+  gitCommitDiff: (
+    viewerContextId: string,
+    cwd: string,
+    commit: string,
+    mode: string,
+    path = "",
+    previousPath = ""
+  ) =>
+    [
+      "pico",
+      "git-commit-diff",
+      viewerContextId,
+      cwd,
+      commit,
+      mode,
+      path,
+      previousPath,
+    ] as const,
+  gitCommitFiles: (viewerContextId: string, cwd: string, commit: string) =>
+    ["pico", "git-commit-files", viewerContextId, cwd, commit] as const,
   gitAction: (
     viewerContextId: string,
     cwd: string,

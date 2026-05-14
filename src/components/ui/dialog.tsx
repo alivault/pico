@@ -27,7 +27,11 @@ function blurFocusedElementOutsideDialog() {
   activeElement.blur()
 }
 
-function Dialog({ open, ...props }: DialogPrimitive.Root.Props) {
+function Dialog({
+  open,
+  focusPromptOnClose = true,
+  ...props
+}: DialogPrimitive.Root.Props & { focusPromptOnClose?: boolean }) {
   const wasOpenRef = React.useRef(open === true)
 
   React.useLayoutEffect(() => {
@@ -35,11 +39,11 @@ function Dialog({ open, ...props }: DialogPrimitive.Root.Props) {
     if (nextOpen && !wasOpenRef.current) {
       blurFocusedElementOutsideDialog()
     }
-    if (!nextOpen && wasOpenRef.current) {
+    if (!nextOpen && wasOpenRef.current && focusPromptOnClose) {
       dispatchDialogClosedEvent()
     }
     wasOpenRef.current = nextOpen
-  }, [open])
+  }, [focusPromptOnClose, open])
 
   return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />
 }

@@ -20,17 +20,13 @@ export type AppShellRightSidebarState = {
   fileTreeCollapsed: boolean
 }
 
-function normalizeRightSidebarActiveTab(value: unknown): RightSidebarTabValue {
-  return value === "files" || value === "review" ? value : "review"
-}
-
 function readStoredRightSidebarActiveTab(): RightSidebarTabValue {
-  return normalizeRightSidebarActiveTab(
-    safeLocalStorageGetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY)
-  )
+  const stored = safeLocalStorageGetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY)
+  return stored === "files" || stored === "review" ? stored : "review"
 }
 
 function storeRightSidebarActiveTab(tab: RightSidebarTabValue) {
+  if (tab === "commit-diff" || tab === "history") return
   safeLocalStorageSetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY, tab)
 }
 

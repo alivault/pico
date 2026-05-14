@@ -139,6 +139,47 @@ export type GitChangesResponse =
     }
   | ApiErrorResponse
 
+export type GitCommitDiffMode = "commit" | "head" | "previous"
+
+export type GitCommitDiffResponse =
+  | {
+      ok: true
+      cwd: string
+      commit: string
+      mode: GitCommitDiffMode
+      title: string
+      path?: string
+      previousPath?: string
+      patch: string
+    }
+  | ApiErrorResponse
+
+export type GitCommitFile = {
+  status: string
+  path: string
+  previousPath?: string
+  linesAdded?: number
+  linesDeleted?: number
+}
+
+export type GitCommitFilesResponse =
+  | {
+      ok: true
+      cwd: string
+      commit: string
+      files: Array<GitCommitFile>
+    }
+  | ApiErrorResponse
+
+export type GitCommitRemoteUrlResponse =
+  | {
+      ok: true
+      cwd: string
+      commit: string
+      remoteUrl: string
+    }
+  | ApiErrorResponse
+
 export type GitFileDiffResponse =
   | {
       ok: true
