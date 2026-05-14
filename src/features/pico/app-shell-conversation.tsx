@@ -106,11 +106,12 @@ function ConversationScrollRevisionObserver({
   onRevisionChange: () => void
 }) {
   const conversationRevision = useConversationRevision(conversationItemsStore)
+  const onRevisionChangeEffectEvent = React.useEffectEvent(onRevisionChange)
 
   React.useLayoutEffect(() => {
     if (disabled) return
-    onRevisionChange()
-  }, [conversationRevision, disabled, onRevisionChange])
+    onRevisionChangeEffectEvent()
+  }, [conversationRevision, disabled])
 
   return null
 }
