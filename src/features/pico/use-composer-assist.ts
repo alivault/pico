@@ -34,6 +34,16 @@ type CompletionLoader = (
   query: ComposerCompletionQuery
 ) => Promise<Array<CompletionItem>>
 
+type CompletionAction =
+  | { type: "clear" }
+  | {
+      type: "loaded"
+      query: ComposerCompletionQuery
+      items: Array<CompletionItem>
+    }
+  | { type: "move-selection"; direction: -1 | 1 }
+  | { type: "select"; index: number }
+
 export type ComposerVisibleCompletion = CompletionState
 
 export type ComposerSlashMenuState = SlashCommandInput & {
@@ -180,6 +190,51 @@ function sameCompletionQuery(
   return sameCompletionContext(left, right)
 }
 
+function completionStateReducer(
+  current: CompletionState | null,
+  action: CompletionAction
+): CompletionState | null {
+  switch (action.type) {
+    case "clear":
+      return current ? null : current
+    case "loaded": {
+      const filteredItems = action.items.filter((item) => Boolean(item.value))
+      if (filteredItems.length === 0) return current ? null : current
+
+      const selectedItem =
+        current && sameCompletionContext(current.query, action.query)
+          ? current.items[current.selectedIndex] || current.items[0]
+          : null
+      const selectedIndex = selectedItem
+        ? Math.max(
+            0,
+            filteredItems.findIndex((item) => item.value === selectedItem.value)
+          )
+        : 0
+
+      return {
+        query: action.query,
+        items: filteredItems,
+        selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+      }
+    }
+    case "move-selection": {
+      if (!current) return current
+      const total = current.items.length
+      return {
+        ...current,
+        selectedIndex:
+          (current.selectedIndex + action.direction + total) % total,
+      }
+    }
+    case "select":
+      return current ? { ...current, selectedIndex: action.index } : current
+    default:
+      action satisfies never
+      return current
+  }
+}
+
 function resolveCompletionQuery({
   draftText,
   selection,
@@ -214,8 +269,10 @@ export function useComposerAssist({
   const [completionQuery, setCompletionQuery] =
     React.useState<ComposerCompletionQuery | null>(null)
   const completionQueryRef = React.useRef<ComposerCompletionQuery | null>(null)
-  const [completionState, setCompletionState] =
-    React.useState<CompletionState | null>(null)
+  const [completionState, dispatchCompletionState] = React.useReducer(
+    completionStateReducer,
+    null
+  )
   const completionRequestIdRef = React.useRef(0)
   const completionRequestFnsRef = React.useRef({
     requestFileCompletions,
@@ -278,7 +335,7 @@ export function useComposerAssist({
       completionQueryRef.current = nextCompletionQuery
       setCompletionQuery(nextCompletionQuery)
       if (!nextCompletionQuery) {
-        setCompletionState((current) => (current ? null : current))
+        dispatchCompletionState({ type: "clear" })
       }
     }
   }, [draftSkillRef, draftTextRef, selectionRef, slashCommands])
@@ -300,7 +357,7 @@ export function useComposerAssist({
     if (!completionQuery) {
       completionRequestIdRef.current += 1
       completionDebouncer.cancel()
-      setCompletionState((current) => (current ? null : current))
+      dispatchCompletionState({ type: "clear" })
       return
     }
 
@@ -312,37 +369,14 @@ export function useComposerAssist({
 
         if (requestId !== completionRequestIdRef.current) return
 
-        const filteredItems = (items ?? []).filter((item) =>
-          Boolean(item.value)
-        )
-        if (filteredItems.length === 0) {
-          setCompletionState((current) => (current ? null : current))
-          return
-        }
-
-        setCompletionState((current) => {
-          const selectedItem =
-            current && sameCompletionContext(current.query, completionQuery)
-              ? current.items[current.selectedIndex] || current.items[0]
-              : null
-          const selectedIndex = selectedItem
-            ? Math.max(
-                0,
-                filteredItems.findIndex(
-                  (item) => item.value === selectedItem.value
-                )
-              )
-            : 0
-
-          return {
-            query: completionQuery,
-            items: filteredItems,
-            selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
-          }
+        dispatchCompletionState({
+          type: "loaded",
+          query: completionQuery,
+          items: items ?? [],
         })
       } catch {
         if (requestId === completionRequestIdRef.current) {
-          setCompletionState((current) => (current ? null : current))
+          dispatchCompletionState({ type: "clear" })
         }
       }
     }
@@ -364,7 +398,7 @@ export function useComposerAssist({
     completionQueryRef.current = null
     slashMenuStateRef.current = null
     setCompletionQuery((current) => (current ? null : current))
-    setCompletionState((current) => (current ? null : current))
+    dispatchCompletionState({ type: "clear" })
     setSlashMenuState((current) => (current ? null : current))
     setSlashSelectionIndex(0)
   }, [completionDebouncer, setSlashSelectionIndex])
@@ -478,20 +512,11 @@ export function useComposerAssist({
   )
 
   const selectCompletionIndex = React.useCallback((index: number) => {
-    setCompletionState((current) =>
-      current ? { ...current, selectedIndex: index } : current
-    )
+    dispatchCompletionState({ type: "select", index })
   }, [])
 
   const moveCompletionSelection = React.useCallback((direction: -1 | 1) => {
-    setCompletionState((current) => {
-      if (!current) return current
-      const total = current.items.length
-      return {
-        ...current,
-        selectedIndex: (current.selectedIndex + direction + total) % total,
-      }
-    })
+    dispatchCompletionState({ type: "move-selection", direction })
   }, [])
 
   const moveSlashSelection = React.useCallback(
