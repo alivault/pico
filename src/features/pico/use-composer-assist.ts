@@ -162,12 +162,13 @@ function sameSlashMenuState(
     return false
   }
 
-  if (left.commands.length !== right.commands.length) return false
-
-  return left.commands.every((command, index) => {
-    const other = right.commands[index]
-    return Boolean(other && sameSlashCommand(command, other))
-  })
+  return (
+    left.commands.length === right.commands.length &&
+    left.commands.every((command, index) => {
+      const other = right.commands[index]
+      return Boolean(other && sameSlashCommand(command, other))
+    })
+  )
 }
 
 function sameCompletionQuery(

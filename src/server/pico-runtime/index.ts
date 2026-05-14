@@ -1116,14 +1116,16 @@ class PicoRuntime {
   }
 
   private async disposeUnreferencedSessionEntries() {
-    const candidates = [...this.sessionEntries.values()]
+    const candidates = [...this.sessionEntries.values()].filter((entry) => {
+      if (this.sessionEntries.get(entry.key) !== entry) return false
+      if (this.isSessionEntryReferenced(entry)) return false
+      if (this.isSessionBusyForDone(entry)) return false
+      return true
+    })
 
-    for (const entry of candidates) {
-      if (this.sessionEntries.get(entry.key) !== entry) continue
-      if (this.isSessionEntryReferenced(entry)) continue
-      if (this.isSessionBusyForDone(entry)) continue
-      await this.disposeSessionEntry(entry)
-    }
+    await Promise.all(
+      candidates.map((entry) => this.disposeSessionEntry(entry))
+    )
   }
 
   private async cleanupInactiveContexts() {
@@ -1395,15 +1397,15 @@ class PicoRuntime {
       sessions.flatMap((entry) => (entry.id ? [[entry.id, entry]] : []))
     )
 
-    for (const entry of this.sessionEntries.values()) {
-      if (
-        entry.cwd !== directoryPath ||
-        !this.hasVisibleSessionContent(entry)
-      ) {
-        continue
-      }
+    const fallbackEntries = [...this.sessionEntries.values()].filter(
+      (entry) =>
+        entry.cwd === directoryPath && this.hasVisibleSessionContent(entry)
+    )
+    const fallbacks = await Promise.all(
+      fallbackEntries.map((entry) => this.sessionFallbackInfo(entry))
+    )
 
-      const fallback = await this.sessionFallbackInfo(entry)
+    for (const fallback of fallbacks) {
       const existing =
         (fallback.path ? byPath.get(fallback.path) : undefined) ||
         (fallback.id ? byId.get(fallback.id) : undefined)
@@ -3136,10 +3138,15 @@ class PicoRuntime {
             return { sessionId: undefined, sessionFile: undefined }
           }
 
-          for (const context of viewers()) {
+          const activeViewers = viewers()
+          for (const context of activeViewers) {
             context.draftKey = result.entry.key
-            await this.activateContextSession(context, result.entry)
           }
+          await Promise.all(
+            activeViewers.map((context) =>
+              this.activateContextSession(context, result.entry)
+            )
+          )
           await this.broadcastSessionsAll()
           return { sessionId: undefined, sessionFile: undefined }
         },
@@ -3150,9 +3157,11 @@ class PicoRuntime {
             return { cancelled: true }
           }
           const nextEntry = await this.ensureSessionEntryByPath(branchedPath)
-          for (const context of viewers()) {
-            await this.activateContextSession(context, nextEntry)
-          }
+          await Promise.all(
+            viewers().map((context) =>
+              this.activateContextSession(context, nextEntry)
+            )
+          )
           await this.broadcastSessionsAll()
           return {
             sessionId: nextEntry.session.sessionId,
@@ -3198,9 +3207,11 @@ class PicoRuntime {
               sessionFile: entry.session.sessionFile,
             }
           }
-          for (const context of viewers()) {
-            await this.activateContextSession(context, nextEntry)
-          }
+          await Promise.all(
+            viewers().map((context) =>
+              this.activateContextSession(context, nextEntry)
+            )
+          )
           await this.broadcastSessionsAll()
           return {
             sessionId: nextEntry.session.sessionId,
@@ -3210,8 +3221,10 @@ class PicoRuntime {
         reload: async () => {
           await session.reload?.()
           await this.bindSessionEntry(entry)
-          await this.broadcastEntryState(entry)
-          await this.broadcastSessionsAll()
+          await Promise.all([
+            this.broadcastEntryState(entry),
+            this.broadcastSessionsAll(),
+          ])
         },
       },
       shutdownHandler: () => {
@@ -4415,23 +4428,30 @@ class PicoRuntime {
       targetSessionDirectory
     )
 
-    for (const loadedEntry of loadedEntries) {
-      await this.disposeSessionEntry(loadedEntry)
-    }
+    await Promise.all(
+      loadedEntries.map((loadedEntry) => this.disposeSessionEntry(loadedEntry))
+    )
 
     let nextEntry: SessionEntry | undefined
     if (affectedContexts.some((entry) => entry.wasActive)) {
       nextEntry = await this.ensureSessionEntryByPath(nextPath)
+      const activeNextEntry = nextEntry
       for (const affected of affectedContexts) {
         if (affected.wasDraft) {
           affected.context.draftKey = undefined
         }
-        if (affected.wasActive) {
-          await this.activateContextSession(affected.context, nextEntry, {
-            refreshSessions: false,
-          })
-        }
       }
+      await Promise.all(
+        affectedContexts.flatMap((affected) =>
+          affected.wasActive
+            ? [
+                this.activateContextSession(affected.context, activeNextEntry, {
+                  refreshSessions: false,
+                }),
+              ]
+            : []
+        )
+      )
     } else {
       for (const affected of affectedContexts) {
         if (affected.wasDraft) {
@@ -4623,24 +4643,35 @@ class PicoRuntime {
     const loadedEntries = [...this.sessionEntries.values()].filter((entry) =>
       sessionPathSet.has(this.getSessionPath(entry))
     )
-    let replacementEntry: SessionEntry | undefined
-
-    for (const loadedEntry of loadedEntries) {
+    const replacementRequests = loadedEntries.flatMap((loadedEntry) => {
       const affectedContexts = [...this.contexts.values()].filter(
         (ctx) => ctx.activeKey === loadedEntry.key
       )
-      if (affectedContexts.length > 0) {
-        const nextReplacementEntry = await this.createNewSessionEntry(
-          loadedEntry.cwd,
-          { draft: true }
-        )
-        replacementEntry = replacementEntry ?? nextReplacementEntry
-        for (const affected of affectedContexts) {
-          affected.draftKey = nextReplacementEntry.key
-          await this.activateContextSession(affected, nextReplacementEntry)
-        }
+      return affectedContexts.length > 0
+        ? [{ affectedContexts, cwd: loadedEntry.cwd }]
+        : []
+    })
+    const replacementResults = await Promise.all(
+      replacementRequests.map(async (request) => ({
+        affectedContexts: request.affectedContexts,
+        entry: await this.createNewSessionEntry(request.cwd, { draft: true }),
+      }))
+    )
+    let replacementEntry: SessionEntry | undefined
+
+    for (const result of replacementResults) {
+      replacementEntry = replacementEntry ?? result.entry
+      for (const affected of result.affectedContexts) {
+        affected.draftKey = result.entry.key
       }
     }
+    await Promise.all(
+      replacementResults.flatMap((result) =>
+        result.affectedContexts.map((affected) =>
+          this.activateContextSession(affected, result.entry)
+        )
+      )
+    )
 
     for (const ctx of this.contexts.values()) {
       for (const sessionPath of sessionPaths) {
@@ -5121,9 +5152,11 @@ class PicoRuntime {
     }
     this.pendingUiRequests.clear()
 
-    for (const entry of this.sessionEntries.values()) {
-      await this.disposeSessionEntry(entry)
-    }
+    await Promise.all(
+      [...this.sessionEntries.values()].map((entry) =>
+        this.disposeSessionEntry(entry)
+      )
+    )
   }
 }
 

@@ -162,63 +162,62 @@ export async function listPathCompletionEntries(
   }
 
   const normalizedSearchPrefix = searchPrefix.toLowerCase()
-  const suggestions: CompletionEntry[] = []
+  const matchingEntries = entries.filter((entry) =>
+    entry.name.toLowerCase().startsWith(normalizedSearchPrefix)
+  )
+  const suggestions: CompletionEntry[] = await Promise.all(
+    matchingEntries.map(async (entry) => {
+      const fullPath = join(searchDir, entry.name)
+      const isDirectory = await completionEntryIsDirectory(entry, fullPath)
+      let completionPath: string
 
-  for (const entry of entries) {
-    if (!entry.name.toLowerCase().startsWith(normalizedSearchPrefix)) {
-      continue
-    }
-
-    const fullPath = join(searchDir, entry.name)
-    const isDirectory = await completionEntryIsDirectory(entry, fullPath)
-    let completionPath: string
-
-    if (displayPrefix.endsWith("/") || displayPrefix.endsWith("\\")) {
-      completionPath = `${displayPrefix}${entry.name}`
-    } else if (
-      projectPathTextContains(displayPrefix, "/") ||
-      projectPathTextContains(displayPrefix, "\\")
-    ) {
-      if (displayPrefix === "~") {
-        completionPath = `~/${entry.name}`
-      } else if (displayPrefix.startsWith("~/")) {
-        const homeRelativeDir = displayPrefix.slice(2)
-        const parentDir = dirname(homeRelativeDir)
-        completionPath =
-          parentDir === "."
-            ? `~/${entry.name}`
-            : `~/${displayPath(parentDir)}/${entry.name}`
-      } else if (displayPrefix.startsWith("/")) {
-        const parentDir = dirname(displayPrefix)
-        completionPath =
-          parentDir === "/"
-            ? `/${entry.name}`
-            : `${displayPath(parentDir)}/${entry.name}`
-      } else {
-        completionPath = displayPath(join(dirname(displayPrefix), entry.name))
-        if (
-          displayPrefix.startsWith("./") &&
-          !completionPath.startsWith("./")
-        ) {
-          completionPath = `./${completionPath}`
+      if (displayPrefix.endsWith("/") || displayPrefix.endsWith("\\")) {
+        completionPath = `${displayPrefix}${entry.name}`
+      } else if (
+        projectPathTextContains(displayPrefix, "/") ||
+        projectPathTextContains(displayPrefix, "\\")
+      ) {
+        if (displayPrefix === "~") {
+          completionPath = `~/${entry.name}`
+        } else if (displayPrefix.startsWith("~/")) {
+          const homeRelativeDir = displayPrefix.slice(2)
+          const parentDir = dirname(homeRelativeDir)
+          completionPath =
+            parentDir === "."
+              ? `~/${entry.name}`
+              : `~/${displayPath(parentDir)}/${entry.name}`
+        } else if (displayPrefix.startsWith("/")) {
+          const parentDir = dirname(displayPrefix)
+          completionPath =
+            parentDir === "/"
+              ? `/${entry.name}`
+              : `${displayPath(parentDir)}/${entry.name}`
+        } else {
+          completionPath = displayPath(join(dirname(displayPrefix), entry.name))
+          if (
+            displayPrefix.startsWith("./") &&
+            !completionPath.startsWith("./")
+          ) {
+            completionPath = `./${completionPath}`
+          }
         }
+      } else if (displayPrefix.startsWith("~")) {
+        completionPath = `~/${entry.name}`
+      } else {
+        completionPath = entry.name
       }
-    } else if (displayPrefix.startsWith("~")) {
-      completionPath = `~/${entry.name}`
-    } else {
-      completionPath = entry.name
-    }
 
-    const value = isDirectory
-      ? `${displayPath(completionPath)}/`
-      : displayPath(completionPath)
+      const value = isDirectory
+        ? `${displayPath(completionPath)}/`
+        : displayPath(completionPath)
 
-    suggestions.push({
-      value,
-      label: `${entry.name}${isDirectory ? "/" : ""}`,
-      isDirectory,
+      return {
+        value,
+        label: `${entry.name}${isDirectory ? "/" : ""}`,
+        isDirectory,
+      } satisfies CompletionEntry
     })
-  }
+  )
 
   suggestions.sort((left, right) => {
     if (left.isDirectory && !right.isDirectory) return -1
@@ -328,6 +327,14 @@ async function runFdSearch(command: string, args: string[]) {
   })
 }
 
+async function runFdSearchCandidates(args: string[]) {
+  const results = await Promise.all(
+    ["fd", "fdfind"].map((command) => runFdSearch(command, args))
+  )
+
+  return results.find((result) => result !== undefined)
+}
+
 function escapePathQueryRegex(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -360,6 +367,17 @@ function buildFdPathQuery(query = "") {
   return pattern
 }
 
+async function readDirectoryEntries(directory: string) {
+  try {
+    return await readdir(directory, {
+      withFileTypes: true,
+      encoding: "utf8",
+    })
+  } catch {
+    return []
+  }
+}
+
 async function walkDirectoryWithFallback(
   baseDir: string,
   query = "",
@@ -370,40 +388,37 @@ async function walkDirectoryWithFallback(
   const normalizedQuery = displayPath(query).toLowerCase()
 
   while (queue.length > 0 && matches.length < maxResults) {
-    const currentDir = queue.shift()
-    if (!currentDir) continue
+    const currentDirs = queue.splice(0)
+    const directoryEntries = await Promise.all(
+      currentDirs.map(async (currentDir) => ({
+        currentDir,
+        entries: await readDirectoryEntries(currentDir),
+      }))
+    )
 
-    let entries: Array<Dirent<string>>
-    try {
-      entries = await readdir(currentDir, {
-        withFileTypes: true,
-        encoding: "utf8",
-      })
-    } catch {
-      continue
-    }
+    for (const { currentDir, entries } of directoryEntries) {
+      for (const entry of entries) {
+        if (matches.length >= maxResults) break
+        if (WALK_IGNORE_DIRECTORIES.has(entry.name)) continue
 
-    for (const entry of entries) {
-      if (matches.length >= maxResults) break
-      if (WALK_IGNORE_DIRECTORIES.has(entry.name)) continue
+        const fullPath = join(currentDir, entry.name)
+        const relativePath = displayPath(path.relative(baseDir, fullPath))
+        const isDirectory = entry.isDirectory()
+        const displayValue = isDirectory ? `${relativePath}/` : relativePath
 
-      const fullPath = join(currentDir, entry.name)
-      const relativePath = displayPath(path.relative(baseDir, fullPath))
-      const isDirectory = entry.isDirectory()
-      const displayValue = isDirectory ? `${relativePath}/` : relativePath
+        if (
+          !normalizedQuery ||
+          projectPathTextContains(displayValue.toLowerCase(), normalizedQuery)
+        ) {
+          matches.push({
+            path: displayValue,
+            isDirectory,
+          })
+        }
 
-      if (
-        !normalizedQuery ||
-        projectPathTextContains(displayValue.toLowerCase(), normalizedQuery)
-      ) {
-        matches.push({
-          path: displayValue,
-          isDirectory,
-        })
-      }
-
-      if (isDirectory) {
-        queue.push(fullPath)
+        if (isDirectory) {
+          queue.push(fullPath)
+        }
       }
     }
   }
@@ -445,11 +460,9 @@ async function walkDirectory(baseDir: string, query = "", maxResults = 100) {
     args.push(buildFdPathQuery(query))
   }
 
-  for (const command of ["fd", "fdfind"]) {
-    const results = await runFdSearch(command, args)
-    if (results !== undefined) {
-      return results
-    }
+  const results = await runFdSearchCandidates(args)
+  if (results !== undefined) {
+    return results
   }
 
   return await walkDirectoryWithFallback(baseDir, query, maxResults)
@@ -596,35 +609,34 @@ async function searchDirectoriesWithFallback({
   ]
 
   while (queue.length > 0 && results.length < maxResults) {
-    const current = queue.shift()
-    if (!current || current.depth >= DIRECTORY_SEARCH_MAX_DEPTH) continue
+    const currentDirectories = queue
+      .splice(0)
+      .filter((current) => current.depth < DIRECTORY_SEARCH_MAX_DEPTH)
+    const directoryEntries = await Promise.all(
+      currentDirectories.map(async (current) => ({
+        current,
+        entries: await readDirectoryEntries(current.directory),
+      }))
+    )
 
-    let entries: Array<Dirent<string>>
-    try {
-      entries = await readdir(current.directory, {
-        withFileTypes: true,
-        encoding: "utf8",
-      })
-    } catch {
-      continue
-    }
+    for (const { current, entries } of directoryEntries) {
+      for (const entry of entries) {
+        if (results.length >= maxResults) break
+        if (!entry.isDirectory()) continue
+        if (DIRECTORY_SEARCH_IGNORE_DIRECTORIES.has(entry.name)) continue
+        if (!normalizedQuery.startsWith(".") && entry.name.startsWith(".")) {
+          continue
+        }
 
-    for (const entry of entries) {
-      if (results.length >= maxResults) break
-      if (!entry.isDirectory()) continue
-      if (DIRECTORY_SEARCH_IGNORE_DIRECTORIES.has(entry.name)) continue
-      if (!normalizedQuery.startsWith(".") && entry.name.startsWith(".")) {
-        continue
+        const fullPath = join(current.directory, entry.name)
+        const relativePath = `${displayPath(path.relative(root, fullPath))}/`
+        if (
+          projectPathTextContains(relativePath.toLowerCase(), normalizedQuery)
+        ) {
+          results.push({ path: relativePath, isDirectory: true })
+        }
+        queue.push({ directory: fullPath, depth: current.depth + 1 })
       }
-
-      const fullPath = join(current.directory, entry.name)
-      const relativePath = `${displayPath(path.relative(root, fullPath))}/`
-      if (
-        projectPathTextContains(relativePath.toLowerCase(), normalizedQuery)
-      ) {
-        results.push({ path: relativePath, isDirectory: true })
-      }
-      queue.push({ directory: fullPath, depth: current.depth + 1 })
     }
   }
 
@@ -678,11 +690,9 @@ async function searchDirectoriesInRoot({
     buildFdPathQuery(query),
   ]
 
-  for (const command of ["fd", "fdfind"]) {
-    const results = await runFdSearch(command, args)
-    if (results !== undefined) {
-      return results.filter((entry) => entry.isDirectory)
-    }
+  const results = await runFdSearchCandidates(args)
+  if (results !== undefined) {
+    return results.filter((entry) => entry.isDirectory)
   }
 
   return await searchDirectoriesWithFallback({ root, query, maxResults })
@@ -713,37 +723,41 @@ export async function searchDirectoryEntries(query: string, baseCwd: string) {
     score: number
   }> = []
 
-  for (const root of roots) {
-    let rootStats: Stats
-    try {
-      rootStats = await stat(root)
-    } catch {
-      continue
-    }
-    if (!rootStats.isDirectory()) continue
+  const rootEntries = await Promise.all(
+    roots.map(async (root) => {
+      let rootStats: Stats
+      try {
+        rootStats = await stat(root)
+      } catch {
+        return []
+      }
+      if (!rootStats.isDirectory()) return []
 
-    const entries = await searchDirectoriesInRoot({
-      root,
-      query: normalizedQuery,
-      maxResults: DIRECTORY_SEARCH_LIMIT * 4,
-    })
-
-    for (const entry of entries) {
-      const relativePath = displayPath(entry.path).replace(/\/+$/g, "")
-      if (!relativePath) continue
-
-      const absolutePath = resolve(root, relativePath)
-      if (seen.has(absolutePath)) continue
-      seen.add(absolutePath)
-
-      const score = directorySearchScore({
-        absolutePath,
-        query: normalizedQuery,
+      const entries = await searchDirectoriesInRoot({
         root,
+        query: normalizedQuery,
+        maxResults: DIRECTORY_SEARCH_LIMIT * 4,
       })
-      if (score <= 0) continue
-      matches.push({ absolutePath, root, score })
-    }
+
+      return entries.map((entry) => ({ entry, root }))
+    })
+  )
+
+  for (const { entry, root } of rootEntries.flat()) {
+    const relativePath = displayPath(entry.path).replace(/\/+$/g, "")
+    if (!relativePath) continue
+
+    const absolutePath = resolve(root, relativePath)
+    if (seen.has(absolutePath)) continue
+    seen.add(absolutePath)
+
+    const score = directorySearchScore({
+      absolutePath,
+      query: normalizedQuery,
+      root,
+    })
+    if (score <= 0) continue
+    matches.push({ absolutePath, root, score })
   }
 
   return matches
