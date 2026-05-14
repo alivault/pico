@@ -1274,10 +1274,16 @@ export function RightSidebarTabStrip({
     const nextMixedTabIds = arrayMove(mixedTabIds, oldIndex, newIndex)
     setMixedTabOrder(nextMixedTabIds)
     onReorderFiles?.(
-      nextMixedTabIds.map(filePathFromViewerTabId).filter(Boolean)
+      nextMixedTabIds.flatMap((id) => {
+        const path = filePathFromViewerTabId(id)
+        return path ? [path] : []
+      })
     )
     onReorderCommitDiffs?.(
-      nextMixedTabIds.map(commitDiffKeyFromViewerTabId).filter(Boolean)
+      nextMixedTabIds.flatMap((id) => {
+        const key = commitDiffKeyFromViewerTabId(id)
+        return key ? [key] : []
+      })
     )
     setActiveDragTabId("")
   }

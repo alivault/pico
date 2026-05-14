@@ -1495,8 +1495,6 @@ function GitCommitRow({
     action()
   }
 
-  const renderActionMenu = () => <GitCommitActionsMenu {...commitActionProps} />
-
   return (
     <AccordionItem value={value} className="border-0">
       <div className="group/commit-row relative min-w-0">
@@ -1536,7 +1534,7 @@ function GitCommitRow({
                 <FileDiffIcon />
                 View diff
               </Button>
-              {renderActionMenu()}
+              <GitCommitActionsMenu {...commitActionProps} />
             </div>
             {parsed.author || time || parsed.fullHash ? (
               <div className="flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">

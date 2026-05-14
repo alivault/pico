@@ -750,14 +750,13 @@ export function mergeAssistantBlocksForStreaming(options: {
 
   if (!options.preserveMissingTools) return withToolResults(mergedNextBlocks)
 
-  const missingPreviousTools = previousBlocks
-    .map((block, index) => ({ block, index }))
-    .filter(
-      (entry): entry is { block: ToolBlock; index: number } =>
-        entry.block.type === "tool" &&
-        Boolean(entry.block.callId) &&
-        !nextToolCallIds.has(entry.block.callId || "")
-    )
+  const missingPreviousTools = previousBlocks.flatMap((block, index) =>
+    block.type === "tool" &&
+    Boolean(block.callId) &&
+    !nextToolCallIds.has(block.callId || "")
+      ? [{ block, index }]
+      : []
+  )
 
   if (missingPreviousTools.length === 0) {
     return withToolResults(mergedNextBlocks)
@@ -861,8 +860,19 @@ function mergePendingItemsForSync(options: {
   const mergedPendingItems: Array<Extract<ConversationItem, { kind: "user" }>> =
     []
 
-  for (const previousItem of pendingItemsFromPrevious(options.previousItems)) {
-    const previousIndex = options.previousItems.indexOf(previousItem)
+  for (
+    let previousIndex = 0;
+    previousIndex < options.previousItems.length;
+    previousIndex += 1
+  ) {
+    const previousItem = options.previousItems[previousIndex]
+    if (
+      previousItem?.kind !== "user" ||
+      !isOptimisticPendingConversationItem(previousItem) ||
+      previousItem.queued
+    ) {
+      continue
+    }
 
     if (
       hasMatchingCommittedUserItem(
@@ -890,15 +900,6 @@ function committedItemsFromPrevious(previousItems: Array<ConversationItem>) {
   })
 }
 
-function pendingItemsFromPrevious(previousItems: Array<ConversationItem>) {
-  return previousItems.filter(
-    (item): item is Extract<ConversationItem, { kind: "user" }> =>
-      item.kind === "user" &&
-      isOptimisticPendingConversationItem(item) &&
-      !item.queued
-  )
-}
-
 function isQueuedConversationItem(item: ConversationItem) {
   return item.kind === "user" && Boolean(item.queued)
 }
@@ -919,7 +920,10 @@ function nextMessageItemIndex(items: Array<ConversationItem>) {
 
 function uniqueRenderKey(preferredKey: string, items: Array<ConversationItem>) {
   const existingRenderKeys = new Set(
-    items.map((item) => conversationItemRenderKey(item)).filter(Boolean)
+    items.flatMap((item) => {
+      const key = conversationItemRenderKey(item)
+      return key ? [key] : []
+    })
   )
   if (!existingRenderKeys.has(preferredKey)) return preferredKey
 
@@ -1226,10 +1230,10 @@ function primaryThinkingSummaryText(value: unknown) {
   if (typeof value !== "string") return ""
 
   const normalized = value.replace(/\r\n?/g, "\n")
-  const paragraphs = normalized
-    .split(/\n\s*\n+/)
-    .map((part) => sanitizeThinkingSummaryText(part))
-    .filter(Boolean)
+  const paragraphs = normalized.split(/\n\s*\n+/).flatMap((part) => {
+    const summary = sanitizeThinkingSummaryText(part)
+    return summary ? [summary] : []
+  })
 
   if (paragraphs.length) {
     return paragraphs[0] || ""

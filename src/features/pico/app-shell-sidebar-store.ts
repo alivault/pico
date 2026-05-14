@@ -212,9 +212,10 @@ export function getRenderedSidebarSessionKeys() {
 
   return Array.from(
     document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
-  )
-    .map((element) => element.dataset.sessionKey?.trim() || "")
-    .filter((key) => key.length > 0)
+  ).flatMap((element) => {
+    const key = element.dataset.sessionKey?.trim() || ""
+    return key.length > 0 ? [key] : []
+  })
 }
 
 export function clearUnreadForActiveSidebarSession(
@@ -497,16 +498,18 @@ function computeAppShellSidebarDerived(
   }
 
   const sidebarSessions = Array.from(sidebarSessionEntriesByKey.values())
-  const pinnedSidebarSessions = state.pinnedSidebarSessionKeys
-    .map((key) => sidebarSessionEntriesByKey.get(key))
-    .filter((entry): entry is SessionListEntry =>
-      Boolean(entry?.path || entry?.id)
-    )
-  const selectedSidebarSessions = state.selectedSidebarSessionKeys
-    .map((key) => sidebarSessionEntriesByKey.get(key))
-    .filter((entry): entry is SessionListEntry =>
-      Boolean(entry?.path || entry?.id)
-    )
+  const pinnedSidebarSessions = state.pinnedSidebarSessionKeys.flatMap(
+    (key) => {
+      const entry = sidebarSessionEntriesByKey.get(key)
+      return entry?.path || entry?.id ? [entry] : []
+    }
+  )
+  const selectedSidebarSessions = state.selectedSidebarSessionKeys.flatMap(
+    (key) => {
+      const entry = sidebarSessionEntriesByKey.get(key)
+      return entry?.path || entry?.id ? [entry] : []
+    }
+  )
   const workspaceVersion = [
     baseSidebarDirectories.join("\n"),
     state.pinnedSidebarSessionKeys.join("\n"),

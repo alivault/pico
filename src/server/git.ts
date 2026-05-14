@@ -400,10 +400,10 @@ function parseCommandLines(
   output: string,
   { trim = false }: { trim?: boolean } = {}
 ) {
-  return output
-    .split(/\r?\n/)
-    .map((entry) => (trim ? entry.trim() : entry))
-    .filter((entry) => Boolean(trim ? entry : entry.length))
+  return output.split(/\r?\n/).flatMap((entry) => {
+    const line = trim ? entry.trim() : entry
+    return trim ? (line ? [line] : []) : line.length ? [line] : []
+  })
 }
 
 function isGitCommitGraphLine(line: string) {
@@ -483,8 +483,10 @@ function gitCommandErrorMessage(
   result: Awaited<ReturnType<typeof runCommand>>
 ) {
   const details = [result.stderr, result.stdout]
-    .map((value) => value.trim())
-    .filter(Boolean)
+    .flatMap((value) => {
+      const detail = value.trim()
+      return detail ? [detail] : []
+    })
     .join("\n")
   if (result.timedOut) return `${fallback}: command timed out`
   if (details) return `${fallback}: ${details}`
@@ -561,8 +563,10 @@ function deriveHeuristicCommitMessage(files: Array<GitChangeFile>) {
   }
 
   const commonDirectory = files
-    .map((file) => file.path.split("/").slice(0, -1).join("/"))
-    .filter(Boolean)
+    .flatMap((file) => {
+      const directory = file.path.split("/").slice(0, -1).join("/")
+      return directory ? [directory] : []
+    })
     .reduce<string | undefined>((common, directory) => {
       if (common === undefined) return directory
       return common === directory ? common : ""
@@ -676,11 +680,12 @@ function parseGitNumstatEntries(output: string) {
 }
 
 function parseGitRefRows(output: string) {
-  return parseCommandLines(output)
-    .map((line) => line.split("\u0000"))
-    .filter((fields) =>
-      fields.some((field) => typeof field === "string" && field.length > 0)
-    )
+  return parseCommandLines(output).flatMap((line) => {
+    const fields = line.split("\u0000")
+    return fields.some((field) => typeof field === "string" && field.length > 0)
+      ? [fields]
+      : []
+  })
 }
 
 function parseGitBranchTrack(track: string, upstream: string) {

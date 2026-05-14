@@ -69,6 +69,51 @@ function providerDescription(provider: AuthProviderOption) {
   return provider.source ? `${kind} · ${provider.source}` : kind
 }
 
+function AuthSurface({
+  open,
+  isMobile,
+  title,
+  description,
+  children,
+  onOpenChange,
+}: {
+  open: boolean
+  isMobile: boolean
+  title: string
+  description: string
+  children: React.ReactNode
+  onOpenChange: (open: boolean) => void
+}) {
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
+          <DrawerHeader>
+            <DrawerTitle>{title}</DrawerTitle>
+            <DrawerDescription>{description}</DrawerDescription>
+          </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-xl"
+      initialFocus
+    >
+      {children}
+    </CommandDialog>
+  )
+}
+
 function ProviderCommandItem({
   provider,
   actionLabel,
@@ -497,77 +542,48 @@ export function AppShellAuthDialogController({
     </form>
   )
 
-  const renderAuthSurface = (
-    open: boolean,
-    onOpenChange: (open: boolean) => void,
-    title: string,
-    description: string,
-    body: React.ReactNode
-  ) => {
-    if (isMobile) {
-      return (
-        <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
-          <DrawerContent className="max-h-[90svh] overflow-hidden">
-            <DrawerHeader>
-              <DrawerTitle>{title}</DrawerTitle>
-              <DrawerDescription>{description}</DrawerDescription>
-            </DrawerHeader>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
-              {body}
-            </div>
-          </DrawerContent>
-        </Drawer>
-      )
-    }
-
-    return (
-      <CommandDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title={title}
-        description={description}
-        className="sm:max-w-xl"
-        initialFocus
-      >
-        {body}
-      </CommandDialog>
-    )
-  }
-
   return (
     <>
-      {renderAuthSurface(
-        loginOpen,
-        (nextOpen) => {
+      <AuthSurface
+        open={loginOpen}
+        isMobile={isMobile}
+        onOpenChange={(nextOpen) => {
           if (!nextOpen) closeAndReturnToOrigin()
           else setLoginOpen(true)
-        },
-        "Login to provider",
-        "Search providers and press Enter to configure authentication.",
-        loginCommandBody
-      )}
-      {renderAuthSurface(
-        logoutOpen,
-        (nextOpen) => {
+        }}
+        title="Login to provider"
+        description="Search providers and press Enter to configure authentication."
+      >
+        {loginCommandBody}
+      </AuthSurface>
+      <AuthSurface
+        open={logoutOpen}
+        isMobile={isMobile}
+        onOpenChange={(nextOpen) => {
           if (!nextOpen) closeAndReturnToOrigin()
           else setLogoutOpen(true)
-        },
-        "Logout from provider",
-        "Search saved provider credentials and press Enter to remove them.",
-        logoutCommandBody
-      )}
-      {renderAuthSurface(
-        apiKeyOpen,
-        (nextOpen) => {
+        }}
+        title="Logout from provider"
+        description="Search saved provider credentials and press Enter to remove them."
+      >
+        {logoutCommandBody}
+      </AuthSurface>
+      <AuthSurface
+        open={apiKeyOpen}
+        isMobile={isMobile}
+        onOpenChange={(nextOpen) => {
           if (!nextOpen) backToLoginProviders()
           else setApiKeyOpen(true)
-        },
-        selectedApiKeyProvider
-          ? `Set ${selectedApiKeyProvider.name} API key`
-          : "Set provider API key",
-        "Enter an API key to save it to pi auth storage.",
-        apiKeyCommandBody
-      )}
+        }}
+        title={
+          selectedApiKeyProvider
+            ? `Set ${selectedApiKeyProvider.name} API key`
+            : "Set provider API key"
+        }
+        description="Enter an API key to save it to pi auth storage."
+      >
+        {apiKeyCommandBody}
+      </AuthSurface>
     </>
   )
 }

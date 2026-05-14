@@ -209,11 +209,10 @@ export function matchingSlashCommands(
   query: string
 ) {
   return commands
-    .map((command) => ({
-      command,
-      rank: slashCommandMatchRank(command, query),
-    }))
-    .filter((entry) => Number.isFinite(entry.rank))
+    .flatMap((command) => {
+      const rank = slashCommandMatchRank(command, query)
+      return Number.isFinite(rank) ? [{ command, rank }] : []
+    })
     .sort(
       (left, right) =>
         left.rank - right.rank ||

@@ -340,8 +340,7 @@ function buildFdPathQuery(query = "") {
   const separatorPattern = "[\\\\/]"
   const segments = trimmed
     .split("/")
-    .filter(Boolean)
-    .map((segment) => escapePathQueryRegex(segment))
+    .flatMap((segment) => (segment ? [escapePathQueryRegex(segment)] : []))
 
   if (segments.length === 0) {
     return normalized
@@ -517,9 +516,11 @@ function resolveProjectFilePath(baseCwd: string, filePath: string) {
 export async function listProjectFileTreePaths(baseCwd: string) {
   const entries = await walkDirectory(baseCwd, "", PROJECT_FILE_TREE_LIMIT)
   return entries
-    .filter((entry) => !entry.isDirectory)
-    .map((entry) => displayPath(entry.path).replace(/\/+$/g, ""))
-    .filter(Boolean)
+    .flatMap((entry) => {
+      if (entry.isDirectory) return []
+      const path = displayPath(entry.path).replace(/\/+$/g, "")
+      return path ? [path] : []
+    })
     .sort((left, right) => left.localeCompare(right))
 }
 
@@ -779,15 +780,14 @@ export async function listFileReferenceEntries(
   const entries = await walkDirectory(searchBaseDir, searchQuery, 100)
 
   return entries
-    .map((entry) => ({
-      ...entry,
-      score: scoreFileReferenceEntry(
+    .flatMap((entry) => {
+      const score = scoreFileReferenceEntry(
         entry.path,
         searchQuery,
         entry.isDirectory
-      ),
-    }))
-    .filter((entry) => entry.score > 0)
+      )
+      return score > 0 ? [{ ...entry, score }] : []
+    })
     .sort((left, right) => right.score - left.score)
     .slice(0, 20)
     .map((entry) => {

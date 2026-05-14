@@ -132,11 +132,10 @@ function normalizePendingMessages(
     pendingId: typeof message.pendingId === "string" ? message.pendingId : "",
     text: typeof message.text === "string" ? message.text : "",
     images: Array.isArray(message.images)
-      ? message.images
-          .map((image: unknown) => normalizePromptImage(image))
-          .filter((image: PromptImage | null): image is PromptImage =>
-            Boolean(image)
-          )
+      ? message.images.flatMap((image: unknown) => {
+          const normalizedImage = normalizePromptImage(image)
+          return normalizedImage ? [normalizedImage] : []
+        })
       : [],
     streamingBehavior:
       message.streamingBehavior === "steer" ? "steer" : "followUp",
@@ -350,9 +349,10 @@ function visibleConversationSignature(
       continue
     }
 
-    const blockKeys = item.blocks
-      .map((block) => visibleAssistantBlockKey(block, options))
-      .filter(Boolean)
+    const blockKeys = item.blocks.flatMap((block) => {
+      const key = visibleAssistantBlockKey(block, options)
+      return key ? [key] : []
+    })
     const footerSignature = [
       item.done === false ? "0" : "1",
       item.model?.provider || "",

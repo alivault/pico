@@ -311,6 +311,7 @@ export function AppShellSidebarController({
 
     const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
+    const payloadDirectorySet = new Set(payloadDirectories)
 
     sidebarStore.setSidebarState((current) => {
       const merged = payloadDirectories.length
@@ -363,7 +364,7 @@ export function AppShellSidebarController({
       const previousRevision = previousSnapshot?.revisions[directory] || ""
       nextRevisions[directory] = nextRevision
 
-      if (payloadDirectories.includes(directory)) {
+      if (payloadDirectorySet.has(directory)) {
         continue
       }
 
@@ -420,12 +421,10 @@ export function AppShellSidebarController({
         clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         const activeDirectoryIndexes = Object.fromEntries(
-          activeDirectories
-            .map((directory) => [
-              directory,
-              response.directoryIndexes[directory],
-            ])
-            .filter((entry) => Boolean(entry[1]))
+          activeDirectories.flatMap((directory) => {
+            const indexData = response.directoryIndexes[directory]
+            return indexData ? [[directory, indexData]] : []
+          })
         )
 
         sidebarStore.setSidebarState((current) => {
@@ -589,12 +588,10 @@ export function AppShellSidebarController({
         clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
 
         const activeDirectoryIndexes = Object.fromEntries(
-          activeDirectories
-            .map((directory) => [
-              directory,
-              response.directoryIndexes[directory],
-            ])
-            .filter((entry) => Boolean(entry[1]))
+          activeDirectories.flatMap((directory) => {
+            const indexData = response.directoryIndexes[directory]
+            return indexData ? [[directory, indexData]] : []
+          })
         )
 
         sidebarStore.setSidebarState((current) => {

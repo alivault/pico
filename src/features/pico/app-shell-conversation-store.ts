@@ -9,11 +9,6 @@ import {
 } from "@/features/pico/conversation-view"
 import { sameStringArray } from "@/features/pico/app-shell-common"
 
-type AssistantConversationItem = Extract<
-  ConversationItem,
-  { kind: "assistant" }
->
-
 export type RenderConversationGroupDescriptor =
   | {
       kind: "user"
@@ -481,11 +476,10 @@ export function assistantMessagesSnapshotFromStore(options: {
   return {
     hideThinking: options.hideThinking,
     hideToolBlocks: options.hideToolBlocks,
-    items: options.itemKeys
-      .map((key) => options.store.getItem(key))
-      .filter(
-        (item): item is AssistantConversationItem => item?.kind === "assistant"
-      ),
+    items: options.itemKeys.flatMap((key) => {
+      const item = options.store.getItem(key)
+      return item?.kind === "assistant" ? [item] : []
+    }),
   }
 }
 
