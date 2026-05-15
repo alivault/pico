@@ -1,5 +1,4 @@
 import * as React from "react"
-import { flushSync } from "react-dom"
 import {
   AlertTriangleIcon,
   ArrowUpRightIcon,
@@ -733,10 +732,9 @@ function GitCommitActionsMenu({
   } | null>(null)
   const runAndClose = (action: () => void) => {
     actionsRef.current?.close()
-    flushSync(() => {
-      setOpen(false)
-      setMenuKey((key) => key + 1)
-    })
+    actionsRef.current?.unmount()
+    setOpen(false)
+    setMenuKey((key) => key + 1)
     action()
   }
 
@@ -1593,9 +1591,7 @@ function GitCommitRow({
   const runContextAction = (action: () => void) => {
     contextMenuActionsRef.current?.close()
     contextMenuActionsRef.current?.unmount()
-    flushSync(() => {
-      dispatchRow({ type: "reset-context-menu" })
-    })
+    dispatchRow({ type: "reset-context-menu" })
     action()
   }
 
