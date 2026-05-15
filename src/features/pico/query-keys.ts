@@ -80,15 +80,7 @@ export const picoQueryKeys = {
   providerUsage: (
     viewerContextId: string,
     sessionId: string,
-    provider: string,
-    tokenRevision: number | null
+    provider: string
   ) =>
-    [
-      "pico",
-      "provider-usage",
-      viewerContextId,
-      sessionId,
-      provider,
-      tokenRevision,
-    ] as const,
+    ["pico", "provider-usage", viewerContextId, sessionId, provider] as const,
 } as const

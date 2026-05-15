@@ -543,8 +543,7 @@ export function ComposerContextUsageIndicator({
     queryKey: picoQueryKeys.providerUsage(
       viewerContextId,
       activeSessionId || "",
-      modelProvider || "",
-      contextUsage?.tokens ?? null
+      modelProvider || ""
     ),
     queryFn: async () => {
       if (!modelProvider) return []
