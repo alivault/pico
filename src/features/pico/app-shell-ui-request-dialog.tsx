@@ -116,8 +116,7 @@ function AuthManualRedirectForm({
   return (
     <form
       className="flex min-h-0 flex-1 flex-col"
-      onSubmit={(event) => {
-        event.preventDefault()
+      action={() => {
         if (!pendingUiValue.trim()) return
         onSubmit()
       }}
@@ -351,8 +350,7 @@ function AuthInputForm({
   return (
     <form
       className="flex min-h-0 flex-1 flex-col"
-      onSubmit={(event) => {
-        event.preventDefault()
+      action={() => {
         if (!allowEmpty && !pendingUiValue.trim()) return
         onResolveUiRequest({ value: pendingUiValue })
       }}

@@ -389,13 +389,7 @@ export function NewSessionComposerSelectors({
               switch to it for the new session.
             </DialogDescription>
           </DialogHeader>
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              createBranch()
-            }}
-          >
+          <form className="grid gap-4" action={createBranch}>
             <Input
               value={createBranchName}
               onChange={(event) => setCreateBranchName(event.target.value)}
