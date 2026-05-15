@@ -67,7 +67,6 @@ import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   hasRemainingScrollContent,
   hasScrolledContent,
-  setDerivedScrollState,
 } from "@/features/pico/scroll-shadow-utils"
 import {
   GIT_COMMITS_PAGE_SIZE,
@@ -151,6 +150,96 @@ type GitCommitFormState =
   | { kind: "branch"; title: string; description: string; value: string }
   | { kind: "tag"; title: string; description: string; value: string }
   | { kind: "squash"; title: string; description: string; value: string }
+
+type GitCommitRowState = {
+  hashCopied: boolean
+  messageCopied: boolean
+  formDialog: GitCommitFormState | null
+  confirmDialog: GitCommitConfirmState | null
+  contextMenuOpen: boolean
+  contextMenuKey: number
+  scrollValue: string
+  commitBodyHeaderShadowed: boolean
+  commitBodyFooterShadowed: boolean
+}
+
+type GitCommitRowAction =
+  | { type: "set-hash-copied"; copied: boolean }
+  | { type: "set-message-copied"; copied: boolean }
+  | { type: "set-form-dialog"; formDialog: GitCommitFormState | null }
+  | { type: "set-form-dialog-value"; value: string }
+  | { type: "set-confirm-dialog"; confirmDialog: GitCommitConfirmState | null }
+  | { type: "set-context-menu-open"; open: boolean }
+  | { type: "reset-context-menu" }
+  | {
+      type: "set-scroll-shadows"
+      value: string
+      headerShadowed: boolean
+      footerShadowed: boolean
+    }
+
+const initialGitCommitRowState = {
+  hashCopied: false,
+  messageCopied: false,
+  formDialog: null,
+  confirmDialog: null,
+  contextMenuOpen: false,
+  contextMenuKey: 0,
+  scrollValue: "",
+  commitBodyHeaderShadowed: false,
+  commitBodyFooterShadowed: false,
+} satisfies GitCommitRowState
+
+function gitCommitRowReducer(
+  state: GitCommitRowState,
+  action: GitCommitRowAction
+): GitCommitRowState {
+  switch (action.type) {
+    case "set-hash-copied":
+      if (state.hashCopied === action.copied) return state
+      return { ...state, hashCopied: action.copied }
+    case "set-message-copied":
+      if (state.messageCopied === action.copied) return state
+      return { ...state, messageCopied: action.copied }
+    case "set-form-dialog":
+      if (state.formDialog === action.formDialog) return state
+      return { ...state, formDialog: action.formDialog }
+    case "set-form-dialog-value":
+      if (!state.formDialog || state.formDialog.value === action.value) {
+        return state
+      }
+      return {
+        ...state,
+        formDialog: { ...state.formDialog, value: action.value },
+      }
+    case "set-confirm-dialog":
+      if (state.confirmDialog === action.confirmDialog) return state
+      return { ...state, confirmDialog: action.confirmDialog }
+    case "set-context-menu-open":
+      if (state.contextMenuOpen === action.open) return state
+      return { ...state, contextMenuOpen: action.open }
+    case "reset-context-menu":
+      return {
+        ...state,
+        contextMenuOpen: false,
+        contextMenuKey: state.contextMenuKey + 1,
+      }
+    case "set-scroll-shadows":
+      if (
+        state.scrollValue === action.value &&
+        state.commitBodyHeaderShadowed === action.headerShadowed &&
+        state.commitBodyFooterShadowed === action.footerShadowed
+      ) {
+        return state
+      }
+      return {
+        ...state,
+        scrollValue: action.value,
+        commitBodyHeaderShadowed: action.headerShadowed,
+        commitBodyFooterShadowed: action.footerShadowed,
+      }
+  }
+}
 
 function gitGraphLaneColor(index: number, active = false) {
   if (active) return "#f87171"
@@ -1128,21 +1217,12 @@ function GitCommitRow({
 }) {
   const parsed = parseGitCommitGraphLine(line)
   const queryClient = useQueryClient()
-  const [hashCopied, setHashCopied] = React.useState(false)
-  const [messageCopied, setMessageCopied] = React.useState(false)
-  const [formDialog, setFormDialog] = React.useState<GitCommitFormState | null>(
-    null
+  const [rowState, dispatchRow] = React.useReducer(
+    gitCommitRowReducer,
+    initialGitCommitRowState
   )
-  const [confirmDialog, setConfirmDialog] =
-    React.useState<GitCommitConfirmState | null>(null)
   const hashCopiedResetRef = React.useRef<number | undefined>(undefined)
   const messageCopiedResetRef = React.useRef<number | undefined>(undefined)
-  const [contextMenuOpen, setContextMenuOpen] = React.useState(false)
-  const [contextMenuKey, setContextMenuKey] = React.useState(0)
-  const [commitBodyHeaderShadowed, setCommitBodyHeaderShadowed] =
-    React.useState(false)
-  const [commitBodyFooterShadowed, setCommitBodyFooterShadowed] =
-    React.useState(false)
   const commitBodyScrollRef = React.useRef<HTMLDivElement>(null)
   const contextMenuActionsRef = React.useRef<{
     close: () => void
@@ -1155,23 +1235,29 @@ function GitCommitRow({
   const deletions = gitCommitStatCount(parsed.stats, "deletions")
   const shortHash = parsed.hash || parsed.fullHash.slice(0, 7)
   const canRunCommitAction = Boolean(viewerContextId && cwd && parsed.fullHash)
+  const {
+    hashCopied,
+    messageCopied,
+    formDialog,
+    confirmDialog,
+    contextMenuOpen,
+    contextMenuKey,
+  } = rowState
 
-  React.useEffect(() => {
-    setDerivedScrollState<boolean>(setCommitBodyHeaderShadowed, false)
-    setDerivedScrollState<boolean>(setCommitBodyFooterShadowed, false)
-  }, [value])
+  const commitBodyHeaderShadowed =
+    rowState.scrollValue === value && rowState.commitBodyHeaderShadowed
+  const commitBodyFooterShadowed =
+    rowState.scrollValue === value && rowState.commitBodyFooterShadowed
 
   const updateCommitBodyScrollShadows = (
     scrollElement: HTMLDivElement | null
   ) => {
-    setDerivedScrollState(
-      setCommitBodyHeaderShadowed,
-      hasScrolledContent(scrollElement)
-    )
-    setDerivedScrollState(
-      setCommitBodyFooterShadowed,
-      hasRemainingScrollContent(scrollElement)
-    )
+    dispatchRow({
+      type: "set-scroll-shadows",
+      value,
+      headerShadowed: hasScrolledContent(scrollElement),
+      footerShadowed: hasRemainingScrollContent(scrollElement),
+    })
   }
 
   React.useLayoutEffect(() => {
@@ -1251,12 +1337,12 @@ function GitCommitRow({
 
     void copyGitCommitValue(parsed.fullHash).then((copied) => {
       if (!copied) return
-      setHashCopied(true)
+      dispatchRow({ type: "set-hash-copied", copied: true })
       if (typeof hashCopiedResetRef.current === "number") {
         window.clearTimeout(hashCopiedResetRef.current)
       }
       hashCopiedResetRef.current = window.setTimeout(() => {
-        setHashCopied(false)
+        dispatchRow({ type: "set-hash-copied", copied: false })
       }, 1200)
     })
   }
@@ -1266,12 +1352,12 @@ function GitCommitRow({
 
     void copyGitCommitValue(title).then((copied) => {
       if (!copied) return
-      setMessageCopied(true)
+      dispatchRow({ type: "set-message-copied", copied: true })
       if (typeof messageCopiedResetRef.current === "number") {
         window.clearTimeout(messageCopiedResetRef.current)
       }
       messageCopiedResetRef.current = window.setTimeout(() => {
-        setMessageCopied(false)
+        dispatchRow({ type: "set-message-copied", copied: false })
       }, 1200)
     })
   }
@@ -1308,7 +1394,7 @@ function GitCommitRow({
   const runConfirmedAction = () => {
     if (!confirmDialog) return
     gitCommitActionMutation.mutate(confirmDialog)
-    setConfirmDialog(null)
+    dispatchRow({ type: "set-confirm-dialog", confirmDialog: null })
   }
 
   const submitFormAction = (event: React.FormEvent<HTMLFormElement>) => {
@@ -1335,11 +1421,11 @@ function GitCommitRow({
         label: "Squashed commits",
       })
     }
-    setFormDialog(null)
+    dispatchRow({ type: "set-form-dialog", formDialog: null })
   }
 
   const showConfirm = (state: GitCommitConfirmState) => {
-    setConfirmDialog(state)
+    dispatchRow({ type: "set-confirm-dialog", confirmDialog: state })
   }
 
   const showResetConfirm = (resetMode: GitResetMode) => {
@@ -1402,11 +1488,14 @@ function GitCommitRow({
       void copyGitCommitValue(title)
     },
     onCreateBranch: () => {
-      setFormDialog({
-        kind: "branch",
-        title: "Create branch from commit",
-        description: `Create and check out a new branch at ${shortHash}.`,
-        value: defaultGitBranchName(title, shortHash),
+      dispatchRow({
+        type: "set-form-dialog",
+        formDialog: {
+          kind: "branch",
+          title: "Create branch from commit",
+          description: `Create and check out a new branch at ${shortHash}.`,
+          value: defaultGitBranchName(title, shortHash),
+        },
       })
     },
     onCheckout: () => {
@@ -1446,11 +1535,14 @@ function GitCommitRow({
       })
     },
     onTag: () => {
-      setFormDialog({
-        kind: "tag",
-        title: "Tag commit",
-        description: `Create a lightweight tag at ${shortHash}.`,
-        value: defaultGitTagName(shortHash),
+      dispatchRow({
+        type: "set-form-dialog",
+        formDialog: {
+          kind: "tag",
+          title: "Tag commit",
+          description: `Create a lightweight tag at ${shortHash}.`,
+          value: defaultGitTagName(shortHash),
+        },
       })
     },
     onOpenRemote: openRemoteCommit,
@@ -1482,13 +1574,16 @@ function GitCommitRow({
       })
     },
     onSquash: () => {
-      setFormDialog({
-        kind: "squash",
-        title: "Squash commits after this commit",
-        description: `Soft reset to ${shortHash}, then create one replacement commit from all newer commits.`,
-        value: title
-          ? `Squash changes after ${title}`
-          : `Squash after ${shortHash}`,
+      dispatchRow({
+        type: "set-form-dialog",
+        formDialog: {
+          kind: "squash",
+          title: "Squash commits after this commit",
+          description: `Soft reset to ${shortHash}, then create one replacement commit from all newer commits.`,
+          value: title
+            ? `Squash changes after ${title}`
+            : `Squash after ${shortHash}`,
+        },
       })
     },
     canCopyMessage: Boolean(title),
@@ -1499,8 +1594,7 @@ function GitCommitRow({
     contextMenuActionsRef.current?.close()
     contextMenuActionsRef.current?.unmount()
     flushSync(() => {
-      setContextMenuOpen(false)
-      setContextMenuKey((key) => key + 1)
+      dispatchRow({ type: "reset-context-menu" })
     })
     action()
   }
@@ -1511,7 +1605,9 @@ function GitCommitRow({
         <ContextMenu
           key={contextMenuKey}
           open={contextMenuOpen}
-          onOpenChange={setContextMenuOpen}
+          onOpenChange={(open) => {
+            dispatchRow({ type: "set-context-menu-open", open })
+          }}
           actionsRef={contextMenuActionsRef}
         >
           <ContextMenuTrigger render={trigger} />
@@ -1651,7 +1747,9 @@ function GitCommitRow({
         open={formDialog !== null}
         focusPromptOnClose={false}
         onOpenChange={(open) => {
-          if (!open) setFormDialog(null)
+          if (!open) {
+            dispatchRow({ type: "set-form-dialog", formDialog: null })
+          }
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1665,22 +1763,20 @@ function GitCommitRow({
                 value={formDialog.value}
                 rows={4}
                 onChange={(event) => {
-                  setFormDialog((current) =>
-                    current
-                      ? { ...current, value: event.target.value }
-                      : current
-                  )
+                  dispatchRow({
+                    type: "set-form-dialog-value",
+                    value: event.target.value,
+                  })
                 }}
               />
             ) : (
               <Input
                 value={formDialog?.value || ""}
                 onChange={(event) => {
-                  setFormDialog((current) =>
-                    current
-                      ? { ...current, value: event.target.value }
-                      : current
-                  )
+                  dispatchRow({
+                    type: "set-form-dialog-value",
+                    value: event.target.value,
+                  })
                 }}
               />
             )}
@@ -1688,7 +1784,9 @@ function GitCommitRow({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setFormDialog(null)}
+                onClick={() => {
+                  dispatchRow({ type: "set-form-dialog", formDialog: null })
+                }}
               >
                 Cancel
               </Button>
@@ -1706,7 +1804,9 @@ function GitCommitRow({
       <AlertDialog
         open={confirmDialog !== null}
         onOpenChange={(open) => {
-          if (!open) setConfirmDialog(null)
+          if (!open) {
+            dispatchRow({ type: "set-confirm-dialog", confirmDialog: null })
+          }
         }}
       >
         <AlertDialogContent>
