@@ -1071,7 +1071,11 @@ type TreeBrowsePanelProps = {
   onLabelTreeNode: (nodeId: string) => void
 }
 
-function TreeBrowsePanel({
+function TreeBrowsePanel(props: TreeBrowsePanelProps) {
+  return useTreeBrowsePanelView(props)
+}
+
+function useTreeBrowsePanelView({
   isMobile,
   treeFilterMode,
   onTreeFilterModeChange,
@@ -1851,7 +1855,11 @@ type AppShellTreeDialogProps = {
   onSaveTreeLabel: (label: string) => Promise<void> | void
 }
 
-function AppShellTreeDialog({
+function AppShellTreeDialog(props: AppShellTreeDialogProps) {
+  return useAppShellTreeDialogView(props)
+}
+
+function useAppShellTreeDialogView({
   open,
   onOpenChange,
   treeLoading,

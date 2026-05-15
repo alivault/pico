@@ -211,7 +211,13 @@ function authDialogReducer(
   }
 }
 
-export function AppShellAuthDialogController({
+export function AppShellAuthDialogController(
+  props: AppShellAuthDialogControllerProps
+) {
+  return useAppShellAuthDialogControllerView(props)
+}
+
+function useAppShellAuthDialogControllerView({
   ref,
   openStateRef,
   viewerContextId,

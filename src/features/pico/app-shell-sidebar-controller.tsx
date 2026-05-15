@@ -67,15 +67,23 @@ function findSidebarSessionSelectionKey(
   return ""
 }
 
-export function AppShellSidebarController({
-  viewerContextId,
-  sidebarStore,
-  sessionWorkspaceRef,
-}: {
+type AppShellSidebarControllerProps = {
   viewerContextId: string
   sidebarStore: AppShellSidebarStore
   sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
-}) {
+}
+
+export function AppShellSidebarController(
+  props: AppShellSidebarControllerProps
+) {
+  return useAppShellSidebarControllerView(props)
+}
+
+function useAppShellSidebarControllerView({
+  viewerContextId,
+  sidebarStore,
+  sessionWorkspaceRef,
+}: AppShellSidebarControllerProps) {
   const [directorySessionsStore] = React.useState(() =>
     createDirectorySessionsStore({}, {})
   )

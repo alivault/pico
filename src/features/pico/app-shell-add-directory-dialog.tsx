@@ -263,7 +263,11 @@ type AppShellAddDirectoryDialogProps = {
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
-function AppShellAddDirectoryDialog({
+function AppShellAddDirectoryDialog(props: AppShellAddDirectoryDialogProps) {
+  return useAppShellAddDirectoryDialogView(props)
+}
+
+function useAppShellAddDirectoryDialogView({
   open,
   onOpenChange,
   directoryInput,

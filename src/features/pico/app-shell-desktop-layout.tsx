@@ -478,7 +478,25 @@ function AppShellDesktopResizeHandle({
   )
 }
 
-export function AppShellTabsController({
+type AppShellTabsControllerProps = AppShellSessionContentProps & {
+  appUiStore: PicoStore<AppShellUiState>
+  gitPanelOpen: boolean
+  isMobile: boolean
+  onCloseAllFileViewTabs: () => void
+  onCloseFileViewTab: (path: string) => void
+  onCloseFileViewTabsToRight: (path: string) => void
+  onCloseOtherFileViewTabs: (path: string) => void
+  onOpenFileViewTab: (path: string, options?: OpenFileViewTabOptions) => void
+  onReorderFileViewTabs: (paths: Array<string>) => void
+  onValueChange: (value: string) => void
+  rightSidebarStore: PicoStore<AppShellRightSidebarState>
+}
+
+export function AppShellTabsController(props: AppShellTabsControllerProps) {
+  return useAppShellTabsControllerView(props)
+}
+
+function useAppShellTabsControllerView({
   actionsRef,
   appUiStore,
   awaitingFirstTurn,
@@ -510,19 +528,7 @@ export function AppShellTabsController({
   store,
   viewerContextId,
   workingStateStore,
-}: AppShellSessionContentProps & {
-  appUiStore: PicoStore<AppShellUiState>
-  gitPanelOpen: boolean
-  isMobile: boolean
-  onCloseAllFileViewTabs: () => void
-  onCloseFileViewTab: (path: string) => void
-  onCloseFileViewTabsToRight: (path: string) => void
-  onCloseOtherFileViewTabs: (path: string) => void
-  onOpenFileViewTab: (path: string, options?: OpenFileViewTabOptions) => void
-  onReorderFileViewTabs: (paths: Array<string>) => void
-  onValueChange: (value: string) => void
-  rightSidebarStore: PicoStore<AppShellRightSidebarState>
-}) {
+}: AppShellTabsControllerProps) {
   const currentTab = useSelector(appUiStore, (state) => state.currentTab)
   const isDraftSession = useSelector(
     sessionStore,

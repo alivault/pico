@@ -422,7 +422,11 @@ function sessionsDialogReducer(
   }
 }
 
-function AppShellSessionsDialog({
+function AppShellSessionsDialog(props: AppShellSessionsDialogProps) {
+  return useAppShellSessionsDialogView(props)
+}
+
+function useAppShellSessionsDialogView({
   open,
   onOpenChange,
   viewerContextId,

@@ -1585,7 +1585,11 @@ function AppSidebarDirectoriesHeader({
   )
 }
 
-export function AppSidebar({
+export function AppSidebar(props: AppSidebarProps) {
+  return useAppSidebarView(props)
+}
+
+function useAppSidebarView({
   sessionSearch,
   onOpenSessionsDialog,
   visibleDirectories,

@@ -1198,21 +1198,27 @@ function GitCommitFilesList({
   )
 }
 
-function GitCommitRow({
-  viewerContextId,
-  cwd,
-  graphWidth,
-  line,
-  value,
-  onOpenCommitDiff,
-}: {
+type GitCommitRowProps = {
   viewerContextId: string
   cwd: string
   graphWidth: number
   line: string
   value: string
   onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
-}) {
+}
+
+function GitCommitRow(props: GitCommitRowProps) {
+  return useGitCommitRowView(props)
+}
+
+function useGitCommitRowView({
+  viewerContextId,
+  cwd,
+  graphWidth,
+  line,
+  value,
+  onOpenCommitDiff,
+}: GitCommitRowProps) {
   const parsed = parseGitCommitGraphLine(line)
   const queryClient = useQueryClient()
   const [rowState, dispatchRow] = React.useReducer(

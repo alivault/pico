@@ -316,17 +316,23 @@ function gitFileShouldPreviewPatch(file: GitChangeFile) {
   )
 }
 
-export function FileReviewContent({
+type FileReviewContentProps = GitScopedProps & {
+  onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
+  showEmbeddedHistory?: boolean
+}
+
+export function FileReviewContent(props: FileReviewContentProps) {
+  return useFileReviewContentView(props)
+}
+
+function useFileReviewContentView({
   viewerContextId,
   cwd,
   active,
   onOpenCommitDiff,
   onOpenFile,
   showEmbeddedHistory = true,
-}: GitScopedProps & {
-  onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
-  showEmbeddedHistory?: boolean
-}) {
+}: FileReviewContentProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [state, dispatch] = React.useReducer(
