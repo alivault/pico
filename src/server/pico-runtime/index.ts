@@ -2884,12 +2884,6 @@ class PicoRuntime {
         })
       : []
 
-    if (normalizedUpdates.length !== pendingMessages.length) {
-      throw new Error(
-        "pendingMessages must include every pending prompt exactly once."
-      )
-    }
-
     const pendingMessagesById = new Map(
       pendingMessages.map((message) => [message.pendingId, message])
     )
@@ -2902,11 +2896,7 @@ class PicoRuntime {
     const nextPendingMessages: Array<PendingUserMessage> = []
     for (const update of normalizedUpdates) {
       const existing = pendingMessagesById.get(update.pendingId)
-      if (!existing) {
-        throw new Error(
-          "pendingMessages must include every pending prompt exactly once."
-        )
-      }
+      if (!existing) continue
       const text = update.hasText ? update.text : existing.text
       const images = update.hasImages ? update.images : existing.images
       if (!text.trim() && images.length === 0) {
@@ -3824,7 +3814,11 @@ class PicoRuntime {
       (message) => message.pendingId === pendingId
     )
     if (pendingIndex === -1) {
-      if (normalizeClientPendingId(pendingId)) {
+      const isKnownClientPendingId = Boolean(
+        normalizeClientPendingId(pendingId)
+      )
+      const isKnownServerPendingId = pendingId.startsWith("pending:")
+      if (isKnownClientPendingId || isKnownServerPendingId) {
         activeEntry.canceledPendingUserMessageIds.add(pendingId)
         return { ok: true, pendingId }
       }
