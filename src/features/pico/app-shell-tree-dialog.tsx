@@ -2528,22 +2528,18 @@ export function AppShellTreeDialogController({
     if (!open || !treeData) return
 
     const flat = flattenTree(treeData.tree)
-    setSelectedTreeNodeId((current) => {
-      if (current && flat.some((entry) => entry.id === current)) {
-        return current
-      }
-      return treeData.leafId
-    })
-  }, [treeData, open])
+    const currentSelected = selectedTreeNodeId
+      ? flat.find((entry) => entry.id === selectedTreeNodeId)
+      : undefined
+    const nextSelected =
+      currentSelected ?? flat.find((entry) => entry.id === treeData.leafId)
+    const nextSelectedId = nextSelected?.id ?? treeData.leafId
 
-  React.useEffect(() => {
-    if (!treeData) return
-
-    const flat = flattenTree(treeData.tree)
-    const fallbackId = selectedTreeNodeId || treeData.leafId
-    const selected = flat.find((entry) => entry.id === fallbackId)
-    setSelectedTreeNodeLabel(selected?.label || "")
-  }, [selectedTreeNodeId, treeData])
+    setSelectedTreeNodeId((current) =>
+      current === nextSelectedId ? current : nextSelectedId
+    )
+    setSelectedTreeNodeLabel(nextSelected?.label || "")
+  }, [selectedTreeNodeId, treeData, open])
 
   React.useImperativeHandle(
     ref,
