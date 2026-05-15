@@ -701,11 +701,11 @@ export function useAppShellPromptMutations({
         })
       }
 
-      setIsSubmitting(true)
       if (!treatAsQueuedPrompt) {
         awaitingFirstTurnRef.current = true
         setAwaitingFirstTurn(true)
       }
+      setIsSubmitting(true)
       if (shouldOptimisticallyClearComposer) {
         replaceComposerDraft("", undefined, { forceSync: true })
         setComposerImages([])
