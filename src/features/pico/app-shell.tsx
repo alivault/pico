@@ -311,14 +311,6 @@ function useAppShellSessionWorkspaceView({
     },
     [appUiStore]
   )
-  const setInitialLoadingSessionId = React.useCallback<
-    React.Dispatch<React.SetStateAction<string | null>>
-  >(
-    (action) => {
-      setStoreField(appUiStore, "initialLoadingSessionId", action)
-    },
-    [appUiStore]
-  )
   const previousRouteSessionIdRef = React.useRef(sessionId)
   const composerDraftSeedStoreRef = React.useRef<PicoStore<{
     text: string
@@ -715,6 +707,53 @@ function useAppShellSessionWorkspaceView({
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
   const lastSyncedEditorTextRef = React.useRef("")
+  const publishSidebarActiveSession = React.useCallback(
+    (
+      activeSession: {
+        draft?: boolean
+        sessionFile?: string
+        sessionId?: string
+        sessionKey?: string
+        sessionPath?: string
+      },
+      routeSessionId = sessionId
+    ) => {
+      const activeSessionId =
+        activeSession.sessionId ||
+        (activeSession.sessionKey ? undefined : routeSessionId)
+      const activeSidebarSessionId = activeSession.draft
+        ? ""
+        : activeSessionId?.trim() || ""
+      const activeSidebarSessionPath = activeSession.draft
+        ? ""
+        : (activeSession.sessionFile || activeSession.sessionPath || "").trim()
+      const activeSidebarSessionKey = activeSession.draft
+        ? ""
+        : sessionNotificationKey({
+            sessionFile: activeSidebarSessionPath,
+            sessionId: activeSidebarSessionId,
+          }) ||
+          activeSession.sessionKey?.trim() ||
+          ""
+
+      sidebarStore.setSidebarState((current) => {
+        if (
+          current.activeSidebarSessionId === activeSidebarSessionId &&
+          current.activeSidebarSessionKey === activeSidebarSessionKey &&
+          current.activeSidebarSessionPath === activeSidebarSessionPath
+        ) {
+          return current
+        }
+
+        return {
+          activeSidebarSessionId,
+          activeSidebarSessionKey,
+          activeSidebarSessionPath,
+        }
+      })
+    },
+    [sessionId, sidebarStore]
+  )
   const setSessionState = React.useCallback<
     React.Dispatch<React.SetStateAction<SessionState>>
   >(
@@ -734,8 +773,9 @@ function useAppShellSessionWorkspaceView({
 
       sessionStateRef.current = nextState
       setStoreState(sessionStore, nextState)
+      publishSidebarActiveSession(nextState)
     },
-    [sessionStore]
+    [publishSidebarActiveSession, sessionStore]
   )
   const composerTextRef = React.useRef(composerDraftSeedStore.state.text)
   const composerSkillRef = React.useRef<string | undefined>(
@@ -1042,52 +1082,6 @@ function useAppShellSessionWorkspaceView({
     }),
     { compare: shallowRecordEqual }
   )
-  const setSidebarActiveSession = React.useCallback(
-    (activeSession: {
-      draft?: boolean
-      sessionFile?: string
-      sessionId?: string
-      sessionKey?: string
-      sessionPath?: string
-    }) => {
-      const activeSidebarSessionId = activeSession.draft
-        ? ""
-        : activeSession.sessionId?.trim() || ""
-      const activeSidebarSessionPath = activeSession.draft
-        ? ""
-        : (activeSession.sessionFile || activeSession.sessionPath || "").trim()
-      const activeSidebarSessionKey = activeSession.draft
-        ? ""
-        : sessionNotificationKey({
-            sessionFile: activeSidebarSessionPath,
-            sessionId: activeSidebarSessionId,
-          }) ||
-          activeSession.sessionKey?.trim() ||
-          ""
-
-      sidebarStore.setSidebarState((current) => {
-        if (
-          current.activeSidebarSessionId === activeSidebarSessionId &&
-          current.activeSidebarSessionKey === activeSidebarSessionKey &&
-          current.activeSidebarSessionPath === activeSidebarSessionPath
-        ) {
-          return current
-        }
-
-        return {
-          activeSidebarSessionId,
-          activeSidebarSessionKey,
-          activeSidebarSessionPath,
-        }
-      })
-    },
-    [sidebarStore]
-  )
-
-  React.useLayoutEffect(() => {
-    setSidebarActiveSession(sessionState)
-  }, [sessionState, setSidebarActiveSession])
-
   const gitPanelOpen = useSelector(appUiStore, (state) => state.gitPanelOpen)
 
   const openFileViewTab = (path: string, options?: OpenFileViewTabOptions) => {
@@ -1230,18 +1224,19 @@ function useAppShellSessionWorkspaceView({
 
     if (previousSessionId === sessionId) return
 
-    setCurrentTab((tab) => (tab === "git" ? "session" : tab))
-
-    if (!sessionId) {
-      setInitialLoadingSessionId(null)
-      setLoadingSessionId(null)
-      return
-    }
-
-    if (sessionStateRef.current.sessionId !== sessionId) {
-      setLoadingSessionId(sessionId)
-    }
-  }, [sessionId])
+    publishSidebarActiveSession(sessionStateRef.current, sessionId)
+    setStoreState(appUiStore, (current) => ({
+      ...current,
+      currentTab: current.currentTab === "git" ? "session" : current.currentTab,
+      initialLoadingSessionId: sessionId
+        ? current.initialLoadingSessionId
+        : null,
+      loadingSessionId:
+        sessionId && sessionStateRef.current.sessionId !== sessionId
+          ? sessionId
+          : null,
+    }))
+  }, [appUiStore, publishSidebarActiveSession, sessionId])
 
   React.useEffect(() => {
     if (isMobile) return
@@ -1312,18 +1307,24 @@ function useAppShellSessionWorkspaceView({
   }
   const replaceComposerDraftRef = useLatestRef(replaceComposerDraft)
 
+  const applyStoredClientPreferences = () => {
+    batch(() => {
+      setGitPanelOpen(readStoredRightSidebarOpen())
+      setStoredDraftDirectory(readStoredDraftDirectory() || "")
+      setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
+      setSessionDoneDesktopNotificationsEnabled(
+        readStoredSessionDoneDesktopNotificationsEnabled()
+      )
+      setHideToolBlocks(readStoredHideToolBlocks())
+      setCenterMessages(readStoredCenterMessages())
+      setAutoScrollEnabled(readStoredAutoScrollEnabled())
+      setRecentDirectories(readStoredRecentDirectories())
+      setDesktopNotificationPermission(getDesktopNotificationPermission())
+    })
+  }
+
   React.useEffect(() => {
-    setGitPanelOpen(readStoredRightSidebarOpen())
-    setStoredDraftDirectory(readStoredDraftDirectory() || "")
-    setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
-    setSessionDoneDesktopNotificationsEnabled(
-      readStoredSessionDoneDesktopNotificationsEnabled()
-    )
-    setHideToolBlocks(readStoredHideToolBlocks())
-    setCenterMessages(readStoredCenterMessages())
-    setAutoScrollEnabled(readStoredAutoScrollEnabled())
-    setRecentDirectories(readStoredRecentDirectories())
-    setDesktopNotificationPermission(getDesktopNotificationPermission())
+    applyStoredClientPreferences()
   }, [])
 
   const openCommandPalette = () => {
@@ -1821,7 +1822,7 @@ function useAppShellSessionWorkspaceView({
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
       setCurrentTab((tab) => (tab === "git" ? "session" : tab))
       syncSidebarSelectionForSession(nextSessionId, options)
-      setSidebarActiveSession({
+      publishSidebarActiveSession({
         draft: !nextSessionId,
         sessionId: nextSessionId,
         sessionPath: options?.sessionPath,
@@ -1853,7 +1854,7 @@ function useAppShellSessionWorkspaceView({
     [
       onSelectSession,
       sessionStateRef,
-      setSidebarActiveSession,
+      publishSidebarActiveSession,
       syncSidebarSelectionForSession,
     ]
   )
