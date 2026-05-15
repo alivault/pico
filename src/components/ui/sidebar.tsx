@@ -129,6 +129,63 @@ function useSidebar() {
   return context
 }
 
+type SidebarProviderState = {
+  open: boolean
+  openMobile: boolean
+  openMobileSettled: boolean
+  sidebarResizing: boolean
+  sidebarWidth: string
+}
+
+type SidebarProviderAction =
+  | { type: "openChanged"; open: boolean }
+  | { type: "openMobileChanged"; openMobile: boolean }
+  | { type: "openMobileSettledChanged"; openMobileSettled: boolean }
+  | { type: "sidebarResizingChanged"; sidebarResizing: boolean }
+  | { type: "sidebarWidthChanged"; sidebarWidth: string }
+
+function createInitialSidebarProviderState(
+  open: boolean
+): SidebarProviderState {
+  return {
+    open,
+    openMobile: false,
+    openMobileSettled: false,
+    sidebarResizing: false,
+    sidebarWidth: normalizeSidebarWidth(SIDEBAR_WIDTH),
+  }
+}
+
+function sidebarProviderReducer(
+  state: SidebarProviderState,
+  action: SidebarProviderAction
+): SidebarProviderState {
+  switch (action.type) {
+    case "openChanged":
+      return state.open === action.open
+        ? state
+        : { ...state, open: action.open }
+    case "openMobileChanged":
+      return state.openMobile === action.openMobile
+        ? state
+        : { ...state, openMobile: action.openMobile }
+    case "openMobileSettledChanged":
+      return state.openMobileSettled === action.openMobileSettled
+        ? state
+        : { ...state, openMobileSettled: action.openMobileSettled }
+    case "sidebarResizingChanged":
+      return state.sidebarResizing === action.sidebarResizing
+        ? state
+        : { ...state, sidebarResizing: action.sidebarResizing }
+    case "sidebarWidthChanged":
+      return state.sidebarWidth === action.sidebarWidth
+        ? state
+        : { ...state, sidebarWidth: action.sidebarWidth }
+    default:
+      return state
+  }
+}
+
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -143,12 +200,18 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void
 }) {
   const isMobile = useIsMobile()
-  const [openMobile, setOpenMobile] = React.useState(false)
-  const [openMobileSettled, setOpenMobileSettled] = React.useState(false)
-  const [sidebarWidth, setSidebarWidthState] = React.useState(() =>
-    normalizeSidebarWidth(SIDEBAR_WIDTH)
+  const [sidebarProviderState, dispatchSidebarProvider] = React.useReducer(
+    sidebarProviderReducer,
+    defaultOpen,
+    createInitialSidebarProviderState
   )
-  const [sidebarResizing, setSidebarResizing] = React.useState(false)
+  const {
+    open: uncontrolledOpen,
+    openMobile,
+    openMobileSettled,
+    sidebarResizing,
+    sidebarWidth,
+  } = sidebarProviderState
   const sidebarWidthRef = React.useRef(sidebarWidth)
   sidebarWidthRef.current = sidebarWidth
   React.useEffect(() => {
@@ -156,38 +219,61 @@ function SidebarProvider({
     if (sidebarWidthRef.current === nextWidth) return
 
     sidebarWidthRef.current = nextWidth
-    setSidebarWidthState(nextWidth)
+    dispatchSidebarProvider({
+      type: "sidebarWidthChanged",
+      sidebarWidth: nextWidth,
+    })
   }, [])
   const setSidebarWidth = (width: string) => {
     const nextWidth = normalizeSidebarWidth(width)
     if (sidebarWidthRef.current === nextWidth) return
 
     sidebarWidthRef.current = nextWidth
-    setSidebarWidthState(nextWidth)
+    dispatchSidebarProvider({
+      type: "sidebarWidthChanged",
+      sidebarWidth: nextWidth,
+    })
     storeSidebarWidth(nextWidth)
   }
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
-  const open = openProp ?? _open
+  const open = openProp ?? uncontrolledOpen
   const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
     const openState = typeof value === "function" ? value(open) : value
     if (setOpenProp) {
       setOpenProp(openState)
     } else {
-      _setOpen(openState)
+      dispatchSidebarProvider({ type: "openChanged", open: openState })
     }
 
     // This sets the cookie to keep the sidebar state.
     document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
   }
+  const setOpenMobile = (nextOpenMobile: boolean) => {
+    dispatchSidebarProvider({
+      type: "openMobileChanged",
+      openMobile: nextOpenMobile,
+    })
+  }
+  const setOpenMobileSettled = (nextOpenMobileSettled: boolean) => {
+    dispatchSidebarProvider({
+      type: "openMobileSettledChanged",
+      openMobileSettled: nextOpenMobileSettled,
+    })
+  }
+  const setSidebarResizing = (nextSidebarResizing: boolean) => {
+    dispatchSidebarProvider({
+      type: "sidebarResizingChanged",
+      sidebarResizing: nextSidebarResizing,
+    })
+  }
 
   // Helper to toggle the sidebar.
   const toggleSidebar = () => {
     return isMobile
-      ? setOpenMobile((currentOpen) => !currentOpen)
-      : setOpen((currentOpen) => !currentOpen)
+      ? setOpenMobile(!openMobile)
+      : setOpen((current) => !current)
   }
   const toggleSidebarRef = useLatestRef(toggleSidebar)
 
