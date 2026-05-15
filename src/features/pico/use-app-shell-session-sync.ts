@@ -600,8 +600,13 @@ export function useAppShellSessionSync({
 
       if (!shouldRefresh) return
 
-      initialEventsSessionIdRef.current = currentSessionIdRef.current
-      setEventsReconnectNonce((nonce) => nonce + 1)
+      const source = currentSourceRef.current
+      const shouldReconnectEvents =
+        force || !source || source.readyState !== EventSource.OPEN
+      if (shouldReconnectEvents) {
+        initialEventsSessionIdRef.current = currentSessionIdRef.current
+        setEventsReconnectNonce((nonce) => nonce + 1)
+      }
       void queryClient
         .invalidateQueries({ refetchType: "active" })
         .catch(() => undefined)

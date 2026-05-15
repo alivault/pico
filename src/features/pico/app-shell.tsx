@@ -35,6 +35,7 @@ import type { AppShellUiRequestDialogHandle } from "@/features/pico/app-shell-ui
 import {
   findSidebarSessionSelectionKey,
   getCurrentSessionTitleFromState,
+  resolveNewSessionCwd,
   sameStringArray,
   sessionNotificationKey,
   sessionScrollKey,
@@ -2134,10 +2135,14 @@ function useAppShellSessionWorkspaceView({
 
   const createSession = React.useCallback(
     async (cwdOverride?: string, options?: CreateSessionOptions) => {
-      const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
+      const previousState = sessionStateRef.current
+      const nextCwd = resolveNewSessionCwd({
+        cwdOverride,
+        defaultDirectory: defaultNewSessionDirectory,
+        currentCwd: previousState.cwd,
+      })
       const ownerKey = promptDraftKey({ cwd: nextCwd })
       const optimisticSessionKey = `optimistic:${ownerKey}`
-      const previousState = sessionStateRef.current
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
@@ -2160,7 +2165,7 @@ function useAppShellSessionWorkspaceView({
       conversationItemsStore.setItems(nextState.items)
       setSessionState(nextState)
 
-      const created = await requestCreateSession(cwdOverride)
+      const created = await requestCreateSession(nextCwd)
       if (created) {
         return
       }

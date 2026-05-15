@@ -11,6 +11,7 @@ import type {
   SimpleOkResponse,
 } from "@/lib/pico/api"
 
+import { resolveNewSessionCwd } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys, picoSessionScopeKey } from "@/features/pico/query-keys"
 import {
@@ -493,7 +494,11 @@ export function useAppShellPromptMutations({
     async (cwdOverride?: string) => {
       if (!viewerContextId) return false
 
-      const nextCwd = cwdOverride || defaultNewSessionDirectory || undefined
+      const nextCwd = resolveNewSessionCwd({
+        cwdOverride,
+        defaultDirectory: defaultNewSessionDirectory,
+        currentCwd: sessionStateRef.current.cwd,
+      })
       if (nextCwd) {
         rememberRecentDirectory(nextCwd)
         safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextCwd)
@@ -525,6 +530,7 @@ export function useAppShellPromptMutations({
       defaultNewSessionDirectory,
       rememberRecentDirectory,
       restorePendingDraftPrompt,
+      sessionStateRef,
       setDraftSessionLoadingOwnerKey,
       setStoredDraftDirectory,
       viewerContextId,

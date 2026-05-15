@@ -76,6 +76,19 @@ export function sessionScrollKey(sessionState: {
   return picoSessionScopeKey(sessionState)
 }
 
+export function resolveNewSessionCwd(options: {
+  cwdOverride?: string | undefined
+  defaultDirectory?: string | undefined
+  currentCwd?: string | undefined
+}) {
+  return (
+    options.cwdOverride?.trim() ||
+    options.defaultDirectory?.trim() ||
+    options.currentCwd?.trim() ||
+    undefined
+  )
+}
+
 export function sameStringArray(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
 
