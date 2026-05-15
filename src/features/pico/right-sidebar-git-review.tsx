@@ -840,10 +840,6 @@ function ReviewFileAccordionItem({
     stageMutation.mutate()
   }
 
-  React.useEffect(() => {
-    setFullContextRequested(false)
-  }, [value])
-
   return (
     <AccordionItem value={value} className="border-border/70">
       <AccordionPrimitive.Header
