@@ -643,85 +643,8 @@ export function useAppShellSessionSync({
     }
   }, [queryClient, viewerContextId])
 
-  React.useEffect(() => {
-    if (!viewerContextId) return
-
-    hasReceivedStateSyncRef.current = false
-    const gitInvalidationBatcher = new Batcher<GitInvalidationBatchItem>(
-      (items) => {
-        const scopesByCwd = new Map<string, Set<string>>()
-        for (const item of items) {
-          const scopes = scopesByCwd.get(item.cwd) ?? new Set<string>()
-          for (const scope of item.scopes) scopes.add(scope)
-          scopesByCwd.set(item.cwd, scopes)
-        }
-
-        const invalidations = []
-        for (const [cwd, scopes] of scopesByCwd) {
-          if (scopes.has("status")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              })
-            )
-          }
-          if (scopes.has("files")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitFiles(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              }),
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              }),
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitFileReviews(viewerContextId, cwd),
-                exact: false,
-                refetchType: "active",
-              })
-            )
-          }
-          if (scopes.has("refs")) {
-            invalidations.push(
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
-                exact: true,
-                refetchType: "active",
-              }),
-              queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitCommits(viewerContextId, cwd),
-                exact: false,
-                refetchType: "active",
-              })
-            )
-          }
-        }
-
-        void Promise.all(invalidations).catch(() => undefined)
-      },
-      {
-        key: "pico.git.invalidations",
-        wait: 100,
-      }
-    )
-
-    const source = new EventSource(
-      buildRequestUrl("/events", {
-        contextId: viewerContextId,
-        sessionId: initialEventsSessionIdRef.current,
-        searchParams: {
-          sidebarDirectory: bootstrapSidebarDirectories,
-        },
-      })
-    )
-    currentSourceRef.current = source
-
-    source.onopen = () => {
+  const handleEventSourceOpen = React.useCallback(
+    (source: EventSource) => {
       if (currentSourceRef.current !== source) return
       const currentState = sessionStateRef.current
       if (currentState.connected) return
@@ -729,9 +652,12 @@ export function useAppShellSessionSync({
       sessionStateRef.current = nextState
       setConversationItems(nextState.items)
       setSessionState(nextState)
-    }
+    },
+    [sessionStateRef, setConversationItems, setSessionState]
+  )
 
-    source.onerror = () => {
+  const handleEventSourceError = React.useCallback(
+    (source: EventSource) => {
       if (currentSourceRef.current !== source) return
       const currentState = sessionStateRef.current
       if (!currentState.connected) return
@@ -739,9 +665,16 @@ export function useAppShellSessionSync({
       sessionStateRef.current = nextState
       setConversationItems(nextState.items)
       setSessionState(nextState)
-    }
+    },
+    [sessionStateRef, setConversationItems, setSessionState]
+  )
 
-    source.onmessage = (event) => {
+  const handleEventSourceMessage = React.useCallback(
+    (
+      source: EventSource,
+      gitInvalidationBatcher: Batcher<GitInvalidationBatchItem>,
+      event: MessageEvent<string>
+    ) => {
       if (currentSourceRef.current !== source) return
       const payload = JSON.parse(event.data) as PicoServerEvent
 
@@ -901,7 +834,6 @@ export function useAppShellSessionSync({
           if (shouldClearDraftRoute) {
             handleSelectSessionRef.current(undefined, { replace: true })
           }
-
           if (!preserveLocalPrompt) {
             replaceComposerDraftRef.current(nextPromptText, nextState)
           }
@@ -976,6 +908,120 @@ export function useAppShellSessionSync({
 
         pendingUiRequestHandlerRef.current(payload)
       }
+    },
+    [
+      applySidebarSessionStatusRef,
+      composerSkillRef,
+      composerTextRef,
+      handleSelectSessionRef,
+      hideToolBlocksRef,
+      lastSyncedEditorTextRef,
+      pendingRouteSessionIdRef,
+      pendingUiRequestHandlerRef,
+      replaceComposerDraftRef,
+      sessionStateRef,
+      setComposerContextUsage,
+      setComposerImages,
+      setComposerStreaming,
+      setCompactRunningState,
+      setConversationItems,
+      setHiddenThinkingPreview,
+      setPendingMessages,
+      setSessionDoneEvents,
+      setSessionState,
+      setSessionsEvent,
+      setWorkingState,
+    ]
+  )
+
+  React.useEffect(() => {
+    if (!viewerContextId) return
+
+    hasReceivedStateSyncRef.current = false
+    const gitInvalidationBatcher = new Batcher<GitInvalidationBatchItem>(
+      (items) => {
+        const scopesByCwd = new Map<string, Set<string>>()
+        for (const item of items) {
+          const scopes = scopesByCwd.get(item.cwd) ?? new Set<string>()
+          for (const scope of item.scopes) scopes.add(scope)
+          scopesByCwd.set(item.cwd, scopes)
+        }
+
+        const invalidations = []
+        for (const [cwd, scopes] of scopesByCwd) {
+          if (scopes.has("status")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("files")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.gitFiles(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.gitFileReviews(viewerContextId, cwd),
+                exact: false,
+                refetchType: "active",
+              })
+            )
+          }
+          if (scopes.has("refs")) {
+            invalidations.push(
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
+                exact: true,
+                refetchType: "active",
+              }),
+              queryClient.invalidateQueries({
+                queryKey: picoQueryKeys.gitCommits(viewerContextId, cwd),
+                exact: false,
+                refetchType: "active",
+              })
+            )
+          }
+        }
+
+        void Promise.all(invalidations).catch(() => undefined)
+      },
+      {
+        key: "pico.git.invalidations",
+        wait: 100,
+      }
+    )
+
+    const source = new EventSource(
+      buildRequestUrl("/events", {
+        contextId: viewerContextId,
+        sessionId: initialEventsSessionIdRef.current,
+        searchParams: {
+          sidebarDirectory: bootstrapSidebarDirectories,
+        },
+      })
+    )
+    currentSourceRef.current = source
+
+    source.onopen = () => {
+      handleEventSourceOpen(source)
+    }
+
+    source.onerror = () => {
+      handleEventSourceError(source)
+    }
+
+    source.onmessage = (event) => {
+      handleEventSourceMessage(source, gitInvalidationBatcher, event)
     }
 
     return () => {
@@ -989,27 +1035,12 @@ export function useAppShellSessionSync({
     }
   }, [
     bootstrapSidebarDirectories,
-    composerSkillRef,
-    composerTextRef,
-    lastSyncedEditorTextRef,
-    applySidebarSessionStatusRef,
-    queryClient,
-    replaceComposerDraftRef,
-    sessionStateRef,
-    setComposerImages,
-    setHiddenThinkingPreview,
-    setWorkingState,
-    setCompactRunningState,
-    setComposerContextUsage,
-    setComposerStreaming,
-    setConversationItems,
-    setPendingMessages,
-    pendingUiRequestHandlerRef,
-    setSessionDoneEvents,
-    setSessionState,
-    setSessionsEvent,
-    viewerContextId,
     eventsReconnectNonce,
+    handleEventSourceError,
+    handleEventSourceMessage,
+    handleEventSourceOpen,
+    queryClient,
+    viewerContextId,
   ])
 
   React.useEffect(() => {
