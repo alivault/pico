@@ -58,6 +58,7 @@ Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline validation command.
+- `npx -y react-doctor@latest` is useful for architecture/performance/dead-code checks, but has known intentional false positives listed under Validation expectations.
 - Avoid leaving ad hoc long-lived dev/preview server processes running. Reuse an existing terminal/session manager if one is already set up by the user.
 
 ## Repo layout
@@ -120,8 +121,10 @@ Notes:
   - secondary workspace sidebar coordinator that switches between project files and git review panels
 - `src/features/pico/right-sidebar-project-files.tsx`
   - project file tree, file tab strip, file viewer, open-file dialog, and syntax-highlighted file preview
+- `src/features/pico/highlighted-code.tsx`
+  - safe renderer for server-generated Sugar High syntax-highlight spans; prefer this over `dangerouslySetInnerHTML` for highlighted code
 - `src/features/pico/right-sidebar-git-data.ts`, `src/features/pico/right-sidebar-git-toolbar.tsx`, `src/features/pico/right-sidebar-git-header-actions.tsx`, `src/features/pico/right-sidebar-git-commit-dialog.tsx`, `src/features/pico/right-sidebar-git-branch-dialog.tsx`, `src/features/pico/right-sidebar-git-review.tsx`, and `src/features/pico/right-sidebar-git-commits.tsx`
-  - git query options/helpers, toolbar/header actions, commit and branch dialogs, file diff/review UI, and commit history graph rendering
+  - git query options/helpers, toolbar/header actions, commit and branch dialogs, file diff/review UI, commit history graph rendering, commit diff tabs, commit actions, and history/review layout behavior
 - `src/features/pico/right-sidebar-types.ts`, `src/features/pico/right-sidebar-shared.ts`, `src/features/pico/right-sidebar-section-note.tsx`, and `src/features/pico/right-sidebar-git-section.tsx`
   - shared right-sidebar types, path/error helpers, section note UI, and git section card UI used across right-sidebar modules
 - `src/features/pico/keyboard-shortcuts.ts`
@@ -149,7 +152,7 @@ Notes:
 - `src/lib/pico/sync.ts`
   - state-sync item construction and sync/message normalization helpers
 - `src/lib/pico/tree.ts`
-  - session/tree flattening and filtering helpers
+  - session/tree flattening helpers
 - `src/lib/pico/api.ts`
   - API response types
   - SSE event types
@@ -332,6 +335,8 @@ Existing notable endpoints:
 - `/api/session/tree`
 - `/api/session/tree/label`
 - `/api/session/history`
+- `/api/session/move`
+- `/api/session/read-state`
 - `/api/sessions/delete`
 - `/api/model`
 - `/api/thinking`
@@ -351,8 +356,14 @@ Existing notable endpoints:
 - `/api/git-changes`
 - `/api/git-diff`
 - `/api/git-review`
+- `/api/git-commit-files`
+- `/api/git-commit-diff`
+- `/api/git-commit-remote-url`
+- `/api/git-commit-action`
 - `/api/git-commit-message`
 - `/api/git-commit`
+- `/api/git-stage`
+- `/api/git-discard`
 - `/api/git-checkout`
 - `/api/git-push`
 - `/api/git-pull`
@@ -464,6 +475,10 @@ Rendering/performance details:
 - Long streaming markdown can temporarily render as plain text and switches back to markdown when streaming stops.
 - Code block syntax highlighting is deferred until code blocks are near the viewport and uses `/api/highlight` caching.
 - Do not bypass the loading-state path when switching sessions; previous messages should be hidden while `isSessionViewLoading` is true.
+
+### Syntax highlighting
+
+Server-side code highlighting uses Sugar High via `/api/highlight`. Client rendering should use `src/features/pico/highlighted-code.tsx` for highlighted spans instead of `dangerouslySetInnerHTML`. The renderer intentionally only preserves the constrained Sugar High span/class/color shape.
 
 ### Draft persistence
 
@@ -583,21 +598,25 @@ Current behavior includes:
 - changed files with line counts where available
 - local branch info
 - remote branch info
-- recent commits
+- recent commits with load-more history and commit graph rows
+- commit diff tabs, commit file lists, commit remote URLs, and commit-row actions
 - unpushed commit hashes
 - changed-file diffs and AI-assisted review
+- stage/discard actions for changed files
 - AI/heuristic commit message generation
 - commit, optional commit-and-push, push, and pull actions
 - short-lived caches for status/files/branches/commits/diffs
 - filesystem git watching that emits debounced `git_changed` SSE notifications
 
-The git panel renders files, branches, commits, diffs, and review affordances when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
+The git panel renders files, branches, commits, diffs, history, and review affordances when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
+
+The right-sidebar Git workspace can show review and history areas together; the history tab/sidebar visibility is persisted. Preserve commit diff tabs across Git tab/history/review changes unless the user explicitly closes them.
 
 If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
 - shared response types in `src/lib/pico/api.ts`
-- rendering in `src/features/pico/git-panel.tsx`
+- rendering in `src/features/pico/git-panel.tsx` and/or the right-sidebar Git modules
 
 ## Common change recipes
 
@@ -681,12 +700,20 @@ Manual smoke tests are recommended for the touched area. Useful flows:
 - abort/queue/steer while streaming
 - add/remove/reorder sidebar directories
 - search/select sessions through the sessions dialog
+- mark sessions read/unread from the sidebar
 - open tree and navigate
 - fork from an older message
 - rename/delete a session
 - open git tab
+- open commit history, commit diff tabs, and review/history split panes
 - toggle settings for thinking/tools/notifications
 - open Settings → Login/Logout, verify Esc/back returns to Settings, then smoke test OAuth/API-key auth dialog substeps
+
+React Doctor/Knip known intentional false positives:
+
+- `src/react-scan-dev.ts` is loaded by `src/routes/__root.tsx` through a dev-only module script URL when `VITE_REACT_SCAN=true`; do not replace it with a normal static import just to satisfy dead-code detection.
+- `vendor/node-domexception/index.js` is a package-resolution shim used through the `node-domexception` file dependency/override and included in package publishing; it is not imported by source files directly.
+- Unused `src/components/ui/*` exports may be intentionally retained as reusable shadcn-style primitives. Do not delete or unexport them solely because React Doctor/Knip reports them as unused.
 
 ## Things that are easy to break
 
