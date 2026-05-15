@@ -1,6 +1,5 @@
 import type {
   DirectoryState,
-  MessagePayload,
   PromptImage,
   SessionState,
   SessionsPayload,
@@ -222,29 +221,12 @@ export type GitCommitMessageResponse =
     }
   | ApiErrorResponse
 
-export type DirectorySessionsResponse =
-  | {
-      ok: true
-      directory: string
-      totalCount: number
-      offset: number
-      limit: number
-      sessions: Array<SessionListEntry>
-    }
-  | ApiErrorResponse
-
 export type DirectorySessionsIndexSnapshot = {
   directory: string
   totalCount: number
   revision: string
   sessions: Array<SessionListEntry>
 }
-
-export type DirectorySessionsIndexResponse =
-  | ({
-      ok: true
-    } & DirectorySessionsIndexSnapshot)
-  | ApiErrorResponse
 
 export type DirectorySessionsIndexesResponse =
   | {
@@ -353,31 +335,11 @@ export type PendingMessageRemoveResponse =
     }
   | ApiErrorResponse
 
-export type ModelResponse =
-  | {
-      ok: true
-      model?: {
-        id: string
-        provider?: string
-        name?: string
-        reasoning?: boolean
-      }
-      thinkingLevel: string
-    }
-  | ApiErrorResponse
-
 export type ThinkingResponse =
   | {
       ok: true
       thinkingLevel: string
       availableThinkingLevels: Array<string>
-    }
-  | ApiErrorResponse
-
-export type HideThinkingResponse =
-  | {
-      ok: true
-      hideThinkingBlock: boolean
     }
   | ApiErrorResponse
 
@@ -401,17 +363,6 @@ export type HighlightResponse =
     ))
   | ApiErrorResponse
 
-export type SessionHistoryResponse =
-  | {
-      ok: true
-      offset: number
-      limit: number
-      totalCount: number
-      hasMoreBefore: boolean
-      messages: Array<MessagePayload>
-    }
-  | ApiErrorResponse
-
 export type SessionTreeResponse =
   | {
       ok: true
@@ -430,7 +381,7 @@ export type NavigateSessionTreeResponse =
     }
   | ApiErrorResponse
 
-export type ForkableMessage = {
+type ForkableMessage = {
   entryId: string
   text: string
 }
@@ -481,14 +432,6 @@ export type MoveSessionResponse =
     }
   | ApiErrorResponse
 
-export type DeleteSessionResponse =
-  | {
-      ok: true
-      sessionId?: string
-      sessionFile?: string
-    }
-  | ApiErrorResponse
-
 export type DeleteSessionsRequest = {
   paths: Array<string>
 }
@@ -502,7 +445,7 @@ export type DeleteSessionsResponse =
     }
   | ApiErrorResponse
 
-export type AuthProviderKind = "oauth" | "api_key"
+type AuthProviderKind = "oauth" | "api_key"
 
 export type AuthProviderOption = {
   id: string
@@ -541,14 +484,14 @@ export type UiRequestResponse =
     }
   | ApiErrorResponse
 
-export type RequestErrorEvent = {
+type RequestErrorEvent = {
   type: "request_error"
   scope?: string
   message?: string
   error?: string
 }
 
-export type ExtensionErrorEvent = {
+type ExtensionErrorEvent = {
   type: "extension_error"
   error?: string
 }
@@ -557,14 +500,14 @@ export type ExtensionUiEvent = UiRequest & {
   type: "extension_ui_request"
 }
 
-export type UserMessageEvent = {
+type UserMessageEvent = {
   type: "user_message"
   message?: string
   images?: Array<unknown>
   queued?: boolean
 }
 
-export type AutoSessionNamingErrorEvent = {
+type AutoSessionNamingErrorEvent = {
   type: "auto_session_naming_error"
   sessionId?: string
   cwd?: string

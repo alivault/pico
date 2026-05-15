@@ -1,5 +1,3 @@
-import { normalizeStoredDirectoryList } from "@/lib/pico/storage"
-
 export {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
@@ -67,7 +65,6 @@ export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
 export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
 
 export type ThemeFamily = "default" | "flexoki"
-export type ThemeMode = ThemeFamily
 export type ThemeColorMode = "auto" | "light" | "dark"
 export type ResolvedThemeMode = Exclude<ThemeColorMode, "auto">
 export type AppliedThemeClass =
@@ -149,7 +146,7 @@ export type UiRequest = {
   timeout?: number
 }
 
-export type TextBlock = {
+type TextBlock = {
   type: "text"
   blockKey?: string
   renderKey?: string
@@ -157,7 +154,7 @@ export type TextBlock = {
   isError?: boolean
 }
 
-export type ThinkingBlock = {
+type ThinkingBlock = {
   type: "thinking"
   blockKey?: string
   renderKey?: string
@@ -179,7 +176,7 @@ export type ToolBlock = {
   running: boolean
 }
 
-export type CompactionBlock = {
+type CompactionBlock = {
   type: "compaction"
   blockKey?: string
   renderKey?: string
@@ -193,7 +190,7 @@ export type AssistantBlock =
   | ToolBlock
   | CompactionBlock
 
-export type UserItem = {
+type UserItem = {
   kind: "user"
   itemKey?: string
   renderKey?: string
@@ -322,20 +319,6 @@ export type StateSyncPayload = {
   uiState?: SessionUiState
 }
 
-export type SessionMetaPayload = {
-  type: "session_meta"
-  sessionKey?: string
-  sessionId?: string
-  sessionFile?: string
-  sessionName?: string
-  firstMessage?: string
-  cwd?: string
-  modified?: string
-  draft?: boolean
-  streaming?: boolean
-  pendingUserMessages?: Array<PendingUserMessagePayload>
-}
-
 export type SessionsPayload = {
   type: "sessions"
   directories?: Array<string>
@@ -387,56 +370,10 @@ export type FlatTreeNode = {
   node: TreeNode
 }
 
-function shortRelativeTime(value: number, unit: string, past: boolean) {
-  return past ? `${value}${unit} ago` : `in ${value}${unit}`
-}
-
-export function relativeTime(value?: string, now = Date.now()) {
-  if (!value) return ""
-
-  const date = new Date(value)
-  const timestamp = date.getTime()
-  if (Number.isNaN(timestamp)) {
-    return ""
-  }
-
-  const diffMs = now - timestamp
-  const past = diffMs >= 0
-  const seconds = Math.max(1, Math.floor(Math.abs(diffMs) / 1000))
-
-  if (seconds < 60) return shortRelativeTime(seconds, "s", past)
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return shortRelativeTime(minutes, "m", past)
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return shortRelativeTime(hours, "h", past)
-
-  const days = Math.floor(hours / 24)
-  if (days < 30) return shortRelativeTime(days, "d", past)
-
-  if (days < 365) {
-    return shortRelativeTime(Math.floor(days / 30), "mo", past)
-  }
-
-  const years = Math.floor(days / 365)
-  return shortRelativeTime(Math.max(1, years), "y", past)
-}
-
 export function getSessionTitle(
   summary?: Pick<SessionSummary, "title" | "name">
 ) {
   if (summary?.title?.trim()) return summary.title.trim()
   if (summary?.name?.trim()) return summary.name.trim()
   return "New session"
-}
-
-export function clampSidebarDirectories(
-  directories: Array<string>,
-  fallbackDirectory?: string
-) {
-  const normalized = normalizeStoredDirectoryList(directories)
-  if (normalized.length > 0) return normalized
-  if (fallbackDirectory?.trim()) return [fallbackDirectory.trim()]
-  return []
 }

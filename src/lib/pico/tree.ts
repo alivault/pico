@@ -48,12 +48,3 @@ export function flattenTree(tree: Array<TreeNode>) {
 
   return flatNodes
 }
-
-export function filterFlatTree(nodes: Array<FlatTreeNode>, query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
-  if (!normalizedQuery) return nodes
-
-  return nodes.filter((node) =>
-    node.text.toLowerCase().includes(normalizedQuery)
-  )
-}

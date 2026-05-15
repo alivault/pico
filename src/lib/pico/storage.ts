@@ -5,7 +5,6 @@ import type {
   SessionEntryIdentity,
   ThemeColorMode,
   ThemeFamily,
-  ThemeMode,
 } from "@/lib/pico"
 
 export const THEME_STORAGE_KEY = "pico-theme"
@@ -247,21 +246,11 @@ export function normalizeThemeFamily(value: unknown): ThemeFamily {
     : "default"
 }
 
-export function normalizeThemeMode(value: unknown): ThemeMode {
-  return normalizeThemeFamily(value)
-}
-
 export function normalizeThemeColorMode(value: unknown): ThemeColorMode {
   if (value === "auto" || value === "system") return "auto"
   if (value === "light" || value === "flexoki-light") return "light"
   if (value === "dark" || value === "flexoki-dark") return "dark"
   return "auto"
-}
-
-export function normalizeAppliedThemeClass(value: unknown): AppliedThemeClass {
-  return APPLIED_THEME_CLASSES.includes(value as AppliedThemeClass)
-    ? (value as AppliedThemeClass)
-    : "light"
 }
 
 function resolvedThemeMode(
@@ -291,10 +280,6 @@ export function appliedThemeClass(
 
 export function themeFamilyLabel(theme: ThemeFamily) {
   return theme === "flexoki" ? "Flexoki" : "Default"
-}
-
-export function themeModeLabel(theme: ThemeMode) {
-  return themeFamilyLabel(theme)
 }
 
 export function themeColorModeLabel(
