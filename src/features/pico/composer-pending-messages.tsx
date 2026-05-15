@@ -97,7 +97,7 @@ export const ComposerPendingMessages = React.memo(
       pendingMessageEditReducer,
       EMPTY_PENDING_MESSAGE_EDIT_STATE
     )
-    const [openSections, setOpenSections] = React.useState(["pending-prompts"])
+    const [openSections, setOpenSections] = React.useState<Array<string>>([])
     const { editingPendingId, editText, editError } = editState
 
     const editingMessage = editingPendingId
