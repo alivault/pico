@@ -2419,6 +2419,13 @@ export function AppShellTreeDialogController({
         }
       )
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey,
+        exact: true,
+        refetchType: "active",
+      })
+    },
   })
 
   const openDialog = async () => {
