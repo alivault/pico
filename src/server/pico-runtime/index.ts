@@ -2932,6 +2932,26 @@ class PicoRuntime {
     return sortPendingUserMessages(nextPendingMessages)
   }
 
+  private async replayPendingUserMessages(
+    entry: SessionEntry,
+    pendingMessages: Array<PendingUserMessage>,
+    index = 0
+  ): Promise<void> {
+    const pendingMessage = pendingMessages[index]
+    if (!pendingMessage) return
+
+    const text = pendingMessage.text
+    const images = normalizePromptImages(pendingMessage.images)
+    if (text.trim() || images.length > 0) {
+      await entry.session.prompt(text, {
+        ...(images.length > 0 ? { images } : {}),
+        streamingBehavior: pendingMessage.streamingBehavior,
+      })
+    }
+
+    await this.replayPendingUserMessages(entry, pendingMessages, index + 1)
+  }
+
   private async replacePendingUserMessages(
     entry: SessionEntry,
     pendingMessages: Array<PendingUserMessage>
@@ -2951,15 +2971,7 @@ class PicoRuntime {
       entry.pendingUserMessages = []
 
       if (canReplayPending) {
-        for (const pendingMessage of nextPending) {
-          const text = pendingMessage.text
-          const images = normalizePromptImages(pendingMessage.images)
-          if (!text.trim() && images.length === 0) continue
-          await entry.session.prompt(text, {
-            ...(images.length > 0 ? { images } : {}),
-            streamingBehavior: pendingMessage.streamingBehavior,
-          })
-        }
+        await this.replayPendingUserMessages(entry, nextPending)
       }
 
       entry.pendingUserMessages = nextPending
