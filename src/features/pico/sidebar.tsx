@@ -670,7 +670,7 @@ function SidebarSessionItem({
   )
   const draggable = useDraggable({
     id: `session:${entryKey}`,
-    disabled: overlay || !entry?.path,
+    disabled: isMobile || overlay || !entry?.path,
     data: {
       type: "session",
       entry,
@@ -1728,6 +1728,7 @@ function useAppSidebarView({
       | undefined
 
     if (activeData?.type === "session" && activeData.entry) {
+      if (isMobile) return
       setActiveSessionDrag({
         entryKey: activeData.entryKey || String(event.active.id),
         entry: activeData.entry,
@@ -1751,6 +1752,7 @@ function useAppSidebarView({
     const overId = event.over ? String(event.over.id) : ""
 
     if (activeData?.type === "session") {
+      if (isMobile) return
       const overDirectory = visibleDirectories.includes(overId) ? overId : ""
       setSessionDropDirectory(
         overDirectory && overDirectory !== activeData.sourceDirectory
@@ -1780,6 +1782,11 @@ function useAppSidebarView({
     const overId = event.over ? String(event.over.id) : ""
 
     if (activeData?.type === "session") {
+      if (isMobile) {
+        setActiveSessionDrag(null)
+        setSessionDropDirectory(null)
+        return
+      }
       const targetDirectory = visibleDirectories.includes(overId) ? overId : ""
       if (
         activeData.entry &&
