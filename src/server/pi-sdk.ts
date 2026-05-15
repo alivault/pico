@@ -60,6 +60,7 @@ type PiSdkModuleLike = PiSdkLike & {
 
 async function importExternalModule<T>(entry: string): Promise<T> {
   const url = pathToFileURL(entry).href
+  // eslint-disable-next-line react-doctor/no-dynamic-import-path -- Pico loads the bundled or explicitly configured Pi SDK from an absolute file URL at runtime.
   return (await import(/* @vite-ignore */ url)) as T
 }
 

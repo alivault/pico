@@ -82,6 +82,7 @@ function resolveToCwd(filePath: string, cwd: string) {
 }
 
 async function getEditDiffModule() {
+  // eslint-disable-next-line react-doctor/no-dynamic-import-path -- The edit diff helper is loaded from the runtime-resolved Pi SDK directory.
   editDiffModulePromise ??= import(
     /* @vite-ignore */ pathToFileURL(
       path.join(resolvePiSdkDir(), "dist", "core", "tools", "edit-diff.js")
