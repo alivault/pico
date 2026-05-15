@@ -1890,6 +1890,24 @@ class PicoRuntime {
     )
   }
 
+  private async activateContextsSessionAndBroadcast(
+    contexts: Array<ContextState>,
+    entry: SessionEntry
+  ) {
+    await Promise.all(
+      contexts.map((context) => this.activateContextSession(context, entry))
+    )
+    await this.broadcastSessionsAll()
+  }
+
+  private async bindSessionEntryAndBroadcast(entry: SessionEntry) {
+    await this.bindSessionEntry(entry)
+    await Promise.all([
+      this.broadcastEntryState(entry),
+      this.broadcastSessionsAll(),
+    ])
+  }
+
   private syncGitWatchDirectories() {
     const cwds = new Set<string>()
     for (const context of this.contexts.values()) {
@@ -3155,12 +3173,10 @@ class PicoRuntime {
           for (const context of activeViewers) {
             context.draftKey = result.entry.key
           }
-          await Promise.all(
-            activeViewers.map((context) =>
-              this.activateContextSession(context, result.entry)
-            )
+          await this.activateContextsSessionAndBroadcast(
+            activeViewers,
+            result.entry
           )
-          await this.broadcastSessionsAll()
           return { sessionId: undefined, sessionFile: undefined }
         },
         fork: async (branchEntryId: string) => {
@@ -3170,12 +3186,7 @@ class PicoRuntime {
             return { cancelled: true }
           }
           const nextEntry = await this.ensureSessionEntryByPath(branchedPath)
-          await Promise.all(
-            viewers().map((context) =>
-              this.activateContextSession(context, nextEntry)
-            )
-          )
-          await this.broadcastSessionsAll()
+          await this.activateContextsSessionAndBroadcast(viewers(), nextEntry)
           return {
             sessionId: nextEntry.session.sessionId,
             sessionFile: nextEntry.session.sessionFile,
@@ -3220,12 +3231,7 @@ class PicoRuntime {
               sessionFile: entry.session.sessionFile,
             }
           }
-          await Promise.all(
-            viewers().map((context) =>
-              this.activateContextSession(context, nextEntry)
-            )
-          )
-          await this.broadcastSessionsAll()
+          await this.activateContextsSessionAndBroadcast(viewers(), nextEntry)
           return {
             sessionId: nextEntry.session.sessionId,
             sessionFile: nextEntry.session.sessionFile,
@@ -3233,11 +3239,7 @@ class PicoRuntime {
         },
         reload: async () => {
           await session.reload?.()
-          await this.bindSessionEntry(entry)
-          await Promise.all([
-            this.broadcastEntryState(entry),
-            this.broadcastSessionsAll(),
-          ])
+          await this.bindSessionEntryAndBroadcast(entry)
         },
       },
       shutdownHandler: () => {
