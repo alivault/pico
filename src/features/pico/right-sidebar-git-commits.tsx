@@ -1933,7 +1933,8 @@ export function GitCommitsSection({
     placeholderData: (previousData, previousQuery) => {
       const previousKey = previousQuery?.queryKey
       const sameCommitScope =
-        previousKey?.length === commitsScopeQueryKey.length &&
+        Array.isArray(previousKey) &&
+        previousKey.length >= commitsScopeQueryKey.length &&
         commitsScopeQueryKey.every((part, index) => previousKey[index] === part)
       return sameCommitScope ? previousData : undefined
     },
@@ -1993,7 +1994,7 @@ export function GitCommitsSection({
       No git repository detected.
     </GitSectionNote>
   ) : Array.isArray(commits) && commits.length > 0 ? (
-    <div className="grid min-w-0 gap-3">
+    <div className="grid min-w-0 gap-0">
       <GitCommitRows
         viewerContextId={viewerContextId}
         cwd={normalizedCwd}
@@ -2002,17 +2003,17 @@ export function GitCommitsSection({
         onOpenCommitDiff={onOpenCommitDiff}
       />
       {commitsHasMore ? (
-        <div ref={commitsLoadMoreRef} className="flex">
-          <button
-            type="button"
-            className="inline-flex h-8 w-fit items-center justify-center rounded-md border border-border/80 bg-background px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={commitsQuery.isFetching}
-            onClick={() => {
-              setCommitsLimit((value) => value + GIT_COMMITS_PAGE_SIZE)
-            }}
-          >
-            {commitsQuery.isFetching ? "Loading more…" : "Load more"}
-          </button>
+        <div ref={commitsLoadMoreRef} className="flex min-h-8 items-center">
+          {commitsQuery.isFetching ? (
+            <div
+              role="status"
+              aria-label="Loading more commits"
+              className="inline-flex items-center gap-2 px-1 text-xs text-muted-foreground"
+            >
+              <Spinner className="size-3" />
+              Loading more commits…
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
