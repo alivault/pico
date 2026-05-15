@@ -193,18 +193,21 @@ export async function resolveRequestedEntry<
     }
   }
 
-  if (preferActiveDraft && context.draftKey) {
-    const draftEntry = getSessionEntryByKey(context.draftKey)
-    if (draftEntry && isDraftEntry(draftEntry)) {
-      return await activateRequestedEntry(draftEntry)
-    }
-  }
-
   const requestedSessionId = url.searchParams.get("session")
   if (requestedSessionId) {
     const requestedEntry = await ensureSessionEntryById(requestedSessionId)
     if (requestedEntry) {
       return await activateRequestedEntry(requestedEntry)
+    }
+  }
+
+  // Only fall back to the active draft when the request did not explicitly
+  // target a session. Otherwise prompt-like requests with `preferActiveDraft`
+  // can hijack a selected session's first message into a hidden draft.
+  if (preferActiveDraft && context.draftKey) {
+    const draftEntry = getSessionEntryByKey(context.draftKey)
+    if (draftEntry && isDraftEntry(draftEntry)) {
+      return await activateRequestedEntry(draftEntry)
     }
   }
 
