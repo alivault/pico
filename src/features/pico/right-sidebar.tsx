@@ -758,7 +758,6 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
-          showHistory={isMobile}
           showReview
         />
         <React.Activity mode={activeTab === "review" ? "visible" : "hidden"}>
@@ -769,7 +768,7 @@ export function RightSidebar({
               active={active && activeTab === "review"}
               onOpenCommitDiff={openCommitDiff}
               onOpenFile={openFile}
-              showEmbeddedHistory={!isMobile}
+              showEmbeddedHistory
             />
           </div>
         </React.Activity>
