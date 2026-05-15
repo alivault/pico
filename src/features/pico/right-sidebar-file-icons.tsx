@@ -10,12 +10,24 @@ const projectFileIconResolver = createFileTreeIconResolver({
   colored: true,
 })
 
+function installTrustedFileIconSprite(node: HTMLSpanElement | null) {
+  if (!node || node.firstChild) return
+
+  const template = document.createElement("template")
+  template.innerHTML = PROJECT_FILE_ICON_SPRITE_SHEET
+  node.replaceChildren(template.content.cloneNode(true))
+
+  return () => {
+    node.replaceChildren()
+  }
+}
+
 export function ProjectFileIconSprite() {
   return (
     <span
+      ref={installTrustedFileIconSprite}
       aria-hidden="true"
       className="pointer-events-none block size-0 overflow-hidden"
-      dangerouslySetInnerHTML={{ __html: PROJECT_FILE_ICON_SPRITE_SHEET }}
     />
   )
 }
