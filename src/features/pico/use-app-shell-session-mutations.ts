@@ -127,6 +127,116 @@ function applyDirectoryIndexDelete(
   return changed ? next : current
 }
 
+function sessionListTimestampValue(value: string | undefined) {
+  if (!value) return 0
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function compareSessionListEntriesByLastUserMessage(
+  left: SessionListEntry,
+  right: SessionListEntry
+) {
+  return (
+    sessionListTimestampValue(right.lastUserMessageAt || right.modified) -
+      sessionListTimestampValue(left.lastUserMessageAt || left.modified) ||
+    sessionListTimestampValue(right.modified) -
+      sessionListTimestampValue(left.modified)
+  )
+}
+
+function sessionEntryMatchesMoveTarget(
+  entry: SessionListEntry,
+  options: {
+    previousPath: string
+    nextPath: string
+    sessionId: string
+  }
+) {
+  return Boolean(
+    (entry.path &&
+      (entry.path === options.previousPath ||
+        entry.path === options.nextPath)) ||
+    (options.sessionId && entry.id === options.sessionId)
+  )
+}
+
+function applyDirectoryIndexMove(
+  current: DirectoryIndexDataByPath,
+  options: {
+    previousPath: string
+    nextPath?: string
+    nextCwd: string
+    fallbackEntry: SessionListEntry
+  }
+) {
+  const previousPath = options.previousPath.trim()
+  const nextPath = (options.nextPath || previousPath).trim()
+  const nextCwd = options.nextCwd.trim()
+  if (!previousPath || !nextPath || !nextCwd) return current
+
+  const sessionId = options.fallbackEntry.id || ""
+  let changed = false
+  let movedEntry: SessionListEntry | undefined
+  const next: DirectoryIndexDataByPath = { ...current }
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    let removedCount = 0
+    const sessions = snapshot.sessions.filter((entry) => {
+      if (
+        !sessionEntryMatchesMoveTarget(entry, {
+          previousPath,
+          nextPath,
+          sessionId,
+        })
+      ) {
+        return true
+      }
+
+      movedEntry = movedEntry ?? entry
+      removedCount += 1
+      return false
+    })
+
+    if (removedCount === 0) continue
+
+    changed = true
+    next[directory] = {
+      ...snapshot,
+      totalCount: Math.max(0, snapshot.totalCount - removedCount),
+      sessions,
+    }
+  }
+
+  const targetSnapshot = next[nextCwd] || current[nextCwd]
+  if (!targetSnapshot) return changed ? next : current
+
+  const nextEntry = {
+    ...(movedEntry || options.fallbackEntry),
+    path: nextPath,
+    cwd: nextCwd,
+  }
+  const alreadyInTarget = targetSnapshot.sessions.some((entry) =>
+    sessionEntryMatchesMoveTarget(entry, {
+      previousPath: nextPath,
+      nextPath,
+      sessionId: nextEntry.id || sessionId,
+    })
+  )
+  if (alreadyInTarget) return changed ? next : current
+
+  changed = true
+  next[nextCwd] = {
+    ...targetSnapshot,
+    totalCount: targetSnapshot.totalCount + 1,
+    sessions: [nextEntry, ...targetSnapshot.sessions].sort(
+      compareSessionListEntriesByLastUserMessage
+    ),
+  }
+
+  return next
+}
+
 function directoriesWithSessionPaths(
   indexes: DirectoryIndexDataByPath | undefined,
   targetPaths: Set<string>
@@ -145,6 +255,10 @@ function directoriesWithSessionPaths(
   }
 
   return directories
+}
+
+function uniqueDirectories(directories: Array<string>) {
+  return Array.from(new Set(directories.filter(Boolean)))
 }
 
 function restoreDirectoryIndexesForDirectories(
@@ -682,55 +796,158 @@ export function useAppShellSessionMutations({
       }
       if (entry.cwd === nextDirectory) return false
 
-      try {
-        const response = await moveSessionMutation.mutateAsync({
-          path: entry.path,
-          cwd: nextDirectory,
-        })
-        const previousKey = sessionListEntryKey({
-          path: response.previousPath || entry.path,
-        })
-        const nextKey = sessionListEntryKey({
-          path: response.path,
-          id: response.sessionId || entry.id,
-        })
+      const targetPath = entry.path
+      const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
+      const previousSessionsEvent = getSessionsEvent()
+      const targetPaths = new Set([targetPath])
+      const affectedDirectories = uniqueDirectories([
+        ...directoriesWithSessionPaths(
+          previousDirectoryIndexDataByPath,
+          targetPaths
+        ),
+        ...(previousDirectoryIndexDataByPath[nextDirectory]
+          ? [nextDirectory]
+          : []),
+      ])
+      const affectedEventDirectories = uniqueDirectories([
+        ...directoriesWithSessionPaths(
+          previousSessionsEvent?.directoryIndexes,
+          targetPaths
+        ),
+        ...(previousSessionsEvent?.directoryIndexes?.[nextDirectory]
+          ? [nextDirectory]
+          : []),
+      ])
+      const previousSessionCwd = sessionStateRef.current.cwd
+      const activeSessionMatches =
+        sessionStateRef.current.sessionFile === targetPath
 
-        setSelectedSidebarSessionKeys((current) =>
-          replaceSessionKey(current, previousKey, nextKey)
+      setSessionsEvent((current) =>
+        updateSessionsEventDirectoryIndexes(current, (indexes) =>
+          applyDirectoryIndexMove(indexes, {
+            previousPath: targetPath,
+            nextCwd: nextDirectory,
+            fallbackEntry: entry,
+          })
         )
-        setSidebarSessionSelectionAnchor((current) =>
-          current === previousKey ? nextKey : current
-        )
-        setPinnedSidebarSessionKeys((current) => {
-          const next = replaceSessionKey(current, previousKey, nextKey)
-          if (next !== current) {
-            safeLocalStorageSetItem(
-              PINNED_SESSIONS_STORAGE_KEY,
-              JSON.stringify(next)
-            )
-          }
-          return next
+      )
+      setDirectoryIndexDataByPath((current) =>
+        applyDirectoryIndexMove(current, {
+          previousPath: targetPath,
+          nextCwd: nextDirectory,
+          fallbackEntry: entry,
         })
+      )
+      if (activeSessionMatches) {
         setSessionState((current) =>
-          current.sessionFile === response.previousPath
-            ? { ...current, cwd: response.cwd, sessionFile: response.path }
+          current.sessionFile === targetPath
+            ? { ...current, cwd: nextDirectory }
             : current
         )
-
-        toast.success("Moved session")
-        return true
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to move session"
-        )
-        return false
       }
+
+      void (async () => {
+        try {
+          const response = await moveSessionMutation.mutateAsync({
+            path: targetPath,
+            cwd: nextDirectory,
+          })
+          const previousKey = sessionListEntryKey({
+            path: response.previousPath || targetPath,
+          })
+          const nextKey = sessionListEntryKey({
+            path: response.path,
+            id: response.sessionId || entry.id,
+          })
+
+          setSessionsEvent((current) =>
+            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+              applyDirectoryIndexMove(indexes, {
+                previousPath: response.previousPath || targetPath,
+                nextPath: response.path,
+                nextCwd: response.cwd,
+                fallbackEntry: {
+                  ...entry,
+                  id: response.sessionId || entry.id,
+                },
+              })
+            )
+          )
+          setDirectoryIndexDataByPath((current) =>
+            applyDirectoryIndexMove(current, {
+              previousPath: response.previousPath || targetPath,
+              nextPath: response.path,
+              nextCwd: response.cwd,
+              fallbackEntry: {
+                ...entry,
+                id: response.sessionId || entry.id,
+              },
+            })
+          )
+          setSelectedSidebarSessionKeys((current) =>
+            replaceSessionKey(current, previousKey, nextKey)
+          )
+          setSidebarSessionSelectionAnchor((current) =>
+            current === previousKey ? nextKey : current
+          )
+          setPinnedSidebarSessionKeys((current) => {
+            const next = replaceSessionKey(current, previousKey, nextKey)
+            if (next !== current) {
+              safeLocalStorageSetItem(
+                PINNED_SESSIONS_STORAGE_KEY,
+                JSON.stringify(next)
+              )
+            }
+            return next
+          })
+          setSessionState((current) =>
+            current.sessionFile === response.previousPath ||
+            current.sessionFile === targetPath
+              ? { ...current, cwd: response.cwd, sessionFile: response.path }
+              : current
+          )
+
+          toast.success("Moved session")
+        } catch (error) {
+          setSessionsEvent((current) =>
+            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+              restoreDirectoryIndexesForDirectories(
+                indexes,
+                previousSessionsEvent?.directoryIndexes,
+                affectedEventDirectories
+              )
+            )
+          )
+          setDirectoryIndexDataByPath((current) =>
+            restoreDirectoryIndexesForDirectories(
+              current,
+              previousDirectoryIndexDataByPath,
+              affectedDirectories
+            )
+          )
+          setSessionState((current) =>
+            current.sessionFile === targetPath && current.cwd === nextDirectory
+              ? { ...current, cwd: previousSessionCwd }
+              : current
+          )
+          toast.error(
+            error instanceof Error ? error.message : "Failed to move session"
+          )
+        }
+      })()
+
+      return true
     },
     [
+      getDirectoryIndexDataByPath,
+      getSessionsEvent,
       moveSessionMutation,
+      sessionStateRef,
+      setDirectoryIndexDataByPath,
       setPinnedSidebarSessionKeys,
       setSelectedSidebarSessionKeys,
       setSessionState,
+      setSessionsEvent,
       setSidebarSessionSelectionAnchor,
       viewerContextId,
     ]
