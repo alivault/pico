@@ -1225,7 +1225,23 @@ function useAppShellSessionWorkspaceView({
 
     if (previousSessionId === sessionId) return
 
-    publishSidebarActiveSession(sessionStateRef.current, sessionId)
+    const currentSession = sessionStateRef.current
+    const optimisticSessionPath = sessionId
+      ? pendingRouteSessionPathRef.current ||
+        sidebarStore.state.derived.sidebarSessions.find(
+          (session) => session.id === sessionId
+        )?.path
+      : undefined
+    const optimisticActiveSession = sessionId
+      ? currentSession.draft || currentSession.sessionId !== sessionId
+        ? {
+            sessionId,
+            sessionPath: optimisticSessionPath,
+          }
+        : currentSession
+      : { draft: true }
+
+    publishSidebarActiveSession(optimisticActiveSession, sessionId)
     setStoreState(appUiStore, (current) => ({
       ...current,
       currentTab: current.currentTab === "git" ? "session" : current.currentTab,
@@ -1237,7 +1253,7 @@ function useAppShellSessionWorkspaceView({
           ? sessionId
           : null,
     }))
-  }, [appUiStore, publishSidebarActiveSession, sessionId])
+  }, [appUiStore, publishSidebarActiveSession, sessionId, sidebarStore])
 
   React.useEffect(() => {
     if (isMobile) return
