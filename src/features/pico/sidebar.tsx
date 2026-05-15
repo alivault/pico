@@ -463,6 +463,7 @@ type AppSidebarProps = {
   ) => void
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
+  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
   onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
@@ -636,6 +637,7 @@ type SidebarSessionItemProps = {
   ) => void
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
+  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
   onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
@@ -654,6 +656,7 @@ function SidebarSessionItem({
   onSessionClick,
   onRenameSession,
   onDeleteSession,
+  onSetSessionUnread,
   onMoveSession,
   onMoveSessionAnyDirectory,
   onTogglePinnedSession,
@@ -701,7 +704,8 @@ function SidebarSessionItem({
   const hasSessionActions =
     Boolean(
       onTogglePinnedSession ||
-      (entry.path && (onRenameSession || onDeleteSession)) ||
+      (entry.path &&
+        (onRenameSession || onDeleteSession || onSetSessionUnread)) ||
       hasMoveActions
     ) && !overlay
 
@@ -802,6 +806,13 @@ function SidebarSessionItem({
             {onTogglePinnedSession ? (
               <ContextMenuItem onClick={() => onTogglePinnedSession(entry)}>
                 {isPinned ? "Unpin" : "Pin to sidebar"}
+              </ContextMenuItem>
+            ) : null}
+            {onSetSessionUnread && entry.path ? (
+              <ContextMenuItem
+                onClick={() => onSetSessionUnread(entry, !entry.unread)}
+              >
+                {entry.unread ? "Mark as read" : "Mark as unread"}
               </ContextMenuItem>
             ) : null}
             {hasMoveActions ? (
@@ -1055,6 +1066,7 @@ type DirectorySessionGroupProps = {
   ) => void
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
+  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
   onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
@@ -1083,6 +1095,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   onSessionClick,
   onRenameSession,
   onDeleteSession,
+  onSetSessionUnread,
   onMoveSession,
   onMoveSessionAnyDirectory,
   onTogglePinnedSession,
@@ -1292,6 +1305,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                         onSessionClick={onSessionClick}
                         onRenameSession={onRenameSession}
                         onDeleteSession={onDeleteSession}
+                        onSetSessionUnread={onSetSessionUnread}
                         onMoveSession={onMoveSession}
                         onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                         onTogglePinnedSession={onTogglePinnedSession}
@@ -1352,6 +1366,7 @@ type PinnedSessionGroupProps = {
   ) => void
   onRenameSession?: (entry: SessionListEntry) => void
   onDeleteSession?: (entry: SessionListEntry) => void
+  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
   onMoveSession?: (entry: SessionListEntry, directory: string) => void
   onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
   onTogglePinnedSession?: (entry: SessionListEntry) => void
@@ -1370,6 +1385,7 @@ function PinnedSessionGroup({
   onSessionClick,
   onRenameSession,
   onDeleteSession,
+  onSetSessionUnread,
   onMoveSession,
   onMoveSessionAnyDirectory,
   onTogglePinnedSession,
@@ -1431,6 +1447,7 @@ function PinnedSessionGroup({
                   onSessionClick={onSessionClick}
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
+                  onSetSessionUnread={onSetSessionUnread}
                   onMoveSession={onMoveSession}
                   onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                   onTogglePinnedSession={onTogglePinnedSession}
@@ -1607,6 +1624,7 @@ function useAppSidebarView({
   onSessionClick,
   onRenameSession,
   onDeleteSession,
+  onSetSessionUnread,
   onMoveSession,
   onMoveSessionAnyDirectory,
   onTogglePinnedSession,
@@ -1859,6 +1877,7 @@ function useAppSidebarView({
             onSessionClick={onSessionClick}
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
+            onSetSessionUnread={onSetSessionUnread}
             onMoveSession={onMoveSession}
             onTogglePinnedSession={onTogglePinnedSession}
           />
@@ -1934,6 +1953,7 @@ function useAppSidebarView({
                                 onSessionClick={onSessionClick}
                                 onRenameSession={onRenameSession}
                                 onDeleteSession={onDeleteSession}
+                                onSetSessionUnread={onSetSessionUnread}
                                 onMoveSession={onMoveSession}
                                 onMoveSessionAnyDirectory={
                                   onMoveSessionAnyDirectory
@@ -1980,6 +2000,7 @@ function useAppSidebarView({
                 onSessionClick={onSessionClick}
                 onRenameSession={onRenameSession}
                 onDeleteSession={onDeleteSession}
+                onSetSessionUnread={onSetSessionUnread}
                 onMoveSession={onMoveSession}
                 onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                 onTogglePinnedSession={onTogglePinnedSession}
@@ -2006,6 +2027,7 @@ function useAppSidebarView({
                   onSessionClick={onSessionClick}
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
+                  onSetSessionUnread={onSetSessionUnread}
                   onMoveSession={onMoveSession}
                   onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                   onTogglePinnedSession={onTogglePinnedSession}

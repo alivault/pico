@@ -45,6 +45,7 @@ import { Route as ApiSessionsDeleteRouteImport } from './routes/api.sessions.del
 import { Route as ApiSessionTreeRouteImport } from './routes/api.session.tree'
 import { Route as ApiSessionSelectRouteImport } from './routes/api.session.select'
 import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
+import { Route as ApiSessionReadStateRouteImport } from './routes/api.session.read-state'
 import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
 import { Route as ApiSessionMoveRouteImport } from './routes/api.session.move'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api.session.history'
@@ -245,6 +246,11 @@ const ApiSessionRenameRoute = ApiSessionRenameRouteImport.update({
   path: '/api/session/rename',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionReadStateRoute = ApiSessionReadStateRouteImport.update({
+  id: '/api/session/read-state',
+  path: '/api/session/read-state',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionNewRoute = ApiSessionNewRouteImport.update({
   id: '/api/session/new',
   path: '/api/session/new',
@@ -380,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
   '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -435,6 +442,7 @@ export interface FileRoutesByTo {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
   '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -491,6 +499,7 @@ export interface FileRoutesById {
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
   '/api/session/new': typeof ApiSessionNewRoute
+  '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
   '/api/session/select': typeof ApiSessionSelectRoute
   '/api/session/tree': typeof ApiSessionTreeRouteWithChildren
@@ -548,6 +557,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/move'
     | '/api/session/new'
+    | '/api/session/read-state'
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
@@ -603,6 +613,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/move'
     | '/api/session/new'
+    | '/api/session/read-state'
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
@@ -658,6 +669,7 @@ export interface FileRouteTypes {
     | '/api/session/history'
     | '/api/session/move'
     | '/api/session/new'
+    | '/api/session/read-state'
     | '/api/session/rename'
     | '/api/session/select'
     | '/api/session/tree'
@@ -713,6 +725,7 @@ export interface RootRouteChildren {
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
   ApiSessionMoveRoute: typeof ApiSessionMoveRoute
   ApiSessionNewRoute: typeof ApiSessionNewRoute
+  ApiSessionReadStateRoute: typeof ApiSessionReadStateRoute
   ApiSessionRenameRoute: typeof ApiSessionRenameRoute
   ApiSessionSelectRoute: typeof ApiSessionSelectRoute
   ApiSessionTreeRoute: typeof ApiSessionTreeRouteWithChildren
@@ -975,6 +988,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionRenameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/read-state': {
+      id: '/api/session/read-state'
+      path: '/api/session/read-state'
+      fullPath: '/api/session/read-state'
+      preLoaderRoute: typeof ApiSessionReadStateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/new': {
       id: '/api/session/new'
       path: '/api/session/new'
@@ -1166,6 +1186,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
   ApiSessionMoveRoute: ApiSessionMoveRoute,
   ApiSessionNewRoute: ApiSessionNewRoute,
+  ApiSessionReadStateRoute: ApiSessionReadStateRoute,
   ApiSessionRenameRoute: ApiSessionRenameRoute,
   ApiSessionSelectRoute: ApiSessionSelectRoute,
   ApiSessionTreeRoute: ApiSessionTreeRouteWithChildren,

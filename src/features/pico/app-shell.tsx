@@ -187,6 +187,7 @@ import type {
   GitActionResponse,
   SessionDoneEvent,
   SessionListEntry,
+  SessionReadStateResponse,
   SessionStatusEvent,
 } from "@/lib/pico/api"
 
@@ -2374,6 +2375,57 @@ function useAppShellSessionWorkspaceView({
     return moved
   }
 
+  const setSessionUnread = async (entry: SessionListEntry, unread: boolean) => {
+    if (!viewerContextId || !entry.path) return false
+
+    const targetPath = entry.path
+    const previousUnread = Boolean(entry.unread)
+    const nextUnread = Boolean(unread)
+
+    const applyUnread = (value: boolean) => {
+      sidebarStore.setSidebarSessionStatusByKey((current) =>
+        mergeSidebarSessionStatusMap(current, {
+          type: "session_status",
+          sessionId: entry.id,
+          sessionPath: targetPath,
+          unread: value,
+        })
+      )
+    }
+
+    applyUnread(nextUnread)
+
+    try {
+      await fetchJson<Extract<SessionReadStateResponse, { ok: true }>>(
+        buildRequestUrl("/api/session/read-state", {
+          contextId: viewerContextId,
+          sessionId: activeSessionId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: targetPath, unread: nextUnread }),
+        }
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        refetchType: "active",
+      })
+      toast.success(
+        nextUnread ? "Marked session unread" : "Marked session read"
+      )
+      return true
+    } catch (error) {
+      applyUnread(previousUnread)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update session read state"
+      )
+      return false
+    }
+  }
+
   const moveSessionDirectoryTargetToPath = async (directory: string) => {
     const target = moveSessionDirectoryTargetRef.current
     if (!target) return false
@@ -3033,6 +3085,7 @@ function useAppShellSessionWorkspaceView({
       openRenameDialogForEntry,
       openSessionsDialog,
       openSettingsDialog,
+      setSessionUnread,
       selectSession: handleSelectSession,
     },
   }
@@ -3057,6 +3110,7 @@ function useAppShellSessionWorkspaceView({
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
       openSessionsDialog: actions?.openSessionsDialog ?? openSessionsDialog,
       openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
+      setSessionUnread: actions?.setSessionUnread ?? setSessionUnread,
       selectSession: actions?.selectSession ?? handleSelectSession,
     }
   }, [
@@ -3071,6 +3125,7 @@ function useAppShellSessionWorkspaceView({
     openRenameDialogForEntry,
     openSessionsDialog,
     openSettingsDialog,
+    setSessionUnread,
   ])
 
   return (

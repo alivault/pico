@@ -27,6 +27,10 @@ export type AppShellSessionWorkspaceHandle = {
   openRenameDialogForEntry: (entry: SessionListEntry) => void
   openSessionsDialog: () => void
   openSettingsDialog: () => void
+  setSessionUnread: (
+    entry: SessionListEntry,
+    unread: boolean
+  ) => Promise<boolean>
   selectSession: (
     nextSessionId?: string,
     options?: SelectSessionNavigationOptions

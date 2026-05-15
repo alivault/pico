@@ -288,6 +288,14 @@ export type SessionStatusEvent = {
   unread?: boolean
 }
 
+export type SessionReadStateResponse =
+  | {
+      ok: true
+      path: string
+      unread: boolean
+    }
+  | ApiErrorResponse
+
 export type SessionDoneEvent = {
   type: "session_done"
   id: string

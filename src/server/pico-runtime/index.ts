@@ -4358,6 +4358,40 @@ class PicoRuntime {
     return { ok: true, name: nextName }
   }
 
+  async setSessionReadState(
+    request: Request,
+    body: { path?: unknown; unread?: unknown }
+  ) {
+    const { context } = await this.resolveRequest(request)
+    const sessionPath = typeof body.path === "string" ? body.path.trim() : ""
+    const unread = typeof body.unread === "boolean" ? body.unread : false
+    if (!sessionPath) {
+      throw new Error("path is required")
+    }
+
+    if (unread) {
+      context.unreadFinished.add(sessionPath)
+    } else {
+      context.unreadFinished.delete(sessionPath)
+    }
+
+    const loadedEntry = [...this.sessionEntries.values()].find(
+      (entry) => this.getSessionPath(entry) === sessionPath
+    )
+    if (loadedEntry) {
+      this.sendSessionStatusToContext(context, loadedEntry)
+    } else {
+      this.sendToContext(context, {
+        type: "session_status",
+        sessionPath,
+        unread,
+      } satisfies SessionStatusEvent)
+    }
+
+    await this.sendSessionsToContext(context)
+    return { ok: true, path: sessionPath, unread }
+  }
+
   private async writeMovedSessionFile(
     sessionPath: string,
     nextCwd: string,

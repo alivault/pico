@@ -822,6 +822,9 @@ function useAppShellSidebarControllerView({
       onDeleteSession={(entry) => {
         sessionWorkspaceRef.current?.openDeleteDialog([entry])
       }}
+      onSetSessionUnread={(entry, unread) => {
+        void sessionWorkspaceRef.current?.setSessionUnread(entry, unread)
+      }}
       onMoveSession={(entry, directory) => {
         void sessionWorkspaceRef.current?.moveSessionToDirectory(
           entry,
