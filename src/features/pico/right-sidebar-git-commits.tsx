@@ -7,6 +7,7 @@ import {
   ExternalLinkIcon,
   FileDiffIcon,
   GitBranchIcon,
+  Minimize2Icon,
   MoreHorizontalIcon,
   TagIcon,
 } from "lucide-react"
@@ -1905,10 +1906,12 @@ export function GitCommitsSection({
   cwd,
   active,
   onOpenCommitDiff,
+  onRestoreEmbedded,
   embedded = false,
   flush = false,
 }: GitScopedProps & {
   onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
+  onRestoreEmbedded?: () => void
   embedded?: boolean
   flush?: boolean
 }) {
@@ -2030,7 +2033,7 @@ export function GitCommitsSection({
   if (flush) {
     return (
       <section className="flex h-full min-h-0 flex-col bg-background">
-        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-2">
+        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 py-1.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <div className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
               History
@@ -2041,6 +2044,20 @@ export function GitCommitsSection({
               </div>
             ) : null}
           </div>
+          {onRestoreEmbedded ? (
+            <TitleTooltip title="Restore history accordion">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0"
+                aria-label="Restore history accordion"
+                onClick={onRestoreEmbedded}
+              >
+                <Minimize2Icon className="size-4" />
+              </Button>
+            </TitleTooltip>
+          ) : null}
         </div>
         <div className="grid min-h-0 min-w-0 flex-1 gap-2 overflow-x-hidden overflow-y-auto">
           {content}

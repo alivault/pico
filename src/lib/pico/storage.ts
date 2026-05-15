@@ -45,6 +45,8 @@ export const RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY =
   "pico-right-sidebar-file-tree-width"
 export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
   "pico-right-sidebar-history-height"
+export const RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY =
+  "pico-right-sidebar-history-tab"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 

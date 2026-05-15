@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
+  Maximize2Icon,
   PlusIcon,
   Undo2Icon,
 } from "lucide-react"
@@ -317,6 +318,7 @@ function gitFileShouldPreviewPatch(file: GitChangeFile) {
 }
 
 type FileReviewContentProps = GitScopedProps & {
+  onMaximizeHistory?: () => void
   onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
   showEmbeddedHistory?: boolean
 }
@@ -329,6 +331,7 @@ function useFileReviewContentView({
   viewerContextId,
   cwd,
   active,
+  onMaximizeHistory,
   onOpenCommitDiff,
   onOpenFile,
   showEmbeddedHistory = true,
@@ -665,28 +668,46 @@ function useFileReviewContentView({
               onPointerDown={startHistoryResize}
             />
           ) : null}
-          <button
-            type="button"
-            aria-expanded={historyOpen}
+          <div
             className={cn(
-              "flex min-h-10 w-full shrink-0 items-center justify-between gap-3 bg-background px-3 py-2 text-left transition-[background-color,box-shadow] hover:bg-muted/60",
+              "flex min-h-10 shrink-0 items-center bg-background transition-shadow",
               historyHeaderShadowed && "shadow-sm"
             )}
-            onClick={() => {
-              dispatch({ type: "historyOpenToggled" })
-            }}
           >
-            <span className="flex min-w-0 items-center">
-              <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
-                History
+            <button
+              type="button"
+              aria-expanded={historyOpen}
+              className="flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/60"
+              onClick={() => {
+                dispatch({ type: "historyOpenToggled" })
+              }}
+            >
+              <span className="flex min-w-0 items-center">
+                <span className="text-xs font-bold tracking-[0.04em] text-muted-foreground uppercase">
+                  History
+                </span>
               </span>
-            </span>
-            {historyOpen ? (
-              <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-            )}
-          </button>
+              {historyOpen ? (
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+            {onMaximizeHistory ? (
+              <TitleTooltip title="Open history tab">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mr-1 size-8 shrink-0"
+                  aria-label="Open history tab"
+                  onClick={onMaximizeHistory}
+                >
+                  <Maximize2Icon className="size-4" />
+                </Button>
+              </TitleTooltip>
+            ) : null}
+          </div>
           {historyOpen ? (
             <div
               ref={historyScrollRef}

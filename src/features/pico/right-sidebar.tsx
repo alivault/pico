@@ -51,6 +51,11 @@ import type {
   RightSidebarTabValue,
 } from "@/features/pico/right-sidebar-types"
 import { useIsMobile } from "@/hooks/use-mobile"
+import {
+  RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY,
+  safeLocalStorageGetItem,
+  safeLocalStorageSetItem,
+} from "@/lib/pico"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 
@@ -60,6 +65,17 @@ type CommitDiffStyle = "unified" | "split"
 const EMPTY_RIGHT_SIDEBAR_FILE_TABS: NonNullable<
   RightSidebarProps["fileTabs"]
 > = []
+
+function readStoredHistoryAsTab() {
+  return safeLocalStorageGetItem(RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY) === "1"
+}
+
+function storeHistoryAsTab(historyAsTab: boolean) {
+  safeLocalStorageSetItem(
+    RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY,
+    historyAsTab ? "1" : "0"
+  )
+}
 
 function gitCommitDiffTabKey(
   commit: string,
@@ -617,6 +633,9 @@ export function RightSidebar({
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
   )
+  const [historyAsTab, setHistoryAsTabState] = React.useState(
+    readStoredHistoryAsTab
+  )
   const hasControlledActiveTab = controlledActiveTab !== undefined
   const activeTab = controlledActiveTab ?? localState.uncontrolledActiveTab
   const activeTabRef = React.useRef(activeTab)
@@ -629,6 +648,10 @@ export function RightSidebar({
   const setActiveTab = (tab: RightSidebarTabValue) => {
     dispatchLocal({ type: "set-active-tab", tab })
     onActiveTabChange?.(tab)
+  }
+  const setHistoryAsTab = (value: boolean) => {
+    setHistoryAsTabState(value)
+    storeHistoryAsTab(value)
   }
   const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
   const panelHasCardChrome = showToolbar && !isMobile
@@ -758,6 +781,7 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
+          showHistory={historyAsTab}
           showReview
         />
         <React.Activity mode={activeTab === "review" ? "visible" : "hidden"}>
@@ -766,9 +790,13 @@ export function RightSidebar({
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
               active={active && activeTab === "review"}
+              onMaximizeHistory={() => {
+                setHistoryAsTab(true)
+                setActiveTab("history")
+              }}
               onOpenCommitDiff={openCommitDiff}
               onOpenFile={openFile}
-              showEmbeddedHistory
+              showEmbeddedHistory={!historyAsTab}
             />
           </div>
         </React.Activity>
@@ -780,6 +808,10 @@ export function RightSidebar({
               active={active && activeTab === "history"}
               flush
               onOpenCommitDiff={openCommitDiff}
+              onRestoreEmbedded={() => {
+                setHistoryAsTab(false)
+                setActiveTab("review")
+              }}
             />
           </div>
         </React.Activity>
