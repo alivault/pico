@@ -1117,16 +1117,16 @@ export function useAppShellPromptMutations({
   const reorderPending = React.useCallback(
     async (pendingId: string, direction: -1 | 1) => {
       if (!viewerContextId) return
-      const next = movePendingComposerMessage(
-        pendingMessagesRef.current,
-        pendingId,
-        direction
-      )
+      const previous = pendingMessagesRef.current
+      const next = movePendingComposerMessage(previous, pendingId, direction)
       if (!next) return
+
+      updatePendingMessages(() => next)
 
       try {
         await editPendingMessagesMutation.mutateAsync(next)
       } catch (error) {
+        updatePendingMessages(() => previous)
         toast.error(
           error instanceof Error
             ? error.message
@@ -1134,7 +1134,12 @@ export function useAppShellPromptMutations({
         )
       }
     },
-    [editPendingMessagesMutation, pendingMessagesRef, viewerContextId]
+    [
+      editPendingMessagesMutation,
+      pendingMessagesRef,
+      updatePendingMessages,
+      viewerContextId,
+    ]
   )
 
   return {

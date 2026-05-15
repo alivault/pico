@@ -97,6 +97,7 @@ export const ComposerPendingMessages = React.memo(
       pendingMessageEditReducer,
       EMPTY_PENDING_MESSAGE_EDIT_STATE
     )
+    const [openSections, setOpenSections] = React.useState(["pending-prompts"])
     const { editingPendingId, editText, editError } = editState
 
     const editingMessage = editingPendingId
@@ -137,7 +138,12 @@ export const ComposerPendingMessages = React.memo(
     }
 
     return (
-      <Accordion className="rounded-2xl border bg-card">
+      <Accordion
+        multiple
+        value={openSections}
+        onValueChange={setOpenSections}
+        className="rounded-2xl border bg-card"
+      >
         <AccordionItem value="pending-prompts" className="border-0">
           <AccordionTrigger className="min-h-10 items-center gap-3 px-3 py-2 hover:no-underline">
             <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
