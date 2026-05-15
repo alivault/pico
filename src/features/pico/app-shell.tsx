@@ -231,7 +231,15 @@ type AppShellSessionWorkspaceProps = {
   sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
 }
 
-function AppShellSessionWorkspace({
+function AppShellSessionWorkspace(
+  props: AppShellSessionWorkspaceProps & {
+    ref?: React.Ref<AppShellSessionWorkspaceHandle>
+  }
+) {
+  return useAppShellSessionWorkspaceView(props)
+}
+
+function useAppShellSessionWorkspaceView({
   viewerContextId,
   sessionId,
   onSelectSession,
