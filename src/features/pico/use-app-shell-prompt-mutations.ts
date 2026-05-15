@@ -805,9 +805,9 @@ export function useAppShellPromptMutations({
     pendingDraftFollowUpsRef.current = []
     setPendingDraftFollowUps([])
 
-    for (let index = 0; index < followUps.length; index += 1) {
+    const flushFollowUp = async (index = 0): Promise<boolean> => {
       const followUp = followUps[index]
-      if (!followUp) continue
+      if (!followUp) return true
 
       try {
         await promptMutation.mutateAsync({
@@ -832,9 +832,11 @@ export function useAppShellPromptMutations({
         )
         return false
       }
+
+      return await flushFollowUp(index + 1)
     }
 
-    return true
+    return await flushFollowUp()
   }, [
     composerTextRef,
     promptMutation,
