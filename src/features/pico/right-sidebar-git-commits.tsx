@@ -61,7 +61,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { TitleTooltip } from "@/components/ui/tooltip"
+import {
+  TitleTooltip,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
@@ -1901,6 +1906,40 @@ function GitCommitRows({
   )
 }
 
+function RestoreHistoryAccordionButton({
+  onRestoreEmbedded,
+}: {
+  onRestoreEmbedded: () => void
+}) {
+  const [tooltipOpen, setTooltipOpen] = React.useState(false)
+
+  const closeTooltip = () => setTooltipOpen(false)
+
+  return (
+    <Tooltip open={tooltipOpen} onOpenChange={(open) => setTooltipOpen(open)}>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            aria-label="Restore history accordion"
+            onPointerDown={closeTooltip}
+            onClick={() => {
+              closeTooltip()
+              onRestoreEmbedded()
+            }}
+          >
+            <Minimize2Icon className="size-4" />
+          </Button>
+        }
+      />
+      <TooltipContent>Restore history accordion</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function GitCommitsSection({
   viewerContextId,
   cwd,
@@ -2045,18 +2084,9 @@ export function GitCommitsSection({
             ) : null}
           </div>
           {onRestoreEmbedded ? (
-            <TitleTooltip title="Restore history accordion">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0"
-                aria-label="Restore history accordion"
-                onClick={onRestoreEmbedded}
-              >
-                <Minimize2Icon className="size-4" />
-              </Button>
-            </TitleTooltip>
+            <RestoreHistoryAccordionButton
+              onRestoreEmbedded={onRestoreEmbedded}
+            />
           ) : null}
         </div>
         <div className="grid min-h-0 min-w-0 flex-1 gap-2 overflow-x-hidden overflow-y-auto">
