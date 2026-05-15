@@ -1,6 +1,5 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
-import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import type { ExtensionUiEvent, UiRequestResponse } from "@/lib/pico/api"
@@ -701,31 +700,29 @@ export function AppShellUiRequestDialogController({
     }
   }
 
-  const resolveUiRequestMutation = useMutation({
-    mutationFn: async ({
-      requestId,
-      body,
-    }: {
-      requestId: string
-      body: Record<string, unknown>
-    }) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
+  const resolveUiRequestResponse = async ({
+    requestId,
+    body,
+  }: {
+    requestId: string
+    body: Record<string, unknown>
+  }) => {
+    if (!viewerContextId) {
+      throw new Error("Viewer context unavailable")
+    }
 
-      return await fetchJson<UiRequestResponse>(
-        buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
-          contextId: viewerContextId,
-          sessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      )
-    },
-  })
+    return await fetchJson<UiRequestResponse>(
+      buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
+        contextId: viewerContextId,
+        sessionId,
+      }),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    )
+  }
 
   const clearRequest = (requestId?: string) => {
     if (requestId && pendingUiRequestRef.current?.id !== requestId) return
@@ -740,10 +737,7 @@ export function AppShellUiRequestDialogController({
 
     const requestId = pendingUiRequest.id
     try {
-      await resolveUiRequestMutation.mutateAsync({
-        requestId,
-        body,
-      })
+      await resolveUiRequestResponse({ requestId, body })
       clearRequest(requestId)
     } catch (error) {
       toast.error(
