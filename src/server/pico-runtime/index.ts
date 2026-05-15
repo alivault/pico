@@ -2959,10 +2959,10 @@ class PicoRuntime {
     const nextPending = sortPendingUserMessages(pendingMessages)
     const canReplayPending = Boolean(entry.session.isStreaming)
 
-    if (!canReplayPending && nextPending.length > 0) {
-      throw new Error(
-        "Pending prompts can only be changed while the session is streaming."
-      )
+    if (!canReplayPending) {
+      entry.pendingUserMessages = nextPending
+      await this.broadcastEntryState(entry)
+      return entry.pendingUserMessages
     }
 
     entry.pendingQueueMutation = true
@@ -3793,12 +3793,6 @@ class PicoRuntime {
       pendingMessages
     )
 
-    if (!activeEntry.session.isStreaming && nextPendingMessages.length > 0) {
-      throw new Error(
-        "Pending prompts can only be changed while the session is streaming."
-      )
-    }
-
     await this.replacePendingUserMessages(activeEntry, nextPendingMessages)
     return {
       ok: true,
@@ -3840,11 +3834,6 @@ class PicoRuntime {
 
     activeEntry.canceledPendingUserMessageIds.delete(pendingId)
     pendingMessages.splice(pendingIndex, 1)
-    if (!activeEntry.session.isStreaming && pendingMessages.length > 0) {
-      throw new Error(
-        "Pending prompts can only be changed while the session is streaming."
-      )
-    }
 
     await this.replacePendingUserMessages(activeEntry, pendingMessages)
     return { ok: true, pendingId }
