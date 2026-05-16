@@ -458,6 +458,12 @@ function SettingsThemeBody({
   onThemeSelect,
   onCancelThemePreview,
 }: SettingsThemeBodyProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
   return (
     <div
       role="presentation"
@@ -494,6 +500,7 @@ function SettingsThemeBody({
         className="min-h-0 flex-1 rounded-none!"
       >
         <CommandInput
+          ref={inputRef}
           value={themeQuery}
           onValueChange={onThemeQueryChange}
           placeholder="Search themes"
@@ -608,6 +615,7 @@ function AppShellSettingsDialog({
     dispatch({ type: "preview-theme", selectedTheme: theme })
     themePreviewInitialRef.current = theme
     onThemeChange(theme)
+    onOpenChange(false)
   }
 
   const cancelThemePreview = () => {
