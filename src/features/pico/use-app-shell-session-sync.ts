@@ -438,23 +438,32 @@ function shouldPublishSessionState(previous: SessionState, next: SessionState) {
   )
 }
 
+function stateSyncPayloadDraftKey(payload: StateSyncPayload) {
+  return promptDraftKey({
+    cwd: typeof payload.cwd === "string" ? payload.cwd : undefined,
+    sessionFile:
+      typeof payload.sessionFile === "string" ? payload.sessionFile : undefined,
+    sessionId:
+      typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+  })
+}
+
 function stateSyncPayloadConfirmsPendingDraft(
   payload: StateSyncPayload,
   ownerKey: string | null
 ) {
   if (!ownerKey || payload.draft !== true) return false
 
-  return (
-    promptDraftKey({
-      cwd: typeof payload.cwd === "string" ? payload.cwd : undefined,
-      sessionFile:
-        typeof payload.sessionFile === "string"
-          ? payload.sessionFile
-          : undefined,
-      sessionId:
-        typeof payload.sessionId === "string" ? payload.sessionId : undefined,
-    }) === ownerKey
-  )
+  return stateSyncPayloadDraftKey(payload) === ownerKey
+}
+
+function stateSyncPayloadConfirmsOptimisticDraft(
+  payload: StateSyncPayload,
+  previousState: SessionState
+) {
+  if (payload.draft !== true) return false
+
+  return stateSyncPayloadDraftKey(payload) === promptDraftKey(previousState)
 }
 
 function shouldIgnoreOptimisticDraftStateSync(options: {
@@ -473,10 +482,17 @@ function shouldIgnoreOptimisticDraftStateSync(options: {
     return false
   }
 
-  return !stateSyncPayloadConfirmsPendingDraft(
-    options.payload,
-    options.ownerKey
-  )
+  if (
+    stateSyncPayloadConfirmsPendingDraft(options.payload, options.ownerKey) ||
+    stateSyncPayloadConfirmsOptimisticDraft(
+      options.payload,
+      options.previousState
+    )
+  ) {
+    return false
+  }
+
+  return true
 }
 
 export function useAppShellSessionSync({
