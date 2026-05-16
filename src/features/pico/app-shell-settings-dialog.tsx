@@ -6,6 +6,8 @@ import {
   THEME_COLOR_MODES,
   THEME_FAMILIES,
   themeColorModeLabel,
+  themeFamilyDescription,
+  themeFamilyKeywords,
   themeFamilyLabel,
   type ThemeColorMode,
   type ThemeFamily,
@@ -138,21 +140,6 @@ function nextThemeColorMode(currentMode: ThemeColorMode) {
   return THEME_COLOR_MODE_OPTIONS[nextIndex] ?? "auto"
 }
 
-function themeDescription(theme: ThemeFamily) {
-  switch (theme) {
-    case "default":
-      return "Use Pico's default palette."
-    case "flexoki":
-      return "Use Flexoki's warm paper and inky dark palettes."
-    default:
-      return "Use this theme."
-  }
-}
-
-function themeKeywords(theme: ThemeFamily) {
-  return [theme, themeFamilyLabel(theme), themeDescription(theme)]
-}
-
 function settingsCommandKeywords(command: SettingsCommand) {
   return [
     command.title,
@@ -268,9 +255,14 @@ function getSettingsCommandGroups({
         {
           id: "theme",
           title: "Theme",
-          description: "Choose between Default and Flexoki.",
+          description: "Choose a color palette.",
           valueLabel: themeFamilyLabel(currentTheme),
-          keywords: ["color", "mode", "default", "flexoki"],
+          keywords: [
+            "color",
+            "mode",
+            "palette",
+            ...THEME_OPTIONS.flatMap((theme) => themeFamilyKeywords(theme)),
+          ],
           onSelect: onThemeCommand,
         },
         {
@@ -532,7 +524,7 @@ function SettingsThemeBody({
               <CommandItem
                 key={theme}
                 value={theme}
-                keywords={themeKeywords(theme)}
+                keywords={themeFamilyKeywords(theme)}
                 onMouseEnter={() => onThemePreview(theme)}
                 onSelect={() => onThemeSelect(theme)}
                 data-checked={theme === currentTheme ? true : undefined}
@@ -543,7 +535,7 @@ function SettingsThemeBody({
                     {themeFamilyLabel(theme)}
                   </span>
                   <span className="line-clamp-2 text-xs text-muted-foreground">
-                    {themeDescription(theme)}
+                    {themeFamilyDescription(theme)}
                   </span>
                 </div>
               </CommandItem>

@@ -1,30 +1,12 @@
-import type {
-  AppliedThemeClass,
-  PromptDraftTarget,
-  ResolvedThemeMode,
-  SessionEntryIdentity,
-  ThemeColorMode,
-  ThemeFamily,
-} from "@/lib/pico"
+import type { PromptDraftTarget, SessionEntryIdentity } from "@/lib/pico"
+import {
+  normalizeThemeColorMode,
+  normalizeThemeFamily,
+} from "@/lib/pico/themes"
 
 export const THEME_STORAGE_KEY = "pico-theme"
 export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
 export const APPLIED_THEME_STORAGE_KEY = "pico-applied-theme"
-export const THEME_FAMILIES = [
-  "default",
-  "flexoki",
-] as const satisfies ReadonlyArray<ThemeFamily>
-export const THEME_COLOR_MODES = [
-  "auto",
-  "light",
-  "dark",
-] as const satisfies ReadonlyArray<ThemeColorMode>
-export const APPLIED_THEME_CLASSES = [
-  "light",
-  "dark",
-  "flexoki-light",
-  "flexoki-dark",
-] as const satisfies ReadonlyArray<AppliedThemeClass>
 export const DRAFT_DIRECTORY_STORAGE_KEY = "pico-draft-directory"
 export const SIDEBAR_DIRECTORIES_STORAGE_KEY = "pico-sidebar-directories"
 export const COLLAPSED_DIRECTORIES_STORAGE_KEY = "pico-collapsed-directories"
@@ -250,63 +232,6 @@ export function readStoredRecentDirectories() {
   } catch {
     return []
   }
-}
-
-export function normalizeThemeFamily(value: unknown): ThemeFamily {
-  return value === "flexoki" ||
-    value === "flexoki-light" ||
-    value === "flexoki-dark"
-    ? "flexoki"
-    : "default"
-}
-
-export function normalizeThemeColorMode(value: unknown): ThemeColorMode {
-  if (value === "auto" || value === "system") return "auto"
-  if (value === "light" || value === "flexoki-light") return "light"
-  if (value === "dark" || value === "flexoki-dark") return "dark"
-  return "auto"
-}
-
-function resolvedThemeMode(
-  mode: ThemeColorMode,
-  systemTheme?: string
-): ResolvedThemeMode {
-  if (mode === "auto") {
-    return systemTheme === "dark" ? "dark" : "light"
-  }
-
-  return mode
-}
-
-export function appliedThemeClass(
-  family: ThemeFamily,
-  mode: ThemeColorMode,
-  systemTheme?: string
-): AppliedThemeClass {
-  const resolvedMode = resolvedThemeMode(mode, systemTheme)
-
-  if (family === "flexoki") {
-    return resolvedMode === "dark" ? "flexoki-dark" : "flexoki-light"
-  }
-
-  return resolvedMode
-}
-
-export function themeFamilyLabel(theme: ThemeFamily) {
-  return theme === "flexoki" ? "Flexoki" : "Default"
-}
-
-export function themeColorModeLabel(
-  mode: ThemeColorMode,
-  systemTheme?: string
-) {
-  if (mode === "auto") {
-    if (!systemTheme) return "Auto"
-
-    return `Auto (${resolvedThemeMode(mode, systemTheme) === "light" ? "Light" : "Dark"})`
-  }
-
-  return mode === "light" ? "Light" : "Dark"
 }
 
 export function readStoredTheme() {

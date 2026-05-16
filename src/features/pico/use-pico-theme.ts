@@ -6,12 +6,12 @@ import {
   THEME_COLOR_MODE_STORAGE_KEY,
   THEME_STORAGE_KEY,
   appliedThemeClass,
+  appliedThemeClassColorMode,
   normalizeThemeColorMode,
   normalizeThemeFamily,
   readStoredTheme,
   readStoredThemeColorMode,
   safeLocalStorageSetItem,
-  type AppliedThemeClass,
   type ThemeColorMode,
   type ThemeFamily,
 } from "@/lib/pico"
@@ -24,15 +24,16 @@ export function usePicoTheme() {
   const [colorMode, setColorModeState] = React.useState<ThemeColorMode>(() =>
     readStoredThemeColorMode()
   )
-  const appliedTheme = appliedThemeClass(
-    themeFamily,
-    colorMode,
-    systemTheme
-  ) as AppliedThemeClass
+  const appliedTheme = appliedThemeClass(themeFamily, colorMode, systemTheme)
 
   React.useEffect(() => {
     setTheme(appliedTheme)
     safeLocalStorageSetItem(APPLIED_THEME_STORAGE_KEY, appliedTheme)
+
+    const appliedThemeMode = appliedThemeClassColorMode(appliedTheme)
+    if (appliedThemeMode) {
+      document.documentElement.dataset.picoThemeMode = appliedThemeMode
+    }
   }, [appliedTheme, setTheme])
 
   const previewThemeFamily = (value: ThemeFamily) => {

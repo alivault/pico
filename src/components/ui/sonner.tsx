@@ -8,14 +8,12 @@ import {
 } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
+import { appliedThemeClassColorMode } from "@/lib/pico"
 
 function sonnerThemeFromAppliedTheme(theme?: string): ToasterProps["theme"] {
-  if (theme === "flexoki-dark") return "dark"
-  if (theme === "flexoki-light") return "light"
-  if (theme === "dark" || theme === "light" || theme === "system") {
-    return theme
-  }
-  return "system"
+  if (theme === "system") return "system"
+
+  return appliedThemeClassColorMode(theme) ?? "system"
 }
 
 const Toaster = ({ ...props }: ToasterProps) => {
