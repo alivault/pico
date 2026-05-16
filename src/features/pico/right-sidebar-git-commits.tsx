@@ -119,7 +119,7 @@ const GIT_GRAPH_LANE_COLORS = [
 ]
 const GIT_GRAPH_NULL_VERTEX_ID = -1
 const GIT_GRAPH_ROW_HEIGHT = 32
-const GIT_GRAPH_COMMIT_DETAILS_HEIGHT = 300
+const GIT_GRAPH_COMMIT_DETAILS_HEIGHT = 200
 const GIT_GRAPH_LANE_WIDTH = 14
 const GIT_GRAPH_OFFSET_X = 12
 
@@ -1625,7 +1625,7 @@ function useGitCommitRowView({
           />
         </ContextMenu>
       </div>
-      <AccordionContent className="relative h-[300px] border-b border-border/70 bg-muted/50 p-0">
+      <AccordionContent className="relative h-[200px] border-b border-border/70 bg-muted/50 p-0">
         <div
           ref={commitBodyScrollRef}
           className="h-full overflow-y-auto pr-2 pb-2"
