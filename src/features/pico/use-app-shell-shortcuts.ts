@@ -244,7 +244,7 @@ export function useAppShellShortcuts({
     sessionButtons[nextIndex]?.focus()
   }
 
-  const handleSidebarDelete = (event: KeyboardEvent) => {
+  const handleSidebarBackspaceDelete = (event: KeyboardEvent) => {
     const context = getShortcutContext(event)
 
     if (
@@ -254,17 +254,10 @@ export function useAppShellShortcuts({
       return
     }
 
-    const targetsToDelete =
-      context.selectedSidebarSessions.length > 0
-        ? context.selectedSidebarSessions
-        : context.focusedSidebarSession?.path
-          ? [context.focusedSidebarSession]
-          : []
-
-    if (targetsToDelete.length === 0) return
+    if (context.selectedSidebarSessions.length <= 1) return
 
     event.preventDefault()
-    shortcutActionsRef.current.openDeleteDialog(targetsToDelete)
+    shortcutActionsRef.current.openDeleteDialog(context.selectedSidebarSessions)
   }
 
   const handleFocusPrompt = (event: KeyboardEvent) => {
@@ -480,13 +473,13 @@ export function useAppShellShortcuts({
       },
     })),
     {
-      hotkey: "Delete",
-      callback: handleSidebarDelete,
+      hotkey: "Backspace",
+      callback: handleSidebarBackspaceDelete,
       options: {
         meta: {
           name: "Delete selected sidebar sessions",
           description:
-            "Open the delete dialog for focused or selected sessions.",
+            "Open the delete dialog for multiple selected sidebar sessions.",
         },
       },
     },
