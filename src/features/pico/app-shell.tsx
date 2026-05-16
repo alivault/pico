@@ -81,6 +81,8 @@ import {
 import {
   createAppShellSidebarStore,
   mergeSidebarSessionStatusMap,
+  removeOptimisticSidebarSessionEntry,
+  upsertOptimisticSidebarSessionEntry,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
 } from "@/features/pico/app-shell-sidebar-store"
@@ -422,6 +424,7 @@ function useAppShellSessionWorkspaceView({
     images: Array<PromptImage>
     streamingBehavior?: StreamingBehavior
     optimisticId?: string
+    optimisticSidebarSessionId?: string
   } | null> | null>(null)
   if (!pendingDraftPromptStoreRef.current) {
     pendingDraftPromptStoreRef.current = createPicoStore<{
@@ -430,6 +433,7 @@ function useAppShellSessionWorkspaceView({
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
       optimisticId?: string
+      optimisticSidebarSessionId?: string
     } | null>(null)
   }
   const pendingDraftPromptStore = pendingDraftPromptStoreRef.current
@@ -926,6 +930,7 @@ function useAppShellSessionWorkspaceView({
         images: Array<PromptImage>
         streamingBehavior?: StreamingBehavior
         optimisticId?: string
+        optimisticSidebarSessionId?: string
       } | null>
     >
   >(
@@ -2056,6 +2061,113 @@ function useAppShellSessionWorkspaceView({
     []
   )
 
+  const addOptimisticSidebarSession = React.useCallback(
+    (options?: { id?: string; cwd?: string }) => {
+      const currentState = sessionStateRef.current
+      const optimisticId = (
+        options?.id ||
+        currentState.sessionKey ||
+        `optimistic:${promptDraftKey(currentState)}`
+      ).trim()
+      const cwd = (
+        options?.cwd ||
+        currentState.cwd ||
+        defaultNewSessionDirectory
+      ).trim()
+      if (!optimisticId || !cwd) return undefined
+
+      const modified = new Date().toISOString()
+      const entry = {
+        id: optimisticId,
+        cwd,
+        title: "New session",
+        modified,
+        lastUserMessageAt: modified,
+        streaming: true,
+        unread: false,
+        optimistic: true,
+      } satisfies SessionListEntry
+      const entryKey = sessionListEntryKey(entry)
+
+      sidebarStore.setSidebarDirectories((current) => {
+        const normalizedCurrent = normalizeStoredDirectoryList(current)
+        if (normalizedCurrent.includes(cwd)) return current
+
+        const nextDirectories = normalizeStoredDirectoryList([
+          cwd,
+          ...normalizedCurrent,
+        ])
+        safeLocalStorageSetItem(
+          SIDEBAR_DIRECTORIES_STORAGE_KEY,
+          JSON.stringify(nextDirectories)
+        )
+        return nextDirectories
+      })
+      const optimisticEntry = {
+        ...entry,
+        id: optimisticId,
+        cwd,
+      }
+      sidebarStore.setDirectoryIndexDataByPath((current) =>
+        upsertOptimisticSidebarSessionEntry(current, optimisticEntry)
+      )
+      sidebarStore.setSessionsEvent((current) =>
+        current
+          ? {
+              ...current,
+              directoryIndexes: upsertOptimisticSidebarSessionEntry(
+                current.directoryIndexes || {},
+                optimisticEntry
+              ),
+            }
+          : current
+      )
+      if (entryKey) {
+        sidebarStore.setSelectedSidebarSessionKeys((current) =>
+          sameStringArray(current, [entryKey]) ? current : [entryKey]
+        )
+        sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+          current === entryKey ? current : entryKey
+        )
+      }
+
+      return optimisticId
+    },
+    [defaultNewSessionDirectory, sessionStateRef, sidebarStore]
+  )
+
+  const removeOptimisticSidebarSession = React.useCallback(
+    (optimisticId: string | undefined) => {
+      const targetId = optimisticId?.trim() || ""
+      if (!targetId) return
+
+      const entryKey = sessionListEntryKey({ id: targetId })
+      sidebarStore.setDirectoryIndexDataByPath((current) =>
+        removeOptimisticSidebarSessionEntry(current, targetId)
+      )
+      sidebarStore.setSessionsEvent((current) =>
+        current?.directoryIndexes
+          ? {
+              ...current,
+              directoryIndexes: removeOptimisticSidebarSessionEntry(
+                current.directoryIndexes,
+                targetId
+              ),
+            }
+          : current
+      )
+      if (entryKey) {
+        sidebarStore.setSelectedSidebarSessionKeys((current) =>
+          current.filter((key) => key !== entryKey)
+        )
+        sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+          current === entryKey ? "" : current
+        )
+      }
+    },
+    [sidebarStore]
+  )
+
   const clearSelectedSidebarSelection = React.useCallback(() => {
     sidebarStore.setSelectedSidebarSessionKeys((current) =>
       current.length === 0 ? current : []
@@ -2100,6 +2212,8 @@ function useAppShellSessionWorkspaceView({
     prefetchDirectorySessionsIndex,
     addOptimisticUserMessage,
     removeOptimisticUserMessage,
+    addOptimisticSidebarSession,
+    removeOptimisticSidebarSession,
     setSidebarDirectories: sidebarStore.setSidebarDirectories,
     setStoredDraftDirectory,
     setDraftSessionLoadingOwnerKey,

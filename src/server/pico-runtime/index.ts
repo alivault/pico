@@ -1298,7 +1298,15 @@ class PicoRuntime {
   }
 
   private async sessionFallbackInfo(entry: SessionEntry) {
-    const firstMessage = this.getSessionFirstMessage(entry)
+    const sessionName = entry.session.sessionName
+    const waitingForAutoName = Boolean(
+      entry.sessionNaming.pendingGeneration &&
+      !cleanupSessionNameCandidate(sessionName)
+    )
+    const firstMessage = waitingForAutoName
+      ? ""
+      : this.getSessionFirstMessage(entry)
+    const listName = waitingForAutoName ? "New session" : sessionName
     const lastMessage = getSessionLastCompleteMessageInfo(
       entry.session.messages
     )
@@ -1306,10 +1314,10 @@ class PicoRuntime {
       path: entry.session.sessionFile,
       id: entry.session.sessionId,
       cwd: entry.cwd,
-      name: entry.session.sessionName,
+      name: listName,
       firstMessage,
       title: getSessionListTitle({
-        name: entry.session.sessionName,
+        name: listName,
         firstMessage,
       }),
       modified: await this.sessionEntryModified(entry),

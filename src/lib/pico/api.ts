@@ -268,6 +268,7 @@ export type SessionListEntry = {
   contextUsage?: SessionState["contextUsage"]
   streaming?: boolean
   unread?: boolean
+  optimistic?: boolean
 }
 
 export type SessionsEvent = SessionsPayload & {

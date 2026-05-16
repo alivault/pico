@@ -9,7 +9,9 @@ import {
   clearUnreadForActiveSidebarSession,
   fetchDirectorySessionsIndexes,
   getRenderedSidebarSessionKeys,
+  isOptimisticSidebarSessionEntry,
   mergeDirectoryIndexData,
+  mergeDirectoryIndexDataPreservingOptimistic,
   mergeSidebarSessionStatusMap,
   sameDirectoryIndexDataRecord,
   sameSessionEntryRecord,
@@ -438,7 +440,7 @@ function useAppShellSidebarControllerView({
         sidebarStore.setSidebarState((current) => {
           const nextDirectoryIndexDataByPath =
             Object.keys(activeDirectoryIndexes).length > 0
-              ? mergeDirectoryIndexData(
+              ? mergeDirectoryIndexDataPreservingOptimistic(
                   current.directoryIndexDataByPath,
                   activeDirectoryIndexes
                 )
@@ -605,7 +607,7 @@ function useAppShellSidebarControllerView({
         sidebarStore.setSidebarState((current) => {
           const nextDirectoryIndexDataByPath =
             Object.keys(activeDirectoryIndexes).length > 0
-              ? mergeDirectoryIndexData(
+              ? mergeDirectoryIndexDataPreservingOptimistic(
                   current.directoryIndexDataByPath,
                   activeDirectoryIndexes
                 )
@@ -780,7 +782,7 @@ function useAppShellSidebarControllerView({
     }
 
     setSidebarSelection([key], key)
-    if (entry.id) {
+    if (entry.id && !isOptimisticSidebarSessionEntry(entry)) {
       sessionWorkspaceRef.current?.selectSession(entry.id, {
         sessionPath: entry.path,
       })

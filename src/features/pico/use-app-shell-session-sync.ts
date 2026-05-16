@@ -247,6 +247,9 @@ function sameSessionListEntries(
     if (Boolean(leftEntry.unread) !== Boolean(rightEntry.unread)) {
       return false
     }
+    if (Boolean(leftEntry.optimistic) !== Boolean(rightEntry.optimistic)) {
+      return false
+    }
   }
 
   return true

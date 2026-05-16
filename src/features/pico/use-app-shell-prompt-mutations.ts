@@ -40,6 +40,7 @@ type PendingDraftPrompt = {
   images: Array<PromptImage>
   streamingBehavior?: StreamingBehavior
   optimisticId?: string
+  optimisticSidebarSessionId?: string
 }
 
 type PendingDraftFollowUp = {
@@ -90,6 +91,11 @@ type UseAppShellPromptMutationsOptions = {
     streamingBehavior?: StreamingBehavior
   }) => string
   removeOptimisticUserMessage: (pendingId: string | undefined) => void
+  addOptimisticSidebarSession: (options?: {
+    id?: string
+    cwd?: string
+  }) => string | undefined
+  removeOptimisticSidebarSession: (optimisticId: string | undefined) => void
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setStoredDraftDirectory: React.Dispatch<React.SetStateAction<string>>
   setDraftSessionLoadingOwnerKey: React.Dispatch<
@@ -310,6 +316,8 @@ export function useAppShellPromptMutations({
   prefetchDirectorySessionsIndex,
   addOptimisticUserMessage,
   removeOptimisticUserMessage,
+  addOptimisticSidebarSession,
+  removeOptimisticSidebarSession,
   setSidebarDirectories,
   setStoredDraftDirectory,
   setDraftSessionLoadingOwnerKey,
@@ -457,6 +465,7 @@ export function useAppShellPromptMutations({
       }
 
       removeOptimisticUserMessage(nextPrompt.optimisticId)
+      removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
       for (const followUp of pendingDraftFollowUpsRef.current) {
         removeOptimisticUserMessage(followUp.optimisticId)
       }
@@ -472,6 +481,7 @@ export function useAppShellPromptMutations({
     },
     [
       applyPendingDraftPromptToComposer,
+      removeOptimisticSidebarSession,
       removeOptimisticUserMessage,
       setAwaitingFirstTurn,
       setPendingDraftFollowUps,
@@ -606,11 +616,13 @@ export function useAppShellPromptMutations({
           images,
           queued: false,
         })
+        const optimisticSidebarSessionId = addOptimisticSidebarSession()
         const nextPrompt = {
           ownerKey,
           message,
           images,
           optimisticId,
+          optimisticSidebarSessionId,
         } satisfies PendingDraftPrompt
         pendingDraftPromptRef.current = nextPrompt
         setPendingDraftPrompt(nextPrompt)
@@ -642,6 +654,7 @@ export function useAppShellPromptMutations({
       return true
     },
     [
+      addOptimisticSidebarSession,
       addOptimisticUserMessage,
       composerDiffLineCommentsRef,
       composerImagesRef,
@@ -711,6 +724,7 @@ export function useAppShellPromptMutations({
       options?: {
         forceFirstPrompt?: boolean
         optimisticId?: string
+        optimisticSidebarSessionId?: string
       }
     ) => {
       if (!viewerContextId) return false
@@ -758,6 +772,11 @@ export function useAppShellPromptMutations({
               images: submittedImages,
               queued: false,
             }))
+      const optimisticSidebarSessionId =
+        options?.optimisticSidebarSessionId ??
+        (!treatAsQueuedPrompt && sessionStateRef.current.draft
+          ? addOptimisticSidebarSession()
+          : undefined)
 
       if (queuedPendingId && normalizedStreamingBehavior) {
         addOptimisticPendingMessage({
@@ -803,6 +822,7 @@ export function useAppShellPromptMutations({
           removeOptimisticPendingMessage(queuedPendingId)
         }
         removeOptimisticUserMessage(optimisticId)
+        removeOptimisticSidebarSession(optimisticSidebarSessionId)
         if (!treatAsQueuedPrompt) {
           awaitingFirstTurnAssistantOutputSignatureRef.current = null
           awaitingFirstTurnRef.current = false
@@ -841,6 +861,7 @@ export function useAppShellPromptMutations({
     },
     [
       addOptimisticPendingMessage,
+      addOptimisticSidebarSession,
       addOptimisticUserMessage,
       composerDiffLineCommentsRef,
       composerImagesRef,
@@ -851,6 +872,7 @@ export function useAppShellPromptMutations({
       queuePendingDraftPrompt,
       sessionStateRef,
       removeOptimisticPendingMessage,
+      removeOptimisticSidebarSession,
       removeOptimisticUserMessage,
       replaceComposerDraft,
       setAwaitingFirstTurn,
@@ -940,8 +962,10 @@ export function useAppShellPromptMutations({
       const sent = await submitPrompt(nextPrompt.streamingBehavior, {
         forceFirstPrompt: true,
         optimisticId: nextPrompt.optimisticId,
+        optimisticSidebarSessionId: nextPrompt.optimisticSidebarSessionId,
       })
       if (!sent) {
+        removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
         for (const followUp of pendingDraftFollowUpsRef.current) {
           removeOptimisticUserMessage(followUp.optimisticId)
         }
@@ -955,6 +979,7 @@ export function useAppShellPromptMutations({
     [
       applyPendingDraftPromptToComposer,
       flushPendingDraftFollowUps,
+      removeOptimisticSidebarSession,
       removeOptimisticUserMessage,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,

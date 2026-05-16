@@ -196,6 +196,120 @@ export function updateDirectoryIndexLoadingState(
   return changed ? next : current
 }
 
+export function upsertOptimisticSidebarSessionEntry(
+  current: Record<string, DirectorySessionsIndexData>,
+  entry: SessionListEntry & { cwd: string; id: string }
+) {
+  const directory = entry.cwd.trim()
+  const optimisticId = entry.id.trim()
+  if (!directory || !optimisticId) return current
+
+  const currentSnapshot = current[directory]
+  const currentSessions = currentSnapshot?.sessions || []
+  const existingEntry = currentSessions.find(
+    (session) => session.id === optimisticId
+  )
+  const nextEntry = {
+    ...existingEntry,
+    ...entry,
+    id: optimisticId,
+    cwd: directory,
+    optimistic: true,
+  } satisfies SessionListEntry
+  const nextSessions = [
+    nextEntry,
+    ...currentSessions.filter((session) => session.id !== optimisticId),
+  ]
+  const totalCountBaseline = Math.max(
+    currentSnapshot?.totalCount ?? 0,
+    currentSessions.length
+  )
+
+  return {
+    ...current,
+    [directory]: {
+      directory,
+      totalCount: existingEntry ? totalCountBaseline : totalCountBaseline + 1,
+      revision: `optimistic:${optimisticId}:${
+        currentSnapshot?.revision || "initial"
+      }:${entry.modified || ""}`,
+      sessions: nextSessions,
+    },
+  }
+}
+
+export function removeOptimisticSidebarSessionEntry(
+  current: Record<string, DirectorySessionsIndexData>,
+  optimisticId: string | undefined
+) {
+  const targetId = optimisticId?.trim() || ""
+  if (!targetId) return current
+
+  let changed = false
+  const next: Record<string, DirectorySessionsIndexData> = { ...current }
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    const nextSessions = snapshot.sessions.filter(
+      (entry) => entry.id !== targetId
+    )
+    if (nextSessions.length === snapshot.sessions.length) continue
+
+    changed = true
+    next[directory] = {
+      ...snapshot,
+      totalCount: Math.max(0, snapshot.totalCount - 1),
+      revision: `remove-optimistic:${targetId}:${snapshot.revision}`,
+      sessions: nextSessions,
+    }
+  }
+
+  return changed ? next : current
+}
+
+export function isOptimisticSidebarSessionEntry(entry: SessionListEntry) {
+  return Boolean(
+    entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)
+  )
+}
+
+export function mergeDirectoryIndexDataPreservingOptimistic(
+  current: Record<string, DirectorySessionsIndexData>,
+  next: Record<string, DirectorySessionsIndexData>
+) {
+  let merged = mergeDirectoryIndexData(current, next)
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    const optimisticSessions = snapshot.sessions.filter(
+      isOptimisticSidebarSessionEntry
+    )
+    if (optimisticSessions.length === 0) continue
+
+    const targetSnapshot = merged[directory]
+    if (!targetSnapshot) continue
+
+    const targetIds = new Set(
+      targetSnapshot.sessions.flatMap((entry) => (entry.id ? [entry.id] : []))
+    )
+    const missingOptimisticSessions = optimisticSessions.filter(
+      (entry) => entry.id && !targetIds.has(entry.id)
+    )
+    if (missingOptimisticSessions.length === 0) continue
+
+    merged = {
+      ...merged,
+      [directory]: {
+        ...targetSnapshot,
+        totalCount:
+          targetSnapshot.totalCount + missingOptimisticSessions.length,
+        revision: `preserve-optimistic:${targetSnapshot.revision}`,
+        sessions: [...missingOptimisticSessions, ...targetSnapshot.sessions],
+      },
+    }
+  }
+
+  return merged
+}
+
 export function sameSessionEntryRecord(
   left: Record<string, Array<SessionListEntry>>,
   right: Record<string, Array<SessionListEntry>>
@@ -505,13 +619,19 @@ function computeAppShellSidebarDerived(
   const pinnedSidebarSessions = state.pinnedSidebarSessionKeys.flatMap(
     (key) => {
       const entry = sidebarSessionEntriesByKey.get(key)
-      return entry?.path || entry?.id ? [entry] : []
+      return entry?.path ||
+        (entry?.id && !isOptimisticSidebarSessionEntry(entry))
+        ? [entry]
+        : []
     }
   )
   const selectedSidebarSessions = state.selectedSidebarSessionKeys.flatMap(
     (key) => {
       const entry = sidebarSessionEntriesByKey.get(key)
-      return entry?.path || entry?.id ? [entry] : []
+      return entry?.path ||
+        (entry?.id && !isOptimisticSidebarSessionEntry(entry))
+        ? [entry]
+        : []
     }
   )
   const workspaceVersion = [

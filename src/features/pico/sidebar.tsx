@@ -693,6 +693,9 @@ function SidebarSessionItem({
   const exactTimestamp =
     hasTimestamp && timestamp ? new Date(timestamp).toLocaleString() : undefined
   const showUnread = Boolean(entry.unread) && !entry.streaming
+  const isOptimisticSession = Boolean(
+    entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)
+  )
   const availableMoveTargetDirectories = moveTargetDirectories.filter(
     (directory) => directory && directory !== entry.cwd
   )
@@ -703,7 +706,7 @@ function SidebarSessionItem({
   const hasMoveActions = hasMoveTargets || canMoveAnyDirectory
   const hasSessionActions =
     Boolean(
-      onTogglePinnedSession ||
+      (!isOptimisticSession && onTogglePinnedSession) ||
       (entry.path &&
         (onRenameSession || onDeleteSession || onSetSessionUnread)) ||
       hasMoveActions
@@ -803,7 +806,7 @@ function SidebarSessionItem({
         <ContextMenu>
           <ContextMenuTrigger render={sessionRow} />
           <ContextMenuContent className="w-44">
-            {onTogglePinnedSession ? (
+            {onTogglePinnedSession && !isOptimisticSession ? (
               <ContextMenuItem onClick={() => onTogglePinnedSession(entry)}>
                 {isPinned ? "Unpin" : "Pin to sidebar"}
               </ContextMenuItem>
@@ -900,7 +903,8 @@ function sameDirectorySessionEntry(
     JSON.stringify(left.contextUsage ?? null) ===
       JSON.stringify(right.contextUsage ?? null) &&
     Boolean(left.streaming) === Boolean(right.streaming) &&
-    Boolean(left.unread) === Boolean(right.unread)
+    Boolean(left.unread) === Boolean(right.unread) &&
+    Boolean(left.optimistic) === Boolean(right.optimistic)
   )
 }
 
@@ -1048,7 +1052,6 @@ type DirectorySessionGroupProps = {
   directorySessionsStore: DirectorySessionsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
   searchActive: boolean
-  directoryOrderingEnabled: boolean
   moveTargetDirectories: Array<string>
   activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
@@ -1080,7 +1083,6 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   directorySessionsStore,
   collapsedDirectoryStore,
   searchActive,
-  directoryOrderingEnabled,
   moveTargetDirectories,
   activeSessionStore,
   selectedSessionKeyStore,
@@ -1929,9 +1931,6 @@ function useAppSidebarView({
                                   collapsedDirectoryStore
                                 }
                                 searchActive={searchActive}
-                                directoryOrderingEnabled={
-                                  directoryOrderingEnabled
-                                }
                                 moveTargetDirectories={visibleDirectories}
                                 activeSessionStore={activeSessionStore}
                                 selectedSessionKeyStore={
@@ -1985,7 +1984,6 @@ function useAppSidebarView({
                 directorySessionsStore={directorySessionsStore}
                 collapsedDirectoryStore={collapsedDirectoryStore}
                 searchActive={searchActive}
-                directoryOrderingEnabled={directoryOrderingEnabled}
                 moveTargetDirectories={visibleDirectories}
                 activeSessionStore={activeSessionStore}
                 selectedSessionKeyStore={selectedSessionKeyStore}
