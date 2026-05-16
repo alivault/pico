@@ -33,6 +33,14 @@ import { useIsMobile } from "@/hooks/use-mobile"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
 const THEME_COLOR_MODE_OPTIONS: Array<ThemeColorMode> = [...THEME_COLOR_MODES]
+const SETTINGS_DIALOG_AUTO_FOCUS_MEDIA = "(min-width: 768px)"
+
+function shouldAutoFocusSettingsDialogInput() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia(SETTINGS_DIALOG_AUTO_FOCUS_MEDIA).matches
+  )
+}
 
 type SettingsDialogStage = "browse" | "theme"
 
@@ -391,6 +399,14 @@ function SettingsBrowseBody({
   onSelectedCommandIdChange,
   onSelectCommand,
 }: SettingsBrowseBodyProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    if (!shouldAutoFocusSettingsDialogInput()) return
+
+    inputRef.current?.focus()
+  }, [])
+
   return (
     <Command
       shouldFilter
@@ -401,6 +417,7 @@ function SettingsBrowseBody({
       className="min-h-0 flex-1"
     >
       <CommandInput
+        ref={inputRef}
         value={query}
         onValueChange={onQueryChange}
         placeholder="Search settings"
@@ -461,6 +478,8 @@ function SettingsThemeBody({
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
+    if (!shouldAutoFocusSettingsDialogInput()) return
+
     inputRef.current?.focus()
   }, [])
 
