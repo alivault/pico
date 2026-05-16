@@ -92,6 +92,8 @@ export type SessionManagerLike = {
   getEntry?(id: string): SessionTreeEntryLike | undefined
   getLabel?(id: string): string | undefined
   getBranch?(id?: string | null): Array<SessionTreeEntryLike>
+  branch?(leafId: string): void
+  resetLeaf?(): void
   createBranchedSession?(leafId: string): string | undefined
   appendLabelChange?(targetId: string, label?: string): string
   appendSessionInfo?(name: string): string

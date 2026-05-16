@@ -264,55 +264,127 @@ export function countFullTurnUserAndAssistantMessages(
   return count
 }
 
-export async function readSessionListMetrics(sessionPath: string) {
-  try {
-    const content = await readFile(sessionPath, "utf8")
-    let lastTimestamp = 0
-    let lastValue: string | undefined
-    const messages: Array<UnknownRecord> = []
+function readSessionListMetricEntries(content: string) {
+  const entries: Array<UnknownRecord> = []
 
-    for (const line of content.split("\n")) {
-      if (!line.trim()) continue
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue
 
-      let entry: unknown
-      try {
-        entry = JSON.parse(line)
-      } catch {
-        continue
-      }
+    let entry: unknown
+    try {
+      entry = JSON.parse(line)
+    } catch {
+      continue
+    }
 
-      if (!isRecord(entry) || entry.type !== "message") continue
-      const message = isRecord(entry.message) ? entry.message : undefined
-      if (!message) continue
+    if (!isRecord(entry) || entry.type === "session") continue
+    entries.push(entry)
+  }
 
-      const messageWithTimestamp: UnknownRecord = {
-        ...message,
-        timestamp: message.timestamp ?? entry.timestamp,
-      }
+  return entries
+}
 
-      if (messageWithTimestamp.role === "user") {
-        const normalized = normalizeModifiedTimestamp(
-          messageWithTimestamp.timestamp
-        )
-        const timestamp = modifiedTimestampValue(normalized)
-        if (timestamp && timestamp >= lastTimestamp) {
-          lastTimestamp = timestamp
-          lastValue = normalized
-        }
-      }
+function sessionListMetricEntryId(entry: UnknownRecord) {
+  return typeof entry.id === "string" && entry.id ? entry.id : ""
+}
 
-      if (
-        messageWithTimestamp.role === "user" ||
-        messageWithTimestamp.role === "assistant"
-      ) {
-        messages.push(messageWithTimestamp)
+function sessionListMetricEntryParentId(entry: UnknownRecord) {
+  return typeof entry.parentId === "string" && entry.parentId
+    ? entry.parentId
+    : ""
+}
+
+function sessionListMetricBranchEntries(
+  entries: Array<UnknownRecord>,
+  leafId: string | null | undefined
+) {
+  if (leafId === undefined) return entries
+  if (leafId === null) return []
+
+  const byId = new Map(
+    entries.flatMap((entry) => {
+      const id = sessionListMetricEntryId(entry)
+      return id ? [[id, entry] as const] : []
+    })
+  )
+  const leaf = byId.get(leafId)
+  if (!leaf) return entries
+
+  const branch: Array<UnknownRecord> = []
+  let current: UnknownRecord | undefined = leaf
+  const visited = new Set<string>()
+
+  while (current) {
+    const id = sessionListMetricEntryId(current)
+    if (id) {
+      if (visited.has(id)) break
+      visited.add(id)
+    }
+    branch.unshift(current)
+
+    const parentId = sessionListMetricEntryParentId(current)
+    current = parentId ? byId.get(parentId) : undefined
+  }
+
+  return branch
+}
+
+function collectSessionListMetricMessages(entries: Array<UnknownRecord>) {
+  let lastTimestamp = 0
+  let lastValue: string | undefined
+  const messages: Array<UnknownRecord> = []
+
+  for (const entry of entries) {
+    if (entry.type !== "message") continue
+    const message = isRecord(entry.message) ? entry.message : undefined
+    if (!message) continue
+
+    const messageWithTimestamp: UnknownRecord = {
+      ...message,
+      timestamp: message.timestamp ?? entry.timestamp,
+    }
+
+    if (messageWithTimestamp.role === "user") {
+      const normalized = normalizeModifiedTimestamp(
+        messageWithTimestamp.timestamp
+      )
+      const timestamp = modifiedTimestampValue(normalized)
+      if (timestamp && timestamp >= lastTimestamp) {
+        lastTimestamp = timestamp
+        lastValue = normalized
       }
     }
 
+    if (
+      messageWithTimestamp.role === "user" ||
+      messageWithTimestamp.role === "assistant"
+    ) {
+      messages.push(messageWithTimestamp)
+    }
+  }
+
+  return { lastUserMessageAt: lastValue, messages }
+}
+
+export async function readSessionListMetrics(
+  sessionPath: string,
+  options?: { leafId?: string | null }
+) {
+  try {
+    const content = await readFile(sessionPath, "utf8")
+    const entries = readSessionListMetricEntries(content)
+    const metricEntries = Object.prototype.hasOwnProperty.call(
+      options ?? {},
+      "leafId"
+    )
+      ? sessionListMetricBranchEntries(entries, options?.leafId)
+      : entries
+    const { lastUserMessageAt, messages } =
+      collectSessionListMetricMessages(metricEntries)
     const lastMessage = getSessionLastCompleteMessageInfo(messages)
 
     return {
-      lastUserMessageAt: lastValue,
+      lastUserMessageAt,
       lastMessageAt: lastMessage.timestamp,
       lastMessagePreview: lastMessage.preview,
       messageCount: countFullTurnUserAndAssistantMessages(messages),

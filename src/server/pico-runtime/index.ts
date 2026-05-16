@@ -808,6 +808,7 @@ class PicoRuntime {
   private readonly encoder = new TextEncoder()
   private readonly contexts = new Map<string, ContextState>()
   private readonly sessionEntries = new Map<string, SessionEntry>()
+  private readonly sessionTreeLeafOverrides = new Map<string, string | null>()
   private readonly servicesByCwd = new Map<string, SessionServicesLike>()
   private readonly pendingUiRequests = new Map<string, PendingUiRequest>()
   private readonly activeOAuthLogins = new Map<string, () => void>()
@@ -1081,6 +1082,42 @@ class PicoRuntime {
     return entry.session.sessionFile ?? entry.key
   }
 
+  private getSessionTreeLeafOverrideKey(entry: SessionEntry) {
+    return entry.session.sessionFile || ""
+  }
+
+  private rememberSessionTreeLeaf(entry: SessionEntry, onlyExisting = false) {
+    const key = this.getSessionTreeLeafOverrideKey(entry)
+    if (!key) return
+    if (onlyExisting && !this.sessionTreeLeafOverrides.has(key)) return
+
+    const leafId = entry.session.sessionManager.getLeafId?.() ?? null
+    if (this.sessionTreeLeafOverrides.get(key) === leafId) return
+
+    this.sessionTreeLeafOverrides.set(key, leafId)
+    this.invalidateSessionIndexCache()
+  }
+
+  private restoreSessionTreeLeafOverride(
+    manager: SessionManagerLike,
+    sessionPath: string
+  ) {
+    if (!this.sessionTreeLeafOverrides.has(sessionPath)) return
+
+    const leafId = this.sessionTreeLeafOverrides.get(sessionPath) ?? null
+    if (leafId === null) {
+      manager.resetLeaf?.()
+      return
+    }
+
+    if (!manager.getEntry?.(leafId)) {
+      this.sessionTreeLeafOverrides.delete(sessionPath)
+      return
+    }
+
+    manager.branch?.(leafId)
+  }
+
   private getActiveEntry(context: ContextState) {
     return context.activeKey
       ? this.sessionEntries.get(context.activeKey)
@@ -1308,17 +1345,33 @@ class PicoRuntime {
       const metricsStartedAt = performance.now()
       const withMetrics = await Promise.all(
         sessions.map(async (entry) => {
-          const metrics = entry.path
-            ? await readSessionListMetrics(entry.path)
-            : undefined
+          let metrics: Awaited<ReturnType<typeof readSessionListMetrics>>
+          if (entry.path) {
+            const hasLeafOverride = this.sessionTreeLeafOverrides.has(
+              entry.path
+            )
+            metrics = await readSessionListMetrics(
+              entry.path,
+              hasLeafOverride
+                ? {
+                    leafId:
+                      this.sessionTreeLeafOverrides.get(entry.path) ?? null,
+                  }
+                : undefined
+            )
+          }
           return {
             ...entry,
-            lastUserMessageAt:
-              metrics?.lastUserMessageAt ?? entry.lastUserMessageAt,
-            lastMessageAt: metrics?.lastMessageAt ?? entry.lastMessageAt,
-            lastMessagePreview:
-              metrics?.lastMessagePreview ?? entry.lastMessagePreview,
-            messageCount: metrics?.messageCount ?? entry.messageCount,
+            lastUserMessageAt: metrics
+              ? metrics.lastUserMessageAt
+              : entry.lastUserMessageAt,
+            lastMessageAt: metrics
+              ? metrics.lastMessageAt
+              : entry.lastMessageAt,
+            lastMessagePreview: metrics
+              ? metrics.lastMessagePreview
+              : entry.lastMessagePreview,
+            messageCount: metrics ? metrics.messageCount : entry.messageCount,
           }
         })
       )
@@ -1908,6 +1961,26 @@ class PicoRuntime {
       this.broadcastEntryState(entry),
       this.broadcastSessionsAll(),
     ])
+  }
+
+  private scheduleTreeNavigationSessionListChange(
+    entry: SessionEntry,
+    previousLeafId: string | null | undefined,
+    result: { cancelled?: boolean; aborted?: boolean; summaryEntry?: unknown }
+  ) {
+    if (result.cancelled || result.aborted) return
+
+    const nextLeafId = entry.session.sessionManager.getLeafId?.() ?? null
+    if (!result.summaryEntry && previousLeafId === nextLeafId) return
+
+    this.rememberSessionTreeLeaf(entry)
+    this.touchSessionEntry(entry)
+    void this.broadcastSessionsAll().catch((error) => {
+      console.error(
+        "[pico] failed to broadcast tree navigation sessions:",
+        error
+      )
+    })
   }
 
   private syncGitWatchDirectories() {
@@ -2518,6 +2591,7 @@ class PicoRuntime {
         const sdk = await this.getSdk()
         const openStartedAt = performance.now()
         const sessionManager = sdk.SessionManager.open(sessionPath)
+        this.restoreSessionTreeLeafOverride(sessionManager, sessionPath)
         this.logSessionLoadDebug("session_manager:open", {
           sessionPath,
           cwd: sessionManager.getCwd(),
@@ -2542,11 +2616,13 @@ class PicoRuntime {
       }
 
       const sdk = await this.getSdk()
-      return sdk.SessionManager.open(
+      const sessionManager = sdk.SessionManager.open(
         currentSessionFile,
         currentManager.getSessionDir?.(),
         entry.cwd
       )
+      this.restoreSessionTreeLeafOverride(sessionManager, currentSessionFile)
+      return sessionManager
     }
 
     return await this.createForkedInMemorySessionManager(
@@ -3203,16 +3279,18 @@ class PicoRuntime {
             label?: string
           }
         ) => {
+          const previousLeafId = session.sessionManager.getLeafId?.() ?? null
           const result = await session.navigateTree(targetId, navigateOptions)
           this.refreshRetainedConversationItems(entry)
           if (result.editorText != null) {
             entry.uiState.editorText = result.editorText
           }
           await this.broadcastEntryState(entry)
-          if (result.summaryEntry) {
-            this.touchSessionEntry(entry)
-            await this.broadcastSessionsAll()
-          }
+          this.scheduleTreeNavigationSessionListChange(
+            entry,
+            previousLeafId,
+            result
+          )
           return {
             cancelled: Boolean(result.cancelled),
             aborted: Boolean(result.aborted),
@@ -3403,6 +3481,8 @@ class PicoRuntime {
     if (statusChanged) {
       this.broadcastSessionStatusAll(entry)
     }
+
+    this.rememberSessionTreeLeaf(entry, true)
 
     await this.broadcastEntryState(entry)
 
@@ -4137,6 +4217,8 @@ class PicoRuntime {
       throw new Error("Abort the current response before navigating the tree.")
     }
 
+    const previousLeafId =
+      activeEntry.session.sessionManager.getLeafId?.() ?? null
     const result = await activeEntry.session.navigateTree(targetId, {
       summarize: Boolean(body.summarize),
       customInstructions:
@@ -4151,11 +4233,12 @@ class PicoRuntime {
     if (result.editorText != null) {
       activeEntry.uiState.editorText = result.editorText
     }
-    if (result.summaryEntry) {
-      this.touchSessionEntry(activeEntry)
-      await this.broadcastSessionsAll()
-    }
     await this.broadcastEntryState(activeEntry)
+    this.scheduleTreeNavigationSessionListChange(
+      activeEntry,
+      previousLeafId,
+      result
+    )
     return {
       ok: true,
       cancelled: Boolean(result.cancelled),

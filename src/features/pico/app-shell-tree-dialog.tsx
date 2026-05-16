@@ -2427,8 +2427,8 @@ export function AppShellTreeDialogController({
         }
       )
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
         queryKey,
         exact: true,
         refetchType: "active",
@@ -2471,6 +2471,8 @@ export function AppShellTreeDialogController({
   ) => {
     if (!viewerContextId) return
 
+    setOpenState(false)
+
     try {
       const response = await navigateTreeNodeMutation.mutateAsync({
         targetId,
@@ -2485,7 +2487,6 @@ export function AppShellTreeDialogController({
         toast.info("Tree navigation cancelled")
         return
       }
-      setOpenState(false)
       toast.success(
         options?.summarize
           ? "Continued from summarized branch"
