@@ -311,6 +311,7 @@ type ContextState = {
   id: string
   clients: Set<SseClient>
   activeRevision: number
+  selectionNonce: number
   activeKey?: string
   draftKey?: string
   sessionScope: string
@@ -1065,6 +1066,7 @@ class PicoRuntime {
       id,
       clients: new Set(),
       activeRevision: 0,
+      selectionNonce: 0,
       activeKey: undefined,
       draftKey: undefined,
       sessionScope: process.cwd(),
@@ -3500,10 +3502,11 @@ class PicoRuntime {
           const bootstrapStartedAt = performance.now()
           try {
             const stateStartedAt = performance.now()
+            const bootstrapEntry = this.getActiveEntry(context) ?? activeEntry
             this.sendStatePayloadToClient(
               context,
               client,
-              this.currentStatePayload(activeEntry, context),
+              this.currentStatePayload(bootstrapEntry, context),
               {
                 forceFull: true,
               }
@@ -3512,7 +3515,7 @@ class PicoRuntime {
               contextId: context.id,
               clientId: client.id,
               durationMs: roundedDurationMs(stateStartedAt),
-              ...this.sessionDebugDetails(activeEntry),
+              ...this.sessionDebugDetails(bootstrapEntry),
             })
             if (client.closed || request.signal.aborted) return
             const sessionsStartedAt = performance.now()
@@ -3877,6 +3880,11 @@ class PicoRuntime {
     const requestedSessionId = url.searchParams.get("session")?.trim() || ""
     const requestedSessionPath =
       url.searchParams.get("sessionPath")?.trim() || ""
+    const rawSelectionNonce = Number(url.searchParams.get("selectionNonce"))
+    const selectionNonce =
+      Number.isSafeInteger(rawSelectionNonce) && rawSelectionNonce > 0
+        ? rawSelectionNonce
+        : 0
     const context = this.ensureContext(
       url.searchParams.get("context") || "default"
     )
@@ -3884,9 +3892,14 @@ class PicoRuntime {
       url.searchParams.get("scope"),
       process.cwd()
     )
+    if (selectionNonce > context.selectionNonce) {
+      context.selectionNonce = selectionNonce
+    }
     this.logSessionLoadDebug("select_session:start", {
       requestedSessionId,
       requestedSessionPath,
+      selectionNonce,
+      latestSelectionNonce: context.selectionNonce,
       contextId: context.id,
     })
 
@@ -3909,6 +3922,28 @@ class PicoRuntime {
       })
       if (!nextEntry) {
         throw new Error(`Unknown session: ${requestedSessionId}`)
+      }
+
+      if (request.signal.aborted) {
+        this.logSessionLoadDebug("select_session:skip_aborted", {
+          requestedSessionId,
+          requestedSessionPath,
+          selectionNonce,
+          latestSelectionNonce: context.selectionNonce,
+          ...this.sessionDebugDetails(nextEntry),
+        })
+        return { ok: true }
+      }
+
+      if (selectionNonce > 0 && selectionNonce < context.selectionNonce) {
+        this.logSessionLoadDebug("select_session:skip_stale", {
+          requestedSessionId,
+          requestedSessionPath,
+          selectionNonce,
+          latestSelectionNonce: context.selectionNonce,
+          ...this.sessionDebugDetails(nextEntry),
+        })
+        return { ok: true }
       }
 
       const activateStartedAt = performance.now()

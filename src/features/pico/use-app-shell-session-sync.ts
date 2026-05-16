@@ -532,6 +532,7 @@ export function useAppShellSessionSync({
   )
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const hasReceivedStateSyncRef = React.useRef(false)
+  const [hasReceivedStateSync, setHasReceivedStateSync] = React.useState(false)
   const backgroundedAtRef = React.useRef<number | null>(null)
   const wasBackgroundedRef = React.useRef(false)
   const [eventsReconnectNonce, setEventsReconnectNonce] = React.useState(0)
@@ -553,8 +554,8 @@ export function useAppShellSessionSync({
     sessionStore,
     (sessionState) => sessionState.sessionId
   )
-  const syncedSessionIdRef = React.useRef(syncedSessionId)
   const latestActivationRevisionRef = React.useRef(0)
+  const sessionSelectNonceRef = React.useRef(Date.now() * 1000)
   const observedRouteSessionIdRef = React.useRef<string | undefined>(undefined)
   const syncedSessionDraft = useSelector(
     sessionStore,
@@ -711,7 +712,10 @@ export function useAppShellSessionSync({
           latestActivationRevisionRef.current = activationRevision
         }
 
-        hasReceivedStateSyncRef.current = true
+        if (!hasReceivedStateSyncRef.current) {
+          hasReceivedStateSyncRef.current = true
+          setHasReceivedStateSync(true)
+        }
         const previousState = sessionStateRef.current
         if (
           shouldIgnoreOptimisticDraftStateSync({
@@ -959,6 +963,8 @@ export function useAppShellSessionSync({
     if (!viewerContextId) return
 
     hasReceivedStateSyncRef.current = false
+    setHasReceivedStateSync(false)
+    latestActivationRevisionRef.current = 0
     const gitInvalidationBatcher = new Batcher<GitInvalidationBatchItem>(
       (items) => {
         const scopesByCwd = new Map<string, Set<string>>()
@@ -1065,24 +1071,26 @@ export function useAppShellSessionSync({
   ])
 
   React.useEffect(() => {
-    syncedSessionIdRef.current = syncedSessionId
-  }, [syncedSessionId])
-
-  React.useEffect(() => {
     if (!viewerContextId || !sessionId) return
     if (draftSessionLoadingOwnerKey) return
-    if (!hasReceivedStateSyncRef.current) return
-    if (sessionId === syncedSessionIdRef.current) return
+    if (!hasReceivedStateSync) return
+    if (sessionId === syncedSessionId) return
     if (pendingRouteSessionIdRef.current !== sessionId) return
 
     const abortController = new AbortController()
     const sessionPath = pendingRouteSessionPathRef.current
+    const selectionNonce = Math.max(
+      sessionSelectNonceRef.current + 1,
+      Date.now() * 1000
+    )
+    sessionSelectNonceRef.current = selectionNonce
 
     void fetchJson<SimpleOkResponse>(
       buildRequestUrl("/api/session/select", {
         contextId: viewerContextId,
         sessionId,
         searchParams: {
+          selectionNonce,
           sessionPath,
         },
       }),
@@ -1102,8 +1110,10 @@ export function useAppShellSessionSync({
     }
   }, [
     draftSessionLoadingOwnerKey,
+    hasReceivedStateSync,
     pendingRouteSessionIdRef,
     pendingRouteSessionPathRef,
+    syncedSessionId,
     viewerContextId,
     sessionId,
   ])
