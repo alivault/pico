@@ -682,7 +682,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     hasDraftText ||
     composerDiffLineComments.length > 0 ||
     composerImages.length > 0
-  const acceptFollowUps = isStreaming || awaitingFirstTurn
+  const responseInFlight = isStreaming || awaitingFirstTurn || isSubmitting
+  const acceptFollowUps = responseInFlight
   const setAssistPointerSelectionSuppressedValue = (next: boolean) => {
     assistPointerSelectionSuppressedRef.current = next
     setAssistPointerSelectionSuppressed(next)
@@ -876,7 +877,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         return
       }
 
-      if (isStreaming && !event.repeat) {
+      if (responseInFlight && !event.repeat) {
         event.preventDefault()
         event.stopPropagation()
         onAbort()
@@ -1074,7 +1075,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               <ListStartIcon data-icon="inline-start" />
               Steer
             </Button>
-            {isStreaming ? (
+            {responseInFlight ? (
               <TitleTooltip title="Abort" kbd="Esc">
                 <Button
                   variant="destructive"
