@@ -1144,11 +1144,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
       <CollapsibleTrigger
         type="button"
         className={cn(
-          "group/directory-label flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-sidebar-foreground",
-          directoryOrderingEnabled &&
-            !overlay &&
-            "cursor-grab active:cursor-grabbing",
-          searchActive && "cursor-default"
+          "group/directory-label flex min-w-0 flex-1 cursor-default items-center gap-2 text-left text-sm text-sidebar-foreground"
         )}
         disabled={searchActive || overlay}
         {...(attributes ?? {})}
