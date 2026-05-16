@@ -68,30 +68,77 @@ function RenameSessionDialog({
   onRenameSession,
 }: RenameSessionDialogProps) {
   const isMobile = useIsMobile()
+  const renameInputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+
+    const frame = window.requestAnimationFrame(() => {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [open])
+
   const renameInput = (
     <Input
+      ref={renameInputRef}
       value={renameValue}
       onChange={(event) => onRenameValueChange(event.target.value)}
       onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenChange(false)
+          return
+        }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
         event.preventDefault()
+        event.stopPropagation()
         onRenameSession()
       }}
       placeholder="Session name"
+      className="min-w-0 flex-1"
     />
+  )
+  const body = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border/70 px-3 py-2">
+        <div className="truncate text-sm font-medium">Rename session</div>
+        <div className="truncate text-xs text-muted-foreground">
+          Update the display name shown in the sidebar.
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center p-3">{renameInput}</div>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Enter</FooterKbd> Save
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Esc</FooterKbd> Cancel
+          </span>
+        </div>
+      )}
+    </div>
   )
 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
-        <DrawerContent>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Rename session</DrawerTitle>
             <DrawerDescription>
               Update the display name shown in the sidebar.
             </DrawerDescription>
           </DrawerHeader>
-          <div className="px-4 pb-2">{renameInput}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {body}
+          </div>
           <DrawerFooter className="border-t border-border/70">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -104,23 +151,16 @@ function RenameSessionDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rename session</DialogTitle>
-          <DialogDescription>
-            Update the display name shown in the sidebar.
-          </DialogDescription>
-        </DialogHeader>
-        {renameInput}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={onRenameSession}>Save</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Rename session"
+      description="Update the display name shown in the sidebar."
+      className="sm:max-w-md"
+      initialFocus
+    >
+      {body}
+    </CommandDialog>
   )
 }
 
@@ -210,6 +250,7 @@ type DeleteSessionsDialogProps = {
   onOpenChange: (open: boolean) => void
   title: string
   description: string
+  targets: Array<SessionListEntry>
   onDeleteSession: () => void
 }
 
@@ -218,18 +259,95 @@ function DeleteSessionsDialog({
   onOpenChange,
   title,
   description,
+  targets,
   onDeleteSession,
 }: DeleteSessionsDialogProps) {
   const isMobile = useIsMobile()
+  const deletePanelRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open || isMobile) return
+
+    const frame = window.requestAnimationFrame(() => {
+      deletePanelRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [isMobile, open])
+
+  const previewTargets = targets.slice(0, 8)
+  const remainingTargetCount = Math.max(
+    0,
+    targets.length - previewTargets.length
+  )
+  const body = (
+    <div
+      ref={deletePanelRef}
+      role="presentation"
+      tabIndex={-1}
+      className="flex min-h-0 flex-1 flex-col outline-none"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenChange(false)
+          return
+        }
+        if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+        event.preventDefault()
+        event.stopPropagation()
+        onDeleteSession()
+      }}
+    >
+      <div className="border-b border-border/70 px-3 py-2">
+        <div className="truncate text-sm font-medium">{title}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          {description}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+        {targets.length > 1 ? (
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
+            {previewTargets.map((target) => (
+              <div key={target.path || target.id} className="truncate">
+                {target.title || "New session"}
+              </div>
+            ))}
+            {remainingTargetCount > 0 ? (
+              <div className="text-muted-foreground">
+                …and {remainingTargetCount} more
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {isMobile ? null : (
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Enter</FooterKbd> Delete
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Esc</FooterKbd> Cancel
+          </span>
+        </div>
+      )}
+    </div>
+  )
 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>
+        <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>{title}</DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+            {body}
+          </div>
           <DrawerFooter className="border-t border-border/70">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -244,22 +362,16 @@ function DeleteSessionsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={onDeleteSession}>
-            Delete
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-md"
+      initialFocus
+    >
+      {body}
+    </CommandDialog>
   )
 }
 
@@ -625,6 +737,7 @@ export function DeleteSessionsDialogController({
       onOpenChange={setOpenState}
       title={title}
       description={description}
+      targets={targets}
       onDeleteSession={() => {
         void submitDelete()
       }}
