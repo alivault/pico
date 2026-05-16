@@ -217,13 +217,12 @@ function buildCurrentSessionRequestUrl(
     !sessionState.sessionKey.startsWith("optimistic:")
       ? sessionState.sessionKey
       : undefined
-  const hasFallbackSession = Boolean(
-    fallbackSessionId && fallbackSessionId !== sessionState.sessionId
-  )
+  // Drafts do not expose a stable session id yet. During a new-session
+  // transition, callbacks can still carry the previous route session id as a
+  // fallback, so prefer the explicit runtime session key whenever the current
+  // snapshot is a draft or otherwise id-less.
   const shouldUseSessionKey = Boolean(
-    sessionKey &&
-    !hasFallbackSession &&
-    (sessionState.draft || !sessionState.sessionId)
+    sessionKey && (sessionState.draft || !sessionState.sessionId)
   )
 
   return buildRequestUrl(path, {
