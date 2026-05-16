@@ -1,4 +1,9 @@
 import * as React from "react"
+import type {
+  AnnotationSide,
+  DiffLineAnnotation,
+  SelectedLineRange,
+} from "@pierre/diffs"
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import {
@@ -22,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -52,6 +58,7 @@ import {
   getErrorMessage,
   normalizeCwd,
 } from "@/features/pico/right-sidebar-shared"
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type {
   GitCommitDiffTabRequest,
   GitScopedProps,
@@ -134,6 +141,165 @@ function GitFileDiff({ file }: { file: GitChangeFile }) {
 }
 
 type ReviewDiffStyle = "unified" | "split"
+
+type ReviewDiffCommentTarget = Omit<
+  ComposerDiffLineComment,
+  "cwd" | "id" | "text"
+>
+
+type PendingReviewDiffLineComment = ReviewDiffCommentTarget & {
+  kind: "pending"
+  onCancel: () => void
+  onSubmit: (text: string) => void
+}
+
+type ReviewDiffLineAnnotationMetadata =
+  | ComposerDiffLineComment
+  | PendingReviewDiffLineComment
+
+function reviewDiffCommentSideLabel(side: AnnotationSide) {
+  return side === "deletions" ? "old" : "new"
+}
+
+function reviewDiffCommentLineFromRange(range: SelectedLineRange) {
+  return Math.min(range.start, range.end)
+}
+
+function reviewDiffCommentSideFromRange(range: SelectedLineRange) {
+  return (range.side || range.endSide || "additions") as AnnotationSide
+}
+
+function reviewDiffCommentPath(file: GitChangeFile, side: AnnotationSide) {
+  return side === "deletions" ? file.previousPath || file.path : file.path
+}
+
+function reviewDiffCommentTabKey(file: GitChangeFile) {
+  return `changes:${reviewFileValue(file)}`
+}
+
+function reviewDiffLineCommentAnnotations({
+  comments,
+  pendingComment,
+}: {
+  comments: Array<ComposerDiffLineComment>
+  pendingComment?: PendingReviewDiffLineComment | null
+}): Array<DiffLineAnnotation<ReviewDiffLineAnnotationMetadata>> {
+  const annotations: Array<
+    DiffLineAnnotation<ReviewDiffLineAnnotationMetadata>
+  > = comments.map((comment) => ({
+    lineNumber: comment.lineNumber,
+    metadata: comment,
+    side: comment.side,
+  }))
+
+  if (pendingComment) {
+    annotations.push({
+      lineNumber: pendingComment.lineNumber,
+      metadata: pendingComment,
+      side: pendingComment.side,
+    })
+  }
+
+  return annotations
+}
+
+function ReviewDiffPendingLineComment({
+  comment,
+}: {
+  comment: PendingReviewDiffLineComment
+}) {
+  const [text, setText] = React.useState("")
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null)
+
+  React.useEffect(() => {
+    textareaRef.current?.focus()
+  }, [])
+
+  const submit = () => {
+    const normalizedText = text.trim()
+    if (!normalizedText) return
+    comment.onSubmit(normalizedText)
+  }
+
+  return (
+    <form
+      className="m-2 max-w-[min(38rem,calc(100%-1rem))] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
+      onPointerDown={(event) => event.stopPropagation()}
+      onSubmit={(event) => {
+        event.preventDefault()
+        submit()
+      }}
+    >
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">
+          Comment on {comment.path}:L{comment.lineNumber} (
+          {reviewDiffCommentSideLabel(comment.side)})
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Cancel line comment"
+          onClick={comment.onCancel}
+        >
+          ×
+        </Button>
+      </div>
+      <Textarea
+        ref={textareaRef}
+        value={text}
+        rows={2}
+        placeholder="Add a note for the prompt…"
+        className="min-h-16 resize-none text-sm"
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault()
+            submit()
+          }
+          if (event.key === "Escape") {
+            event.preventDefault()
+            comment.onCancel()
+          }
+        }}
+      />
+      <div className="mt-2 flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={comment.onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!text.trim()}>
+          Add to prompt
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function ReviewDiffLineAnnotation({
+  annotation,
+}: {
+  annotation: DiffLineAnnotation<ReviewDiffLineAnnotationMetadata>
+}) {
+  const comment = annotation.metadata
+  if (!comment) return null
+
+  if ((comment as PendingReviewDiffLineComment).kind === "pending") {
+    return (
+      <ReviewDiffPendingLineComment
+        comment={comment as PendingReviewDiffLineComment}
+      />
+    )
+  }
+
+  const savedComment = comment as ComposerDiffLineComment
+
+  return (
+    <div className="my-1 ml-2 inline-flex max-w-[min(32rem,90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200">
+      <span className="shrink-0">💬</span>
+      <span className="truncate">{savedComment.text}</span>
+    </div>
+  )
+}
 
 const GIT_HISTORY_PANEL_MIN_HEIGHT = 160
 const GIT_HISTORY_PANEL_MAX_STORED_HEIGHT = 1600
@@ -331,6 +497,8 @@ function useFileReviewContentView({
   viewerContextId,
   cwd,
   active,
+  diffLineComments = [],
+  onAddDiffLineComment,
   onMaximizeHistory,
   onOpenCommitDiff,
   onOpenFile,
@@ -624,10 +792,12 @@ function useFileReviewContentView({
                 viewerContextId={viewerContextId}
                 cwd={normalizedCwd}
                 active={active}
+                diffLineComments={diffLineComments}
                 diffStyle={diffStyle}
                 file={file}
                 open={openFiles.includes(reviewFileValue(file))}
                 stuck={stickyReviewFileValue === reviewFileValue(file)}
+                onAddDiffLineComment={onAddDiffLineComment}
                 onOpenFile={onOpenFile}
               />
             ))}
@@ -735,10 +905,12 @@ function ReviewFileAccordionItem({
   viewerContextId,
   cwd,
   active,
+  diffLineComments = [],
   diffStyle,
   file,
   open,
   stuck,
+  onAddDiffLineComment,
   onOpenFile,
 }: GitScopedProps & {
   diffStyle: ReviewDiffStyle
@@ -749,6 +921,9 @@ function ReviewFileAccordionItem({
   const normalizedCwd = normalizeCwd(cwd)
   const queryClient = useQueryClient()
   const value = reviewFileValue(file)
+  const commentTabKey = reviewDiffCommentTabKey(file)
+  const [commentTarget, setCommentTarget] =
+    React.useState<ReviewDiffCommentTarget | null>(null)
   const [fullContextRequested, setFullContextRequested] = React.useState(false)
   const previewPatch = gitFileShouldPreviewPatch(file) && !fullContextRequested
   const diffQuery = useQuery({
@@ -777,6 +952,45 @@ function ReviewFileAccordionItem({
   const oldContent = reviewQuery.data?.oldContent ?? ""
   const newContent = reviewQuery.data?.newContent ?? ""
   const patch = diffQuery.data?.patch ?? ""
+  const commentsForFile = diffLineComments.filter(
+    (comment) =>
+      comment.cwd === normalizedCwd && comment.tabKey === commentTabKey
+  )
+  const startLineComment = (range: SelectedLineRange) => {
+    if (!onAddDiffLineComment) return
+    const side = reviewDiffCommentSideFromRange(range)
+    setCommentTarget({
+      commit: "working-tree",
+      lineNumber: reviewDiffCommentLineFromRange(range),
+      mode: "head",
+      path: reviewDiffCommentPath(file, side),
+      shortHash: "working tree",
+      side,
+      tabKey: commentTabKey,
+      tabTitle: "Working tree changes",
+    })
+  }
+  const pendingComment: PendingReviewDiffLineComment | null = commentTarget
+    ? {
+        ...commentTarget,
+        kind: "pending",
+        onCancel: () => setCommentTarget(null),
+        onSubmit: (text) => {
+          onAddDiffLineComment?.({ ...commentTarget, text })
+          setCommentTarget(null)
+        },
+      }
+    : null
+  const lineAnnotations = reviewDiffLineCommentAnnotations({
+    comments: commentsForFile,
+    pendingComment,
+  })
+  const commentableOptions = onAddDiffLineComment
+    ? {
+        enableGutterUtility: true,
+        onGutterUtilityClick: startLineComment,
+      }
+    : {}
   const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
   const canStage = worktreeStatus !== " " || indexStatus === "?"
 
@@ -845,6 +1059,10 @@ function ReviewFileAccordionItem({
     },
   })
   const actionPending = stageMutation.isPending || discardMutation.isPending
+
+  React.useEffect(() => {
+    setCommentTarget(null)
+  }, [value, previewPatch, patch, oldContent, newContent])
 
   const openFile = (event?: React.MouseEvent<HTMLButtonElement>) => {
     event?.stopPropagation()
@@ -968,12 +1186,17 @@ function ReviewFileAccordionItem({
                   Load full context
                 </Button>
               </div>
-              <PatchDiff
+              <PatchDiff<ReviewDiffLineAnnotationMetadata>
                 patch={patch}
                 disableWorkerPool
+                lineAnnotations={lineAnnotations}
+                renderAnnotation={(annotation) => (
+                  <ReviewDiffLineAnnotation annotation={annotation} />
+                )}
                 options={{
                   diffStyle,
                   disableFileHeader: true,
+                  ...commentableOptions,
                   overflow: "wrap",
                 }}
               />
@@ -996,7 +1219,7 @@ function ReviewFileAccordionItem({
             </GitSectionNote>
           </div>
         ) : oldContent !== newContent ? (
-          <MultiFileDiff
+          <MultiFileDiff<ReviewDiffLineAnnotationMetadata>
             oldFile={{
               name: file.previousPath || file.path,
               contents: oldContent,
@@ -1006,9 +1229,14 @@ function ReviewFileAccordionItem({
               contents: newContent,
             }}
             disableWorkerPool
+            lineAnnotations={lineAnnotations}
+            renderAnnotation={(annotation) => (
+              <ReviewDiffLineAnnotation annotation={annotation} />
+            )}
             options={{
               diffStyle,
               disableFileHeader: true,
+              ...commentableOptions,
               overflow: "wrap",
             }}
           />

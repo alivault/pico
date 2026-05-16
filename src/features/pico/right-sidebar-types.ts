@@ -1,3 +1,4 @@
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { GitCommitDiffMode, GitStatusSummary } from "@/lib/pico/api"
 
 export type GitStatusValue = GitStatusSummary | null
@@ -39,11 +40,15 @@ export type RightSidebarProps = {
   active: boolean
   activeFilePath?: string
   activeTab?: RightSidebarTabValue
+  diffLineComments?: Array<ComposerDiffLineComment>
   fileTabs?: Array<string>
   filePreviewPath?: string
   fileTreeCollapsed?: boolean
   onActiveFileChange?: (path: string) => void
   onActiveTabChange?: (tab: RightSidebarTabValue) => void
+  onAddDiffLineComment?: (
+    comment: Omit<ComposerDiffLineComment, "cwd" | "id">
+  ) => void
   onCloseAllFiles?: () => void
   onCloseFile?: (path: string) => void
   onCloseFilesToRight?: (path: string) => void

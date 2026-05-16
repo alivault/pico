@@ -5,6 +5,7 @@ import {
   type SessionState,
   type StreamingBehavior,
 } from "@/lib/pico"
+import type { GitCommitDiffMode } from "@/lib/pico/api"
 
 export type PendingComposerMessage = {
   pendingId: string
@@ -83,10 +84,25 @@ export function movePendingDraftFollowUpMessage(
   return next
 }
 
+export type ComposerDiffLineComment = {
+  id: string
+  cwd: string
+  path: string
+  lineNumber: number
+  side: "additions" | "deletions"
+  text: string
+  tabKey: string
+  tabTitle: string
+  commit: string
+  shortHash: string
+  mode: GitCommitDiffMode
+}
+
 export type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
   centerMessages: boolean
+  composerDiffLineComments: Array<ComposerDiffLineComment>
   composerImages: Array<PromptImage>
   composerSkill?: string
   composerSyncNonce: number
@@ -98,8 +114,37 @@ export type AppShellComposerSnapshot = {
   viewerContextId: string
 }
 
+export const EMPTY_COMPOSER_DIFF_LINE_COMMENTS: Array<ComposerDiffLineComment> =
+  []
 export const EMPTY_COMPOSER_IMAGES: Array<PromptImage> = []
 export const EMPTY_COMPOSER_PENDING_MESSAGES: Array<PendingComposerMessage> = []
+
+function sameComposerDiffLineComments(
+  left: Array<ComposerDiffLineComment>,
+  right: Array<ComposerDiffLineComment>
+) {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftComment = left[index]
+    const rightComment = right[index]
+    if (!leftComment || !rightComment) return false
+    if (leftComment.id !== rightComment.id) return false
+    if (leftComment.cwd !== rightComment.cwd) return false
+    if (leftComment.path !== rightComment.path) return false
+    if (leftComment.lineNumber !== rightComment.lineNumber) return false
+    if (leftComment.side !== rightComment.side) return false
+    if (leftComment.text !== rightComment.text) return false
+    if (leftComment.tabKey !== rightComment.tabKey) return false
+    if (leftComment.tabTitle !== rightComment.tabTitle) return false
+    if (leftComment.commit !== rightComment.commit) return false
+    if (leftComment.shortHash !== rightComment.shortHash) return false
+    if (leftComment.mode !== rightComment.mode) return false
+  }
+
+  return true
+}
 
 function sameComposerPromptImages(
   left: Array<PromptImage>,
@@ -152,6 +197,10 @@ export function sameAppShellComposerSnapshot(
     left.activeSessionId === right.activeSessionId &&
     left.awaitingFirstTurn === right.awaitingFirstTurn &&
     left.centerMessages === right.centerMessages &&
+    sameComposerDiffLineComments(
+      left.composerDiffLineComments,
+      right.composerDiffLineComments
+    ) &&
     left.composerSkill === right.composerSkill &&
     left.composerSyncNonce === right.composerSyncNonce &&
     left.composerText === right.composerText &&
@@ -176,6 +225,7 @@ export type AppShellComposerActions = {
     pendingId: string,
     text: string
   ) => void | Promise<unknown>
+  removeDiffLineComment: (id: string) => void
   removePendingDraftFollowUp: (pendingId: string) => boolean
   removePendingMessage: (pendingId: string) => void | Promise<unknown>
   reorderPending: (
@@ -202,6 +252,7 @@ export function createInitialAppShellComposerSnapshot(
     activeSessionId: undefined,
     awaitingFirstTurn: false,
     centerMessages: false,
+    composerDiffLineComments: EMPTY_COMPOSER_DIFF_LINE_COMMENTS,
     composerImages: EMPTY_COMPOSER_IMAGES,
     composerSkill: undefined,
     composerSyncNonce: 0,

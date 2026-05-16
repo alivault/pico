@@ -7,6 +7,7 @@ import {
   AppShellSessionContent,
   type AppShellSessionContentProps,
 } from "@/features/pico/app-shell-session-content"
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { AppShellUiState } from "@/features/pico/app-shell-types"
 import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
 import { RightSidebar } from "@/features/pico/right-sidebar"
@@ -66,6 +67,8 @@ function AppShellTabsList({
 const AppShellGitPanelController = React.memo(
   function AppShellGitPanelController({
     active,
+    composerDiffLineComments,
+    onAddDiffLineComment,
     onCloseAllFiles,
     onCloseFile,
     onCloseFilesToRight,
@@ -77,6 +80,10 @@ const AppShellGitPanelController = React.memo(
     viewerContextId,
   }: {
     active: boolean
+    composerDiffLineComments: Array<ComposerDiffLineComment>
+    onAddDiffLineComment: (
+      comment: Omit<ComposerDiffLineComment, "cwd" | "id">
+    ) => void
     onCloseAllFiles: () => void
     onCloseFile: (path: string) => void
     onCloseFilesToRight: (path: string) => void
@@ -114,6 +121,7 @@ const AppShellGitPanelController = React.memo(
         active={active}
         activeFilePath={activeFilePath}
         activeTab={activeTab}
+        diffLineComments={composerDiffLineComments}
         filePreviewPath={filePreviewPath}
         fileTabs={fileTabs}
         fileTreeCollapsed={fileTreeCollapsed}
@@ -123,6 +131,7 @@ const AppShellGitPanelController = React.memo(
         onActiveTabChange={(tab) => {
           setRightSidebarActiveTab(rightSidebarStore, tab)
         }}
+        onAddDiffLineComment={onAddDiffLineComment}
         onCloseAllFiles={onCloseAllFiles}
         onCloseFile={onCloseFile}
         onCloseFilesToRight={onCloseFilesToRight}
@@ -139,6 +148,8 @@ const AppShellGitPanelController = React.memo(
 
 function AppShellDesktopGitPanel({
   active,
+  composerDiffLineComments,
+  onAddDiffLineComment,
   onCloseAllFiles,
   onCloseFile,
   onCloseFilesToRight,
@@ -150,6 +161,10 @@ function AppShellDesktopGitPanel({
   viewerContextId,
 }: {
   active: boolean
+  composerDiffLineComments: Array<ComposerDiffLineComment>
+  onAddDiffLineComment: (
+    comment: Omit<ComposerDiffLineComment, "cwd" | "id">
+  ) => void
   onCloseAllFiles: () => void
   onCloseFile: (path: string) => void
   onCloseFilesToRight: (path: string) => void
@@ -193,6 +208,7 @@ function AppShellDesktopGitPanel({
         active={active}
         activeFilePath={activeFilePath}
         activeTab={activeTab}
+        diffLineComments={composerDiffLineComments}
         filePreviewPath={filePreviewPath}
         fileTabs={fileTabs}
         fileTreeCollapsed={fileTreeCollapsed}
@@ -202,6 +218,7 @@ function AppShellDesktopGitPanel({
         onActiveTabChange={(tab) => {
           setRightSidebarActiveTab(rightSidebarStore, tab)
         }}
+        onAddDiffLineComment={onAddDiffLineComment}
         onCloseAllFiles={onCloseAllFiles}
         onCloseFile={onCloseFile}
         onCloseFilesToRight={onCloseFilesToRight}
@@ -480,12 +497,16 @@ function AppShellDesktopResizeHandle({
 
 type AppShellTabsControllerProps = AppShellSessionContentProps & {
   appUiStore: PicoStore<AppShellUiState>
+  composerDiffLineComments: Array<ComposerDiffLineComment>
   gitPanelOpen: boolean
   isMobile: boolean
   onCloseAllFileViewTabs: () => void
   onCloseFileViewTab: (path: string) => void
   onCloseFileViewTabsToRight: (path: string) => void
   onCloseOtherFileViewTabs: (path: string) => void
+  onAddDiffLineComment: (
+    comment: Omit<ComposerDiffLineComment, "cwd" | "id">
+  ) => void
   onOpenFileViewTab: (path: string, options?: OpenFileViewTabOptions) => void
   onReorderFileViewTabs: (paths: Array<string>) => void
   onValueChange: (value: string) => void
@@ -500,6 +521,7 @@ function useAppShellTabsControllerView({
   actionsRef,
   appUiStore,
   awaitingFirstTurn,
+  composerDiffLineComments,
   composerPanelRef,
   contextUsageStore,
   conversationFrameRef,
@@ -520,6 +542,7 @@ function useAppShellTabsControllerView({
   onCloseFileViewTab,
   onCloseFileViewTabsToRight,
   onCloseOtherFileViewTabs,
+  onAddDiffLineComment,
   onOpenFileViewTab,
   onReorderFileViewTabs,
   onValueChange,
@@ -639,7 +662,9 @@ function useAppShellTabsControllerView({
             viewerContextId={viewerContextId}
             sessionStore={sessionStore}
             active={currentTab === "git"}
+            composerDiffLineComments={composerDiffLineComments}
             rightSidebarStore={rightSidebarStore}
+            onAddDiffLineComment={onAddDiffLineComment}
             onCloseAllFiles={onCloseAllFileViewTabs}
             onCloseFile={onCloseFileViewTab}
             onCloseFilesToRight={onCloseFileViewTabsToRight}
@@ -792,7 +817,9 @@ function useAppShellTabsControllerView({
                         viewerContextId={viewerContextId}
                         sessionStore={sessionStore}
                         active={desktopGitPanelOpen}
+                        composerDiffLineComments={composerDiffLineComments}
                         rightSidebarStore={rightSidebarStore}
+                        onAddDiffLineComment={onAddDiffLineComment}
                         onCloseAllFiles={onCloseAllFileViewTabs}
                         onCloseFile={onCloseFileViewTab}
                         onCloseFilesToRight={onCloseFileViewTabsToRight}

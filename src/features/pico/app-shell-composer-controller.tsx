@@ -551,6 +551,7 @@ export const AppShellComposerController = React.memo(
         ref={composerPanelRef}
         activeSessionId={snapshot.activeSessionId}
         currentPendingMessages={snapshot.currentPendingMessages}
+        composerDiffLineComments={snapshot.composerDiffLineComments}
         composerImages={snapshot.composerImages}
         composerText={snapshot.composerText}
         composerSkill={snapshot.composerSkill}
@@ -569,6 +570,9 @@ export const AppShellComposerController = React.memo(
         fileInputRef={fileInputRef}
         onComposerTextChange={onComposerTextChange}
         onPickImages={onPickImages}
+        onRemoveComposerDiffLineComment={
+          actionsRef.current.removeDiffLineComment
+        }
         onRemoveComposerImage={onRemoveComposerImage}
         onSubmitPrompt={onSubmitPrompt}
         onAbort={onAbort}

@@ -1,6 +1,12 @@
 import * as React from "react"
-import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
-import { FileDiff } from "@pierre/diffs/react"
+import {
+  FileDiff as FileDiffInstance,
+  parsePatchFiles,
+  type AnnotationSide,
+  type DiffLineAnnotation,
+  type FileDiffMetadata,
+  type FileDiffOptions,
+} from "@pierre/diffs"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
@@ -56,15 +62,33 @@ import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
 } from "@/lib/pico"
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 
 type GitCommitDiffData = Extract<GitCommitDiffResponse, { ok: true }>
 type CommitDiffStyle = "unified" | "split"
 
+const EMPTY_RIGHT_SIDEBAR_DIFF_LINE_COMMENTS: Array<ComposerDiffLineComment> =
+  []
 const EMPTY_RIGHT_SIDEBAR_FILE_TABS: NonNullable<
   RightSidebarProps["fileTabs"]
 > = []
+
+type CommitDiffCommentTarget = Omit<
+  ComposerDiffLineComment,
+  "cwd" | "id" | "text"
+>
+
+type PendingCommitDiffLineComment = CommitDiffCommentTarget & {
+  kind: "pending"
+  onCancel: () => void
+  onSubmit: (text: string) => void
+}
+
+type CommitDiffLineAnnotationMetadata =
+  | ComposerDiffLineComment
+  | PendingCommitDiffLineComment
 
 function readStoredHistoryAsTab() {
   return safeLocalStorageGetItem(RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY) === "1"
@@ -253,15 +277,280 @@ function commitFileDiffLineCounts(fileDiff: FileDiffMetadata) {
   )
 }
 
+function commitDiffCommentSideLabel(side: AnnotationSide) {
+  return side === "deletions" ? "old" : "new"
+}
+
+function commitDiffLineCommentAnnotations({
+  comments,
+  pendingComment,
+}: {
+  comments: Array<ComposerDiffLineComment>
+  pendingComment?: PendingCommitDiffLineComment | null
+}): Array<DiffLineAnnotation<CommitDiffLineAnnotationMetadata>> {
+  const annotations: Array<
+    DiffLineAnnotation<CommitDiffLineAnnotationMetadata>
+  > = comments.map((comment) => ({
+    lineNumber: comment.lineNumber,
+    metadata: comment,
+    side: comment.side,
+  }))
+
+  if (pendingComment) {
+    annotations.push({
+      lineNumber: pendingComment.lineNumber,
+      metadata: pendingComment,
+      side: pendingComment.side,
+    })
+  }
+
+  return annotations
+}
+
+function assignClassName(element: HTMLElement, className: string) {
+  for (const classItem of className.split(/\s+/)) {
+    if (classItem) element.classList.add(classItem)
+  }
+}
+
+function renderPendingCommitDiffLineComment(
+  pendingComment: PendingCommitDiffLineComment
+) {
+  const form = document.createElement("form")
+  assignClassName(
+    form,
+    "m-2 max-w-[min(38rem,calc(100%-1rem))] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
+  )
+
+  const header = document.createElement("div")
+  assignClassName(
+    header,
+    "mb-2 flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground"
+  )
+
+  const label = document.createElement("span")
+  label.textContent = `Comment on ${pendingComment.path}:L${pendingComment.lineNumber} (${commitDiffCommentSideLabel(pendingComment.side)})`
+  assignClassName(label, "min-w-0 truncate")
+
+  const cancelButton = document.createElement("button")
+  cancelButton.type = "button"
+  cancelButton.textContent = "×"
+  cancelButton.setAttribute("aria-label", "Cancel line comment")
+  assignClassName(
+    cancelButton,
+    "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+  )
+  cancelButton.addEventListener("click", () => pendingComment.onCancel())
+
+  header.append(label, cancelButton)
+
+  const textarea = document.createElement("textarea")
+  textarea.rows = 2
+  textarea.placeholder = "Add a note for the prompt…"
+  assignClassName(
+    textarea,
+    "flex min-h-16 w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+  )
+  textarea.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault()
+      submit()
+    }
+    if (event.key === "Escape") {
+      event.preventDefault()
+      pendingComment.onCancel()
+    }
+  })
+
+  const footer = document.createElement("div")
+  assignClassName(footer, "mt-2 flex justify-end gap-2")
+
+  const secondaryCancelButton = document.createElement("button")
+  secondaryCancelButton.type = "button"
+  secondaryCancelButton.textContent = "Cancel"
+  assignClassName(
+    secondaryCancelButton,
+    "inline-flex h-8 items-center rounded-md px-3 text-sm hover:bg-muted"
+  )
+  secondaryCancelButton.addEventListener("click", () =>
+    pendingComment.onCancel()
+  )
+
+  const submitButton = document.createElement("button")
+  submitButton.type = "submit"
+  submitButton.textContent = "Add to prompt"
+  assignClassName(
+    submitButton,
+    "inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
+  )
+
+  function syncSubmitDisabled() {
+    submitButton.disabled = textarea.value.trim().length === 0
+  }
+
+  function submit() {
+    const text = textarea.value.trim()
+    if (!text) return
+    pendingComment.onSubmit(text)
+  }
+
+  textarea.addEventListener("input", syncSubmitDisabled)
+  form.addEventListener("submit", (event) => {
+    event.preventDefault()
+    submit()
+  })
+
+  footer.append(secondaryCancelButton, submitButton)
+  form.append(header, textarea, footer)
+  syncSubmitDisabled()
+  window.setTimeout(() => textarea.focus(), 0)
+  return form
+}
+
+function renderCommitDiffLineAnnotation(
+  annotation: DiffLineAnnotation<CommitDiffLineAnnotationMetadata>
+) {
+  const comment = annotation.metadata
+  if (!comment) return undefined
+
+  if ((comment as PendingCommitDiffLineComment).kind === "pending") {
+    return renderPendingCommitDiffLineComment(
+      comment as PendingCommitDiffLineComment
+    )
+  }
+
+  const savedComment = comment as ComposerDiffLineComment
+  const wrapper = document.createElement("div")
+  assignClassName(
+    wrapper,
+    "my-1 ml-2 inline-flex max-w-[min(32rem,90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200"
+  )
+
+  const icon = document.createElement("span")
+  icon.textContent = "💬"
+  assignClassName(icon, "shrink-0")
+
+  const text = document.createElement("span")
+  text.textContent = savedComment.text
+  assignClassName(text, "truncate")
+
+  wrapper.append(icon, text)
+  return wrapper
+}
+
+function CommitDiffFileRenderer({
+  comments,
+  diffStyle,
+  disableFileHeader = false,
+  fileDiff,
+  onStartComment,
+  pendingComment,
+}: {
+  comments: Array<ComposerDiffLineComment>
+  diffStyle: CommitDiffStyle
+  disableFileHeader?: boolean
+  fileDiff: FileDiffMetadata
+  onStartComment: (target: {
+    lineNumber: number
+    path: string
+    side: AnnotationSide
+  }) => void
+  pendingComment?: PendingCommitDiffLineComment | null
+}) {
+  const [container, setContainer] = React.useState<HTMLElement | null>(null)
+  const instanceRef =
+    React.useRef<FileDiffInstance<CommitDiffLineAnnotationMetadata> | null>(
+      null
+    )
+  const lineAnnotations = commitDiffLineCommentAnnotations({
+    comments,
+    pendingComment,
+  })
+  const options = {
+    diffStyle,
+    disableFileHeader,
+    enableGutterUtility: true,
+    lineDiffType: "word-alt",
+    lineHoverHighlight: "both",
+    maxLineDiffLength: 1000,
+    onGutterUtilityClick: (range) => {
+      onStartComment({
+        lineNumber: Math.min(range.start, range.end),
+        path: fileDiff.name,
+        side: (range.side || range.endSide || "additions") as AnnotationSide,
+      })
+    },
+    onLineNumberClick: (props) => {
+      onStartComment({
+        lineNumber: props.lineNumber,
+        path: fileDiff.name,
+        side: props.annotationSide,
+      })
+    },
+    overflow: "wrap",
+    renderAnnotation: renderCommitDiffLineAnnotation,
+  } satisfies FileDiffOptions<CommitDiffLineAnnotationMetadata>
+
+  React.useLayoutEffect(() => {
+    if (!container) return
+
+    const existing = instanceRef.current
+    if (existing) {
+      existing.setOptions(options)
+      existing.render({
+        containerWrapper: container,
+        fileDiff,
+        forceRender: true,
+        lineAnnotations,
+      })
+      return
+    }
+
+    const instance = new FileDiffInstance<CommitDiffLineAnnotationMetadata>(
+      options,
+      undefined,
+      false
+    )
+    instanceRef.current = instance
+    instance.render({
+      containerWrapper: container,
+      fileDiff,
+      lineAnnotations,
+    })
+  })
+
+  React.useLayoutEffect(
+    () => () => {
+      instanceRef.current?.cleanUp()
+      instanceRef.current = null
+    },
+    []
+  )
+
+  return React.createElement("div", {
+    ref: setContainer,
+  })
+}
+
 function CommitFileDiffAccordionItem({
+  comments,
   diffStyle,
   fileDiff,
   index,
+  onStartComment,
+  pendingComment,
   stuck,
 }: {
+  comments: Array<ComposerDiffLineComment>
   diffStyle: CommitDiffStyle
   fileDiff: FileDiffMetadata
   index: number
+  onStartComment: (target: {
+    lineNumber: number
+    path: string
+    side: AnnotationSide
+  }) => void
+  pendingComment?: PendingCommitDiffLineComment | null
   stuck: boolean
 }) {
   const value = commitFileDiffValue(fileDiff, index)
@@ -314,16 +603,13 @@ function CommitFileDiffAccordionItem({
         </AccordionPrimitive.Trigger>
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
-        <FileDiff
+        <CommitDiffFileRenderer
+          comments={comments}
+          diffStyle={diffStyle}
+          disableFileHeader
           fileDiff={fileDiff}
-          disableWorkerPool
-          options={{
-            diffStyle,
-            disableFileHeader: true,
-            lineDiffType: "word-alt",
-            maxLineDiffLength: 1000,
-            overflow: "wrap",
-          }}
+          onStartComment={onStartComment}
+          pendingComment={pendingComment}
         />
       </AccordionContent>
     </AccordionItem>
@@ -331,11 +617,21 @@ function CommitFileDiffAccordionItem({
 }
 
 function CommitSingleFileDiff({
+  comments,
   diffStyle,
+  onStartComment,
   patch,
+  pendingComment,
 }: {
+  comments: Array<ComposerDiffLineComment>
   diffStyle: CommitDiffStyle
+  onStartComment: (target: {
+    lineNumber: number
+    path: string
+    side: AnnotationSide
+  }) => void
   patch: string
+  pendingComment?: PendingCommitDiffLineComment | null
 }) {
   const fileDiff = parsePatchFiles(patch).flatMap((parsed) => parsed.files)[0]
 
@@ -357,27 +653,34 @@ function CommitSingleFileDiff({
         } as React.CSSProperties
       }
     >
-      <FileDiff
+      <CommitDiffFileRenderer
+        comments={comments}
+        diffStyle={diffStyle}
         fileDiff={fileDiff}
-        disableWorkerPool
-        options={{
-          diffStyle,
-          lineDiffType: "word-alt",
-          maxLineDiffLength: 1000,
-          overflow: "wrap",
-        }}
+        onStartComment={onStartComment}
+        pendingComment={pendingComment}
       />
     </div>
   )
 }
 
 function CommitPatchDiffs({
+  comments,
   diffStyle,
+  onStartComment,
   patch,
+  pendingComment,
   stuckFileValue,
 }: {
+  comments: Array<ComposerDiffLineComment>
   diffStyle: CommitDiffStyle
+  onStartComment: (target: {
+    lineNumber: number
+    path: string
+    side: AnnotationSide
+  }) => void
   patch: string
+  pendingComment?: PendingCommitDiffLineComment | null
   stuckFileValue: string
 }) {
   const fileDiffs = parsePatchFiles(patch).flatMap((parsed) => parsed.files)
@@ -411,9 +714,16 @@ function CommitPatchDiffs({
         {fileDiffs.map((fileDiff, index) => (
           <CommitFileDiffAccordionItem
             key={commitFileDiffValue(fileDiff, index)}
+            comments={comments.filter(
+              (comment) => comment.path === fileDiff.name
+            )}
             diffStyle={diffStyle}
             fileDiff={fileDiff}
             index={index}
+            onStartComment={onStartComment}
+            pendingComment={
+              pendingComment?.path === fileDiff.name ? pendingComment : null
+            }
             stuck={stuckFileValue === commitFileDiffValue(fileDiff, index)}
           />
         ))}
@@ -483,15 +793,23 @@ function CommitDiffContent({
   viewerContextId,
   cwd,
   active,
+  diffLineComments,
+  onAddDiffLineComment,
   tab,
 }: {
   viewerContextId: string
   cwd: string
   active: boolean
+  diffLineComments: Array<ComposerDiffLineComment>
+  onAddDiffLineComment?: (
+    comment: Omit<ComposerDiffLineComment, "cwd" | "id">
+  ) => void
   tab: GitCommitDiffTab | undefined
 }) {
   const [diffStyle, setDiffStyle] = React.useState<CommitDiffStyle>("unified")
   const [stickyCommitFileValue, setStickyCommitFileValue] = React.useState("")
+  const [commentTarget, setCommentTarget] =
+    React.useState<CommitDiffCommentTarget | null>(null)
   const diffScrollRef = React.useRef<HTMLDivElement>(null)
   const updateStickyCommitFileHeader = (
     scrollElement: HTMLDivElement | null
@@ -535,7 +853,45 @@ function CommitDiffContent({
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
 
+  const commentsForTab = tab
+    ? diffLineComments.filter(
+        (comment) =>
+          comment.tabKey === tab.key &&
+          comment.commit === tab.commit &&
+          comment.mode === tab.mode
+      )
+    : EMPTY_RIGHT_SIDEBAR_DIFF_LINE_COMMENTS
+  const startLineComment = (lineTarget: {
+    lineNumber: number
+    path: string
+    side: AnnotationSide
+  }) => {
+    if (!tab || !onAddDiffLineComment) return
+    setCommentTarget({
+      commit: tab.commit,
+      lineNumber: lineTarget.lineNumber,
+      mode: tab.mode,
+      path: lineTarget.path,
+      shortHash: tab.shortHash,
+      side: lineTarget.side,
+      tabKey: tab.key,
+      tabTitle: tab.title,
+    })
+  }
+  const pendingComment: PendingCommitDiffLineComment | null = commentTarget
+    ? {
+        ...commentTarget,
+        kind: "pending",
+        onCancel: () => setCommentTarget(null),
+        onSubmit: (text) => {
+          onAddDiffLineComment?.({ ...commentTarget, text })
+          setCommentTarget(null)
+        },
+      }
+    : null
+
   React.useEffect(() => {
+    setCommentTarget(null)
     setDerivedScrollState<string>(setStickyCommitFileValue, "")
     updateStickyCommitFileHeader(diffScrollRef.current)
   }, [tab?.key, diffQuery.data?.patch])
@@ -587,14 +943,25 @@ function CommitDiffContent({
           </div>
         ) : diffQuery.data?.patch && tab.path ? (
           <CommitSingleFileDiff
+            comments={commentsForTab.filter((comment) => {
+              if (!tab.path) return true
+              return (
+                comment.path === tab.path || comment.path === tab.previousPath
+              )
+            })}
             diffStyle={diffStyle}
+            onStartComment={startLineComment}
             patch={diffQuery.data.patch}
+            pendingComment={pendingComment}
           />
         ) : diffQuery.data?.patch ? (
           <CommitPatchDiffs
             key={`${diffQuery.data.commit}:${diffQuery.data.mode}`}
+            comments={commentsForTab}
             diffStyle={diffStyle}
+            onStartComment={startLineComment}
             patch={diffQuery.data.patch}
+            pendingComment={pendingComment}
             stuckFileValue={stickyCommitFileValue}
           />
         ) : (
@@ -613,11 +980,13 @@ export function RightSidebar({
   active,
   activeFilePath = "",
   activeTab: controlledActiveTab,
+  diffLineComments = EMPTY_RIGHT_SIDEBAR_DIFF_LINE_COMMENTS,
   filePreviewPath = "",
   fileTabs = EMPTY_RIGHT_SIDEBAR_FILE_TABS,
   fileTreeCollapsed = false,
   onActiveFileChange,
   onActiveTabChange,
+  onAddDiffLineComment,
   onCloseAllFiles,
   onCloseFile,
   onCloseFilesToRight,
@@ -784,98 +1153,112 @@ export function RightSidebar({
           showHistory={historyAsTab}
           showReview
         />
-        <React.Activity mode={activeTab === "review" ? "visible" : "hidden"}>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <FileReviewContent
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "review"}
-              onMaximizeHistory={() => {
-                setHistoryAsTab(true)
-                setActiveTab("history")
-              }}
-              onOpenCommitDiff={openCommitDiff}
-              onOpenFile={openFile}
-              showEmbeddedHistory={!historyAsTab}
-            />
-          </div>
-        </React.Activity>
-        <React.Activity mode={activeTab === "history" ? "visible" : "hidden"}>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <GitCommitsSection
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "history"}
-              flush
-              onOpenCommitDiff={openCommitDiff}
-              onRestoreEmbedded={() => {
-                setHistoryAsTab(false)
-                setActiveTab("review")
-              }}
-            />
-          </div>
-        </React.Activity>
-        <React.Activity
-          mode={activeTab === "commit-diff" ? "visible" : "hidden"}
+        <div
+          className={
+            activeTab === "review" ? "min-h-0 flex-1 overflow-hidden" : "hidden"
+          }
         >
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <CommitDiffContent
-              viewerContextId={viewerContextId}
-              cwd={normalizedCwd}
-              active={active && activeTab === "commit-diff"}
-              tab={activeCommitDiffTab}
-            />
-          </div>
-        </React.Activity>
-        <React.Activity mode={activeTab === "files" ? "visible" : "hidden"}>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {previewMode === "external" && hasOpenFileTabs ? (
-              <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-                {currentFilePath ? (
-                  <FilePathBreadcrumb
-                    path={currentFilePath}
-                    fileTreeCollapsed={fileTreeCollapsed}
-                    onFileTreeCollapsedChange={onFileTreeCollapsedChange}
+          <FileReviewContent
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active && activeTab === "review"}
+            diffLineComments={diffLineComments}
+            onMaximizeHistory={() => {
+              setHistoryAsTab(true)
+              setActiveTab("history")
+            }}
+            onAddDiffLineComment={onAddDiffLineComment}
+            onOpenCommitDiff={openCommitDiff}
+            onOpenFile={openFile}
+            showEmbeddedHistory={!historyAsTab}
+          />
+        </div>
+        <div
+          className={
+            activeTab === "history"
+              ? "min-h-0 flex-1 overflow-hidden"
+              : "hidden"
+          }
+        >
+          <GitCommitsSection
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active && activeTab === "history"}
+            flush
+            onOpenCommitDiff={openCommitDiff}
+            onRestoreEmbedded={() => {
+              setHistoryAsTab(false)
+              setActiveTab("review")
+            }}
+          />
+        </div>
+        <div
+          className={
+            activeTab === "commit-diff"
+              ? "min-h-0 flex-1 overflow-hidden"
+              : "hidden"
+          }
+        >
+          <CommitDiffContent
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active && activeTab === "commit-diff"}
+            diffLineComments={diffLineComments}
+            onAddDiffLineComment={onAddDiffLineComment}
+            tab={activeCommitDiffTab}
+          />
+        </div>
+        <div
+          className={
+            activeTab === "files" ? "min-h-0 flex-1 overflow-hidden" : "hidden"
+          }
+        >
+          {previewMode === "external" && hasOpenFileTabs ? (
+            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+              {currentFilePath ? (
+                <FilePathBreadcrumb
+                  path={currentFilePath}
+                  fileTreeCollapsed={fileTreeCollapsed}
+                  onFileTreeCollapsedChange={onFileTreeCollapsedChange}
+                />
+              ) : null}
+              <div className="flex min-h-0 flex-1 overflow-hidden">
+                {fileTreeCollapsed ? null : (
+                  <ProjectFileTreePane
+                    viewerContextId={viewerContextId}
+                    cwd={normalizedCwd}
+                    active={active && activeTab === "files"}
+                    activeFilePath={currentFilePath}
+                    onOpenFile={openFile}
+                    previewMode={previewMode}
                   />
-                ) : null}
-                <div className="flex min-h-0 flex-1 overflow-hidden">
-                  {fileTreeCollapsed ? null : (
-                    <ProjectFileTreePane
+                )}
+                {currentFilePath ? (
+                  <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                    <ProjectFileContent
                       viewerContextId={viewerContextId}
                       cwd={normalizedCwd}
                       active={active && activeTab === "files"}
-                      activeFilePath={currentFilePath}
-                      onOpenFile={openFile}
-                      previewMode={previewMode}
+                      path={currentFilePath}
                     />
-                  )}
-                  {currentFilePath ? (
-                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-                      <ProjectFileContent
-                        viewerContextId={viewerContextId}
-                        cwd={normalizedCwd}
-                        active={active && activeTab === "files"}
-                        path={currentFilePath}
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <ProjectFilesWorkspace
-                viewerContextId={viewerContextId}
-                cwd={normalizedCwd}
-                active={active && activeTab === "files"}
-                activeFilePath={currentFilePath}
-                onCloseFile={() => {
-                  dispatchLocal({ type: "set-inline-active-file", path: "" })
-                }}
-                onOpenFile={openFile}
-                previewMode={previewMode}
-              />
-            )}
-          </div>
-        </React.Activity>
+            </div>
+          ) : (
+            <ProjectFilesWorkspace
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active && activeTab === "files"}
+              activeFilePath={currentFilePath}
+              onCloseFile={() => {
+                dispatchLocal({ type: "set-inline-active-file", path: "" })
+              }}
+              onOpenFile={openFile}
+              previewMode={previewMode}
+            />
+          )}
+        </div>
         <ProjectOpenFileDialog
           open={localState.openFileDialogOpen}
           onOpenChange={(open) =>

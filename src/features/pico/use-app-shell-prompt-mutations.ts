@@ -18,7 +18,11 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import { serializeComposerDraft } from "@/features/pico/composer-utils"
+import {
+  buildComposerPromptMessage,
+  serializeComposerDraft,
+} from "@/features/pico/composer-utils"
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -64,6 +68,7 @@ type UseAppShellPromptMutationsOptions = {
   pendingDraftFollowUps: Array<PendingDraftFollowUp>
   awaitingFirstTurn: boolean
   pendingMessages: Array<PendingComposerMessage>
+  composerDiffLineCommentsRef: React.RefObject<Array<ComposerDiffLineComment>>
   composerImagesRef: React.RefObject<Array<PromptImage>>
   composerTextRef: React.RefObject<string>
   composerSkillRef: React.RefObject<string | undefined>
@@ -100,6 +105,9 @@ type UseAppShellPromptMutationsOptions = {
   >
   setAwaitingFirstTurn: React.Dispatch<React.SetStateAction<boolean>>
   setIsSubmitting: React.Dispatch<React.SetStateAction<boolean>>
+  setComposerDiffLineComments: React.Dispatch<
+    React.SetStateAction<Array<ComposerDiffLineComment>>
+  >
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
 }
 
@@ -261,6 +269,7 @@ export function useAppShellPromptMutations({
   pendingDraftFollowUps,
   awaitingFirstTurn,
   pendingMessages,
+  composerDiffLineCommentsRef,
   composerImagesRef,
   composerTextRef,
   composerSkillRef,
@@ -278,6 +287,7 @@ export function useAppShellPromptMutations({
   setPendingMessages,
   setAwaitingFirstTurn,
   setIsSubmitting,
+  setComposerDiffLineComments,
   setComposerImages,
 }: UseAppShellPromptMutationsOptions) {
   const queryClient = useQueryClient()
@@ -542,9 +552,10 @@ export function useAppShellPromptMutations({
       const ownerKey = draftSessionLoadingOwnerKeyRef.current
       if (!ownerKey) return false
 
-      const message = serializeComposerDraft({
+      const message = buildComposerPromptMessage({
         text: composerTextRef.current,
         skillName: composerSkillRef.current,
+        diffLineComments: composerDiffLineCommentsRef.current,
       }).trim()
       const images = composerImagesRef.current.map((image) => ({ ...image }))
       if (!message && images.length === 0) return false
@@ -589,6 +600,7 @@ export function useAppShellPromptMutations({
       }
 
       replaceComposerDraft("", undefined, { forceSync: true })
+      setComposerDiffLineComments([])
       setComposerImages([])
       lastSyncedEditorTextRef.current = ""
 
@@ -596,12 +608,14 @@ export function useAppShellPromptMutations({
     },
     [
       addOptimisticUserMessage,
+      composerDiffLineCommentsRef,
       composerImagesRef,
       composerSkillRef,
       composerTextRef,
       lastSyncedEditorTextRef,
       replaceComposerDraft,
       setAwaitingFirstTurn,
+      setComposerDiffLineComments,
       setComposerImages,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
@@ -669,9 +683,13 @@ export function useAppShellPromptMutations({
         return queuePendingDraftPrompt(streamingBehavior)
       }
 
-      const message = serializeComposerDraft({
+      const submittedDiffLineComments = composerDiffLineCommentsRef.current.map(
+        (comment) => ({ ...comment })
+      )
+      const message = buildComposerPromptMessage({
         text: composerTextRef.current,
         skillName: composerSkillRef.current,
+        diffLineComments: submittedDiffLineComments,
       }).trim()
       if (!message && composerImagesRef.current.length === 0) return false
 
@@ -714,6 +732,7 @@ export function useAppShellPromptMutations({
       setIsSubmitting(true)
       if (shouldOptimisticallyClearComposer) {
         replaceComposerDraft("", undefined, { forceSync: true })
+        setComposerDiffLineComments([])
         setComposerImages([])
         lastSyncedEditorTextRef.current = ""
       }
@@ -735,6 +754,7 @@ export function useAppShellPromptMutations({
         }
         if (!shouldOptimisticallyClearComposer) {
           replaceComposerDraft("")
+          setComposerDiffLineComments([])
           setComposerImages([])
           lastSyncedEditorTextRef.current = ""
         }
@@ -754,8 +774,16 @@ export function useAppShellPromptMutations({
             skillName: composerSkillRef.current,
           }).trim()
 
-          if (!currentDraft) {
+          if (
+            !currentDraft &&
+            composerDiffLineCommentsRef.current.length === 0
+          ) {
             replaceComposerDraft(message)
+            setComposerDiffLineComments((current) =>
+              current.length === 0
+                ? submittedDiffLineComments.map((comment) => ({ ...comment }))
+                : current
+            )
             setComposerImages((current) =>
               current.length === 0
                 ? submittedImages.map((image) => ({ ...image }))
@@ -774,6 +802,7 @@ export function useAppShellPromptMutations({
     [
       addOptimisticPendingMessage,
       addOptimisticUserMessage,
+      composerDiffLineCommentsRef,
       composerImagesRef,
       composerSkillRef,
       composerTextRef,
@@ -785,6 +814,7 @@ export function useAppShellPromptMutations({
       removeOptimisticUserMessage,
       replaceComposerDraft,
       setAwaitingFirstTurn,
+      setComposerDiffLineComments,
       setComposerImages,
       setIsSubmitting,
       viewerContextId,

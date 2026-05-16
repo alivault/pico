@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   ArrowUpIcon,
+  GitPullRequestArrowIcon,
   ImagePlusIcon,
   ListEndIcon,
   ListStartIcon,
@@ -11,6 +12,7 @@ import {
 import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
 import type { CompletionItem } from "@/lib/pico/api"
 
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
 import {
   shallow,
@@ -28,6 +30,7 @@ import { ComposerPickers } from "@/features/pico/composer-pickers"
 import { matchesShortcutEvent } from "@/features/pico/keyboard-shortcuts"
 import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
 import {
+  formatComposerDiffLineCommentReference,
   formatComposerSkillName,
   parseComposerSkillMessage,
   serializeComposerDraft,
@@ -64,6 +67,7 @@ type ComposerDisplaySettingsStore = PicoStore<{
 type ComposerPanelProps = {
   activeSessionId?: string
   currentPendingMessages: Array<PendingComposerMessage>
+  composerDiffLineComments: Array<ComposerDiffLineComment>
   composerImages: Array<PromptImage>
   composerText: string
   composerSkill?: string
@@ -82,6 +86,7 @@ type ComposerPanelProps = {
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
+  onRemoveComposerDiffLineComment: (id: string) => void
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
@@ -105,6 +110,7 @@ type ComposerAttachmentsProps = {
 }
 
 type ComposerPromptEditorProps = {
+  composerDiffLineComments: Array<ComposerDiffLineComment>
   composerImages: Array<PromptImage>
   composerText: string
   composerSkill?: string
@@ -119,6 +125,7 @@ type ComposerPromptEditorProps = {
   sessionStore: ComposerSessionStore
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
+  onRemoveComposerDiffLineComment: (id: string) => void
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
@@ -331,6 +338,7 @@ function getClipboardImageFiles(data: DataTransfer) {
 export function ComposerPanel({
   activeSessionId,
   currentPendingMessages,
+  composerDiffLineComments,
   composerImages,
   composerText,
   composerSkill,
@@ -349,6 +357,7 @@ export function ComposerPanel({
   fileInputRef,
   onComposerTextChange,
   onPickImages,
+  onRemoveComposerDiffLineComment,
   onRemoveComposerImage,
   onSubmitPrompt,
   onAbort,
@@ -412,6 +421,7 @@ export function ComposerPanel({
 
         <div className="overflow-visible rounded-[18px] border bg-card">
           <ComposerPromptEditor
+            composerDiffLineComments={composerDiffLineComments}
             composerImages={composerImages}
             composerText={composerText}
             composerSkill={composerSkill}
@@ -426,6 +436,7 @@ export function ComposerPanel({
             sessionStore={sessionStore}
             onComposerTextChange={onComposerTextChange}
             onPickImages={onPickImages}
+            onRemoveComposerDiffLineComment={onRemoveComposerDiffLineComment}
             onRemoveComposerImage={onRemoveComposerImage}
             onSubmitPrompt={onSubmitPrompt}
             onAbort={onAbort}
@@ -512,6 +523,7 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
 })
 
 const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
+  composerDiffLineComments,
   composerImages,
   composerText,
   composerSkill,
@@ -526,6 +538,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   sessionStore,
   onComposerTextChange,
   onPickImages,
+  onRemoveComposerDiffLineComment,
   onRemoveComposerImage,
   onSubmitPrompt,
   onAbort,
@@ -665,7 +678,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     refreshAssistStateRef.current()
   }, [composerSkill, composerSyncNonce, composerText, dismissMenus, promptRef])
 
-  const hasSubmittableContent = hasDraftText || composerImages.length > 0
+  const hasSubmittableContent =
+    hasDraftText ||
+    composerDiffLineComments.length > 0 ||
+    composerImages.length > 0
   const acceptFollowUps = isStreaming || awaitingFirstTurn
   const setAssistPointerSelectionSuppressedValue = (next: boolean) => {
     assistPointerSelectionSuppressedRef.current = next
@@ -761,6 +777,17 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
     if (event.key === "Backspace" && !draftText && currentDraftSkill) {
       applyDraft("", undefined, { immediate: true })
+      return
+    }
+
+    if (
+      event.key === "Backspace" &&
+      !draftText &&
+      !currentDraftSkill &&
+      composerDiffLineComments.length > 0
+    ) {
+      const lastComment = composerDiffLineComments.at(-1)
+      if (lastComment) onRemoveComposerDiffLineComment(lastComment.id)
       return
     }
 
@@ -932,6 +959,29 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                 </Button>
               </span>
             ) : null}
+
+            {composerDiffLineComments.map((comment) => (
+              <span
+                key={comment.id}
+                title={`${formatComposerDiffLineCommentReference(comment)}: ${comment.text}`}
+                className="inline-flex h-7 max-w-[45%] shrink-0 items-center gap-1 overflow-hidden rounded-full bg-amber-500/10 pr-0.5 pl-2 text-sm font-medium text-amber-700 dark:text-amber-300"
+              >
+                <GitPullRequestArrowIcon className="size-3.5 shrink-0" />
+                <span className="truncate">
+                  Diff: {formatComposerDiffLineCommentReference(comment)}
+                </span>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="ml-1 rounded-full text-amber-700 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
+                  aria-label={`Remove diff comment for ${formatComposerDiffLineCommentReference(comment)}`}
+                  disabled={disabled}
+                  onClick={() => onRemoveComposerDiffLineComment(comment.id)}
+                >
+                  <XIcon className="size-3.5" />
+                </Button>
+              </span>
+            ))}
 
             <Textarea
               ref={promptRef}

@@ -1,4 +1,5 @@
 import type { CompletionItem } from "@/lib/pico/api"
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 
 export type SlashCommandInput = {
   rawValue: string
@@ -106,6 +107,46 @@ export function formatComposerSkillName(skillName = "") {
       return [`${part.charAt(0).toUpperCase()}${part.slice(1)}`]
     })
     .join(" ")
+}
+
+export function formatComposerDiffLineCommentReference(
+  comment: ComposerDiffLineComment
+) {
+  const sideLabel = comment.side === "deletions" ? "old" : "new"
+  return `${comment.path}:L${comment.lineNumber} (${sideLabel})`
+}
+
+export function formatComposerDiffLineCommentForPrompt(
+  comment: ComposerDiffLineComment
+) {
+  const sourceLabel =
+    comment.commit === "working-tree"
+      ? "working tree changes"
+      : comment.shortHash
+  return `- ${formatComposerDiffLineCommentReference(comment)} in ${sourceLabel}: ${comment.text}`
+}
+
+export function buildComposerPromptMessage({
+  diffLineComments,
+  skillName,
+  text,
+}: {
+  diffLineComments?: Array<ComposerDiffLineComment>
+  skillName?: string
+  text?: string
+}) {
+  const baseMessage = serializeComposerDraft({ text, skillName }).trim()
+  const comments = diffLineComments?.filter(
+    (comment) => comment.text.trim().length > 0
+  )
+
+  if (!comments || comments.length === 0) return baseMessage
+
+  const commentBlock = `Diff comments:\n${comments
+    .map(formatComposerDiffLineCommentForPrompt)
+    .join("\n")}`
+
+  return baseMessage ? `${baseMessage}\n\n${commentBlock}` : commentBlock
 }
 
 export function parseSlashCommandInput(value = ""): SlashCommandInput | null {
