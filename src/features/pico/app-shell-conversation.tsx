@@ -8,6 +8,7 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Empty,
   EmptyContent,
@@ -117,9 +118,11 @@ function ConversationScrollRevisionObserver({
 }
 
 function ConversationPreviousMessageButton({
+  centerMessages,
   onClick,
   scrollStateStore,
 }: {
+  centerMessages: boolean
   onClick: () => void
   scrollStateStore: MessageScrollStateStore
 }) {
@@ -128,7 +131,7 @@ function ConversationPreviousMessageButton({
     (snapshot) => !snapshot.hasPreviousMessageJumpTarget
   )
 
-  return (
+  const button = (
     <TitleTooltip
       title="Jump to previous message"
       kbd={formatShortcutLabel("Control+ArrowLeft")}
@@ -137,13 +140,28 @@ function ConversationPreviousMessageButton({
         variant="secondary"
         size="icon-lg"
         disabled={isDisabled}
-        className="absolute right-4 bottom-4 z-10 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:right-[18px] md:bottom-[18px]"
+        className={cn(
+          "rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0",
+          centerMessages
+            ? "pointer-events-auto"
+            : "absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
+        )}
         aria-label="Jump to previous message"
         onClick={onClick}
       >
         <ArrowUpToLineIcon className="size-4" />
       </Button>
     </TitleTooltip>
+  )
+
+  if (!centerMessages) return button
+
+  return (
+    <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 md:bottom-[18px]">
+      <div className="mx-auto flex w-full max-w-[80ch] justify-end">
+        {button}
+      </div>
+    </div>
   )
 }
 
@@ -173,12 +191,14 @@ function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
 function AppShellConversationFrame({
   autoScrollEnabled,
   children,
+  centerMessages,
   conversationItemsStore,
   isSessionViewLoading,
   ref,
   sessionState,
 }: {
   autoScrollEnabled: boolean
+  centerMessages: boolean
   children: React.ReactNode
   conversationItemsStore: ConversationItemsStore
   isSessionViewLoading: boolean
@@ -251,6 +271,7 @@ function AppShellConversationFrame({
             scrollStateStore={scrollStateStore}
           />
           <ConversationPreviousMessageButton
+            centerMessages={centerMessages}
             onClick={jumpToPreviousMessage}
             scrollStateStore={scrollStateStore}
           />
@@ -740,6 +761,7 @@ export const AppShellSessionConversation = React.memo(
       <AppShellConversationFrame
         ref={conversationFrameRef}
         autoScrollEnabled={autoScrollEnabled}
+        centerMessages={centerMessages}
         conversationItemsStore={conversationItemsStore}
         isSessionViewLoading={isSessionViewLoading}
         sessionState={sessionState}
