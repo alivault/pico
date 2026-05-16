@@ -94,6 +94,7 @@ import type {
   SelectSessionNavigationOptions,
 } from "@/features/pico/app-shell-types"
 import {
+  AWAITING_FIRST_RESPONSE_WORKING_LABEL,
   COMPACT_CANCELLED_LABEL,
   COMPACT_WORKING_LABEL,
   sameWorkingState,
@@ -869,11 +870,12 @@ function useAppShellSessionWorkspaceView({
         })
         if (next && !sessionStateRef.current.streaming) {
           setStoreState(workingStateStore, {
-            label: "Waiting for first response…",
+            label: AWAITING_FIRST_RESPONSE_WORKING_LABEL,
           })
         } else if (
           !next &&
-          workingStateStore.state?.label === "Waiting for first response…"
+          workingStateStore.state?.label ===
+            AWAITING_FIRST_RESPONSE_WORKING_LABEL
         ) {
           setStoreState(workingStateStore, null)
         }

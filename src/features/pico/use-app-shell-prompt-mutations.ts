@@ -112,6 +112,7 @@ type UseAppShellPromptMutationsOptions = {
 }
 
 type PromptMutationSessionSnapshot = {
+  assistantOutputSignature: string
   cwd?: string
   draft: boolean
   sessionFile?: string
@@ -125,6 +126,7 @@ function samePromptMutationSessionSnapshot(
   right: PromptMutationSessionSnapshot
 ) {
   return (
+    left.assistantOutputSignature === right.assistantOutputSignature &&
     left.cwd === right.cwd &&
     left.draft === right.draft &&
     left.sessionFile === right.sessionFile &&
@@ -134,10 +136,33 @@ function samePromptMutationSessionSnapshot(
   )
 }
 
+function sessionAssistantOutputSignature(items: SessionState["items"]) {
+  let outputCount = 0
+  let lastOutputKey = ""
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    if (!item || item.kind !== "assistant") continue
+
+    const hasTextOutput = item.blocks.some(
+      (block) => block.type === "text" && block.text.trim()
+    )
+    if (!hasTextOutput) continue
+
+    outputCount += 1
+    lastOutputKey = item.itemKey || item.renderKey || `index:${index}`
+  }
+
+  return `${outputCount}:${lastOutputKey}`
+}
+
 function usePromptMutationSessionSnapshot(store: SessionStateStore) {
   return useSelector(
     store,
     (sessionState) => ({
+      assistantOutputSignature: sessionAssistantOutputSignature(
+        sessionState.items
+      ),
       cwd: sessionState.cwd,
       draft: sessionState.draft,
       sessionFile: sessionState.sessionFile,
@@ -298,6 +323,9 @@ export function useAppShellPromptMutations({
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
   const pendingMessagesRef = React.useRef(pendingMessages)
   const awaitingFirstTurnRef = React.useRef(awaitingFirstTurn)
+  const awaitingFirstTurnAssistantOutputSignatureRef = React.useRef<
+    string | null
+  >(null)
   const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
   const sessionStreamingRef = React.useRef(sessionSnapshot.streaming)
 
@@ -431,6 +459,7 @@ export function useAppShellPromptMutations({
       pendingDraftFollowUpsRef.current = []
       setPendingDraftPrompt(null)
       setPendingDraftFollowUps([])
+      awaitingFirstTurnAssistantOutputSignatureRef.current = null
       awaitingFirstTurnRef.current = false
       setAwaitingFirstTurn(false)
       return applyPendingDraftPromptToComposer(nextPrompt)
@@ -706,6 +735,14 @@ export function useAppShellPromptMutations({
       const queuedPendingId = treatAsQueuedPrompt
         ? createLocalPendingId()
         : undefined
+
+      if (!treatAsQueuedPrompt) {
+        awaitingFirstTurnAssistantOutputSignatureRef.current =
+          sessionAssistantOutputSignature(sessionStateRef.current.items)
+        awaitingFirstTurnRef.current = true
+        setAwaitingFirstTurn(true)
+      }
+
       const optimisticId =
         options?.optimisticId ??
         (treatAsQueuedPrompt
@@ -725,10 +762,6 @@ export function useAppShellPromptMutations({
         })
       }
 
-      if (!treatAsQueuedPrompt) {
-        awaitingFirstTurnRef.current = true
-        setAwaitingFirstTurn(true)
-      }
       setIsSubmitting(true)
       if (shouldOptimisticallyClearComposer) {
         replaceComposerDraft("", undefined, { forceSync: true })
@@ -765,6 +798,7 @@ export function useAppShellPromptMutations({
         }
         removeOptimisticUserMessage(optimisticId)
         if (!treatAsQueuedPrompt) {
+          awaitingFirstTurnAssistantOutputSignatureRef.current = null
           awaitingFirstTurnRef.current = false
           setAwaitingFirstTurn(false)
         }
@@ -954,24 +988,27 @@ export function useAppShellPromptMutations({
 
   React.useEffect(() => {
     if (!awaitingFirstTurn) return
-    const currentSessionState = sessionStateRef.current
-    const hasAssistantOutput = currentSessionState.items.some(
-      (item) =>
-        item.kind === "assistant" &&
-        item.blocks.some((block) => block.type === "text" && block.text.trim())
-    )
+
+    const baselineAssistantOutputSignature =
+      awaitingFirstTurnAssistantOutputSignatureRef.current
+    const assistantOutputStarted =
+      baselineAssistantOutputSignature !== null &&
+      sessionSnapshot.assistantOutputSignature !==
+        baselineAssistantOutputSignature
 
     if (
-      currentSessionState.streaming ||
-      hasAssistantOutput ||
+      sessionStateRef.current.streaming ||
+      assistantOutputStarted ||
       pendingMessages.length > 0
     ) {
+      awaitingFirstTurnAssistantOutputSignatureRef.current = null
       awaitingFirstTurnRef.current = false
       setAwaitingFirstTurn(false)
     }
   }, [
     awaitingFirstTurn,
     pendingMessages.length,
+    sessionSnapshot.assistantOutputSignature,
     sessionSnapshot.streaming,
     sessionStateRef,
     setAwaitingFirstTurn,

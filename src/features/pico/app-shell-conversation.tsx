@@ -275,6 +275,8 @@ function AppShellWorkingIndicatorLabel({
       ? hiddenThinkingPreview
       : fallbackLabel
 
+  if (!visibleLabel.trim()) return null
+
   return <div className="font-medium text-foreground">{visibleLabel}</div>
 }
 
@@ -574,7 +576,9 @@ function AppShellConversationEmptyState({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
         <Spinner />
-        <div>{conversationLoadingLabel}</div>
+        {conversationLoadingLabel ? (
+          <div>{conversationLoadingLabel}</div>
+        ) : null}
       </div>
     )
   }

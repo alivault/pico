@@ -1,3 +1,4 @@
+export const AWAITING_FIRST_RESPONSE_WORKING_LABEL = ""
 export const COMPACT_WORKING_LABEL = "Compacting context..."
 export const COMPACT_CANCELLED_LABEL = "Error: Compaction cancelled"
 
