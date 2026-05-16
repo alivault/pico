@@ -30,6 +30,7 @@ export {
   normalizeThemeColorMode,
   normalizeThemeFamily,
   promptDraftKey,
+  promptDraftKeyMatchesOwner,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
   readStoredCollapsedDirectories,

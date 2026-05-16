@@ -30,6 +30,7 @@ import {
 import {
   normalizePromptImage,
   promptDraftKey,
+  promptDraftKeyMatchesOwner,
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pico"
@@ -454,7 +455,7 @@ function stateSyncPayloadConfirmsPendingDraft(
 ) {
   if (!ownerKey || payload.draft !== true) return false
 
-  return stateSyncPayloadDraftKey(payload) === ownerKey
+  return promptDraftKeyMatchesOwner(stateSyncPayloadDraftKey(payload), ownerKey)
 }
 
 function stateSyncPayloadConfirmsOptimisticDraft(
@@ -463,7 +464,10 @@ function stateSyncPayloadConfirmsOptimisticDraft(
 ) {
   if (payload.draft !== true) return false
 
-  return stateSyncPayloadDraftKey(payload) === promptDraftKey(previousState)
+  return promptDraftKeyMatchesOwner(
+    stateSyncPayloadDraftKey(payload),
+    promptDraftKey(previousState)
+  )
 }
 
 function shouldIgnoreOptimisticDraftStateSync(options: {
@@ -748,9 +752,10 @@ export function useAppShellSessionSync({
         const previousWasOptimisticDraft =
           previousState.draft &&
           previousState.sessionKey?.startsWith("optimistic:")
-        const draftMatchesPendingOwner = currentDraftOwnerKey
-          ? promptDraftKey(nextState) === currentDraftOwnerKey
-          : false
+        const draftMatchesPendingOwner = promptDraftKeyMatchesOwner(
+          promptDraftKey(nextState),
+          currentDraftOwnerKey
+        )
         const shouldClearDraftRoute = Boolean(
           currentRouteSessionId &&
           !pendingRouteSessionIdRef.current &&

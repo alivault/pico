@@ -141,6 +141,18 @@ export function promptDraftKey(target: PromptDraftTarget = {}) {
   return `draft:${target.cwd?.trim() || "default"}`
 }
 
+export function promptDraftKeyMatchesOwner(
+  draftKey: string,
+  ownerKey: string | null | undefined
+) {
+  if (!ownerKey) return false
+  if (draftKey === ownerKey) return true
+
+  // During optimistic new-session startup, the client may not know the server's
+  // resolved cwd yet and uses the default draft owner key until state sync lands.
+  return ownerKey === promptDraftKey() && draftKey.startsWith("draft:")
+}
+
 function loadStoredPromptDrafts() {
   try {
     const raw = safeSessionStorageGetItem(PROMPT_DRAFTS_STORAGE_KEY)

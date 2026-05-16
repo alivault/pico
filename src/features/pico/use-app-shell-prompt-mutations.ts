@@ -28,6 +28,7 @@ import {
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   normalizeStoredDirectoryList,
   promptDraftKey,
+  promptDraftKeyMatchesOwner,
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 
@@ -210,8 +211,13 @@ function buildCurrentSessionRequestUrl(
     !sessionState.sessionKey.startsWith("optimistic:")
       ? sessionState.sessionKey
       : undefined
+  const hasFallbackSession = Boolean(
+    fallbackSessionId && fallbackSessionId !== sessionState.sessionId
+  )
   const shouldUseSessionKey = Boolean(
-    sessionKey && (sessionState.draft || !sessionState.sessionId)
+    sessionKey &&
+    !hasFallbackSession &&
+    (sessionState.draft || !sessionState.sessionId)
   )
 
   return buildRequestUrl(path, {
@@ -966,7 +972,7 @@ export function useAppShellPromptMutations({
     const currentOwnerKey = promptDraftKey(currentSessionState)
     if (
       !currentSessionState.draft ||
-      currentOwnerKey !== draftSessionLoadingOwnerKey
+      !promptDraftKeyMatchesOwner(currentOwnerKey, draftSessionLoadingOwnerKey)
     ) {
       return
     }
