@@ -3,12 +3,13 @@ import { ArrowLeftIcon } from "lucide-react"
 
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
 import {
-  THEME_COLOR_MODES,
   THEME_FAMILIES,
   themeColorModeLabel,
   themeFamilyDescription,
+  themeFamilyFixedMode,
   themeFamilyKeywords,
   themeFamilyLabel,
+  themeFamilySupportsColorMode,
   type ThemeColorMode,
   type ThemeFamily,
 } from "@/lib/pico"
@@ -34,14 +35,115 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
-const THEME_COLOR_MODE_OPTIONS: Array<ThemeColorMode> = [...THEME_COLOR_MODES]
+const THEME_SELECTION_SECTION_CONFIGS = [
+  { heading: "Auto", colorMode: "auto" },
+  { heading: "Dark", colorMode: "dark" },
+  { heading: "Light", colorMode: "light" },
+] as const satisfies ReadonlyArray<{
+  heading: string
+  colorMode: ThemeColorMode
+}>
+const THEME_SELECTION_SECTIONS = THEME_SELECTION_SECTION_CONFIGS.map(
+  (section) => ({
+    ...section,
+    themes: THEME_OPTIONS.filter((theme) =>
+      themeFamilySupportsColorMode(theme, section.colorMode)
+    ),
+  })
+)
 const SETTINGS_DIALOG_AUTO_FOCUS_MEDIA = "(min-width: 768px)"
+
+type ThemeSelection = {
+  theme: ThemeFamily
+  colorMode: ThemeColorMode
+}
 
 function shouldAutoFocusSettingsDialogInput() {
   return (
     typeof window !== "undefined" &&
     window.matchMedia(SETTINGS_DIALOG_AUTO_FOCUS_MEDIA).matches
   )
+}
+
+function isThemeColorMode(value: string): value is ThemeColorMode {
+  return value === "auto" || value === "light" || value === "dark"
+}
+
+function themeSelectionKey(selection: ThemeSelection) {
+  return `${selection.colorMode}:${selection.theme}`
+}
+
+function themeSelectionFromKey(value: string): ThemeSelection | undefined {
+  const separatorIndex = value.indexOf(":")
+
+  if (separatorIndex < 0) return undefined
+
+  const colorMode = value.slice(0, separatorIndex)
+  const theme = value.slice(separatorIndex + 1)
+
+  if (!isThemeColorMode(colorMode)) return undefined
+  if (!THEME_OPTIONS.includes(theme as ThemeFamily)) return undefined
+
+  const normalizedTheme = theme as ThemeFamily
+  if (!themeFamilySupportsColorMode(normalizedTheme, colorMode)) {
+    return undefined
+  }
+
+  return { theme: normalizedTheme, colorMode }
+}
+
+function themeSelectionForCurrent(
+  theme: ThemeFamily,
+  colorMode: ThemeColorMode
+): ThemeSelection {
+  return {
+    theme,
+    colorMode: themeFamilyFixedMode(theme) ?? colorMode,
+  }
+}
+
+function themeSelectionModeLabel(
+  selection: ThemeSelection,
+  systemTheme?: string
+) {
+  if (selection.colorMode === "auto") {
+    return themeColorModeLabel(selection.colorMode, systemTheme)
+  }
+
+  return selection.colorMode === "light" ? "Light" : "Dark"
+}
+
+function themeSelectionValueLabel(
+  selection: ThemeSelection,
+  systemTheme?: string
+) {
+  return `${themeFamilyLabel(selection.theme)} · ${themeSelectionModeLabel(
+    selection,
+    systemTheme
+  )}`
+}
+
+function themeSelectionDescription(selection: ThemeSelection) {
+  if (selection.colorMode === "auto") {
+    return `Auto: ${themeFamilyDescription(selection.theme)}`
+  }
+
+  const fixedMode = themeFamilyFixedMode(selection.theme)
+  if (fixedMode) {
+    return `${themeSelectionModeLabel(selection)} only: ${themeFamilyDescription(
+      selection.theme
+    )}`
+  }
+
+  return themeFamilyDescription(selection.theme)
+}
+
+function themeSelectionKeywords(selection: ThemeSelection) {
+  return [
+    selection.colorMode,
+    themeSelectionModeLabel(selection),
+    ...themeFamilyKeywords(selection.theme),
+  ]
 }
 
 type SettingsDialogStage = "browse" | "theme"
@@ -51,27 +153,39 @@ type SettingsDialogState = {
   themeQuery: string
   stage: SettingsDialogStage
   selectedCommandId: string
-  selectedTheme: ThemeFamily
+  selectedTheme: ThemeSelection
 }
 
 type SettingsDialogAction =
-  | { type: "reset"; currentTheme: ThemeFamily }
+  | {
+      type: "reset"
+      currentTheme: ThemeFamily
+      currentThemeColorMode: ThemeColorMode
+    }
   | { type: "set-query"; query: string }
   | { type: "set-theme-query"; themeQuery: string }
   | { type: "set-selected-command-id"; selectedCommandId: string }
-  | { type: "open-theme"; currentTheme: ThemeFamily }
-  | { type: "close-theme"; selectedTheme: ThemeFamily }
-  | { type: "preview-theme"; selectedTheme: ThemeFamily }
+  | {
+      type: "open-theme"
+      currentTheme: ThemeFamily
+      currentThemeColorMode: ThemeColorMode
+    }
+  | { type: "close-theme"; selectedTheme: ThemeSelection }
+  | { type: "preview-theme"; selectedTheme: ThemeSelection }
 
 function createInitialSettingsDialogState(
-  currentTheme: ThemeFamily
+  currentTheme: ThemeFamily,
+  currentThemeColorMode: ThemeColorMode
 ): SettingsDialogState {
   return {
     query: "",
     themeQuery: "",
     stage: "browse",
     selectedCommandId: "theme",
-    selectedTheme: currentTheme,
+    selectedTheme: themeSelectionForCurrent(
+      currentTheme,
+      currentThemeColorMode
+    ),
   }
 }
 
@@ -81,7 +195,10 @@ function settingsDialogReducer(
 ): SettingsDialogState {
   switch (action.type) {
     case "reset":
-      return createInitialSettingsDialogState(action.currentTheme)
+      return createInitialSettingsDialogState(
+        action.currentTheme,
+        action.currentThemeColorMode
+      )
     case "set-query":
       return { ...state, query: action.query }
     case "set-theme-query":
@@ -89,7 +206,14 @@ function settingsDialogReducer(
     case "set-selected-command-id":
       return { ...state, selectedCommandId: action.selectedCommandId }
     case "open-theme":
-      return { ...state, stage: "theme", selectedTheme: action.currentTheme }
+      return {
+        ...state,
+        stage: "theme",
+        selectedTheme: themeSelectionForCurrent(
+          action.currentTheme,
+          action.currentThemeColorMode
+        ),
+      }
     case "close-theme":
       return { ...state, stage: "browse", selectedTheme: action.selectedTheme }
     case "preview-theme":
@@ -133,13 +257,6 @@ function formatToggleValue(enabled: boolean) {
   return enabled ? "On" : "Off"
 }
 
-function nextThemeColorMode(currentMode: ThemeColorMode) {
-  const currentIndex = THEME_COLOR_MODE_OPTIONS.indexOf(currentMode)
-  const nextIndex = (currentIndex + 1) % THEME_COLOR_MODE_OPTIONS.length
-
-  return THEME_COLOR_MODE_OPTIONS[nextIndex] ?? "auto"
-}
-
 function settingsCommandKeywords(command: SettingsCommand) {
   return [
     command.title,
@@ -178,7 +295,7 @@ type AppShellSettingsDialogProps = {
   currentThemeColorMode: ThemeColorMode
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
-  onThemePreviewChange: (value: ThemeFamily) => void
+  onThemePreviewChange: (value: ThemeFamily, colorMode: ThemeColorMode) => void
   systemTheme?: string
   hideThinkingBlocks: boolean
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -219,7 +336,6 @@ type SettingsCommandGroupsOptions = Pick<
   | "onLogoutProviders"
 > & {
   onThemeCommand: () => void
-  onThemeColorModeCommand: () => void
 }
 
 function getSettingsCommandGroups({
@@ -242,7 +358,6 @@ function getSettingsCommandGroups({
   onLoginProviders,
   onLogoutProviders,
   onThemeCommand,
-  onThemeColorModeCommand,
 }: SettingsCommandGroupsOptions): Array<SettingsCommandGroup> {
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
@@ -255,23 +370,22 @@ function getSettingsCommandGroups({
         {
           id: "theme",
           title: "Theme",
-          description: "Choose a color palette.",
-          valueLabel: themeFamilyLabel(currentTheme),
+          description: "Choose an auto, dark, or light color palette.",
+          valueLabel: themeSelectionValueLabel(
+            themeSelectionForCurrent(currentTheme, currentThemeColorMode),
+            systemTheme
+          ),
           keywords: [
+            "auto",
+            "system",
+            "light",
+            "dark",
             "color",
             "mode",
             "palette",
             ...THEME_OPTIONS.flatMap((theme) => themeFamilyKeywords(theme)),
           ],
           onSelect: onThemeCommand,
-        },
-        {
-          id: "theme-color-mode",
-          title: "Light/dark mode",
-          description: "Follow OS appearance, or force light or dark mode.",
-          valueLabel: themeColorModeLabel(currentThemeColorMode, systemTheme),
-          keywords: ["auto", "system", "light", "dark", "mode", "color"],
-          onSelect: onThemeColorModeCommand,
         },
       ],
     },
@@ -450,17 +564,21 @@ function SettingsBrowseBody({
 
 type SettingsThemeBodyProps = {
   currentTheme: ThemeFamily
-  selectedTheme: ThemeFamily
+  currentThemeColorMode: ThemeColorMode
+  selectedTheme: ThemeSelection
+  systemTheme?: string
   themeQuery: string
   onThemeQueryChange: (query: string) => void
-  onThemePreview: (theme: ThemeFamily) => void
-  onThemeSelect: (theme: ThemeFamily) => void
+  onThemePreview: (selection: ThemeSelection) => void
+  onThemeSelect: (selection: ThemeSelection) => void
   onCancelThemePreview: () => void
 }
 
 function SettingsThemeBody({
   currentTheme,
+  currentThemeColorMode,
   selectedTheme,
+  systemTheme,
   themeQuery,
   onThemeQueryChange,
   onThemePreview,
@@ -499,15 +617,22 @@ function SettingsThemeBody({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">Choose theme</div>
           <div className="truncate text-xs text-muted-foreground">
-            Current: {themeFamilyLabel(currentTheme)}
+            Current:{" "}
+            {themeSelectionValueLabel(
+              themeSelectionForCurrent(currentTheme, currentThemeColorMode),
+              systemTheme
+            )}
           </div>
         </div>
       </div>
       <Command
         shouldFilter
         loop
-        value={selectedTheme}
-        onValueChange={(value) => onThemePreview(value as ThemeFamily)}
+        value={themeSelectionKey(selectedTheme)}
+        onValueChange={(value) => {
+          const selection = themeSelectionFromKey(value)
+          if (selection) onThemePreview(selection)
+        }}
         className="min-h-0 flex-1 rounded-none!"
       >
         <CommandInput
@@ -519,27 +644,42 @@ function SettingsThemeBody({
         />
         <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,28rem)]">
           <CommandEmpty>No themes found.</CommandEmpty>
-          <CommandGroup heading="Themes">
-            {THEME_OPTIONS.map((theme) => (
-              <CommandItem
-                key={theme}
-                value={theme}
-                keywords={themeFamilyKeywords(theme)}
-                onSelect={() => onThemeSelect(theme)}
-                data-checked={theme === currentTheme ? true : undefined}
-                className="items-start py-2"
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">
-                    {themeFamilyLabel(theme)}
-                  </span>
-                  <span className="line-clamp-2 text-xs text-muted-foreground">
-                    {themeFamilyDescription(theme)}
-                  </span>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {THEME_SELECTION_SECTIONS.map((section) => (
+            <CommandGroup key={section.colorMode} heading={section.heading}>
+              {section.themes.map((theme) => {
+                const selection = { theme, colorMode: section.colorMode }
+                const selectionKey = themeSelectionKey(selection)
+                const currentSelection = themeSelectionForCurrent(
+                  currentTheme,
+                  currentThemeColorMode
+                )
+
+                return (
+                  <CommandItem
+                    key={selectionKey}
+                    value={selectionKey}
+                    keywords={themeSelectionKeywords(selection)}
+                    onSelect={() => onThemeSelect(selection)}
+                    data-checked={
+                      selectionKey === themeSelectionKey(currentSelection)
+                        ? true
+                        : undefined
+                    }
+                    className="items-start py-2"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate font-medium">
+                        {themeFamilyLabel(theme)}
+                      </span>
+                      <span className="line-clamp-2 text-xs text-muted-foreground">
+                        {themeSelectionDescription(selection)}
+                      </span>
+                    </div>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          ))}
         </CommandList>
         <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
           Use ↑/↓ to select, Enter to choose, and Esc to go back.
@@ -592,21 +732,33 @@ function AppShellSettingsDialog({
 }: AppShellSettingsDialogProps) {
   const [state, dispatch] = React.useReducer(
     settingsDialogReducer,
-    currentTheme,
-    createInitialSettingsDialogState
+    { currentTheme, currentThemeColorMode },
+    ({ currentTheme: initialTheme, currentThemeColorMode: initialColorMode }) =>
+      createInitialSettingsDialogState(initialTheme, initialColorMode)
   )
-  const themePreviewInitialRef = React.useRef<ThemeFamily>(currentTheme)
+  const themePreviewInitialRef = React.useRef<ThemeSelection>(
+    themeSelectionForCurrent(currentTheme, currentThemeColorMode)
+  )
   const isMobile = useIsMobile()
 
   React.useEffect(() => {
     if (open) return
 
     if (state.stage === "theme") {
-      onThemePreviewChange(themePreviewInitialRef.current)
+      onThemePreviewChange(
+        themePreviewInitialRef.current.theme,
+        themePreviewInitialRef.current.colorMode
+      )
     }
 
-    dispatch({ type: "reset", currentTheme })
-  }, [currentTheme, onThemePreviewChange, open, state.stage])
+    dispatch({ type: "reset", currentTheme, currentThemeColorMode })
+  }, [
+    currentTheme,
+    currentThemeColorMode,
+    onThemePreviewChange,
+    open,
+    state.stage,
+  ])
 
   const handleSelect = (command: SettingsCommand) => {
     void Promise.resolve(command.onSelect()).catch((error: unknown) => {
@@ -614,24 +766,27 @@ function AppShellSettingsDialog({
     })
   }
 
-  const handleThemePreview = (theme: ThemeFamily) => {
-    if (!THEME_OPTIONS.includes(theme)) return
+  const handleThemePreview = (selection: ThemeSelection) => {
+    if (!THEME_OPTIONS.includes(selection.theme)) return
+    if (!themeFamilySupportsColorMode(selection.theme, selection.colorMode))
+      return
 
-    dispatch({ type: "preview-theme", selectedTheme: theme })
-    onThemePreviewChange(theme)
+    dispatch({ type: "preview-theme", selectedTheme: selection })
+    onThemePreviewChange(selection.theme, selection.colorMode)
   }
 
-  const handleThemeSelect = (theme: ThemeFamily) => {
-    dispatch({ type: "preview-theme", selectedTheme: theme })
-    themePreviewInitialRef.current = theme
-    onThemeChange(theme)
+  const handleThemeSelect = (selection: ThemeSelection) => {
+    dispatch({ type: "preview-theme", selectedTheme: selection })
+    themePreviewInitialRef.current = selection
+    onThemeColorModeChange(selection.colorMode)
+    onThemeChange(selection.theme)
     onOpenChange(false)
   }
 
   const cancelThemePreview = () => {
     const initialTheme = themePreviewInitialRef.current
     dispatch({ type: "close-theme", selectedTheme: initialTheme })
-    onThemePreviewChange(initialTheme)
+    onThemePreviewChange(initialTheme.theme, initialTheme.colorMode)
   }
 
   const settingGroups = getSettingsCommandGroups({
@@ -654,11 +809,12 @@ function AppShellSettingsDialog({
     onLoginProviders,
     onLogoutProviders,
     onThemeCommand: () => {
-      themePreviewInitialRef.current = currentTheme
-      dispatch({ type: "open-theme", currentTheme })
+      themePreviewInitialRef.current = themeSelectionForCurrent(
+        currentTheme,
+        currentThemeColorMode
+      )
+      dispatch({ type: "open-theme", currentTheme, currentThemeColorMode })
     },
-    onThemeColorModeCommand: () =>
-      onThemeColorModeChange(nextThemeColorMode(currentThemeColorMode)),
   })
 
   const settingsCommandBody = (
@@ -675,7 +831,9 @@ function AppShellSettingsDialog({
       }}
       themeBodyProps={{
         currentTheme,
+        currentThemeColorMode,
         selectedTheme: state.selectedTheme,
+        systemTheme,
         themeQuery: state.themeQuery,
         onThemeQueryChange: (themeQuery) =>
           dispatch({ type: "set-theme-query", themeQuery }),

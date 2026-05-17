@@ -1,3 +1,8 @@
+import {
+  SHIKI_BUNDLED_THEME_DEFINITIONS,
+  SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS,
+} from "@/lib/pico/shiki-bundled-themes"
+
 export const THEME_COLOR_MODES = ["auto", "light", "dark"] as const
 
 export const PICO_CODE_SHIKI_THEME = "pico-code"
@@ -48,6 +53,8 @@ type ThemeDefinitionConfig = {
   description: string
   keywords: ReadonlyArray<string>
   classes: Record<ResolvedThemeMode, string>
+  mode?: ResolvedThemeMode
+  selectorModes?: ReadonlyArray<ThemeColorMode>
 }
 
 export const THEME_DEFINITIONS = [
@@ -127,6 +134,8 @@ export const THEME_DEFINITIONS = [
     keywords: ["tokyo", "tokyonight", "moon", "day", "folke", "nvim"],
     classes: { light: "tokyonight-day", dark: "tokyonight-moon" },
   },
+  ...SHIKI_BUNDLED_THEME_DEFINITIONS,
+  ...SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS,
 ] as const satisfies ReadonlyArray<ThemeDefinitionConfig>
 
 type ThemeDefinition = (typeof THEME_DEFINITIONS)[number]
@@ -159,6 +168,39 @@ function getThemeDefinition(theme: ThemeFamily): ThemeDefinition {
   )
 }
 
+function themeDefinitionMode(
+  definition: ThemeDefinition
+): ResolvedThemeMode | undefined {
+  return "mode" in definition ? definition.mode : undefined
+}
+
+export function themeFamilyFixedMode(
+  theme: ThemeFamily
+): ResolvedThemeMode | undefined {
+  return themeDefinitionMode(getThemeDefinition(normalizeThemeFamily(theme)))
+}
+
+function themeDefinitionSelectorModes(
+  definition: ThemeDefinition
+): ReadonlyArray<ThemeColorMode> {
+  if ("selectorModes" in definition && definition.selectorModes) {
+    return definition.selectorModes
+  }
+
+  const fixedMode = themeDefinitionMode(definition)
+
+  return fixedMode ? [fixedMode] : THEME_COLOR_MODES
+}
+
+export function themeFamilySupportsColorMode(
+  theme: ThemeFamily,
+  mode: ThemeColorMode
+) {
+  return themeDefinitionSelectorModes(
+    getThemeDefinition(normalizeThemeFamily(theme))
+  ).includes(mode)
+}
+
 export function appliedThemeClassColorMode(
   themeClass: unknown
 ): ResolvedThemeMode | undefined {
@@ -166,8 +208,12 @@ export function appliedThemeClassColorMode(
   if (!normalized) return undefined
 
   for (const definition of THEME_DEFINITIONS) {
-    if (definition.classes.dark === normalized) return "dark"
-    if (definition.classes.light === normalized) return "light"
+    if (definition.classes.dark === normalized) {
+      return themeDefinitionMode(definition) ?? "dark"
+    }
+    if (definition.classes.light === normalized) {
+      return themeDefinitionMode(definition) ?? "light"
+    }
   }
 
   return undefined
@@ -213,8 +259,9 @@ export function appliedThemeClass(
   mode: ThemeColorMode,
   systemTheme?: string
 ): AppliedThemeClass {
-  const resolvedMode = resolvedThemeMode(mode, systemTheme)
   const definition = getThemeDefinition(normalizeThemeFamily(family))
+  const resolvedMode =
+    themeDefinitionMode(definition) ?? resolvedThemeMode(mode, systemTheme)
 
   return definition.classes[resolvedMode]
 }

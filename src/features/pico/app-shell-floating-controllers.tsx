@@ -112,7 +112,7 @@ type AppShellFloatingControllersProps = {
   ) => void
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
-  onThemePreviewChange: (value: ThemeFamily) => void
+  onThemePreviewChange: (value: ThemeFamily, colorMode: ThemeColorMode) => void
   recentDirectoriesStore: PicoStore<Array<string>>
   renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>

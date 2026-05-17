@@ -1,0 +1,3445 @@
+/* Generated from Shiki 65 bundled themes. */
+.shiki-theme-andromeeda {
+  color-scheme: dark;
+  --background: #23262e;
+  --foreground: #d5ced9;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #00e8c5cc;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #96e072;
+  --warning: #ffe66d;
+  --danger: #ee5d43;
+  --inline-code-foreground: #d5ced9;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d5ced9;
+  --code-comment: #a0a1a7cc;
+  --code-keyword: #f39c12;
+  --code-string: #d5ced9;
+  --code-number: #d5ced9;
+  --code-title: #ffe66d;
+  --code-meta: #a0a1a7cc;
+  --code-variable: #00e8c6;
+  --code-symbol: #f39c12;
+  --code-selection: #3d4352;
+}
+
+.shiki-theme-aurora-x {
+  color-scheme: dark;
+  --background: #07090f;
+  --foreground: #576daf;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #86a5ff;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #64d389fd;
+  --warning: #ffffff;
+  --danger: #dd5074;
+  --inline-code-foreground: #ffffff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #576daf;
+  --code-comment: #546e7a;
+  --code-keyword: #c792ea;
+  --code-string: #eeffff;
+  --code-number: #ffffff;
+  --code-title: #82aaff;
+  --code-meta: #546e7a;
+  --code-variable: #eeffff;
+  --code-symbol: #ffcb6b;
+  --code-selection: #262e47;
+}
+
+.shiki-theme-ayu-dark {
+  color-scheme: dark;
+  --background: #10141c;
+  --foreground: #bfbdb6;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #e6b450;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #70bf56;
+  --warning: #fdb04c;
+  --danger: #f26d78;
+  --inline-code-foreground: #aad94c;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #bfbdb6;
+  --code-comment: #5a6673;
+  --code-keyword: #ff8f40;
+  --code-string: #aad94c;
+  --code-number: #aad94c;
+  --code-title: #bfbdb6;
+  --code-meta: #f29668;
+  --code-variable: #bfbdb6;
+  --code-symbol: #59c2ff;
+  --code-selection: #3388ff40;
+}
+
+.shiki-theme-ayu-light {
+  color-scheme: light;
+  --background: #fcfcfc;
+  --foreground: #5c6166;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #f29718;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #6cbf43;
+  --warning: #e7a100;
+  --danger: #ff7383;
+  --inline-code-foreground: #86b300;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #5c6166;
+  --code-comment: #adaeb1;
+  --code-keyword: #fa8532;
+  --code-string: #86b300;
+  --code-number: #86b300;
+  --code-title: #5c6166;
+  --code-meta: #f2a191;
+  --code-variable: #5c6166;
+  --code-symbol: #22a4e6;
+  --code-selection: #035bd626;
+}
+
+.shiki-theme-ayu-mirage {
+  color-scheme: dark;
+  --background: #242936;
+  --foreground: #cccac2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #ffcc66;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #87d96c;
+  --warning: #fcca60;
+  --danger: #f27983;
+  --inline-code-foreground: #d5ff80;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #cccac2;
+  --code-comment: #6e7c8f;
+  --code-keyword: #ffa659;
+  --code-string: #d5ff80;
+  --code-number: #d5ff80;
+  --code-title: #cccac2;
+  --code-meta: #f29e74;
+  --code-variable: #cccac2;
+  --code-symbol: #73d0ff;
+  --code-selection: #409fff40;
+}
+
+.shiki-theme-catppuccin-frappe {
+  color-scheme: dark;
+  --background: #303446;
+  --foreground: #c6d0f5;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #8caaee;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #a6d189;
+  --warning: #e5c890;
+  --danger: #e78284;
+  --inline-code-foreground: #f4b8e4;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #c6d0f5;
+  --code-comment: #949cbb;
+  --code-keyword: #ef9f76;
+  --code-string: #a6d189;
+  --code-number: #f4b8e4;
+  --code-title: #81c8be;
+  --code-meta: #c6d0f5;
+  --code-variable: #c6d0f5;
+  --code-symbol: #ca9ee6;
+  --code-selection: #949cbb40;
+}
+
+.shiki-theme-catppuccin-latte {
+  color-scheme: light;
+  --background: #eff1f5;
+  --foreground: #4c4f69;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #1e66f5;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #40a02b;
+  --warning: #df8e1d;
+  --danger: #d20f39;
+  --inline-code-foreground: #ea76cb;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #4c4f69;
+  --code-comment: #7c7f93;
+  --code-keyword: #fe640b;
+  --code-string: #40a02b;
+  --code-number: #ea76cb;
+  --code-title: #179299;
+  --code-meta: #4c4f69;
+  --code-variable: #4c4f69;
+  --code-symbol: #8839ef;
+  --code-selection: #7c7f934d;
+}
+
+.shiki-theme-catppuccin-macchiato {
+  color-scheme: dark;
+  --background: #24273a;
+  --foreground: #cad3f5;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #8aadf4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #a6da95;
+  --warning: #eed49f;
+  --danger: #ed8796;
+  --inline-code-foreground: #f5bde6;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #cad3f5;
+  --code-comment: #939ab7;
+  --code-keyword: #f5a97f;
+  --code-string: #a6da95;
+  --code-number: #f5bde6;
+  --code-title: #8bd5ca;
+  --code-meta: #cad3f5;
+  --code-variable: #cad3f5;
+  --code-symbol: #c6a0f6;
+  --code-selection: #939ab740;
+}
+
+.shiki-theme-catppuccin-mocha {
+  color-scheme: dark;
+  --background: #1e1e2e;
+  --foreground: #cdd6f4;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #89b4fa;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #a6e3a1;
+  --warning: #f9e2af;
+  --danger: #f38ba8;
+  --inline-code-foreground: #f5c2e7;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #cdd6f4;
+  --code-comment: #9399b2;
+  --code-keyword: #fab387;
+  --code-string: #a6e3a1;
+  --code-number: #f5c2e7;
+  --code-title: #94e2d5;
+  --code-meta: #cdd6f4;
+  --code-variable: #cdd6f4;
+  --code-symbol: #cba6f7;
+  --code-selection: #9399b240;
+}
+
+.shiki-theme-dark-plus {
+  color-scheme: dark;
+  --background: #1e1e1e;
+  --foreground: #d4d4d4;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #007acc;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #d4d4d4;
+  --warning: #569cd6;
+  --danger: #d4d4d4;
+  --inline-code-foreground: #569cd6;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d4d4d4;
+  --code-comment: #6a9955;
+  --code-keyword: #b5cea8;
+  --code-string: #d4d4d4;
+  --code-number: #569cd6;
+  --code-title: #569cd6;
+  --code-meta: #d4d4d4;
+  --code-variable: #d4d4d4;
+  --code-symbol: #9cdcfe;
+  --code-selection: #3a3d41;
+}
+
+.shiki-theme-dracula {
+  color-scheme: dark;
+  --background: #282a36;
+  --foreground: #f8f8f2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #44475a;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #50fa7b;
+  --warning: #f1fa8c;
+  --danger: #ff5555;
+  --inline-code-foreground: #bd93f9;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #f8f8f2;
+  --code-comment: #6272a4;
+  --code-keyword: #bd93f9;
+  --code-string: #50fa7b;
+  --code-number: #bd93f9;
+  --code-title: #bd93f9;
+  --code-meta: #6272a4;
+  --code-variable: #bd93f9;
+  --code-symbol: #8be9fd;
+  --code-selection: #44475a;
+}
+
+.shiki-theme-dracula-soft {
+  color-scheme: dark;
+  --background: #282a36;
+  --foreground: #f6f6f4;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #44475a;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #62e884;
+  --warning: #e7ee98;
+  --danger: #ee6666;
+  --inline-code-foreground: #bf9eee;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #f6f6f4;
+  --code-comment: #7b7f8b;
+  --code-keyword: #bf9eee;
+  --code-string: #62e884;
+  --code-number: #bf9eee;
+  --code-title: #bf9eee;
+  --code-meta: #7b7f8b;
+  --code-variable: #bf9eee;
+  --code-symbol: #97e1f1;
+  --code-selection: #44475a;
+}
+
+.shiki-theme-everforest-dark {
+  color-scheme: dark;
+  --background: #2d353b;
+  --foreground: #d3c6aa;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #a7c080;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #a7c080a0;
+  --warning: #dbbc7f;
+  --danger: #e67e80a0;
+  --inline-code-foreground: #a7c080;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d3c6aa;
+  --code-comment: #859289;
+  --code-keyword: #e67e80;
+  --code-string: #dbbc7f;
+  --code-number: #a7c080;
+  --code-title: #e67e80;
+  --code-meta: #e67e80;
+  --code-variable: #a7c080;
+  --code-symbol: #83c092;
+  --code-selection: #475258c0;
+}
+
+.shiki-theme-everforest-light {
+  color-scheme: light;
+  --background: #fdf6e3;
+  --foreground: #5c6a72;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #8da101;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #8da101a0;
+  --warning: #dfa000;
+  --danger: #f85552a0;
+  --inline-code-foreground: #8da101;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #5c6a72;
+  --code-comment: #939f91;
+  --code-keyword: #f85552;
+  --code-string: #dfa000;
+  --code-number: #8da101;
+  --code-title: #f85552;
+  --code-meta: #f85552;
+  --code-variable: #8da101;
+  --code-symbol: #35a77c;
+  --code-selection: #e6e2cca0;
+}
+
+.shiki-theme-github-dark {
+  color-scheme: dark;
+  --background: #24292e;
+  --foreground: #e1e4e8;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #79b8ff;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #34d058;
+  --warning: #ffea7f;
+  --danger: #ea4a5a;
+  --inline-code-foreground: #79b8ff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #e1e4e8;
+  --code-comment: #6a737d;
+  --code-keyword: #f97583;
+  --code-string: #9ecbff;
+  --code-number: #79b8ff;
+  --code-title: #e1e4e8;
+  --code-meta: #6a737d;
+  --code-variable: #79b8ff;
+  --code-symbol: #79b8ff;
+  --code-selection: #3392ff44;
+}
+
+.shiki-theme-github-dark-default {
+  color-scheme: dark;
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #2f81f7;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --inline-code-foreground: #ff7b72;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #e6edf3;
+  --code-comment: #8b949e;
+  --code-keyword: #ff7b72;
+  --code-string: #a5d6ff;
+  --code-number: #ff7b72;
+  --code-title: #e6edf3;
+  --code-meta: #8b949e;
+  --code-variable: #79c0ff;
+  --code-symbol: #7ee787;
+  --code-selection: #6e76811a;
+}
+
+.shiki-theme-github-dark-dimmed {
+  color-scheme: dark;
+  --background: #22272e;
+  --foreground: #adbac7;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #539bf5;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #57ab5a;
+  --warning: #c69026;
+  --danger: #e5534b;
+  --inline-code-foreground: #f47067;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #adbac7;
+  --code-comment: #768390;
+  --code-keyword: #f47067;
+  --code-string: #96d0ff;
+  --code-number: #f47067;
+  --code-title: #adbac7;
+  --code-meta: #768390;
+  --code-variable: #6cb6ff;
+  --code-symbol: #8ddb8c;
+  --code-selection: #636e7b1a;
+}
+
+.shiki-theme-github-dark-high-contrast {
+  color-scheme: dark;
+  --background: #0a0c10;
+  --foreground: #f0f3f6;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #71b7ff;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #26cd4d;
+  --warning: #f0b72f;
+  --danger: #ff6a69;
+  --inline-code-foreground: #ff9492;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #f0f3f6;
+  --code-comment: #bdc4cc;
+  --code-keyword: #ff9492;
+  --code-string: #addcff;
+  --code-number: #ff9492;
+  --code-title: #f0f3f6;
+  --code-meta: #bdc4cc;
+  --code-variable: #91cbff;
+  --code-symbol: #72f088;
+  --code-selection: #ffffff;
+}
+
+.shiki-theme-github-light {
+  color-scheme: light;
+  --background: #fff;
+  --foreground: #24292e;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #0366d6;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #28a745;
+  --warning: #dbab09;
+  --danger: #d73a49;
+  --inline-code-foreground: #005cc5;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #24292e;
+  --code-comment: #6a737d;
+  --code-keyword: #d73a49;
+  --code-string: #032f62;
+  --code-number: #005cc5;
+  --code-title: #24292e;
+  --code-meta: #6a737d;
+  --code-variable: #005cc5;
+  --code-symbol: #005cc5;
+  --code-selection: #0366d625;
+}
+
+.shiki-theme-github-light-default {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #1f2328;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #0969da;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #1a7f37;
+  --warning: #4d2d00;
+  --danger: #cf222e;
+  --inline-code-foreground: #cf222e;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #1f2328;
+  --code-comment: #6e7781;
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-number: #cf222e;
+  --code-title: #1f2328;
+  --code-meta: #6e7781;
+  --code-variable: #0550ae;
+  --code-symbol: #116329;
+  --code-selection: #eaeef280;
+}
+
+.shiki-theme-github-light-high-contrast {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0e1116;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #0349b4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #055d20;
+  --warning: #3f2200;
+  --danger: #a0111f;
+  --inline-code-foreground: #a0111f;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #0e1116;
+  --code-comment: #66707b;
+  --code-keyword: #a0111f;
+  --code-string: #032563;
+  --code-number: #a0111f;
+  --code-title: #0e1116;
+  --code-meta: #66707b;
+  --code-variable: #023b95;
+  --code-symbol: #024c1a;
+  --code-selection: #0e1116;
+}
+
+.shiki-theme-gruvbox-dark-hard {
+  color-scheme: dark;
+  --background: #1d2021;
+  --foreground: #ebdbb2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #83a598;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #ebdbb2;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #d3869b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #ebdbb2;
+  --code-comment: #928374;
+  --code-keyword: #fb4934;
+  --code-string: #b8bb26;
+  --code-number: #d3869b;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #d3869b;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-gruvbox-dark-medium {
+  color-scheme: dark;
+  --background: #282828;
+  --foreground: #ebdbb2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #83a598;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #ebdbb2;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #d3869b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #ebdbb2;
+  --code-comment: #928374;
+  --code-keyword: #fb4934;
+  --code-string: #b8bb26;
+  --code-number: #d3869b;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #d3869b;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-gruvbox-dark-soft {
+  color-scheme: dark;
+  --background: #32302f;
+  --foreground: #ebdbb2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #83a598;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #ebdbb2;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #d3869b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #ebdbb2;
+  --code-comment: #928374;
+  --code-keyword: #fb4934;
+  --code-string: #b8bb26;
+  --code-number: #d3869b;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #d3869b;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-gruvbox-light-hard {
+  color-scheme: light;
+  --background: #f9f5d7;
+  --foreground: #3c3836;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #076678;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #3c3836;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #8f3f71;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #3c3836;
+  --code-comment: #928374;
+  --code-keyword: #9d0006;
+  --code-string: #79740e;
+  --code-number: #8f3f71;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #8f3f71;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-gruvbox-light-medium {
+  color-scheme: light;
+  --background: #fbf1c7;
+  --foreground: #3c3836;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #076678;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #3c3836;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #8f3f71;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #3c3836;
+  --code-comment: #928374;
+  --code-keyword: #9d0006;
+  --code-string: #79740e;
+  --code-number: #8f3f71;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #8f3f71;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-gruvbox-light-soft {
+  color-scheme: light;
+  --background: #f2e5bc;
+  --foreground: #3c3836;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #076678;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #3c3836;
+  --warning: #d79921;
+  --danger: #cc241d;
+  --inline-code-foreground: #8f3f71;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #3c3836;
+  --code-comment: #928374;
+  --code-keyword: #9d0006;
+  --code-string: #79740e;
+  --code-number: #8f3f71;
+  --code-title: #689d6a;
+  --code-meta: #928374;
+  --code-variable: #8f3f71;
+  --code-symbol: #689d6a;
+  --code-selection: #689d6a40;
+}
+
+.shiki-theme-horizon {
+  color-scheme: dark;
+  --background: #1c1e26;
+  --foreground: #d5d8da;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #e95378;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #27d797b3;
+  --warning: #fab795;
+  --danger: #f43e5c;
+  --inline-code-foreground: #f09483e6;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d5d8da;
+  --code-comment: #bbbbbb4d;
+  --code-keyword: #fac29ae6;
+  --code-string: #f09483e6;
+  --code-number: #f09483e6;
+  --code-title: #25b0bce6;
+  --code-meta: #bbbbbb;
+  --code-variable: #e95678e6;
+  --code-symbol: #fac29ae6;
+  --code-selection: #2e303eb3;
+}
+
+.shiki-theme-horizon-bright {
+  color-scheme: dark;
+  --background: #fdf0ed;
+  --foreground: #06060c;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #e84a72;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #1eb980b3;
+  --warning: #fab795;
+  --danger: #f43e5c;
+  --inline-code-foreground: #dc3318;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #06060c;
+  --code-comment: #33333380;
+  --code-keyword: #f77d26;
+  --code-string: #dc3318;
+  --code-number: #dc3318;
+  --code-title: #1d8991;
+  --code-meta: #333333;
+  --code-variable: #da103f;
+  --code-symbol: #f77d26;
+  --code-selection: #f9cbbe80;
+}
+
+.shiki-theme-houston {
+  color-scheme: dark;
+  --background: #17191e;
+  --foreground: #eef0f9;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #54b9ff;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #4bf3c8;
+  --warning: #ffc368;
+  --danger: #f4587e;
+  --inline-code-foreground: #4bf3c8;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #eef0f9;
+  --code-comment: #545864;
+  --code-keyword: #ffd493;
+  --code-string: #ffd493;
+  --code-number: #4bf3c8;
+  --code-title: #acafff;
+  --code-meta: #4bf3c8;
+  --code-variable: #54b9ff;
+  --code-symbol: #eef0f9;
+  --code-selection: #ad5dca44;
+}
+
+.shiki-theme-kanagawa-dragon {
+  color-scheme: dark;
+  --background: #181616;
+  --foreground: #c5c9c5;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #6a9589;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #8a9a7b;
+  --warning: #c4b28a;
+  --danger: #c4746e;
+  --inline-code-foreground: #b6927b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #c5c9c5;
+  --code-comment: #737c73;
+  --code-keyword: #8992a7;
+  --code-string: #c5c9c5;
+  --code-number: #b6927b;
+  --code-title: #8ba4b0;
+  --code-meta: #737c73;
+  --code-variable: #c5c9c5;
+  --code-symbol: #8ea4a2;
+  --code-selection: #223249;
+}
+
+.shiki-theme-kanagawa-lotus {
+  color-scheme: light;
+  --background: #f2ecbc;
+  --foreground: #545464;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #5e857a;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #6f894e;
+  --warning: #77713f;
+  --danger: #c84053;
+  --inline-code-foreground: #cc6d00;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #545464;
+  --code-comment: #716e61;
+  --code-keyword: #624c83;
+  --code-string: #545464;
+  --code-number: #cc6d00;
+  --code-title: #4d699b;
+  --code-meta: #716e61;
+  --code-variable: #545464;
+  --code-symbol: #597b75;
+  --code-selection: #c7d7e0;
+}
+
+.shiki-theme-kanagawa-wave {
+  color-scheme: dark;
+  --background: #1f1f28;
+  --foreground: #dcd7ba;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #6a9589;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #76946a;
+  --warning: #c0a36e;
+  --danger: #c34043;
+  --inline-code-foreground: #ffa066;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #dcd7ba;
+  --code-comment: #727169;
+  --code-keyword: #957fb8;
+  --code-string: #dcd7ba;
+  --code-number: #ffa066;
+  --code-title: #7e9cd8;
+  --code-meta: #727169;
+  --code-variable: #dcd7ba;
+  --code-symbol: #7aa89f;
+  --code-selection: #223249;
+}
+
+.shiki-theme-laserwave {
+  color-scheme: dark;
+  --background: #27212e;
+  --foreground: #ffffff;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #eb64b9;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #74dfc4;
+  --warning: #ffe261;
+  --danger: #b381c5;
+  --inline-code-foreground: #b381c5;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #ffffff;
+  --code-comment: #91889b;
+  --code-keyword: #40b4c4;
+  --code-string: #b4dce7;
+  --code-number: #b381c5;
+  --code-title: #40b4c4;
+  --code-meta: #40b4c4;
+  --code-variable: #40b4c4;
+  --code-symbol: #74dfc4;
+  --code-selection: #eb64b927;
+}
+
+.shiki-theme-light-plus {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #007acc;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #000000ff;
+  --warning: #0000ff;
+  --danger: #000000ff;
+  --inline-code-foreground: #0000ff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #000000;
+  --code-comment: #008000;
+  --code-keyword: #098658;
+  --code-string: #000000ff;
+  --code-number: #0000ff;
+  --code-title: #0000ff;
+  --code-meta: #000000ff;
+  --code-variable: #000000ff;
+  --code-symbol: #e50000;
+  --code-selection: #e5ebf1;
+}
+
+.shiki-theme-material-theme {
+  color-scheme: dark;
+  --background: #263238;
+  --foreground: #eeffff;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #80cbc4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #c3e88d;
+  --warning: #ffcb6b;
+  --danger: #f0717890;
+  --inline-code-foreground: #89ddff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #eeffff;
+  --code-comment: #546e7a;
+  --code-keyword: #f78c6c;
+  --code-string: #c3e88d;
+  --code-number: #89ddff;
+  --code-title: #eeffff;
+  --code-meta: #89ddff;
+  --code-variable: #eeffff;
+  --code-symbol: #89ddff;
+  --code-selection: #80cbc420;
+}
+
+.shiki-theme-material-theme-darker {
+  color-scheme: dark;
+  --background: #212121;
+  --foreground: #eeffff;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #80cbc4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #c3e88d;
+  --warning: #ffcb6b;
+  --danger: #f0717890;
+  --inline-code-foreground: #89ddff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #eeffff;
+  --code-comment: #545454;
+  --code-keyword: #f78c6c;
+  --code-string: #c3e88d;
+  --code-number: #89ddff;
+  --code-title: #eeffff;
+  --code-meta: #89ddff;
+  --code-variable: #eeffff;
+  --code-symbol: #89ddff;
+  --code-selection: #61616150;
+}
+
+.shiki-theme-material-theme-lighter {
+  color-scheme: light;
+  --background: #fafafa;
+  --foreground: #90a4ae;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #80cbc4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #91b859;
+  --warning: #e2931d;
+  --danger: #e5393590;
+  --inline-code-foreground: #39adb5;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #90a4ae;
+  --code-comment: #90a4ae;
+  --code-keyword: #f76d47;
+  --code-string: #91b859;
+  --code-number: #39adb5;
+  --code-title: #90a4ae;
+  --code-meta: #39adb5;
+  --code-variable: #90a4ae;
+  --code-symbol: #39adb5;
+  --code-selection: #80cbc440;
+}
+
+.shiki-theme-material-theme-ocean {
+  color-scheme: dark;
+  --background: #0f111a;
+  --foreground: #babed8;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #80cbc4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #c3e88d;
+  --warning: #ffcb6b;
+  --danger: #f0717890;
+  --inline-code-foreground: #89ddff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #babed8;
+  --code-comment: #464b5d;
+  --code-keyword: #f78c6c;
+  --code-string: #c3e88d;
+  --code-number: #89ddff;
+  --code-title: #babed8;
+  --code-meta: #89ddff;
+  --code-variable: #babed8;
+  --code-symbol: #89ddff;
+  --code-selection: #717cb450;
+}
+
+.shiki-theme-material-theme-palenight {
+  color-scheme: dark;
+  --background: #292d3e;
+  --foreground: #babed8;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #80cbc4;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #c3e88d;
+  --warning: #ffcb6b;
+  --danger: #f0717890;
+  --inline-code-foreground: #89ddff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #babed8;
+  --code-comment: #676e95;
+  --code-keyword: #f78c6c;
+  --code-string: #c3e88d;
+  --code-number: #89ddff;
+  --code-title: #babed8;
+  --code-meta: #89ddff;
+  --code-variable: #babed8;
+  --code-symbol: #89ddff;
+  --code-selection: #717cb450;
+}
+
+.shiki-theme-min-dark {
+  color-scheme: dark;
+  --background: #1f1f1f;
+  --foreground: #888888;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #ccc;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #9db1c5;
+  --warning: #79b8ff;
+  --danger: #79b8ff;
+  --inline-code-foreground: #79b8ff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #888888;
+  --code-comment: #6b737c;
+  --code-keyword: #b392f0;
+  --code-string: #9db1c5;
+  --code-number: #79b8ff;
+  --code-title: #b392f0;
+  --code-meta: #b392f0;
+  --code-variable: #79b8ff;
+  --code-symbol: #f8f8f8;
+  --code-selection: color-mix(in lab, var(--background) 80%, var(--primary));
+}
+
+.shiki-theme-min-light {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #212121;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #000;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #77cc00;
+  --warning: #f29718;
+  --danger: #d32f2f;
+  --inline-code-foreground: #1976d2;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #212121;
+  --code-comment: #c2c3c5;
+  --code-keyword: #24292eff;
+  --code-string: #2b5581;
+  --code-number: #1976d2;
+  --code-title: #24292eff;
+  --code-meta: #24292eff;
+  --code-variable: #1976d2;
+  --code-symbol: #d32f2f;
+  --code-selection: color-mix(in lab, var(--background) 80%, var(--primary));
+}
+
+.shiki-theme-monokai {
+  color-scheme: dark;
+  --background: #272822;
+  --foreground: #f8f8f2;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #75715e;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #86b42b;
+  --warning: #b3b42b;
+  --danger: #c4265e;
+  --inline-code-foreground: #ae81ff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #f8f8f2;
+  --code-comment: #88846f;
+  --code-keyword: #f92672;
+  --code-string: #f8f8f2;
+  --code-number: #ae81ff;
+  --code-title: #a6e22e;
+  --code-meta: #f8f8f2;
+  --code-variable: #f8f8f2;
+  --code-symbol: #a6e22e;
+  --code-selection: #878b9180;
+}
+
+.shiki-theme-night-owl {
+  color-scheme: dark;
+  --background: #011627;
+  --foreground: #d6deeb;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #7e57c2cc;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #22da6e;
+  --warning: #c5e478;
+  --danger: #ef535090;
+  --inline-code-foreground: #f78c6c;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d6deeb;
+  --code-comment: #637777;
+  --code-keyword: #c792ea;
+  --code-string: #ecc48d;
+  --code-number: #f78c6c;
+  --code-title: #5f7e97;
+  --code-meta: #a2bffc;
+  --code-variable: #ecc48d;
+  --code-symbol: #ffcb8b;
+  --code-selection: #1d3b53;
+}
+
+.shiki-theme-night-owl-light {
+  color-scheme: light;
+  --background: #fbfbfb;
+  --foreground: #403f53;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #2aa298;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #08916a;
+  --warning: #e0af02;
+  --danger: #de3d3b;
+  --inline-code-foreground: #aa0982;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #403f53;
+  --code-comment: #989fb1;
+  --code-keyword: #994cc3;
+  --code-string: #4876d6;
+  --code-number: #aa0982;
+  --code-title: #5f7e97;
+  --code-meta: #a2bffc;
+  --code-variable: #c96765;
+  --code-symbol: #111111;
+  --code-selection: #e0e0e0;
+}
+
+.shiki-theme-nord {
+  color-scheme: dark;
+  --background: #2e3440;
+  --foreground: #d8dee9;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #88c0d0;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #a3be8c;
+  --warning: #ebcb8b;
+  --danger: #bf616a;
+  --inline-code-foreground: #ebcb8b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #d8dee9;
+  --code-comment: #616e88;
+  --code-keyword: #81a1c1;
+  --code-string: #a3be8c;
+  --code-number: #ebcb8b;
+  --code-title: #88c0d0;
+  --code-meta: #81a1c1;
+  --code-variable: #eceff4;
+  --code-symbol: #8fbcbb;
+  --code-selection: #434c5ecc;
+}
+
+.shiki-theme-one-dark-pro {
+  color-scheme: dark;
+  --background: #282c34;
+  --foreground: #abb2bf;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #61afef;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #8cc265;
+  --warning: #d18f52;
+  --danger: #e05561;
+  --inline-code-foreground: #e06c75;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #abb2bf;
+  --code-comment: #5c6370;
+  --code-keyword: #d19a66;
+  --code-string: #98c379;
+  --code-number: #e06c75;
+  --code-title: #e5c07b;
+  --code-meta: #abb2bf;
+  --code-variable: #c678dd;
+  --code-symbol: #56b6c2;
+  --code-selection: #67769660;
+}
+
+.shiki-theme-one-light {
+  color-scheme: light;
+  --background: #fafafa;
+  --foreground: #383a42;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #5871ef;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #50a14f;
+  --warning: #986801;
+  --danger: #e45649;
+  --inline-code-foreground: #986801;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #383a42;
+  --code-comment: #a0a1a7;
+  --code-keyword: #a626a4;
+  --code-string: #50a14f;
+  --code-number: #986801;
+  --code-title: #383a42;
+  --code-meta: #383a42;
+  --code-variable: #e45649;
+  --code-symbol: #c18401;
+  --code-selection: #e5e5e6;
+}
+
+.shiki-theme-plastic {
+  color-scheme: dark;
+  --background: #21252b;
+  --foreground: #a9b2c3;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #e06c75;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #98c379;
+  --warning: #e5c07b;
+  --danger: #e06c75;
+  --inline-code-foreground: #56b6c2;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #a9b2c3;
+  --code-comment: #5f6672;
+  --code-keyword: #e06c75;
+  --code-string: #98c379;
+  --code-number: #56b6c2;
+  --code-title: #b57edc;
+  --code-meta: #5f6672;
+  --code-variable: #e06c75;
+  --code-symbol: #61afef;
+  --code-selection: #a9b2c333;
+}
+
+.shiki-theme-poimandres {
+  color-scheme: dark;
+  --background: #1b1e28;
+  --foreground: #a6accd;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #add7ff;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #5fb3a1;
+  --warning: #fffac2;
+  --danger: #d0679d;
+  --inline-code-foreground: #e4f0fb;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #a6accd;
+  --code-comment: #767c9db0;
+  --code-keyword: #e4f0fb;
+  --code-string: #add7ff;
+  --code-number: #e4f0fb;
+  --code-title: #add7ff;
+  --code-meta: #767c9db0;
+  --code-variable: #a6accd;
+  --code-symbol: #e4f0fb;
+  --code-selection: #717cb425;
+}
+
+.shiki-theme-red {
+  color-scheme: dark;
+  --background: #390000;
+  --foreground: #f8f8f8;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #833;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #f8f8f8;
+  --warning: #994646ff;
+  --danger: #ffeaea;
+  --inline-code-foreground: #994646ff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #f8f8f8;
+  --code-comment: #e7c0c0ff;
+  --code-keyword: #f12727ff;
+  --code-string: #f8f8f8;
+  --code-number: #994646ff;
+  --code-title: #ffb454ff;
+  --code-meta: #f8f8f8;
+  --code-variable: #f8f8f8;
+  --code-symbol: #96dd3bff;
+  --code-selection: #750000;
+}
+
+.shiki-theme-rose-pine {
+  color-scheme: dark;
+  --background: #191724;
+  --foreground: #e0def4;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #c4a7e7;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #9ccfd8;
+  --warning: #f6c177;
+  --danger: #908caa;
+  --inline-code-foreground: #31748f;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #e0def4;
+  --code-comment: #6e6a86;
+  --code-keyword: #31748f;
+  --code-string: #f6c177;
+  --code-number: #31748f;
+  --code-title: #eb6f92;
+  --code-meta: #c4a7e7;
+  --code-variable: #31748f;
+  --code-symbol: #9ccfd8;
+  --code-selection: #6e6a8633;
+}
+
+.shiki-theme-rose-pine-dawn {
+  color-scheme: light;
+  --background: #faf4ed;
+  --foreground: #575279;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #907aa9;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #56949f;
+  --warning: #ea9d34;
+  --danger: #797593;
+  --inline-code-foreground: #286983;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #575279;
+  --code-comment: #9893a5;
+  --code-keyword: #286983;
+  --code-string: #ea9d34;
+  --code-number: #286983;
+  --code-title: #b4637a;
+  --code-meta: #907aa9;
+  --code-variable: #286983;
+  --code-symbol: #56949f;
+  --code-selection: #6e6a8614;
+}
+
+.shiki-theme-rose-pine-moon {
+  color-scheme: dark;
+  --background: #232136;
+  --foreground: #e0def4;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #c4a7e7;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #9ccfd8;
+  --warning: #f6c177;
+  --danger: #908caa;
+  --inline-code-foreground: #3e8fb0;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #e0def4;
+  --code-comment: #6e6a86;
+  --code-keyword: #3e8fb0;
+  --code-string: #f6c177;
+  --code-number: #3e8fb0;
+  --code-title: #eb6f92;
+  --code-meta: #c4a7e7;
+  --code-variable: #3e8fb0;
+  --code-symbol: #9ccfd8;
+  --code-selection: #817c9c26;
+}
+
+.shiki-theme-slack-dark {
+  color-scheme: dark;
+  --background: #222222;
+  --foreground: #e6e6e6;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #0077b5;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #ecb22e;
+  --warning: #569cd6;
+  --danger: #fff;
+  --inline-code-foreground: #569cd6;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #e6e6e6;
+  --code-comment: #6a9955;
+  --code-keyword: #569cd6;
+  --code-string: #ce9178;
+  --code-number: #569cd6;
+  --code-title: #9cdcfe;
+  --code-meta: #d4d4d4;
+  --code-variable: #9cdcfe;
+  --code-symbol: #9cdcfe;
+  --code-selection: #3a3d41;
+}
+
+.shiki-theme-slack-ochin {
+  color-scheme: light;
+  --background: #fff;
+  --foreground: #000;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #475663;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #ecb22e;
+  --warning: #ffb62c;
+  --danger: #fff;
+  --inline-code-foreground: #174781;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #000;
+  --code-comment: #357b42;
+  --code-keyword: #7b30d0;
+  --code-string: #110000;
+  --code-number: #174781;
+  --code-title: #7eb233;
+  --code-meta: #110000;
+  --code-variable: #2f86d2;
+  --code-symbol: #1172c7;
+  --code-selection: #aed4fb;
+}
+
+.shiki-theme-snazzy-light {
+  color-scheme: light;
+  --background: #fafbfc;
+  --foreground: #565869;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #2dae58;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #2dae58;
+  --warning: #cf9c00;
+  --danger: #ff5c57;
+  --inline-code-foreground: #2dae58;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #565869;
+  --code-comment: #adb1c2;
+  --code-keyword: #11658f;
+  --code-string: #cf9c00;
+  --code-number: #2dae58;
+  --code-title: #2dae58;
+  --code-meta: #11658f;
+  --code-variable: #2dae58;
+  --code-symbol: #11658f;
+  --code-selection: #2dae5822;
+}
+
+.shiki-theme-solarized-dark {
+  color-scheme: dark;
+  --background: #002b36;
+  --foreground: #839496;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #2aa19899;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #859900;
+  --warning: #b58900;
+  --danger: #dc322f;
+  --inline-code-foreground: #d33682;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #839496;
+  --code-comment: #586e75;
+  --code-keyword: #859900;
+  --code-string: #839496;
+  --code-number: #d33682;
+  --code-title: #268bd2;
+  --code-meta: #839496;
+  --code-variable: #839496;
+  --code-symbol: #cb4b16;
+  --code-selection: #274642;
+}
+
+.shiki-theme-solarized-light {
+  color-scheme: light;
+  --background: #fdf6e3;
+  --foreground: #657b83;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #ac9d57;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #859900;
+  --warning: #b58900;
+  --danger: #dc322f;
+  --inline-code-foreground: #d33682;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #657b83;
+  --code-comment: #93a1a1;
+  --code-keyword: #859900;
+  --code-string: #657b83;
+  --code-number: #d33682;
+  --code-title: #268bd2;
+  --code-meta: #657b83;
+  --code-variable: #657b83;
+  --code-symbol: #cb4b16;
+  --code-selection: #eee8d5;
+}
+
+.shiki-theme-synthwave-84 {
+  color-scheme: dark;
+  --background: #262335;
+  --foreground: #ffffff;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #f97e72;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #72f1b8cc;
+  --warning: #f3e70f;
+  --danger: #fe4450;
+  --inline-code-foreground: #f97e72;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #ffffff;
+  --code-comment: #848bbd;
+  --code-keyword: #fede5d;
+  --code-string: #848bbd;
+  --code-number: #f97e72;
+  --code-title: #36f9f6;
+  --code-meta: #ff8b39;
+  --code-variable: #ff7edb;
+  --code-symbol: #fe4450;
+  --code-selection: #ffffff20;
+}
+
+.shiki-theme-tokyo-night {
+  color-scheme: dark;
+  --background: #1a1b26;
+  --foreground: #a9b1d6;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #6183bb;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #449dab;
+  --warning: #e0af68;
+  --danger: #914c54;
+  --inline-code-foreground: #ff9e64;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #a9b1d6;
+  --code-comment: #51597d;
+  --code-keyword: #5a638c;
+  --code-string: #51597d;
+  --code-number: #ff9e64;
+  --code-title: #0db9d7;
+  --code-meta: #51597d;
+  --code-variable: #ff9e64;
+  --code-symbol: #646e9c;
+  --code-selection: #515c7e4d;
+}
+
+.shiki-theme-vesper {
+  color-scheme: dark;
+  --background: #101010;
+  --foreground: #fff;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #ffc799;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #fff;
+  --warning: #ffc799;
+  --danger: #fff;
+  --inline-code-foreground: #fff;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #fff;
+  --code-comment: #8b8b8b94;
+  --code-keyword: #a0a0a0;
+  --code-string: #fff;
+  --code-number: #fff;
+  --code-title: #ffc799;
+  --code-meta: #8b8b8b94;
+  --code-variable: #fff;
+  --code-symbol: #ffc799;
+  --code-selection: #ffffff25;
+}
+
+.shiki-theme-vitesse-black {
+  color-scheme: dark;
+  --background: #000;
+  --foreground: #dbd7cacc;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #4d9375;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #4d9375;
+  --warning: #e6cc77;
+  --danger: #cb7676;
+  --inline-code-foreground: #c99076;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #dbd7cacc;
+  --code-comment: #758575dd;
+  --code-keyword: #444444;
+  --code-string: #c98a7d;
+  --code-number: #c99076;
+  --code-title: #444444;
+  --code-meta: #758575dd;
+  --code-variable: #c99076;
+  --code-symbol: #cb7676;
+  --code-selection: #eeeeee18;
+}
+
+.shiki-theme-vitesse-dark {
+  color-scheme: dark;
+  --background: #121212;
+  --foreground: #dbd7caee;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #4d9375;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #4d9375;
+  --warning: #e6cc77;
+  --danger: #cb7676;
+  --inline-code-foreground: #c99076;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #dbd7caee;
+  --code-comment: #758575dd;
+  --code-keyword: #666666;
+  --code-string: #c98a7d;
+  --code-number: #c99076;
+  --code-title: #666666;
+  --code-meta: #758575dd;
+  --code-variable: #c99076;
+  --code-symbol: #cb7676;
+  --code-selection: #eeeeee18;
+}
+
+.shiki-theme-vitesse-light {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #393a34;
+  --card: color-mix(in lab, var(--background) 96%, var(--foreground));
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: #1c6b48;
+  --primary-foreground: var(--background);
+  --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
+  --muted-foreground: color-mix(
+    in lab,
+    var(--foreground) 62%,
+    var(--background)
+  );
+  --accent: color-mix(in lab, var(--background) 84%, var(--primary));
+  --accent-foreground: var(--foreground);
+  --success: #1e754f;
+  --warning: #bda437;
+  --danger: #ab5959;
+  --inline-code-foreground: #a65e2b;
+  --destructive: var(--danger);
+  --border: color-mix(in lab, var(--background) 78%, var(--foreground));
+  --input: color-mix(in lab, var(--background) 70%, var(--foreground));
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: var(--success);
+  --chart-3: var(--inline-code-foreground);
+  --chart-4: var(--code-keyword);
+  --chart-5: var(--code-variable);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+  --code-fg: #393a34;
+  --code-comment: #a0ada0;
+  --code-keyword: #999999;
+  --code-string: #b56959;
+  --code-number: #a65e2b;
+  --code-title: #999999;
+  --code-meta: #a0ada0;
+  --code-variable: #a65e2b;
+  --code-symbol: #ab5959;
+  --code-selection: #22222218;
+}

@@ -2802,8 +2802,11 @@ function useAppShellSessionWorkspaceView({
     setThemeFamily(value)
   }
 
-  const handleThemePreviewChange = (value: ThemeFamily) => {
-    previewThemeFamily(value)
+  const handleThemePreviewChange = (
+    value: ThemeFamily,
+    colorMode: ThemeColorMode
+  ) => {
+    previewThemeFamily(value, colorMode)
   }
 
   const handleThemeColorModeChange = (value: ThemeColorMode) => {

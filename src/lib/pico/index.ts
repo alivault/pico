@@ -58,8 +58,10 @@ export {
   normalizeThemeFamily,
   themeColorModeLabel,
   themeFamilyDescription,
+  themeFamilyFixedMode,
   themeFamilyKeywords,
   themeFamilyLabel,
+  themeFamilySupportsColorMode,
 } from "@/lib/pico/themes"
 export type {
   AppliedThemeClass,
