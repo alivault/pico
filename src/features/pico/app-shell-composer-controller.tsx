@@ -315,7 +315,7 @@ export function NewSessionComposerSelectors({
             <GitBranchIcon className="size-4 shrink-0" aria-hidden="true" />
             <span className="truncate">{branchLabel}</span>
             {checkoutBranchMutation.isPending ? (
-              <Spinner className="size-[16px] shrink-0" />
+              <Spinner size="md" className="shrink-0" />
             ) : (
               <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
             )}

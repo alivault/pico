@@ -762,7 +762,7 @@ function GitCommitActionsMenu({
           />
         }
       >
-        {busy ? <Spinner className="size-[11px]" /> : <MoreHorizontalIcon />}
+        {busy ? <Spinner size="xs" /> : <MoreHorizontalIcon />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuGroup>
@@ -2052,7 +2052,7 @@ export function GitCommitsSection({
               aria-label="Loading more commits"
               className="inline-flex items-center gap-2 px-1 text-xs text-muted-foreground"
             >
-              <Spinner className="size-[11px]" />
+              <Spinner size="xs" />
               Loading more commits…
             </div>
           ) : null}

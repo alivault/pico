@@ -224,7 +224,7 @@ function GitBranchLocalGroup({
     <CommandGroup heading={`Local branches · ${branches.length}`}>
       {branchesPending && branches.length === 0 ? (
         <CommandItem value="loading:branches" disabled>
-          <Spinner className="size-[14px] text-primary" />
+          <Spinner className="text-primary" />
           <span className="text-muted-foreground">Loading branches…</span>
         </CommandItem>
       ) : null}

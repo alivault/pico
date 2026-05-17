@@ -13,36 +13,32 @@ const SPINNER_CELLS = [
   { id: "left", className: "pico-spinner-pixel-3" },
 ] as const
 
-type SpinnerPixelSize = "xs" | "sm" | "md"
+type SpinnerSize = "xs" | "sm" | "md"
 
-function getSpinnerPixelSize(className?: string): SpinnerPixelSize {
-  const classes = className?.split(/\s+/) ?? []
-
-  if (classes.includes("size-3") || classes.includes("size-[11px]")) {
-    return "xs"
-  }
-
-  if (classes.includes("size-3.5") || classes.includes("size-[14px]")) {
-    return "sm"
-  }
-
-  return "md"
+type SpinnerProps = Omit<React.ComponentProps<"span">, "size"> & {
+  size?: SpinnerSize
 }
+
+const SPINNER_SIZE_CLASS_NAMES = {
+  xs: "size-3",
+  sm: "size-3.5",
+  md: "size-4",
+} as const satisfies Record<SpinnerSize, string>
 
 function Spinner({
   className,
+  size = "sm",
   "aria-label": ariaLabel = "Loading",
   ...props
-}: React.ComponentProps<"span">) {
-  const pixelSize = getSpinnerPixelSize(className)
-
+}: SpinnerProps) {
   return (
     <span
       role="status"
       aria-label={ariaLabel}
-      data-pico-spinner-size={pixelSize}
+      data-pico-spinner-size={size}
       className={cn(
-        "pico-spinner pointer-events-none inline-flex size-[16px] shrink-0 items-center justify-center font-mono leading-none text-primary select-none",
+        "pico-spinner pointer-events-none inline-flex shrink-0 items-center justify-center font-mono leading-none text-primary select-none",
+        SPINNER_SIZE_CLASS_NAMES[size],
         className
       )}
       {...props}

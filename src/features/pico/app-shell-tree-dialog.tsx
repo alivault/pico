@@ -1378,7 +1378,8 @@ function useTreeBrowsePanelView({
                     <span className="flex h-6 w-2.5 items-center justify-center">
                       {node.streaming || node.id === treeStreamingEntryId ? (
                         <Spinner
-                          className="size-3 text-[var(--success)]"
+                          size="xs"
+                          className="text-[var(--success)]"
                           aria-label="Streaming"
                         />
                       ) : node.isActivePath ? (
