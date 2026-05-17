@@ -27,6 +27,44 @@ export const THEME_DEFINITIONS = [
     classes: { light: "flexoki-light", dark: "flexoki-dark" },
   },
   {
+    id: "kanagawa",
+    label: "Kanagawa",
+    description: "Use Kanagawa Lotus in light mode and Wave in dark mode.",
+    keywords: [
+      "kanagawa",
+      "wave",
+      "lotus",
+      "hokusai",
+      "light",
+      "dark",
+      "vscode",
+      "nvim",
+    ],
+    classes: { light: "kanagawa-lotus", dark: "kanagawa" },
+  },
+  {
+    id: "catppuccin",
+    label: "Catppuccin Mocha",
+    description: "Use Catppuccin Latte in light mode and Mocha in dark mode.",
+    keywords: ["catppuccin", "mocha", "latte", "pastel", "vscode"],
+    classes: { light: "catppuccin-latte", dark: "catppuccin-mocha" },
+  },
+  {
+    id: "catppuccin-macchiato",
+    label: "Catppuccin Macchiato",
+    description:
+      "Use Catppuccin Latte in light mode and Macchiato in dark mode.",
+    keywords: ["catppuccin", "macchiato", "latte", "pastel", "vscode"],
+    classes: { light: "catppuccin-latte", dark: "catppuccin-macchiato" },
+  },
+  {
+    id: "catppuccin-frappe",
+    label: "Catppuccin Frappé",
+    description: "Use Catppuccin Latte in light mode and Frappé in dark mode.",
+    keywords: ["catppuccin", "frappe", "frappé", "latte", "pastel", "vscode"],
+    classes: { light: "catppuccin-latte", dark: "catppuccin-frappe" },
+  },
+  {
     id: "tokyonight",
     label: "Tokyo Night",
     description:
@@ -89,8 +127,8 @@ export function appliedThemeClassColorMode(
   if (!normalized) return undefined
 
   for (const definition of THEME_DEFINITIONS) {
-    if (definition.classes.light === normalized) return "light"
     if (definition.classes.dark === normalized) return "dark"
+    if (definition.classes.light === normalized) return "light"
   }
 
   return undefined
