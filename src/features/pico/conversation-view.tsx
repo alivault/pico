@@ -15,6 +15,7 @@ import {
   copyTextToClipboard,
   MarkdownBlock,
 } from "@/features/pico/markdown-renderer"
+import { ImageLightbox } from "@/features/pico/image-lightbox"
 import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
 import {
   Collapsible,
@@ -2406,6 +2407,13 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   item: Extract<ConversationItem, { kind: "user" }>
 }) {
   const labelText = userMessageLabel(item)
+  const [selectedImageIndex, setSelectedImageIndex] = React.useState<
+    number | null
+  >(null)
+  const selectedImage =
+    selectedImageIndex === null
+      ? null
+      : (item.images[selectedImageIndex] ?? null)
 
   return (
     <div className="mr-2 ml-auto w-fit max-w-[80%]">
@@ -2429,17 +2437,36 @@ export const UserMessageCard = React.memo(function UserMessageCard({
         )}
         {item.images.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-3">
-            {item.images.map((image) => (
-              <img
-                key={promptImageKey(image)}
-                src={image.previewUrl}
-                alt="Prompt upload"
-                className="h-28 rounded-lg border object-cover"
-              />
+            {item.images.map((image, index) => (
+              <button
+                key={`${promptImageKey(image)}:${index}`}
+                type="button"
+                className="max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 p-0 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary focus-visible:outline-none"
+                onClick={() => setSelectedImageIndex(index)}
+              >
+                <img
+                  src={image.previewUrl}
+                  alt="Prompt upload"
+                  className="block h-28 max-w-full object-cover"
+                />
+                <span className="sr-only">Open prompt upload</span>
+              </button>
             ))}
           </div>
         ) : null}
       </div>
+      {selectedImage ? (
+        <ImageLightbox
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setSelectedImageIndex(null)
+          }}
+          imageSrc={selectedImage.previewUrl}
+          imageAlt="Prompt upload"
+          title="Prompt upload preview"
+          description="Expanded preview of an image attached to a user message."
+        />
+      ) : null}
     </div>
   )
 })
