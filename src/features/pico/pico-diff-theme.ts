@@ -24,8 +24,8 @@ const PICO_DIFF_COLOR_CSS = `
   --diffs-addition-color-override: var(--success);
   --diffs-deletion-color-override: var(--danger);
   --diffs-modified-color-override: var(--primary);
-  --diffs-bg-addition-emphasis-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base));
-  --diffs-bg-deletion-emphasis-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base));
+  --diffs-bg-addition-emphasis-override: color-mix(in lab, var(--diffs-bg) 42%, var(--diffs-addition-base));
+  --diffs-bg-deletion-emphasis-override: color-mix(in lab, var(--diffs-bg) 42%, var(--diffs-deletion-base));
 }
 
 @media (max-width: 640px) {
@@ -40,8 +40,8 @@ const PICO_DIFF_COLOR_CSS = `
   [data-line],
   [data-no-newline]
 ) {
-  --mix-light: 74%;
-  --mix-dark: 62%;
+  --mix-light: 84%;
+  --mix-dark: 76%;
 }
 
 [data-line-type="change-deletion"]:is(
@@ -50,8 +50,8 @@ const PICO_DIFF_COLOR_CSS = `
   [data-line],
   [data-no-newline]
 ) {
-  --mix-light: 74%;
-  --mix-dark: 64%;
+  --mix-light: 84%;
+  --mix-dark: 76%;
 }
 `
 
