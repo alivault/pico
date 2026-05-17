@@ -24,6 +24,9 @@ When behavior is ambiguous, prefer the behavior currently documented in `README.
 - Vite+ + Nitro
 - Tailwind CSS v4
 - Base UI / shadcn-style component patterns
+- next-themes for persisted theme class management
+- Shiki-based code highlighting and theme variables
+- @pierre/diffs / @pierre/trees plus @dnd-kit for git diffs and project file trees
 - Pi SDK loaded from the repo-local `@earendil-works/pi-coding-agent` dependency by default
 
 ## Pi SDK dependency
@@ -33,7 +36,7 @@ This app is intended to be self-contained and uses the repo-local `@earendil-wor
 Resolution happens in `src/server/pi-sdk-path.ts` and tries, in order:
 
 1. `PI_REMOTE_PI_SDK_DIR` for explicit SDK override/testing
-2. the bundled `@earendil-works/pi-coding-agent` dependency from `node_modules`
+2. the bundled Pi SDK dependency from `node_modules`; the package is currently `@earendil-works/pi-coding-agent`, and resolution also accepts the legacy `@mariozechner/pi-coding-agent` package name when present
 
 Use `pnpm update:pi` to refresh the bundled SDK to the current npm `latest` release.
 
@@ -67,11 +70,11 @@ Notes:
 
 - `src/features/pico/app-shell.tsx`
   - main application shell workspace coordinator and top-level store/controller wiring
-  - wires extracted shell controllers, command actions, mutations, shortcuts, and root layout
+  - wires extracted shell controllers, window effects, command actions, mutations, shortcuts, and root layout
 - `src/features/pico/app-shell-common.ts`, `src/features/pico/app-shell-types.ts`, and `src/features/pico/app-shell-working-state.ts`
   - shared app-shell helpers, cross-module shell types, and compaction/working-state labels/comparators
 - `src/features/pico/app-shell-composer-state.ts` and `src/features/pico/app-shell-composer-controller.tsx`
-  - composer snapshot types/comparators, optimistic prompt helpers, new-session branch/directory selectors, and composer panel controller
+  - composer snapshot types/comparators, optimistic prompt helpers, diff line comment state, new-session branch/directory selectors, and composer panel controller
 - `src/features/pico/app-shell-conversation-store.ts` and `src/features/pico/app-shell-conversation.tsx`
   - render-optimized conversation item store, group subscriptions, conversation frame, empty/loading states, and working footer
 - `src/features/pico/app-shell-session-content.tsx`, `src/features/pico/app-shell-desktop-layout.tsx`, and `src/features/pico/app-shell-session-header.tsx`
@@ -81,7 +84,9 @@ Notes:
 - `src/features/pico/app-shell-sidebar-store.ts`
   - directory/session sidebar store, derived sidebar snapshots, directory index merging, and sidebar session status overlays
 - `src/features/pico/app-shell-right-sidebar-state.ts`
-  - right-sidebar file tab/open-file state helpers used by the app shell
+  - right-sidebar tab/file/open-file state helpers used by the app shell
+- `src/features/pico/app-shell-window-effects.tsx`
+  - document-title/unread effects, session-done toasts, desktop notifications, and completion sound triggers
 - `src/features/pico/use-app-shell-session-sync.ts`
   - SSE wiring and session/state sync behavior for the shell
 - `src/features/pico/use-app-shell-prompt-mutations.ts`
@@ -97,40 +102,36 @@ Notes:
   - uses directory-keyed session/loading subscriptions plus keyed selected/active session stores
   - inline sidebar search has been removed; the sidebar search affordance opens the sessions dialog
 - `src/features/pico/composer-panel.tsx`
-  - prompt composer, slash commands, completions, model/thinking pickers, queue/steer UX
+  - prompt composer, slash commands, completions, model/thinking pickers, diff line comments, queue/steer UX
 - `src/features/pico/composer-assist-menu.tsx` and `src/features/pico/use-composer-assist.ts`
   - slash command, path, and `@file` assist menu behavior
 - `src/features/pico/composer-context-usage-indicator.tsx`, `src/features/pico/composer-pending-messages.tsx`, and `src/features/pico/composer-pickers.tsx`
   - context/provider usage display, queued prompt controls, and picker subcomponents
 - `src/features/pico/conversation-view.tsx`
-  - message rendering, markdown, code blocks, tool cards, compaction cards
-  - includes assistant block subscriptions and deferred syntax highlighting
+  - message rendering, assistant block subscriptions, tool cards, thinking cards, and compaction cards
+- `src/features/pico/markdown-renderer.tsx` and `src/features/pico/highlighted-code.tsx`
+  - markdown rendering, code-block copy/highlight UX, and the safe renderer for server-generated Shiki highlight spans; prefer this over `dangerouslySetInnerHTML` for highlighted code
 - `src/features/pico/app-shell-add-directory-dialog.tsx`, `src/features/pico/app-shell-auth-dialog.tsx`, `src/features/pico/app-shell-session-dialogs.tsx`, `src/features/pico/app-shell-sessions-dialog.tsx`, `src/features/pico/app-shell-settings-dialog.tsx`, `src/features/pico/app-shell-tree-dialog.tsx`, and `src/features/pico/app-shell-ui-request-dialog.tsx`
   - focused dialog implementations hosted by `app-shell-floating-controllers.tsx`
   - auth dialogs are keyboard-first command surfaces on desktop and drawers on mobile
 - `src/features/pico/app-shell-dialog-types.ts`
   - shared dialog/controller types for shell-hosted dialogs
-- `src/features/pico/app-shell-dialogs.tsx`
-  - minimal UI-request dialog wrapper; most current dialog wiring lives in `app-shell-floating-controllers.tsx`
 - `src/features/pico/app-shell-command-palette.tsx`
   - command palette UI
-- `src/features/pico/git-panel.tsx`
-  - git status/files/branches/commits tab plus diff, review, commit, push, and pull actions
-  - keeps detailed git queries scoped to the active Git tab while lightweight status text can render elsewhere
 - `src/features/pico/right-sidebar.tsx`
-  - secondary workspace sidebar coordinator that switches between project files and git review panels
-- `src/features/pico/right-sidebar-project-files.tsx`
-  - project file tree, file tab strip, file viewer, open-file dialog, and syntax-highlighted file preview
-- `src/features/pico/highlighted-code.tsx`
-  - safe renderer for server-generated Sugar High syntax-highlight spans; prefer this over `dangerouslySetInnerHTML` for highlighted code
+  - secondary workspace/sidebar coordinator for project files, Git review/history, and commit diff tabs
+- `src/features/pico/right-sidebar-project-files.tsx` and `src/features/pico/right-sidebar-file-icons.tsx`
+  - project file tree powered by `@pierre/trees`, file tab strip with drag/reorder, file viewer/open-file dialog, file icons, markdown preview/source, and syntax-highlighted file preview
 - `src/features/pico/right-sidebar-git-data.ts`, `src/features/pico/right-sidebar-git-toolbar.tsx`, `src/features/pico/right-sidebar-git-header-actions.tsx`, `src/features/pico/right-sidebar-git-commit-dialog.tsx`, `src/features/pico/right-sidebar-git-branch-dialog.tsx`, `src/features/pico/right-sidebar-git-review.tsx`, and `src/features/pico/right-sidebar-git-commits.tsx`
-  - git query options/helpers, toolbar/header actions, commit and branch dialogs, file diff/review UI, commit history graph rendering, commit diff tabs, commit actions, and history/review layout behavior
+  - git query options/helpers, toolbar/header actions, commit and branch dialogs, working-tree diff/review UI, commit history graph rendering, commit diff tabs, diff line annotations/comments, commit actions, and history/review layout behavior
 - `src/features/pico/right-sidebar-types.ts`, `src/features/pico/right-sidebar-shared.ts`, `src/features/pico/right-sidebar-section-note.tsx`, and `src/features/pico/right-sidebar-git-section.tsx`
   - shared right-sidebar types, path/error helpers, section note UI, and git section card UI used across right-sidebar modules
+- `src/features/pico/pico-diff-theme.ts`
+  - @pierre/diffs theme registration/selection that keeps Git diffs aligned with Pico/Shiki theme variables
 - `src/features/pico/keyboard-shortcuts.ts`
   - shared shortcut descriptors and labels used by the shell UI
-- `src/features/pico/git-toast-utils.ts`, `src/features/pico/relative-time.tsx`, and `src/features/pico/scroll-shadow-utils.ts`
-  - focused UI helpers for git toasts, relative timestamps, and scroll affordances
+- `src/features/pico/session-done-notifications.ts`, `src/features/pico/use-pico-theme.ts`, `src/features/pico/git-toast-utils.ts`, and `src/features/pico/scroll-shadow-utils.ts`
+  - focused UI helpers for completion notification audio/desktop permission, theme persistence, git toasts, and scroll affordances
 - `src/features/pico/query-keys.ts`
   - TanStack Query cache keys
 - `src/features/pico/tanstack-store-utils.ts`
@@ -140,19 +141,24 @@ Notes:
 - `src/features/pico/app-shell-utils.ts`
   - request URL builder, fetch helper, image conversion, sync-state helpers
 - `src/features/pico/composer-utils.ts`
-  - slash-command matching and completion parsing logic
+  - slash-command matching, skill serialization, completion parsing, and diff line comment prompt formatting
 
 ### Shared types/contracts
 
 - `src/lib/pico/index.ts`
   - domain types
-  - thin barrel that re-exports shared storage/sync/tree helpers
+  - thin barrel that re-exports shared storage/sync/tree/theme helpers
 - `src/lib/pico/storage.ts`
-  - storage keys, prompt draft persistence, and settings storage helpers
+  - storage keys, prompt draft persistence, and settings/theme storage helpers
 - `src/lib/pico/sync.ts`
   - state-sync item construction and sync/message normalization helpers
 - `src/lib/pico/tree.ts`
   - session/tree flattening helpers
+- `src/lib/pico/themes.ts` and `src/lib/pico/shiki-bundled-themes.ts`
+  - Pico theme definitions, applied theme classes, Shiki theme metadata, and theme helper functions
+  - keep these in sync with `src/styles/themes/*` and next-themes wiring when changing themes
+- `src/lib/pico/tool-classification.ts`
+  - shared tool categorization helpers used by conversation rendering
 - `src/lib/pico/api.ts`
   - API response types
   - SSE event types
@@ -160,6 +166,8 @@ Notes:
 
 ### Routes
 
+- `src/routes/__root.tsx`
+  - root document, CSS links, app providers, TanStack Devtools, and dev-only React Scan script loading
 - `src/routes/index.tsx`
   - main route
   - session selection is linked to `?session=`
@@ -182,7 +190,7 @@ Notes:
 - `src/server/pico-runtime/ui-requests.ts`
   - pending UI request bridge helpers
 - `src/server/pico-runtime/highlight.ts`
-  - syntax highlight payload helpers
+  - Shiki-based syntax highlight payload helpers and language normalization
 - `src/server/pico-runtime/conversation-retainer.ts`
   - render-optimized conversation item construction plus streaming conversation item helpers
 - `src/server/pi-sdk.ts`
@@ -208,11 +216,17 @@ Notes:
 - `src/server/route-helpers.ts`
   - request JSON parsing and route error handling
 
-### UI primitives
+### UI primitives, providers, hooks, and styles
 
 - `src/components/ui/*`
   - shared UI components
   - prefer using/extending these over inventing one-off patterns
+- `src/components/app-providers.tsx`
+  - HotkeysProvider, next-themes ThemeProvider, TooltipProvider, and Sonner toaster wiring
+- `src/hooks/use-mobile.ts` and `src/hooks/use-sidebar-resize.ts`
+  - viewport and resize/cursor helpers used by responsive shell/right-sidebar layouts
+- `src/styles.css` and `src/styles/themes/*`
+  - Tailwind entrypoint, design tokens, theme class variables, and Shiki/Pico code color variables
 
 ## Core architecture
 
@@ -251,7 +265,7 @@ Important current behavior:
 
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
 - initial session sync sends render-ready conversation items, not the full sanitized message list; do not reintroduce full-history `messages` in live SSE payloads unless there is a deliberate reason
-- follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/pico/app-shell-utils.ts`, `src/lib/pico/index.ts`, and runtime patching together if changing this contract
+- follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/pico/app-shell-utils.ts`, `src/lib/pico/index.ts`, `src/lib/pico/sync.ts`, and runtime patching together if changing this contract
 - avoid duplicating large payloads such as base64 images across both `messages` and `items` in `/events`; use `/api/session/history` for paginated raw history needs
 - `/api/session/history` still exists as a paginated history endpoint, but the current conversation UI does not lazy-load older messages on scroll
 - session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
@@ -285,10 +299,10 @@ Notable current client-side state patterns:
   - `setSessionState()` publishes to `sessionStore` and updates the ref.
   - SSE sync may update the ref before publishing; do not add early-return logic that compares only against the ref.
 - `appUiStore` owns workspace UI state such as current tab and loading session ids.
-- `displaySettingsStore` owns display settings such as tool visibility and message centering.
-- `notificationStore` owns notification settings/permission and session-done events.
+- `displaySettingsStore` owns display settings such as tool visibility, message centering, and auto-scroll.
+- `notificationStore` owns completion notification settings, desktop permission state, and session-done events consumed by `AppShellWindowEffectsHost`.
 - `draftFlowStore`, `composerDraftSeedStore`, `composerImagesStore`, `awaitingFirstTurnStore`, `pendingDraftPromptStore`, and `pendingDraftFollowUpsStore` own draft/composer setup state.
-- `composerStore`, `isSubmittingStore`, and `pendingMessagesStore` hold the composer snapshot, submit status, and queued prompt state consumed by `AppShellComposerController`.
+- `composerStore`, `isSubmittingStore`, and `pendingMessagesStore` hold the composer snapshot, submit status, diff line comments, and queued prompt state consumed by `AppShellComposerController`.
 - `contextUsageStore` feeds the composer context/provider usage indicator.
   - high-frequency context-usage publications are throttled with TanStack Pacer and reset on session switches.
 - `conversationItemsStore` owns the render-optimized projection of `SessionState.items`.
@@ -434,14 +448,17 @@ The composer supports:
 - path completions
 - `@file` reference completions
 - queue/steer while streaming
+- Git diff line comments from the right sidebar, serialized into the submitted prompt
 
 Composer data flows through `composerStore` as `AppShellComposerSnapshot`, with actions routed through `AppShellComposerController`. The model picker uses the shared `Command` UI and depends on `sessionStore` publishing `availableModels` from `state_sync`; if models look empty, verify the store publish path before changing picker UI.
 
-If you touch composer parsing or submission, inspect both:
+If you touch composer parsing or submission, inspect all of:
 
 - `src/features/pico/composer-panel.tsx`
 - `src/features/pico/composer-utils.ts`
 - `src/features/pico/use-composer-assist.ts`
+- `src/features/pico/use-app-shell-prompt-mutations.ts`
+- `src/features/pico/app-shell-composer-state.ts`
 
 Path and `@file` completion requests are debounced with TanStack Pacer while preserving request-id stale-result guards.
 
@@ -454,6 +471,8 @@ If you touch conversation/session sync behavior, inspect all of:
 - `src/features/pico/app-shell.tsx`
 - `src/features/pico/use-app-shell-session-sync.ts`
 - `src/features/pico/app-shell-utils.ts`
+- `src/features/pico/conversation-view.tsx`
+- `src/features/pico/markdown-renderer.tsx`
 - `src/lib/pico/sync.ts`
 - `src/server/pico-runtime/index.ts`
 - `src/routes/api.session.history.ts`
@@ -472,13 +491,13 @@ Rendering/performance details:
 - Conversation rendering is layered: `ConversationItemsStore` → per-assistant-group `AssistantMessagesStore` → `AssistantBlockStore` in `conversation-view.tsx` → per-block and tool-derived subscriptions.
 - Streaming conversation item updates are throttled with TanStack Pacer before publishing to the conversation store.
 - Assistant block rendering subscribes narrowly: text/thinking/compaction blocks subscribe by block key, while tool cards derive separate header/body snapshots so collapsed bodies do not subscribe to full tool payloads.
-- Long streaming markdown can temporarily render as plain text and switches back to markdown when streaming stops.
-- Code block syntax highlighting is deferred until code blocks are near the viewport and uses `/api/highlight` caching.
+- Markdown/code block rendering lives in `src/features/pico/markdown-renderer.tsx`; streaming fenced code blocks render unhighlighted until the fence is complete.
+- Code block syntax highlighting uses `/api/highlight` caching and only runs for complete, non-streaming code blocks with a supported language.
 - Do not bypass the loading-state path when switching sessions; previous messages should be hidden while `isSessionViewLoading` is true.
 
 ### Syntax highlighting
 
-Server-side code highlighting uses Sugar High via `/api/highlight`. Client rendering should use `src/features/pico/highlighted-code.tsx` for highlighted spans instead of `dangerouslySetInnerHTML`. The renderer intentionally only preserves the constrained Sugar High span/class/color shape.
+Server-side code highlighting uses Shiki via `/api/highlight`, with the Pico CSS-variable theme built in `src/server/pico-runtime/highlight.ts`. Client rendering should use `src/features/pico/highlighted-code.tsx` for highlighted spans instead of `dangerouslySetInnerHTML`. The renderer intentionally only preserves constrained Shiki `<span>` output, the `line` class, and safe CSS-variable `color` declarations.
 
 ### Draft persistence
 
@@ -496,6 +515,8 @@ Preserve existing key names when possible for backward compatibility, especially
 - other existing `pico-*` keys
 
 Display and notification settings are mirrored through external stores in `app-shell.tsx`; persist changes via the storage helpers and publish to the relevant store instead of adding duplicate local state.
+
+Theme family/color-mode state flows through `src/features/pico/use-pico-theme.ts`, next-themes, `APPLIED_THEME_STORAGE_KEY`, and the theme helpers in `src/lib/pico/themes.ts`. Keep theme storage keys, `src/styles/themes/*`, and `APPLIED_THEME_CLASSES` in sync when changing theme behavior.
 
 ## Server/runtime conventions
 
@@ -539,13 +560,13 @@ with `src/server/pico-runtime/index.ts` remaining the coordinator.
 
 ### Slash commands
 
-Built-in slash commands are surfaced in the client and executed in the runtime. `/login` and `/logout` are client-handled auth dialog commands; most other built-ins execute runtime behavior.
+Built-in slash commands are surfaced and pre-validated in the client. `/login` and `/logout` open auth dialogs; `/clone`, `/fork`, `/tree`, `/rename`, `/delete`, and display toggles are orchestrated through client dialog/action flows; `/compact` calls the runtime through `/api/slash-command`.
 
-If you add or change a slash command, update both sides:
+If you add or change a slash command, update the relevant sides:
 
-- UI command descriptors in `app-shell.tsx`
-- composer matching behavior if needed
-- runtime handling in `runSlashCommand()`
+- UI command descriptors and `runBuiltinSlashCommand()` in `app-shell.tsx`
+- composer matching behavior in `composer-utils.ts` and assist UI when needed
+- runtime handling in `runSlashCommand()` only when the command should execute server/runtime behavior
 
 ### Generic UI requests
 
@@ -602,13 +623,14 @@ Current behavior includes:
 - commit diff tabs, commit file lists, commit remote URLs, and commit-row actions
 - unpushed commit hashes
 - changed-file diffs and AI-assisted review
+- diff line annotations/comments that can be attached to the composer prompt
 - stage/discard actions for changed files
 - AI/heuristic commit message generation
-- commit, optional commit-and-push, push, and pull actions
+- commit, optional commit-and-push, push, force-push with `--force-with-lease`, and pull actions
 - short-lived caches for status/files/branches/commits/diffs
 - filesystem git watching that emits debounced `git_changed` SSE notifications
 
-The git panel renders files, branches, commits, diffs, history, and review affordances when the Git tab is active. Keep detailed git queries scoped to the active Git tab unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
+The right-sidebar Git workspace renders files, branches, commits, diffs, history, and review affordances when the Git tab/right sidebar is active. Keep detailed git queries scoped to the active Git view unless there is a deliberate UX reason to fetch them elsewhere; off-tab git fetches should stay limited to lightweight status data used by the session header and Git tab title. Client-side `git_changed` query invalidations are batched by cwd/scope with TanStack Pacer.
 
 The right-sidebar Git workspace can show review and history areas together; the history tab/sidebar visibility is persisted. Preserve commit diff tabs across Git tab/history/review changes unless the user explicitly closes them.
 
@@ -616,7 +638,7 @@ If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
 - shared response types in `src/lib/pico/api.ts`
-- rendering in `src/features/pico/git-panel.tsx` and/or the right-sidebar Git modules
+- rendering in `src/features/pico/right-sidebar.tsx` and the focused right-sidebar Git modules
 
 ## Common change recipes
 
@@ -650,12 +672,21 @@ If you extend git UI, update:
 3. expose controls in `app-shell-settings-dialog.tsx` if user-facing
 4. preserve existing keys when changing behavior rather than renaming casually
 
+### Add or change a theme
+
+1. update theme definitions/helpers in `src/lib/pico/themes.ts`
+2. update bundled theme metadata in `src/lib/pico/shiki-bundled-themes.ts` when adding/removing Shiki-backed themes
+3. update CSS variables/classes in `src/styles/themes/*`
+4. verify next-themes wiring in `src/components/app-providers.tsx` and `src/features/pico/use-pico-theme.ts`
+5. keep code/diff highlighting variables aligned through `src/server/pico-runtime/highlight.ts`, `src/features/pico/highlighted-code.tsx`, and `src/features/pico/pico-diff-theme.ts`
+
 ### Add a new slash command
 
 1. add the descriptor in `app-shell.tsx`
-2. update composer behavior if needed
-3. implement runtime handling in `runSlashCommand()`
-4. validate both typed entry and UI suggestion flows
+2. update `runBuiltinSlashCommand()` in `app-shell.tsx` for client-handled commands
+3. update composer behavior/search in `composer-utils.ts` and assist UI if needed
+4. implement runtime handling in `runSlashCommand()` only for server-executed commands
+5. validate both typed entry and UI suggestion flows
 
 ## Release workflow
 
@@ -691,7 +722,7 @@ Release process for agents:
    - `minor` for user-facing features or compatible behavior additions
    - `major` only for breaking changes
 3. Confirm the bump and release-note highlights with the user unless they explicitly asked to release with a specific bump.
-4. Run the release script from `main`:
+4. Run the release script from `main` (or set `RELEASE_BRANCH=<branch>` only if intentionally releasing from another branch):
 
 ```bash
 pnpm release patch # or minor/major
@@ -720,9 +751,9 @@ Manual smoke tests are recommended for the touched area. Useful flows:
 - open tree and navigate
 - fork from an older message
 - rename/delete a session
-- open git tab
+- open the Git/right-sidebar tab
 - open commit history, commit diff tabs, and review/history split panes
-- toggle settings for thinking/tools/notifications
+- toggle settings for theme/thinking/tools/auto-scroll/notifications
 - open Settings → Login/Logout, verify Esc/back returns to Settings, then smoke test OAuth/API-key auth dialog substeps
 
 React Doctor/Knip known intentional false positives:
@@ -743,10 +774,12 @@ Be especially careful around these:
 - breaking draft-session behavior
 - assuming every `state_sync` event is complete; initial sync currently includes full history, but follow-up patch events may omit unchanged fields
 - invalidating the wrong TanStack Query keys
-- changing storage keys unnecessarily
+- changing storage keys or theme class names without migration/syncing CSS and helpers
+- bypassing `HighlightedCode` or accepting broader highlight HTML than the constrained Shiki span shape
 - replacing named TanStack Pacer controls with ad hoc debounce/throttle/queue timers in high-churn paths
 - bypassing the runtime singleton with ad hoc server state
 - altering session tree/fork/clone behavior without testing the dialog flows
+- fetching detailed Git data outside the active Git/right-sidebar view without a deliberate UX reason
 - relying on private machine-local paths, unpublished references, or git history for product behavior
 
 ## When documenting the app
