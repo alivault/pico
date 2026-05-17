@@ -2109,7 +2109,7 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
     isSuccessfulEditTool || isSelfContainedWriteTool
 
   return (
-    <div className="border-t pt-3">
+    <div className={cn("border-t", !isSuccessfulEditTool && "pt-3")}>
       <div
         ref={block.name === "bash" ? autoScroll.ref : undefined}
         onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
@@ -2117,9 +2117,11 @@ function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
           isSelfContainedWriteTool
             ? "overflow-hidden rounded-lg"
             : "max-h-96 overflow-auto",
-          hasSelfContainedToolOutput
-            ? "rounded-lg"
-            : "rounded-lg border bg-background/80 p-3"
+          isSuccessfulEditTool
+            ? "rounded-t-none rounded-b-xl"
+            : hasSelfContainedToolOutput
+              ? "rounded-lg"
+              : "rounded-lg border bg-background/80 p-3"
         )}
       >
         {block.name === "bash" ? (
@@ -2218,6 +2220,8 @@ function ToolBlockCardContent({
     header.openStateKey
   )
   const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
+  const isSuccessfulEditTool =
+    header.name === "edit" && !header.running && !header.isError
 
   return (
     <Collapsible
@@ -2256,7 +2260,12 @@ function ToolBlockCardContent({
 
       {isOpen && bodyBlock ? (
         <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
-          <div className="h-(--collapsible-panel-height) px-3 pt-0 pb-3 data-ending-style:h-0 data-starting-style:h-0">
+          <div
+            className={cn(
+              "h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0",
+              !isSuccessfulEditTool && "px-3 pt-0 pb-3"
+            )}
+          >
             <ToolBlockCardBody block={bodyBlock} />
           </div>
         </CollapsibleContent>
