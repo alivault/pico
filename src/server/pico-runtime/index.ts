@@ -739,7 +739,9 @@ function serializeModel(model: ModelLike | undefined): ModelOption | undefined {
 
 function clampSessionNameLength(value: string) {
   if (value.length <= SESSION_NAME_MAX_LENGTH) return value
-  return `${value.slice(0, Math.max(0, SESSION_NAME_MAX_LENGTH - 1)).trimEnd()}…`
+  return `${value
+    .slice(0, Math.max(0, SESSION_NAME_MAX_LENGTH - 1))
+    .trimEnd()}…`
 }
 
 function clonePendingUserMessage(
@@ -2385,7 +2387,11 @@ class PicoRuntime {
   private async resolveRequestedEntry(
     url: URL,
     context: ContextState,
-    options?: { notifyOnActivate?: boolean; preferActiveDraft?: boolean }
+    options?: {
+      notifyOnActivate?: boolean
+      preferActiveDraft?: boolean
+      preferActiveDraftOverRequestedSession?: boolean
+    }
   ) {
     return await resolveRuntimeRequestedEntry({
       url,
@@ -2405,12 +2411,18 @@ class PicoRuntime {
         ),
       notifyOnActivate: options?.notifyOnActivate,
       preferActiveDraft: options?.preferActiveDraft,
+      preferActiveDraftOverRequestedSession:
+        options?.preferActiveDraftOverRequestedSession,
     })
   }
 
   async resolveRequest(
     request: Request,
-    options?: { notifyOnActivate?: boolean; preferActiveDraft?: boolean }
+    options?: {
+      notifyOnActivate?: boolean
+      preferActiveDraft?: boolean
+      preferActiveDraftOverRequestedSession?: boolean
+    }
   ): Promise<ResolveRequestResult> {
     const startedAt = performance.now()
     const url = new URL(request.url)
@@ -2433,6 +2445,8 @@ class PicoRuntime {
       const activeEntry = await this.resolveRequestedEntry(url, context, {
         notifyOnActivate: options?.notifyOnActivate ?? false,
         preferActiveDraft: options?.preferActiveDraft ?? true,
+        preferActiveDraftOverRequestedSession:
+          options?.preferActiveDraftOverRequestedSession ?? false,
       })
       this.logSessionLoadDebug("request_resolve:done", {
         pathname: url.pathname,
@@ -3689,6 +3703,7 @@ class PicoRuntime {
   ) {
     const { context, activeEntry } = await this.resolveRequest(request, {
       preferActiveDraft: true,
+      preferActiveDraftOverRequestedSession: true,
     })
     const message = typeof body.message === "string" ? body.message : ""
     const images = normalizePromptImages(body.images)

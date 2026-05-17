@@ -164,6 +164,7 @@ export async function resolveRequestedEntry<
   ) => Promise<void>
   notifyOnActivate?: boolean
   preferActiveDraft?: boolean
+  preferActiveDraftOverRequestedSession?: boolean
 }) {
   const {
     url,
@@ -176,6 +177,7 @@ export async function resolveRequestedEntry<
     activateContextSession,
     notifyOnActivate = true,
     preferActiveDraft = false,
+    preferActiveDraftOverRequestedSession = false,
   } = options
 
   const activateRequestedEntry = async (entry: E) => {
@@ -195,6 +197,18 @@ export async function resolveRequestedEntry<
 
   const requestedSessionId = url.searchParams.get("session")
   if (requestedSessionId) {
+    if (
+      preferActiveDraft &&
+      preferActiveDraftOverRequestedSession &&
+      context.draftKey &&
+      context.activeKey === context.draftKey
+    ) {
+      const activeDraftEntry = getSessionEntryByKey(context.draftKey)
+      if (activeDraftEntry && isDraftEntry(activeDraftEntry)) {
+        return await activateRequestedEntry(activeDraftEntry)
+      }
+    }
+
     const requestedEntry = await ensureSessionEntryById(requestedSessionId)
     if (requestedEntry) {
       return await activateRequestedEntry(requestedEntry)
@@ -202,8 +216,9 @@ export async function resolveRequestedEntry<
   }
 
   // Only fall back to the active draft when the request did not explicitly
-  // target a session. Otherwise prompt-like requests with `preferActiveDraft`
-  // can hijack a selected session's first message into a hidden draft.
+  // target a session. Callers that can receive a stale route session during a
+  // new-session transition may opt into preferring the already-active draft
+  // above.
   if (preferActiveDraft && context.draftKey) {
     const draftEntry = getSessionEntryByKey(context.draftKey)
     if (draftEntry && isDraftEntry(draftEntry)) {

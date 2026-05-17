@@ -219,17 +219,18 @@ function buildCurrentSessionRequestUrl(
       : undefined
   // Drafts do not expose a stable session id yet. During a new-session
   // transition, callbacks can still carry the previous route session id as a
-  // fallback, so prefer the explicit runtime session key whenever the current
-  // snapshot is a draft or otherwise id-less.
+  // fallback; never use that previous id while the current snapshot is a draft.
   const shouldUseSessionKey = Boolean(
     sessionKey && (sessionState.draft || !sessionState.sessionId)
   )
+  const sessionId =
+    shouldUseSessionKey || sessionState.draft
+      ? undefined
+      : (sessionState.sessionId ?? fallbackSessionId)
 
   return buildRequestUrl(path, {
     contextId,
-    sessionId: shouldUseSessionKey
-      ? undefined
-      : (sessionState.sessionId ?? fallbackSessionId),
+    sessionId,
     searchParams: shouldUseSessionKey ? { sessionKey } : undefined,
   })
 }
@@ -530,9 +531,10 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<SimpleOkResponse>(
-        buildRequestUrl("/api/session/new", {
+        buildCurrentSessionRequestUrl("/api/session/new", {
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
         }),
         {
           method: "POST",
@@ -541,7 +543,7 @@ export function useAppShellPromptMutations({
         }
       )
     },
-    [activeSessionId, viewerContextId]
+    [activeSessionId, sessionStateRef, viewerContextId]
   )
 
   const createSession = React.useCallback(

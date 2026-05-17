@@ -2289,6 +2289,10 @@ function useAppShellSessionWorkspaceView({
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
+      // Start the request before focusing the composer so an immediate Enter
+      // queues against the new draft instead of the previous route session.
+      const createSessionPromise = requestCreateSession(nextCwd)
+
       handleSelectSession(undefined)
       clearSelectedSidebarSelection()
       if (shouldCloseMobileSidebar) {
@@ -2308,7 +2312,7 @@ function useAppShellSessionWorkspaceView({
       conversationItemsStore.setItems(nextState.items)
       setSessionState(nextState)
 
-      const created = await requestCreateSession(nextCwd)
+      const created = await createSessionPromise
       if (created) {
         return
       }
@@ -3134,7 +3138,13 @@ function useAppShellSessionWorkspaceView({
         id: "delete-selected-sessions",
         group: "Sidebar",
         title: "Delete selected sidebar sessions",
-        description: `Delete ${commandState.selectedSidebarSessions.length} selected sidebar ${commandState.selectedSidebarSessions.length === 1 ? "session" : "sessions"}`,
+        description: `Delete ${
+          commandState.selectedSidebarSessions.length
+        } selected sidebar ${
+          commandState.selectedSidebarSessions.length === 1
+            ? "session"
+            : "sessions"
+        }`,
         keywords: ["delete", "selected", "sidebar", "sessions"],
         onSelect: () => {
           openDeleteDialog(
