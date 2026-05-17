@@ -320,7 +320,7 @@ function renderPendingCommitDiffLineComment(
   const form = document.createElement("form")
   assignClassName(
     form,
-    "m-2 max-w-[min(38rem,calc(100%-1rem))] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
+    "m-2 w-[min(38rem,calc(100vw_-_5rem))] max-w-[calc(100%_-_1rem)] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
   )
 
   const header = document.createElement("div")
@@ -364,7 +364,7 @@ function renderPendingCommitDiffLineComment(
   })
 
   const footer = document.createElement("div")
-  assignClassName(footer, "mt-2 flex justify-end gap-2")
+  assignClassName(footer, "mt-2 flex flex-wrap justify-end gap-2")
 
   const secondaryCancelButton = document.createElement("button")
   secondaryCancelButton.type = "button"
@@ -424,7 +424,7 @@ function renderCommitDiffLineAnnotation(
   const wrapper = document.createElement("div")
   assignClassName(
     wrapper,
-    "my-1 ml-2 inline-flex max-w-[min(32rem,90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200"
+    "my-1 ml-2 inline-flex max-w-[min(32rem,calc(100vw_-_5rem),90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200"
   )
 
   const icon = document.createElement("span")

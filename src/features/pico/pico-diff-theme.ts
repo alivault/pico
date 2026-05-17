@@ -28,6 +28,12 @@ const PICO_DIFF_COLOR_CSS = `
   --diffs-bg-deletion-emphasis-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base));
 }
 
+@media (max-width: 640px) {
+  [data-annotation-content] {
+    inline-size: min(100%, calc(100vw - var(--diffs-column-number-width, 0px) - 1rem));
+  }
+}
+
 [data-line-type="change-addition"]:is(
   [data-gutter-buffer],
   [data-column-number],

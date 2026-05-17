@@ -224,7 +224,7 @@ function ReviewDiffPendingLineComment({
 
   return (
     <form
-      className="m-2 max-w-[min(38rem,calc(100%-1rem))] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
+      className="m-2 w-[min(38rem,calc(100vw_-_5rem))] max-w-[calc(100%_-_1rem)] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
       onPointerDown={(event) => event.stopPropagation()}
       onSubmit={(event) => {
         event.preventDefault()
@@ -264,7 +264,7 @@ function ReviewDiffPendingLineComment({
           }
         }}
       />
-      <div className="mt-2 flex justify-end gap-2">
+      <div className="mt-2 flex flex-wrap justify-end gap-2">
         <Button type="button" variant="ghost" onClick={comment.onCancel}>
           Cancel
         </Button>
@@ -295,7 +295,7 @@ function ReviewDiffLineAnnotation({
   const savedComment = comment as ComposerDiffLineComment
 
   return (
-    <div className="my-1 ml-2 inline-flex max-w-[min(32rem,90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200">
+    <div className="my-1 ml-2 inline-flex max-w-[min(32rem,calc(100vw_-_5rem),90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200">
       <span className="shrink-0">💬</span>
       <span className="truncate">{savedComment.text}</span>
     </div>
