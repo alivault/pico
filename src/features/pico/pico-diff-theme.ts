@@ -19,9 +19,40 @@ const PICO_DIFF_THEME_PAIR = {
   dark: PICO_DIFF_SHIKI_THEMES.dark,
 } satisfies ThemesType
 
+const PICO_DIFF_COLOR_CSS = `
+:host {
+  --diffs-addition-color-override: var(--success);
+  --diffs-deletion-color-override: var(--danger);
+  --diffs-modified-color-override: var(--primary);
+  --diffs-bg-addition-emphasis-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base));
+  --diffs-bg-deletion-emphasis-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base));
+}
+
+[data-line-type="change-addition"]:is(
+  [data-gutter-buffer],
+  [data-column-number],
+  [data-line],
+  [data-no-newline]
+) {
+  --mix-light: 74%;
+  --mix-dark: 62%;
+}
+
+[data-line-type="change-deletion"]:is(
+  [data-gutter-buffer],
+  [data-column-number],
+  [data-line],
+  [data-no-newline]
+) {
+  --mix-light: 74%;
+  --mix-dark: 64%;
+}
+`
+
 type PicoDiffThemeOptions = {
   theme: ThemesType
   themeType: Exclude<ThemeTypes, "system">
+  unsafeCSS: string
 }
 
 function registerPicoDiffTheme(name: string, type: ResolvedThemeMode) {
@@ -66,5 +97,6 @@ export function usePicoDiffThemeOptions(): PicoDiffThemeOptions {
   return {
     theme: PICO_DIFF_THEME_PAIR,
     themeType: resolvePicoDiffThemeType({ resolvedTheme, systemTheme, theme }),
+    unsafeCSS: PICO_DIFF_COLOR_CSS,
   }
 }
