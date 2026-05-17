@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   ProjectFileIconSprite,
@@ -991,6 +992,7 @@ function ReviewFileAccordionItem({
         onGutterUtilityClick: startLineComment,
       }
     : {}
+  const themeOptions = usePicoDiffThemeOptions()
   const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
   const canStage = worktreeStatus !== " " || indexStatus === "?"
 
@@ -1194,6 +1196,7 @@ function ReviewFileAccordionItem({
                   <ReviewDiffLineAnnotation annotation={annotation} />
                 )}
                 options={{
+                  ...themeOptions,
                   diffStyle,
                   disableFileHeader: true,
                   ...commentableOptions,
@@ -1234,6 +1237,7 @@ function ReviewFileAccordionItem({
               <ReviewDiffLineAnnotation annotation={annotation} />
             )}
             options={{
+              ...themeOptions,
               diffStyle,
               disableFileHeader: true,
               ...commentableOptions,

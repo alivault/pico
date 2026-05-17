@@ -1,5 +1,44 @@
 export const THEME_COLOR_MODES = ["auto", "light", "dark"] as const
 
+export const PICO_CODE_SHIKI_THEME = "pico-code"
+export const PICO_DIFF_SHIKI_THEMES = {
+  light: "pico-diff-light",
+  dark: "pico-diff-dark",
+} as const
+
+export const PICO_SHIKI_VARIABLE_DEFAULTS = {
+  foreground: "var(--code-fg)",
+  background: "var(--background)",
+  "token-comment": "var(--code-comment)",
+  "token-constant": "var(--code-number)",
+  "token-keyword": "var(--code-keyword)",
+  "token-parameter": "var(--code-variable)",
+  "token-function": "var(--code-title)",
+  "token-string": "var(--code-string)",
+  "token-string-expression": "var(--code-string)",
+  "token-punctuation": "var(--code-meta)",
+  "token-link": "var(--code-title)",
+  "token-inserted": "var(--success)",
+  "token-deleted": "var(--danger)",
+  "token-changed": "var(--warning)",
+  "ansi-black": "var(--background)",
+  "ansi-red": "var(--danger)",
+  "ansi-green": "var(--success)",
+  "ansi-yellow": "var(--warning)",
+  "ansi-blue": "var(--primary)",
+  "ansi-magenta": "var(--code-keyword)",
+  "ansi-cyan": "var(--code-meta)",
+  "ansi-white": "var(--foreground)",
+  "ansi-bright-black": "var(--muted-foreground)",
+  "ansi-bright-red": "var(--danger)",
+  "ansi-bright-green": "var(--success)",
+  "ansi-bright-yellow": "var(--warning)",
+  "ansi-bright-blue": "var(--primary)",
+  "ansi-bright-magenta": "var(--code-keyword)",
+  "ansi-bright-cyan": "var(--code-meta)",
+  "ansi-bright-white": "var(--foreground)",
+} as const satisfies Record<string, string>
+
 export type ThemeColorMode = (typeof THEME_COLOR_MODES)[number]
 export type ResolvedThemeMode = Exclude<ThemeColorMode, "auto">
 

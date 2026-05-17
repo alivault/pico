@@ -110,20 +110,11 @@
   }
 }
 
-.sh__line {
-  display: block;
-  color: var(--sh-identifier);
+.shiki {
+  color: var(--code-fg);
 }
 
-pre .sh__line {
-  display: inline;
-}
-
-.sh__line ::selection,
-.sh__line::selection {
+.shiki .line::selection,
+.shiki .line ::selection {
   background: var(--code-selection);
-}
-
-.sh__token--comment {
-  font-style: italic;
 }

@@ -38,6 +38,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitPanelErrorToasts } from "@/features/pico/right-sidebar-git-toolbar"
+import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
 import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
 import { FileReviewContent } from "@/features/pico/right-sidebar-git-review"
 import {
@@ -466,7 +467,9 @@ function CommitDiffFileRenderer({
     comments,
     pendingComment,
   })
+  const themeOptions = usePicoDiffThemeOptions()
   const options = {
+    ...themeOptions,
     diffStyle,
     disableFileHeader,
     enableGutterUtility: true,

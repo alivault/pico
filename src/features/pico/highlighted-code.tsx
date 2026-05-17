@@ -51,9 +51,13 @@ function normalizeHighlightClassName(value: string | undefined) {
 
   const classNames = value
     .split(/\s+/)
-    .filter((className) => /^sh__[A-Za-z0-9_-]+$/.test(className))
+    .filter((className) => className === "line")
 
   return classNames.length > 0 ? classNames.join(" ") : undefined
+}
+
+function isSafeCssVariableColor(value: string) {
+  return /^var\(--[A-Za-z0-9-]+(?:,\s*var\(--[A-Za-z0-9-]+\))?\)$/.test(value)
 }
 
 function normalizeHighlightStyle(value: string | undefined) {
@@ -64,7 +68,7 @@ function normalizeHighlightStyle(value: string | undefined) {
     const property = rawProperty?.trim().toLowerCase()
     const color = rawValueParts.join(":").trim()
     if (property !== "color") continue
-    if (!/^var\(--sh-[A-Za-z0-9-]+\)$/.test(color)) continue
+    if (!isSafeCssVariableColor(color)) continue
 
     return { color } satisfies React.CSSProperties
   }
@@ -134,7 +138,9 @@ export function HighlightedCode({
   language,
 }: HighlightedCodeProps) {
   return (
-    <code className={cn(language && `language-${language}`, className)}>
+    <code
+      className={cn("shiki", language && `language-${language}`, className)}
+    >
       {parseHighlightedHtml(html).map(renderHighlightedChild)}
     </code>
   )

@@ -5253,7 +5253,7 @@ class PicoRuntime {
     const text = typeof code === "string" ? code : ""
 
     try {
-      const highlightInput = buildHighlightPayload({ code, language })
+      const highlightInput = await buildHighlightPayload({ code, language })
 
       if ("skipped" in highlightInput) {
         return {

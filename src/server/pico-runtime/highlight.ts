@@ -1,12 +1,11 @@
-import { highlight as sugarHigh } from "sugar-high"
 import {
-  c as sugarC,
-  css as sugarCss,
-  go as sugarGo,
-  java as sugarJava,
-  python as sugarPython,
-  rust as sugarRust,
-} from "sugar-high/presets"
+  bundledLanguages,
+  bundledLanguagesAlias,
+  codeToHtml,
+  createCssVariablesTheme,
+} from "shiki"
+
+import { PICO_CODE_SHIKI_THEME, PICO_SHIKI_VARIABLE_DEFAULTS } from "@/lib/pico"
 
 export type HighlightPayload =
   | {
@@ -25,7 +24,18 @@ export type HighlightPayload =
       unavailable: true
     }
 
-type SugarHighOptions = Parameters<typeof sugarHigh>[1]
+const SPECIAL_SHIKI_LANGUAGES = new Set(["ansi", "plain", "plaintext", "text"])
+const SUPPORTED_SHIKI_LANGUAGES = new Set([
+  ...Object.keys(bundledLanguages),
+  ...Object.keys(bundledLanguagesAlias),
+])
+
+const picoCodeTheme = createCssVariablesTheme({
+  name: PICO_CODE_SHIKI_THEME,
+  variablePrefix: "--sh-",
+  variableDefaults: { ...PICO_SHIKI_VARIABLE_DEFAULTS },
+  fontStyle: false,
+})
 
 function normalizeHighlightLanguage(language: unknown) {
   const normalized =
@@ -38,31 +48,25 @@ function normalizeHighlightLanguage(language: unknown) {
   if (!normalized) return ""
 
   switch (normalized) {
-    case "js":
     case "mjs":
     case "cjs":
       return "javascript"
-    case "ts":
+    case "cts":
+    case "mts":
       return "typescript"
-    case "py":
-      return "python"
-    case "rs":
-      return "rust"
     case "golang":
       return "go"
     case "htm":
     case "xhtml":
       return "html"
-    case "yml":
-      return "yaml"
+    case "svg":
+      return "xml"
     case "shell":
     case "shellscript":
-    case "sh":
-    case "zsh":
       return "bash"
     case "plain":
-    case "text":
-      return "plaintext"
+    case "txt":
+      return "text"
     case "h":
       return "c"
     default:
@@ -78,45 +82,25 @@ function countTextLines(text: string) {
   return lines
 }
 
-function getSugarHighOptions(
-  language: string
-): SugarHighOptions | null | undefined {
-  switch (language) {
-    case "javascript":
-    case "jsx":
-    case "typescript":
-    case "tsx":
-    case "json":
-    case "jsonc":
-    case "html":
-    case "xml":
-    case "svg":
-    case "mdx":
-      return null
-    case "css":
-      return sugarCss
-    case "python":
-      return sugarPython
-    case "rust":
-      return sugarRust
-    case "c":
-      return sugarC
-    case "go":
-      return sugarGo
-    case "java":
-      return sugarJava
-    default:
-      return undefined
-  }
+function isSupportedShikiLanguage(language: string) {
+  return (
+    SPECIAL_SHIKI_LANGUAGES.has(language) ||
+    SUPPORTED_SHIKI_LANGUAGES.has(language)
+  )
 }
 
-export function buildHighlightPayload(options: {
+function shikiCodeInnerHtml(html: string) {
+  return /<pre\b[^>]*><code>([\s\S]*)<\/code><\/pre>/.exec(html)?.[1] ?? html
+}
+
+export async function buildHighlightPayload(options: {
   code: unknown
   language: unknown
-}):
+}): Promise<
   | { skipped: true; language?: string }
   | { language: string; html: string }
-  | { unsupported: true; language: string } {
+  | { unsupported: true; language: string }
+> {
   const text = typeof options.code === "string" ? options.code : ""
   const normalizedLanguage = normalizeHighlightLanguage(options.language)
 
@@ -128,6 +112,7 @@ export function buildHighlightPayload(options: {
   }
 
   if (
+    normalizedLanguage === "text" ||
     normalizedLanguage === "plaintext" ||
     text.length > 100_000 ||
     countTextLines(text) > 1_500
@@ -138,16 +123,21 @@ export function buildHighlightPayload(options: {
     }
   }
 
-  const sugarOptions = getSugarHighOptions(normalizedLanguage)
-  if (sugarOptions === undefined) {
+  if (!isSupportedShikiLanguage(normalizedLanguage)) {
     return {
       unsupported: true,
       language: normalizedLanguage,
     }
   }
 
+  const html = await codeToHtml(text, {
+    lang: normalizedLanguage,
+    theme: picoCodeTheme,
+    defaultColor: false,
+  })
+
   return {
     language: normalizedLanguage,
-    html: sugarHigh(text, sugarOptions ?? undefined),
+    html: shikiCodeInnerHtml(html),
   }
 }
