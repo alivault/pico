@@ -1,9 +1,8 @@
 export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   {
     id: "shiki-pair-ayu",
-    label: "Shiki: Ayu",
-    description:
-      "Use Shiki's bundled Ayu Light in light mode and Ayu Dark in dark mode.",
+    label: "Ayu",
+    description: "Use Ayu Light in light mode and Ayu Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -25,9 +24,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-ayu-mirage",
-    label: "Shiki: Ayu Mirage",
-    description:
-      "Use Shiki's bundled Ayu Light in light mode and Ayu Mirage in dark mode.",
+    label: "Ayu Mirage",
+    description: "Use Ayu Light in light mode and Ayu Mirage in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -49,9 +47,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-catppuccin-frappe",
-    label: "Shiki: Catppuccin Frappé",
+    label: "Catppuccin Frappé",
     description:
-      "Use Shiki's bundled Catppuccin Latte in light mode and Catppuccin Frappé in dark mode.",
+      "Use Catppuccin Latte in light mode and Catppuccin Frappé in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -75,9 +73,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-catppuccin-macchiato",
-    label: "Shiki: Catppuccin Macchiato",
+    label: "Catppuccin Macchiato",
     description:
-      "Use Shiki's bundled Catppuccin Latte in light mode and Catppuccin Macchiato in dark mode.",
+      "Use Catppuccin Latte in light mode and Catppuccin Macchiato in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -100,9 +98,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-catppuccin-mocha",
-    label: "Shiki: Catppuccin Mocha",
+    label: "Catppuccin Mocha",
     description:
-      "Use Shiki's bundled Catppuccin Latte in light mode and Catppuccin Mocha in dark mode.",
+      "Use Catppuccin Latte in light mode and Catppuccin Mocha in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -125,9 +123,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-everforest",
-    label: "Shiki: Everforest",
+    label: "Everforest",
     description:
-      "Use Shiki's bundled Everforest Light in light mode and Everforest Dark in dark mode.",
+      "Use Everforest Light in light mode and Everforest Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -149,9 +147,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-github",
-    label: "Shiki: GitHub",
-    description:
-      "Use Shiki's bundled GitHub Light in light mode and GitHub Dark in dark mode.",
+    label: "GitHub",
+    description: "Use GitHub Light in light mode and GitHub Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -173,9 +170,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-github-default",
-    label: "Shiki: GitHub Default",
+    label: "GitHub Default",
     description:
-      "Use Shiki's bundled GitHub Light Default in light mode and GitHub Dark Default in dark mode.",
+      "Use GitHub Light Default in light mode and GitHub Dark Default in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -198,9 +195,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-github-high-contrast",
-    label: "Shiki: GitHub High Contrast",
+    label: "GitHub High Contrast",
     description:
-      "Use Shiki's bundled GitHub Light High Contrast in light mode and GitHub Dark High Contrast in dark mode.",
+      "Use GitHub Light High Contrast in light mode and GitHub Dark High Contrast in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -224,9 +221,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-gruvbox-hard",
-    label: "Shiki: Gruvbox Hard",
+    label: "Gruvbox Hard",
     description:
-      "Use Shiki's bundled Gruvbox Light Hard in light mode and Gruvbox Dark Hard in dark mode.",
+      "Use Gruvbox Light Hard in light mode and Gruvbox Dark Hard in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -249,9 +246,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-gruvbox-medium",
-    label: "Shiki: Gruvbox Medium",
+    label: "Gruvbox Medium",
     description:
-      "Use Shiki's bundled Gruvbox Light Medium in light mode and Gruvbox Dark Medium in dark mode.",
+      "Use Gruvbox Light Medium in light mode and Gruvbox Dark Medium in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -274,9 +271,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-gruvbox-soft",
-    label: "Shiki: Gruvbox Soft",
+    label: "Gruvbox Soft",
     description:
-      "Use Shiki's bundled Gruvbox Light Soft in light mode and Gruvbox Dark Soft in dark mode.",
+      "Use Gruvbox Light Soft in light mode and Gruvbox Dark Soft in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -299,9 +296,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-kanagawa-dragon",
-    label: "Shiki: Kanagawa Dragon",
+    label: "Kanagawa Dragon",
     description:
-      "Use Shiki's bundled Kanagawa Lotus in light mode and Kanagawa Dragon in dark mode.",
+      "Use Kanagawa Lotus in light mode and Kanagawa Dragon in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -324,9 +321,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-kanagawa-wave",
-    label: "Shiki: Kanagawa Wave",
+    label: "Kanagawa Wave",
     description:
-      "Use Shiki's bundled Kanagawa Lotus in light mode and Kanagawa Wave in dark mode.",
+      "Use Kanagawa Lotus in light mode and Kanagawa Wave in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -349,9 +346,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-material-theme",
-    label: "Shiki: Material Theme",
+    label: "Material Theme",
     description:
-      "Use Shiki's bundled Material Theme Lighter in light mode and Material Theme in dark mode.",
+      "Use Material Theme Lighter in light mode and Material Theme in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -373,9 +370,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-material-theme-darker",
-    label: "Shiki: Material Theme Darker",
+    label: "Material Theme Darker",
     description:
-      "Use Shiki's bundled Material Theme Lighter in light mode and Material Theme Darker in dark mode.",
+      "Use Material Theme Lighter in light mode and Material Theme Darker in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -398,9 +395,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-material-theme-ocean",
-    label: "Shiki: Material Theme Ocean",
+    label: "Material Theme Ocean",
     description:
-      "Use Shiki's bundled Material Theme Lighter in light mode and Material Theme Ocean in dark mode.",
+      "Use Material Theme Lighter in light mode and Material Theme Ocean in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -423,9 +420,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-material-theme-palenight",
-    label: "Shiki: Material Theme Palenight",
+    label: "Material Theme Palenight",
     description:
-      "Use Shiki's bundled Material Theme Lighter in light mode and Material Theme Palenight in dark mode.",
+      "Use Material Theme Lighter in light mode and Material Theme Palenight in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -448,9 +445,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-min",
-    label: "Shiki: Min",
-    description:
-      "Use Shiki's bundled Min Light in light mode and Min Dark in dark mode.",
+    label: "Min",
+    description: "Use Min Light in light mode and Min Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -473,9 +469,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-night-owl",
-    label: "Shiki: Night Owl",
+    label: "Night Owl",
     description:
-      "Use Shiki's bundled Night Owl Light in light mode and Night Owl in dark mode.",
+      "Use Night Owl Light in light mode and Night Owl in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -496,9 +492,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-one",
-    label: "Shiki: One",
-    description:
-      "Use Shiki's bundled One Light in light mode and One Dark Pro in dark mode.",
+    label: "One",
+    description: "Use One Light in light mode and One Dark Pro in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -521,9 +516,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-plus",
-    label: "Shiki: Plus",
-    description:
-      "Use Shiki's bundled Light Plus in light mode and Dark Plus in dark mode.",
+    label: "Plus",
+    description: "Use Light Plus in light mode and Dark Plus in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -547,9 +541,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-rose-pine",
-    label: "Shiki: Rosé Pine",
-    description:
-      "Use Shiki's bundled Rosé Pine Dawn in light mode and Rosé Pine in dark mode.",
+    label: "Rosé Pine",
+    description: "Use Rosé Pine Dawn in light mode and Rosé Pine in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -572,9 +565,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-rose-pine-moon",
-    label: "Shiki: Rosé Pine Moon",
+    label: "Rosé Pine Moon",
     description:
-      "Use Shiki's bundled Rosé Pine Dawn in light mode and Rosé Pine Moon in dark mode.",
+      "Use Rosé Pine Dawn in light mode and Rosé Pine Moon in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -598,9 +591,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-slack",
-    label: "Shiki: Slack",
-    description:
-      "Use Shiki's bundled Slack Ochin in light mode and Slack Dark in dark mode.",
+    label: "Slack",
+    description: "Use Slack Ochin in light mode and Slack Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -623,9 +615,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-solarized",
-    label: "Shiki: Solarized",
+    label: "Solarized",
     description:
-      "Use Shiki's bundled Solarized Light in light mode and Solarized Dark in dark mode.",
+      "Use Solarized Light in light mode and Solarized Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -647,9 +639,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-vitesse",
-    label: "Shiki: Vitesse",
+    label: "Vitesse",
     description:
-      "Use Shiki's bundled Vitesse Light in light mode and Vitesse Dark in dark mode.",
+      "Use Vitesse Light in light mode and Vitesse Dark in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -671,9 +663,9 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
   },
   {
     id: "shiki-pair-vitesse-black",
-    label: "Shiki: Vitesse Black",
+    label: "Vitesse Black",
     description:
-      "Use Shiki's bundled Vitesse Light in light mode and Vitesse Black in dark mode.",
+      "Use Vitesse Light in light mode and Vitesse Black in dark mode.",
     keywords: [
       "shiki",
       "auto",
@@ -697,8 +689,8 @@ export const SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS = [
 export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   {
     id: "shiki-andromeeda",
-    label: "Shiki: Andromeeda",
-    description: "Use Shiki's bundled Andromeeda theme (dark).",
+    label: "Andromeeda",
+    description: "Use Andromeeda theme (dark).",
     keywords: ["shiki", "andromeeda", "Andromeeda", "andromeeda", "dark"],
     classes: {
       light: "shiki-theme-andromeeda",
@@ -708,32 +700,32 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-aurora-x",
-    label: "Shiki: Aurora X",
-    description: "Use Shiki's bundled Aurora X theme (dark).",
+    label: "Aurora X",
+    description: "Use Aurora X theme (dark).",
     keywords: ["shiki", "aurora-x", "Aurora X", "aurora-x", "dark"],
     classes: { light: "shiki-theme-aurora-x", dark: "shiki-theme-aurora-x" },
     mode: "dark",
   },
   {
     id: "shiki-ayu-dark",
-    label: "Shiki: Ayu Dark",
-    description: "Use Shiki's bundled Ayu Dark theme (dark).",
+    label: "Ayu Dark",
+    description: "Use Ayu Dark theme (dark).",
     keywords: ["shiki", "ayu-dark", "Ayu Dark", "ayu-dark", "dark"],
     classes: { light: "shiki-theme-ayu-dark", dark: "shiki-theme-ayu-dark" },
     mode: "dark",
   },
   {
     id: "shiki-ayu-light",
-    label: "Shiki: Ayu Light",
-    description: "Use Shiki's bundled Ayu Light theme (light).",
+    label: "Ayu Light",
+    description: "Use Ayu Light theme (light).",
     keywords: ["shiki", "ayu-light", "Ayu Light", "ayu-light", "light"],
     classes: { light: "shiki-theme-ayu-light", dark: "shiki-theme-ayu-light" },
     mode: "light",
   },
   {
     id: "shiki-ayu-mirage",
-    label: "Shiki: Ayu Mirage",
-    description: "Use Shiki's bundled Ayu Mirage theme (dark).",
+    label: "Ayu Mirage",
+    description: "Use Ayu Mirage theme (dark).",
     keywords: ["shiki", "ayu-mirage", "Ayu Mirage", "ayu-mirage", "dark"],
     classes: {
       light: "shiki-theme-ayu-mirage",
@@ -743,8 +735,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-catppuccin-frappe",
-    label: "Shiki: Catppuccin Frappé",
-    description: "Use Shiki's bundled Catppuccin Frappé theme (dark).",
+    label: "Catppuccin Frappé",
+    description: "Use Catppuccin Frappé theme (dark).",
     keywords: [
       "shiki",
       "catppuccin-frappe",
@@ -760,8 +752,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-catppuccin-latte",
-    label: "Shiki: Catppuccin Latte",
-    description: "Use Shiki's bundled Catppuccin Latte theme (light).",
+    label: "Catppuccin Latte",
+    description: "Use Catppuccin Latte theme (light).",
     keywords: [
       "shiki",
       "catppuccin-latte",
@@ -777,8 +769,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-catppuccin-macchiato",
-    label: "Shiki: Catppuccin Macchiato",
-    description: "Use Shiki's bundled Catppuccin Macchiato theme (dark).",
+    label: "Catppuccin Macchiato",
+    description: "Use Catppuccin Macchiato theme (dark).",
     keywords: [
       "shiki",
       "catppuccin-macchiato",
@@ -794,8 +786,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-catppuccin-mocha",
-    label: "Shiki: Catppuccin Mocha",
-    description: "Use Shiki's bundled Catppuccin Mocha theme (dark).",
+    label: "Catppuccin Mocha",
+    description: "Use Catppuccin Mocha theme (dark).",
     keywords: [
       "shiki",
       "catppuccin-mocha",
@@ -811,24 +803,24 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-dark-plus",
-    label: "Shiki: Dark Plus",
-    description: "Use Shiki's bundled Dark Plus theme (dark).",
+    label: "Dark Plus",
+    description: "Use Dark Plus theme (dark).",
     keywords: ["shiki", "dark-plus", "Dark Plus", "dark-plus", "dark"],
     classes: { light: "shiki-theme-dark-plus", dark: "shiki-theme-dark-plus" },
     mode: "dark",
   },
   {
     id: "shiki-dracula",
-    label: "Shiki: Dracula Theme",
-    description: "Use Shiki's bundled Dracula Theme theme (dark).",
+    label: "Dracula Theme",
+    description: "Use Dracula Theme theme (dark).",
     keywords: ["shiki", "dracula", "Dracula Theme", "dracula", "dark"],
     classes: { light: "shiki-theme-dracula", dark: "shiki-theme-dracula" },
     mode: "dark",
   },
   {
     id: "shiki-dracula-soft",
-    label: "Shiki: Dracula Theme Soft",
-    description: "Use Shiki's bundled Dracula Theme Soft theme (dark).",
+    label: "Dracula Theme Soft",
+    description: "Use Dracula Theme Soft theme (dark).",
     keywords: [
       "shiki",
       "dracula-soft",
@@ -844,8 +836,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-everforest-dark",
-    label: "Shiki: Everforest Dark",
-    description: "Use Shiki's bundled Everforest Dark theme (dark).",
+    label: "Everforest Dark",
+    description: "Use Everforest Dark theme (dark).",
     keywords: [
       "shiki",
       "everforest-dark",
@@ -861,8 +853,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-everforest-light",
-    label: "Shiki: Everforest Light",
-    description: "Use Shiki's bundled Everforest Light theme (light).",
+    label: "Everforest Light",
+    description: "Use Everforest Light theme (light).",
     keywords: [
       "shiki",
       "everforest-light",
@@ -878,8 +870,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-dark",
-    label: "Shiki: GitHub Dark",
-    description: "Use Shiki's bundled GitHub Dark theme (dark).",
+    label: "GitHub Dark",
+    description: "Use GitHub Dark theme (dark).",
     keywords: ["shiki", "github-dark", "GitHub Dark", "github-dark", "dark"],
     classes: {
       light: "shiki-theme-github-dark",
@@ -889,8 +881,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-dark-default",
-    label: "Shiki: GitHub Dark Default",
-    description: "Use Shiki's bundled GitHub Dark Default theme (dark).",
+    label: "GitHub Dark Default",
+    description: "Use GitHub Dark Default theme (dark).",
     keywords: [
       "shiki",
       "github-dark-default",
@@ -906,8 +898,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-dark-dimmed",
-    label: "Shiki: GitHub Dark Dimmed",
-    description: "Use Shiki's bundled GitHub Dark Dimmed theme (dark).",
+    label: "GitHub Dark Dimmed",
+    description: "Use GitHub Dark Dimmed theme (dark).",
     keywords: [
       "shiki",
       "github-dark-dimmed",
@@ -923,8 +915,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-dark-high-contrast",
-    label: "Shiki: GitHub Dark High Contrast",
-    description: "Use Shiki's bundled GitHub Dark High Contrast theme (dark).",
+    label: "GitHub Dark High Contrast",
+    description: "Use GitHub Dark High Contrast theme (dark).",
     keywords: [
       "shiki",
       "github-dark-high-contrast",
@@ -940,8 +932,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-light",
-    label: "Shiki: GitHub Light",
-    description: "Use Shiki's bundled GitHub Light theme (light).",
+    label: "GitHub Light",
+    description: "Use GitHub Light theme (light).",
     keywords: [
       "shiki",
       "github-light",
@@ -957,8 +949,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-light-default",
-    label: "Shiki: GitHub Light Default",
-    description: "Use Shiki's bundled GitHub Light Default theme (light).",
+    label: "GitHub Light Default",
+    description: "Use GitHub Light Default theme (light).",
     keywords: [
       "shiki",
       "github-light-default",
@@ -974,9 +966,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-github-light-high-contrast",
-    label: "Shiki: GitHub Light High Contrast",
-    description:
-      "Use Shiki's bundled GitHub Light High Contrast theme (light).",
+    label: "GitHub Light High Contrast",
+    description: "Use GitHub Light High Contrast theme (light).",
     keywords: [
       "shiki",
       "github-light-high-contrast",
@@ -992,8 +983,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-dark-hard",
-    label: "Shiki: Gruvbox Dark Hard",
-    description: "Use Shiki's bundled Gruvbox Dark Hard theme (dark).",
+    label: "Gruvbox Dark Hard",
+    description: "Use Gruvbox Dark Hard theme (dark).",
     keywords: [
       "shiki",
       "gruvbox-dark-hard",
@@ -1009,8 +1000,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-dark-medium",
-    label: "Shiki: Gruvbox Dark Medium",
-    description: "Use Shiki's bundled Gruvbox Dark Medium theme (dark).",
+    label: "Gruvbox Dark Medium",
+    description: "Use Gruvbox Dark Medium theme (dark).",
     keywords: [
       "shiki",
       "gruvbox-dark-medium",
@@ -1026,8 +1017,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-dark-soft",
-    label: "Shiki: Gruvbox Dark Soft",
-    description: "Use Shiki's bundled Gruvbox Dark Soft theme (dark).",
+    label: "Gruvbox Dark Soft",
+    description: "Use Gruvbox Dark Soft theme (dark).",
     keywords: [
       "shiki",
       "gruvbox-dark-soft",
@@ -1043,8 +1034,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-light-hard",
-    label: "Shiki: Gruvbox Light Hard",
-    description: "Use Shiki's bundled Gruvbox Light Hard theme (light).",
+    label: "Gruvbox Light Hard",
+    description: "Use Gruvbox Light Hard theme (light).",
     keywords: [
       "shiki",
       "gruvbox-light-hard",
@@ -1060,8 +1051,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-light-medium",
-    label: "Shiki: Gruvbox Light Medium",
-    description: "Use Shiki's bundled Gruvbox Light Medium theme (light).",
+    label: "Gruvbox Light Medium",
+    description: "Use Gruvbox Light Medium theme (light).",
     keywords: [
       "shiki",
       "gruvbox-light-medium",
@@ -1077,8 +1068,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-gruvbox-light-soft",
-    label: "Shiki: Gruvbox Light Soft",
-    description: "Use Shiki's bundled Gruvbox Light Soft theme (light).",
+    label: "Gruvbox Light Soft",
+    description: "Use Gruvbox Light Soft theme (light).",
     keywords: [
       "shiki",
       "gruvbox-light-soft",
@@ -1094,16 +1085,16 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-horizon",
-    label: "Shiki: Horizon",
-    description: "Use Shiki's bundled Horizon theme (dark).",
+    label: "Horizon",
+    description: "Use Horizon theme (dark).",
     keywords: ["shiki", "horizon", "Horizon", "horizon", "dark"],
     classes: { light: "shiki-theme-horizon", dark: "shiki-theme-horizon" },
     mode: "dark",
   },
   {
     id: "shiki-horizon-bright",
-    label: "Shiki: Horizon Bright",
-    description: "Use Shiki's bundled Horizon Bright theme (dark).",
+    label: "Horizon Bright",
+    description: "Use Horizon Bright theme (dark).",
     keywords: [
       "shiki",
       "horizon-bright",
@@ -1119,16 +1110,16 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-houston",
-    label: "Shiki: Houston",
-    description: "Use Shiki's bundled Houston theme (dark).",
+    label: "Houston",
+    description: "Use Houston theme (dark).",
     keywords: ["shiki", "houston", "Houston", "houston", "dark"],
     classes: { light: "shiki-theme-houston", dark: "shiki-theme-houston" },
     mode: "dark",
   },
   {
     id: "shiki-kanagawa-dragon",
-    label: "Shiki: Kanagawa Dragon",
-    description: "Use Shiki's bundled Kanagawa Dragon theme (dark).",
+    label: "Kanagawa Dragon",
+    description: "Use Kanagawa Dragon theme (dark).",
     keywords: [
       "shiki",
       "kanagawa-dragon",
@@ -1144,8 +1135,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-kanagawa-lotus",
-    label: "Shiki: Kanagawa Lotus",
-    description: "Use Shiki's bundled Kanagawa Lotus theme (light).",
+    label: "Kanagawa Lotus",
+    description: "Use Kanagawa Lotus theme (light).",
     keywords: [
       "shiki",
       "kanagawa-lotus",
@@ -1161,8 +1152,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-kanagawa-wave",
-    label: "Shiki: Kanagawa Wave",
-    description: "Use Shiki's bundled Kanagawa Wave theme (dark).",
+    label: "Kanagawa Wave",
+    description: "Use Kanagawa Wave theme (dark).",
     keywords: [
       "shiki",
       "kanagawa-wave",
@@ -1178,16 +1169,16 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-laserwave",
-    label: "Shiki: LaserWave",
-    description: "Use Shiki's bundled LaserWave theme (dark).",
+    label: "LaserWave",
+    description: "Use LaserWave theme (dark).",
     keywords: ["shiki", "laserwave", "LaserWave", "laserwave", "dark"],
     classes: { light: "shiki-theme-laserwave", dark: "shiki-theme-laserwave" },
     mode: "dark",
   },
   {
     id: "shiki-light-plus",
-    label: "Shiki: Light Plus",
-    description: "Use Shiki's bundled Light Plus theme (light).",
+    label: "Light Plus",
+    description: "Use Light Plus theme (light).",
     keywords: ["shiki", "light-plus", "Light Plus", "light-plus", "light"],
     classes: {
       light: "shiki-theme-light-plus",
@@ -1197,8 +1188,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-material-theme",
-    label: "Shiki: Material Theme",
-    description: "Use Shiki's bundled Material Theme theme (dark).",
+    label: "Material Theme",
+    description: "Use Material Theme theme (dark).",
     keywords: [
       "shiki",
       "material-theme",
@@ -1214,8 +1205,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-material-theme-darker",
-    label: "Shiki: Material Theme Darker",
-    description: "Use Shiki's bundled Material Theme Darker theme (dark).",
+    label: "Material Theme Darker",
+    description: "Use Material Theme Darker theme (dark).",
     keywords: [
       "shiki",
       "material-theme-darker",
@@ -1231,8 +1222,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-material-theme-lighter",
-    label: "Shiki: Material Theme Lighter",
-    description: "Use Shiki's bundled Material Theme Lighter theme (light).",
+    label: "Material Theme Lighter",
+    description: "Use Material Theme Lighter theme (light).",
     keywords: [
       "shiki",
       "material-theme-lighter",
@@ -1248,8 +1239,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-material-theme-ocean",
-    label: "Shiki: Material Theme Ocean",
-    description: "Use Shiki's bundled Material Theme Ocean theme (dark).",
+    label: "Material Theme Ocean",
+    description: "Use Material Theme Ocean theme (dark).",
     keywords: [
       "shiki",
       "material-theme-ocean",
@@ -1265,8 +1256,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-material-theme-palenight",
-    label: "Shiki: Material Theme Palenight",
-    description: "Use Shiki's bundled Material Theme Palenight theme (dark).",
+    label: "Material Theme Palenight",
+    description: "Use Material Theme Palenight theme (dark).",
     keywords: [
       "shiki",
       "material-theme-palenight",
@@ -1282,40 +1273,40 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-min-dark",
-    label: "Shiki: Min Dark",
-    description: "Use Shiki's bundled Min Dark theme (dark).",
+    label: "Min Dark",
+    description: "Use Min Dark theme (dark).",
     keywords: ["shiki", "min-dark", "Min Dark", "min-dark", "dark"],
     classes: { light: "shiki-theme-min-dark", dark: "shiki-theme-min-dark" },
     mode: "dark",
   },
   {
     id: "shiki-min-light",
-    label: "Shiki: Min Light",
-    description: "Use Shiki's bundled Min Light theme (light).",
+    label: "Min Light",
+    description: "Use Min Light theme (light).",
     keywords: ["shiki", "min-light", "Min Light", "min-light", "light"],
     classes: { light: "shiki-theme-min-light", dark: "shiki-theme-min-light" },
     mode: "light",
   },
   {
     id: "shiki-monokai",
-    label: "Shiki: Monokai",
-    description: "Use Shiki's bundled Monokai theme (dark).",
+    label: "Monokai",
+    description: "Use Monokai theme (dark).",
     keywords: ["shiki", "monokai", "Monokai", "monokai", "dark"],
     classes: { light: "shiki-theme-monokai", dark: "shiki-theme-monokai" },
     mode: "dark",
   },
   {
     id: "shiki-night-owl",
-    label: "Shiki: Night Owl",
-    description: "Use Shiki's bundled Night Owl theme (dark).",
+    label: "Night Owl",
+    description: "Use Night Owl theme (dark).",
     keywords: ["shiki", "night-owl", "Night Owl", "night-owl", "dark"],
     classes: { light: "shiki-theme-night-owl", dark: "shiki-theme-night-owl" },
     mode: "dark",
   },
   {
     id: "shiki-night-owl-light",
-    label: "Shiki: Night Owl Light",
-    description: "Use Shiki's bundled Night Owl Light theme (light).",
+    label: "Night Owl Light",
+    description: "Use Night Owl Light theme (light).",
     keywords: [
       "shiki",
       "night-owl-light",
@@ -1331,16 +1322,16 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-nord",
-    label: "Shiki: Nord",
-    description: "Use Shiki's bundled Nord theme (dark).",
+    label: "Nord",
+    description: "Use Nord theme (dark).",
     keywords: ["shiki", "nord", "Nord", "nord", "dark"],
     classes: { light: "shiki-theme-nord", dark: "shiki-theme-nord" },
     mode: "dark",
   },
   {
     id: "shiki-one-dark-pro",
-    label: "Shiki: One Dark Pro",
-    description: "Use Shiki's bundled One Dark Pro theme (dark).",
+    label: "One Dark Pro",
+    description: "Use One Dark Pro theme (dark).",
     keywords: ["shiki", "one-dark-pro", "One Dark Pro", "one-dark-pro", "dark"],
     classes: {
       light: "shiki-theme-one-dark-pro",
@@ -1350,24 +1341,24 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-one-light",
-    label: "Shiki: One Light",
-    description: "Use Shiki's bundled One Light theme (light).",
+    label: "One Light",
+    description: "Use One Light theme (light).",
     keywords: ["shiki", "one-light", "One Light", "one-light", "light"],
     classes: { light: "shiki-theme-one-light", dark: "shiki-theme-one-light" },
     mode: "light",
   },
   {
     id: "shiki-plastic",
-    label: "Shiki: Plastic",
-    description: "Use Shiki's bundled Plastic theme (dark).",
+    label: "Plastic",
+    description: "Use Plastic theme (dark).",
     keywords: ["shiki", "plastic", "Plastic", "plastic", "dark"],
     classes: { light: "shiki-theme-plastic", dark: "shiki-theme-plastic" },
     mode: "dark",
   },
   {
     id: "shiki-poimandres",
-    label: "Shiki: Poimandres",
-    description: "Use Shiki's bundled Poimandres theme (dark).",
+    label: "Poimandres",
+    description: "Use Poimandres theme (dark).",
     keywords: ["shiki", "poimandres", "Poimandres", "poimandres", "dark"],
     classes: {
       light: "shiki-theme-poimandres",
@@ -1377,24 +1368,24 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-red",
-    label: "Shiki: Red",
-    description: "Use Shiki's bundled Red theme (dark).",
+    label: "Red",
+    description: "Use Red theme (dark).",
     keywords: ["shiki", "red", "Red", "red", "dark"],
     classes: { light: "shiki-theme-red", dark: "shiki-theme-red" },
     mode: "dark",
   },
   {
     id: "shiki-rose-pine",
-    label: "Shiki: Rosé Pine",
-    description: "Use Shiki's bundled Rosé Pine theme (dark).",
+    label: "Rosé Pine",
+    description: "Use Rosé Pine theme (dark).",
     keywords: ["shiki", "rose-pine", "Rosé Pine", "rose-pine", "dark"],
     classes: { light: "shiki-theme-rose-pine", dark: "shiki-theme-rose-pine" },
     mode: "dark",
   },
   {
     id: "shiki-rose-pine-dawn",
-    label: "Shiki: Rosé Pine Dawn",
-    description: "Use Shiki's bundled Rosé Pine Dawn theme (light).",
+    label: "Rosé Pine Dawn",
+    description: "Use Rosé Pine Dawn theme (light).",
     keywords: [
       "shiki",
       "rose-pine-dawn",
@@ -1410,8 +1401,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-rose-pine-moon",
-    label: "Shiki: Rosé Pine Moon",
-    description: "Use Shiki's bundled Rosé Pine Moon theme (dark).",
+    label: "Rosé Pine Moon",
+    description: "Use Rosé Pine Moon theme (dark).",
     keywords: [
       "shiki",
       "rose-pine-moon",
@@ -1427,8 +1418,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-slack-dark",
-    label: "Shiki: Slack Dark",
-    description: "Use Shiki's bundled Slack Dark theme (dark).",
+    label: "Slack Dark",
+    description: "Use Slack Dark theme (dark).",
     keywords: ["shiki", "slack-dark", "Slack Dark", "slack-dark", "dark"],
     classes: {
       light: "shiki-theme-slack-dark",
@@ -1438,8 +1429,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-slack-ochin",
-    label: "Shiki: Slack Ochin",
-    description: "Use Shiki's bundled Slack Ochin theme (light).",
+    label: "Slack Ochin",
+    description: "Use Slack Ochin theme (light).",
     keywords: ["shiki", "slack-ochin", "Slack Ochin", "slack-ochin", "light"],
     classes: {
       light: "shiki-theme-slack-ochin",
@@ -1449,8 +1440,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-snazzy-light",
-    label: "Shiki: Snazzy Light",
-    description: "Use Shiki's bundled Snazzy Light theme (light).",
+    label: "Snazzy Light",
+    description: "Use Snazzy Light theme (light).",
     keywords: [
       "shiki",
       "snazzy-light",
@@ -1466,8 +1457,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-solarized-dark",
-    label: "Shiki: Solarized Dark",
-    description: "Use Shiki's bundled Solarized Dark theme (dark).",
+    label: "Solarized Dark",
+    description: "Use Solarized Dark theme (dark).",
     keywords: [
       "shiki",
       "solarized-dark",
@@ -1483,8 +1474,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-solarized-light",
-    label: "Shiki: Solarized Light",
-    description: "Use Shiki's bundled Solarized Light theme (light).",
+    label: "Solarized Light",
+    description: "Use Solarized Light theme (light).",
     keywords: [
       "shiki",
       "solarized-light",
@@ -1500,8 +1491,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-synthwave-84",
-    label: "Shiki: Synthwave '84",
-    description: "Use Shiki's bundled Synthwave '84 theme (dark).",
+    label: "Synthwave '84",
+    description: "Use Synthwave '84 theme (dark).",
     keywords: [
       "shiki",
       "synthwave-84",
@@ -1517,8 +1508,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-tokyo-night",
-    label: "Shiki: Tokyo Night",
-    description: "Use Shiki's bundled Tokyo Night theme (dark).",
+    label: "Tokyo Night",
+    description: "Use Tokyo Night theme (dark).",
     keywords: ["shiki", "tokyo-night", "Tokyo Night", "tokyo-night", "dark"],
     classes: {
       light: "shiki-theme-tokyo-night",
@@ -1528,16 +1519,16 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-vesper",
-    label: "Shiki: Vesper",
-    description: "Use Shiki's bundled Vesper theme (dark).",
+    label: "Vesper",
+    description: "Use Vesper theme (dark).",
     keywords: ["shiki", "vesper", "Vesper", "vesper", "dark"],
     classes: { light: "shiki-theme-vesper", dark: "shiki-theme-vesper" },
     mode: "dark",
   },
   {
     id: "shiki-vitesse-black",
-    label: "Shiki: Vitesse Black",
-    description: "Use Shiki's bundled Vitesse Black theme (dark).",
+    label: "Vitesse Black",
+    description: "Use Vitesse Black theme (dark).",
     keywords: [
       "shiki",
       "vitesse-black",
@@ -1553,8 +1544,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-vitesse-dark",
-    label: "Shiki: Vitesse Dark",
-    description: "Use Shiki's bundled Vitesse Dark theme (dark).",
+    label: "Vitesse Dark",
+    description: "Use Vitesse Dark theme (dark).",
     keywords: ["shiki", "vitesse-dark", "Vitesse Dark", "vitesse-dark", "dark"],
     classes: {
       light: "shiki-theme-vitesse-dark",
@@ -1564,8 +1555,8 @@ export const SHIKI_BUNDLED_THEME_DEFINITIONS = [
   },
   {
     id: "shiki-vitesse-light",
-    label: "Shiki: Vitesse Light",
-    description: "Use Shiki's bundled Vitesse Light theme (light).",
+    label: "Vitesse Light",
+    description: "Use Vitesse Light theme (light).",
     keywords: [
       "shiki",
       "vitesse-light",

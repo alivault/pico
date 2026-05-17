@@ -645,7 +645,11 @@ function SettingsThemeBody({
         <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,28rem)]">
           <CommandEmpty>No themes found.</CommandEmpty>
           {THEME_SELECTION_SECTIONS.map((section) => (
-            <CommandGroup key={section.colorMode} heading={section.heading}>
+            <CommandGroup
+              key={section.colorMode}
+              heading={section.heading}
+              className="**:[[cmdk-group-heading]]:sticky **:[[cmdk-group-heading]]:top-0 **:[[cmdk-group-heading]]:z-10 **:[[cmdk-group-heading]]:bg-popover"
+            >
               {section.themes.map((theme) => {
                 const selection = { theme, colorMode: section.colorMode }
                 const selectionKey = themeSelectionKey(selection)

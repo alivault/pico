@@ -4,13 +4,10 @@
 @import "@fontsource-variable/inter";
 @import "./styles/themes/default.css";
 @import "./styles/themes/flexoki.css";
-@import "./styles/themes/tokyonight.css";
-@import "./styles/themes/catppuccin.css";
-@import "./styles/themes/kanagawa.css";
 @import "./styles/themes/shiki-bundled.css";
 
 @plugin "@tailwindcss/typography";
-@custom-variant dark (&:is(.dark *, .flexoki-dark *, .tokyonight-night *, .tokyonight-storm *, .tokyonight-moon *, .catppuccin-frappe *, .catppuccin-macchiato *, .catppuccin-mocha *, .kanagawa *, [data-pico-theme-mode="dark"] *));
+@custom-variant dark (&:is(.dark *, .flexoki-dark *, [data-pico-theme-mode="dark"] *));
 
 @theme inline {
   --font-heading: var(--font-sans);

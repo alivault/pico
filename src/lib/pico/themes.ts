@@ -72,68 +72,6 @@ export const THEME_DEFINITIONS = [
     keywords: ["flexoki", "warm", "paper", "inky"],
     classes: { light: "flexoki-light", dark: "flexoki-dark" },
   },
-  {
-    id: "kanagawa",
-    label: "Kanagawa",
-    description: "Use Kanagawa Lotus in light mode and Wave in dark mode.",
-    keywords: [
-      "kanagawa",
-      "wave",
-      "lotus",
-      "hokusai",
-      "light",
-      "dark",
-      "vscode",
-      "nvim",
-    ],
-    classes: { light: "kanagawa-lotus", dark: "kanagawa" },
-  },
-  {
-    id: "catppuccin",
-    label: "Catppuccin Mocha",
-    description: "Use Catppuccin Latte in light mode and Mocha in dark mode.",
-    keywords: ["catppuccin", "mocha", "latte", "pastel", "vscode"],
-    classes: { light: "catppuccin-latte", dark: "catppuccin-mocha" },
-  },
-  {
-    id: "catppuccin-macchiato",
-    label: "Catppuccin Macchiato",
-    description:
-      "Use Catppuccin Latte in light mode and Macchiato in dark mode.",
-    keywords: ["catppuccin", "macchiato", "latte", "pastel", "vscode"],
-    classes: { light: "catppuccin-latte", dark: "catppuccin-macchiato" },
-  },
-  {
-    id: "catppuccin-frappe",
-    label: "Catppuccin Frappé",
-    description: "Use Catppuccin Latte in light mode and Frappé in dark mode.",
-    keywords: ["catppuccin", "frappe", "frappé", "latte", "pastel", "vscode"],
-    classes: { light: "catppuccin-latte", dark: "catppuccin-frappe" },
-  },
-  {
-    id: "tokyonight",
-    label: "Tokyo Night",
-    description:
-      "Use Tokyo Night's classic blue-black palette, with Day in light mode.",
-    keywords: ["tokyo", "tokyonight", "night", "day", "folke", "nvim"],
-    classes: { light: "tokyonight-day", dark: "tokyonight-night" },
-  },
-  {
-    id: "tokyonight-storm",
-    label: "Tokyo Night Storm",
-    description:
-      "Use Tokyo Night Storm's blue-gray dark palette, with Day in light mode.",
-    keywords: ["tokyo", "tokyonight", "storm", "day", "folke", "nvim"],
-    classes: { light: "tokyonight-day", dark: "tokyonight-storm" },
-  },
-  {
-    id: "tokyonight-moon",
-    label: "Tokyo Night Moon",
-    description:
-      "Use Tokyo Night Moon's softer dark palette, with Day in light mode.",
-    keywords: ["tokyo", "tokyonight", "moon", "day", "folke", "nvim"],
-    classes: { light: "tokyonight-day", dark: "tokyonight-moon" },
-  },
   ...SHIKI_BUNDLED_THEME_DEFINITIONS,
   ...SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS,
 ] as const satisfies ReadonlyArray<ThemeDefinitionConfig>
