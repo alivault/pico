@@ -1963,13 +1963,17 @@
 .shiki-theme-material-theme-lighter {
   color-scheme: light;
   --background: #fafafa;
-  --foreground: #90a4ae;
+  /*
+   * Material Theme Lighter's editor foreground is #90a4ae, which works as a
+   * muted code fallback but is too low-contrast for Pico's app chrome.
+   */
+  --foreground: #263238;
   --card: color-mix(in lab, var(--background) 96%, var(--foreground));
   --card-foreground: var(--foreground);
   --popover: var(--card);
   --popover-foreground: var(--foreground);
   --primary: #80cbc4;
-  --primary-foreground: var(--background);
+  --primary-foreground: var(--foreground);
   --secondary: color-mix(in lab, var(--background) 92%, var(--foreground));
   --secondary-foreground: var(--foreground);
   --muted: color-mix(in lab, var(--background) 93%, var(--foreground));
@@ -1996,7 +2000,7 @@
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--background);
+  --sidebar-primary-foreground: var(--foreground);
   --sidebar-accent: var(--secondary);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
