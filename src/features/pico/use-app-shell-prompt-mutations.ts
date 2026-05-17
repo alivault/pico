@@ -342,6 +342,9 @@ export function useAppShellPromptMutations({
   >(null)
   const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
   const sessionStreamingRef = React.useRef(sessionSnapshot.streaming)
+  const flushPendingDraftPromptRef = React.useRef<
+    (ownerKey: string) => Promise<boolean>
+  >(async () => false)
 
   React.useEffect(() => {
     draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
@@ -566,6 +569,15 @@ export function useAppShellPromptMutations({
 
       try {
         await createSessionRequest({ cwd: nextCwd })
+        if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
+          draftSessionLoadingOwnerKeyRef.current = null
+          setDraftSessionLoadingOwnerKey((current) =>
+            current === ownerKey ? null : current
+          )
+        }
+        if (pendingDraftPromptRef.current?.ownerKey === ownerKey) {
+          void flushPendingDraftPromptRef.current(ownerKey)
+        }
         return true
       } catch (error) {
         if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
@@ -987,6 +999,8 @@ export function useAppShellPromptMutations({
       submitPrompt,
     ]
   )
+
+  flushPendingDraftPromptRef.current = flushPendingDraftPrompt
 
   React.useEffect(() => {
     if (!draftSessionLoadingOwnerKey) return
