@@ -667,15 +667,31 @@ Release setup:
 - workflow filename: `release.yml`
 - GitHub Actions environment: `npm`
 - the workflow uses OIDC (`id-token: write`), not an `NPM_TOKEN` secret
+- GitHub release notes are generated automatically by `softprops/action-gh-release` with `generate_release_notes: true`
+
+Release-note/changelog quality:
+
+- Prefer merging release-worthy work through pull requests instead of direct commits when possible; GitHub generated release notes are best when they can summarize merged PRs.
+- Keep PR titles user-facing and changelog-ready, for example `Add git commit history diff tabs` or `Fix provider login returning to Settings`; avoid vague titles like `updates`, `fixes`, or `wip`.
+- Apply release-note labels consistently so GitHub can group changes well:
+  - `feature` or `enhancement` for user-facing additions
+  - `bug` or `fix` for fixes
+  - `documentation` for docs
+  - `dependencies` for dependency updates
+  - `chore` or `maintenance` for internal/release automation
+  - `ignore-for-release` for changes that should not appear in release notes
+- If the user asks for nicer generated changelog categories, add or update `.github/release.yml` rather than replacing the existing release workflow. Keep it aligned with the labels above.
+- Before releasing, review the commits/PRs since the previous tag and tell the user the likely generated release-note highlights plus the chosen semver bump.
 
 Release process for agents:
 
 1. Make sure all intended changes are committed. The release script requires a clean working tree.
-2. Choose the semver bump from the committed changes:
+2. Inspect changes since the previous tag and choose the semver bump from the committed changes:
    - `patch` for fixes, dependency maintenance, docs, and internal automation
    - `minor` for user-facing features or compatible behavior additions
    - `major` only for breaking changes
-3. Run the release script from `main`:
+3. Confirm the bump and release-note highlights with the user unless they explicitly asked to release with a specific bump.
+4. Run the release script from `main`:
 
 ```bash
 pnpm release patch # or minor/major
@@ -683,7 +699,7 @@ pnpm release patch # or minor/major
 
 The release script fetches `origin/main`, verifies local `main` is based on it (local commits ahead of origin are OK), checks that the target git tag and npm version do not already exist, runs `pnpm check` and `pnpm build`, bumps `package.json` via `pnpm version`, creates the matching `v*.*.*` tag, and pushes the branch plus tags.
 
-Do not run `pnpm version` or push release tags manually unless the release script is unsuitable and the user explicitly asks. The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes.
+Do not run `pnpm version` or push release tags manually unless the release script is unsuitable and the user explicitly asks. The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes. Do not hand-write a separate GitHub release body unless the user explicitly wants to override generated notes.
 
 ## Validation expectations
 
