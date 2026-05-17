@@ -525,7 +525,6 @@ function SettingsThemeBody({
                 key={theme}
                 value={theme}
                 keywords={themeFamilyKeywords(theme)}
-                onMouseEnter={() => onThemePreview(theme)}
                 onSelect={() => onThemeSelect(theme)}
                 data-checked={theme === currentTheme ? true : undefined}
                 className="items-start py-2"
