@@ -719,7 +719,7 @@ function useAppShellSessionsDialogView({
         >
           {loading && sortedSessionItems.length === 0 ? (
             <CommandItem value="loading:sessions" disabled>
-              <Spinner className="size-3.5 text-primary" />
+              <Spinner className="size-[14px] text-primary" />
               <span className="text-muted-foreground">Loading sessions…</span>
             </CommandItem>
           ) : null}

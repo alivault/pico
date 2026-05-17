@@ -28,7 +28,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         info: <InfoIcon className="size-4" />,
         warning: <TriangleAlertIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
-        loading: <Spinner className="size-4" />,
+        loading: <Spinner className="size-[16px]" />,
       }}
       style={
         {

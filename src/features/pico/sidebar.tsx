@@ -735,7 +735,7 @@ function SidebarSessionItem({
     >
       {entry.streaming ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
-          <Spinner className="size-3.5" aria-label="Session streaming" />
+          <Spinner className="size-[14px]" aria-label="Session streaming" />
         </span>
       ) : showUnread ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
@@ -1164,7 +1164,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           )
         ) : null}
         {showHeaderLoadingSpinner ? (
-          <Spinner className="size-3.5 shrink-0" />
+          <Spinner className="size-[14px] shrink-0" />
         ) : null}
       </CollapsibleTrigger>
 

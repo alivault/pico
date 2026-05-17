@@ -382,7 +382,7 @@ export function GitPanelToolbar({
           }}
         />
         {active && refreshing ? (
-          <Spinner className="size-3 shrink-0 text-primary" />
+          <Spinner className="size-[11px] shrink-0 text-primary" />
         ) : null}
       </div>
 

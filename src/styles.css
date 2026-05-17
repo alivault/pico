@@ -70,41 +70,123 @@
   }
 }
 
-.pico-spinner-braille::before {
-  animation: pico-braille-spinner 0.8s linear infinite;
-  content: "\280b";
+.pico-spinner[data-pico-spinner-size="md"] {
+  width: 16px;
+  height: 16px;
 }
 
-@keyframes pico-braille-spinner {
+.pico-spinner[data-pico-spinner-size="sm"] {
+  width: 14px;
+  height: 14px;
+}
+
+.pico-spinner[data-pico-spinner-size="xs"] {
+  width: 11px;
+  height: 11px;
+}
+
+.pico-spinner-pixels {
+  --pico-spinner-size: 16px;
+  --pico-spinner-cell-size: 4px;
+  --pico-spinner-gap-size: 2px;
+
+  display: inline-grid;
+  width: var(--pico-spinner-size);
+  height: var(--pico-spinner-size);
+  align-content: start;
+  justify-content: start;
+  grid-template-columns: repeat(3, var(--pico-spinner-cell-size));
+  grid-template-rows: repeat(3, var(--pico-spinner-cell-size));
+  gap: var(--pico-spinner-gap-size);
+}
+
+[data-pico-spinner-size="sm"] .pico-spinner-pixels {
+  --pico-spinner-size: 14px;
+  --pico-spinner-cell-size: 4px;
+  --pico-spinner-gap-size: 1px;
+}
+
+[data-pico-spinner-size="xs"] .pico-spinner-pixels {
+  --pico-spinner-size: 11px;
+  --pico-spinner-cell-size: 3px;
+  --pico-spinner-gap-size: 1px;
+}
+
+.pico-spinner-pixel {
+  min-width: 0;
+  min-height: 0;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, currentColor 82%, white),
+    color-mix(in oklab, currentColor 88%, black)
+  );
+  opacity: 0.14;
+  animation: pico-pixel-spinner 960ms steps(8, end) infinite;
+}
+
+.pico-spinner-pixel-0 {
+  grid-area: 1 / 1;
+  animation-delay: 0ms;
+}
+
+.pico-spinner-pixel-1 {
+  grid-area: 1 / 2;
+  animation-delay: -840ms;
+}
+
+.pico-spinner-pixel-2 {
+  grid-area: 1 / 3;
+  animation-delay: -720ms;
+}
+
+.pico-spinner-pixel-5 {
+  grid-area: 2 / 3;
+  animation-delay: -600ms;
+}
+
+.pico-spinner-pixel-8 {
+  grid-area: 3 / 3;
+  animation-delay: -480ms;
+}
+
+.pico-spinner-pixel-7 {
+  grid-area: 3 / 2;
+  animation-delay: -360ms;
+}
+
+.pico-spinner-pixel-6 {
+  grid-area: 3 / 1;
+  animation-delay: -240ms;
+}
+
+.pico-spinner-pixel-3 {
+  grid-area: 2 / 1;
+  animation-delay: -120ms;
+}
+
+@keyframes pico-pixel-spinner {
   0% {
-    content: "\280b";
+    opacity: 1;
   }
-  10% {
-    content: "\2819";
+  12.5% {
+    opacity: 0.72;
   }
-  20% {
-    content: "\2839";
+  25% {
+    opacity: 0.44;
   }
-  30% {
-    content: "\2838";
+  37.5% {
+    opacity: 0.24;
   }
-  40% {
-    content: "\283c";
+  50%,
+  100% {
+    opacity: 0.14;
   }
-  50% {
-    content: "\2834";
-  }
-  60% {
-    content: "\2826";
-  }
-  70% {
-    content: "\2827";
-  }
-  80% {
-    content: "\2807";
-  }
-  90% {
-    content: "\280f";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pico-spinner-pixel {
+    opacity: 0.72;
+    animation: none;
   }
 }
 
