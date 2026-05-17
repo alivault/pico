@@ -277,6 +277,29 @@ function DeleteSessionsDialog({
     }
   }, [isMobile, open])
 
+  React.useEffect(() => {
+    if (!open || isMobile) return
+
+    const handleDeleteKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        event.stopPropagation()
+        onOpenChange(false)
+        return
+      }
+
+      if (event.key !== "Enter" || event.isComposing) return
+      event.preventDefault()
+      event.stopPropagation()
+      onDeleteSession()
+    }
+
+    window.addEventListener("keydown", handleDeleteKeyDown, true)
+    return () => {
+      window.removeEventListener("keydown", handleDeleteKeyDown, true)
+    }
+  }, [isMobile, onDeleteSession, onOpenChange, open])
+
   const previewTargets = targets.slice(0, 8)
   const remainingTargetCount = Math.max(
     0,
