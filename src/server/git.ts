@@ -1485,6 +1485,129 @@ function uniqueGitActionPaths(paths: Array<string | undefined>) {
   ) as Array<string>
 }
 
+async function gitRepositoryHasHead(cwd: string) {
+  const result = await runCommand("git", ["rev-parse", "--verify", "HEAD"], {
+    cwd,
+    timeoutMs: GIT_REPOSITORY_CHECK_TIMEOUT_MS,
+  })
+  return result.code === 0
+}
+
+function combineGitActionResults(results: Array<GitActionResult>) {
+  return {
+    stdout: results
+      .map((result) => result.stdout)
+      .filter(Boolean)
+      .join("\n"),
+    stderr: results
+      .map((result) => result.stderr)
+      .filter(Boolean)
+      .join("\n"),
+  } satisfies GitActionResult
+}
+
+export async function stageDirectoryGitAll(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const result = await runCommand("git", ["add", "-A", "--", ":/"], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to stage changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+export async function unstageDirectoryGitAll(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const hasHead = await gitRepositoryHasHead(normalizedCwd)
+  const result = hasHead
+    ? await runCommand("git", ["restore", "--staged", "--", ":/"], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+    : await runCommand(
+        "git",
+        ["rm", "-r", "--cached", "--ignore-unmatch", "--", ":/"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to unstage changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
+export async function discardDirectoryGitAll(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const hasHead = await gitRepositoryHasHead(normalizedCwd)
+  const restoreResult = hasHead
+    ? await runCommand(
+        "git",
+        ["restore", "--source=HEAD", "--staged", "--worktree", "--", ":/"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+    : await runCommand(
+        "git",
+        ["rm", "-r", "--cached", "--ignore-unmatch", "--", ":/"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+  if (restoreResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to discard changes", restoreResult)
+    )
+  }
+
+  const cleanResult = await runCommand("git", ["clean", "-fd", "--", ":/"], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (cleanResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to discard changes", cleanResult)
+    )
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return combineGitActionResults([
+    { stdout: restoreResult.stdout, stderr: restoreResult.stderr },
+    { stdout: cleanResult.stdout, stderr: cleanResult.stderr },
+  ])
+}
+
 export async function stageDirectoryGitFile(
   cwd: string,
   path: string,

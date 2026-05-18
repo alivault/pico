@@ -13,6 +13,8 @@ import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   Maximize2Icon,
+  MinusIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   Undo2Icon,
 } from "lucide-react"
@@ -25,6 +27,13 @@ import {
   AccordionItem,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -142,6 +151,17 @@ function GitFileDiff({ file }: { file: GitChangeFile }) {
 }
 
 type ReviewDiffStyle = "unified" | "split"
+type ReviewBulkGitAction = "discard-all" | "stage-all" | "unstage-all"
+
+function gitFileCanStage(file: GitChangeFile) {
+  const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
+  return worktreeStatus !== " " || indexStatus === "?"
+}
+
+function gitFileCanUnstage(file: GitChangeFile) {
+  const [indexStatus] = gitFileStatusCharacters(file.status)
+  return indexStatus !== " " && indexStatus !== "?"
+}
 
 type ReviewDiffCommentTarget = Omit<
   ComposerDiffLineComment,
@@ -506,6 +526,7 @@ function useFileReviewContentView({
   showEmbeddedHistory = true,
 }: FileReviewContentProps) {
   const normalizedCwd = normalizeCwd(cwd)
+  const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const [state, dispatch] = React.useReducer(
     fileReviewReducer,
@@ -556,6 +577,52 @@ function useFileReviewContentView({
   })
   const files = filesQuery.data
   const changedFiles = Array.isArray(files) ? files : []
+  const canStageAll = changedFiles.some(gitFileCanStage)
+  const canUnstageAll = changedFiles.some(gitFileCanUnstage)
+  const canDiscardAll = changedFiles.length > 0
+  const bulkGitActionMutation = useMutation({
+    mutationFn: async (action: ReviewBulkGitAction) => {
+      const endpoint =
+        action === "discard-all" ? "/api/git-discard" : "/api/git-stage"
+      return await fetchJson<GitActionResponse>(
+        buildRequestUrl(endpoint, { contextId: viewerContextId }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action,
+            cwd: normalizedCwd,
+          }),
+        }
+      )
+    },
+    onSuccess: async (_response, action) => {
+      await invalidateGitQueries({
+        queryClient,
+        viewerContextId,
+        cwd: normalizedCwd,
+      })
+      toast.success(
+        action === "discard-all"
+          ? "Discarded all changes"
+          : action === "unstage-all"
+            ? "Unstaged all changes"
+            : "Staged all changes"
+      )
+    },
+    onError: (error, action) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          action === "discard-all"
+            ? "Failed to discard changes"
+            : action === "unstage-all"
+              ? "Failed to unstage changes"
+              : "Failed to stage changes"
+        )
+      )
+    },
+  })
 
   React.useEffect(() => {
     if (previousNormalizedCwdRef.current === normalizedCwd) return
@@ -688,11 +755,26 @@ function useFileReviewContentView({
   }, [historyOpen, isMobile, normalizedCwd])
 
   const hasOpenFile = openFiles.length > 0
+  const bulkActionPending = bulkGitActionMutation.isPending
+  const bulkActionDisabled =
+    bulkActionPending || !viewerContextId || !normalizedCwd
+  const discardAllPending =
+    bulkGitActionMutation.isPending &&
+    bulkGitActionMutation.variables === "discard-all"
+  const stageAllPending =
+    bulkGitActionMutation.isPending &&
+    bulkGitActionMutation.variables === "stage-all"
+  const unstageAllPending =
+    bulkGitActionMutation.isPending &&
+    bulkGitActionMutation.variables === "unstage-all"
   const toggleAll = () => {
     dispatch({
       type: "openFilesChanged",
       openFiles: hasOpenFile ? [] : changedFiles.map(reviewFileValue),
     })
+  }
+  const runBulkGitAction = (action: ReviewBulkGitAction) => {
+    bulkGitActionMutation.mutate(action)
   }
 
   return (
@@ -714,7 +796,114 @@ function useFileReviewContentView({
             Diffs
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {changedFiles.length > 0 ? (
+            isMobile ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Diff actions"
+                      disabled={bulkActionDisabled}
+                    />
+                  }
+                >
+                  {bulkActionPending ? (
+                    <Spinner size="xs" />
+                  ) : (
+                    <MoreHorizontalIcon className="size-4" />
+                  )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={bulkActionDisabled || !canDiscardAll}
+                      onClick={() => runBulkGitAction("discard-all")}
+                    >
+                      {discardAllPending ? (
+                        <Spinner size="xs" />
+                      ) : (
+                        <Undo2Icon />
+                      )}
+                      Discard all
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={bulkActionDisabled || !canUnstageAll}
+                      onClick={() => runBulkGitAction("unstage-all")}
+                    >
+                      {unstageAllPending ? (
+                        <Spinner size="xs" />
+                      ) : (
+                        <MinusIcon />
+                      )}
+                      Unstage all
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={bulkActionDisabled || !canStageAll}
+                      onClick={() => runBulkGitAction("stage-all")}
+                    >
+                      {stageAllPending ? <Spinner size="xs" /> : <PlusIcon />}
+                      Stage all
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex shrink-0 flex-wrap items-center gap-1">
+                <TitleTooltip title="Discard all changes">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    disabled={bulkActionDisabled || !canDiscardAll}
+                    onClick={() => runBulkGitAction("discard-all")}
+                  >
+                    {discardAllPending ? (
+                      <Spinner size="xs" />
+                    ) : (
+                      <Undo2Icon className="size-3.5" />
+                    )}
+                    Discard all
+                  </Button>
+                </TitleTooltip>
+                <TitleTooltip title="Unstage all staged changes">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground hover:text-amber-500"
+                    disabled={bulkActionDisabled || !canUnstageAll}
+                    onClick={() => runBulkGitAction("unstage-all")}
+                  >
+                    {unstageAllPending ? (
+                      <Spinner size="xs" />
+                    ) : (
+                      <MinusIcon className="size-3.5" />
+                    )}
+                    Unstage all
+                  </Button>
+                </TitleTooltip>
+                <TitleTooltip title="Stage all working tree changes">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground hover:text-emerald-500"
+                    disabled={bulkActionDisabled || !canStageAll}
+                    onClick={() => runBulkGitAction("stage-all")}
+                  >
+                    {stageAllPending ? (
+                      <Spinner size="xs" />
+                    ) : (
+                      <PlusIcon className="size-3.5" />
+                    )}
+                    Stage all
+                  </Button>
+                </TitleTooltip>
+              </div>
+            )
+          ) : null}
           <TitleTooltip title={hasOpenFile ? "Collapse all" : "Expand all"}>
             <Button
               variant="outline"
@@ -993,8 +1182,7 @@ function ReviewFileAccordionItem({
       }
     : {}
   const themeOptions = usePicoDiffThemeOptions()
-  const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
-  const canStage = worktreeStatus !== " " || indexStatus === "?"
+  const canStage = gitFileCanStage(file)
 
   const invalidateChangedFileQueries = async () => {
     await invalidateGitQueries({
