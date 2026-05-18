@@ -1122,7 +1122,13 @@ function useAppShellSessionWorkspaceView({
     if (!path) return
     batch(() => {
       setGitPanelOpen(true)
-      openRightSidebarFile(rightSidebarStore, path, options)
+      if (isMobile) {
+        setCurrentTab("git")
+      }
+      openRightSidebarFile(rightSidebarStore, path, {
+        ...options,
+        pin: isMobile || options?.pin,
+      })
     })
   }
 

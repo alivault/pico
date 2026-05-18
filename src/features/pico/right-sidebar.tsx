@@ -1025,10 +1025,9 @@ export function RightSidebar({
     setHistoryAsTabState(value)
     storeHistoryAsTab(value)
   }
-  const previewMode: ProjectFilesPreviewMode = isMobile ? "inline" : "external"
+  const previewMode: ProjectFilesPreviewMode = "external"
   const panelHasCardChrome = showToolbar && !isMobile
-  const currentFilePath =
-    previewMode === "inline" ? localState.inlineActiveFilePath : activeFilePath
+  const currentFilePath = activeFilePath
   const hasOpenFileTabs = fileTabs.length > 0
   const activeCommitDiffTab =
     localState.commitDiffTabs.find(
@@ -1050,10 +1049,6 @@ export function RightSidebar({
   const openFile = (path: string, options?: OpenProjectFileOptions) => {
     if (!path) return
     setActiveTab("files")
-    if (previewMode === "inline") {
-      dispatchLocal({ type: "set-inline-active-file", path })
-      return
-    }
     onOpenFile?.(path, options)
     onActiveFileChange?.(path)
   }
@@ -1103,6 +1098,13 @@ export function RightSidebar({
     dispatchLocal({ type: "reorder-commit-diffs", keys })
   }
 
+  const handleTabStripActiveTabChange = (tab: RightSidebarTabValue) => {
+    if (isMobile && tab === "files") {
+      onActiveFileChange?.("")
+    }
+    setActiveTab(tab)
+  }
+
   React.useEffect(() => {
     dispatchLocal({
       type: "reset-navigation",
@@ -1139,7 +1141,7 @@ export function RightSidebar({
             dispatchLocal({ type: "set-active-commit-diff-key", key })
           }
           onActiveFileChange={onActiveFileChange}
-          onActiveTabChange={setActiveTab}
+          onActiveTabChange={handleTabStripActiveTabChange}
           onCloseAllCommitDiffs={closeAllCommitDiffs}
           onCloseAllFiles={onCloseAllFiles}
           onCloseCommitDiff={closeCommitDiff}
@@ -1153,6 +1155,7 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
+          showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab}
           showReview
         />
@@ -1216,7 +1219,30 @@ export function RightSidebar({
             activeTab === "files" ? "min-h-0 flex-1 overflow-hidden" : "hidden"
           }
         >
-          {previewMode === "external" && hasOpenFileTabs ? (
+          {isMobile ? (
+            currentFilePath ? (
+              <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+                <FilePathBreadcrumb path={currentFilePath} />
+                <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <ProjectFileContent
+                    viewerContextId={viewerContextId}
+                    cwd={normalizedCwd}
+                    active={active && activeTab === "files"}
+                    path={currentFilePath}
+                  />
+                </div>
+              </div>
+            ) : (
+              <ProjectFilesWorkspace
+                viewerContextId={viewerContextId}
+                cwd={normalizedCwd}
+                active={active && activeTab === "files"}
+                activeFilePath={currentFilePath}
+                onOpenFile={openFile}
+                previewMode={previewMode}
+              />
+            )
+          ) : hasOpenFileTabs ? (
             <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
               {currentFilePath ? (
                 <FilePathBreadcrumb
@@ -1254,9 +1280,6 @@ export function RightSidebar({
               cwd={normalizedCwd}
               active={active && activeTab === "files"}
               activeFilePath={currentFilePath}
-              onCloseFile={() => {
-                dispatchLocal({ type: "set-inline-active-file", path: "" })
-              }}
               onOpenFile={openFile}
               previewMode={previewMode}
             />

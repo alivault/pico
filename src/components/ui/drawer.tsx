@@ -14,19 +14,22 @@ function dispatchDrawerClosedEvent() {
 }
 
 function Drawer({
+  restorePromptFocusOnClose = true,
   shouldScaleBackground = false,
   open,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) {
+}: React.ComponentProps<typeof DrawerPrimitive.Root> & {
+  restorePromptFocusOnClose?: boolean
+}) {
   const wasOpenRef = React.useRef(open === true)
 
   React.useLayoutEffect(() => {
     const nextOpen = open === true
-    if (!nextOpen && wasOpenRef.current) {
+    if (!nextOpen && wasOpenRef.current && restorePromptFocusOnClose) {
       dispatchDrawerClosedEvent()
     }
     wasOpenRef.current = nextOpen
-  }, [open])
+  }, [open, restorePromptFocusOnClose])
 
   return (
     <DrawerPrimitive.Root

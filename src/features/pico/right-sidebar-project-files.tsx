@@ -688,7 +688,11 @@ export function ProjectOpenFileDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        restorePromptFocusOnClose={false}
+      >
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
             <DrawerTitle>Open Files</DrawerTitle>
@@ -1192,6 +1196,7 @@ export function RightSidebarTabStrip({
   onOpenFileDialog,
   onReorderCommitDiffs,
   onReorderFiles,
+  showFiles = false,
   showHistory = false,
   showReview = false,
 }: {
@@ -1215,17 +1220,20 @@ export function RightSidebarTabStrip({
   onOpenFileDialog?: () => void
   onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
+  showFiles?: boolean
   showHistory?: boolean
   showReview?: boolean
 }) {
   const renderTab = ({
+    active: activeOverride,
     label,
     value,
   }: {
+    active?: boolean
     label: string
     value: RightSidebarTabValue
   }) => {
-    const active = activeTab === value
+    const active = activeOverride ?? activeTab === value
     return (
       <button
         key={value}
@@ -1323,7 +1331,13 @@ export function RightSidebarTabStrip({
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
-      {!hasOpenFiles ? renderTab({ label: "Files", value: "files" }) : null}
+      {!hasOpenFiles || showFiles
+        ? renderTab({
+            active: activeTab === "files" && (!hasOpenFiles || !activeFilePath),
+            label: "Files",
+            value: "files",
+          })
+        : null}
       {hasOpenFiles || hasOpenCommitDiffs ? (
         <span className="mx-1 shrink-0 text-xs text-border" aria-hidden="true">
           |

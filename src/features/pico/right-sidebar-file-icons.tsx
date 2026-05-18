@@ -27,7 +27,7 @@ export function ProjectFileIconSprite() {
     <span
       ref={installTrustedFileIconSprite}
       aria-hidden="true"
-      className="pointer-events-none block size-0 overflow-hidden"
+      className="pointer-events-none absolute size-0 overflow-hidden"
     />
   )
 }
