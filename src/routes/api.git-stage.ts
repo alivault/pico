@@ -6,6 +6,7 @@ import {
   stageDirectoryGitAll,
   stageDirectoryGitFile,
   unstageDirectoryGitAll,
+  unstageDirectoryGitFile,
 } from "@/server/git"
 import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/api/git-stage")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let errorFallback = "Failed to stage changes"
         try {
           const body = await readRequestJson<{
             action?: unknown
@@ -24,6 +26,9 @@ export const Route = createFileRoute("/api/git-stage")({
             previousPath?: unknown
           }>(request)
           const action = typeof body.action === "string" ? body.action : ""
+          if (action === "unstage" || action === "unstage-all") {
+            errorFallback = "Failed to unstage changes"
+          }
           const all = body.all === true
           const requestedCwd = typeof body.cwd === "string" ? body.cwd : ""
           const path = typeof body.path === "string" ? body.path : ""
@@ -46,13 +51,19 @@ export const Route = createFileRoute("/api/git-stage")({
           const result =
             action === "unstage-all"
               ? await unstageDirectoryGitAll(cwd)
-              : all || action === "stage-all"
-                ? await stageDirectoryGitAll(cwd)
-                : await stageDirectoryGitFile(
+              : action === "unstage"
+                ? await unstageDirectoryGitFile(
                     cwd,
                     path,
                     previousPath || undefined
                   )
+                : all || action === "stage-all"
+                  ? await stageDirectoryGitAll(cwd)
+                  : await stageDirectoryGitFile(
+                      cwd,
+                      path,
+                      previousPath || undefined
+                    )
           return jsonResponse({
             ok: true,
             cwd,
@@ -60,7 +71,7 @@ export const Route = createFileRoute("/api/git-stage")({
             stderr: result.stderr,
           } satisfies GitActionResponse)
         } catch (error) {
-          return routeErrorResponse(error, "Failed to stage changes")
+          return routeErrorResponse(error, errorFallback)
         }
       },
     },

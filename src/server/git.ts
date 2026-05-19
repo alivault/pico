@@ -1558,6 +1558,44 @@ export async function unstageDirectoryGitAll(
   return { stdout: result.stdout, stderr: result.stderr }
 }
 
+export async function unstageDirectoryGitFile(
+  cwd: string,
+  path: string,
+  previousPath?: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  const normalizedPath = assertGitFilePath(path)
+  const normalizedPreviousPath = previousPath
+    ? assertGitFilePath(previousPath)
+    : undefined
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const paths = uniqueGitActionPaths([normalizedPreviousPath, normalizedPath])
+  const hasHead = await gitRepositoryHasHead(normalizedCwd)
+  const result = hasHead
+    ? await runCommand("git", ["restore", "--staged", "--", ...paths], {
+        cwd: normalizedCwd,
+        timeoutMs: GIT_ACTION_TIMEOUT_MS,
+      })
+    : await runCommand(
+        "git",
+        ["rm", "-r", "--cached", "--ignore-unmatch", "--", ...paths],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+  if (result.code !== 0) {
+    throw new Error(gitCommandErrorMessage("Failed to unstage changes", result))
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return { stdout: result.stdout, stderr: result.stderr }
+}
+
 export async function discardDirectoryGitAll(
   cwd: string
 ): Promise<GitActionResult> {

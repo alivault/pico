@@ -41,6 +41,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -1210,6 +1217,7 @@ function ReviewFileAccordionItem({
     : {}
   const themeOptions = usePicoDiffThemeOptions()
   const canStage = gitFileCanStage(file)
+  const canUnstage = gitFileCanUnstage(file)
 
   const invalidateChangedFileQueries = async () => {
     await invalidateGitQueries({
@@ -1220,30 +1228,41 @@ function ReviewFileAccordionItem({
   }
 
   const stageMutation = useMutation({
-    mutationFn: async () =>
+    mutationFn: async (action: "stage" | "unstage") =>
       await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-stage", { contextId: viewerContextId }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
+            action,
             cwd: normalizedCwd,
             path: file.path,
             previousPath: file.previousPath,
           }),
         }
       ),
-    onSuccess: async () => {
+    onSuccess: async (_response, action) => {
       await queryClient.invalidateQueries({
         queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
         exact: true,
         refetchType: "active",
       })
       await invalidateChangedFileQueries()
-      toast.success("Staged changes", { description: file.path })
+      toast.success(
+        action === "unstage" ? "Unstaged changes" : "Staged changes",
+        { description: file.path }
+      )
     },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Failed to stage changes"))
+    onError: (error, action) => {
+      toast.error(
+        getErrorMessage(
+          error,
+          action === "unstage"
+            ? "Failed to unstage changes"
+            : "Failed to stage changes"
+        )
+      )
     },
   })
 
@@ -1281,20 +1300,64 @@ function ReviewFileAccordionItem({
     setCommentTarget(null)
   }, [value, previewPatch, patch, oldContent, newContent])
 
-  const openFile = (event?: React.MouseEvent<HTMLButtonElement>) => {
+  const gitActionDisabled = actionPending || !viewerContextId || !normalizedCwd
+  const stagePending =
+    stageMutation.isPending && stageMutation.variables === "stage"
+  const unstagePending =
+    stageMutation.isPending && stageMutation.variables === "unstage"
+
+  const openFile = (event?: React.MouseEvent) => {
     event?.stopPropagation()
     onOpenFile?.(file.path, { pin: true })
   }
 
-  const discardFileChanges = (event?: React.MouseEvent<HTMLButtonElement>) => {
+  const discardFileChanges = (event?: React.MouseEvent) => {
     event?.stopPropagation()
     discardMutation.mutate()
   }
 
-  const stageFileChanges = (event?: React.MouseEvent<HTMLButtonElement>) => {
+  const stageFileChanges = (event?: React.MouseEvent) => {
     event?.stopPropagation()
-    stageMutation.mutate()
+    stageMutation.mutate("stage")
   }
+
+  const unstageFileChanges = (event?: React.MouseEvent) => {
+    event?.stopPropagation()
+    stageMutation.mutate("unstage")
+  }
+
+  const trigger = (
+    <AccordionPrimitive.Trigger
+      data-review-file-trigger
+      data-review-file-value={value}
+      className="group/review-file-trigger relative flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-none border border-transparent bg-background px-3 py-2 text-left text-[13px] font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground"
+    >
+      <span className="grid min-w-0 flex-1 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2">
+        <GitFileStatus status={file.status} />
+        <ProjectFileTypeIcon path={file.path} />
+        <span className="min-w-0 truncate text-left">
+          {file.previousPath ? (
+            <>
+              <span className="text-muted-foreground">{file.previousPath}</span>
+              <span className="text-muted-foreground/70"> → </span>
+              <span>{file.path}</span>
+            </>
+          ) : (
+            file.path
+          )}
+        </span>
+        <GitFileDiff file={file} />
+      </span>
+      <ChevronRightIcon
+        data-slot="accordion-trigger-icon"
+        className="pointer-events-none size-4 shrink-0 group-aria-expanded/review-file-trigger:hidden"
+      />
+      <ChevronDownIcon
+        data-slot="accordion-trigger-icon"
+        className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
+      />
+    </AccordionPrimitive.Trigger>
+  )
 
   return (
     <AccordionItem value={value} className="border-border/70">
@@ -1304,38 +1367,42 @@ function ReviewFileAccordionItem({
           stuck && "shadow-sm"
         )}
       >
-        <AccordionPrimitive.Trigger
-          data-review-file-trigger
-          data-review-file-value={value}
-          className="group/review-file-trigger relative flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-none border border-transparent bg-background px-3 py-2 text-left text-[13px] font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground"
-        >
-          <span className="grid min-w-0 flex-1 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2">
-            <GitFileStatus status={file.status} />
-            <ProjectFileTypeIcon path={file.path} />
-            <span className="min-w-0 truncate text-left">
-              {file.previousPath ? (
-                <>
-                  <span className="text-muted-foreground">
-                    {file.previousPath}
-                  </span>
-                  <span className="text-muted-foreground/70"> → </span>
-                  <span>{file.path}</span>
-                </>
+        <ContextMenu>
+          <ContextMenuTrigger render={trigger} />
+          <ContextMenuContent className="w-48">
+            <ContextMenuItem disabled={!onOpenFile} onClick={openFile}>
+              <ArrowUpRightIcon />
+              Open file
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              disabled={gitActionDisabled || !canStage}
+              onClick={stageFileChanges}
+            >
+              {stagePending ? <Spinner size="xs" /> : <PlusIcon />}
+              Stage changes
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={gitActionDisabled || !canUnstage}
+              onClick={unstageFileChanges}
+            >
+              {unstagePending ? <Spinner size="xs" /> : <MinusIcon />}
+              Unstage changes
+            </ContextMenuItem>
+            <ContextMenuItem
+              variant="destructive"
+              disabled={gitActionDisabled}
+              onClick={discardFileChanges}
+            >
+              {discardMutation.isPending ? (
+                <Spinner size="xs" />
               ) : (
-                file.path
+                <Undo2Icon />
               )}
-            </span>
-            <GitFileDiff file={file} />
-          </span>
-          <ChevronRightIcon
-            data-slot="accordion-trigger-icon"
-            className="pointer-events-none size-4 shrink-0 group-aria-expanded/review-file-trigger:hidden"
-          />
-          <ChevronDownIcon
-            data-slot="accordion-trigger-icon"
-            className="pointer-events-none hidden size-4 shrink-0 group-aria-expanded/review-file-trigger:inline"
-          />
-        </AccordionPrimitive.Trigger>
+              Discard changes
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </AccordionPrimitive.Header>
       <AccordionContent className="bg-background p-0">
         <div className="flex gap-2 border-b border-border/70 bg-card/40 p-2">
