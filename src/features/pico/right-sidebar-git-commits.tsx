@@ -1460,7 +1460,7 @@ function useGitCommitRowView({
 
   if (!parsed.hash && !parsed.subject) {
     return (
-      <div className="flex h-8 max-w-full min-w-0 items-center font-mono text-[13px] leading-5">
+      <div className="flex h-8 max-w-full min-w-0 items-center text-[13px] leading-5">
         {parsed.subject ? (
           <span className="min-w-0 flex-1 truncate text-foreground">
             {parsed.subject}
@@ -1474,7 +1474,7 @@ function useGitCommitRowView({
     <AccordionTrigger
       headerClassName="min-w-0"
       className={cn(
-        "h-8 min-h-8 w-full items-center gap-2 rounded-none px-1.5 py-0 font-mono text-[13px] leading-5 font-normal transition-[background-color,box-shadow,color] hover:no-underline focus-visible:ring-0 aria-expanded:bg-muted/50 **:data-[slot=accordion-trigger-icon]:size-4"
+        "h-8 min-h-8 w-full items-center gap-2 rounded-none px-1.5 py-0 text-[13px] leading-5 font-normal transition-[background-color,box-shadow,color] hover:no-underline focus-visible:ring-0 aria-expanded:bg-muted/50 **:data-[slot=accordion-trigger-icon]:size-4"
       )}
     >
       <span
@@ -1634,7 +1634,7 @@ function useGitCommitRowView({
           }}
         >
           <div
-            className="grid content-start gap-1.5 pt-1 font-mono text-xs leading-4"
+            className="grid content-start gap-1.5 pt-1 text-xs leading-4"
             style={{ paddingLeft: graphWidth }}
           >
             <div className="flex min-w-0 flex-wrap items-center gap-1.5 font-sans">
