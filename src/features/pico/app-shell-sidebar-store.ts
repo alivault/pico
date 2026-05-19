@@ -196,6 +196,26 @@ export function updateDirectoryIndexLoadingState(
   return changed ? next : current
 }
 
+function normalizeOptimisticSidebarPreview(value: string) {
+  const text = value.replace(/\s+/g, " ").trim()
+  if (!text) return ""
+  if (text.length <= 240) return text
+  return `${text.slice(0, 239).trimEnd()}…`
+}
+
+function sidebarEntryMatchesIdentity(
+  entry: SessionListEntry,
+  identity: { sessionId?: string; sessionPath?: string }
+) {
+  const sessionId = identity.sessionId?.trim() || ""
+  const sessionPath = identity.sessionPath?.trim() || ""
+
+  return Boolean(
+    (sessionPath && entry.path === sessionPath) ||
+    (sessionId && entry.id === sessionId)
+  )
+}
+
 export function upsertOptimisticSidebarSessionEntry(
   current: Record<string, DirectorySessionsIndexData>,
   entry: SessionListEntry & { cwd: string; id: string }
@@ -236,6 +256,62 @@ export function upsertOptimisticSidebarSessionEntry(
       sessions: nextSessions,
     },
   }
+}
+
+export function updateOptimisticSidebarSessionPreviewEntry(
+  current: Record<string, DirectorySessionsIndexData>,
+  options: {
+    sessionId?: string
+    sessionPath?: string
+    preview: string
+    modified: string
+  }
+) {
+  const preview = normalizeOptimisticSidebarPreview(options.preview)
+  if (!preview) return current
+
+  let changed = false
+  const next: Record<string, DirectorySessionsIndexData> = { ...current }
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    const updatedEntries: Array<SessionListEntry> = []
+    let sessionsChanged = false
+
+    const sessions = snapshot.sessions.map((entry) => {
+      if (!sidebarEntryMatchesIdentity(entry, options)) return entry
+
+      const nextEntry = {
+        ...entry,
+        modified: options.modified,
+        lastUserMessageAt: options.modified,
+        lastMessageAt: options.modified,
+        lastMessagePreview: preview,
+        streaming: true,
+        unread: false,
+      } satisfies SessionListEntry
+
+      updatedEntries.push(nextEntry)
+      sessionsChanged ||= nextEntry !== entry
+      return nextEntry
+    })
+
+    if (!sessionsChanged) continue
+
+    const updatedKeys = new Set(updatedEntries.map(sessionListEntryKey))
+    next[directory] = {
+      ...snapshot,
+      revision: `optimistic-preview:${options.modified}:${snapshot.revision}`,
+      sessions: [
+        ...updatedEntries,
+        ...sessions.filter(
+          (entry) => !updatedKeys.has(sessionListEntryKey(entry))
+        ),
+      ],
+    }
+    changed = true
+  }
+
+  return changed ? next : current
 }
 
 export function removeOptimisticSidebarSessionEntry(

@@ -1114,20 +1114,20 @@ export function buildItemsFromSync(
         ? true
         : Boolean(previousStreamingItem)
 
-  if (shouldRenderStreaming) {
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index]
-      if (item?.kind !== "assistant") continue
-      items[index] = { ...item, done: false }
-      break
-    }
-  }
-
   const pendingItems = mergePendingItemsForSync({
     previousItems,
     committedItems: items,
     preserveOptimisticItems: Boolean(sync.draft) || shouldRenderStreaming,
   })
+
+  if (shouldRenderStreaming && pendingItems.length === 0) {
+    const lastItemIndex = items.length - 1
+    const lastItem = items[lastItemIndex]
+    if (lastItem?.kind === "assistant") {
+      items[lastItemIndex] = { ...lastItem, done: false }
+    }
+  }
+
   items.push(...pendingItems)
 
   if (shouldRenderStreaming) {

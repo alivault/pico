@@ -94,8 +94,13 @@ type UseAppShellPromptMutationsOptions = {
   addOptimisticSidebarSession: (options?: {
     id?: string
     cwd?: string
+    lastMessagePreview?: string
   }) => string | undefined
   removeOptimisticSidebarSession: (optimisticId: string | undefined) => void
+  updateOptimisticSidebarSessionPreview: (options: {
+    preview: string
+    optimisticSidebarSessionId?: string
+  }) => void
   setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
   setStoredDraftDirectory: React.Dispatch<React.SetStateAction<string>>
   setDraftSessionLoadingOwnerKey: React.Dispatch<
@@ -185,6 +190,14 @@ function normalizeQueuedStreamingBehavior(
   streamingBehavior?: StreamingBehavior
 ) {
   return streamingBehavior === "followUp" ? "followUp" : "steer"
+}
+
+function promptSidebarPreview(message: string, images: Array<PromptImage>) {
+  const text = message.replace(/\s+/g, " ").trim()
+  if (text) return text
+  if (images.length === 0) return ""
+
+  return `${images.length.toLocaleString()} image${images.length === 1 ? "" : "s"}`
 }
 
 function createLocalPendingId() {
@@ -318,6 +331,7 @@ export function useAppShellPromptMutations({
   removeOptimisticUserMessage,
   addOptimisticSidebarSession,
   removeOptimisticSidebarSession,
+  updateOptimisticSidebarSessionPreview,
   setSidebarDirectories,
   setStoredDraftDirectory,
   setDraftSessionLoadingOwnerKey,
@@ -623,13 +637,17 @@ export function useAppShellPromptMutations({
           ? pendingDraftPromptRef.current
           : null
 
+      const sidebarPreview = promptSidebarPreview(message, images)
+
       if (!currentPendingPrompt) {
         const optimisticId = addOptimisticUserMessage({
           message,
           images,
           queued: false,
         })
-        const optimisticSidebarSessionId = addOptimisticSidebarSession()
+        const optimisticSidebarSessionId = addOptimisticSidebarSession({
+          lastMessagePreview: sidebarPreview,
+        })
         const nextPrompt = {
           ownerKey,
           message,
@@ -646,6 +664,15 @@ export function useAppShellPromptMutations({
         const queuedStreamingBehavior =
           normalizeQueuedStreamingBehavior(streamingBehavior)
         const optimisticId = createLocalPendingId()
+        updateOptimisticSidebarSessionPreview({
+          ...(currentPendingPrompt.optimisticSidebarSessionId
+            ? {
+                optimisticSidebarSessionId:
+                  currentPendingPrompt.optimisticSidebarSessionId,
+              }
+            : {}),
+          preview: sidebarPreview,
+        })
         const nextFollowUps = [
           ...pendingDraftFollowUpsRef.current,
           {
@@ -680,6 +707,7 @@ export function useAppShellPromptMutations({
       setComposerImages,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
+      updateOptimisticSidebarSessionPreview,
     ]
   )
 
@@ -765,6 +793,7 @@ export function useAppShellPromptMutations({
         ...image,
       }))
       const shouldOptimisticallyClearComposer = true
+      const sidebarPreview = promptSidebarPreview(message, submittedImages)
       const queuedPendingId = treatAsQueuedPrompt
         ? createLocalPendingId()
         : undefined
@@ -788,8 +817,15 @@ export function useAppShellPromptMutations({
       const optimisticSidebarSessionId =
         options?.optimisticSidebarSessionId ??
         (!treatAsQueuedPrompt && sessionStateRef.current.draft
-          ? addOptimisticSidebarSession()
+          ? addOptimisticSidebarSession({
+              lastMessagePreview: sidebarPreview,
+            })
           : undefined)
+
+      updateOptimisticSidebarSessionPreview({
+        ...(optimisticSidebarSessionId ? { optimisticSidebarSessionId } : {}),
+        preview: sidebarPreview,
+      })
 
       if (queuedPendingId && normalizedStreamingBehavior) {
         addOptimisticPendingMessage({
@@ -892,6 +928,7 @@ export function useAppShellPromptMutations({
       setComposerDiffLineComments,
       setComposerImages,
       setIsSubmitting,
+      updateOptimisticSidebarSessionPreview,
       viewerContextId,
     ]
   )

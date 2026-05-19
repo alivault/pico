@@ -82,6 +82,7 @@ import {
   createAppShellSidebarStore,
   mergeSidebarSessionStatusMap,
   removeOptimisticSidebarSessionEntry,
+  updateOptimisticSidebarSessionPreviewEntry,
   upsertOptimisticSidebarSessionEntry,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
@@ -2068,7 +2069,7 @@ function useAppShellSessionWorkspaceView({
   )
 
   const addOptimisticSidebarSession = React.useCallback(
-    (options?: { id?: string; cwd?: string }) => {
+    (options?: { id?: string; cwd?: string; lastMessagePreview?: string }) => {
       const currentState = sessionStateRef.current
       const optimisticId = (
         options?.id ||
@@ -2089,6 +2090,10 @@ function useAppShellSessionWorkspaceView({
         title: "New session",
         modified,
         lastUserMessageAt: modified,
+        lastMessageAt: modified,
+        ...(options?.lastMessagePreview
+          ? { lastMessagePreview: options.lastMessagePreview }
+          : {}),
         streaming: true,
         unread: false,
         optimistic: true,
@@ -2174,6 +2179,43 @@ function useAppShellSessionWorkspaceView({
     [sidebarStore]
   )
 
+  const updateOptimisticSidebarSessionPreview = React.useCallback(
+    (options: { preview: string; optimisticSidebarSessionId?: string }) => {
+      const preview = options.preview.trim()
+      if (!preview) return
+
+      const currentState = sessionStateRef.current
+      const modified = new Date().toISOString()
+      const sessionId =
+        options.optimisticSidebarSessionId ||
+        currentState.sessionId ||
+        currentState.sessionKey
+      const sessionPath = currentState.sessionFile
+
+      const previewUpdate = {
+        ...(sessionId ? { sessionId } : {}),
+        ...(sessionPath ? { sessionPath } : {}),
+        preview,
+        modified,
+      }
+
+      sidebarStore.setDirectoryIndexDataByPath((current) =>
+        updateOptimisticSidebarSessionPreviewEntry(current, previewUpdate)
+      )
+      sidebarStore.setSessionsEvent((current) => {
+        if (!current?.directoryIndexes) return current
+        const directoryIndexes = updateOptimisticSidebarSessionPreviewEntry(
+          current.directoryIndexes,
+          previewUpdate
+        )
+        return directoryIndexes === current.directoryIndexes
+          ? current
+          : { ...current, directoryIndexes }
+      })
+    },
+    [sessionStateRef, sidebarStore]
+  )
+
   const clearSelectedSidebarSelection = React.useCallback(() => {
     sidebarStore.setSelectedSidebarSessionKeys((current) =>
       current.length === 0 ? current : []
@@ -2220,6 +2262,7 @@ function useAppShellSessionWorkspaceView({
     removeOptimisticUserMessage,
     addOptimisticSidebarSession,
     removeOptimisticSidebarSession,
+    updateOptimisticSidebarSessionPreview,
     setSidebarDirectories: sidebarStore.setSidebarDirectories,
     setStoredDraftDirectory,
     setDraftSessionLoadingOwnerKey,

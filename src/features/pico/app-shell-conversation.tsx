@@ -296,9 +296,17 @@ function AppShellWorkingIndicatorLabel({
       ? hiddenThinkingPreview
       : fallbackLabel
 
-  if (!visibleLabel.trim()) return null
+  if (!visibleLabel.trim()) {
+    return (
+      <div aria-hidden="true" className="invisible leading-5 font-medium">
+        Working…
+      </div>
+    )
+  }
 
-  return <div className="font-medium text-foreground">{visibleLabel}</div>
+  return (
+    <div className="leading-5 font-medium text-foreground">{visibleLabel}</div>
+  )
 }
 
 function AppShellMessagesWorkingIndicator({
@@ -328,7 +336,7 @@ function AppShellMessagesWorkingIndicator({
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center justify-start gap-2">
+        <div className="flex min-h-5 min-w-0 items-center justify-start gap-2">
           <div className="min-w-0 shrink-0">
             {state.done ? (
               <div className="font-medium text-foreground">Done</div>
@@ -491,12 +499,11 @@ function ConversationAssistantGroupView({
   ])
 
   return (
-    <div className={className}>
-      <AssistantMessagesStoreCard
-        hideFooter={hideFooter}
-        store={assistantMessagesStore}
-      />
-    </div>
+    <AssistantMessagesStoreCard
+      className={className}
+      hideFooter={hideFooter}
+      store={assistantMessagesStore}
+    />
   )
 }
 
@@ -697,10 +704,6 @@ function AppShellConversationMessageStack({
     sessionStore,
     (sessionState) => sessionState.hideThinkingBlock
   )
-  const streaming = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.streaming
-  )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   if (!hasMessages) return null
 
@@ -709,7 +712,7 @@ function AppShellConversationMessageStack({
       <AppShellConversationItemGroups
         centerMessages={centerMessages}
         conversationItemsStore={conversationItemsStore}
-        hideFooter={streaming}
+        hideFooter={false}
         hideThinking={hideThinking}
         hideToolBlocks={hideToolBlocks}
       />

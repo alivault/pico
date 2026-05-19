@@ -1028,6 +1028,12 @@ function assistantItemIsWorking(
   )
 }
 
+function assistantItemIsStreaming(
+  item: Extract<ConversationItem, { kind: "assistant" }>
+) {
+  return Boolean(item.streaming)
+}
+
 function assistantMessagesShellSnapshotFromBlocks(
   snapshot: AssistantMessagesSnapshot,
   blocks: Array<AssistantConversationBlock>
@@ -1038,8 +1044,9 @@ function assistantMessagesShellSnapshotFromBlocks(
 
   const copyText = assistantCopyTextFromItems(snapshot.items)
   const modelLabel = assistantMessagesModelLabel(snapshot.items)
+  const streaming = snapshot.items.some(assistantItemIsStreaming)
   const working = snapshot.items.some(assistantItemIsWorking)
-  const hasFooter = Boolean(copyText.trim() || modelLabel || working)
+  const hasFooter = Boolean(copyText.trim() || modelLabel)
 
   return {
     ...(anchorBlock
@@ -1052,7 +1059,7 @@ function assistantMessagesShellSnapshotFromBlocks(
       : {}),
     hasBlocks: blocks.length > 0,
     hasFooter,
-    streaming: working,
+    streaming,
     working,
     copyText,
     modelLabel,
@@ -2511,11 +2518,7 @@ export function assistantMessageHasVisibleBlocks({
 export function assistantMessageHasFooterMeta(
   item: Extract<ConversationItem, { kind: "assistant" }>
 ) {
-  return Boolean(
-    assistantItemIsWorking(item) ||
-    item.model ||
-    assistantCopyTextFromItems([item])
-  )
+  return Boolean(item.model || assistantCopyTextFromItems([item]))
 }
 
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
@@ -2737,9 +2740,11 @@ function AssistantMessageFooter({
 }
 
 export function AssistantMessagesStoreCard({
+  className,
   hideFooter = false,
   store,
 }: {
+  className?: string
   hideFooter?: boolean
   store: AssistantMessagesStore
 }) {
@@ -2779,13 +2784,17 @@ export function AssistantMessagesStoreCard({
     shellStore.getSnapshot
   )
 
-  if (!shellSnapshot.hasBlocks && !shellSnapshot.hasFooter) {
+  const showFooter = Boolean(
+    !hideFooter && !shellSnapshot.streaming && shellSnapshot.hasFooter
+  )
+
+  if (!shellSnapshot.hasBlocks && !showFooter) {
     return null
   }
 
   return (
     <div
-      className="flex flex-col gap-4"
+      className={cn("flex flex-col gap-4", className)}
       data-conversation-assistant-group="true"
       data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
     >
@@ -2796,13 +2805,13 @@ export function AssistantMessagesStoreCard({
           streaming={shellSnapshot.streaming}
         />
       ) : null}
-      {hideFooter ? null : (
+      {showFooter ? (
         <AssistantMessageFooter
           copyText={shellSnapshot.copyText}
           modelLabel={shellSnapshot.modelLabel}
           streaming={shellSnapshot.streaming}
         />
-      )}
+      ) : null}
     </div>
   )
 }
