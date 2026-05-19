@@ -2396,6 +2396,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           </div>
         ) : null}
       </div>
+      <UserMessageFooter copyText={item.text} />
       {selectedImage ? (
         <ImageLightbox
           open={true}
@@ -2411,6 +2412,16 @@ export const UserMessageCard = React.memo(function UserMessageCard({
     </div>
   )
 })
+
+function UserMessageFooter({ copyText }: { copyText: string }) {
+  if (!copyText.trim()) return null
+
+  return (
+    <div className="mt-1 flex justify-end gap-1.5 text-xs font-medium text-muted-foreground">
+      <MessageFooterCopyButton idleLabel="Copy user message" text={copyText} />
+    </div>
+  )
+}
 
 function assistantBlockIsVisible({
   block,
@@ -2606,7 +2617,15 @@ function AssistantBlockGroupsView({
   )
 }
 
-function AssistantMessageFooterCopyButton({ text }: { text: string }) {
+function MessageFooterCopyButton({
+  className,
+  idleLabel,
+  text,
+}: {
+  className?: string
+  idleLabel: string
+  text: string
+}) {
   const [copyState, setCopyState] = React.useState<"idle" | "copied" | "error">(
     "idle"
   )
@@ -2630,14 +2649,14 @@ function AssistantMessageFooterCopyButton({ text }: { text: string }) {
       ? "Copied"
       : copyState === "error"
         ? "Retry copy"
-        : "Copy assistant message"
+        : idleLabel
 
   return (
     <TitleTooltip title={label}>
       <Button
         variant="ghost"
         size="icon-xs"
-        className="-ml-2 text-muted-foreground"
+        className={cn("text-muted-foreground", className)}
         disabled={!canCopy}
         aria-label={label}
         onClick={copyMessage}
@@ -2666,7 +2685,11 @@ function AssistantMessageFooter({
   return (
     <div className="-mt-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
       {showCopyButton ? (
-        <AssistantMessageFooterCopyButton text={copyText} />
+        <MessageFooterCopyButton
+          className="-ml-2"
+          idleLabel="Copy assistant message"
+          text={copyText}
+        />
       ) : null}
       {modelLabel ? <span className="truncate">{modelLabel}</span> : null}
     </div>
