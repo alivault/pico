@@ -58,7 +58,99 @@ function toolCommandPreviewFromArgs(args: unknown) {
   )
 }
 
-function rawShellCommandTextFromTool(name: string | undefined, args: unknown) {
+function looksLikeJsonObjectPrefix(text: string) {
+  return text === "{" || /^\{\s*(?:"|$)/.test(text)
+}
+
+export function toolArgsAreIncompleteJsonObject(args: unknown) {
+  if (typeof args !== "string") return false
+
+  const trimmed = args.trim()
+  if (!looksLikeJsonObjectPrefix(trimmed)) return false
+
+  try {
+    JSON.parse(trimmed)
+    return false
+  } catch {
+    return true
+  }
+}
+
+function readPartialJsonStringValue(text: string, start: number) {
+  let value = ""
+  let escaped = false
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (escaped) {
+      switch (char) {
+        case '"':
+        case "\\":
+        case "/":
+          value += char
+          break
+        case "b":
+          value += "\b"
+          break
+        case "f":
+          value += "\f"
+          break
+        case "n":
+          value += "\n"
+          break
+        case "r":
+          value += "\r"
+          break
+        case "t":
+          value += "\t"
+          break
+        case "u": {
+          const hex = text.slice(index + 1, index + 5)
+          if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+            value += String.fromCharCode(Number.parseInt(hex, 16))
+            index += 4
+          } else {
+            value += char
+          }
+          break
+        }
+        default:
+          value += char || ""
+          break
+      }
+      escaped = false
+      continue
+    }
+
+    if (char === "\\") {
+      escaped = true
+      continue
+    }
+
+    if (char === '"') break
+
+    value += char || ""
+  }
+
+  return value.trim()
+}
+
+function partialJsonStringProperty(text: string, property: string) {
+  const propertyPattern = new RegExp(
+    `"${property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:\\s*"`,
+    "g"
+  )
+  const match = propertyPattern.exec(text)
+  if (!match) return ""
+
+  return readPartialJsonStringValue(text, match.index + match[0].length)
+}
+
+export function rawShellCommandTextFromTool(
+  name: string | undefined,
+  args: unknown
+) {
   if (name !== "bash") return ""
 
   if (typeof args === "string") {
@@ -69,9 +161,13 @@ function rawShellCommandTextFromTool(name: string | undefined, args: unknown) {
       const parsed = JSON.parse(trimmed)
       if (parsed && typeof parsed === "object" && "command" in parsed) {
         const command = (parsed as Record<string, unknown>).command
-        return typeof command === "string" ? command.trim() : trimmed
+        return typeof command === "string" ? command.trim() : ""
       }
     } catch {
+      if (toolArgsAreIncompleteJsonObject(trimmed)) {
+        return partialJsonStringProperty(trimmed, "command")
+      }
+
       return trimmed
     }
 
@@ -121,7 +217,7 @@ function shellCommandNameFromSegment(segment: string) {
   return ""
 }
 
-function exploreShellCommandNameFromTool(
+export function exploreShellCommandNameFromTool(
   name: string | undefined,
   args: unknown
 ) {

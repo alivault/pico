@@ -25,6 +25,12 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TitleTooltip } from "@/components/ui/tooltip"
+import {
+  exploreShellCommandNameFromTool,
+  rawShellCommandTextFromTool,
+  toolArgsAreIncompleteJsonObject,
+  toolCategoryFromTool,
+} from "@/lib/pico/tool-classification"
 import { cn } from "@/lib/utils"
 
 export function promptImageKey(
@@ -247,27 +253,9 @@ function formatToolArgString(value: string) {
 function rawShellCommandText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
-  if (block.type !== "tool" || block.name !== "bash") return ""
-
-  if (typeof block.args === "string") {
-    const trimmed = block.args.trim()
-    if (!trimmed) return ""
-
-    try {
-      const parsed = JSON.parse(trimmed)
-      if (parsed && typeof parsed === "object" && "command" in parsed) {
-        const command = (parsed as Record<string, unknown>).command
-        return typeof command === "string" ? command.trim() : trimmed
-      }
-    } catch {
-      return trimmed
-    }
-
-    return trimmed
-  }
-
-  const args = normalizeToolArgs(block.args)
-  return getToolArgText(args, "command") || toolCommandPreview(block)
+  return block.type === "tool"
+    ? rawShellCommandTextFromTool(block.name, block.args)
+    : ""
 }
 
 function toolCallText(
@@ -328,25 +316,6 @@ function toolOutputText(
   if (block.isError) return "Tool failed with no output."
   return "No output available."
 }
-
-const EXPLORE_TOOL_NAMES = new Set([
-  "read",
-  "grep",
-  "glob",
-  "find",
-  "ls",
-  "list",
-  "rg",
-])
-const EXPLORE_SHELL_COMMAND_NAMES = new Set(["find", "grep", "ls", "rg"])
-const SKIPPABLE_SHELL_COMMAND_NAMES = new Set(["cd", "export", "pwd", "set"])
-const SHELL_COMMAND_WRAPPER_NAMES = new Set([
-  "command",
-  "env",
-  "noglob",
-  "sudo",
-  "time",
-])
 
 type AssistantConversationBlock = Extract<
   ConversationItem,
@@ -422,58 +391,19 @@ type AssistantBlockStore = {
   subscribeBlocks: (keys: Array<string>, listener: () => void) => () => void
 }
 
-function shellCommandNameFromSegment(segment: string) {
-  let text = segment.trim()
-
-  while (text) {
-    const assignmentMatch = text.match(/^[A-Za-z_][A-Za-z0-9_]*=\S+\s+/)
-    if (assignmentMatch) {
-      text = text.slice(assignmentMatch[0].length).trimStart()
-      continue
-    }
-
-    const commandMatch = text.match(/^([./A-Za-z0-9_-]+)\b/)
-    if (!commandMatch) return ""
-
-    const commandPath = commandMatch[1] || ""
-    const commandName = pathBaseName(commandPath)
-
-    if (!SHELL_COMMAND_WRAPPER_NAMES.has(commandName)) {
-      return commandName
-    }
-
-    text = text.slice(commandPath.length).trimStart()
-  }
-
-  return ""
-}
-
 function exploreShellCommandName(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
-  if (block.type !== "tool" || block.name !== "bash") return ""
-
-  const command = rawShellCommandText(block)
-  const segments = command.split(/(?:&&|\|\||;)/)
-
-  for (const segment of segments) {
-    const commandName = shellCommandNameFromSegment(segment)
-    if (!commandName || SKIPPABLE_SHELL_COMMAND_NAMES.has(commandName)) {
-      continue
-    }
-
-    return EXPLORE_SHELL_COMMAND_NAMES.has(commandName) ? commandName : ""
-  }
-
-  return ""
+  return block.type === "tool"
+    ? exploreShellCommandNameFromTool(block.name, block.args)
+    : ""
 }
 
 function matchesExploreToolBlock(block: AssistantConversationBlock) {
   if (block.type !== "tool") return false
   return (
     block.category === "explore" ||
-    EXPLORE_TOOL_NAMES.has(block.name || "") ||
-    Boolean(exploreShellCommandName(block))
+    toolCategoryFromTool(block.name, block.args) === "explore"
   )
 }
 
@@ -497,7 +427,11 @@ function isPendingUnclassifiedToolBlock(block: AssistantConversationBlock) {
   }
 
   if (block.name === "bash") {
-    return !rawShellCommandText(block)
+    const category = toolCategoryFromTool(block.name, block.args)
+    return (
+      !rawShellCommandText(block) ||
+      (category !== "explore" && toolArgsAreIncompleteJsonObject(block.args))
+    )
   }
 
   return false
