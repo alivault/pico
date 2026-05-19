@@ -3974,7 +3974,12 @@ class PicoRuntime {
 
     context.draftKey = nextEntry.key
     await this.activateContextSession(context, nextEntry)
-    return { ok: true, draft: true }
+    return {
+      ok: true,
+      draft: true,
+      sessionKey: nextEntry.key,
+      cwd: nextEntry.cwd,
+    }
   }
 
   async selectSession(request: Request) {

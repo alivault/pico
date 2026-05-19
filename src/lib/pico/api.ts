@@ -325,6 +325,15 @@ export type SimpleOkResponse =
     }
   | ApiErrorResponse
 
+export type SessionNewResponse =
+  | {
+      ok: true
+      draft: true
+      sessionKey: string
+      cwd?: string
+    }
+  | ApiErrorResponse
+
 export type PendingMessagesResponse =
   | {
       ok: true

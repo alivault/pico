@@ -8,6 +8,7 @@ import type {
   PendingMessageRemoveResponse,
   PendingMessagesResponse,
   PromptResponse,
+  SessionNewResponse,
   SimpleOkResponse,
 } from "@/lib/pico/api"
 
@@ -33,6 +34,13 @@ import {
 } from "@/lib/pico"
 
 type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
+type SessionNewData = Extract<SessionNewResponse, { ok: true }>
+
+type NewSessionPromptTarget = {
+  ownerKey: string
+  sessionKey: string
+  cwd?: string
+}
 
 type PendingDraftPrompt = {
   ownerKey: string
@@ -219,12 +227,21 @@ function buildCurrentSessionRequestUrl(
     contextId,
     sessionState,
     fallbackSessionId,
+    targetSessionKey,
   }: {
     contextId: string
     sessionState: SessionState
     fallbackSessionId?: string
+    targetSessionKey?: string
   }
 ) {
+  if (targetSessionKey) {
+    return buildRequestUrl(path, {
+      contextId,
+      searchParams: { sessionKey: targetSessionKey },
+    })
+  }
+
   const sessionKey =
     sessionState.sessionKey &&
     !sessionState.sessionKey.startsWith("optimistic:")
@@ -347,6 +364,8 @@ export function useAppShellPromptMutations({
   const draftSessionLoadingOwnerKeyRef = React.useRef(
     draftSessionLoadingOwnerKey
   )
+  const pendingNewSessionPromptTargetRef =
+    React.useRef<NewSessionPromptTarget | null>(null)
   const pendingDraftPromptRef = React.useRef(pendingDraftPrompt)
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
   const pendingMessagesRef = React.useRef(pendingMessages)
@@ -357,7 +376,7 @@ export function useAppShellPromptMutations({
   const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
   const sessionStreamingRef = React.useRef(sessionSnapshot.streaming)
   const flushPendingDraftPromptRef = React.useRef<
-    (ownerKey: string) => Promise<boolean>
+    (ownerKey: string, targetSessionKey?: string) => Promise<boolean>
   >(async () => false)
 
   React.useEffect(() => {
@@ -487,6 +506,7 @@ export function useAppShellPromptMutations({
         removeOptimisticUserMessage(followUp.optimisticId)
       }
 
+      pendingNewSessionPromptTargetRef.current = null
       pendingDraftPromptRef.current = null
       pendingDraftFollowUpsRef.current = []
       setPendingDraftPrompt(null)
@@ -547,7 +567,7 @@ export function useAppShellPromptMutations({
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<SimpleOkResponse>(
+      return await fetchJson<SessionNewData>(
         buildCurrentSessionRequestUrl("/api/session/new", {
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
@@ -582,7 +602,12 @@ export function useAppShellPromptMutations({
       setDraftSessionLoadingOwnerKey(ownerKey)
 
       try {
-        await createSessionRequest({ cwd: nextCwd })
+        const response = await createSessionRequest({ cwd: nextCwd })
+        pendingNewSessionPromptTargetRef.current = {
+          ownerKey,
+          sessionKey: response.sessionKey,
+          cwd: response.cwd,
+        }
         if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
           draftSessionLoadingOwnerKeyRef.current = null
           setDraftSessionLoadingOwnerKey((current) =>
@@ -590,7 +615,7 @@ export function useAppShellPromptMutations({
           )
         }
         if (pendingDraftPromptRef.current?.ownerKey === ownerKey) {
-          void flushPendingDraftPromptRef.current(ownerKey)
+          void flushPendingDraftPromptRef.current(ownerKey, response.sessionKey)
         }
         return true
       } catch (error) {
@@ -600,6 +625,9 @@ export function useAppShellPromptMutations({
         setDraftSessionLoadingOwnerKey((current) =>
           current === ownerKey ? null : current
         )
+        if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
+          pendingNewSessionPromptTargetRef.current = null
+        }
         restorePendingDraftPrompt(ownerKey)
         toast.error(
           error instanceof Error ? error.message : "Failed to create session"
@@ -718,12 +746,14 @@ export function useAppShellPromptMutations({
       streamingBehavior,
       pendingId,
       thinkingLevel,
+      targetSessionKey,
     }: {
       message: string
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
       pendingId?: string
       thinkingLevel?: string
+      targetSessionKey?: string
     }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -734,6 +764,7 @@ export function useAppShellPromptMutations({
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
+          targetSessionKey,
         }),
         {
           method: "POST",
@@ -766,6 +797,7 @@ export function useAppShellPromptMutations({
         forceFirstPrompt?: boolean
         optimisticId?: string
         optimisticSidebarSessionId?: string
+        targetSessionKey?: string
       }
     ) => {
       if (!viewerContextId) return false
@@ -782,6 +814,21 @@ export function useAppShellPromptMutations({
         diffLineComments: submittedDiffLineComments,
       }).trim()
       if (!message && composerImagesRef.current.length === 0) return false
+
+      const pendingNewSessionPromptTarget =
+        pendingNewSessionPromptTargetRef.current
+      const implicitTargetSessionKey =
+        !options?.targetSessionKey &&
+        sessionStateRef.current.draft &&
+        pendingNewSessionPromptTarget &&
+        promptDraftKeyMatchesOwner(
+          promptDraftKey(sessionStateRef.current),
+          pendingNewSessionPromptTarget.ownerKey
+        )
+          ? pendingNewSessionPromptTarget.sessionKey
+          : undefined
+      const targetSessionKey =
+        options?.targetSessionKey || implicitTargetSessionKey
 
       const treatAsQueuedPrompt = options?.forceFirstPrompt
         ? false
@@ -851,6 +898,7 @@ export function useAppShellPromptMutations({
           streamingBehavior: normalizedStreamingBehavior,
           pendingId: queuedPendingId,
           thinkingLevel: sessionStateRef.current.thinkingLevel,
+          targetSessionKey,
         })
         if (
           queuedPendingId &&
@@ -858,6 +906,13 @@ export function useAppShellPromptMutations({
           (!response.queued || response.canceled)
         ) {
           removeOptimisticPendingMessage(queuedPendingId)
+        }
+        if (
+          targetSessionKey &&
+          pendingNewSessionPromptTargetRef.current?.sessionKey ===
+            targetSessionKey
+        ) {
+          pendingNewSessionPromptTargetRef.current = null
         }
         if (!shouldOptimisticallyClearComposer) {
           replaceComposerDraft("")
@@ -933,70 +988,74 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  const flushPendingDraftFollowUps = React.useCallback(async () => {
-    if (draftSessionLoadingOwnerKeyRef.current) {
-      return false
-    }
-
-    const pendingFollowUps = pendingDraftFollowUpsRef.current
-    if (pendingFollowUps.length === 0) {
-      return false
-    }
-
-    const followUps = pendingFollowUps.map((entry) => ({
-      message: entry.message,
-      images: entry.images.map((image) => ({ ...image })),
-      streamingBehavior: entry.streamingBehavior,
-      optimisticId: entry.optimisticId,
-    }))
-
-    pendingDraftFollowUpsRef.current = []
-    setPendingDraftFollowUps([])
-
-    const flushFollowUp = async (index = 0): Promise<boolean> => {
-      const followUp = followUps[index]
-      if (!followUp) return true
-
-      try {
-        await promptMutation.mutateAsync({
-          message: followUp.message,
-          images: followUp.images,
-          streamingBehavior: followUp.streamingBehavior,
-          pendingId: followUp.optimisticId,
-          thinkingLevel: sessionStateRef.current.thinkingLevel,
-        })
-      } catch (error) {
-        for (const unsentFollowUp of followUps.slice(index)) {
-          removeOptimisticUserMessage(unsentFollowUp.optimisticId)
-        }
-        if (!composerTextRef.current) {
-          replaceComposerDraft(followUp.message)
-          setComposerImages(followUp.images)
-        }
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to submit queued follow-up"
-        )
+  const flushPendingDraftFollowUps = React.useCallback(
+    async (targetSessionKey?: string) => {
+      if (draftSessionLoadingOwnerKeyRef.current) {
         return false
       }
 
-      return await flushFollowUp(index + 1)
-    }
+      const pendingFollowUps = pendingDraftFollowUpsRef.current
+      if (pendingFollowUps.length === 0) {
+        return false
+      }
 
-    return await flushFollowUp()
-  }, [
-    composerTextRef,
-    promptMutation,
-    removeOptimisticUserMessage,
-    sessionStateRef,
-    replaceComposerDraft,
-    setComposerImages,
-    setPendingDraftFollowUps,
-  ])
+      const followUps = pendingFollowUps.map((entry) => ({
+        message: entry.message,
+        images: entry.images.map((image) => ({ ...image })),
+        streamingBehavior: entry.streamingBehavior,
+        optimisticId: entry.optimisticId,
+      }))
+
+      pendingDraftFollowUpsRef.current = []
+      setPendingDraftFollowUps([])
+
+      const flushFollowUp = async (index = 0): Promise<boolean> => {
+        const followUp = followUps[index]
+        if (!followUp) return true
+
+        try {
+          await promptMutation.mutateAsync({
+            message: followUp.message,
+            images: followUp.images,
+            streamingBehavior: followUp.streamingBehavior,
+            pendingId: followUp.optimisticId,
+            thinkingLevel: sessionStateRef.current.thinkingLevel,
+            targetSessionKey,
+          })
+        } catch (error) {
+          for (const unsentFollowUp of followUps.slice(index)) {
+            removeOptimisticUserMessage(unsentFollowUp.optimisticId)
+          }
+          if (!composerTextRef.current) {
+            replaceComposerDraft(followUp.message)
+            setComposerImages(followUp.images)
+          }
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to submit queued follow-up"
+          )
+          return false
+        }
+
+        return await flushFollowUp(index + 1)
+      }
+
+      return await flushFollowUp()
+    },
+    [
+      composerTextRef,
+      promptMutation,
+      removeOptimisticUserMessage,
+      sessionStateRef,
+      replaceComposerDraft,
+      setComposerImages,
+      setPendingDraftFollowUps,
+    ]
+  )
 
   const flushPendingDraftPrompt = React.useCallback(
-    async (ownerKey: string) => {
+    async (ownerKey: string, targetSessionKey?: string) => {
       const nextPrompt = pendingDraftPromptRef.current
       if (
         !nextPrompt ||
@@ -1006,6 +1065,12 @@ export function useAppShellPromptMutations({
         return false
       }
 
+      const resolvedTargetSessionKey =
+        targetSessionKey ||
+        (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey
+          ? pendingNewSessionPromptTargetRef.current.sessionKey
+          : undefined)
+
       pendingDraftPromptRef.current = null
       setPendingDraftPrompt(null)
       applyPendingDraftPromptToComposer(nextPrompt)
@@ -1013,6 +1078,7 @@ export function useAppShellPromptMutations({
         forceFirstPrompt: true,
         optimisticId: nextPrompt.optimisticId,
         optimisticSidebarSessionId: nextPrompt.optimisticSidebarSessionId,
+        targetSessionKey: resolvedTargetSessionKey,
       })
       if (!sent) {
         removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
@@ -1021,9 +1087,15 @@ export function useAppShellPromptMutations({
         }
         pendingDraftFollowUpsRef.current = []
         setPendingDraftFollowUps([])
+        if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
+          pendingNewSessionPromptTargetRef.current = null
+        }
         return false
       }
-      await flushPendingDraftFollowUps()
+      await flushPendingDraftFollowUps(resolvedTargetSessionKey)
+      if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
+        pendingNewSessionPromptTargetRef.current = null
+      }
       return true
     },
     [
@@ -1054,12 +1126,28 @@ export function useAppShellPromptMutations({
       return
     }
 
+    const targetSessionKey = currentSessionState.sessionKey?.startsWith(
+      "optimistic:"
+    )
+      ? undefined
+      : currentSessionState.sessionKey
+    if (targetSessionKey) {
+      pendingNewSessionPromptTargetRef.current = {
+        ownerKey: draftSessionLoadingOwnerKey,
+        sessionKey: targetSessionKey,
+        cwd: currentSessionState.cwd,
+      }
+    }
+
     draftSessionLoadingOwnerKeyRef.current = null
     setDraftSessionLoadingOwnerKey(null)
     if (
       pendingDraftPromptRef.current?.ownerKey === draftSessionLoadingOwnerKey
     ) {
-      void flushPendingDraftPrompt(draftSessionLoadingOwnerKey)
+      void flushPendingDraftPrompt(
+        draftSessionLoadingOwnerKey,
+        targetSessionKey
+      )
     }
   }, [
     draftSessionLoadingOwnerKey,
