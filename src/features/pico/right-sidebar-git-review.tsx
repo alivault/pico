@@ -7,6 +7,7 @@ import type {
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import {
+  AlertTriangleIcon,
   ArrowUpRightIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -16,6 +17,7 @@ import {
   MinusIcon,
   MoreHorizontalIcon,
   PlusIcon,
+  Trash2Icon,
   Undo2Icon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -26,12 +28,24 @@ import {
   AccordionContent,
   AccordionItem,
 } from "@/components/ui/accordion"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
@@ -151,7 +165,11 @@ function GitFileDiff({ file }: { file: GitChangeFile }) {
 }
 
 type ReviewDiffStyle = "unified" | "split"
-type ReviewBulkGitAction = "discard-all" | "stage-all" | "unstage-all"
+type ReviewBulkGitAction =
+  | "discard-all"
+  | "nuke-working-tree"
+  | "stage-all"
+  | "unstage-all"
 
 function gitFileCanStage(file: GitChangeFile) {
   const [indexStatus, worktreeStatus] = gitFileStatusCharacters(file.status)
@@ -161,6 +179,32 @@ function gitFileCanStage(file: GitChangeFile) {
 function gitFileCanUnstage(file: GitChangeFile) {
   const [indexStatus] = gitFileStatusCharacters(file.status)
   return indexStatus !== " " && indexStatus !== "?"
+}
+
+function reviewBulkGitActionSuccessLabel(action: ReviewBulkGitAction) {
+  switch (action) {
+    case "discard-all":
+      return "Discarded all changes"
+    case "nuke-working-tree":
+      return "Nuked working tree"
+    case "unstage-all":
+      return "Unstaged all changes"
+    case "stage-all":
+      return "Staged all changes"
+  }
+}
+
+function reviewBulkGitActionErrorFallback(action: ReviewBulkGitAction) {
+  switch (action) {
+    case "discard-all":
+      return "Failed to discard changes"
+    case "nuke-working-tree":
+      return "Failed to nuke working tree"
+    case "unstage-all":
+      return "Failed to unstage changes"
+    case "stage-all":
+      return "Failed to stage changes"
+  }
 }
 
 type ReviewDiffCommentTarget = Omit<
@@ -580,10 +624,14 @@ function useFileReviewContentView({
   const canStageAll = changedFiles.some(gitFileCanStage)
   const canUnstageAll = changedFiles.some(gitFileCanUnstage)
   const canDiscardAll = changedFiles.length > 0
+  const [confirmNukeWorkingTreeOpen, setConfirmNukeWorkingTreeOpen] =
+    React.useState(false)
   const bulkGitActionMutation = useMutation({
     mutationFn: async (action: ReviewBulkGitAction) => {
       const endpoint =
-        action === "discard-all" ? "/api/git-discard" : "/api/git-stage"
+        action === "discard-all" || action === "nuke-working-tree"
+          ? "/api/git-discard"
+          : "/api/git-stage"
       return await fetchJson<GitActionResponse>(
         buildRequestUrl(endpoint, { contextId: viewerContextId }),
         {
@@ -602,24 +650,11 @@ function useFileReviewContentView({
         viewerContextId,
         cwd: normalizedCwd,
       })
-      toast.success(
-        action === "discard-all"
-          ? "Discarded all changes"
-          : action === "unstage-all"
-            ? "Unstaged all changes"
-            : "Staged all changes"
-      )
+      toast.success(reviewBulkGitActionSuccessLabel(action))
     },
     onError: (error, action) => {
       toast.error(
-        getErrorMessage(
-          error,
-          action === "discard-all"
-            ? "Failed to discard changes"
-            : action === "unstage-all"
-              ? "Failed to unstage changes"
-              : "Failed to stage changes"
-        )
+        getErrorMessage(error, reviewBulkGitActionErrorFallback(action))
       )
     },
   })
@@ -757,10 +792,18 @@ function useFileReviewContentView({
   const hasOpenFile = openFiles.length > 0
   const bulkActionPending = bulkGitActionMutation.isPending
   const bulkActionDisabled =
-    bulkActionPending || !viewerContextId || !normalizedCwd
+    bulkActionPending ||
+    !viewerContextId ||
+    !normalizedCwd ||
+    typeof files === "undefined" ||
+    files === null ||
+    Boolean(filesQuery.error)
   const discardAllPending =
     bulkGitActionMutation.isPending &&
     bulkGitActionMutation.variables === "discard-all"
+  const nukeWorkingTreePending =
+    bulkGitActionMutation.isPending &&
+    bulkGitActionMutation.variables === "nuke-working-tree"
   const stageAllPending =
     bulkGitActionMutation.isPending &&
     bulkGitActionMutation.variables === "stage-all"
@@ -775,6 +818,13 @@ function useFileReviewContentView({
   }
   const runBulkGitAction = (action: ReviewBulkGitAction) => {
     bulkGitActionMutation.mutate(action)
+  }
+  const requestNukeWorkingTree = () => {
+    setConfirmNukeWorkingTreeOpen(true)
+  }
+  const runConfirmedNukeWorkingTree = () => {
+    bulkGitActionMutation.mutate("nuke-working-tree")
+    setConfirmNukeWorkingTreeOpen(false)
   }
 
   return (
@@ -797,113 +847,63 @@ function useFileReviewContentView({
           </span>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {changedFiles.length > 0 ? (
-            isMobile ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="Diff actions"
-                      disabled={bulkActionDisabled}
-                    />
-                  }
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Diff actions"
+                  disabled={bulkActionDisabled}
+                />
+              }
+            >
+              {bulkActionPending ? (
+                <Spinner size="xs" />
+              ) : (
+                <MoreHorizontalIcon className="size-4" />
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  disabled={bulkActionDisabled || !canStageAll}
+                  onClick={() => runBulkGitAction("stage-all")}
                 >
-                  {bulkActionPending ? (
+                  {stageAllPending ? <Spinner size="xs" /> : <PlusIcon />}
+                  Stage all
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={bulkActionDisabled || !canUnstageAll}
+                  onClick={() => runBulkGitAction("unstage-all")}
+                >
+                  {unstageAllPending ? <Spinner size="xs" /> : <MinusIcon />}
+                  Unstage all
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={bulkActionDisabled || !canDiscardAll}
+                  onClick={() => runBulkGitAction("discard-all")}
+                >
+                  {discardAllPending ? <Spinner size="xs" /> : <Undo2Icon />}
+                  Discard all
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={bulkActionDisabled}
+                  onClick={requestNukeWorkingTree}
+                >
+                  {nukeWorkingTreePending ? (
                     <Spinner size="xs" />
                   ) : (
-                    <MoreHorizontalIcon className="size-4" />
+                    <Trash2Icon />
                   )}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      disabled={bulkActionDisabled || !canDiscardAll}
-                      onClick={() => runBulkGitAction("discard-all")}
-                    >
-                      {discardAllPending ? (
-                        <Spinner size="xs" />
-                      ) : (
-                        <Undo2Icon />
-                      )}
-                      Discard all
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={bulkActionDisabled || !canUnstageAll}
-                      onClick={() => runBulkGitAction("unstage-all")}
-                    >
-                      {unstageAllPending ? (
-                        <Spinner size="xs" />
-                      ) : (
-                        <MinusIcon />
-                      )}
-                      Unstage all
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={bulkActionDisabled || !canStageAll}
-                      onClick={() => runBulkGitAction("stage-all")}
-                    >
-                      {stageAllPending ? <Spinner size="xs" /> : <PlusIcon />}
-                      Stage all
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="flex shrink-0 flex-wrap items-center gap-1">
-                <TitleTooltip title="Discard all changes">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive"
-                    disabled={bulkActionDisabled || !canDiscardAll}
-                    onClick={() => runBulkGitAction("discard-all")}
-                  >
-                    {discardAllPending ? (
-                      <Spinner size="xs" />
-                    ) : (
-                      <Undo2Icon className="size-3.5" />
-                    )}
-                    Discard all
-                  </Button>
-                </TitleTooltip>
-                <TitleTooltip title="Unstage all staged changes">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-muted-foreground hover:text-amber-500"
-                    disabled={bulkActionDisabled || !canUnstageAll}
-                    onClick={() => runBulkGitAction("unstage-all")}
-                  >
-                    {unstageAllPending ? (
-                      <Spinner size="xs" />
-                    ) : (
-                      <MinusIcon className="size-3.5" />
-                    )}
-                    Unstage all
-                  </Button>
-                </TitleTooltip>
-                <TitleTooltip title="Stage all working tree changes">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-muted-foreground hover:text-emerald-500"
-                    disabled={bulkActionDisabled || !canStageAll}
-                    onClick={() => runBulkGitAction("stage-all")}
-                  >
-                    {stageAllPending ? (
-                      <Spinner size="xs" />
-                    ) : (
-                      <PlusIcon className="size-3.5" />
-                    )}
-                    Stage all
-                  </Button>
-                </TitleTooltip>
-              </div>
-            )
-          ) : null}
+                  Nuke working tree
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <TitleTooltip title={hasOpenFile ? "Collapse all" : "Expand all"}>
             <Button
               variant="outline"
@@ -1087,6 +1087,33 @@ function useFileReviewContentView({
           ) : null}
         </div>
       ) : null}
+      <AlertDialog
+        open={confirmNukeWorkingTreeOpen}
+        onOpenChange={setConfirmNukeWorkingTreeOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <AlertTriangleIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Nuke working tree?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This restores tracked files to HEAD and deletes untracked and
+              ignored files in this repository. This cannot be undone from Pico.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={bulkActionDisabled}
+              onClick={runConfirmedNukeWorkingTree}
+            >
+              Nuke working tree
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

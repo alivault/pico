@@ -1608,6 +1608,56 @@ export async function discardDirectoryGitAll(
   ])
 }
 
+export async function nukeDirectoryGitWorkingTree(
+  cwd: string
+): Promise<GitActionResult> {
+  const normalizedCwd = normalizeGitCwd(cwd)
+  if (!normalizedCwd) throw new Error("cwd is required")
+  if (!(await isInsideWorkTree(normalizedCwd))) {
+    throw new Error("No git repository detected")
+  }
+
+  const hasHead = await gitRepositoryHasHead(normalizedCwd)
+  const restoreResult = hasHead
+    ? await runCommand(
+        "git",
+        ["restore", "--source=HEAD", "--staged", "--worktree", "--", ":/"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+    : await runCommand(
+        "git",
+        ["rm", "-r", "--cached", "--ignore-unmatch", "--", ":/"],
+        {
+          cwd: normalizedCwd,
+          timeoutMs: GIT_ACTION_TIMEOUT_MS,
+        }
+      )
+  if (restoreResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to nuke working tree", restoreResult)
+    )
+  }
+
+  const cleanResult = await runCommand("git", ["clean", "-fdx", "--", ":/"], {
+    cwd: normalizedCwd,
+    timeoutMs: GIT_ACTION_TIMEOUT_MS,
+  })
+  if (cleanResult.code !== 0) {
+    throw new Error(
+      gitCommandErrorMessage("Failed to nuke working tree", cleanResult)
+    )
+  }
+
+  invalidateDirectoryGitCaches(normalizedCwd)
+  return combineGitActionResults([
+    { stdout: restoreResult.stdout, stderr: restoreResult.stderr },
+    { stdout: cleanResult.stdout, stderr: cleanResult.stderr },
+  ])
+}
+
 export async function stageDirectoryGitFile(
   cwd: string,
   path: string,

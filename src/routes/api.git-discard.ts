@@ -2,7 +2,11 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import type { GitActionResponse } from "@/lib/pico/api"
 import { jsonResponse } from "@/server/http"
-import { discardDirectoryGitAll, discardDirectoryGitFile } from "@/server/git"
+import {
+  discardDirectoryGitAll,
+  discardDirectoryGitFile,
+  nukeDirectoryGitWorkingTree,
+} from "@/server/git"
 import { getPicoRuntime } from "@/server/pico-runtime"
 import { resolveDirectoryPath } from "@/server/project-paths"
 import { readRequestJson, routeErrorResponse } from "@/server/route-helpers"
@@ -28,7 +32,12 @@ export const Route = createFileRoute("/api/git-discard")({
             typeof body.previousPath === "string" ? body.previousPath : ""
           const status = typeof body.status === "string" ? body.status : ""
           if (!requestedCwd.trim()) throw new Error("cwd is required")
-          if (!path.trim() && !all && action !== "discard-all") {
+          if (
+            !path.trim() &&
+            !all &&
+            action !== "discard-all" &&
+            action !== "nuke-working-tree"
+          ) {
             throw new Error("file path is required")
           }
 
@@ -37,14 +46,16 @@ export const Route = createFileRoute("/api/git-discard")({
           const baseCwd = getPicoRuntime().getBaseCwd(activeEntry, context)
           const cwd = await resolveDirectoryPath(requestedCwd, baseCwd)
           const result =
-            all || action === "discard-all"
-              ? await discardDirectoryGitAll(cwd)
-              : await discardDirectoryGitFile(
-                  cwd,
-                  path,
-                  previousPath || undefined,
-                  status || undefined
-                )
+            action === "nuke-working-tree"
+              ? await nukeDirectoryGitWorkingTree(cwd)
+              : all || action === "discard-all"
+                ? await discardDirectoryGitAll(cwd)
+                : await discardDirectoryGitFile(
+                    cwd,
+                    path,
+                    previousPath || undefined,
+                    status || undefined
+                  )
           return jsonResponse({
             ok: true,
             cwd,
