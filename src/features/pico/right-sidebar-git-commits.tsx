@@ -247,7 +247,7 @@ function gitCommitRowReducer(
 }
 
 function gitGraphLaneColor(index: number, active = false) {
-  if (active) return "#f87171"
+  if (active) return "var(--warning)"
   return GIT_GRAPH_LANE_COLORS[index % GIT_GRAPH_LANE_COLORS.length]
 }
 
