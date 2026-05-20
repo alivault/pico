@@ -324,7 +324,7 @@ function renderPendingCommitDiffLineComment(
   const form = document.createElement("form")
   assignClassName(
     form,
-    "m-2 w-[min(38rem,calc(100vw_-_5rem))] max-w-[calc(100%_-_1rem)] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
+    "m-2 w-[calc(100%_-_1rem)] max-w-[38rem] rounded-lg border border-border/70 bg-background p-2 shadow-sm"
   )
 
   const header = document.createElement("div")
