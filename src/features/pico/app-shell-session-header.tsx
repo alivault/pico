@@ -147,7 +147,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </h2>
             </TitleTooltip>
           </div>
-          <div className="flex max-w-full min-w-0 items-center justify-center gap-x-3">
+          <div className="flex max-w-full min-w-0 items-center justify-center gap-x-2">
             {displaySessionCwd ? (
               <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
                 <span className="truncate">
