@@ -70,9 +70,9 @@ import {
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
-  hasRemainingScrollContent,
-  hasScrolledContent,
-} from "@/features/pico/scroll-shadow-utils"
+  ScrollGradientOverlays,
+  useScrollGradients,
+} from "@/features/pico/scroll-gradient-utils"
 import {
   GIT_COMMITS_PAGE_SIZE,
   copyGitCommitValue,
@@ -163,9 +163,6 @@ type GitCommitRowState = {
   confirmDialog: GitCommitConfirmState | null
   contextMenuOpen: boolean
   contextMenuKey: number
-  scrollValue: string
-  commitBodyHeaderShadowed: boolean
-  commitBodyFooterShadowed: boolean
 }
 
 type GitCommitRowAction =
@@ -176,12 +173,6 @@ type GitCommitRowAction =
   | { type: "set-confirm-dialog"; confirmDialog: GitCommitConfirmState | null }
   | { type: "set-context-menu-open"; open: boolean }
   | { type: "reset-context-menu" }
-  | {
-      type: "set-scroll-shadows"
-      value: string
-      headerShadowed: boolean
-      footerShadowed: boolean
-    }
 
 const initialGitCommitRowState = {
   hashCopied: false,
@@ -190,9 +181,6 @@ const initialGitCommitRowState = {
   confirmDialog: null,
   contextMenuOpen: false,
   contextMenuKey: 0,
-  scrollValue: "",
-  commitBodyHeaderShadowed: false,
-  commitBodyFooterShadowed: false,
 } satisfies GitCommitRowState
 
 function gitCommitRowReducer(
@@ -228,20 +216,6 @@ function gitCommitRowReducer(
         ...state,
         contextMenuOpen: false,
         contextMenuKey: state.contextMenuKey + 1,
-      }
-    case "set-scroll-shadows":
-      if (
-        state.scrollValue === action.value &&
-        state.commitBodyHeaderShadowed === action.headerShadowed &&
-        state.commitBodyFooterShadowed === action.footerShadowed
-      ) {
-        return state
-      }
-      return {
-        ...state,
-        scrollValue: action.value,
-        commitBodyHeaderShadowed: action.headerShadowed,
-        commitBodyFooterShadowed: action.footerShadowed,
       }
   }
 }
@@ -1233,11 +1207,16 @@ function useGitCommitRowView({
   )
   const hashCopiedResetRef = React.useRef<number | undefined>(undefined)
   const messageCopiedResetRef = React.useRef<number | undefined>(undefined)
-  const commitBodyScrollRef = React.useRef<HTMLDivElement>(null)
   const contextMenuActionsRef = React.useRef<{
     close: () => void
     unmount: () => void
   } | null>(null)
+  const {
+    bottomHeight: commitBodyBottomGradientHeight,
+    onScroll: onCommitBodyGradientScroll,
+    setScrollElement: setCommitBodyGradientElement,
+    topHeight: commitBodyTopGradientHeight,
+  } = useScrollGradients<HTMLDivElement>()
   const title = parsed.subject.trim()
   const time = formatGitCommitDetailTime(parsed.relativeDate)
   const fullTime = formatGitCommitFullDate(parsed.fullDate)
@@ -1253,26 +1232,6 @@ function useGitCommitRowView({
     contextMenuOpen,
     contextMenuKey,
   } = rowState
-
-  const commitBodyHeaderShadowed =
-    rowState.scrollValue === value && rowState.commitBodyHeaderShadowed
-  const commitBodyFooterShadowed =
-    rowState.scrollValue === value && rowState.commitBodyFooterShadowed
-
-  const updateCommitBodyScrollShadows = (
-    scrollElement: HTMLDivElement | null
-  ) => {
-    dispatchRow({
-      type: "set-scroll-shadows",
-      value,
-      headerShadowed: hasScrolledContent(scrollElement),
-      footerShadowed: hasRemainingScrollContent(scrollElement),
-    })
-  }
-
-  React.useLayoutEffect(() => {
-    updateCommitBodyScrollShadows(commitBodyScrollRef.current)
-  })
 
   React.useEffect(() => {
     return () => {
@@ -1627,11 +1586,9 @@ function useGitCommitRowView({
       </div>
       <AccordionContent className="relative h-[200px] border-b border-border/70 bg-muted/50 p-0">
         <div
-          ref={commitBodyScrollRef}
+          ref={setCommitBodyGradientElement}
           className="h-full overflow-y-auto pr-2 pb-2"
-          onScroll={(event) => {
-            updateCommitBodyScrollShadows(event.currentTarget)
-          }}
+          onScroll={onCommitBodyGradientScroll}
         >
           <div
             className="grid content-start gap-1.5 pt-1 text-xs leading-4"
@@ -1738,17 +1695,9 @@ function useGitCommitRowView({
             ) : null}
           </div>
         </div>
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-b from-black/10 to-transparent transition-opacity duration-150",
-            commitBodyHeaderShadowed ? "opacity-100" : "opacity-0"
-          )}
-        />
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-gradient-to-t from-black/10 to-transparent transition-opacity duration-150",
-            commitBodyFooterShadowed ? "opacity-100" : "opacity-0"
-          )}
+        <ScrollGradientOverlays
+          bottomHeight={commitBodyBottomGradientHeight}
+          topHeight={commitBodyTopGradientHeight}
         />
       </AccordionContent>
       <Dialog

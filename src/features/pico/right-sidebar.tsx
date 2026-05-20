@@ -45,6 +45,10 @@ import {
   getStuckScrollTriggerValue,
   setDerivedScrollState,
 } from "@/features/pico/scroll-shadow-utils"
+import {
+  ScrollGradientOverlays,
+  useScrollGradients,
+} from "@/features/pico/scroll-gradient-utils"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
 import {
   getErrorMessage,
@@ -814,6 +818,19 @@ function CommitDiffContent({
   const [commentTarget, setCommentTarget] =
     React.useState<CommitDiffCommentTarget | null>(null)
   const diffScrollRef = React.useRef<HTMLDivElement>(null)
+  const {
+    bottomHeight: diffScrollBottomGradientHeight,
+    onScroll: onDiffScrollGradientScroll,
+    setScrollElement: setDiffScrollGradientElement,
+    topHeight: diffScrollTopGradientHeight,
+  } = useScrollGradients<HTMLDivElement>()
+  const setDiffScrollElement = React.useCallback(
+    (element: HTMLDivElement | null) => {
+      diffScrollRef.current = element
+      setDiffScrollGradientElement(element)
+    },
+    [setDiffScrollGradientElement]
+  )
   const updateStickyCommitFileHeader = (
     scrollElement: HTMLDivElement | null
   ) => {
@@ -925,53 +942,60 @@ function CommitDiffContent({
           <ToggleGroupItem value="split">Split</ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <div
-        ref={diffScrollRef}
-        className="min-h-0 flex-1 overflow-auto"
-        onScroll={(event) => {
-          updateStickyCommitFileHeader(event.currentTarget)
-        }}
-      >
-        {diffQuery.isPending && !diffQuery.data ? (
-          <div className="p-4">
-            <GitSectionNote>
-              <Spinner /> Loading commit diff…
-            </GitSectionNote>
-          </div>
-        ) : diffQuery.error ? (
-          <div className="p-4">
-            <GitSectionNote tone="destructive">
-              {getErrorMessage(diffQuery.error, "Failed to load commit diff")}
-            </GitSectionNote>
-          </div>
-        ) : diffQuery.data?.patch && tab.path ? (
-          <CommitSingleFileDiff
-            comments={commentsForTab.filter((comment) => {
-              if (!tab.path) return true
-              return (
-                comment.path === tab.path || comment.path === tab.previousPath
-              )
-            })}
-            diffStyle={diffStyle}
-            onStartComment={startLineComment}
-            patch={diffQuery.data.patch}
-            pendingComment={pendingComment}
-          />
-        ) : diffQuery.data?.patch ? (
-          <CommitPatchDiffs
-            key={`${diffQuery.data.commit}:${diffQuery.data.mode}`}
-            comments={commentsForTab}
-            diffStyle={diffStyle}
-            onStartComment={startLineComment}
-            patch={diffQuery.data.patch}
-            pendingComment={pendingComment}
-            stuckFileValue={stickyCommitFileValue}
-          />
-        ) : (
-          <div className="p-4">
-            <GitSectionNote>No line changes.</GitSectionNote>
-          </div>
-        )}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={setDiffScrollElement}
+          className="h-full overflow-auto"
+          onScroll={(event) => {
+            updateStickyCommitFileHeader(event.currentTarget)
+            onDiffScrollGradientScroll(event)
+          }}
+        >
+          {diffQuery.isPending && !diffQuery.data ? (
+            <div className="p-4">
+              <GitSectionNote>
+                <Spinner /> Loading commit diff…
+              </GitSectionNote>
+            </div>
+          ) : diffQuery.error ? (
+            <div className="p-4">
+              <GitSectionNote tone="destructive">
+                {getErrorMessage(diffQuery.error, "Failed to load commit diff")}
+              </GitSectionNote>
+            </div>
+          ) : diffQuery.data?.patch && tab.path ? (
+            <CommitSingleFileDiff
+              comments={commentsForTab.filter((comment) => {
+                if (!tab.path) return true
+                return (
+                  comment.path === tab.path || comment.path === tab.previousPath
+                )
+              })}
+              diffStyle={diffStyle}
+              onStartComment={startLineComment}
+              patch={diffQuery.data.patch}
+              pendingComment={pendingComment}
+            />
+          ) : diffQuery.data?.patch ? (
+            <CommitPatchDiffs
+              key={`${diffQuery.data.commit}:${diffQuery.data.mode}`}
+              comments={commentsForTab}
+              diffStyle={diffStyle}
+              onStartComment={startLineComment}
+              patch={diffQuery.data.patch}
+              pendingComment={pendingComment}
+              stuckFileValue={stickyCommitFileValue}
+            />
+          ) : (
+            <div className="p-4">
+              <GitSectionNote>No line changes.</GitSectionNote>
+            </div>
+          )}
+        </div>
+        <ScrollGradientOverlays
+          bottomHeight={diffScrollBottomGradientHeight}
+          topHeight={diffScrollTopGradientHeight}
+        />
       </div>
     </div>
   )

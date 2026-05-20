@@ -49,6 +49,10 @@ import {
 } from "@/features/pico/use-app-shell-message-scroll"
 import type { MessageScrollStateStore } from "@/features/pico/use-app-shell-message-scroll"
 import {
+  ScrollGradientOverlays,
+  useScrollGradients,
+} from "@/features/pico/scroll-gradient-utils"
+import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
@@ -220,6 +224,19 @@ function AppShellConversationFrame({
     isSessionViewLoading,
     sessionState,
   })
+  const {
+    bottomHeight: conversationScrollBottomGradientHeight,
+    onScroll: onConversationScrollGradientScroll,
+    setScrollElement: setConversationScrollGradientElement,
+    topHeight: conversationScrollTopGradientHeight,
+  } = useScrollGradients<HTMLDivElement>({ disabled: isSessionViewLoading })
+  const setMessagesScrollAreaElement = React.useCallback(
+    (element: HTMLDivElement | null) => {
+      messagesScrollAreaRef.current = element
+      setConversationScrollGradientElement(element)
+    },
+    [messagesScrollAreaRef, setConversationScrollGradientElement]
+  )
 
   React.useImperativeHandle(
     ref,
@@ -240,12 +257,13 @@ function AppShellConversationFrame({
   return (
     <div className="relative min-h-0 flex-1">
       <div
-        ref={messagesScrollAreaRef}
+        ref={setMessagesScrollAreaElement}
         data-conversation-viewport="true"
         tabIndex={0}
         role="region"
         aria-label="Conversation messages"
         className="h-full overflow-x-hidden overflow-y-auto overscroll-contain px-4 outline-none [overflow-anchor:none]"
+        onScroll={onConversationScrollGradientScroll}
       >
         <div ref={messagesContentRef} className="flex min-h-full flex-col">
           <ConversationScrollRevisionObserver
@@ -261,6 +279,11 @@ function AppShellConversationFrame({
           <div ref={bottomRef} />
         </div>
       </div>
+
+      <ScrollGradientOverlays
+        bottomHeight={conversationScrollBottomGradientHeight}
+        topHeight={conversationScrollTopGradientHeight}
+      />
 
       {!isSessionViewLoading ? (
         <>

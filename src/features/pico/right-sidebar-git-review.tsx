@@ -100,6 +100,10 @@ import {
   setDerivedScrollState,
 } from "@/features/pico/scroll-shadow-utils"
 import {
+  ScrollGradientOverlays,
+  useScrollGradients,
+} from "@/features/pico/scroll-gradient-utils"
+import {
   RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
@@ -612,6 +616,19 @@ function useFileReviewContentView({
     dispatch({ type: "historyHeaderShadowedChanged", value })
   }
   const changesScrollRef = React.useRef<HTMLDivElement>(null)
+  const {
+    bottomHeight: changesScrollBottomGradientHeight,
+    onScroll: onChangesScrollGradientScroll,
+    setScrollElement: setChangesScrollGradientElement,
+    topHeight: changesScrollTopGradientHeight,
+  } = useScrollGradients<HTMLDivElement>()
+  const setChangesScrollElement = React.useCallback(
+    (element: HTMLDivElement | null) => {
+      changesScrollRef.current = element
+      setChangesScrollGradientElement(element)
+    },
+    [setChangesScrollGradientElement]
+  )
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
   const historyPanelRef = React.useRef<HTMLDivElement>(null)
   const historyScrollRef = React.useRef<HTMLDivElement>(null)
@@ -944,66 +961,73 @@ function useFileReviewContentView({
           </ToggleGroup>
         </div>
       </div>
-      <div
-        ref={changesScrollRef}
-        className="min-h-0 flex-1 overflow-auto"
-        onScroll={(event) => {
-          updateStickyReviewFileHeader(event.currentTarget)
-        }}
-      >
-        {!normalizedCwd ? (
-          <GitSectionNote className="px-3 py-2.5">
-            No directory selected.
-          </GitSectionNote>
-        ) : !viewerContextId ? (
-          <GitSectionNote className="px-3 py-2.5">
-            Waiting for viewer context…
-          </GitSectionNote>
-        ) : filesQuery.isPending && typeof files === "undefined" ? (
-          <GitSectionNote className="px-3 py-2.5">
-            <Spinner /> Loading changes…
-          </GitSectionNote>
-        ) : filesQuery.error ? (
-          <GitSectionNote tone="destructive" className="px-3 py-2.5">
-            {getErrorMessage(filesQuery.error, "Failed to load changes")}
-          </GitSectionNote>
-        ) : files === null ? (
-          <GitSectionNote className="px-3 py-2.5">
-            No git repository detected.
-          </GitSectionNote>
-        ) : changedFiles.length > 0 ? (
-          <Accordion
-            multiple
-            value={openFiles}
-            onValueChange={(nextOpenFiles) => {
-              dispatch({
-                type: "openFilesChanged",
-                openFiles: nextOpenFiles,
-              })
-            }}
-            className="border-b border-border/80"
-          >
-            {changedFiles.map((file) => (
-              <ReviewFileAccordionItem
-                key={reviewFileValue(file)}
-                viewerContextId={viewerContextId}
-                cwd={normalizedCwd}
-                active={active}
-                diffLineComments={diffLineComments}
-                diffStyle={diffStyle}
-                file={file}
-                open={openFiles.includes(reviewFileValue(file))}
-                stuck={stickyReviewFileValue === reviewFileValue(file)}
-                onAddDiffLineComment={onAddDiffLineComment}
-                onOpenFile={onOpenFile}
-              />
-            ))}
-          </Accordion>
-        ) : (
-          <GitSectionNote className="px-3 py-2.5">
-            Working tree clean.
-          </GitSectionNote>
-        )}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={setChangesScrollElement}
+          className="h-full overflow-auto"
+          onScroll={(event) => {
+            updateStickyReviewFileHeader(event.currentTarget)
+            onChangesScrollGradientScroll(event)
+          }}
+        >
+          {!normalizedCwd ? (
+            <GitSectionNote className="px-3 py-2.5">
+              No directory selected.
+            </GitSectionNote>
+          ) : !viewerContextId ? (
+            <GitSectionNote className="px-3 py-2.5">
+              Waiting for viewer context…
+            </GitSectionNote>
+          ) : filesQuery.isPending && typeof files === "undefined" ? (
+            <GitSectionNote className="px-3 py-2.5">
+              <Spinner /> Loading changes…
+            </GitSectionNote>
+          ) : filesQuery.error ? (
+            <GitSectionNote tone="destructive" className="px-3 py-2.5">
+              {getErrorMessage(filesQuery.error, "Failed to load changes")}
+            </GitSectionNote>
+          ) : files === null ? (
+            <GitSectionNote className="px-3 py-2.5">
+              No git repository detected.
+            </GitSectionNote>
+          ) : changedFiles.length > 0 ? (
+            <Accordion
+              multiple
+              value={openFiles}
+              onValueChange={(nextOpenFiles) => {
+                dispatch({
+                  type: "openFilesChanged",
+                  openFiles: nextOpenFiles,
+                })
+              }}
+              className="border-b border-border/80"
+            >
+              {changedFiles.map((file) => (
+                <ReviewFileAccordionItem
+                  key={reviewFileValue(file)}
+                  viewerContextId={viewerContextId}
+                  cwd={normalizedCwd}
+                  active={active}
+                  diffLineComments={diffLineComments}
+                  diffStyle={diffStyle}
+                  file={file}
+                  open={openFiles.includes(reviewFileValue(file))}
+                  stuck={stickyReviewFileValue === reviewFileValue(file)}
+                  onAddDiffLineComment={onAddDiffLineComment}
+                  onOpenFile={onOpenFile}
+                />
+              ))}
+            </Accordion>
+          ) : (
+            <GitSectionNote className="px-3 py-2.5">
+              Working tree clean.
+            </GitSectionNote>
+          )}
+        </div>
+        <ScrollGradientOverlays
+          bottomHeight={changesScrollBottomGradientHeight}
+          topHeight={changesScrollTopGradientHeight}
+        />
       </div>
       {showEmbeddedHistory &&
       normalizedCwd &&
