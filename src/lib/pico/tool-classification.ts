@@ -9,15 +9,25 @@ const EXPLORE_TOOL_NAMES = new Set([
   "list",
   "rg",
 ])
-const EXPLORE_SHELL_COMMAND_NAMES = new Set(["find", "grep", "ls", "rg"])
+const EXPLORE_SHELL_COMMAND_NAMES = ["find", "grep", "ls", "rg"] as const
+const EXPLORE_SHELL_COMMAND_NAME_SET = new Set<string>(
+  EXPLORE_SHELL_COMMAND_NAMES
+)
 const SKIPPABLE_SHELL_COMMAND_NAMES = new Set(["cd", "export", "pwd", "set"])
-const SHELL_COMMAND_WRAPPER_NAMES = new Set([
+const SHELL_COMMAND_WRAPPER_NAMES = [
   "command",
   "env",
   "noglob",
   "sudo",
   "time",
-])
+] as const
+const SHELL_COMMAND_WRAPPER_NAME_SET = new Set<string>(
+  SHELL_COMMAND_WRAPPER_NAMES
+)
+const PENDING_EXPLORE_SHELL_COMMAND_PREFIXES = [
+  ...EXPLORE_SHELL_COMMAND_NAMES,
+  ...SHELL_COMMAND_WRAPPER_NAMES,
+] as const
 
 function normalizeToolArgs(args: unknown) {
   if (!args) return undefined
@@ -42,20 +52,6 @@ function getToolArgText(
 ) {
   const value = args?.[key]
   return typeof value === "string" && value.trim() ? value.trim() : ""
-}
-
-function toolCommandPreviewFromArgs(args: unknown) {
-  if (typeof args === "string" && args.trim()) {
-    return args.trim()
-  }
-
-  const normalizedArgs = normalizeToolArgs(args)
-  return (
-    getToolArgText(normalizedArgs, "description") ||
-    getToolArgText(normalizedArgs, "command") ||
-    getToolArgText(normalizedArgs, "path") ||
-    getToolArgText(normalizedArgs, "filePath")
-  )
 }
 
 function looksLikeJsonObjectPrefix(text: string) {
@@ -175,10 +171,7 @@ export function rawShellCommandTextFromTool(
   }
 
   const normalizedArgs = normalizeToolArgs(args)
-  return (
-    getToolArgText(normalizedArgs, "command") ||
-    toolCommandPreviewFromArgs(args)
-  )
+  return getToolArgText(normalizedArgs, "command")
 }
 
 function pathBaseName(path: string) {
@@ -207,14 +200,45 @@ function shellCommandNameFromSegment(segment: string) {
     const commandPath = commandMatch[1] || ""
     const commandName = pathBaseName(commandPath)
 
-    if (!SHELL_COMMAND_WRAPPER_NAMES.has(commandName)) {
+    if (!SHELL_COMMAND_WRAPPER_NAME_SET.has(commandName)) {
       return commandName
     }
 
-    text = text.slice(commandPath.length).trimStart()
+    const remainingText = text.slice(commandPath.length).trimStart()
+    if (!remainingText) return commandName
+
+    text = remainingText
   }
 
   return ""
+}
+
+function shellCommandNameCouldBecomeExplore(commandName: string) {
+  return PENDING_EXPLORE_SHELL_COMMAND_PREFIXES.some((prefix) =>
+    prefix.startsWith(commandName)
+  )
+}
+
+export function toolCouldBecomeExploreFromTool(
+  name: string | undefined,
+  args: unknown
+) {
+  if (EXPLORE_TOOL_NAMES.has(name || "")) return true
+  if (name !== "bash") return false
+
+  const command = rawShellCommandTextFromTool(name, args)
+  const segments = command.split(/(?:&&|\|\||;)/)
+
+  for (const segment of segments) {
+    const commandName = shellCommandNameFromSegment(segment)
+    if (!commandName || SKIPPABLE_SHELL_COMMAND_NAMES.has(commandName)) {
+      continue
+    }
+
+    return shellCommandNameCouldBecomeExplore(commandName)
+  }
+
+  return false
 }
 
 export function exploreShellCommandNameFromTool(
@@ -228,11 +252,15 @@ export function exploreShellCommandNameFromTool(
 
   for (const segment of segments) {
     const commandName = shellCommandNameFromSegment(segment)
-    if (!commandName || SKIPPABLE_SHELL_COMMAND_NAMES.has(commandName)) {
+    if (
+      !commandName ||
+      SKIPPABLE_SHELL_COMMAND_NAMES.has(commandName) ||
+      SHELL_COMMAND_WRAPPER_NAME_SET.has(commandName)
+    ) {
       continue
     }
 
-    return EXPLORE_SHELL_COMMAND_NAMES.has(commandName) ? commandName : ""
+    return EXPLORE_SHELL_COMMAND_NAME_SET.has(commandName) ? commandName : ""
   }
 
   return ""

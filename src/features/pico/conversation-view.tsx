@@ -30,6 +30,7 @@ import {
   rawShellCommandTextFromTool,
   toolArgsAreIncompleteJsonObject,
   toolCategoryFromTool,
+  toolCouldBecomeExploreFromTool,
 } from "@/lib/pico/tool-classification"
 import { cn } from "@/lib/utils"
 
@@ -430,7 +431,9 @@ function isPendingUnclassifiedToolBlock(block: AssistantConversationBlock) {
     const category = toolCategoryFromTool(block.name, block.args)
     return (
       !rawShellCommandText(block) ||
-      (category !== "explore" && toolArgsAreIncompleteJsonObject(block.args))
+      (category !== "explore" &&
+        (toolArgsAreIncompleteJsonObject(block.args) ||
+          toolCouldBecomeExploreFromTool(block.name, block.args)))
     )
   }
 
