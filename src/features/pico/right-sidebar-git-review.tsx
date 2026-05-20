@@ -876,7 +876,7 @@ function useFileReviewContentView({
               render={
                 <Button
                   variant="outline"
-                  size="icon"
+                  size={isMobile ? "icon" : "icon-sm"}
                   aria-label="Diff actions"
                   disabled={bulkActionDisabled}
                 />
@@ -931,7 +931,7 @@ function useFileReviewContentView({
           <TitleTooltip title={hasOpenFile ? "Collapse all" : "Expand all"}>
             <Button
               variant="outline"
-              size="icon"
+              size={isMobile ? "icon" : "icon-sm"}
               aria-label={hasOpenFile ? "Collapse all" : "Expand all"}
               disabled={changedFiles.length === 0}
               onClick={toggleAll}
@@ -945,6 +945,7 @@ function useFileReviewContentView({
           </TitleTooltip>
           <ToggleGroup
             variant="outline"
+            size={isMobile ? "default" : "sm"}
             value={[diffStyle]}
             onValueChange={(values) => {
               const value = values[0]

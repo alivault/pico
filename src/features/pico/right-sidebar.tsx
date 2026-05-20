@@ -815,6 +815,7 @@ function CommitDiffContent({
 }) {
   const [diffStyle, setDiffStyle] = React.useState<CommitDiffStyle>("unified")
   const [stickyCommitFileValue, setStickyCommitFileValue] = React.useState("")
+  const isMobile = useIsMobile()
   const [commentTarget, setCommentTarget] =
     React.useState<CommitDiffCommentTarget | null>(null)
   const diffScrollRef = React.useRef<HTMLDivElement>(null)
@@ -930,6 +931,7 @@ function CommitDiffContent({
         <CommitDiffHeaderTitle tab={tab} />
         <ToggleGroup
           variant="outline"
+          size={isMobile ? "default" : "sm"}
           value={[diffStyle]}
           onValueChange={(values) => {
             const value = values[0]

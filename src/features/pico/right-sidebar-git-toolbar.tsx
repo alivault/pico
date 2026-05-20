@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
@@ -218,6 +219,7 @@ export function GitPanelToolbar({
   active,
 }: GitScopedProps) {
   const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
   const normalizedCwd = normalizeCwd(cwd)
   const [branchDialogOpen, setBranchDialogOpen] = React.useState(false)
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
@@ -392,6 +394,7 @@ export function GitPanelToolbar({
             <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
               <Button
                 variant="outline"
+                size={isMobile ? "default" : "sm"}
                 onClick={() => {
                   setCommitDialogOpen(true)
                 }}
@@ -404,6 +407,7 @@ export function GitPanelToolbar({
             <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
               <Button
                 variant="outline"
+                size={isMobile ? "default" : "sm"}
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("push")
@@ -421,6 +425,7 @@ export function GitPanelToolbar({
             >
               <Button
                 variant="outline"
+                size={isMobile ? "default" : "sm"}
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("force-push")
@@ -435,6 +440,7 @@ export function GitPanelToolbar({
             <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
               <Button
                 variant="outline"
+                size={isMobile ? "default" : "sm"}
                 disabled={gitActionBusy}
                 onClick={() => {
                   gitActionMutation.mutate("pull")
