@@ -13,7 +13,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
@@ -92,15 +92,6 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
   )
-  const {
-    isMobile: sidebarIsMobile,
-    openMobile: sidebarOpenMobile,
-    state: sidebarState,
-  } = useSidebar()
-  const sidebarOpen = sidebarIsMobile
-    ? sidebarOpenMobile
-    : sidebarState === "expanded"
-  const showCollapsedNewSessionButton = !sidebarOpen
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
@@ -112,30 +103,28 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-2">
       <div className="relative flex w-full items-center gap-1">
         <SidebarTrigger className="shrink-0" />
-        {showCollapsedNewSessionButton ? (
-          <TitleTooltip
-            title={
-              defaultNewSessionDirectory
-                ? `Create a new session in ${formatDisplayPath(
-                    defaultNewSessionDirectory
-                  )}`
-                : "Create a new session"
-            }
-            kbd={formatShortcutLabel("Control+N")}
+        <TitleTooltip
+          title={
+            defaultNewSessionDirectory
+              ? `Create a new session in ${formatDisplayPath(
+                  defaultNewSessionDirectory
+                )}`
+              : "Create a new session"
+          }
+          kbd={formatShortcutLabel("Control+N")}
+        >
+          <Button
+            size="icon"
+            variant="ghost"
+            className="shrink-0 md:group-data-[sidebar-state=expanded]/sidebar-wrapper:hidden"
+            aria-label="Create a new session"
+            onClick={() => {
+              void actionsRef.current.createSession()
+            }}
           >
-            <Button
-              size="icon"
-              variant="ghost"
-              className="shrink-0"
-              aria-label="Create a new session"
-              onClick={() => {
-                void actionsRef.current.createSession()
-              }}
-            >
-              <SquarePenIcon />
-            </Button>
-          </TitleTooltip>
-        ) : null}
+            <SquarePenIcon />
+          </Button>
+        </TitleTooltip>
         <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0 text-center">
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
