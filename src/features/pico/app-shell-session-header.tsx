@@ -128,7 +128,11 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
         <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0 text-center">
           <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-              <Spinner className="shrink-0" aria-label="Session streaming" />
+              <Spinner
+                size="xs"
+                className="shrink-0"
+                aria-label="Session streaming"
+              />
             ) : null}
             <TitleTooltip title={displaySessionTitle}>
               <h2 className="min-w-0 truncate text-[13px] leading-tight font-semibold">
