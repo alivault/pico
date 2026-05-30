@@ -772,7 +772,7 @@ function useAppShellTabsControllerView({
         <div ref={desktopLayoutRef} className={desktopPanelGroupClassName}>
           <div
             data-desktop-panel="session"
-            className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden ${desktopTransitionClassName}`}
+            className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden max-md:w-full! ${desktopTransitionClassName}`}
             style={{
               width: desktopSideWorkspaceOpen
                 ? `calc(100% - ${desktopSideWorkspaceWidth}px)`
@@ -788,7 +788,7 @@ function useAppShellTabsControllerView({
               aria-hidden={!desktopSideWorkspaceOpen}
               data-state={desktopSideWorkspaceOpen ? "open" : "closed"}
               data-desktop-panel="side-workspace"
-              className={`flex h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none ${desktopTransitionClassName}`}
+              className={`hidden h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none md:flex ${desktopTransitionClassName}`}
               style={{ width: `${desktopSideWorkspaceWidth}px` }}
             >
               {desktopGitPanelRendered ? (
