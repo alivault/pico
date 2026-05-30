@@ -2344,12 +2344,6 @@ function useAppShellSessionWorkspaceView({
 
       handleSelectSession(undefined)
       clearSelectedSidebarSelection()
-      if (shouldCloseMobileSidebar) {
-        pendingMobileSidebarPromptFocusRef.current = true
-        setOpenMobile(false)
-      } else {
-        focusPrompt()
-      }
       setAwaitingFirstTurn(false)
       setPendingMessages((current) => (current.length === 0 ? current : []))
       const nextState = createOptimisticDraftSessionState({
@@ -2360,6 +2354,13 @@ function useAppShellSessionWorkspaceView({
       sessionStateRef.current = nextState
       conversationItemsStore.setItems(nextState.items)
       setSessionState(nextState)
+
+      if (shouldCloseMobileSidebar) {
+        pendingMobileSidebarPromptFocusRef.current = true
+        setOpenMobile(false)
+      } else {
+        focusPrompt()
+      }
 
       const created = await createSessionPromise
       if (created) {

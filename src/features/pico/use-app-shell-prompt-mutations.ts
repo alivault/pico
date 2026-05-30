@@ -374,7 +374,6 @@ export function useAppShellPromptMutations({
     string | null
   >(null)
   const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
-  const sessionStreamingRef = React.useRef(sessionSnapshot.streaming)
   const flushPendingDraftPromptRef = React.useRef<
     (ownerKey: string, targetSessionKey?: string) => Promise<boolean>
   >(async () => false)
@@ -398,10 +397,6 @@ export function useAppShellPromptMutations({
   React.useEffect(() => {
     awaitingFirstTurnRef.current = awaitingFirstTurn
   }, [awaitingFirstTurn])
-
-  React.useEffect(() => {
-    sessionStreamingRef.current = sessionSnapshot.streaming
-  }, [sessionSnapshot.streaming])
 
   const updatePendingMessages = React.useCallback(
     (
@@ -600,6 +595,11 @@ export function useAppShellPromptMutations({
       const ownerKey = promptDraftKey({ cwd: nextCwd })
       draftSessionLoadingOwnerKeyRef.current = ownerKey
       setDraftSessionLoadingOwnerKey(ownerKey)
+      awaitingFirstTurnAssistantOutputSignatureRef.current = null
+      awaitingFirstTurnRef.current = false
+      setAwaitingFirstTurn(false)
+      pendingMessagesRef.current = []
+      setPendingMessages((current) => (current.length === 0 ? current : []))
 
       try {
         const response = await createSessionRequest({ cwd: nextCwd })
@@ -641,15 +641,18 @@ export function useAppShellPromptMutations({
       rememberRecentDirectory,
       restorePendingDraftPrompt,
       sessionStateRef,
+      setAwaitingFirstTurn,
       setDraftSessionLoadingOwnerKey,
+      setPendingMessages,
       setStoredDraftDirectory,
       viewerContextId,
     ]
   )
 
   const queuePendingDraftPrompt = React.useCallback(
-    (streamingBehavior?: StreamingBehavior) => {
-      const ownerKey = draftSessionLoadingOwnerKeyRef.current
+    (streamingBehavior?: StreamingBehavior, ownerKeyOverride?: string) => {
+      const ownerKey =
+        ownerKeyOverride || draftSessionLoadingOwnerKeyRef.current
       if (!ownerKey) return false
 
       const message = buildComposerPromptMessage({
@@ -680,6 +683,7 @@ export function useAppShellPromptMutations({
           ownerKey,
           message,
           images,
+          streamingBehavior,
           optimisticId,
           optimisticSidebarSessionId,
         } satisfies PendingDraftPrompt
@@ -815,14 +819,18 @@ export function useAppShellPromptMutations({
       }).trim()
       if (!message && composerImagesRef.current.length === 0) return false
 
+      const currentSessionState = sessionStateRef.current
       const pendingNewSessionPromptTarget =
         pendingNewSessionPromptTargetRef.current
+      const currentDraftOwnerKey = currentSessionState.draft
+        ? promptDraftKey(currentSessionState)
+        : ""
       const implicitTargetSessionKey =
         !options?.targetSessionKey &&
-        sessionStateRef.current.draft &&
+        currentSessionState.draft &&
         pendingNewSessionPromptTarget &&
         promptDraftKeyMatchesOwner(
-          promptDraftKey(sessionStateRef.current),
+          currentDraftOwnerKey,
           pendingNewSessionPromptTarget.ownerKey
         )
           ? pendingNewSessionPromptTarget.sessionKey
@@ -830,9 +838,21 @@ export function useAppShellPromptMutations({
       const targetSessionKey =
         options?.targetSessionKey || implicitTargetSessionKey
 
+      if (
+        currentSessionState.draft &&
+        currentSessionState.sessionKey?.startsWith("optimistic:") &&
+        !targetSessionKey
+      ) {
+        if (!draftSessionLoadingOwnerKeyRef.current && currentDraftOwnerKey) {
+          draftSessionLoadingOwnerKeyRef.current = currentDraftOwnerKey
+          setDraftSessionLoadingOwnerKey(currentDraftOwnerKey)
+        }
+        return queuePendingDraftPrompt(streamingBehavior, currentDraftOwnerKey)
+      }
+
       const treatAsQueuedPrompt = options?.forceFirstPrompt
         ? false
-        : Boolean(sessionStreamingRef.current || awaitingFirstTurnRef.current)
+        : Boolean(currentSessionState.streaming || awaitingFirstTurnRef.current)
       const normalizedStreamingBehavior = treatAsQueuedPrompt
         ? normalizeQueuedStreamingBehavior(streamingBehavior)
         : undefined
@@ -847,7 +867,7 @@ export function useAppShellPromptMutations({
 
       if (!treatAsQueuedPrompt) {
         awaitingFirstTurnAssistantOutputSignatureRef.current =
-          sessionAssistantOutputSignature(sessionStateRef.current.items)
+          sessionAssistantOutputSignature(currentSessionState.items)
         awaitingFirstTurnRef.current = true
         setAwaitingFirstTurn(true)
       }
@@ -863,7 +883,7 @@ export function useAppShellPromptMutations({
             }))
       const optimisticSidebarSessionId =
         options?.optimisticSidebarSessionId ??
-        (!treatAsQueuedPrompt && sessionStateRef.current.draft
+        (!treatAsQueuedPrompt && currentSessionState.draft
           ? addOptimisticSidebarSession({
               lastMessagePreview: sidebarPreview,
             })
@@ -897,7 +917,7 @@ export function useAppShellPromptMutations({
           images: submittedImages,
           streamingBehavior: normalizedStreamingBehavior,
           pendingId: queuedPendingId,
-          thinkingLevel: sessionStateRef.current.thinkingLevel,
+          thinkingLevel: currentSessionState.thinkingLevel,
           targetSessionKey,
         })
         if (
@@ -982,6 +1002,7 @@ export function useAppShellPromptMutations({
       setAwaitingFirstTurn,
       setComposerDiffLineComments,
       setComposerImages,
+      setDraftSessionLoadingOwnerKey,
       setIsSubmitting,
       updateOptimisticSidebarSessionPreview,
       viewerContextId,

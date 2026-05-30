@@ -3701,6 +3701,12 @@ class PicoRuntime {
       thinkingLevel?: unknown
     }
   ) {
+    const requestedSessionKey =
+      new URL(request.url).searchParams.get("sessionKey")?.trim() || ""
+    if (requestedSessionKey && !this.sessionEntries.has(requestedSessionKey)) {
+      throw new Error("Requested session is no longer available.")
+    }
+
     const { context, activeEntry } = await this.resolveRequest(request, {
       preferActiveDraft: true,
       preferActiveDraftOverRequestedSession: true,
