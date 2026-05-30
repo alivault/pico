@@ -2745,7 +2745,7 @@ export function AssistantMessagesStoreCard({
   )
 
   const showFooter = Boolean(
-    !hideFooter && !shellSnapshot.streaming && shellSnapshot.hasFooter
+    !hideFooter && !shellSnapshot.working && shellSnapshot.hasFooter
   )
 
   if (!shellSnapshot.hasBlocks && !showFooter) {
