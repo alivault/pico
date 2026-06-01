@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.74.0",
+    "node-pty": "^1.1.0",
     "tslib": "^2.8.1"
   },
   "overrides": {
@@ -79,6 +80,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -110,5 +113,10 @@
     "web-vitals": "^5.1.0",
     "zod": "^4.3.6"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-pty"
+    ]
+  }
 }

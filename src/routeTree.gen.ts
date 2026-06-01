@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiThinkingRouteImport } from './routes/api.thinking'
+import { Route as ApiTerminalRouteImport } from './routes/api.terminal'
 import { Route as ApiSlashCommandRouteImport } from './routes/api.slash-command'
 import { Route as ApiProviderUsageRouteImport } from './routes/api.provider-usage'
 import { Route as ApiPromptRouteImport } from './routes/api.prompt'
@@ -62,6 +63,10 @@ import { Route as ApiAuthProvidersRouteImport } from './routes/api.auth.provider
 import { Route as ApiAuthOauthRouteImport } from './routes/api.auth.oauth'
 import { Route as ApiAuthLogoutRouteImport } from './routes/api.auth.logout'
 import { Route as ApiAuthApiKeyRouteImport } from './routes/api.auth.api-key'
+import { Route as ApiTerminalIdResizeRouteImport } from './routes/api.terminal.$id.resize'
+import { Route as ApiTerminalIdInputRouteImport } from './routes/api.terminal.$id.input'
+import { Route as ApiTerminalIdEventsRouteImport } from './routes/api.terminal.$id.events'
+import { Route as ApiTerminalIdCloseRouteImport } from './routes/api.terminal.$id.close'
 import { Route as ApiSessionTreeLabelRouteImport } from './routes/api.session.tree.label'
 
 const EventsRoute = EventsRouteImport.update({
@@ -77,6 +82,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApiThinkingRoute = ApiThinkingRouteImport.update({
   id: '/api/thinking',
   path: '/api/thinking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTerminalRoute = ApiTerminalRouteImport.update({
+  id: '/api/terminal',
+  path: '/api/terminal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSlashCommandRoute = ApiSlashCommandRouteImport.update({
@@ -333,6 +343,26 @@ const ApiAuthApiKeyRoute = ApiAuthApiKeyRouteImport.update({
   path: '/api/auth/api-key',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTerminalIdResizeRoute = ApiTerminalIdResizeRouteImport.update({
+  id: '/$id/resize',
+  path: '/$id/resize',
+  getParentRoute: () => ApiTerminalRoute,
+} as any)
+const ApiTerminalIdInputRoute = ApiTerminalIdInputRouteImport.update({
+  id: '/$id/input',
+  path: '/$id/input',
+  getParentRoute: () => ApiTerminalRoute,
+} as any)
+const ApiTerminalIdEventsRoute = ApiTerminalIdEventsRouteImport.update({
+  id: '/$id/events',
+  path: '/$id/events',
+  getParentRoute: () => ApiTerminalRoute,
+} as any)
+const ApiTerminalIdCloseRoute = ApiTerminalIdCloseRouteImport.update({
+  id: '/$id/close',
+  path: '/$id/close',
+  getParentRoute: () => ApiTerminalRoute,
+} as any)
 const ApiSessionTreeLabelRoute = ApiSessionTreeLabelRouteImport.update({
   id: '/label',
   path: '/label',
@@ -369,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/api/prompt': typeof ApiPromptRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/terminal': typeof ApiTerminalRouteWithChildren
   '/api/thinking': typeof ApiThinkingRoute
   '/api/auth/api-key': typeof ApiAuthApiKeyRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
@@ -394,6 +425,10 @@ export interface FileRoutesByFullPath {
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
+  '/api/terminal/$id/close': typeof ApiTerminalIdCloseRoute
+  '/api/terminal/$id/events': typeof ApiTerminalIdEventsRoute
+  '/api/terminal/$id/input': typeof ApiTerminalIdInputRoute
+  '/api/terminal/$id/resize': typeof ApiTerminalIdResizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -425,6 +460,7 @@ export interface FileRoutesByTo {
   '/api/prompt': typeof ApiPromptRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/terminal': typeof ApiTerminalRouteWithChildren
   '/api/thinking': typeof ApiThinkingRoute
   '/api/auth/api-key': typeof ApiAuthApiKeyRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
@@ -450,6 +486,10 @@ export interface FileRoutesByTo {
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
+  '/api/terminal/$id/close': typeof ApiTerminalIdCloseRoute
+  '/api/terminal/$id/events': typeof ApiTerminalIdEventsRoute
+  '/api/terminal/$id/input': typeof ApiTerminalIdInputRoute
+  '/api/terminal/$id/resize': typeof ApiTerminalIdResizeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -482,6 +522,7 @@ export interface FileRoutesById {
   '/api/prompt': typeof ApiPromptRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/slash-command': typeof ApiSlashCommandRoute
+  '/api/terminal': typeof ApiTerminalRouteWithChildren
   '/api/thinking': typeof ApiThinkingRoute
   '/api/auth/api-key': typeof ApiAuthApiKeyRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
@@ -507,6 +548,10 @@ export interface FileRoutesById {
   '/api/settings/hide-thinking': typeof ApiSettingsHideThinkingRoute
   '/api/ui/$id': typeof ApiUiIdRoute
   '/api/session/tree/label': typeof ApiSessionTreeLabelRoute
+  '/api/terminal/$id/close': typeof ApiTerminalIdCloseRoute
+  '/api/terminal/$id/events': typeof ApiTerminalIdEventsRoute
+  '/api/terminal/$id/input': typeof ApiTerminalIdInputRoute
+  '/api/terminal/$id/resize': typeof ApiTerminalIdResizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -540,6 +585,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/provider-usage'
     | '/api/slash-command'
+    | '/api/terminal'
     | '/api/thinking'
     | '/api/auth/api-key'
     | '/api/auth/logout'
@@ -565,6 +611,10 @@ export interface FileRouteTypes {
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
+    | '/api/terminal/$id/close'
+    | '/api/terminal/$id/events'
+    | '/api/terminal/$id/input'
+    | '/api/terminal/$id/resize'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -596,6 +646,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/provider-usage'
     | '/api/slash-command'
+    | '/api/terminal'
     | '/api/thinking'
     | '/api/auth/api-key'
     | '/api/auth/logout'
@@ -621,6 +672,10 @@ export interface FileRouteTypes {
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
+    | '/api/terminal/$id/close'
+    | '/api/terminal/$id/events'
+    | '/api/terminal/$id/input'
+    | '/api/terminal/$id/resize'
   id:
     | '__root__'
     | '/'
@@ -652,6 +707,7 @@ export interface FileRouteTypes {
     | '/api/prompt'
     | '/api/provider-usage'
     | '/api/slash-command'
+    | '/api/terminal'
     | '/api/thinking'
     | '/api/auth/api-key'
     | '/api/auth/logout'
@@ -677,6 +733,10 @@ export interface FileRouteTypes {
     | '/api/settings/hide-thinking'
     | '/api/ui/$id'
     | '/api/session/tree/label'
+    | '/api/terminal/$id/close'
+    | '/api/terminal/$id/events'
+    | '/api/terminal/$id/input'
+    | '/api/terminal/$id/resize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -709,6 +769,7 @@ export interface RootRouteChildren {
   ApiPromptRoute: typeof ApiPromptRoute
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
   ApiSlashCommandRoute: typeof ApiSlashCommandRoute
+  ApiTerminalRoute: typeof ApiTerminalRouteWithChildren
   ApiThinkingRoute: typeof ApiThinkingRoute
   ApiAuthApiKeyRoute: typeof ApiAuthApiKeyRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
@@ -755,6 +816,13 @@ declare module '@tanstack/react-router' {
       path: '/api/thinking'
       fullPath: '/api/thinking'
       preLoaderRoute: typeof ApiThinkingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/terminal': {
+      id: '/api/terminal'
+      path: '/api/terminal'
+      fullPath: '/api/terminal'
+      preLoaderRoute: typeof ApiTerminalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/slash-command': {
@@ -1107,6 +1175,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthApiKeyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/terminal/$id/resize': {
+      id: '/api/terminal/$id/resize'
+      path: '/$id/resize'
+      fullPath: '/api/terminal/$id/resize'
+      preLoaderRoute: typeof ApiTerminalIdResizeRouteImport
+      parentRoute: typeof ApiTerminalRoute
+    }
+    '/api/terminal/$id/input': {
+      id: '/api/terminal/$id/input'
+      path: '/$id/input'
+      fullPath: '/api/terminal/$id/input'
+      preLoaderRoute: typeof ApiTerminalIdInputRouteImport
+      parentRoute: typeof ApiTerminalRoute
+    }
+    '/api/terminal/$id/events': {
+      id: '/api/terminal/$id/events'
+      path: '/$id/events'
+      fullPath: '/api/terminal/$id/events'
+      preLoaderRoute: typeof ApiTerminalIdEventsRouteImport
+      parentRoute: typeof ApiTerminalRoute
+    }
+    '/api/terminal/$id/close': {
+      id: '/api/terminal/$id/close'
+      path: '/$id/close'
+      fullPath: '/api/terminal/$id/close'
+      preLoaderRoute: typeof ApiTerminalIdCloseRouteImport
+      parentRoute: typeof ApiTerminalRoute
+    }
     '/api/session/tree/label': {
       id: '/api/session/tree/label'
       path: '/label'
@@ -1127,6 +1223,24 @@ const ApiDirectorySessionsRouteChildren: ApiDirectorySessionsRouteChildren = {
 
 const ApiDirectorySessionsRouteWithChildren =
   ApiDirectorySessionsRoute._addFileChildren(ApiDirectorySessionsRouteChildren)
+
+interface ApiTerminalRouteChildren {
+  ApiTerminalIdCloseRoute: typeof ApiTerminalIdCloseRoute
+  ApiTerminalIdEventsRoute: typeof ApiTerminalIdEventsRoute
+  ApiTerminalIdInputRoute: typeof ApiTerminalIdInputRoute
+  ApiTerminalIdResizeRoute: typeof ApiTerminalIdResizeRoute
+}
+
+const ApiTerminalRouteChildren: ApiTerminalRouteChildren = {
+  ApiTerminalIdCloseRoute: ApiTerminalIdCloseRoute,
+  ApiTerminalIdEventsRoute: ApiTerminalIdEventsRoute,
+  ApiTerminalIdInputRoute: ApiTerminalIdInputRoute,
+  ApiTerminalIdResizeRoute: ApiTerminalIdResizeRoute,
+}
+
+const ApiTerminalRouteWithChildren = ApiTerminalRoute._addFileChildren(
+  ApiTerminalRouteChildren,
+)
 
 interface ApiSessionTreeRouteChildren {
   ApiSessionTreeLabelRoute: typeof ApiSessionTreeLabelRoute
@@ -1170,6 +1284,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPromptRoute: ApiPromptRoute,
   ApiProviderUsageRoute: ApiProviderUsageRoute,
   ApiSlashCommandRoute: ApiSlashCommandRoute,
+  ApiTerminalRoute: ApiTerminalRouteWithChildren,
   ApiThinkingRoute: ApiThinkingRoute,
   ApiAuthApiKeyRoute: ApiAuthApiKeyRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,

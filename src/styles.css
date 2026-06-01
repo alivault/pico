@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@xterm/xterm/css/xterm.css";
 @import "./styles/themes/default.css";
 @import "./styles/themes/flexoki.css";
 @import "./styles/themes/shiki-bundled.css";
@@ -68,6 +69,21 @@
   html {
     @apply font-sans;
   }
+}
+
+.pico-terminal-panel .xterm {
+  height: 100%;
+  padding: 0.625rem;
+}
+
+.pico-terminal-panel .xterm-screen,
+.pico-terminal-panel .xterm-viewport {
+  background-color: transparent !important;
+}
+
+.pico-terminal-panel .xterm-viewport {
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent)
+    transparent;
 }
 
 .pico-spinner[data-pico-spinner-size="md"] {

@@ -11,6 +11,7 @@ import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer
 import type { AppShellUiState } from "@/features/pico/app-shell-types"
 import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
 import { RightSidebar } from "@/features/pico/right-sidebar"
+import { TerminalPanel } from "@/features/pico/terminal-panel"
 import {
   selectRightSidebarHasVisibleFiles,
   selectRightSidebarVisibleFileTabs,
@@ -27,15 +28,25 @@ import {
 import {
   getSidebarHorizontalResizeCursor,
   getSidebarResizeTargetMinimumSize,
+  getSidebarVerticalResizeCursor,
   installGlobalResizeCursor,
   type SidebarHorizontalResizeCursor,
+  type SidebarVerticalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import {
   RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY,
+  TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type { SessionState } from "@/lib/pico"
+
+function shallowTerminalSession(
+  left: { cwd?: string; sessionId?: string },
+  right: { cwd?: string; sessionId?: string }
+) {
+  return left.cwd === right.cwd && left.sessionId === right.sessionId
+}
 
 function AppShellTabsList({
   sessionStore,
@@ -59,6 +70,12 @@ function AppShellTabsList({
         className="h-8 data-active:bg-muted dark:data-active:bg-muted"
       >
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
+      </TabsTrigger>
+      <TabsTrigger
+        value="terminal"
+        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
+      >
+        Terminal
       </TabsTrigger>
     </TabsList>
   )
@@ -239,6 +256,10 @@ const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
 const DESKTOP_MIN_SESSION_WIDTH = 320
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
 const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
+const DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT = 280
+const DESKTOP_MIN_TERMINAL_PANEL_HEIGHT = 160
+const DESKTOP_MIN_TOP_PANEL_HEIGHT = 220
+const DESKTOP_MAX_STORED_TERMINAL_PANEL_HEIGHT = 1200
 
 type DesktopSidePanelWidths = {
   fileViewWidth: number
@@ -308,6 +329,34 @@ function sameDesktopSidePanelWidths(
   return (
     left.fileViewWidth === right.fileViewWidth &&
     left.gitPanelWidth === right.gitPanelWidth
+  )
+}
+
+function clampStoredDesktopTerminalPanelHeight(value: unknown) {
+  if (value == null || value === "")
+    return DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT
+
+  const height = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(height)) return DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT
+
+  return Math.round(
+    Math.min(
+      DESKTOP_MAX_STORED_TERMINAL_PANEL_HEIGHT,
+      Math.max(DESKTOP_MIN_TERMINAL_PANEL_HEIGHT, height)
+    )
+  )
+}
+
+function readStoredDesktopTerminalPanelHeight() {
+  return clampStoredDesktopTerminalPanelHeight(
+    safeLocalStorageGetItem(TERMINAL_PANEL_HEIGHT_STORAGE_KEY)
+  )
+}
+
+function storeDesktopTerminalPanelHeight(height: number) {
+  safeLocalStorageSetItem(
+    TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
+    String(clampStoredDesktopTerminalPanelHeight(height))
   )
 }
 
@@ -495,15 +544,134 @@ function AppShellDesktopResizeHandle({
   )
 }
 
+function AppShellDesktopVerticalResizeHandle({
+  label,
+  max,
+  min,
+  onResize,
+  onResizeEnd,
+  onResizeStart,
+  size,
+}: {
+  label: string
+  max: number
+  min: number
+  onResize: (size: number) => void
+  onResizeEnd?: () => void
+  onResizeStart?: () => void
+  size: number
+}) {
+  const propsRef = useLatestRef({
+    max,
+    min,
+    onResize,
+    onResizeEnd,
+    onResizeStart,
+    size,
+  })
+  const [verticalResizeCursor, setVerticalResizeCursor] =
+    React.useState<SidebarVerticalResizeCursor>("row-resize")
+  const [resizeTargetMinimumSize, setResizeTargetMinimumSize] =
+    React.useState(10)
+
+  React.useEffect(() => {
+    const updateResizeTarget = () => {
+      setResizeTargetMinimumSize(getSidebarResizeTargetMinimumSize())
+    }
+    const coarsePointerQuery = window.matchMedia("(pointer:coarse)")
+
+    setVerticalResizeCursor(getSidebarVerticalResizeCursor())
+    updateResizeTarget()
+    coarsePointerQuery.addEventListener("change", updateResizeTarget)
+    return () => {
+      coarsePointerQuery.removeEventListener("change", updateResizeTarget)
+    }
+  }, [])
+
+  const verticalResizeCursorClass =
+    verticalResizeCursor === "ns-resize"
+      ? "cursor-ns-resize"
+      : "cursor-row-resize"
+
+  const resizeTo = (nextSize: number) => {
+    const current = propsRef.current
+    current.onResize(clampDesktopPanelSize(nextSize, current.min, current.max))
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-label={label}
+      aria-orientation="horizontal"
+      tabIndex={0}
+      style={
+        {
+          "--resize-target-height": `${resizeTargetMinimumSize}px`,
+          cursor: verticalResizeCursor,
+        } as React.CSSProperties
+      }
+      className={`absolute inset-x-0 top-0 z-20 h-(--resize-target-height) -translate-y-1/2 touch-none bg-transparent outline-hidden after:absolute after:inset-x-0 after:top-1/2 after:h-px after:bg-transparent focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 ${resizeRailPrimaryInteractiveClass} ${verticalResizeCursorClass}`}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
+        event.preventDefault()
+        const delta = event.shiftKey ? 48 : 16
+        resizeTo(
+          propsRef.current.size + (event.key === "ArrowUp" ? delta : -delta)
+        )
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+
+        const current = propsRef.current
+        const startY = event.clientY
+        const startSize = current.size
+
+        const cursor = getSidebarVerticalResizeCursor()
+        const previousCursor = document.body.style.cursor
+        const previousUserSelect = document.body.style.userSelect
+        const cleanupGlobalResizeCursor = installGlobalResizeCursor(cursor)
+
+        current.onResizeStart?.()
+        Object.assign(document.body.style, {
+          userSelect: "none",
+          cursor,
+        })
+
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+          resizeTo(startSize + startY - moveEvent.clientY)
+        }
+        const handlePointerUp = () => {
+          cleanupGlobalResizeCursor()
+          Object.assign(document.body.style, {
+            userSelect: previousUserSelect,
+            cursor: previousCursor,
+          })
+          document.removeEventListener("pointermove", handlePointerMove)
+          document.removeEventListener("pointerup", handlePointerUp)
+          document.removeEventListener("pointercancel", handlePointerUp)
+          propsRef.current.onResizeEnd?.()
+        }
+
+        document.addEventListener("pointermove", handlePointerMove)
+        document.addEventListener("pointerup", handlePointerUp)
+        document.addEventListener("pointercancel", handlePointerUp)
+      }}
+    />
+  )
+}
+
 type AppShellTabsControllerProps = AppShellSessionContentProps & {
   appUiStore: PicoStore<AppShellUiState>
   composerDiffLineComments: Array<ComposerDiffLineComment>
   gitPanelOpen: boolean
+  terminalPanelOpen: boolean
   isMobile: boolean
   onCloseAllFileViewTabs: () => void
   onCloseFileViewTab: (path: string) => void
   onCloseFileViewTabsToRight: (path: string) => void
   onCloseOtherFileViewTabs: (path: string) => void
+  onCloseTerminalPanel: () => void
   onAddDiffLineComment: (
     comment: Omit<ComposerDiffLineComment, "cwd" | "id">
   ) => void
@@ -530,6 +698,7 @@ function useAppShellTabsControllerView({
   displaySettingsStore,
   fileInputRef,
   gitPanelOpen,
+  terminalPanelOpen,
   hiddenThinkingPreviewStore,
   isSessionViewLoading,
   isSubmitting,
@@ -542,6 +711,7 @@ function useAppShellTabsControllerView({
   onCloseFileViewTab,
   onCloseFileViewTabsToRight,
   onCloseOtherFileViewTabs,
+  onCloseTerminalPanel,
   onAddDiffLineComment,
   onOpenFileViewTab,
   onReorderFileViewTabs,
@@ -557,13 +727,25 @@ function useAppShellTabsControllerView({
     sessionStore,
     (sessionState) => sessionState.draft
   )
+  const terminalSession = useSelector(
+    sessionStore,
+    (sessionState) => ({
+      cwd: sessionState.cwd,
+      sessionId: sessionState.sessionId,
+    }),
+    { compare: shallowTerminalSession }
+  )
   const showTabsList = isMobile || !isDraftSession || isSessionViewLoading
   const sessionVisibleClassName =
-    currentTab === "git"
-      ? "hidden min-h-0 flex-1 flex-col md:flex"
-      : "flex min-h-0 flex-1 flex-col"
+    currentTab === "session"
+      ? "flex min-h-0 flex-1 flex-col"
+      : "hidden min-h-0 flex-1 flex-col md:flex"
   const mobileGitClassName =
     currentTab === "git" ? "min-h-0 flex-1 overflow-hidden md:hidden" : "hidden"
+  const mobileTerminalClassName =
+    currentTab === "terminal"
+      ? "min-h-0 flex-1 overflow-hidden md:hidden"
+      : "hidden"
   const rightSidebarHasVisibleFiles = useSelector(
     rightSidebarStore,
     selectRightSidebarHasVisibleFiles
@@ -574,6 +756,7 @@ function useAppShellTabsControllerView({
   const desktopSideWorkspaceOpen = desktopFileViewOpen || desktopGitPanelOpen
   const desktopLayoutRef = React.useRef<HTMLDivElement | null>(null)
   const [desktopLayoutWidth, setDesktopLayoutWidth] = React.useState(0)
+  const [desktopLayoutHeight, setDesktopLayoutHeight] = React.useState(0)
   const [desktopSidePanelWidths, setDesktopSidePanelWidthsState] =
     React.useState<DesktopSidePanelWidths>(() =>
       defaultDesktopSidePanelWidths()
@@ -618,14 +801,47 @@ function useAppShellTabsControllerView({
   }
   const [desktopGitPanelMounted, setDesktopGitPanelMounted] =
     React.useState(desktopGitPanelOpen)
+  const [desktopTerminalPanelHeight, setDesktopTerminalPanelHeightState] =
+    React.useState(() => DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT)
+  const desktopTerminalPanelHeightLoadedRef = React.useRef(false)
+  const desktopTerminalPanelHeightRef = React.useRef(desktopTerminalPanelHeight)
+  desktopTerminalPanelHeightRef.current = desktopTerminalPanelHeight
+  const [desktopTerminalPanelMounted, setDesktopTerminalPanelMounted] =
+    React.useState(!isMobile && terminalPanelOpen)
   const [desktopPanelResizing, setDesktopPanelResizing] = React.useState(false)
+  const [desktopTerminalResizing, setDesktopTerminalResizing] =
+    React.useState(false)
+
+  const setDesktopTerminalPanelHeight = (
+    action: React.SetStateAction<number>
+  ) => {
+    const current = desktopTerminalPanelHeightRef.current
+    const next = clampStoredDesktopTerminalPanelHeight(
+      applyStoreAction(current, action)
+    )
+    if (current === next) return
+
+    desktopTerminalPanelHeightRef.current = next
+    setDesktopTerminalPanelHeightState(next)
+    if (desktopTerminalPanelHeightLoadedRef.current) {
+      storeDesktopTerminalPanelHeight(next)
+    }
+  }
 
   React.useEffect(() => {
     const storedWidths = readStoredDesktopSidePanelWidths()
+    const storedTerminalPanelHeight = readStoredDesktopTerminalPanelHeight()
     desktopSidePanelWidthsLoadedRef.current = true
+    desktopTerminalPanelHeightLoadedRef.current = true
     desktopSidePanelWidthsRef.current = storedWidths
+    desktopTerminalPanelHeightRef.current = storedTerminalPanelHeight
     setDesktopSidePanelWidthsState((current) =>
       sameDesktopSidePanelWidths(current, storedWidths) ? current : storedWidths
+    )
+    setDesktopTerminalPanelHeightState((current) =>
+      current === storedTerminalPanelHeight
+        ? current
+        : storedTerminalPanelHeight
     )
   }, [])
 
@@ -657,22 +873,34 @@ function useAppShellTabsControllerView({
       </div>
 
       {isMobile ? (
-        <div className={mobileGitClassName}>
-          <AppShellGitPanelController
-            viewerContextId={viewerContextId}
-            sessionStore={sessionStore}
-            active={currentTab === "git"}
-            composerDiffLineComments={composerDiffLineComments}
-            rightSidebarStore={rightSidebarStore}
-            onAddDiffLineComment={onAddDiffLineComment}
-            onCloseAllFiles={onCloseAllFileViewTabs}
-            onCloseFile={onCloseFileViewTab}
-            onCloseFilesToRight={onCloseFileViewTabsToRight}
-            onCloseOtherFiles={onCloseOtherFileViewTabs}
-            onOpenFile={onOpenFileViewTab}
-            onReorderFiles={onReorderFileViewTabs}
-          />
-        </div>
+        <>
+          <div className={mobileGitClassName}>
+            <AppShellGitPanelController
+              viewerContextId={viewerContextId}
+              sessionStore={sessionStore}
+              active={currentTab === "git"}
+              composerDiffLineComments={composerDiffLineComments}
+              rightSidebarStore={rightSidebarStore}
+              onAddDiffLineComment={onAddDiffLineComment}
+              onCloseAllFiles={onCloseAllFileViewTabs}
+              onCloseFile={onCloseFileViewTab}
+              onCloseFilesToRight={onCloseFileViewTabsToRight}
+              onCloseOtherFiles={onCloseOtherFileViewTabs}
+              onOpenFile={onOpenFileViewTab}
+              onReorderFiles={onReorderFileViewTabs}
+            />
+          </div>
+          <div className={mobileTerminalClassName}>
+            <TerminalPanel
+              active={currentTab === "terminal"}
+              cwd={terminalSession.cwd}
+              onClose={onCloseTerminalPanel}
+              sessionId={terminalSession.sessionId}
+              showCloseButton={false}
+              viewerContextId={viewerContextId}
+            />
+          </div>
+        </>
       ) : null}
     </div>
   )
@@ -680,13 +908,17 @@ function useAppShellTabsControllerView({
   React.useLayoutEffect(() => {
     if (isMobile) {
       setDesktopGitPanelMounted(false)
+      setDesktopTerminalPanelMounted(false)
       return
     }
 
     if (desktopSideWorkspaceOpen) {
       setDesktopGitPanelMounted(true)
     }
-  }, [desktopSideWorkspaceOpen, isMobile])
+    if (terminalPanelOpen) {
+      setDesktopTerminalPanelMounted(true)
+    }
+  }, [desktopSideWorkspaceOpen, isMobile, terminalPanelOpen])
 
   React.useLayoutEffect(() => {
     if (isMobile) return
@@ -694,18 +926,19 @@ function useAppShellTabsControllerView({
     const element = desktopLayoutRef.current
     if (!element) return
 
-    const updateWidth = () => {
+    const updateSize = () => {
       setDesktopLayoutWidth(element.clientWidth)
+      setDesktopLayoutHeight(element.clientHeight)
     }
 
-    updateWidth()
+    updateSize()
 
     if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth)
-      return () => window.removeEventListener("resize", updateWidth)
+      window.addEventListener("resize", updateSize)
+      return () => window.removeEventListener("resize", updateSize)
     }
 
-    const observer = new ResizeObserver(updateWidth)
+    const observer = new ResizeObserver(updateSize)
     observer.observe(element)
     return () => observer.disconnect()
   }, [isMobile])
@@ -713,6 +946,9 @@ function useAppShellTabsControllerView({
   const desktopAvailableWidth =
     desktopLayoutWidth ||
     (typeof window === "undefined" ? 1200 : window.innerWidth)
+  const desktopAvailableHeight =
+    desktopLayoutHeight ||
+    (typeof window === "undefined" ? 800 : window.innerHeight)
   const desktopGitPanelRendered =
     desktopSideWorkspaceOpen || desktopGitPanelMounted || desktopGitPanelOpen
   const desktopFittedWidths = fitDesktopSidePanelWidths({
@@ -727,16 +963,38 @@ function useAppShellTabsControllerView({
   const desktopSideWorkspaceWidth = desktopSideWorkspaceOpen
     ? desktopFittedWidths.sideWidth
     : 0
-  const desktopTransitionClassName = !desktopPanelResizing
-    ? "transition-[width] duration-200 ease-linear"
-    : ""
+  const desktopTerminalOpen = !isMobile && terminalPanelOpen
+  const desktopTerminalRendered =
+    desktopTerminalOpen || desktopTerminalPanelMounted
+  const desktopTerminalMaxHeight = Math.max(
+    DESKTOP_MIN_TERMINAL_PANEL_HEIGHT,
+    desktopAvailableHeight - DESKTOP_MIN_TOP_PANEL_HEIGHT
+  )
+  const desktopFittedTerminalPanelHeight = clampDesktopPanelSize(
+    desktopTerminalPanelHeight,
+    Math.min(DESKTOP_MIN_TERMINAL_PANEL_HEIGHT, desktopTerminalMaxHeight),
+    desktopTerminalMaxHeight
+  )
+  const desktopTerminalVisibleHeight = desktopTerminalOpen
+    ? desktopFittedTerminalPanelHeight
+    : 0
+  const desktopTransitionClassName =
+    !desktopPanelResizing && !desktopTerminalResizing
+      ? "transition-[width,height] duration-200 ease-linear"
+      : ""
   const desktopPanelGroupClassName =
-    "relative flex h-full min-h-0 w-full flex-1 overflow-hidden"
+    "relative flex min-h-0 w-full shrink-0 overflow-hidden"
   const desktopResizeStart = () => {
     setDesktopPanelResizing(true)
   }
   const desktopResizeEnd = () => {
     setDesktopPanelResizing(false)
+  }
+  const desktopTerminalResizeStart = () => {
+    setDesktopTerminalResizing(true)
+  }
+  const desktopTerminalResizeEnd = () => {
+    setDesktopTerminalResizing(false)
   }
   const desktopSideWorkspaceMaxWidth = Math.max(
     0,
@@ -750,6 +1008,15 @@ function useAppShellTabsControllerView({
 
     setDesktopFileViewWidth(
       Math.max(DESKTOP_MIN_SIDE_PANEL_WIDTH, nextSize - desktopGitPanelWidth)
+    )
+  }
+  const setDesktopTerminalHeight = (nextSize: number) => {
+    setDesktopTerminalPanelHeight(
+      clampDesktopPanelSize(
+        nextSize,
+        Math.min(DESKTOP_MIN_TERMINAL_PANEL_HEIGHT, desktopTerminalMaxHeight),
+        desktopTerminalMaxHeight
+      )
     )
   }
 
@@ -769,68 +1036,115 @@ function useAppShellTabsControllerView({
       {isMobile ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
       ) : (
-        <div ref={desktopLayoutRef} className={desktopPanelGroupClassName}>
+        <div
+          ref={desktopLayoutRef}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
           <div
-            data-desktop-panel="session"
-            className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden max-md:w-full! ${desktopTransitionClassName}`}
+            className={desktopPanelGroupClassName}
             style={{
-              width: desktopSideWorkspaceOpen
-                ? `calc(100% - ${desktopSideWorkspaceWidth}px)`
+              height: desktopTerminalOpen
+                ? `calc(100% - ${desktopTerminalVisibleHeight}px)`
                 : "100%",
             }}
           >
-            {sessionPane}
-          </div>
-
-          {desktopSideWorkspaceRendered ? (
-            <aside
-              aria-label="Desktop side workspace"
-              aria-hidden={!desktopSideWorkspaceOpen}
-              data-state={desktopSideWorkspaceOpen ? "open" : "closed"}
-              data-desktop-panel="side-workspace"
-              className={`hidden h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none md:flex ${desktopTransitionClassName}`}
-              style={{ width: `${desktopSideWorkspaceWidth}px` }}
+            <div
+              data-desktop-panel="session"
+              className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden max-md:w-full! ${desktopTransitionClassName}`}
+              style={{
+                width: desktopSideWorkspaceOpen
+                  ? `calc(100% - ${desktopSideWorkspaceWidth}px)`
+                  : "100%",
+              }}
             >
-              {desktopGitPanelRendered ? (
-                <div
-                  data-desktop-panel="git"
-                  className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
-                  style={{ width: `${desktopSideWorkspaceWidth}px` }}
-                >
-                  {desktopGitPanelOpen ? (
-                    <AppShellDesktopResizeHandle
-                      label="Resize right sidebar"
-                      min={Math.min(
-                        DESKTOP_MIN_SIDE_PANEL_WIDTH,
-                        desktopSideWorkspaceMaxWidth
-                      )}
-                      max={desktopSideWorkspaceMaxWidth}
-                      size={desktopSideWorkspaceWidth}
-                      onResize={setDesktopSideWorkspaceWidth}
-                      onResizeStart={desktopResizeStart}
-                      onResizeEnd={desktopResizeEnd}
-                    />
-                  ) : null}
-                  <div className="h-full min-h-0 min-w-0 overflow-hidden">
-                    {desktopGitPanelRendered ? (
-                      <AppShellDesktopGitPanel
-                        viewerContextId={viewerContextId}
-                        sessionStore={sessionStore}
-                        active={desktopGitPanelOpen}
-                        composerDiffLineComments={composerDiffLineComments}
-                        rightSidebarStore={rightSidebarStore}
-                        onAddDiffLineComment={onAddDiffLineComment}
-                        onCloseAllFiles={onCloseAllFileViewTabs}
-                        onCloseFile={onCloseFileViewTab}
-                        onCloseFilesToRight={onCloseFileViewTabsToRight}
-                        onCloseOtherFiles={onCloseOtherFileViewTabs}
-                        onOpenFile={onOpenFileViewTab}
-                        onReorderFiles={onReorderFileViewTabs}
+              {sessionPane}
+            </div>
+
+            {desktopSideWorkspaceRendered ? (
+              <aside
+                aria-label="Desktop side workspace"
+                aria-hidden={!desktopSideWorkspaceOpen}
+                data-state={desktopSideWorkspaceOpen ? "open" : "closed"}
+                data-desktop-panel="side-workspace"
+                className={`hidden h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none md:flex ${desktopTransitionClassName}`}
+                style={{ width: `${desktopSideWorkspaceWidth}px` }}
+              >
+                {desktopGitPanelRendered ? (
+                  <div
+                    data-desktop-panel="git"
+                    className={`relative h-full min-h-0 min-w-0 shrink-0 overflow-visible ${desktopTransitionClassName}`}
+                    style={{ width: `${desktopSideWorkspaceWidth}px` }}
+                  >
+                    {desktopGitPanelOpen ? (
+                      <AppShellDesktopResizeHandle
+                        label="Resize right sidebar"
+                        min={Math.min(
+                          DESKTOP_MIN_SIDE_PANEL_WIDTH,
+                          desktopSideWorkspaceMaxWidth
+                        )}
+                        max={desktopSideWorkspaceMaxWidth}
+                        size={desktopSideWorkspaceWidth}
+                        onResize={setDesktopSideWorkspaceWidth}
+                        onResizeStart={desktopResizeStart}
+                        onResizeEnd={desktopResizeEnd}
                       />
                     ) : null}
+                    <div className="h-full min-h-0 min-w-0 overflow-hidden">
+                      {desktopGitPanelRendered ? (
+                        <AppShellDesktopGitPanel
+                          viewerContextId={viewerContextId}
+                          sessionStore={sessionStore}
+                          active={desktopGitPanelOpen}
+                          composerDiffLineComments={composerDiffLineComments}
+                          rightSidebarStore={rightSidebarStore}
+                          onAddDiffLineComment={onAddDiffLineComment}
+                          onCloseAllFiles={onCloseAllFileViewTabs}
+                          onCloseFile={onCloseFileViewTab}
+                          onCloseFilesToRight={onCloseFileViewTabsToRight}
+                          onCloseOtherFiles={onCloseOtherFileViewTabs}
+                          onOpenFile={onOpenFileViewTab}
+                          onReorderFiles={onReorderFileViewTabs}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
+              </aside>
+            ) : null}
+          </div>
+
+          {desktopTerminalRendered ? (
+            <aside
+              aria-label="Terminal"
+              aria-hidden={!desktopTerminalOpen}
+              data-state={desktopTerminalOpen ? "open" : "closed"}
+              data-desktop-panel="terminal"
+              className={`relative hidden min-h-0 w-full shrink-0 overflow-visible border-t border-border/70 bg-background data-[state=closed]:pointer-events-none data-[state=closed]:border-transparent md:flex ${desktopTransitionClassName}`}
+              style={{ height: `${desktopTerminalVisibleHeight}px` }}
+            >
+              {desktopTerminalOpen ? (
+                <AppShellDesktopVerticalResizeHandle
+                  label="Resize terminal"
+                  min={Math.min(
+                    DESKTOP_MIN_TERMINAL_PANEL_HEIGHT,
+                    desktopTerminalMaxHeight
+                  )}
+                  max={desktopTerminalMaxHeight}
+                  size={desktopTerminalVisibleHeight}
+                  onResize={setDesktopTerminalHeight}
+                  onResizeStart={desktopTerminalResizeStart}
+                  onResizeEnd={desktopTerminalResizeEnd}
+                />
               ) : null}
+              <div className="h-full min-h-0 w-full min-w-0 overflow-hidden">
+                <TerminalPanel
+                  active={desktopTerminalOpen}
+                  cwd={terminalSession.cwd}
+                  onClose={onCloseTerminalPanel}
+                  sessionId={terminalSession.sessionId}
+                  viewerContextId={viewerContextId}
+                />
+              </div>
             </aside>
           ) : null}
         </div>

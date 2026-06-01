@@ -29,6 +29,8 @@ export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
   "pico-right-sidebar-history-height"
 export const RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY =
   "pico-right-sidebar-history-tab"
+export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
+export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 
@@ -263,6 +265,10 @@ export function readStoredAutoScrollEnabled() {
 
 export function readStoredRightSidebarOpen() {
   return safeLocalStorageGetItem(RIGHT_SIDEBAR_OPEN_STORAGE_KEY) === "1"
+}
+
+export function readStoredTerminalPanelOpen() {
+  return safeLocalStorageGetItem(TERMINAL_PANEL_OPEN_STORAGE_KEY) === "1"
 }
 
 export function readStoredSessionDoneSoundEnabled() {

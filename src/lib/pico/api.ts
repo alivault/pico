@@ -381,6 +381,37 @@ export type HighlightResponse =
     ))
   | ApiErrorResponse
 
+export type TerminalCreateResponse =
+  | {
+      ok: true
+      id: string
+      cwd: string
+      shell: string
+      reused: boolean
+    }
+  | ApiErrorResponse
+
+export type TerminalEvent =
+  | {
+      type: "ready"
+      id: string
+      cwd: string
+      shell: string
+    }
+  | {
+      type: "output"
+      data: string
+    }
+  | {
+      type: "exit"
+      exitCode: number
+      signal?: number
+    }
+  | {
+      type: "error"
+      error: string
+    }
+
 export type SessionTreeResponse =
   | {
       ok: true

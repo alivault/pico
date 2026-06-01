@@ -40,6 +40,7 @@ export type AppShellSessionWorkspaceHandle = {
 export type AppShellUiState = {
   currentTab: string
   gitPanelOpen: boolean
+  terminalPanelOpen: boolean
   initialLoadingSessionId: string | null
   loadingSessionId: string | null
 }

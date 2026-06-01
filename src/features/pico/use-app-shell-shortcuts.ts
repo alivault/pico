@@ -31,6 +31,7 @@ type ShortcutActions = {
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
   toggleGitPanel: () => void
+  toggleTerminalPanel: () => void
   toggleHideThinking: () => void | Promise<unknown>
   toggleHideToolBlocks: () => void
   cycleThinkingLevel: (direction: -1 | 1) => void | Promise<unknown>
@@ -73,11 +74,19 @@ type ShortcutContext = AppShellShortcutState & {
   targetIsSessionSearch: boolean
 }
 
+function isTerminalTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    target.closest('[data-terminal-panel="true"]') !== null
+  )
+}
+
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
   const tagName = target.tagName.toLowerCase()
   return (
     target.isContentEditable ||
+    isTerminalTarget(target) ||
     tagName === "input" ||
     tagName === "textarea" ||
     target.closest('[contenteditable="true"]') !== null
@@ -173,7 +182,14 @@ export function useAppShellShortcuts({
   const handleEscape = (event: KeyboardEvent) => {
     const context = getShortcutContext(event)
 
-    if (event.repeat || context.modalOpen || event.defaultPrevented) return
+    if (
+      event.repeat ||
+      context.modalOpen ||
+      event.defaultPrevented ||
+      isTerminalTarget(event.target)
+    ) {
+      return
+    }
 
     const now = Date.now()
     if (now - lastEscapeKeyDownAtRef.current <= DOUBLE_ESCAPE_INTERVAL_MS) {
@@ -263,7 +279,13 @@ export function useAppShellShortcuts({
   const handleFocusPrompt = (event: KeyboardEvent) => {
     const context = getShortcutContext(event)
 
-    if (context.blockingModalOpen || event.defaultPrevented) return
+    if (
+      context.blockingModalOpen ||
+      event.defaultPrevented ||
+      isTerminalTarget(event.target)
+    ) {
+      return
+    }
 
     event.preventDefault()
     closeCommandPaletteForShortcut(context.commandPaletteOpen)
@@ -310,11 +332,25 @@ export function useAppShellShortcuts({
     const context = getShortcutContext(event)
 
     if (context.blockingModalOpen || event.defaultPrevented) return
+    if (
+      isTerminalTarget(event.target) &&
+      !context.commandPaletteOpen &&
+      key !== "`"
+    ) {
+      return
+    }
 
     if (key === "\\") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
       shortcutActionsRef.current.toggleGitPanel()
+      return
+    }
+
+    if (key === "`") {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      shortcutActionsRef.current.toggleTerminalPanel()
       return
     }
 
@@ -508,6 +544,7 @@ export function useAppShellShortcuts({
     ...(
       [
         { key: "\\" },
+        { key: "`" },
         { key: "K" },
         { key: "P" },
         { key: "P", shift: true },

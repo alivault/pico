@@ -157,6 +157,7 @@ import {
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
+  TERMINAL_PANEL_OPEN_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -174,6 +175,7 @@ import {
   readStoredPinnedSessionKeys,
   readStoredRecentDirectories,
   readStoredRightSidebarOpen,
+  readStoredTerminalPanelOpen,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
@@ -275,6 +277,7 @@ function useAppShellSessionWorkspaceView({
       {
         currentTab: "session",
         gitPanelOpen: false,
+        terminalPanelOpen: false,
         initialLoadingSessionId: sessionId || null,
         loadingSessionId: null,
       },
@@ -306,6 +309,22 @@ function useAppShellSessionWorkspaceView({
       setStoreField(appUiStore, "gitPanelOpen", nextOpen)
       safeLocalStorageSetItem(
         RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
+        nextOpen ? "1" : "0"
+      )
+    },
+    [appUiStore]
+  )
+  const setTerminalPanelOpen = React.useCallback<
+    React.Dispatch<React.SetStateAction<boolean>>
+  >(
+    (action) => {
+      const nextOpen = applyStoreAction(
+        appUiStore.state.terminalPanelOpen,
+        action
+      )
+      setStoreField(appUiStore, "terminalPanelOpen", nextOpen)
+      safeLocalStorageSetItem(
+        TERMINAL_PANEL_OPEN_STORAGE_KEY,
         nextOpen ? "1" : "0"
       )
     },
@@ -1118,6 +1137,10 @@ function useAppShellSessionWorkspaceView({
     { compare: shallowRecordEqual }
   )
   const gitPanelOpen = useSelector(appUiStore, (state) => state.gitPanelOpen)
+  const terminalPanelOpen = useSelector(
+    appUiStore,
+    (state) => state.terminalPanelOpen
+  )
 
   const openFileViewTab = (path: string, options?: OpenFileViewTabOptions) => {
     if (!path) return
@@ -1284,7 +1307,10 @@ function useAppShellSessionWorkspaceView({
     publishSidebarActiveSession(optimisticActiveSession, sessionId)
     setStoreState(appUiStore, (current) => ({
       ...current,
-      currentTab: current.currentTab === "git" ? "session" : current.currentTab,
+      currentTab:
+        current.currentTab === "git" || current.currentTab === "terminal"
+          ? "session"
+          : current.currentTab,
       initialLoadingSessionId: sessionId
         ? current.initialLoadingSessionId
         : null,
@@ -1297,7 +1323,9 @@ function useAppShellSessionWorkspaceView({
 
   React.useEffect(() => {
     if (isMobile) return
-    setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+    setCurrentTab((tab) =>
+      tab === "git" || tab === "terminal" ? "session" : tab
+    )
   }, [isMobile, setCurrentTab])
 
   const syncComposerDraft = (
@@ -1367,6 +1395,7 @@ function useAppShellSessionWorkspaceView({
   const applyStoredClientPreferences = () => {
     batch(() => {
       setGitPanelOpen(readStoredRightSidebarOpen())
+      setTerminalPanelOpen(readStoredTerminalPanelOpen())
       setStoredDraftDirectory(readStoredDraftDirectory() || "")
       setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
       setSessionDoneDesktopNotificationsEnabled(
@@ -1581,6 +1610,24 @@ function useAppShellSessionWorkspaceView({
     }
 
     setGitPanelOpen((open) => !open)
+  }
+
+  const toggleTerminalPanel = () => {
+    if (isMobile) {
+      setCurrentTab((tab) => (tab === "terminal" ? "session" : "terminal"))
+      return
+    }
+
+    setTerminalPanelOpen((open) => !open)
+  }
+
+  const closeTerminalPanel = () => {
+    if (isMobile) {
+      setCurrentTab((tab) => (tab === "terminal" ? "session" : tab))
+      return
+    }
+
+    setTerminalPanelOpen(false)
   }
 
   const openRenameDialog = () => {
@@ -2919,6 +2966,7 @@ function useAppShellSessionWorkspaceView({
     isMobile,
     selectedSidebarSessions,
     sessionFile: sessionState.sessionFile,
+    terminalPanelOpen,
   })
 
   const buildCommandPaletteCommands = () => {
@@ -2966,6 +3014,21 @@ function useAppShellSessionWorkspaceView({
           "panel",
         ],
         onSelect: toggleGitPanel,
+      },
+      {
+        id: "toggle-terminal",
+        group: "Workspace",
+        title: commandState.isMobile
+          ? "Toggle terminal tab"
+          : commandState.terminalPanelOpen
+            ? "Close terminal"
+            : "Open terminal",
+        description: commandState.isMobile
+          ? "Switch the mobile terminal tab on or off"
+          : "Toggle the bottom terminal panel",
+        shortcut: formatShortcutLabel("Control+`"),
+        keywords: ["terminal", "shell", "console", "bottom", "panel"],
+        onSelect: toggleTerminalPanel,
       },
       {
         id: "commit-changes",
@@ -3248,6 +3311,7 @@ function useAppShellSessionWorkspaceView({
       conversationFrameRef.current?.scrollConversationToTop()
     },
     toggleGitPanel,
+    toggleTerminalPanel,
     toggleHideThinking,
     toggleHideToolBlocks,
     cycleThinkingLevel,
@@ -3412,12 +3476,14 @@ function useAppShellSessionWorkspaceView({
         defaultNewSessionDirectory={defaultNewSessionDirectory}
         displaySessionCwd={displaySessionCwd}
         gitPanelOpen={gitPanelOpen}
+        terminalPanelOpen={terminalPanelOpen}
         loadingDisplaySessionTitle={loadingDisplaySessionTitle}
         currentSessionPinned={currentSessionPinned}
         displaySettingsStore={displaySettingsStore}
         isSessionViewLoading={isSessionViewLoading}
         newSessionDirectoryOptions={newSessionDirectoryOptions}
         onToggleGitPanel={toggleGitPanel}
+        onToggleTerminalPanel={toggleTerminalPanel}
         sessionStore={sessionStore}
         viewerContextId={viewerContextId}
       />
@@ -3437,6 +3503,7 @@ function useAppShellSessionWorkspaceView({
             displaySettingsStore={displaySettingsStore}
             fileInputRef={fileInputRef}
             gitPanelOpen={gitPanelOpen}
+            terminalPanelOpen={terminalPanelOpen}
             hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
             isSessionViewLoading={isSessionViewLoading}
             isSubmitting={isSubmitting}
@@ -3454,6 +3521,7 @@ function useAppShellSessionWorkspaceView({
             onAddDiffLineComment={addComposerDiffLineComment}
             onOpenFileViewTab={openFileViewTab}
             onReorderFileViewTabs={reorderFileViewTabs}
+            onCloseTerminalPanel={closeTerminalPanel}
             rightSidebarStore={rightSidebarStore}
             sessionStore={sessionStore}
             store={composerStore}

@@ -9,10 +9,10 @@ import appCss from "../styles.css?url"
 
 const TANSTACK_DEVTOOLS_SETTINGS_KEY = "tanstack_devtools_settings"
 const TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY =
-  "pico-tanstack-devtools-defaults-v1"
+  "pico-tanstack-devtools-defaults-v2"
 const TANSTACK_DEVTOOLS_CONFIG = {
   position: "bottom-right",
-  openHotkey: ["Control", "`"],
+  openHotkey: ["Control", "Shift", "`"],
   triggerHidden: true,
 } satisfies NonNullable<React.ComponentProps<typeof TanStackDevtools>["config"]>
 

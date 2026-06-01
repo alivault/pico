@@ -41,6 +41,7 @@ import {
   buildHighlightPayload,
   type HighlightPayload,
 } from "@/server/pico-runtime/highlight"
+import { PicoTerminalManager } from "@/server/pico-runtime/terminal"
 import {
   applyRetainedConversationEvent,
   createRetainedConversationState,
@@ -823,6 +824,7 @@ class PicoRuntime {
   private readonly gitWatchManager = new GitWatchManager((change) => {
     void this.handleGitWatchChange(change)
   })
+  private readonly terminalManager = new PicoTerminalManager()
   private sessionIndexCache?: {
     expiresAt: number
     entries: Array<SessionListInfoLike>
@@ -2470,6 +2472,13 @@ class PicoRuntime {
     return (
       activeEntry.cwd || resolveScopeCwd(context.sessionScope, process.cwd())
     )
+  }
+
+  private getTerminalScopeKey(
+    activeEntry: SessionEntry,
+    context: ContextState
+  ) {
+    return `${context.id}:${activeEntry.key}:${this.getBaseCwd(activeEntry, context)}`
   }
 
   private async createSessionEntryFromRuntime(
@@ -5275,6 +5284,68 @@ class PicoRuntime {
     return resolvePendingUiRequest(this.pendingUiRequests, id, body)
   }
 
+  async createTerminal(
+    request: Request,
+    body: { cols?: unknown; rows?: unknown }
+  ) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    const cwd = this.getBaseCwd(activeEntry, context)
+    const terminal = await this.terminalManager.createTerminal({
+      cols: body.cols,
+      cwd,
+      rows: body.rows,
+      scopeKey: this.getTerminalScopeKey(activeEntry, context),
+    })
+
+    return { ok: true, ...terminal }
+  }
+
+  async createTerminalEventsResponse(request: Request, id: string) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    return this.terminalManager.createEventsResponse(
+      id,
+      this.getTerminalScopeKey(activeEntry, context),
+      request.signal
+    )
+  }
+
+  async writeTerminalInput(
+    request: Request,
+    id: string,
+    body: { data?: unknown }
+  ) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    this.terminalManager.writeTerminal(
+      id,
+      this.getTerminalScopeKey(activeEntry, context),
+      body.data
+    )
+    return { ok: true }
+  }
+
+  async resizeTerminal(
+    request: Request,
+    id: string,
+    body: { cols?: unknown; rows?: unknown }
+  ) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    this.terminalManager.resizeTerminal(
+      id,
+      this.getTerminalScopeKey(activeEntry, context),
+      body
+    )
+    return { ok: true }
+  }
+
+  async closeTerminal(request: Request, id: string) {
+    const { context, activeEntry } = await this.resolveRequest(request)
+    this.terminalManager.closeTerminal(
+      id,
+      this.getTerminalScopeKey(activeEntry, context)
+    )
+    return { ok: true }
+  }
+
   async highlightCode(code: unknown, language: unknown) {
     const text = typeof code === "string" ? code : ""
 
@@ -5345,6 +5416,7 @@ class PicoRuntime {
       }
     }
     this.pendingUiRequests.clear()
+    this.terminalManager.dispose()
 
     await Promise.all(
       [...this.sessionEntries.values()].map((entry) =>

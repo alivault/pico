@@ -1,5 +1,10 @@
 import * as React from "react"
-import { EllipsisIcon, PanelRightIcon, SquarePenIcon } from "lucide-react"
+import {
+  EllipsisIcon,
+  PanelRightIcon,
+  SquarePenIcon,
+  SquareTerminalIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -53,12 +58,14 @@ type AppShellSessionHeaderProps = {
   defaultNewSessionDirectory: string
   displaySessionCwd?: string
   gitPanelOpen: boolean
+  terminalPanelOpen: boolean
   loadingDisplaySessionTitle: string
   currentSessionPinned: boolean
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isSessionViewLoading: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
+  onToggleTerminalPanel: () => void
   sessionStore: PicoStore<SessionState>
   viewerContextId: string
 }
@@ -68,12 +75,14 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   defaultNewSessionDirectory,
   displaySessionCwd,
   gitPanelOpen,
+  terminalPanelOpen,
   loadingDisplaySessionTitle,
   currentSessionPinned,
   displaySettingsStore,
   isSessionViewLoading,
   newSessionDirectoryOptions,
   onToggleGitPanel,
+  onToggleTerminalPanel,
   sessionStore,
   viewerContextId,
 }: AppShellSessionHeaderProps) {
@@ -335,6 +344,21 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <TitleTooltip
+            title="Toggle terminal"
+            kbd={formatShortcutLabel("Control+`")}
+          >
+            <Button
+              size="icon"
+              variant="ghost"
+              className="hidden md:inline-flex"
+              aria-pressed={terminalPanelOpen}
+              aria-label="Toggle terminal panel"
+              onClick={onToggleTerminalPanel}
+            >
+              <SquareTerminalIcon />
+            </Button>
+          </TitleTooltip>
           <TitleTooltip
             title="Toggle right sidebar"
             kbd={formatShortcutLabel("Control+\\")}
