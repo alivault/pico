@@ -10,6 +10,7 @@ export const Route = createFileRoute("/api/terminal")({
       POST: async ({ request }) => {
         try {
           const body = await readRequestJson<{
+            clientKey?: unknown
             cols?: unknown
             rows?: unknown
           }>(request)

@@ -15,6 +15,7 @@ export {
   RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY,
   TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
   TERMINAL_PANEL_OPEN_STORAGE_KEY,
+  TERMINAL_TABS_STORAGE_KEY,
   SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -37,16 +38,19 @@ export {
   readStoredRecentDirectories,
   readStoredRightSidebarOpen,
   readStoredTerminalPanelOpen,
+  readStoredTerminalTabs,
   readStoredSessionDoneDesktopNotificationsEnabled,
   readStoredSessionDoneSoundEnabled,
   readStoredSidebarDirectories,
   readStoredTheme,
   readStoredThemeColorMode,
   rememberStoredPromptDraft,
+  rememberStoredTerminalTabs,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico/storage"
+export type { StoredTerminalTabsState } from "@/lib/pico/storage"
 export {
   APPLIED_THEME_CLASSES,
   PICO_CODE_SHIKI_THEME,

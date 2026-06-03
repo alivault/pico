@@ -12,7 +12,12 @@ import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { formatDisplayPath } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
 import type { TerminalCreateResponse, TerminalEvent } from "@/lib/pico/api"
+import {
+  appliedThemeClassColorMode,
+  type ResolvedThemeMode,
+} from "@/lib/pico/themes"
 import { cn } from "@/lib/utils"
 
 type TerminalCreateData = Extract<TerminalCreateResponse, { ok: true }>
@@ -27,6 +32,7 @@ type TerminalStatus =
 type TerminalTab = {
   id: string
   status: TerminalStatus
+  terminalId: string | null
 }
 
 type TerminalTabsState = {
@@ -49,20 +55,111 @@ type TerminalTabPaneProps = {
   active: boolean
   cwd: string
   onStatusChange: (tabId: string, status: TerminalStatus) => void
+  onTerminalIdChange: (tabId: string, terminalId: string) => void
   selected: boolean
   sessionId?: string | undefined
   tabId: string
   viewerContextId: string
 }
 
+type TerminalAnsiTheme = Required<
+  Pick<
+    ITheme,
+    | "black"
+    | "red"
+    | "green"
+    | "yellow"
+    | "blue"
+    | "magenta"
+    | "cyan"
+    | "white"
+    | "brightBlack"
+    | "brightRed"
+    | "brightGreen"
+    | "brightYellow"
+    | "brightBlue"
+    | "brightMagenta"
+    | "brightCyan"
+    | "brightWhite"
+  >
+>
+
+const TERMINAL_ANSI_THEMES = {
+  dark: {
+    black: "#484f58",
+    red: "#ff7b72",
+    green: "#3fb950",
+    yellow: "#d29922",
+    blue: "#58a6ff",
+    magenta: "#bc8cff",
+    cyan: "#39c5cf",
+    white: "#b1bac4",
+    brightBlack: "#6e7681",
+    brightRed: "#ffa198",
+    brightGreen: "#56d364",
+    brightYellow: "#e3b341",
+    brightBlue: "#79c0ff",
+    brightMagenta: "#d2a8ff",
+    brightCyan: "#56d4dd",
+    brightWhite: "#f0f6fc",
+  },
+  light: {
+    black: "#24292f",
+    red: "#cf222e",
+    green: "#116329",
+    yellow: "#953800",
+    blue: "#0969da",
+    magenta: "#8250df",
+    cyan: "#1b7c83",
+    white: "#6e7781",
+    brightBlack: "#57606a",
+    brightRed: "#a40e26",
+    brightGreen: "#1a7f37",
+    brightYellow: "#9a6700",
+    brightBlue: "#218bff",
+    brightMagenta: "#a475f9",
+    brightCyan: "#3192aa",
+    brightWhite: "#24292f",
+  },
+} as const satisfies Record<ResolvedThemeMode, TerminalAnsiTheme>
+
 let terminalTabCounter = 0
 
-function createTerminalTab(): TerminalTab {
-  terminalTabCounter += 1
-  return {
-    id: `terminal-tab-${Date.now()}-${terminalTabCounter}`,
-    status: { type: "idle" },
+function createTerminalTabId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `terminal-tab-${crypto.randomUUID()}`
   }
+
+  terminalTabCounter += 1
+  return `terminal-tab-${Date.now()}-${terminalTabCounter}`
+}
+
+function createTerminalTab(id = createTerminalTabId()): TerminalTab {
+  return {
+    id,
+    status: { type: "idle" },
+    terminalId: null,
+  }
+}
+
+function createTerminalTabsState(scopeKey: string): TerminalTabsState {
+  const storedTabs = readStoredTerminalTabs(scopeKey)
+  const tabs = storedTabs.tabs.map((id) => createTerminalTab(id))
+  return {
+    activeTabId: storedTabs.activeTabId ?? tabs[0]?.id ?? null,
+    scopeKey,
+    tabs,
+  }
+}
+
+function rememberTerminalTabsState(state: TerminalTabsState) {
+  rememberStoredTerminalTabs(state.scopeKey, {
+    activeTabId: state.activeTabId,
+    tabs: state.tabs.map((tab) => tab.id),
+  })
 }
 
 function terminalStatusText(status: TerminalStatus) {
@@ -109,12 +206,76 @@ function cssVariable(name: string, fallback: string) {
   return value || fallback
 }
 
-function createTerminalTheme(): ITheme {
+function resolveTerminalThemeMode(): ResolvedThemeMode {
+  for (const className of document.documentElement.classList) {
+    const mode = appliedThemeClassColorMode(className)
+    if (mode) return mode
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light"
+}
+
+function terminalAnsiTheme(): TerminalAnsiTheme {
+  const fallback = TERMINAL_ANSI_THEMES[resolveTerminalThemeMode()]
+
   return {
-    background: cssVariable("--background", "#111111"),
-    cursor: cssVariable("--primary", "#7aa2f7"),
-    foreground: cssVariable("--foreground", "#f5f5f5"),
-    selectionBackground: cssVariable("--code-selection", "#334155"),
+    black: cssVariable("--terminal-ansi-black", fallback.black),
+    red: cssVariable("--terminal-ansi-red", fallback.red),
+    green: cssVariable("--terminal-ansi-green", fallback.green),
+    yellow: cssVariable("--terminal-ansi-yellow", fallback.yellow),
+    blue: cssVariable("--terminal-ansi-blue", fallback.blue),
+    magenta: cssVariable("--terminal-ansi-magenta", fallback.magenta),
+    cyan: cssVariable("--terminal-ansi-cyan", fallback.cyan),
+    white: cssVariable("--terminal-ansi-white", fallback.white),
+    brightBlack: cssVariable(
+      "--terminal-ansi-bright-black",
+      fallback.brightBlack
+    ),
+    brightRed: cssVariable("--terminal-ansi-bright-red", fallback.brightRed),
+    brightGreen: cssVariable(
+      "--terminal-ansi-bright-green",
+      fallback.brightGreen
+    ),
+    brightYellow: cssVariable(
+      "--terminal-ansi-bright-yellow",
+      fallback.brightYellow
+    ),
+    brightBlue: cssVariable("--terminal-ansi-bright-blue", fallback.brightBlue),
+    brightMagenta: cssVariable(
+      "--terminal-ansi-bright-magenta",
+      fallback.brightMagenta
+    ),
+    brightCyan: cssVariable("--terminal-ansi-bright-cyan", fallback.brightCyan),
+    brightWhite: cssVariable(
+      "--terminal-ansi-bright-white",
+      fallback.brightWhite
+    ),
+  }
+}
+
+function createTerminalTheme(): ITheme {
+  const ansiTheme = terminalAnsiTheme()
+
+  return {
+    ...ansiTheme,
+    background: cssVariable(
+      "--terminal-background",
+      cssVariable("--background", "#111111")
+    ),
+    cursor: cssVariable(
+      "--terminal-cursor",
+      cssVariable("--primary", "#7aa2f7")
+    ),
+    foreground: cssVariable(
+      "--terminal-foreground",
+      cssVariable("--foreground", ansiTheme.brightWhite)
+    ),
+    selectionBackground: cssVariable(
+      "--terminal-selection-background",
+      cssVariable("--code-selection", "#334155")
+    ),
   }
 }
 
@@ -171,6 +332,7 @@ function TerminalTabPane({
   active,
   cwd,
   onStatusChange,
+  onTerminalIdChange,
   selected,
   sessionId,
   tabId,
@@ -182,6 +344,7 @@ function TerminalTabPane({
   const activeRef = React.useRef(active)
   const fitAndResizeRef = React.useRef<() => void>(() => {})
   const onStatusChangeRef = React.useRef(onStatusChange)
+  const onTerminalIdChangeRef = React.useRef(onTerminalIdChange)
   const [status, setStatus] = React.useState<TerminalStatus>({ type: "idle" })
 
   React.useLayoutEffect(() => {
@@ -191,6 +354,10 @@ function TerminalTabPane({
   React.useEffect(() => {
     onStatusChangeRef.current = onStatusChange
   }, [onStatusChange])
+
+  React.useEffect(() => {
+    onTerminalIdChangeRef.current = onTerminalIdChange
+  }, [onTerminalIdChange])
 
   React.useEffect(() => {
     if (!cwd) {
@@ -231,19 +398,6 @@ function TerminalTabPane({
         headers: { "content-type": "application/json" },
         method: "POST",
       })
-    }
-
-    const closeServerTerminal = () => {
-      const id = terminalIdRef.current
-      if (!id) return
-
-      void fetchJson(
-        buildRequestUrl(
-          `/api/terminal/${encodeURIComponent(id)}/close`,
-          requestOptions
-        ),
-        { method: "POST" }
-      ).catch(() => {})
     }
 
     const flushInput = () => {
@@ -338,6 +492,7 @@ function TerminalTabPane({
         const terminalResponse = await postJson<TerminalCreateData>(
           "/api/terminal",
           {
+            clientKey: tabId,
             cols: terminal.cols,
             rows: terminal.rows,
           }
@@ -345,6 +500,7 @@ function TerminalTabPane({
         if (disposed) return
 
         terminalIdRef.current = terminalResponse.id
+        onTerminalIdChangeRef.current(tabId, terminalResponse.id)
         publishStatus({ type: "connected", shell: terminalResponse.shell })
 
         eventSource = new EventSource(
@@ -417,7 +573,6 @@ function TerminalTabPane({
       resizeObserver?.disconnect()
       eventSource?.close()
       inputDisposable?.dispose()
-      closeServerTerminal()
       terminalRef.current?.dispose()
       terminalRef.current = null
       terminalIdRef.current = null
@@ -480,11 +635,9 @@ export function TerminalPanel({
 }: TerminalPanelProps) {
   const normalizedCwd = cwd?.trim() || ""
   const scopeKey = `${viewerContextId}:${sessionId ?? "no-session"}:${normalizedCwd}`
-  const [tabsState, setTabsState] = React.useState<TerminalTabsState>(() => ({
-    activeTabId: null,
-    scopeKey,
-    tabs: [],
-  }))
+  const [tabsState, setTabsState] = React.useState<TerminalTabsState>(() =>
+    createTerminalTabsState(scopeKey)
+  )
   const tabs = tabsState.scopeKey === scopeKey ? tabsState.tabs : []
   const selectedTabId =
     tabsState.scopeKey === scopeKey
@@ -494,7 +647,7 @@ export function TerminalPanel({
   React.useEffect(() => {
     if (tabsState.scopeKey === scopeKey) return
 
-    setTabsState({ activeTabId: null, scopeKey, tabs: [] })
+    setTabsState(createTerminalTabsState(scopeKey))
   }, [scopeKey, tabsState.scopeKey])
 
   React.useEffect(() => {
@@ -508,7 +661,9 @@ export function TerminalPanel({
     }
 
     const tab = createTerminalTab()
-    setTabsState({ activeTabId: tab.id, scopeKey, tabs: [tab] })
+    const nextState = { activeTabId: tab.id, scopeKey, tabs: [tab] }
+    rememberTerminalTabsState(nextState)
+    setTabsState(nextState)
   }, [active, normalizedCwd, scopeKey, tabs.length, tabsState.scopeKey])
 
   const activeTab = tabs.find((tab) => tab.id === selectedTabId)
@@ -516,26 +671,48 @@ export function TerminalPanel({
   const activeError =
     activeStatus.type === "error" ? activeStatus.message : undefined
 
+  const requestOptions = sessionId
+    ? { contextId: viewerContextId, sessionId }
+    : { contextId: viewerContextId }
+
   const addTerminalTab = () => {
     if (!normalizedCwd) return
 
     const tab = createTerminalTab()
     setTabsState((current) => {
-      if (current.scopeKey !== scopeKey) {
-        return { activeTabId: tab.id, scopeKey, tabs: [tab] }
-      }
-
-      return {
-        ...current,
-        activeTabId: tab.id,
-        tabs: [...current.tabs, tab],
-      }
+      const nextState =
+        current.scopeKey !== scopeKey
+          ? { activeTabId: tab.id, scopeKey, tabs: [tab] }
+          : {
+              ...current,
+              activeTabId: tab.id,
+              tabs: [...current.tabs, tab],
+            }
+      rememberTerminalTabsState(nextState)
+      return nextState
     })
   }
 
+  const closeServerTerminal = (terminalId: string | null) => {
+    if (!terminalId) return
+
+    void fetchJson(
+      buildRequestUrl(
+        `/api/terminal/${encodeURIComponent(terminalId)}/close`,
+        requestOptions
+      ),
+      { method: "POST" }
+    ).catch(() => {})
+  }
+
   const closeTerminalTab = (tabId: string) => {
+    if (tabs.length <= 0) return
+
+    const closingTab = tabs.find((tab) => tab.id === tabId)
+    closeServerTerminal(closingTab?.terminalId ?? null)
+
     setTabsState((current) => {
-      if (current.scopeKey !== scopeKey || current.tabs.length <= 1) {
+      if (current.scopeKey !== scopeKey || current.tabs.length <= 0) {
         return current
       }
 
@@ -547,11 +724,13 @@ export function TerminalPanel({
               ?.id ?? null)
           : current.activeTabId
 
-      return {
+      const nextState = {
         ...current,
         activeTabId: nextActiveTabId,
         tabs: nextTabs,
       }
+      rememberTerminalTabsState(nextState)
+      return nextState
     })
   }
 
@@ -563,6 +742,19 @@ export function TerminalPanel({
         ...current,
         tabs: current.tabs.map((tab) =>
           tab.id === tabId ? { ...tab, status } : tab
+        ),
+      }
+    })
+  }
+
+  const updateTabTerminalId = (tabId: string, terminalId: string) => {
+    setTabsState((current) => {
+      if (current.scopeKey !== scopeKey) return current
+
+      return {
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.id === tabId ? { ...tab, terminalId } : tab
         ),
       }
     })
@@ -615,29 +807,24 @@ export function TerminalPanel({
                     type="button"
                     className="flex h-full min-w-0 items-center gap-1.5 px-2 text-left outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onClick={() => {
-                      setTabsState((current) =>
-                        current.scopeKey === scopeKey
-                          ? { ...current, activeTabId: tab.id }
-                          : current
-                      )
+                      setTabsState((current) => {
+                        if (current.scopeKey !== scopeKey) return current
+
+                        const nextState = { ...current, activeTabId: tab.id }
+                        rememberTerminalTabsState(nextState)
+                        return nextState
+                      })
                     }}
                   >
                     <TerminalStatusDot status={tab.status} />
                     <span className="truncate">{label}</span>
                   </button>
                 </TitleTooltip>
-                <TitleTooltip
-                  title={
-                    tabs.length <= 1
-                      ? "Open another terminal before closing this one"
-                      : `Close ${label}`
-                  }
-                >
+                <TitleTooltip title={`Close ${label}`}>
                   <button
                     type="button"
                     className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground opacity-70 outline-hidden group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30"
                     aria-label={`Close ${label}`}
-                    disabled={tabs.length <= 1}
                     onClick={(event) => {
                       event.stopPropagation()
                       closeTerminalTab(tab.id)
@@ -697,6 +884,7 @@ export function TerminalPanel({
                   active={active && selected}
                   cwd={normalizedCwd}
                   onStatusChange={updateTabStatus}
+                  onTerminalIdChange={updateTabTerminalId}
                   selected={selected}
                   sessionId={sessionId}
                   tabId={tab.id}

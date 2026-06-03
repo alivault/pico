@@ -5286,11 +5286,12 @@ class PicoRuntime {
 
   async createTerminal(
     request: Request,
-    body: { cols?: unknown; rows?: unknown }
+    body: { clientKey?: unknown; cols?: unknown; rows?: unknown }
   ) {
     const { context, activeEntry } = await this.resolveRequest(request)
     const cwd = this.getBaseCwd(activeEntry, context)
     const terminal = await this.terminalManager.createTerminal({
+      clientKey: body.clientKey,
       cols: body.cols,
       cwd,
       rows: body.rows,
@@ -5339,7 +5340,7 @@ class PicoRuntime {
 
   async closeTerminal(request: Request, id: string) {
     const { context, activeEntry } = await this.resolveRequest(request)
-    this.terminalManager.closeTerminal(
+    await this.terminalManager.closeTerminal(
       id,
       this.getTerminalScopeKey(activeEntry, context)
     )

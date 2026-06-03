@@ -31,6 +31,7 @@ export const RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY =
   "pico-right-sidebar-history-tab"
 export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
 export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
+export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 
@@ -117,6 +118,85 @@ export function normalizeSessionSelectionKeys(value: unknown) {
   }
 
   return keys
+}
+
+export type StoredTerminalTabsState = {
+  activeTabId: string | null
+  tabs: Array<string>
+}
+
+function normalizeStoredTerminalTabId(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 256) : ""
+}
+
+function normalizeStoredTerminalTabs(value: unknown): StoredTerminalTabsState {
+  if (!value || typeof value !== "object") {
+    return { activeTabId: null, tabs: [] }
+  }
+
+  const rawState = value as {
+    activeTabId?: unknown
+    tabs?: unknown
+  }
+  const tabs: Array<string> = []
+  const seen = new Set<string>()
+
+  if (Array.isArray(rawState.tabs)) {
+    for (const entry of rawState.tabs) {
+      const id = normalizeStoredTerminalTabId(entry)
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      tabs.push(id)
+    }
+  }
+
+  const activeTabId = normalizeStoredTerminalTabId(rawState.activeTabId)
+  return {
+    activeTabId: activeTabId && seen.has(activeTabId) ? activeTabId : null,
+    tabs,
+  }
+}
+
+function loadStoredTerminalTabs() {
+  try {
+    const raw = safeLocalStorageGetItem(TERMINAL_TABS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+export function readStoredTerminalTabs(scopeKey: string) {
+  const key = scopeKey.trim()
+  if (!key) return { activeTabId: null, tabs: [] }
+
+  return normalizeStoredTerminalTabs(loadStoredTerminalTabs()[key])
+}
+
+export function rememberStoredTerminalTabs(
+  scopeKey: string,
+  state: StoredTerminalTabsState
+) {
+  const key = scopeKey.trim()
+  if (!key) return false
+
+  const storedTabs = loadStoredTerminalTabs()
+  const normalizedState = normalizeStoredTerminalTabs(state)
+
+  if (normalizedState.tabs.length > 0) {
+    storedTabs[key] = normalizedState
+  } else {
+    delete storedTabs[key]
+  }
+
+  return safeLocalStorageSetItem(
+    TERMINAL_TABS_STORAGE_KEY,
+    JSON.stringify(storedTabs)
+  )
 }
 
 export function promptDraftKey(target: PromptDraftTarget = {}) {

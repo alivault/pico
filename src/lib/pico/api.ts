@@ -381,9 +381,12 @@ export type HighlightResponse =
     ))
   | ApiErrorResponse
 
+export type TerminalBackend = "zellij" | "tmux" | "shell"
+
 export type TerminalCreateResponse =
   | {
       ok: true
+      backend: TerminalBackend
       id: string
       cwd: string
       shell: string
@@ -394,6 +397,7 @@ export type TerminalCreateResponse =
 export type TerminalEvent =
   | {
       type: "ready"
+      backend: TerminalBackend
       id: string
       cwd: string
       shell: string
