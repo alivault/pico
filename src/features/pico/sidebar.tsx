@@ -735,7 +735,7 @@ function SidebarSessionItem({
     >
       {entry.streaming ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
-          <Spinner aria-label="Session streaming" />
+          <Spinner size="xs" aria-label="Session streaming" />
         </span>
       ) : showUnread ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
@@ -1163,7 +1163,9 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
             <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directory-label:opacity-100 group-focus-visible/directory-label:opacity-100" />
           )
         ) : null}
-        {showHeaderLoadingSpinner ? <Spinner className="shrink-0" /> : null}
+        {showHeaderLoadingSpinner ? (
+          <Spinner size="xs" className="shrink-0" />
+        ) : null}
       </CollapsibleTrigger>
 
       {onCreateSessionInDirectory && !overlay && !isMobile ? (
@@ -1277,7 +1279,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               {showLoadingState ? (
                 <div className="flex items-center gap-2 p-2 text-sm text-sidebar-foreground/70">
                   {showLoadingSpinner ? (
-                    <Spinner />
+                    <Spinner size="xs" />
                   ) : (
                     <span className="size-4" aria-hidden="true" />
                   )}
