@@ -807,6 +807,50 @@ function normalizeClientPendingId(value: unknown) {
   return pendingId
 }
 
+function normalizePromptDraftOwnerKey(value: unknown) {
+  if (typeof value !== "string") return ""
+
+  const ownerKey = value.trim()
+  if (!ownerKey.startsWith("draft:")) return ""
+  if (ownerKey.length > 1024) return ""
+
+  return ownerKey
+}
+
+function normalizePromptDraftCwd(value: unknown) {
+  if (typeof value !== "string") return undefined
+
+  const cwd = value.trim()
+  return cwd || undefined
+}
+
+function promptDraftOwnerKeyForCwd(cwd: string | undefined) {
+  return `draft:${cwd?.trim() || "default"}`
+}
+
+function promptDraftCwdFromOwnerKey(ownerKey: string) {
+  if (!ownerKey || ownerKey === promptDraftOwnerKeyForCwd(undefined)) {
+    return undefined
+  }
+
+  const cwd = ownerKey.slice("draft:".length).trim()
+  return cwd || undefined
+}
+
+function promptDraftTargetMatches(
+  entry: SessionEntry,
+  target: { ownerKey: string; cwd?: string }
+) {
+  if (target.cwd && entry.cwd === target.cwd) return true
+
+  const entryOwnerKey = promptDraftOwnerKeyForCwd(entry.cwd)
+  if (target.ownerKey === entryOwnerKey) return true
+
+  // Match the client-side optimistic default owner. The browser can briefly
+  // use `draft:default` before the server-resolved cwd arrives.
+  return target.ownerKey === promptDraftOwnerKeyForCwd(undefined)
+}
+
 class PicoRuntime {
   private readonly encoder = new TextEncoder()
   private readonly contexts = new Map<string, ContextState>()
@@ -2314,6 +2358,66 @@ class PicoRuntime {
     }
   }
 
+  private async recoverMissingPromptDraftTarget(
+    context: ContextState,
+    target: { ownerKey: string; cwd?: string }
+  ) {
+    if (!target.ownerKey && !target.cwd) return undefined
+
+    const matchesTarget = (entry: SessionEntry | undefined) =>
+      Boolean(
+        entry &&
+        this.isDraftEntry(entry) &&
+        promptDraftTargetMatches(entry, target)
+      )
+
+    const recoveredCwd =
+      target.cwd ||
+      promptDraftCwdFromOwnerKey(target.ownerKey) ||
+      (target.ownerKey === promptDraftOwnerKeyForCwd(undefined)
+        ? resolveScopeCwd(context.sessionScope, process.cwd())
+        : undefined)
+
+    const activeEntry = this.getActiveEntry(context)
+    if (matchesTarget(activeEntry)) {
+      return activeEntry
+    }
+    if (
+      activeEntry &&
+      recoveredCwd &&
+      activeEntry.cwd === recoveredCwd &&
+      this.getEntryStreamingState(activeEntry)
+    ) {
+      return activeEntry
+    }
+
+    const draftEntry = context.draftKey
+      ? this.sessionEntries.get(context.draftKey)
+      : undefined
+    if (draftEntry && matchesTarget(draftEntry)) {
+      await this.activateContextSession(context, draftEntry)
+      return draftEntry
+    }
+
+    if (!recoveredCwd) return undefined
+
+    const nextEntry = await this.createNewSessionEntry(recoveredCwd, {
+      draft: true,
+      sessionDir:
+        activeEntry && recoveredCwd === activeEntry.cwd
+          ? activeEntry.session.sessionManager.getSessionDir?.()
+          : undefined,
+      sessionStartEvent: {
+        type: "session_start",
+        reason: "new",
+        previousSessionFile: activeEntry?.session.sessionFile,
+      },
+    })
+    context.draftKey = nextEntry.key
+    await this.activateContextSession(context, nextEntry)
+    return nextEntry
+  }
+
   private async clearContextDraft(context: ContextState) {
     await clearRuntimeContextDraft({
       context,
@@ -3708,18 +3812,51 @@ class PicoRuntime {
       streamingBehavior?: unknown
       pendingId?: unknown
       thinkingLevel?: unknown
+      draftOwnerKey?: unknown
+      draftCwd?: unknown
     }
   ) {
-    const requestedSessionKey =
-      new URL(request.url).searchParams.get("sessionKey")?.trim() || ""
+    const url = new URL(request.url)
+    const requestedSessionKey = url.searchParams.get("sessionKey")?.trim() || ""
+    const requestedDraftTarget = {
+      ownerKey: normalizePromptDraftOwnerKey(body.draftOwnerKey),
+      cwd: normalizePromptDraftCwd(body.draftCwd),
+    }
+    let resolvedContext: ContextState | undefined
+    let resolvedActiveEntry: SessionEntry | undefined
+
     if (requestedSessionKey && !this.sessionEntries.has(requestedSessionKey)) {
-      throw new Error("Requested session is no longer available.")
+      const context = this.ensureContext(
+        url.searchParams.get("context") || "default"
+      )
+      context.sessionScope = normalizeSessionScope(
+        url.searchParams.get("scope"),
+        process.cwd()
+      )
+      const recoveredEntry = await this.recoverMissingPromptDraftTarget(
+        context,
+        requestedDraftTarget
+      )
+      if (!recoveredEntry) {
+        throw new Error("Requested session is no longer available.")
+      }
+      this.logSessionLoadDebug("prompt:recovered_missing_draft_target", {
+        requestedSessionKey,
+        requestedDraftOwnerKey: requestedDraftTarget.ownerKey || undefined,
+        requestedDraftCwd: requestedDraftTarget.cwd,
+        ...this.sessionDebugDetails(recoveredEntry),
+      })
+      resolvedContext = context
+      resolvedActiveEntry = recoveredEntry
     }
 
-    const { context, activeEntry } = await this.resolveRequest(request, {
-      preferActiveDraft: true,
-      preferActiveDraftOverRequestedSession: true,
-    })
+    const resolved = resolvedActiveEntry
+      ? { url, context: resolvedContext!, activeEntry: resolvedActiveEntry }
+      : await this.resolveRequest(request, {
+          preferActiveDraft: true,
+          preferActiveDraftOverRequestedSession: true,
+        })
+    const { context, activeEntry } = resolved
     const message = typeof body.message === "string" ? body.message : ""
     const images = normalizePromptImages(body.images)
     if (!message.trim() && images.length === 0) {

@@ -42,6 +42,11 @@ type NewSessionPromptTarget = {
   cwd?: string
 }
 
+type PromptDraftTargetContext = {
+  ownerKey?: string
+  cwd?: string
+}
+
 type PendingDraftPrompt = {
   ownerKey: string
   message: string
@@ -366,6 +371,7 @@ export function useAppShellPromptMutations({
   )
   const pendingNewSessionPromptTargetRef =
     React.useRef<NewSessionPromptTarget | null>(null)
+  const newSessionRequestNonceRef = React.useRef(0)
   const pendingDraftPromptRef = React.useRef(pendingDraftPrompt)
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
   const pendingMessagesRef = React.useRef(pendingMessages)
@@ -601,8 +607,15 @@ export function useAppShellPromptMutations({
       pendingMessagesRef.current = []
       setPendingMessages((current) => (current.length === 0 ? current : []))
 
+      const requestNonce = newSessionRequestNonceRef.current + 1
+      newSessionRequestNonceRef.current = requestNonce
+
       try {
         const response = await createSessionRequest({ cwd: nextCwd })
+        if (newSessionRequestNonceRef.current !== requestNonce) {
+          return true
+        }
+
         pendingNewSessionPromptTargetRef.current = {
           ownerKey,
           sessionKey: response.sessionKey,
@@ -619,6 +632,10 @@ export function useAppShellPromptMutations({
         }
         return true
       } catch (error) {
+        if (newSessionRequestNonceRef.current !== requestNonce) {
+          return true
+        }
+
         if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
           draftSessionLoadingOwnerKeyRef.current = null
         }
@@ -751,6 +768,7 @@ export function useAppShellPromptMutations({
       pendingId,
       thinkingLevel,
       targetSessionKey,
+      draftTarget,
     }: {
       message: string
       images: Array<PromptImage>
@@ -758,6 +776,7 @@ export function useAppShellPromptMutations({
       pendingId?: string
       thinkingLevel?: string
       targetSessionKey?: string
+      draftTarget?: PromptDraftTargetContext
     }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -779,6 +798,8 @@ export function useAppShellPromptMutations({
             streamingBehavior,
             pendingId,
             thinkingLevel,
+            draftOwnerKey: draftTarget?.ownerKey,
+            draftCwd: draftTarget?.cwd,
           }),
         }
       )
@@ -802,6 +823,8 @@ export function useAppShellPromptMutations({
         optimisticId?: string
         optimisticSidebarSessionId?: string
         targetSessionKey?: string
+        targetDraftOwnerKey?: string
+        targetDraftCwd?: string
       }
     ) => {
       if (!viewerContextId) return false
@@ -837,6 +860,22 @@ export function useAppShellPromptMutations({
           : undefined
       const targetSessionKey =
         options?.targetSessionKey || implicitTargetSessionKey
+      const targetDraft = currentSessionState.draft
+        ? {
+            ownerKey:
+              options?.targetDraftOwnerKey ||
+              (targetSessionKey &&
+              pendingNewSessionPromptTarget?.sessionKey === targetSessionKey
+                ? pendingNewSessionPromptTarget.ownerKey
+                : currentDraftOwnerKey),
+            cwd:
+              options?.targetDraftCwd ||
+              (targetSessionKey &&
+              pendingNewSessionPromptTarget?.sessionKey === targetSessionKey
+                ? pendingNewSessionPromptTarget.cwd || currentSessionState.cwd
+                : currentSessionState.cwd),
+          }
+        : undefined
 
       if (
         currentSessionState.draft &&
@@ -919,6 +958,7 @@ export function useAppShellPromptMutations({
           pendingId: queuedPendingId,
           thinkingLevel: currentSessionState.thinkingLevel,
           targetSessionKey,
+          draftTarget: targetDraft,
         })
         if (
           queuedPendingId &&
@@ -1010,7 +1050,10 @@ export function useAppShellPromptMutations({
   )
 
   const flushPendingDraftFollowUps = React.useCallback(
-    async (targetSessionKey?: string) => {
+    async (
+      targetSessionKey?: string,
+      draftTarget?: PromptDraftTargetContext
+    ) => {
       if (draftSessionLoadingOwnerKeyRef.current) {
         return false
       }
@@ -1042,6 +1085,7 @@ export function useAppShellPromptMutations({
             pendingId: followUp.optimisticId,
             thinkingLevel: sessionStateRef.current.thinkingLevel,
             targetSessionKey,
+            draftTarget,
           })
         } catch (error) {
           for (const unsentFollowUp of followUps.slice(index)) {
@@ -1086,11 +1130,16 @@ export function useAppShellPromptMutations({
         return false
       }
 
+      const pendingTarget = pendingNewSessionPromptTargetRef.current
       const resolvedTargetSessionKey =
         targetSessionKey ||
-        (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey
-          ? pendingNewSessionPromptTargetRef.current.sessionKey
+        (pendingTarget?.ownerKey === ownerKey
+          ? pendingTarget.sessionKey
           : undefined)
+      const resolvedDraftTarget = {
+        ownerKey,
+        cwd: pendingTarget?.cwd || sessionStateRef.current.cwd,
+      }
 
       pendingDraftPromptRef.current = null
       setPendingDraftPrompt(null)
@@ -1100,6 +1149,8 @@ export function useAppShellPromptMutations({
         optimisticId: nextPrompt.optimisticId,
         optimisticSidebarSessionId: nextPrompt.optimisticSidebarSessionId,
         targetSessionKey: resolvedTargetSessionKey,
+        targetDraftOwnerKey: resolvedDraftTarget.ownerKey,
+        targetDraftCwd: resolvedDraftTarget.cwd,
       })
       if (!sent) {
         removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
@@ -1113,7 +1164,10 @@ export function useAppShellPromptMutations({
         }
         return false
       }
-      await flushPendingDraftFollowUps(resolvedTargetSessionKey)
+      await flushPendingDraftFollowUps(
+        resolvedTargetSessionKey,
+        resolvedDraftTarget
+      )
       if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
         pendingNewSessionPromptTargetRef.current = null
       }

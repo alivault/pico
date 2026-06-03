@@ -15,6 +15,8 @@ export const Route = createFileRoute("/api/prompt")({
             streamingBehavior?: unknown
             pendingId?: unknown
             thinkingLevel?: unknown
+            draftOwnerKey?: unknown
+            draftCwd?: unknown
           }>(request)
           return jsonResponse(await getPicoRuntime().prompt(request, body))
         } catch (error) {
