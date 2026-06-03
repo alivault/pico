@@ -124,7 +124,9 @@ const config = defineConfig({
   },
   plugins: [
     devtools(),
-    nitro(),
+    nitro({
+      traceDeps: ["node-pty*"],
+    }),
     tailwindcss(),
     devAssetFetchMetadataFallback(),
     tanstackStart(),

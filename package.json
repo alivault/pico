@@ -10,7 +10,6 @@
   "files": [
     ".output",
     "bin",
-    "scripts/patch-react-jsx-dev-runtime.mjs",
     "scripts/release.mjs",
     "public/screenshots",
     "vendor/node-domexception",
@@ -33,7 +32,7 @@
   },
   "scripts": {
     "dev": "vp dev",
-    "build": "vp build && node ./scripts/patch-react-jsx-dev-runtime.mjs",
+    "build": "vp build",
     "start": "node ./bin/pico.mjs",
     "prepack": "pnpm build",
     "preview": "vp preview",
