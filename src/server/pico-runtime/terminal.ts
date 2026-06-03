@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { chmod, stat } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { basename, dirname, join } from "node:path"
@@ -8,10 +7,8 @@ import type { IDisposable, IPty } from "node-pty"
 
 const TERMINAL_BACKLOG_MAX_CHUNKS = 500
 const TERMINAL_BACKLOG_MAX_BYTES = 512 * 1024
-const TERMINAL_IDLE_TTL_MS = 30 * 60 * 1000
+const TERMINAL_EXITED_TTL_MS = 30 * 60 * 1000
 const TERMINAL_CLEANUP_INTERVAL_MS = 60 * 1000
-const TERMINAL_COMMAND_CHECK_TIMEOUT_MS = 1500
-const TERMINAL_COMMAND_TIMEOUT_MS = 5000
 const TERMINAL_MIN_COLS = 20
 const TERMINAL_MAX_COLS = 500
 const TERMINAL_MIN_ROWS = 5
@@ -22,11 +19,8 @@ const TERMINAL_KEY_MAX_LENGTH = 256
 
 const require = createRequire(import.meta.url)
 let ensureSpawnHelperExecutablePromise: Promise<void> | undefined
-let terminalMultiplexerBackendPromise:
-  | Promise<TerminalMultiplexerBackend | null>
-  | undefined
 
-export type TerminalBackend = "zellij" | "tmux" | "shell"
+export type TerminalBackend = "shell"
 
 export type TerminalServerEvent =
   | {
@@ -58,17 +52,10 @@ export type CreateTerminalOptions = {
   scopeKey: string
 }
 
-type TerminalMultiplexerBackend = {
-  type: Exclude<TerminalBackend, "shell">
-  command: string
-  label: string
-}
-
 type TerminalSpawnConfig = {
   args: Array<string>
   backend: TerminalBackend
   command: string
-  multiplexerSessionName?: string
   shellLabel: string
 }
 
@@ -89,7 +76,6 @@ type TerminalRecord = {
   createdAt: number
   lastUsedAt: number
   lookupKey?: string
-  multiplexerSessionName?: string
   terminalKey?: string
   exited?: {
     exitCode: number
@@ -117,9 +103,9 @@ function createTerminalEnv() {
     }
   }
 
-  // The Pico server itself is often launched from a terminal multiplexer. A
+  // The Pico server itself might be launched from a terminal multiplexer. A
   // browser terminal is a fresh PTY, so do not let inherited multiplexer state
-  // make child shells, zellij, or tmux think they are already nested.
+  // leak into child shells.
   delete env.ZELLIJ
   delete env.ZELLIJ_SESSION_NAME
   delete env.TMUX
@@ -190,7 +176,9 @@ function sseFrame(event: TerminalServerEvent) {
 }
 
 function exitPayload(exitCode: number, signal?: number) {
-  return typeof signal === "number" ? { exitCode, signal } : { exitCode }
+  return typeof signal === "number" && signal > 0
+    ? { exitCode, signal }
+    : { exitCode }
 }
 
 function exitEvent(exitCode: number, signal?: number): TerminalServerEvent {
@@ -213,110 +201,6 @@ function terminalLookupKey(scopeKey: string, terminalKey: string) {
   return `${scopeKey}\0${terminalKey}`
 }
 
-function terminalMultiplexerSessionName(scopeKey: string, terminalKey: string) {
-  const hash = createHash("sha256")
-    .update(scopeKey)
-    .update("\0")
-    .update(terminalKey)
-    .digest("hex")
-    .slice(0, 32)
-
-  return `pico-${hash}`
-}
-
-function multiplexerAttachArgs(
-  backend: TerminalMultiplexerBackend,
-  sessionName: string
-) {
-  switch (backend.type) {
-    case "zellij":
-      return ["attach", "--create", sessionName]
-    case "tmux":
-      return ["new-session", "-A", "-s", sessionName]
-  }
-}
-
-function multiplexerKillArgs(record: TerminalRecord) {
-  if (!record.multiplexerSessionName) return null
-
-  switch (record.backend) {
-    case "zellij":
-      return {
-        command: "zellij",
-        args: ["kill-session", record.multiplexerSessionName],
-      }
-    case "tmux":
-      return {
-        command: "tmux",
-        args: ["kill-session", "-t", record.multiplexerSessionName],
-      }
-    case "shell":
-      return null
-  }
-}
-
-function runCommand(
-  command: string,
-  args: Array<string>,
-  timeoutMs: number
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false
-    const child = spawn(command, args, {
-      env: createTerminalEnv(),
-      stdio: "ignore",
-    })
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      child.kill()
-      resolve(false)
-    }, timeoutMs)
-
-    const finish = (ok: boolean) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolve(ok)
-    }
-
-    child.once("error", () => finish(false))
-    child.once("exit", (code) => finish(code === 0))
-  })
-}
-
-async function resolveTerminalMultiplexerBackend() {
-  terminalMultiplexerBackendPromise ??= (async () => {
-    if (process.platform === "win32") return null
-
-    if (
-      await runCommand(
-        "zellij",
-        ["--version"],
-        TERMINAL_COMMAND_CHECK_TIMEOUT_MS
-      )
-    ) {
-      return {
-        type: "zellij",
-        command: "zellij",
-        label: "zellij",
-      } satisfies TerminalMultiplexerBackend
-    }
-
-    if (await runCommand("tmux", ["-V"], TERMINAL_COMMAND_CHECK_TIMEOUT_MS)) {
-      return {
-        type: "tmux",
-        command: "tmux",
-        label: "tmux",
-      } satisfies TerminalMultiplexerBackend
-    }
-
-    return null
-  })()
-
-  return await terminalMultiplexerBackendPromise
-}
-
 export class PicoTerminalManager {
   private readonly terminals = new Map<string, TerminalRecord>()
   private readonly terminalKeys = new Map<string, string>()
@@ -325,7 +209,7 @@ export class PicoTerminalManager {
 
   constructor() {
     this.cleanupTimer = setInterval(() => {
-      this.cleanupIdleTerminals()
+      this.cleanupExitedTerminals()
     }, TERMINAL_CLEANUP_INTERVAL_MS)
     this.cleanupTimer.unref?.()
   }
@@ -360,30 +244,11 @@ export class PicoTerminalManager {
     }
 
     if (existingRecord) {
-      await this.disposeTerminalRecord(existingRecord.id, {
-        destroyBackingSession: false,
-      })
+      await this.disposeTerminalRecord(existingRecord.id)
     }
 
-    const nodePty = await import("node-pty")
-    const spawnConfig = await this.createSpawnConfig(scopeKey, terminalKey)
-    const pty = nodePty.spawn(spawnConfig.command, spawnConfig.args, {
-      cols: normalizeDimension(
-        cols,
-        TERMINAL_DEFAULT_COLS,
-        TERMINAL_MIN_COLS,
-        TERMINAL_MAX_COLS
-      ),
-      cwd,
-      env: createTerminalEnv(),
-      name: "xterm-256color",
-      rows: normalizeDimension(
-        rows,
-        TERMINAL_DEFAULT_ROWS,
-        TERMINAL_MIN_ROWS,
-        TERMINAL_MAX_ROWS
-      ),
-    })
+    const spawnConfig = this.createSpawnConfig()
+    const pty = await this.spawnPty(spawnConfig, cwd, cols, rows)
     const id = randomUUID()
     const now = Date.now()
     const record: TerminalRecord = {
@@ -405,18 +270,9 @@ export class PicoTerminalManager {
     }
 
     if (lookupKey) record.lookupKey = lookupKey
-    if (spawnConfig.multiplexerSessionName) {
-      record.multiplexerSessionName = spawnConfig.multiplexerSessionName
-    }
     if (terminalKey) record.terminalKey = terminalKey
 
-    record.dataDisposable = pty.onData((data) => {
-      this.publish(record, { type: "output", data })
-    })
-    record.exitDisposable = pty.onExit((event) => {
-      record.exited = exitPayload(event.exitCode, event.signal)
-      this.publish(record, exitEvent(event.exitCode, event.signal))
-    })
+    this.attachPtyHandlers(record)
 
     this.terminals.set(id, record)
     if (lookupKey) this.terminalKeys.set(lookupKey, id)
@@ -531,38 +387,63 @@ export class PicoTerminalManager {
 
   async closeTerminal(id: string, scopeKey: string) {
     this.assertTerminalScope(id, scopeKey)
-    await this.disposeTerminalRecord(id, { destroyBackingSession: true })
+    await this.disposeTerminalRecord(id)
   }
 
   dispose() {
     clearInterval(this.cleanupTimer)
     for (const id of this.terminals.keys()) {
-      void this.disposeTerminalRecord(id, { destroyBackingSession: false })
+      void this.disposeTerminalRecord(id)
     }
   }
 
-  private async createSpawnConfig(
-    scopeKey: string,
-    terminalKey: string | undefined
-  ): Promise<TerminalSpawnConfig> {
-    const multiplexerBackend = terminalKey
-      ? await resolveTerminalMultiplexerBackend()
-      : null
+  private async spawnPty(
+    spawnConfig: TerminalSpawnConfig,
+    cwd: string,
+    cols: unknown,
+    rows: unknown
+  ) {
+    const nodePty = await import("node-pty")
+    return nodePty.spawn(spawnConfig.command, spawnConfig.args, {
+      cols: normalizeDimension(
+        cols,
+        TERMINAL_DEFAULT_COLS,
+        TERMINAL_MIN_COLS,
+        TERMINAL_MAX_COLS
+      ),
+      cwd,
+      env: createTerminalEnv(),
+      name: "xterm-256color",
+      rows: normalizeDimension(
+        rows,
+        TERMINAL_DEFAULT_ROWS,
+        TERMINAL_MIN_ROWS,
+        TERMINAL_MAX_ROWS
+      ),
+    })
+  }
 
-    if (multiplexerBackend && terminalKey) {
-      const multiplexerSessionName = terminalMultiplexerSessionName(
-        scopeKey,
-        terminalKey
-      )
-      return {
-        args: multiplexerAttachArgs(multiplexerBackend, multiplexerSessionName),
-        backend: multiplexerBackend.type,
-        command: multiplexerBackend.command,
-        multiplexerSessionName,
-        shellLabel: multiplexerBackend.label,
-      }
-    }
+  private attachPtyHandlers(record: TerminalRecord) {
+    record.dataDisposable = record.pty.onData((data) => {
+      this.publish(record, { type: "output", data })
+    })
+    record.exitDisposable = record.pty.onExit((event) => {
+      this.handlePtyExit(record, event.exitCode, event.signal)
+    })
+  }
 
+  private handlePtyExit(
+    record: TerminalRecord,
+    exitCode: number,
+    signal?: number
+  ) {
+    if (this.terminals.get(record.id) !== record) return
+
+    record.exited = exitPayload(exitCode, signal)
+    this.publish(record, exitEvent(exitCode, signal))
+  }
+
+  private createSpawnConfig(): TerminalSpawnConfig {
     const shell = defaultShell()
     return {
       args: [],
@@ -616,10 +497,7 @@ export class PicoTerminalManager {
     }
   }
 
-  private async disposeTerminalRecord(
-    id: string,
-    options: { destroyBackingSession: boolean }
-  ) {
+  private async disposeTerminalRecord(id: string) {
     const record = this.terminals.get(id)
     if (!record) return
 
@@ -645,27 +523,15 @@ export class PicoTerminalManager {
         this.rememberBacklog(record, { type: "error", error: message })
       }
     }
-
-    if (options.destroyBackingSession) {
-      await this.destroyMultiplexerSession(record)
-    }
   }
 
-  private async destroyMultiplexerSession(record: TerminalRecord) {
-    const command = multiplexerKillArgs(record)
-    if (!command) return
-
-    await runCommand(command.command, command.args, TERMINAL_COMMAND_TIMEOUT_MS)
-  }
-
-  private cleanupIdleTerminals() {
+  private cleanupExitedTerminals() {
     const now = Date.now()
     for (const record of this.terminals.values()) {
       if (record.subscribers.size > 0) continue
-      if (now - record.lastUsedAt < TERMINAL_IDLE_TTL_MS) continue
-      void this.disposeTerminalRecord(record.id, {
-        destroyBackingSession: false,
-      })
+      if (!record.exited) continue
+      if (now - record.lastUsedAt < TERMINAL_EXITED_TTL_MS) continue
+      void this.disposeTerminalRecord(record.id)
     }
   }
 }

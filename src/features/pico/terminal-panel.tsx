@@ -8,6 +8,14 @@ import type {
 import { PlusIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { formatDisplayPath } from "@/features/pico/app-shell-common"
@@ -177,6 +185,25 @@ function terminalStatusText(status: TerminalStatus) {
   }
 }
 
+function terminalStatusDetail(status: TerminalStatus) {
+  switch (status.type) {
+    case "idle":
+      return "This terminal has not started yet."
+    case "connecting":
+      return "Pico is connecting to the terminal process."
+    case "connected":
+      return status.shell
+        ? `The terminal is connected and running ${status.shell}.`
+        : "The terminal is connected."
+    case "exited":
+      return typeof status.signal === "number"
+        ? `The terminal process exited with code ${status.exitCode} and signal ${status.signal}.`
+        : `The terminal process exited with code ${status.exitCode}.`
+    case "error":
+      return status.message
+  }
+}
+
 function terminalTabLabel(tab: TerminalTab, index: number) {
   if (tab.status.type === "connected" && tab.status.shell) {
     return `${index + 1}: ${tab.status.shell}`
@@ -293,7 +320,7 @@ function errorMessage(error: unknown) {
 }
 
 function exitedStatus(event: Extract<TerminalEvent, { type: "exit" }>) {
-  return typeof event.signal === "number"
+  return typeof event.signal === "number" && event.signal > 0
     ? {
         type: "exited" as const,
         exitCode: event.exitCode,
@@ -325,6 +352,51 @@ function TerminalStatusDot({ status }: { status: TerminalStatus }) {
       aria-hidden="true"
       className={cn("size-2 shrink-0 rounded-full", statusDotClassName(status))}
     />
+  )
+}
+
+type TerminalStatusDialogProps = {
+  cwd: string
+  index: number
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  tab: TerminalTab | undefined
+}
+
+function TerminalStatusDialog({
+  cwd,
+  index,
+  onOpenChange,
+  open,
+  tab,
+}: TerminalStatusDialogProps) {
+  const status = tab?.status ?? { type: "idle" as const }
+  const label = tab ? terminalTabLabel(tab, index) : "Terminal"
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} focusPromptOnClose={false}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{label} status</DialogTitle>
+          <DialogDescription>{terminalStatusDetail(status)}</DialogDescription>
+        </DialogHeader>
+        <dl className="grid gap-3 text-sm">
+          <div className="grid gap-1">
+            <dt className="text-xs font-medium text-muted-foreground">
+              Status
+            </dt>
+            <dd>{terminalStatusText(status)}</dd>
+          </div>
+          <div className="grid gap-1">
+            <dt className="text-xs font-medium text-muted-foreground">
+              Working directory
+            </dt>
+            <dd className="break-all">{cwd}</dd>
+          </div>
+        </dl>
+        <DialogFooter showCloseButton />
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -638,6 +710,9 @@ export function TerminalPanel({
   const [tabsState, setTabsState] = React.useState<TerminalTabsState>(() =>
     createTerminalTabsState(scopeKey)
   )
+  const [statusDialogTabId, setStatusDialogTabId] = React.useState<
+    string | null
+  >(null)
   const tabs = tabsState.scopeKey === scopeKey ? tabsState.tabs : []
   const selectedTabId =
     tabsState.scopeKey === scopeKey
@@ -670,6 +745,10 @@ export function TerminalPanel({
   const activeStatus = activeTab?.status ?? { type: "idle" }
   const activeError =
     activeStatus.type === "error" ? activeStatus.message : undefined
+  const statusDialogTab = tabs.find((tab) => tab.id === statusDialogTabId)
+  const statusDialogTabIndex = statusDialogTab
+    ? tabs.indexOf(statusDialogTab)
+    : 0
 
   const requestOptions = sessionId
     ? { contextId: viewerContextId, sessionId }
@@ -805,7 +884,20 @@ export function TerminalPanel({
                 <TitleTooltip title={`${label} · ${statusText}`}>
                   <button
                     type="button"
-                    className="flex h-full min-w-0 items-center gap-1.5 px-2 text-left outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-full w-7 shrink-0 items-center justify-center outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    aria-label={`Show ${label} status`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setStatusDialogTabId(tab.id)
+                    }}
+                  >
+                    <TerminalStatusDot status={tab.status} />
+                  </button>
+                </TitleTooltip>
+                <TitleTooltip title={`${label} · ${statusText}`}>
+                  <button
+                    type="button"
+                    className="flex h-full min-w-0 flex-1 items-center px-1 text-left outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onClick={() => {
                       setTabsState((current) => {
                         if (current.scopeKey !== scopeKey) return current
@@ -816,7 +908,6 @@ export function TerminalPanel({
                       })
                     }}
                   >
-                    <TerminalStatusDot status={tab.status} />
                     <span className="truncate">{label}</span>
                   </button>
                 </TitleTooltip>
@@ -873,6 +964,15 @@ export function TerminalPanel({
           </TitleTooltip>
         ) : null}
       </div>
+      <TerminalStatusDialog
+        cwd={normalizedCwd}
+        index={statusDialogTabIndex}
+        open={statusDialogTab !== undefined}
+        tab={statusDialogTab}
+        onOpenChange={(open) => {
+          if (!open) setStatusDialogTabId(null)
+        }}
+      />
       {normalizedCwd ? (
         tabs.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden bg-background">

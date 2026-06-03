@@ -381,7 +381,7 @@ export type HighlightResponse =
     ))
   | ApiErrorResponse
 
-export type TerminalBackend = "zellij" | "tmux" | "shell"
+export type TerminalBackend = "shell"
 
 export type TerminalCreateResponse =
   | {
