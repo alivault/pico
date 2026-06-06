@@ -319,6 +319,15 @@ function errorMessage(error: unknown) {
   return "Unknown terminal error"
 }
 
+function buildTerminalWebSocketUrl(
+  path: string,
+  options: Parameters<typeof buildRequestUrl>[1]
+) {
+  const url = new URL(buildRequestUrl(path, options))
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  return url.toString()
+}
+
 function exitedStatus(event: Extract<TerminalEvent, { type: "exit" }>) {
   return typeof event.signal === "number" && event.signal > 0
     ? {
@@ -442,17 +451,22 @@ function TerminalTabPane({
     if (!terminalElement) return
 
     let disposed = false
-    let eventSource: EventSource | null = null
+    let websocket: WebSocket | null = null
     let inputDisposable: IDisposable | null = null
     let fitAddon: FitAddon | null = null
     let resizeObserver: ResizeObserver | null = null
     let inputFlushTimer: number | null = null
+    let pingTimer: number | null = null
+    let reconnectTimer: number | null = null
     let resizeFrame: number | null = null
     let inputBuffer = ""
     let lastResizeKey = ""
     let lastOutputSeq = 0
     let nextInputSeq = 1
-    let inputPostChain = Promise.resolve()
+    let reconnectAttempt = 0
+    let terminalExited = false
+    let terminalTransportReady = false
+    const pendingInputs = new Map<number, string>()
 
     const requestOptions = sessionId
       ? { contextId: viewerContextId, sessionId }
@@ -475,28 +489,40 @@ function TerminalTabPane({
       })
     }
 
+    const sendTerminalMessage = (message: Record<string, unknown>) => {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) return false
+
+      try {
+        websocket.send(JSON.stringify(message))
+        return true
+      } catch (error) {
+        publishStatus({ type: "error", message: errorMessage(error) })
+        return false
+      }
+    }
+
+    const sendPendingInputs = () => {
+      if (!terminalTransportReady) return
+
+      for (const [inputSeq, data] of [...pendingInputs.entries()].sort(
+        ([left], [right]) => left - right
+      )) {
+        if (!sendTerminalMessage({ type: "input", data, inputSeq })) return
+      }
+    }
+
     const flushInput = () => {
       inputFlushTimer = null
-      const id = terminalIdRef.current
-      if (!id || !inputBuffer) return
+      if (!terminalIdRef.current || !inputBuffer || !terminalTransportReady) {
+        return
+      }
 
       const data = inputBuffer
       const inputSeq = nextInputSeq
       nextInputSeq += 1
       inputBuffer = ""
-      inputPostChain = inputPostChain
-        .catch(() => undefined)
-        .then(async () => {
-          await postJson(`/api/terminal/${encodeURIComponent(id)}/input`, {
-            data,
-            inputSeq,
-          })
-        })
-        .catch((error) => {
-          if (!disposed) {
-            publishStatus({ type: "error", message: errorMessage(error) })
-          }
-        })
+      pendingInputs.set(inputSeq, data)
+      sendPendingInputs()
     }
 
     const scheduleInputFlush = () => {
@@ -514,17 +540,20 @@ function TerminalTabPane({
         return
       }
 
-      const id = terminalIdRef.current
-      if (!id) return
+      if (!terminalIdRef.current || !terminalTransportReady) return
 
       const resizeKey = `${terminal.cols}x${terminal.rows}`
       if (resizeKey === lastResizeKey) return
+      if (
+        !sendTerminalMessage({
+          type: "resize",
+          cols: terminal.cols,
+          rows: terminal.rows,
+        })
+      ) {
+        return
+      }
       lastResizeKey = resizeKey
-
-      void postJson(`/api/terminal/${encodeURIComponent(id)}/resize`, {
-        cols: terminal.cols,
-        rows: terminal.rows,
-      }).catch(() => {})
     }
 
     const scheduleFitAndResize = () => {
@@ -536,6 +565,133 @@ function TerminalTabPane({
     }
 
     fitAndResizeRef.current = scheduleFitAndResize
+
+    const clearPingTimer = () => {
+      if (pingTimer === null) return
+      window.clearInterval(pingTimer)
+      pingTimer = null
+    }
+
+    const startPingTimer = () => {
+      clearPingTimer()
+      pingTimer = window.setInterval(() => {
+        sendTerminalMessage({ type: "ping" })
+      }, 20_000)
+    }
+
+    const scheduleWebSocketReconnect = () => {
+      if (disposed || terminalExited || reconnectTimer !== null) return
+
+      terminalTransportReady = false
+      clearPingTimer()
+      reconnectAttempt += 1
+      const delay = Math.min(10_000, 500 * 2 ** (reconnectAttempt - 1))
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null
+        const id = terminalIdRef.current
+        if (!id || disposed || terminalExited) return
+        publishStatus({ type: "connecting" })
+        connectTerminalWebSocket(id)
+      }, delay)
+    }
+
+    const handleTerminalEvent = (event: TerminalEvent) => {
+      const terminal = terminalRef.current
+      if (!terminal) return
+
+      if (event.type === "output") {
+        if (typeof event.seq === "number") {
+          if (event.seq <= lastOutputSeq) return
+          lastOutputSeq = event.seq
+        }
+        terminal.write(event.data)
+        return
+      }
+
+      if (event.type === "reset") {
+        lastOutputSeq = Math.max(0, event.firstSeq - 1)
+        terminal.clear()
+        terminal.writeln("Terminal output replay gap; showing retained output.")
+        return
+      }
+
+      if (event.type === "ready") {
+        terminalTransportReady = true
+        reconnectAttempt = 0
+        nextInputSeq = Math.max(nextInputSeq, event.nextInputSeq ?? 1)
+        publishStatus({ type: "connected", shell: event.shell })
+        startPingTimer()
+        sendPendingInputs()
+        flushInput()
+        lastResizeKey = ""
+        scheduleFitAndResize()
+        return
+      }
+
+      if (event.type === "input_ack") {
+        pendingInputs.delete(event.inputSeq)
+        return
+      }
+
+      if (event.type === "pong") {
+        return
+      }
+
+      if (event.type === "exit") {
+        terminalExited = true
+        terminalTransportReady = false
+        clearPingTimer()
+        publishStatus(exitedStatus(event))
+        return
+      }
+
+      if (event.type === "error") {
+        publishStatus({ type: "error", message: event.error })
+      }
+    }
+
+    function connectTerminalWebSocket(id: string) {
+      if (websocket) {
+        websocket.onclose = null
+        websocket.onerror = null
+        websocket.onmessage = null
+        websocket.close()
+      }
+
+      terminalTransportReady = false
+      const nextWebSocket = new WebSocket(
+        buildTerminalWebSocketUrl(
+          `/api/terminal/${encodeURIComponent(id)}/ws`,
+          {
+            ...requestOptions,
+            searchParams: { lastSeq: lastOutputSeq || undefined },
+          }
+        )
+      )
+      websocket = nextWebSocket
+
+      nextWebSocket.onmessage = (message) => {
+        if (disposed || websocket !== nextWebSocket) return
+
+        try {
+          const event = JSON.parse(message.data as string) as TerminalEvent
+          handleTerminalEvent(event)
+        } catch (error) {
+          publishStatus({ type: "error", message: errorMessage(error) })
+        }
+      }
+      nextWebSocket.onclose = () => {
+        if (websocket !== nextWebSocket) return
+        websocket = null
+        terminalTransportReady = false
+        scheduleWebSocketReconnect()
+      }
+      nextWebSocket.onerror = () => {
+        if (websocket !== nextWebSocket) return
+        terminalTransportReady = false
+        nextWebSocket.close()
+      }
+    }
 
     const startTerminal = async () => {
       try {
@@ -584,67 +740,7 @@ function TerminalTabPane({
 
         terminalIdRef.current = terminalResponse.id
         onTerminalIdChangeRef.current(tabId, terminalResponse.id)
-        publishStatus({ type: "connected", shell: terminalResponse.shell })
-
-        eventSource = new EventSource(
-          buildRequestUrl(
-            `/api/terminal/${encodeURIComponent(terminalResponse.id)}/events`,
-            {
-              ...requestOptions,
-              searchParams: { lastSeq: lastOutputSeq || undefined },
-            }
-          )
-        )
-        eventSource.onmessage = (message) => {
-          if (disposed) return
-
-          const event = JSON.parse(message.data) as TerminalEvent
-          if (event.type === "output") {
-            if (typeof event.seq === "number") {
-              if (event.seq <= lastOutputSeq) return
-              lastOutputSeq = event.seq
-            }
-            terminal.write(event.data)
-            return
-          }
-
-          if (event.type === "reset") {
-            lastOutputSeq = Math.max(0, event.firstSeq - 1)
-            terminal.clear()
-            terminal.writeln(
-              "Terminal output replay gap; showing retained output."
-            )
-            return
-          }
-
-          if (event.type === "ready") {
-            publishStatus({ type: "connected", shell: event.shell })
-            return
-          }
-
-          if (event.type === "exit") {
-            publishStatus(exitedStatus(event))
-            return
-          }
-
-          if (event.type === "error") {
-            publishStatus({ type: "error", message: event.error })
-          }
-        }
-        eventSource.onerror = () => {
-          if (!disposed && terminalIdRef.current) {
-            setStatus((current) => {
-              if (current.type === "connected") return current
-
-              const nextStatus: TerminalStatus = {
-                type: "error",
-                message: "Terminal connection interrupted.",
-              }
-              onStatusChangeRef.current(tabId, nextStatus)
-              return nextStatus
-            })
-          }
-        }
+        connectTerminalWebSocket(terminalResponse.id)
 
         resizeObserver = new ResizeObserver(scheduleFitAndResize)
         resizeObserver.observe(terminalElement)
@@ -668,9 +764,18 @@ function TerminalTabPane({
       if (resizeFrame !== null) {
         window.cancelAnimationFrame(resizeFrame)
       }
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer)
+      }
+      clearPingTimer()
       flushInput()
       resizeObserver?.disconnect()
-      eventSource?.close()
+      if (websocket) {
+        websocket.onclose = null
+        websocket.onerror = null
+        websocket.onmessage = null
+        websocket.close()
+      }
       inputDisposable?.dispose()
       terminalRef.current?.dispose()
       terminalRef.current = null

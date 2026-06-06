@@ -401,11 +401,19 @@ export type TerminalEvent =
       id: string
       cwd: string
       shell: string
+      nextInputSeq?: number
     }
   | {
       type: "output"
       data: string
       seq?: number
+    }
+  | {
+      type: "input_ack"
+      inputSeq: number
+    }
+  | {
+      type: "pong"
     }
   | {
       type: "reset"

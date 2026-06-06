@@ -42,7 +42,11 @@ import {
   buildHighlightPayload,
   type HighlightPayload,
 } from "@/server/pico-runtime/highlight"
-import { PicoTerminalManager } from "@/server/pico-runtime/terminal"
+import {
+  PicoTerminalManager,
+  type TerminalWebSocketContext,
+  type TerminalWebSocketPeer,
+} from "@/server/pico-runtime/terminal"
 import {
   applyRetainedConversationEvent,
   createRetainedConversationState,
@@ -848,6 +852,44 @@ function parsePositiveInteger(value: string | null) {
   const parsed = Number(value)
   if (!Number.isSafeInteger(parsed) || parsed < 0) return undefined
   return parsed
+}
+
+function terminalWebSocketIdFromRequest(request: Request) {
+  const pathname = new URL(request.url).pathname
+  const match = /^\/api\/terminal\/([^/]+)\/ws\/?$/.exec(pathname)
+  if (!match?.[1]) {
+    throw new Response("Terminal WebSocket route not found.", { status: 404 })
+  }
+
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    throw new Response("Invalid terminal id.", { status: 400 })
+  }
+}
+
+function terminalWebSocketCleanupFromPeer(peer: TerminalWebSocketPeer) {
+  const cleanup = peer.context.terminalCleanup
+  return typeof cleanup === "function" ? cleanup : undefined
+}
+
+function terminalWebSocketContextFromPeer(
+  peer: TerminalWebSocketPeer
+): TerminalWebSocketContext {
+  const { terminalId, terminalLastSeq, terminalScopeKey } = peer.context
+  if (typeof terminalId !== "string" || !terminalId) {
+    throw new Error("Terminal WebSocket is missing a terminal id.")
+  }
+  if (typeof terminalScopeKey !== "string" || !terminalScopeKey) {
+    throw new Error("Terminal WebSocket is missing a terminal scope.")
+  }
+
+  return {
+    terminalId,
+    terminalLastSeq:
+      typeof terminalLastSeq === "number" ? terminalLastSeq : undefined,
+    terminalScopeKey,
+  }
 }
 
 function normalizePromptDraftOwnerKey(value: unknown) {
@@ -5597,6 +5639,55 @@ class PicoRuntime {
       request.signal,
       lastSeq
     )
+  }
+
+  async createTerminalWebSocketContext(request: Request) {
+    try {
+      const id = terminalWebSocketIdFromRequest(request)
+      const { context, activeEntry } = await this.resolveRequest(request)
+      const scopeKey = this.getTerminalScopeKey(activeEntry, context)
+      const lastSeq = parsePositiveInteger(
+        request.headers.get("last-event-id") ||
+          new URL(request.url).searchParams.get("lastSeq")
+      )
+      this.terminalManager.validateTerminal(id, scopeKey)
+
+      return {
+        terminalId: id,
+        terminalLastSeq: lastSeq,
+        terminalScopeKey: scopeKey,
+      } satisfies TerminalWebSocketContext
+    } catch (error) {
+      if (error instanceof Response) throw error
+
+      throw new Response(safeErrorMessage(error), { status: 400 })
+    }
+  }
+
+  openTerminalWebSocket(peer: TerminalWebSocketPeer) {
+    const context = terminalWebSocketContextFromPeer(peer)
+    const cleanup = this.terminalManager.connectWebSocket({
+      id: context.terminalId,
+      lastSeq: context.terminalLastSeq,
+      peer,
+      scopeKey: context.terminalScopeKey,
+    })
+    peer.context.terminalCleanup = cleanup
+  }
+
+  handleTerminalWebSocketMessage(peer: TerminalWebSocketPeer, message: string) {
+    const context = terminalWebSocketContextFromPeer(peer)
+    this.terminalManager.handleWebSocketMessage({
+      id: context.terminalId,
+      message,
+      peer,
+      scopeKey: context.terminalScopeKey,
+    })
+  }
+
+  closeTerminalWebSocket(peer: TerminalWebSocketPeer) {
+    terminalWebSocketCleanupFromPeer(peer)?.()
+    delete peer.context.terminalCleanup
   }
 
   async writeTerminalInput(

@@ -125,6 +125,8 @@ const config = defineConfig({
   plugins: [
     devtools(),
     nitro({
+      features: { websocket: true },
+      scanDirs: ["src/nitro"],
       traceDeps: ["node-pty*"],
     }),
     tailwindcss(),

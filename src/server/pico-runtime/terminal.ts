@@ -29,11 +29,19 @@ export type TerminalServerEvent =
       id: string
       cwd: string
       shell: string
+      nextInputSeq: number
     }
   | {
       type: "output"
       data: string
       seq: number
+    }
+  | {
+      type: "input_ack"
+      inputSeq: number
+    }
+  | {
+      type: "pong"
     }
   | {
       type: "reset"
@@ -58,6 +66,33 @@ export type CreateTerminalOptions = {
   rows?: unknown
   scopeKey: string
 }
+
+export type TerminalWebSocketPeer = {
+  context: Record<string, unknown>
+  send: (data: unknown) => number | void | undefined
+  close: (code?: number, reason?: string) => void
+}
+
+export type TerminalWebSocketContext = {
+  terminalId: string
+  terminalLastSeq?: number
+  terminalScopeKey: string
+}
+
+export type TerminalWebSocketClientMessage =
+  | {
+      type: "input"
+      data?: unknown
+      inputSeq?: unknown
+    }
+  | {
+      type: "resize"
+      cols?: unknown
+      rows?: unknown
+    }
+  | {
+      type: "ping"
+    }
 
 type TerminalSpawnConfig = {
   args: Array<string>
@@ -198,6 +233,37 @@ function exitEvent(exitCode: number, signal?: number): TerminalServerEvent {
   }
 }
 
+function readyEvent(record: TerminalRecord): TerminalServerEvent {
+  return {
+    type: "ready",
+    backend: record.backend,
+    id: record.id,
+    cwd: record.cwd,
+    shell: terminalLabel(record.shell),
+    nextInputSeq: record.lastInputSeq + 1,
+  }
+}
+
+function parseTerminalWebSocketMessage(
+  text: string
+): TerminalWebSocketClientMessage {
+  const parsed = JSON.parse(text) as unknown
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Terminal WebSocket message must be an object.")
+  }
+
+  const message = parsed as Partial<TerminalWebSocketClientMessage>
+  if (
+    message.type !== "input" &&
+    message.type !== "resize" &&
+    message.type !== "ping"
+  ) {
+    throw new Error("Unknown terminal WebSocket message type.")
+  }
+
+  return message as TerminalWebSocketClientMessage
+}
+
 function normalizeTerminalKey(value: unknown) {
   if (typeof value !== "string") return undefined
 
@@ -335,33 +401,7 @@ export class PicoTerminalManager {
         cleanupStream = cleanup
         record.subscribers.add(send)
         signal.addEventListener("abort", cleanup, { once: true })
-        send({
-          type: "ready",
-          backend: record.backend,
-          id: record.id,
-          cwd: record.cwd,
-          shell: terminalLabel(record.shell),
-        })
-        const firstSeq = record.backlog[0]?.seq
-        if (
-          typeof lastSeq === "number" &&
-          firstSeq !== undefined &&
-          lastSeq < firstSeq - 1
-        ) {
-          send({
-            type: "reset",
-            reason: "backlog_gap",
-            firstSeq,
-            nextSeq: record.nextOutputSeq,
-          })
-        }
-        for (const event of record.backlog) {
-          if (typeof lastSeq === "number" && event.seq <= lastSeq) continue
-          send(event)
-        }
-        if (record.exited) {
-          send(exitEvent(record.exited.exitCode, record.exited.signal))
-        }
+        this.sendInitialEvents(record, send, lastSeq)
       },
       cancel: () => {
         cleanupStream()
@@ -376,6 +416,82 @@ export class PicoTerminalManager {
         "x-accel-buffering": "no",
       },
     })
+  }
+
+  validateTerminal(id: string, scopeKey: string) {
+    this.assertTerminalScope(id, scopeKey)
+  }
+
+  connectWebSocket(options: {
+    id: string
+    lastSeq?: number
+    peer: TerminalWebSocketPeer
+    scopeKey: string
+  }) {
+    const { id, lastSeq, peer, scopeKey } = options
+    const record = this.assertTerminalScope(id, scopeKey)
+    record.lastUsedAt = Date.now()
+
+    let closed = false
+    const send = (event: TerminalServerEvent) => {
+      if (closed) return
+
+      try {
+        peer.send(JSON.stringify(event))
+      } catch {
+        cleanup()
+      }
+    }
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      record.subscribers.delete(send)
+    }
+
+    record.subscribers.add(send)
+    this.sendInitialEvents(record, send, lastSeq)
+    return cleanup
+  }
+
+  handleWebSocketMessage(options: {
+    id: string
+    message: string
+    peer: TerminalWebSocketPeer
+    scopeKey: string
+  }) {
+    const { id, message, peer, scopeKey } = options
+
+    try {
+      const payload = parseTerminalWebSocketMessage(message)
+
+      if (payload.type === "input") {
+        const inputSeq = this.writeTerminal(
+          id,
+          scopeKey,
+          payload.data,
+          payload.inputSeq
+        )
+        if (typeof inputSeq === "number" && inputSeq > 0) {
+          peer.send(JSON.stringify({ type: "input_ack", inputSeq }))
+        }
+        return
+      }
+
+      if (payload.type === "resize") {
+        this.resizeTerminal(id, scopeKey, payload)
+        return
+      }
+
+      peer.send(JSON.stringify({ type: "pong" }))
+    } catch (error) {
+      try {
+        peer.send(
+          JSON.stringify({ type: "error", error: formatTerminalError(error) })
+        )
+      } catch {
+        // Ignore socket send failures while reporting message errors.
+      }
+    }
   }
 
   writeTerminal(
@@ -399,12 +515,13 @@ export class PicoTerminalManager {
       Number.MAX_SAFE_INTEGER
     )
     if (normalizedInputSeq > 0) {
-      if (normalizedInputSeq <= record.lastInputSeq) return
+      if (normalizedInputSeq <= record.lastInputSeq) return normalizedInputSeq
       record.lastInputSeq = normalizedInputSeq
     }
 
     record.lastUsedAt = Date.now()
     record.pty.write(data)
+    return normalizedInputSeq > 0 ? normalizedInputSeq : undefined
   }
 
   resizeTerminal(
@@ -512,6 +629,34 @@ export class PicoTerminalManager {
     }
 
     return record
+  }
+
+  private sendInitialEvents(
+    record: TerminalRecord,
+    send: (event: TerminalServerEvent) => void,
+    lastSeq?: number
+  ) {
+    send(readyEvent(record))
+    const firstSeq = record.backlog[0]?.seq
+    if (
+      typeof lastSeq === "number" &&
+      firstSeq !== undefined &&
+      lastSeq < firstSeq - 1
+    ) {
+      send({
+        type: "reset",
+        reason: "backlog_gap",
+        firstSeq,
+        nextSeq: record.nextOutputSeq,
+      })
+    }
+    for (const event of record.backlog) {
+      if (typeof lastSeq === "number" && event.seq <= lastSeq) continue
+      send(event)
+    }
+    if (record.exited) {
+      send(exitEvent(record.exited.exitCode, record.exited.signal))
+    }
   }
 
   private publish(record: TerminalRecord, event: TerminalServerEvent) {
