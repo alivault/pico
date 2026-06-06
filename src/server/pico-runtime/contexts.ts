@@ -30,10 +30,22 @@ export function resolveScopeCwd(
   return normalizeSessionScope(scope ?? null, defaultCwd)
 }
 
-function getSsePayloadText(payload: unknown) {
+export function formatSsePayloadText(
+  payload: unknown,
+  options?: { id?: string; retry?: number }
+) {
+  const prefixLines: Array<string> = []
+  if (options?.id) {
+    prefixLines.push(`id: ${options.id}`)
+  }
+  if (typeof options?.retry === "number" && Number.isFinite(options.retry)) {
+    prefixLines.push(`retry: ${Math.max(0, Math.round(options.retry))}`)
+  }
+
   const json = JSON.stringify(payload)
   const lines = json.split(/\r?\n/)
-  return `${lines.map((line) => `data: ${line}`).join("\n")}\n\n`
+  const dataLines = lines.map((line) => `data: ${line}`)
+  return `${[...prefixLines, ...dataLines].join("\n")}\n\n`
 }
 
 export function writeRawToClient(options: {
@@ -62,17 +74,20 @@ export function sendPayloadToClient(options: {
   context: { clients: Set<SseClientLike> }
   client: SseClientLike
   payload: unknown
+  eventId?: string
+  retry?: number
   closeSseClient: (
     context: { clients: Set<SseClientLike> },
     client: SseClientLike
   ) => void
 }) {
-  const { context, client, payload, closeSseClient, encoder } = options
+  const { context, client, payload, closeSseClient, encoder, eventId, retry } =
+    options
   return writeRawToClient({
     encoder,
     context,
     client,
-    text: getSsePayloadText(payload),
+    text: formatSsePayloadText(payload, { id: eventId, retry }),
     closeSseClient,
   })
 }

@@ -450,6 +450,9 @@ function TerminalTabPane({
     let resizeFrame: number | null = null
     let inputBuffer = ""
     let lastResizeKey = ""
+    let lastOutputSeq = 0
+    let nextInputSeq = 1
+    let inputPostChain = Promise.resolve()
 
     const requestOptions = sessionId
       ? { contextId: viewerContextId, sessionId }
@@ -478,14 +481,22 @@ function TerminalTabPane({
       if (!id || !inputBuffer) return
 
       const data = inputBuffer
+      const inputSeq = nextInputSeq
+      nextInputSeq += 1
       inputBuffer = ""
-      void postJson(`/api/terminal/${encodeURIComponent(id)}/input`, {
-        data,
-      }).catch((error) => {
-        if (!disposed) {
-          publishStatus({ type: "error", message: errorMessage(error) })
-        }
-      })
+      inputPostChain = inputPostChain
+        .catch(() => undefined)
+        .then(async () => {
+          await postJson(`/api/terminal/${encodeURIComponent(id)}/input`, {
+            data,
+            inputSeq,
+          })
+        })
+        .catch((error) => {
+          if (!disposed) {
+            publishStatus({ type: "error", message: errorMessage(error) })
+          }
+        })
     }
 
     const scheduleInputFlush = () => {
@@ -578,7 +589,10 @@ function TerminalTabPane({
         eventSource = new EventSource(
           buildRequestUrl(
             `/api/terminal/${encodeURIComponent(terminalResponse.id)}/events`,
-            requestOptions
+            {
+              ...requestOptions,
+              searchParams: { lastSeq: lastOutputSeq || undefined },
+            }
           )
         )
         eventSource.onmessage = (message) => {
@@ -586,7 +600,20 @@ function TerminalTabPane({
 
           const event = JSON.parse(message.data) as TerminalEvent
           if (event.type === "output") {
+            if (typeof event.seq === "number") {
+              if (event.seq <= lastOutputSeq) return
+              lastOutputSeq = event.seq
+            }
             terminal.write(event.data)
+            return
+          }
+
+          if (event.type === "reset") {
+            lastOutputSeq = Math.max(0, event.firstSeq - 1)
+            terminal.clear()
+            terminal.writeln(
+              "Terminal output replay gap; showing retained output."
+            )
             return
           }
 

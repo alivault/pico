@@ -45,6 +45,7 @@ import {
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
 const COMPACT_WORKING_LABEL = "Compacting context..."
+const EVENT_SOURCE_LAST_ID_STORAGE_PREFIX = "pico-events-last-id:"
 
 type PendingComposerMessage = {
   pendingId: string
@@ -116,6 +117,39 @@ type UseAppShellSessionSyncOptions = {
     (request: ExtensionUiEvent) => void
   >
   lastSyncedEditorTextRef: React.RefObject<string>
+}
+
+function eventsLastIdStorageKey(viewerContextId: string) {
+  return `${EVENT_SOURCE_LAST_ID_STORAGE_PREFIX}${viewerContextId}`
+}
+
+function readStoredEventsLastId(viewerContextId: string) {
+  try {
+    return window.sessionStorage.getItem(
+      eventsLastIdStorageKey(viewerContextId)
+    )
+  } catch {
+    return null
+  }
+}
+
+function rememberStoredEventsLastId(
+  viewerContextId: string,
+  lastEventId: string
+) {
+  try {
+    window.sessionStorage.setItem(
+      eventsLastIdStorageKey(viewerContextId),
+      lastEventId
+    )
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function normalizeEventSourceLastId(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.trim() : ""
+  return /^\d+$/.test(normalized) ? normalized : undefined
 }
 
 function normalizePendingMessages(
@@ -538,6 +572,7 @@ export function useAppShellSessionSync({
     draftSessionLoadingOwnerKey
   )
   const currentSourceRef = React.useRef<EventSource | null>(null)
+  const eventsLastIdRef = React.useRef<string | undefined>(undefined)
   const hasReceivedStateSyncRef = React.useRef(false)
   const [hasReceivedStateSync, setHasReceivedStateSync] = React.useState(false)
   const backgroundedAtRef = React.useRef<number | null>(null)
@@ -551,6 +586,12 @@ export function useAppShellSessionSync({
   React.useEffect(() => {
     draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
   }, [draftSessionLoadingOwnerKey])
+
+  React.useEffect(() => {
+    eventsLastIdRef.current = normalizeEventSourceLastId(
+      readStoredEventsLastId(viewerContextId)
+    )
+  }, [viewerContextId])
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
@@ -705,6 +746,11 @@ export function useAppShellSessionSync({
       event: MessageEvent<string>
     ) => {
       if (currentSourceRef.current !== source) return
+      const lastEventId = normalizeEventSourceLastId(event.lastEventId)
+      if (lastEventId) {
+        eventsLastIdRef.current = lastEventId
+        rememberStoredEventsLastId(viewerContextId, lastEventId)
+      }
       const payload = JSON.parse(event.data) as PicoServerEvent
 
       if (isStateSyncEvent(payload)) {
@@ -964,6 +1010,7 @@ export function useAppShellSessionSync({
       setSessionState,
       setSessionsEvent,
       setWorkingState,
+      viewerContextId,
     ]
   )
 
@@ -1041,6 +1088,7 @@ export function useAppShellSessionSync({
         contextId: viewerContextId,
         sessionId: initialEventsSessionIdRef.current,
         searchParams: {
+          lastEventId: eventsLastIdRef.current,
           sidebarDirectory: bootstrapSidebarDirectories,
         },
       })

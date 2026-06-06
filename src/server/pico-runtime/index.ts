@@ -31,6 +31,7 @@ import {
 import {
   activateContextSession as activateRuntimeContextSession,
   clearContextDraft as clearRuntimeContextDraft,
+  formatSsePayloadText,
   normalizeSessionScope,
   resolveRequestedEntry as resolveRuntimeRequestedEntry,
   resolveScopeCwd,
@@ -117,6 +118,10 @@ const SESSION_HISTORY_PAGE_LIMIT_DEFAULT = 50
 const SESSION_HISTORY_PAGE_LIMIT_MAX = 200
 const SESSION_NAME_MAX_LENGTH = 48
 const HEARTBEAT_INTERVAL_MS = 20_000
+const SSE_RETRY_MS = 1_000
+const SSE_REPLAY_MAX_EVENTS = 200
+const PROMPT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
+const PROMPT_IDEMPOTENCY_MAX_RECORDS = 200
 const SESSION_INDEX_CACHE_TTL_MS = 5_000
 const SESSION_LOAD_DEBUG_ENV_KEYS = [
   "PICO_DEBUG_SESSION_LOAD",
@@ -280,6 +285,23 @@ type SessionNamingState = {
 type SessionDoneReason = SessionDoneEvent["reason"]
 type SessionDoneOutcome = NonNullable<SessionDoneEvent["outcome"]>
 
+type PromptRequestRecord = {
+  createdAt: number
+  promise: Promise<PromptResponsePayload>
+}
+
+type PromptResponsePayload = {
+  ok: true
+  queued: boolean
+  pendingId?: string
+  canceled?: boolean
+}
+
+type SseReplayEvent = {
+  id: number
+  text: string
+}
+
 type SessionEntry = {
   key: string
   cwd: string
@@ -301,6 +323,7 @@ type SessionEntry = {
   restoreSessionMetadataSync?: (() => void) | undefined
   sessionNaming: SessionNamingState
   promptRequestChain: Promise<void>
+  promptRequestRecords: Map<string, PromptRequestRecord>
   doneCheckTimeout?: ReturnType<typeof setTimeout>
   pendingDoneReason?: SessionDoneReason
   pendingDoneOutcome?: SessionDoneOutcome
@@ -318,6 +341,8 @@ type ContextState = {
   sessionScope: string
   unreadFinished: Set<string>
   sidebarBootstrapDirectories: Array<string>
+  nextSseEventId: number
+  replayEvents: Array<SseReplayEvent>
 }
 
 type StateSyncScalarField =
@@ -807,6 +832,24 @@ function normalizeClientPendingId(value: unknown) {
   return pendingId
 }
 
+function normalizeClientPromptRequestId(value: unknown) {
+  if (typeof value !== "string") return undefined
+
+  const requestId = value.trim()
+  if (!requestId.startsWith("prompt:")) return undefined
+  if (requestId.length > 160) return undefined
+
+  return requestId
+}
+
+function parsePositiveInteger(value: string | null) {
+  if (!value) return undefined
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) return undefined
+  return parsed
+}
+
 function normalizePromptDraftOwnerKey(value: unknown) {
   if (typeof value !== "string") return ""
 
@@ -1121,6 +1164,8 @@ class PicoRuntime {
       sessionScope: process.cwd(),
       unreadFinished: new Set(),
       sidebarBootstrapDirectories: [],
+      nextSseEventId: 1,
+      replayEvents: [],
     }
     this.contexts.set(id, next)
     return next
@@ -1836,9 +1881,54 @@ class PicoRuntime {
     }
   }
 
+  private shouldReplayPayload(payload: unknown) {
+    if (!payload || typeof payload !== "object") return false
+
+    const type = (payload as { type?: unknown }).type
+    return (
+      type === "session_done" ||
+      type === "request_error" ||
+      type === "extension_error" ||
+      type === "extension_ui_request" ||
+      type === "auto_session_naming_error" ||
+      type === "git_changed"
+    )
+  }
+
+  private rememberReplayPayload(context: ContextState, payload: unknown) {
+    if (!this.shouldReplayPayload(payload)) return undefined
+
+    const eventId = context.nextSseEventId
+    context.nextSseEventId += 1
+    context.replayEvents.push({
+      id: eventId,
+      text: formatSsePayloadText(payload, { id: String(eventId) }),
+    })
+    while (context.replayEvents.length > SSE_REPLAY_MAX_EVENTS) {
+      context.replayEvents.shift()
+    }
+    return String(eventId)
+  }
+
+  private replayEventsToClient(
+    context: ContextState,
+    client: SseClient,
+    lastEventId: number | undefined
+  ) {
+    if (lastEventId === undefined || context.replayEvents.length === 0) {
+      return
+    }
+
+    for (const event of context.replayEvents) {
+      if (event.id <= lastEventId) continue
+      this.writeRawToClient(context, client, event.text)
+    }
+  }
+
   private sendToContext(context: ContextState, payload: unknown) {
+    const eventId = this.rememberReplayPayload(context, payload)
     for (const client of context.clients) {
-      this.sendPayloadToClient(context, client, payload)
+      this.sendPayloadToClient(context, client, payload, { eventId })
     }
   }
 
@@ -2640,6 +2730,7 @@ class PicoRuntime {
         disposed: false,
       },
       promptRequestChain: Promise.resolve(),
+      promptRequestRecords: new Map(),
       doneNotificationSuppressed: false,
     }
 
@@ -3657,13 +3748,16 @@ class PicoRuntime {
   private sendPayloadToClient(
     context: ContextState,
     client: SseClient,
-    payload: unknown
+    payload: unknown,
+    options?: { eventId?: string; retry?: number }
   ) {
     return sendRuntimePayloadToClient({
       encoder: this.encoder,
       context,
       client,
       payload,
+      eventId: options?.eventId,
+      retry: options?.retry,
       closeSseClient: (activeContext, activeClient) =>
         this.closeSseClient(
           activeContext as ContextState,
@@ -3692,6 +3786,10 @@ class PicoRuntime {
     context.sidebarBootstrapDirectories = normalizeRequestedDirectories(
       url.searchParams.getAll("sidebarDirectory")
     )
+    const lastEventId = parsePositiveInteger(
+      request.headers.get("last-event-id") ||
+        url.searchParams.get("lastEventId")
+    )
     this.logSessionLoadDebug("events_response:create", {
       contextId: context.id,
       sidebarBootstrapDirectoryCount:
@@ -3711,7 +3809,12 @@ class PicoRuntime {
         }
         context.clients.add(client)
         this.syncGitWatchDirectories()
-        this.writeRawToClient(context, client, ": connected\n\n")
+        this.writeRawToClient(
+          context,
+          client,
+          `retry: ${SSE_RETRY_MS}\n: connected\n\n`
+        )
+        this.replayEventsToClient(context, client, lastEventId)
 
         void (async () => {
           const bootstrapStartedAt = performance.now()
@@ -3804,6 +3907,21 @@ class PicoRuntime {
     }
   }
 
+  private prunePromptRequestRecords(entry: SessionEntry) {
+    const now = Date.now()
+    for (const [requestId, record] of entry.promptRequestRecords) {
+      if (now - record.createdAt > PROMPT_IDEMPOTENCY_TTL_MS) {
+        entry.promptRequestRecords.delete(requestId)
+      }
+    }
+
+    while (entry.promptRequestRecords.size > PROMPT_IDEMPOTENCY_MAX_RECORDS) {
+      const oldestRequestId = entry.promptRequestRecords.keys().next().value
+      if (!oldestRequestId) break
+      entry.promptRequestRecords.delete(oldestRequestId)
+    }
+  }
+
   async prompt(
     request: Request,
     body: {
@@ -3811,6 +3929,7 @@ class PicoRuntime {
       images?: unknown
       streamingBehavior?: unknown
       pendingId?: unknown
+      clientRequestId?: unknown
       thinkingLevel?: unknown
       draftOwnerKey?: unknown
       draftCwd?: unknown
@@ -3883,141 +4002,169 @@ class PicoRuntime {
           ? "followUp"
           : undefined
     const clientPendingId = normalizeClientPendingId(body.pendingId)
+    const clientRequestId = normalizeClientPromptRequestId(body.clientRequestId)
 
-    return await this.runSerializedPromptRequest(activeEntry, async () => {
-      if (
-        requestedThinkingLevel &&
-        activeEntry.session.thinkingLevel !== requestedThinkingLevel
-      ) {
-        activeEntry.session.setThinkingLevel(requestedThinkingLevel)
-      }
-
-      const promptOptions = images.length > 0 ? { images } : undefined
-      const promotedDraft = this.isDraftEntry(activeEntry)
-      const isAlreadyStreaming = this.getEntryStreamingState(activeEntry)
-      if (
-        clientPendingId &&
-        activeEntry.canceledPendingUserMessageIds.delete(clientPendingId)
-      ) {
-        await this.broadcastEntryState(activeEntry)
-        return {
-          ok: true,
-          queued: isAlreadyStreaming,
-          pendingId: clientPendingId,
-          canceled: true,
+    const executePromptRequest = async (): Promise<PromptResponsePayload> => {
+      return await this.runSerializedPromptRequest(activeEntry, async () => {
+        if (
+          requestedThinkingLevel &&
+          activeEntry.session.thinkingLevel !== requestedThinkingLevel
+        ) {
+          activeEntry.session.setThinkingLevel(requestedThinkingLevel)
         }
-      }
 
-      const firstPromptMissing = !this.getSessionFirstMessage(activeEntry)
-      if (firstPromptMissing) {
-        activeEntry.firstMessageHint = message.trim()
-        this.startAutoSessionNaming(activeEntry, message.trim(), images.length)
-      }
+        const promptOptions = images.length > 0 ? { images } : undefined
+        const promotedDraft = this.isDraftEntry(activeEntry)
+        const isAlreadyStreaming = this.getEntryStreamingState(activeEntry)
+        if (
+          clientPendingId &&
+          activeEntry.canceledPendingUserMessageIds.delete(clientPendingId)
+        ) {
+          await this.broadcastEntryState(activeEntry)
+          return {
+            ok: true,
+            queued: isAlreadyStreaming,
+            pendingId: clientPendingId,
+            canceled: true,
+          }
+        }
 
-      if (isAlreadyStreaming) {
-        const queuedStreamingBehavior = streamingBehavior ?? "steer"
-        const pendingMessage = createPendingUserMessage(
-          message,
-          images,
-          queuedStreamingBehavior,
-          clientPendingId
-        )
-        this.markSessionUserMessage(activeEntry)
-        activeEntry.canceledPendingUserMessageIds.delete(
-          pendingMessage.pendingId
-        )
-        activeEntry.pendingUserMessages.push(pendingMessage)
-        await this.broadcastEntryState(activeEntry)
+        const firstPromptMissing = !this.getSessionFirstMessage(activeEntry)
+        if (firstPromptMissing) {
+          activeEntry.firstMessageHint = message.trim()
+          this.startAutoSessionNaming(
+            activeEntry,
+            message.trim(),
+            images.length
+          )
+        }
 
-        try {
-          await activeEntry.session.prompt(message, {
-            ...promptOptions,
-            streamingBehavior: queuedStreamingBehavior,
-          })
-        } catch (error) {
-          activeEntry.pendingUserMessages =
-            activeEntry.pendingUserMessages.filter(
-              (entry) => entry.pendingId !== pendingMessage.pendingId
-            )
+        if (isAlreadyStreaming) {
+          const queuedStreamingBehavior = streamingBehavior ?? "steer"
+          const pendingMessage = createPendingUserMessage(
+            message,
+            images,
+            queuedStreamingBehavior,
+            clientPendingId
+          )
+          this.markSessionUserMessage(activeEntry)
+          activeEntry.canceledPendingUserMessageIds.delete(
+            pendingMessage.pendingId
+          )
+          activeEntry.pendingUserMessages.push(pendingMessage)
+          await this.broadcastEntryState(activeEntry)
+
+          try {
+            await activeEntry.session.prompt(message, {
+              ...promptOptions,
+              streamingBehavior: queuedStreamingBehavior,
+            })
+          } catch (error) {
+            activeEntry.pendingUserMessages =
+              activeEntry.pendingUserMessages.filter(
+                (entry) => entry.pendingId !== pendingMessage.pendingId
+              )
+            this.reconcilePendingUserMessages(activeEntry)
+            await this.broadcastEntryState(activeEntry)
+            throw error
+          }
+
           this.reconcilePendingUserMessages(activeEntry)
           await this.broadcastEntryState(activeEntry)
-          throw error
+          await this.broadcastSessionsAll()
+          return { ok: true, queued: true, pendingId: pendingMessage.pendingId }
         }
 
-        this.reconcilePendingUserMessages(activeEntry)
-        await this.broadcastEntryState(activeEntry)
-        await this.broadcastSessionsAll()
-        return { ok: true, queued: true, pendingId: pendingMessage.pendingId }
-      }
+        activeEntry.streamingState = true
+        this.markSessionUserMessage(activeEntry)
 
-      activeEntry.streamingState = true
-      this.markSessionUserMessage(activeEntry)
-
-      if (promotedDraft) {
-        activeEntry.draft = false
-        if (context.draftKey === activeEntry.key) {
-          context.draftKey = undefined
-        }
-        await this.broadcastEntryState(activeEntry)
-        await this.broadcastSessionsAll()
-      }
-
-      this.broadcastToViewers(activeEntry.key, {
-        type: "user_message",
-        message,
-        images,
-        queued: false,
-      })
-
-      let promptPreflightComplete: (() => void) | undefined
-      let promptPreflightSettled = false
-      const promptPreflight = new Promise<void>((resolve) => {
-        promptPreflightComplete = resolve
-      })
-      const settlePromptPreflight = () => {
-        if (promptPreflightSettled) return
-        promptPreflightSettled = true
-        promptPreflightComplete?.()
-      }
-      const promptPromise = activeEntry.session.prompt(message, {
-        ...promptOptions,
-        preflightResult: settlePromptPreflight,
-      })
-      const finishPromptIfIdle = async () => {
-        if (!activeEntry.streamingState || activeEntry.session.isStreaming) {
-          return
+        if (promotedDraft) {
+          activeEntry.draft = false
+          if (context.draftKey === activeEntry.key) {
+            context.draftKey = undefined
+          }
+          await this.broadcastEntryState(activeEntry)
+          await this.broadcastSessionsAll()
         }
 
-        activeEntry.streamingState = false
-        this.reconcilePendingUserMessages(activeEntry)
-        await this.broadcastEntryState(activeEntry)
-        await this.broadcastSessionsAll()
-      }
-
-      void promptPromise
-        .then(() => {
-          // Successful runs are finalized by session events. The SDK prompt
-          // promise can resolve before the final message_end/agent_end events
-          // reach our retained conversation, so do not publish completion here.
+        this.broadcastToViewers(activeEntry.key, {
+          type: "user_message",
+          message,
+          images,
+          queued: false,
         })
-        .catch(async (error) => {
-          await finishPromptIfIdle()
-          console.error("[pico] prompt error", error)
-          this.broadcastToViewers(activeEntry.key, {
-            type: "request_error",
-            scope: "prompt",
-            message,
-            error: formatError(error),
+
+        let promptPreflightComplete: (() => void) | undefined
+        let promptPreflightSettled = false
+        const promptPreflight = new Promise<void>((resolve) => {
+          promptPreflightComplete = resolve
+        })
+        const settlePromptPreflight = () => {
+          if (promptPreflightSettled) return
+          promptPreflightSettled = true
+          promptPreflightComplete?.()
+        }
+        const promptPromise = activeEntry.session.prompt(message, {
+          ...promptOptions,
+          preflightResult: settlePromptPreflight,
+        })
+        const finishPromptIfIdle = async () => {
+          if (!activeEntry.streamingState || activeEntry.session.isStreaming) {
+            return
+          }
+
+          activeEntry.streamingState = false
+          this.reconcilePendingUserMessages(activeEntry)
+          await this.broadcastEntryState(activeEntry)
+          await this.broadcastSessionsAll()
+        }
+
+        void promptPromise
+          .then(() => {
+            // Successful runs are finalized by session events. The SDK prompt
+            // promise can resolve before the final message_end/agent_end events
+            // reach our retained conversation, so do not publish completion here.
           })
-        })
-        .finally(() => {
-          settlePromptPreflight()
-        })
+          .catch(async (error) => {
+            await finishPromptIfIdle()
+            console.error("[pico] prompt error", error)
+            this.broadcastToViewers(activeEntry.key, {
+              type: "request_error",
+              scope: "prompt",
+              message,
+              error: formatError(error),
+            })
+          })
+          .finally(() => {
+            settlePromptPreflight()
+          })
 
-      await promptPreflight
+        await promptPreflight
 
-      return { ok: true, queued: false }
+        return { ok: true, queued: false }
+      })
+    }
+
+    if (!clientRequestId) {
+      return await executePromptRequest()
+    }
+
+    const existingRequest =
+      activeEntry.promptRequestRecords.get(clientRequestId)
+    if (existingRequest) {
+      return await existingRequest.promise
+    }
+
+    this.prunePromptRequestRecords(activeEntry)
+    const promptPromise = executePromptRequest().catch((error) => {
+      activeEntry.promptRequestRecords.delete(clientRequestId)
+      throw error
     })
+    activeEntry.promptRequestRecords.set(clientRequestId, {
+      createdAt: Date.now(),
+      promise: promptPromise,
+    })
+    return await promptPromise
   }
 
   async reorderPendingMessages(
@@ -5440,23 +5587,29 @@ class PicoRuntime {
 
   async createTerminalEventsResponse(request: Request, id: string) {
     const { context, activeEntry } = await this.resolveRequest(request)
+    const lastSeq = parsePositiveInteger(
+      request.headers.get("last-event-id") ||
+        new URL(request.url).searchParams.get("lastSeq")
+    )
     return this.terminalManager.createEventsResponse(
       id,
       this.getTerminalScopeKey(activeEntry, context),
-      request.signal
+      request.signal,
+      lastSeq
     )
   }
 
   async writeTerminalInput(
     request: Request,
     id: string,
-    body: { data?: unknown }
+    body: { data?: unknown; inputSeq?: unknown }
   ) {
     const { context, activeEntry } = await this.resolveRequest(request)
     this.terminalManager.writeTerminal(
       id,
       this.getTerminalScopeKey(activeEntry, context),
-      body.data
+      body.data,
+      body.inputSeq
     )
     return { ok: true }
   }

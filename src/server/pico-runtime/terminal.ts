@@ -33,6 +33,13 @@ export type TerminalServerEvent =
   | {
       type: "output"
       data: string
+      seq: number
+    }
+  | {
+      type: "reset"
+      reason: "backlog_gap"
+      firstSeq: number
+      nextSeq: number
     }
   | {
       type: "exit"
@@ -71,8 +78,10 @@ type TerminalRecord = {
   dataDisposable: IDisposable
   exitDisposable: IDisposable
   subscribers: Set<(event: TerminalServerEvent) => void>
-  backlog: Array<TerminalServerEvent>
+  backlog: Array<Extract<TerminalServerEvent, { type: "output" }>>
   backlogBytes: number
+  nextOutputSeq: number
+  lastInputSeq: number
   createdAt: number
   lastUsedAt: number
   lookupKey?: string
@@ -172,7 +181,8 @@ function formatTerminalError(error: unknown) {
 }
 
 function sseFrame(event: TerminalServerEvent) {
-  return `data: ${JSON.stringify(event)}\n\n`
+  const idLine = event.type === "output" ? `id: ${event.seq}\n` : ""
+  return `${idLine}data: ${JSON.stringify(event)}\n\n`
 }
 
 function exitPayload(exitCode: number, signal?: number) {
@@ -265,6 +275,8 @@ export class PicoTerminalManager {
       subscribers: new Set(),
       backlog: [],
       backlogBytes: 0,
+      nextOutputSeq: 1,
+      lastInputSeq: 0,
       createdAt: now,
       lastUsedAt: now,
     }
@@ -286,7 +298,12 @@ export class PicoTerminalManager {
     }
   }
 
-  createEventsResponse(id: string, scopeKey: string, signal: AbortSignal) {
+  createEventsResponse(
+    id: string,
+    scopeKey: string,
+    signal: AbortSignal,
+    lastSeq?: number
+  ) {
     const record = this.assertTerminalScope(id, scopeKey)
     record.lastUsedAt = Date.now()
 
@@ -325,7 +342,21 @@ export class PicoTerminalManager {
           cwd: record.cwd,
           shell: terminalLabel(record.shell),
         })
+        const firstSeq = record.backlog[0]?.seq
+        if (
+          typeof lastSeq === "number" &&
+          firstSeq !== undefined &&
+          lastSeq < firstSeq - 1
+        ) {
+          send({
+            type: "reset",
+            reason: "backlog_gap",
+            firstSeq,
+            nextSeq: record.nextOutputSeq,
+          })
+        }
         for (const event of record.backlog) {
+          if (typeof lastSeq === "number" && event.seq <= lastSeq) continue
           send(event)
         }
         if (record.exited) {
@@ -347,13 +378,29 @@ export class PicoTerminalManager {
     })
   }
 
-  writeTerminal(id: string, scopeKey: string, data: unknown) {
+  writeTerminal(
+    id: string,
+    scopeKey: string,
+    data: unknown,
+    inputSeq?: unknown
+  ) {
     const record = this.assertTerminalScope(id, scopeKey)
     if (record.exited) {
       throw new Error("Terminal has exited.")
     }
     if (typeof data !== "string") {
       throw new Error("Terminal input data is required.")
+    }
+
+    const normalizedInputSeq = normalizeDimension(
+      inputSeq,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER
+    )
+    if (normalizedInputSeq > 0) {
+      if (normalizedInputSeq <= record.lastInputSeq) return
+      record.lastInputSeq = normalizedInputSeq
     }
 
     record.lastUsedAt = Date.now()
@@ -425,7 +472,9 @@ export class PicoTerminalManager {
 
   private attachPtyHandlers(record: TerminalRecord) {
     record.dataDisposable = record.pty.onData((data) => {
-      this.publish(record, { type: "output", data })
+      const seq = record.nextOutputSeq
+      record.nextOutputSeq += 1
+      this.publish(record, { type: "output", data, seq })
     })
     record.exitDisposable = record.pty.onExit((event) => {
       this.handlePtyExit(record, event.exitCode, event.signal)

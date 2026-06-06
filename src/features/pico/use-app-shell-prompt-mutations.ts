@@ -14,6 +14,12 @@ import type {
 
 import { resolveNewSessionCwd } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  enqueueOfflinePrompt,
+  readOfflinePrompts,
+  removeOfflinePrompt,
+  type OfflinePromptQueueItem,
+} from "@/features/pico/offline-prompt-queue"
 import { picoQueryKeys, picoSessionScopeKey } from "@/features/pico/query-keys"
 import {
   useSelector,
@@ -226,6 +232,33 @@ function createLocalPendingId() {
     .slice(2, 10)}`
 }
 
+function createClientPromptRequestId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `prompt:${crypto.randomUUID()}`
+  }
+
+  return `prompt:${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
+function isOfflinePromptSubmissionError(error: unknown) {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return true
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : ""
+  return (
+    message === "failed to fetch" ||
+    message === "load failed" ||
+    message.includes("networkerror") ||
+    message.includes("network error")
+  )
+}
+
 function buildCurrentSessionRequestUrl(
   path: string,
   {
@@ -268,6 +301,29 @@ function buildCurrentSessionRequestUrl(
     sessionId,
     searchParams: shouldUseSessionKey ? { sessionKey } : undefined,
   })
+}
+
+function buildOfflinePromptRequestUrl(item: OfflinePromptQueueItem) {
+  return buildRequestUrl("/api/prompt", {
+    contextId: item.contextId,
+    sessionId: item.targetSessionKey ? undefined : item.sessionId,
+    searchParams: item.targetSessionKey
+      ? { sessionKey: item.targetSessionKey }
+      : undefined,
+  })
+}
+
+function buildOfflinePromptBody(item: OfflinePromptQueueItem) {
+  return {
+    message: item.message,
+    images: item.images,
+    streamingBehavior: item.streamingBehavior,
+    pendingId: item.pendingId,
+    clientRequestId: item.clientRequestId,
+    thinkingLevel: item.thinkingLevel,
+    draftOwnerKey: item.draftOwnerKey,
+    draftCwd: item.draftCwd,
+  }
 }
 
 function isPendingPromptNotFoundError(error: unknown) {
@@ -766,6 +822,7 @@ export function useAppShellPromptMutations({
       images,
       streamingBehavior,
       pendingId,
+      clientRequestId,
       thinkingLevel,
       targetSessionKey,
       draftTarget,
@@ -774,6 +831,7 @@ export function useAppShellPromptMutations({
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
       pendingId?: string
+      clientRequestId?: string
       thinkingLevel?: string
       targetSessionKey?: string
       draftTarget?: PromptDraftTargetContext
@@ -797,6 +855,7 @@ export function useAppShellPromptMutations({
             images,
             streamingBehavior,
             pendingId,
+            clientRequestId,
             thinkingLevel,
             draftOwnerKey: draftTarget?.ownerKey,
             draftCwd: draftTarget?.cwd,
@@ -814,6 +873,76 @@ export function useAppShellPromptMutations({
       })
     },
   })
+
+  const offlinePromptFlushInFlightRef = React.useRef(false)
+  const offlinePromptFailureToastIdsRef = React.useRef<Set<string>>(new Set())
+  const flushOfflinePromptQueue = React.useCallback(async () => {
+    if (!viewerContextId || offlinePromptFlushInFlightRef.current) return
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return
+
+    offlinePromptFlushInFlightRef.current = true
+    try {
+      const queuedPrompts = await readOfflinePrompts(viewerContextId)
+      if (queuedPrompts.length === 0) return
+
+      let flushedCount = 0
+      for (const item of queuedPrompts) {
+        try {
+          await fetchJson<PromptResponse>(buildOfflinePromptRequestUrl(item), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(buildOfflinePromptBody(item)),
+          })
+          await removeOfflinePrompt(item.id)
+          offlinePromptFailureToastIdsRef.current.delete(item.id)
+          flushedCount += 1
+        } catch (error) {
+          if (isOfflinePromptSubmissionError(error)) break
+          if (!offlinePromptFailureToastIdsRef.current.has(item.id)) {
+            offlinePromptFailureToastIdsRef.current.add(item.id)
+            toast.error(
+              error instanceof Error
+                ? `Failed to send queued prompt: ${error.message}`
+                : "Failed to send queued prompt"
+            )
+          }
+          break
+        }
+      }
+
+      if (flushedCount > 0) {
+        toast.success(
+          flushedCount === 1
+            ? "Sent queued prompt"
+            : `Sent ${flushedCount.toLocaleString()} queued prompts`
+        )
+        await queryClient.invalidateQueries({ refetchType: "active" })
+      }
+    } finally {
+      offlinePromptFlushInFlightRef.current = false
+    }
+  }, [queryClient, viewerContextId])
+
+  React.useEffect(() => {
+    if (!viewerContextId) return
+
+    const flush = () => {
+      void flushOfflinePromptQueue()
+    }
+
+    window.addEventListener("online", flush)
+    window.addEventListener("focus", flush)
+    document.addEventListener("visibilitychange", flush)
+    const timer = window.setInterval(flush, 30_000)
+    flush()
+
+    return () => {
+      window.removeEventListener("online", flush)
+      window.removeEventListener("focus", flush)
+      document.removeEventListener("visibilitychange", flush)
+      window.clearInterval(timer)
+    }
+  }, [flushOfflinePromptQueue, viewerContextId])
 
   const submitPrompt = React.useCallback(
     async (
@@ -942,6 +1071,8 @@ export function useAppShellPromptMutations({
         })
       }
 
+      const clientRequestId = createClientPromptRequestId()
+
       setIsSubmitting(true)
       if (shouldOptimisticallyClearComposer) {
         replaceComposerDraft("", undefined, { forceSync: true })
@@ -956,6 +1087,7 @@ export function useAppShellPromptMutations({
           images: submittedImages,
           streamingBehavior: normalizedStreamingBehavior,
           pendingId: queuedPendingId,
+          clientRequestId,
           thinkingLevel: currentSessionState.thinkingLevel,
           targetSessionKey,
           draftTarget: targetDraft,
@@ -982,6 +1114,53 @@ export function useAppShellPromptMutations({
         }
         return true
       } catch (error) {
+        const queueSessionKey =
+          targetSessionKey ||
+          (currentSessionState.sessionKey &&
+          !currentSessionState.sessionKey.startsWith("optimistic:") &&
+          (currentSessionState.draft || !currentSessionState.sessionId)
+            ? currentSessionState.sessionKey
+            : undefined)
+        const queueSessionId = queueSessionKey
+          ? undefined
+          : (currentSessionState.sessionId ?? activeSessionId)
+        if (
+          isOfflinePromptSubmissionError(error) &&
+          (queueSessionKey || queueSessionId)
+        ) {
+          await enqueueOfflinePrompt({
+            id: clientRequestId,
+            contextId: viewerContextId,
+            createdAt: Date.now(),
+            sessionId: queueSessionId,
+            targetSessionKey: queueSessionKey,
+            message,
+            images: submittedImages.map((image) => ({
+              type: "image",
+              mimeType: image.mimeType,
+              data: image.data,
+            })),
+            streamingBehavior: normalizedStreamingBehavior,
+            pendingId: queuedPendingId,
+            clientRequestId,
+            thinkingLevel: currentSessionState.thinkingLevel,
+            draftOwnerKey: targetDraft?.ownerKey,
+            draftCwd: targetDraft?.cwd,
+          })
+          if (queuedPendingId) {
+            removeOptimisticPendingMessage(queuedPendingId)
+          }
+          removeOptimisticUserMessage(optimisticId)
+          removeOptimisticSidebarSession(optimisticSidebarSessionId)
+          if (!treatAsQueuedPrompt) {
+            awaitingFirstTurnAssistantOutputSignatureRef.current = null
+            awaitingFirstTurnRef.current = false
+            setAwaitingFirstTurn(false)
+          }
+          toast.info("Prompt queued locally and will send when reconnected")
+          return true
+        }
+
         if (queuedPendingId) {
           removeOptimisticPendingMessage(queuedPendingId)
         }
@@ -1024,6 +1203,7 @@ export function useAppShellPromptMutations({
       }
     },
     [
+      activeSessionId,
       addOptimisticPendingMessage,
       addOptimisticSidebarSession,
       addOptimisticUserMessage,
@@ -1083,6 +1263,7 @@ export function useAppShellPromptMutations({
             images: followUp.images,
             streamingBehavior: followUp.streamingBehavior,
             pendingId: followUp.optimisticId,
+            clientRequestId: createClientPromptRequestId(),
             thinkingLevel: sessionStateRef.current.thinkingLevel,
             targetSessionKey,
             draftTarget,

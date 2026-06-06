@@ -405,6 +405,13 @@ export type TerminalEvent =
   | {
       type: "output"
       data: string
+      seq?: number
+    }
+  | {
+      type: "reset"
+      reason: "backlog_gap"
+      firstSeq: number
+      nextSeq: number
     }
   | {
       type: "exit"

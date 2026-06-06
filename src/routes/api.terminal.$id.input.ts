@@ -9,7 +9,10 @@ export const Route = createFileRoute("/api/terminal/$id/input")({
     handlers: {
       POST: async ({ request, params }) => {
         try {
-          const body = await readRequestJson<{ data?: unknown }>(request)
+          const body = await readRequestJson<{
+            data?: unknown
+            inputSeq?: unknown
+          }>(request)
           return jsonResponse(
             await getPicoRuntime().writeTerminalInput(request, params.id, body)
           )

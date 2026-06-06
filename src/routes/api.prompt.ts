@@ -14,6 +14,7 @@ export const Route = createFileRoute("/api/prompt")({
             images?: unknown
             streamingBehavior?: unknown
             pendingId?: unknown
+            clientRequestId?: unknown
             thinkingLevel?: unknown
             draftOwnerKey?: unknown
             draftCwd?: unknown
