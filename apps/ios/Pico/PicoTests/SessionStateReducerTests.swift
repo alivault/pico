@@ -40,6 +40,87 @@ struct SessionStateReducerTests {
     #expect(assistant.blocks.count == 1)
   }
 
+  @Test func preservesOptimisticFirstUserMessageAcrossDraftActivation() throws {
+    var state = SessionState(
+      streaming: true,
+      items: [
+        .user(
+          UserConversationItem(
+            itemKey: "local:user:optimistic",
+            renderKey: "local:user:optimistic",
+            text: "Hello from iPhone",
+            images: []
+          )
+        ),
+      ],
+      firstMessage: "Hello from iPhone"
+    )
+
+    let draftActivationData = Data(
+      #"""
+      {
+        "type": "state_sync",
+        "sessionKey": "draft:ios",
+        "draft": true,
+        "streaming": false,
+        "items": []
+      }
+      """#.utf8
+    )
+    guard case .stateSync(let draftActivation) = try JSONDecoder().decode(
+      PicoServerEvent.self,
+      from: draftActivationData
+    ) else {
+      Issue.record("Expected draft activation state_sync event")
+      return
+    }
+
+    state.apply(draftActivation)
+
+    #expect(state.sessionKey == "draft:ios")
+    #expect(state.items.count == 1)
+    #expect(state.firstMessage == "Hello from iPhone")
+    guard case .user(let optimisticUser) = state.items.first else {
+      Issue.record("Expected optimistic user item")
+      return
+    }
+    #expect(optimisticUser.itemKey == "local:user:optimistic")
+
+    let serverEchoData = Data(
+      #"""
+      {
+        "type": "state_sync",
+        "sessionKey": "draft:ios",
+        "streaming": true,
+        "items": [
+          {
+            "kind": "user",
+            "itemKey": "server:user:1",
+            "text": "Hello from iPhone",
+            "images": []
+          }
+        ]
+      }
+      """#.utf8
+    )
+    guard case .stateSync(let serverEcho) = try JSONDecoder().decode(
+      PicoServerEvent.self,
+      from: serverEchoData
+    ) else {
+      Issue.record("Expected server echo state_sync event")
+      return
+    }
+
+    state.apply(serverEcho)
+
+    #expect(state.items.count == 1)
+    guard case .user(let serverUser) = state.items.first else {
+      Issue.record("Expected server user item")
+      return
+    }
+    #expect(serverUser.itemKey == "server:user:1")
+  }
+
   @Test func tracksHiddenThinkingPreviewForStreamingTurn() throws {
     let data = Data(
       #"""

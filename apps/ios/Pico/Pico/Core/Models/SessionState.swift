@@ -101,12 +101,24 @@ public struct SessionState: Hashable, Sendable {
   public mutating func apply(_ sync: StateSyncPayload) {
     let wasConnected = connected
 
+    let carriedLocalItems = Self.localUserItemsCarriedAcrossSessionKeyChange(
+      current: self,
+      sync: sync
+    )
+    let carriedFirstMessage = carriedLocalItems.isEmpty ? "" : firstMessage
+
     if let nextSessionKey = sync.sessionKey, nextSessionKey != sessionKey {
-      self = SessionState(connected: wasConnected, replaying: replaying)
+      self = SessionState(
+        connected: wasConnected,
+        replaying: replaying,
+        items: carriedLocalItems,
+        firstMessage: carriedFirstMessage
+      )
     }
 
     connected = true
     replaying = false
+    let previousItems = items
 
     if let streaming = sync.streaming {
       self.streaming = streaming
@@ -119,9 +131,12 @@ public struct SessionState: Hashable, Sendable {
     }
 
     if let patch = sync.itemsPatch {
-      items = Self.applyItemsPatch(to: items, patch: patch)
+      items = Self.mergingLocalUserItems(
+        from: previousItems,
+        into: Self.applyItemsPatch(to: items, patch: patch)
+      )
     } else if let items = sync.items {
-      self.items = items
+      self.items = Self.mergingLocalUserItems(from: previousItems, into: items)
     }
     items = Self.deduplicatingLocalUserItems(items)
 
@@ -208,26 +223,88 @@ public struct SessionState: Hashable, Sendable {
     return nextItems
   }
 
+  private static func localUserItemsCarriedAcrossSessionKeyChange(
+    current: SessionState,
+    sync: StateSyncPayload
+  ) -> [ConversationItem] {
+    guard let nextSessionKey = sync.sessionKey,
+          nextSessionKey != current.sessionKey,
+          current.sessionId == nil,
+          sync.draft == true || sync.sessionId == nil else {
+      return []
+    }
+
+    return current.items.filter { item in
+      guard case .user(let user) = item else { return false }
+      return isLocalUserItem(user)
+    }
+  }
+
+  private static func mergingLocalUserItems(
+    from previousItems: [ConversationItem],
+    into nextItems: [ConversationItem]
+  ) -> [ConversationItem] {
+    var mergedItems = nextItems
+
+    for item in previousItems {
+      guard case .user(let user) = item,
+            isLocalUserItem(user),
+            !containsEquivalentUserItem(user, in: mergedItems) else {
+        continue
+      }
+
+      mergedItems.append(item)
+    }
+
+    return mergedItems
+  }
+
   private static func deduplicatingLocalUserItems(
     _ items: [ConversationItem]
   ) -> [ConversationItem] {
-    let serverUserTexts = Set<String>(items.compactMap { item in
+    let serverUsers = items.compactMap { item -> UserConversationItem? in
       guard case .user(let user) = item, !isLocalUserItem(user) else {
         return nil
       }
-      return normalizedUserText(user.text)
-    })
-    guard !serverUserTexts.isEmpty else { return items }
+      return user
+    }
+    guard !serverUsers.isEmpty else { return items }
 
     return items.filter { item in
       guard case .user(let user) = item,
-            isLocalUserItem(user),
-            let text = normalizedUserText(user.text) else {
+            isLocalUserItem(user) else {
         return true
       }
 
-      return !serverUserTexts.contains(text)
+      return !serverUsers.contains { serverUser in
+        userItemsMatch(user, serverUser)
+      }
     }
+  }
+
+  private static func containsEquivalentUserItem(
+    _ user: UserConversationItem,
+    in items: [ConversationItem]
+  ) -> Bool {
+    items.contains { item in
+      guard case .user(let existingUser) = item else { return false }
+      return userItemsMatch(user, existingUser)
+    }
+  }
+
+  private static func userItemsMatch(
+    _ left: UserConversationItem,
+    _ right: UserConversationItem
+  ) -> Bool {
+    if let leftText = normalizedUserText(left.text),
+       let rightText = normalizedUserText(right.text) {
+      return leftText == rightText
+    }
+
+    return normalizedUserText(left.text) == nil &&
+      normalizedUserText(right.text) == nil &&
+      !left.images.isEmpty &&
+      left.images == right.images
   }
 
   private static func isLocalUserItem(_ item: UserConversationItem) -> Bool {

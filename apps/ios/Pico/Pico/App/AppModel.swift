@@ -36,8 +36,10 @@ public final class AppModel {
 
   private struct PromptOptimisticRollback {
     var isComposingNewSession: Bool
+    var composerText: String
     var composerSelectedDirectory: String?
     var composerImages: [PromptImage]
+    var isSubmitting: Bool
     var sessionState: SessionState
   }
 
@@ -198,11 +200,11 @@ public final class AppModel {
   }
 
   public var canEditComposerSessionOptions: Bool {
-    isComposingNewSession ||
+    guard !sessionState.streaming, !isSubmitting else { return false }
+
+    return isComposingNewSession ||
       sessionState.draft ||
-      (!sessionState.streaming &&
-        sessionState.sessionId == nil &&
-        sessionState.items.isEmpty)
+      (sessionState.sessionId == nil && sessionState.items.isEmpty)
   }
 
   public var remainingComposerImageSlots: Int {
@@ -601,7 +603,9 @@ public final class AppModel {
 
     let requestedCwd = cwd?.trimmingCharacters(in: .whitespacesAndNewlines)
     let targetCwd = requestedCwd?.isEmpty == false ? requestedCwd : sessionState.cwd
-    let wasComposingNewSession = isComposingNewSession || sessionState.draft
+    let wasComposingNewSession = isComposingNewSession ||
+      sessionState.draft ||
+      Self.hasLocalSubmittedPrompt(in: sessionState)
 
     do {
       let response = try await apiClient.createSession(
@@ -623,17 +627,41 @@ public final class AppModel {
         model: targetModel,
         available: previousState.availableThinkingLevels
       )
+      let preserveOptimisticPrompt = Self.hasLocalSubmittedPrompt(in: previousState)
+      let hiddenThinkingPreview: String?
+      let contextUsage: ContextUsage?
+      let uiState: SessionUiState
+      if preserveOptimisticPrompt {
+        hiddenThinkingPreview = previousState.hiddenThinkingPreview
+        contextUsage = previousState.contextUsage
+        uiState = previousState.uiState
+      } else {
+        hiddenThinkingPreview = nil
+        contextUsage = nil
+        uiState = SessionUiState()
+      }
       sessionState = SessionState(
         connected: previousState.connected,
+        replaying: preserveOptimisticPrompt ? previousState.replaying : true,
+        streaming: preserveOptimisticPrompt ? previousState.streaming : false,
+        compacting: preserveOptimisticPrompt ? previousState.compacting : false,
         draft: response.draft,
+        items: preserveOptimisticPrompt ? previousState.items : [],
+        pendingMessages: preserveOptimisticPrompt ? previousState.pendingMessages : [],
+        historyOffset: preserveOptimisticPrompt ? previousState.historyOffset : 0,
+        historyTotalCount: preserveOptimisticPrompt ? previousState.historyTotalCount : 0,
         sessionKey: response.sessionKey,
+        firstMessage: preserveOptimisticPrompt ? previousState.firstMessage : "",
         cwd: responseCwd,
         model: targetModel,
         thinkingLevel: targetThinkingLevel,
         availableThinkingLevels: previousState.availableThinkingLevels,
         availableModels: previousState.availableModels,
         availableSkills: previousState.availableSkills,
-        hideThinkingBlock: previousState.hideThinkingBlock
+        hideThinkingBlock: previousState.hideThinkingBlock,
+        hiddenThinkingPreview: hiddenThinkingPreview,
+        contextUsage: contextUsage,
+        uiState: uiState
       )
       selectedSessionId = nil
       loadingSessionTitle = nil
@@ -861,8 +889,12 @@ public final class AppModel {
     }
 
     let targetModel = composerModel
-    if canEditComposerSessionOptions {
-      guard let targetModel else {
+    let canEditSessionOptions = canEditComposerSessionOptions
+    let targetDirectory = composerDirectory
+    var needsNewSession = false
+
+    if canEditSessionOptions {
+      guard targetModel != nil else {
         alert = AppAlert(
           title: "No model available",
           message: "Authenticate a provider in Settings, then choose a model."
@@ -871,46 +903,71 @@ public final class AppModel {
       }
 
       let normalizedComposerDirectory = DirectoryPathFormatter.normalizedDirectoryPrefix(
-        composerDirectory
+        targetDirectory
       )
       let normalizedSessionDirectory = DirectoryPathFormatter.normalizedDirectoryPrefix(
         sessionState.cwd ?? ""
       )
-      let needsNewSession = isComposingNewSession ||
+      needsNewSession = isComposingNewSession ||
         requestSessionId == nil && requestSessionKey == nil ||
         normalizedComposerDirectory != normalizedSessionDirectory
-
-      if needsNewSession {
-        let created = await createSession(directoryInput: composerDirectory)
-        guard created else { return false }
-      }
-
-      if targetModel != sessionState.model {
-        let updatedModel = await setModel(targetModel)
-        guard updatedModel else { return false }
-      }
     }
 
-    if sessionState.streaming {
-      return await submitPrompt(
-        message: trimmedPrompt,
+    let wasStreamingPrompt = sessionState.streaming
+    let suspendsEventsForNewSession = canEditSessionOptions && needsNewSession
+    if suspendsEventsForNewSession {
+      eventTask?.cancel()
+      eventTask = nil
+    }
+
+    var rollback: PromptOptimisticRollback?
+    if !wasStreamingPrompt {
+      rollback = applyOptimisticSubmittedPrompt(
+        trimmedPrompt,
         images: images,
-        streamingBehavior: streamingBehavior
+        clearComposerDirectory: true
       )
     }
 
-    let rollback = applyOptimisticSubmittedPrompt(
-      trimmedPrompt,
-      images: images,
-      clearComposerDirectory: true
-    )
+    if canEditSessionOptions {
+      if needsNewSession {
+        let created = await createSession(directoryInput: targetDirectory)
+        guard created else {
+          if let rollback {
+            restoreOptimisticSubmittedPrompt(
+              rollback,
+              restartEvents: suspendsEventsForNewSession
+            )
+          }
+          return false
+        }
+      }
+
+      if let targetModel,
+         needsNewSession || targetModel != sessionState.model {
+        let updatedModel = await setModel(targetModel)
+        guard updatedModel else {
+          if let rollback {
+            restoreOptimisticSubmittedPrompt(
+              rollback,
+              restartEvents: suspendsEventsForNewSession
+            )
+          }
+          return false
+        }
+      }
+    }
+
     let submitted = await submitPrompt(
       message: trimmedPrompt,
       images: images,
       streamingBehavior: streamingBehavior
     )
-    if !submitted {
-      restoreOptimisticSubmittedPrompt(rollback)
+    if !submitted, let rollback {
+      restoreOptimisticSubmittedPrompt(
+        rollback,
+        restartEvents: suspendsEventsForNewSession
+      )
     }
     return submitted
   }
@@ -943,10 +1000,8 @@ public final class AppModel {
     let created = await createSession(directoryInput: directoryInput)
     guard created else { return false }
 
-    if requestedModel != sessionState.model {
-      let updatedModel = await setModel(requestedModel)
-      guard updatedModel else { return false }
-    }
+    let updatedModel = await setModel(requestedModel)
+    guard updatedModel else { return false }
 
     composerText = trimmedPrompt
     let rollback = applyOptimisticSubmittedPrompt(
@@ -1708,12 +1763,22 @@ public final class AppModel {
   ) -> PromptOptimisticRollback {
     let rollback = PromptOptimisticRollback(
       isComposingNewSession: isComposingNewSession,
+      composerText: composerText,
       composerSelectedDirectory: composerSelectedDirectory,
       composerImages: composerImages,
+      isSubmitting: isSubmitting,
       sessionState: sessionState
     )
 
     isComposingNewSession = false
+    composerText = ""
+    composerImages = []
+    draftStore.saveDraft(
+      "",
+      contextId: connectionStore.contextId,
+      sessionKey: sessionState.sessionKey
+    )
+    isSubmitting = true
     if clearComposerDirectory {
       composerSelectedDirectory = nil
     }
@@ -1721,11 +1786,24 @@ public final class AppModel {
     return rollback
   }
 
-  private func restoreOptimisticSubmittedPrompt(_ rollback: PromptOptimisticRollback) {
+  private func restoreOptimisticSubmittedPrompt(
+    _ rollback: PromptOptimisticRollback,
+    restartEvents: Bool = false
+  ) {
     isComposingNewSession = rollback.isComposingNewSession
+    composerText = rollback.composerText
     composerSelectedDirectory = rollback.composerSelectedDirectory
     composerImages = rollback.composerImages
+    isSubmitting = rollback.isSubmitting
     sessionState = rollback.sessionState
+    draftStore.saveDraft(
+      rollback.composerText,
+      contextId: connectionStore.contextId,
+      sessionKey: rollback.sessionState.sessionKey
+    )
+    if restartEvents, baseURL != nil {
+      startEvents(sessionId: requestSessionId, sessionKey: requestSessionKey)
+    }
   }
 
   private func applyLocalSubmittedPrompt(_ message: String, images: [PromptImage]) {
@@ -1785,6 +1863,14 @@ public final class AppModel {
         )
       )
     )
+  }
+
+  private static func hasLocalSubmittedPrompt(in state: SessionState) -> Bool {
+    state.items.contains { item in
+      guard case .user(let user) = item else { return false }
+      return user.itemKey?.hasPrefix("local:user:") == true ||
+        user.renderKey?.hasPrefix("local:user:") == true
+    }
   }
 
   static func preferredModel(in models: [ModelOption]) -> ModelOption? {
