@@ -116,6 +116,9 @@ const VALID_THINKING_LEVELS = new Set([
   "high",
   "xhigh",
 ])
+const PICO_DEFAULT_MODEL_PROVIDER = "openai-codex"
+const PICO_DEFAULT_MODEL_ID = "gpt-5.5"
+const PICO_DEFAULT_THINKING_LEVEL = "xhigh"
 const SESSION_LIST_LIMIT_DEFAULT = 5
 const SESSION_LIST_LIMIT_MAX = 100
 const SESSION_HISTORY_PAGE_LIMIT_DEFAULT = 50
@@ -124,6 +127,7 @@ const SESSION_NAME_MAX_LENGTH = 48
 const HEARTBEAT_INTERVAL_MS = 20_000
 const SSE_RETRY_MS = 1_000
 const SSE_REPLAY_MAX_EVENTS = 200
+const CONTEXT_INACTIVE_GRACE_MS = 30_000
 const PROMPT_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const PROMPT_IDEMPOTENCY_MAX_RECORDS = 200
 const SESSION_INDEX_CACHE_TTL_MS = 5_000
@@ -347,6 +351,7 @@ type ContextState = {
   sidebarBootstrapDirectories: Array<string>
   nextSseEventId: number
   replayEvents: Array<SseReplayEvent>
+  inactiveSince: number | undefined
 }
 
 type StateSyncScalarField =
@@ -525,6 +530,11 @@ function sanitizeSessionMessage(message: MessageLike) {
     : typeof message?.content === "string"
       ? message.content
       : undefined
+  const tokensBefore = Number(message?.tokensBefore)
+  const estimatedTokensAfter =
+    message?.estimatedTokensAfter == null
+      ? NaN
+      : Number(message.estimatedTokensAfter)
 
   return {
     ...(role ? { role } : {}),
@@ -555,9 +565,8 @@ function sanitizeSessionMessage(message: MessageLike) {
     ...(typeof message?.summary === "string"
       ? { summary: message.summary }
       : {}),
-    ...(Number.isFinite(Number(message?.tokensBefore))
-      ? { tokensBefore: Number(message.tokensBefore) }
-      : {}),
+    ...(Number.isFinite(tokensBefore) ? { tokensBefore } : {}),
+    ...(Number.isFinite(estimatedTokensAfter) ? { estimatedTokensAfter } : {}),
     ...(typeof message?.toolCallId === "string"
       ? { toolCallId: message.toolCallId }
       : {}),
@@ -940,6 +949,7 @@ class PicoRuntime {
   private readonly encoder = new TextEncoder()
   private readonly contexts = new Map<string, ContextState>()
   private readonly sessionEntries = new Map<string, SessionEntry>()
+  private contextCleanupTimeout?: ReturnType<typeof setTimeout>
   private readonly sessionTreeLeafOverrides = new Map<string, string | null>()
   private readonly servicesByCwd = new Map<string, SessionServicesLike>()
   private readonly pendingUiRequests = new Map<string, PendingUiRequest>()
@@ -1160,6 +1170,51 @@ class PicoRuntime {
     )
   }
 
+  private findPicoDefaultModel(entry: SessionEntry) {
+    return entry.services.modelRegistry
+      .getAvailable()
+      .find(
+        (model) =>
+          model.provider === PICO_DEFAULT_MODEL_PROVIDER &&
+          model.id === PICO_DEFAULT_MODEL_ID
+      )
+  }
+
+  private async applyPicoDefaultSessionPreferences(entry: SessionEntry) {
+    const settingsManager = entry.services
+      .settingsManager as SettingsManagerLike & {
+      getDefaultProvider?: () => string | undefined
+      getDefaultModel?: () => string | undefined
+      getDefaultThinkingLevel?: () => string | undefined
+    }
+    const configuredProvider = settingsManager.getDefaultProvider?.()?.trim()
+    const configuredModel = settingsManager.getDefaultModel?.()?.trim()
+    const configuredThinkingLevel = settingsManager
+      .getDefaultThinkingLevel?.()
+      ?.trim()
+
+    if (!configuredProvider && !configuredModel) {
+      const defaultModel = this.findPicoDefaultModel(entry)
+      if (
+        defaultModel &&
+        (entry.session.model?.provider !== defaultModel.provider ||
+          entry.session.model?.id !== defaultModel.id)
+      ) {
+        await entry.session.setModel(defaultModel)
+      }
+    }
+
+    if (
+      !configuredThinkingLevel &&
+      entry.session.thinkingLevel !== PICO_DEFAULT_THINKING_LEVEL &&
+      entry.session
+        .getAvailableThinkingLevels()
+        .includes(PICO_DEFAULT_THINKING_LEVEL)
+    ) {
+      entry.session.setThinkingLevel(PICO_DEFAULT_THINKING_LEVEL)
+    }
+  }
+
   private listAvailableModels(entry: SessionEntry) {
     return entry.services.modelRegistry
       .getAvailable()
@@ -1208,6 +1263,7 @@ class PicoRuntime {
       sidebarBootstrapDirectories: [],
       nextSseEventId: 1,
       replayEvents: [],
+      inactiveSince: undefined,
     }
     this.contexts.set(id, next)
     return next
@@ -1307,12 +1363,32 @@ class PicoRuntime {
     )
   }
 
+  private scheduleInactiveContextCleanup() {
+    if (this.contextCleanupTimeout) return
+
+    this.contextCleanupTimeout = setTimeout(() => {
+      this.contextCleanupTimeout = undefined
+      void this.cleanupInactiveContexts()
+    }, CONTEXT_INACTIVE_GRACE_MS + 100)
+  }
+
   private async cleanupInactiveContexts() {
+    const now = performance.now()
+
     for (const context of this.contexts.values()) {
-      if (context.clients.size > 0) continue
+      if (context.clients.size > 0) {
+        context.inactiveSince = undefined
+        continue
+      }
 
       const activeEntry = this.getActiveEntry(context)
       if (activeEntry && this.isSessionBusyForDone(activeEntry)) continue
+
+      context.inactiveSince ??= now
+      if (now - context.inactiveSince < CONTEXT_INACTIVE_GRACE_MS) {
+        this.scheduleInactiveContextCleanup()
+        continue
+      }
 
       this.contexts.delete(context.id)
     }
@@ -2836,10 +2912,12 @@ class PicoRuntime {
     if (options?.newSessionOptions && sessionManager.newSession) {
       sessionManager.newSession(options.newSessionOptions)
     }
-    return await this.createSessionEntry(sessionManager, {
+    const entry = await this.createSessionEntry(sessionManager, {
       draft: options?.draft,
       sessionStartEvent: options?.sessionStartEvent,
     })
+    await this.applyPicoDefaultSessionPreferences(entry)
+    return entry
   }
 
   private async ensureSessionEntryByPath(sessionPath: string) {
@@ -3642,12 +3720,16 @@ class PicoRuntime {
       )
       const summary = (result as { summary?: unknown }).summary
       const tokensBefore = (result as { tokensBefore?: unknown }).tokensBefore
+      const estimatedTokensAfter = (
+        result as { estimatedTokensAfter?: unknown }
+      ).estimatedTokensAfter
       state.items = [
         ...state.items,
         createCompactionSummaryItem(
           summary,
           tokensBefore,
-          `compaction:live:${state.items.length}`
+          `compaction:live:${state.items.length}`,
+          estimatedTokensAfter
         ),
       ]
       entry.retainedConversationItems = state.items
@@ -3812,6 +3894,10 @@ class PicoRuntime {
     if (client.closed) return
     client.closed = true
     context.clients.delete(client)
+    if (context.clients.size === 0) {
+      context.inactiveSince = performance.now()
+      this.scheduleInactiveContextCleanup()
+    }
     this.syncGitWatchDirectories()
     try {
       client.controller.close()
@@ -3849,6 +3935,7 @@ class PicoRuntime {
           controller,
           lastStateSyncSnapshot: undefined,
         }
+        context.inactiveSince = undefined
         context.clients.add(client)
         this.syncGitWatchDirectories()
         this.writeRawToClient(
@@ -4445,6 +4532,7 @@ class PicoRuntime {
       ok: true,
       model: serializeModel(activeEntry.session.model),
       thinkingLevel: activeEntry.session.thinkingLevel,
+      availableThinkingLevels: activeEntry.session.getAvailableThinkingLevels(),
     }
   }
 
@@ -5279,6 +5367,7 @@ class PicoRuntime {
 
   async getAuthProviders(request: Request) {
     const { activeEntry } = await this.resolveRequest(request)
+    this.refreshModelRegistries()
     const modelRegistry = activeEntry.services.modelRegistry
     const authStorage = this.requireAuthStorage(activeEntry)
     const oauthProviders = authStorage.getOAuthProviders()
@@ -5363,6 +5452,7 @@ class PicoRuntime {
       oauthProviders: oauthOptions,
       apiKeyProviders: apiKeyOptions,
       loggedInProviders,
+      availableModels: this.listAvailableModels(activeEntry),
     }
   }
 

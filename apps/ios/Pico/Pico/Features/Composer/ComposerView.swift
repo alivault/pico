@@ -1,0 +1,818 @@
+import PhotosUI
+import SwiftUI
+import UniformTypeIdentifiers
+import UIKit
+
+struct ComposerView: View {
+  @Bindable var model: AppModel
+  @FocusState private var isPromptFocused: Bool
+  @State private var selectedPhotoItems: [PhotosPickerItem] = []
+  @State private var isShowingCameraPicker = false
+  @State private var isShowingFileImporter = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if !model.sessionState.pendingMessages.isEmpty {
+        PendingMessagesView(
+          messages: model.sessionState.pendingMessages,
+          onReorderMessages: reorderPendingMessages
+        )
+      }
+
+      if !model.composerImages.isEmpty {
+        ComposerAttachmentPreviewStrip(model: model)
+      }
+
+      if model.canEditComposerSessionOptions {
+        ComposerSessionOptionsBar(model: model)
+          .padding(.horizontal)
+      }
+
+      composerCard
+        .padding(.horizontal)
+        .padding(.top, 6)
+    }
+    .sheet(isPresented: $isShowingCameraPicker) {
+      CameraImagePicker { data, mimeType in
+        model.addComposerImage(data: data, mimeType: mimeType)
+      }
+    }
+    .fileImporter(
+      isPresented: $isShowingFileImporter,
+      allowedContentTypes: [.image],
+      allowsMultipleSelection: true,
+      onCompletion: addFileImages
+    )
+    .onChange(of: selectedPhotoItems) {
+      let items = selectedPhotoItems
+      selectedPhotoItems = []
+      Task {
+        await addPhotoItems(items)
+      }
+    }
+  }
+
+  private var composerCard: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      composerTextField
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+
+      HStack(alignment: .center, spacing: 10) {
+        ComposerAttachmentMenu(
+          selectedPhotoItems: $selectedPhotoItems,
+          isShowingCameraPicker: $isShowingCameraPicker,
+          isShowingFileImporter: $isShowingFileImporter,
+          remainingImageSlots: model.remainingComposerImageSlots
+        )
+
+        Spacer(minLength: 12)
+
+        if showsStreamingBehaviorButtons {
+          streamingBehaviorButtons
+        }
+
+        if !model.sessionState.streaming {
+          sendButton
+        }
+
+        if model.sessionState.streaming {
+          abortButton
+        }
+      }
+      .padding(.horizontal, 14)
+      .padding(.bottom, 14)
+    }
+    .glassEffect(
+      .regular,
+      in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+    )
+  }
+
+  private var composerTextField: some View {
+    TextField("Ask Pico anything", text: $model.composerText, axis: .vertical)
+      .focused($isPromptFocused)
+      .lineLimit(1...6)
+      .submitLabel(.return)
+      .textInputAutocapitalization(.sentences)
+      .onChange(of: model.composerText) {
+        model.saveDraft()
+      }
+  }
+
+  private var abortButton: some View {
+    Button(action: abort) {
+      Image(systemName: "stop.fill")
+        .font(.system(size: 13, weight: .bold))
+        .frame(width: 30, height: 30)
+    }
+    .buttonStyle(.glassProminent)
+    .buttonBorderShape(.circle)
+    .tint(.red)
+    .foregroundStyle(.white)
+    .accessibilityLabel("Abort")
+  }
+
+  private var streamingBehaviorButtons: some View {
+    HStack(spacing: 8) {
+      streamingBehaviorButton(.followUp)
+      streamingBehaviorButton(.steer)
+    }
+  }
+
+  private func streamingBehaviorButton(_ behavior: StreamingBehavior) -> some View {
+    Button {
+      submit(streamingBehavior: behavior)
+    } label: {
+      Text(behavior.label)
+        .font(.body)
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.capsule)
+    .disabled(model.isSubmitting || !hasPromptText)
+    .accessibilityLabel("Send as \(behavior.label)")
+  }
+
+  private var showsStreamingBehaviorButtons: Bool {
+    model.sessionState.streaming && hasPromptText
+  }
+
+  private var hasPromptText: Bool {
+    !model.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var hasPromptContent: Bool {
+    hasPromptText || !model.composerImages.isEmpty
+  }
+
+  private var submitDisabled: Bool {
+    !hasPromptContent
+  }
+
+  private var sendButton: some View {
+    Button(action: submit) {
+      sendButtonLabel
+        .frame(width: 34, height: 34)
+        .contentShape(Circle())
+    }
+    .buttonStyle(.glassProminent)
+    .buttonBorderShape(.circle)
+    .tint(Color.accentColor)
+    .foregroundStyle(.white)
+    .opacity(submitDisabled ? 0.45 : 1)
+    .disabled(model.isSubmitting)
+    .allowsHitTesting(!submitDisabled && !model.isSubmitting)
+    .accessibilityLabel("Send")
+  }
+
+  @ViewBuilder
+  private var sendButtonLabel: some View {
+    if model.isSubmitting {
+      ProgressView()
+        .controlSize(.small)
+    } else {
+      Image(systemName: "arrow.up")
+        .font(.system(size: 14, weight: .bold))
+    }
+  }
+
+  private func submit() {
+    submit(streamingBehavior: model.sessionState.streaming ? .steer : nil)
+  }
+
+  private func submit(streamingBehavior: StreamingBehavior?) {
+    guard !submitDisabled else { return }
+
+    isPromptFocused = false
+    Task {
+      await model.submitComposerPrompt(streamingBehavior: streamingBehavior)
+    }
+  }
+
+  private func abort() {
+    Task {
+      await model.abort()
+    }
+  }
+
+  private func reorderPendingMessages(_ messages: [PendingUserMessage]) {
+    Task {
+      await model.reorderPendingMessages(messages)
+    }
+  }
+
+  private func addPhotoItems(_ items: [PhotosPickerItem]) async {
+    for item in items {
+      guard model.remainingComposerImageSlots > 0 else { break }
+
+      do {
+        guard let data = try await item.loadTransferable(type: Data.self) else { continue }
+        let mimeType = item.supportedContentTypes.first { type in
+          type.conforms(to: .image)
+        }?.preferredMIMEType ?? "image/jpeg"
+        model.addComposerImage(data: data, mimeType: mimeType)
+      } catch {
+        model.alert = AppAlert(
+          title: "Could not attach photo",
+          message: error.localizedDescription
+        )
+      }
+    }
+  }
+
+  private func addFileImages(_ result: Result<[URL], Error>) {
+    switch result {
+    case .success(let urls):
+      Task {
+        for url in urls {
+          guard model.remainingComposerImageSlots > 0 else { break }
+          await addFileImage(url)
+        }
+      }
+    case .failure(let error):
+      model.alert = AppAlert(
+        title: "Could not attach file",
+        message: error.localizedDescription
+      )
+    }
+  }
+
+  private func addFileImage(_ url: URL) async {
+    do {
+      let hasAccess = url.startAccessingSecurityScopedResource()
+      defer {
+        if hasAccess {
+          url.stopAccessingSecurityScopedResource()
+        }
+      }
+
+      let data = try Data(contentsOf: url)
+      let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ??
+        "image/jpeg"
+      model.addComposerImage(data: data, mimeType: mimeType)
+    } catch {
+      model.alert = AppAlert(
+        title: "Could not attach file",
+        message: error.localizedDescription
+      )
+    }
+  }
+}
+
+private struct ComposerAttachmentMenu: View {
+  @Binding var selectedPhotoItems: [PhotosPickerItem]
+  @Binding var isShowingCameraPicker: Bool
+  @Binding var isShowingFileImporter: Bool
+  var remainingImageSlots: Int
+
+  var body: some View {
+    Menu {
+      Button("Camera", systemImage: "camera") {
+        isShowingCameraPicker = true
+      }
+      .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera) || remainingImageSlots == 0)
+
+      PhotosPicker(
+        selection: $selectedPhotoItems,
+        maxSelectionCount: max(1, remainingImageSlots),
+        matching: .images
+      ) {
+        Label("Photos", systemImage: "photo.on.rectangle")
+      }
+      .disabled(remainingImageSlots == 0)
+
+      Button("Files", systemImage: "folder") {
+        isShowingFileImporter = true
+      }
+      .disabled(remainingImageSlots == 0)
+    } label: {
+      Image(systemName: "plus")
+        .font(.headline)
+        .frame(width: 34, height: 34)
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
+    .accessibilityLabel("Add attachment")
+  }
+}
+
+struct ContextUsageRingMenu: View {
+  var contextUsage: ContextUsage?
+  var isCompacting: Bool
+  var compactSession: () -> Void
+  var showsCompactAction = true
+
+  var body: some View {
+    Menu {
+      if showsCompactAction {
+        Section("Session") {
+          Button(
+            isCompacting ? "Compacting…" : "Compact context",
+            action: compactSession
+          )
+          .disabled(isCompacting)
+        }
+      }
+
+      if let snapshot {
+        Section("Context window") {
+          Text(snapshot.displayPercent)
+          Text(snapshot.displayTokens)
+        }
+      } else {
+        Text("Context usage unavailable")
+      }
+    } label: {
+      ContextUsageRing(percent: snapshot?.percent)
+        .frame(width: 20, height: 20)
+        .frame(width: 30, height: 30)
+        .contentShape(Circle())
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
+    .accessibilityLabel(accessibilityLabel)
+  }
+
+  private var snapshot: ContextUsageSnapshot? {
+    guard let contextUsage else { return nil }
+    return ContextUsageSnapshot(contextUsage: contextUsage)
+  }
+
+  private var accessibilityLabel: String {
+    guard let snapshot else { return "Context usage unavailable" }
+    return "Context usage, \(snapshot.displayPercent), \(snapshot.displayTokens)"
+  }
+}
+
+private struct ContextUsageRing: View {
+  var percent: Double?
+
+  var body: some View {
+    ZStack {
+      Circle()
+        .stroke(.quaternary, lineWidth: 2.5)
+
+      if let clampedPercent {
+        Circle()
+          .trim(from: 0, to: clampedPercent / 100)
+          .stroke(
+            strokeColor(for: clampedPercent),
+            style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+          )
+          .rotationEffect(.degrees(-90))
+      }
+    }
+  }
+
+  private var clampedPercent: Double? {
+    guard let percent, percent.isFinite else { return nil }
+    return min(100, max(0, percent))
+  }
+
+  private func strokeColor(for percent: Double) -> Color {
+    if percent >= 90 { return .red }
+    if percent >= 80 { return .orange }
+    return .accentColor
+  }
+}
+
+private struct ContextUsageSnapshot {
+  var tokens: Double?
+  var contextWindow: Double?
+  var percent: Double?
+
+  init?(contextUsage: ContextUsage) {
+    tokens = contextUsage.tokens
+    contextWindow = contextUsage.contextWindow
+
+    if let rawPercent = contextUsage.percent, rawPercent.isFinite {
+      percent = min(100, max(0, rawPercent))
+    } else if let tokens,
+              let contextWindow,
+              contextWindow > 0 {
+      percent = min(100, max(0, tokens / contextWindow * 100))
+    } else {
+      percent = nil
+    }
+
+    if tokens == nil && contextWindow == nil && percent == nil {
+      return nil
+    }
+  }
+
+  var displayPercent: String {
+    guard let percent else { return "Usage estimate pending" }
+    return "\(Int(percent.rounded()))% used"
+  }
+
+  var displayTokens: String {
+    let tokenText = tokens.map(Self.compactNumber) ?? "Pending"
+    guard let contextWindow else {
+      return "\(tokenText) tokens used"
+    }
+
+    return "\(tokenText) / \(Self.compactNumber(contextWindow)) tokens"
+  }
+
+  private static func compactNumber(_ value: Double) -> String {
+    let absoluteValue = abs(value)
+    if absoluteValue >= 1_000_000 {
+      return compactValue(value / 1_000_000, suffix: "M")
+    }
+    if absoluteValue >= 1_000 {
+      return compactValue(value / 1_000, suffix: "k")
+    }
+    return value.formatted(.number.precision(.fractionLength(0)))
+  }
+
+  private static func compactValue(_ value: Double, suffix: String) -> String {
+    let precision = abs(value) >= 10 ? 0 : 1
+    return value.formatted(.number.precision(.fractionLength(0...precision))) + suffix
+  }
+}
+
+private struct ComposerAttachmentPreviewStrip: View {
+  @Bindable var model: AppModel
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(model.composerImages) { image in
+          ComposerImageAttachmentThumbnail(image: image) {
+            model.removeComposerImage(image)
+          }
+        }
+      }
+      .padding(.horizontal)
+    }
+  }
+}
+
+private struct ComposerImageAttachmentThumbnail: View {
+  var image: PromptImage
+  var remove: () -> Void
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      thumbnail
+        .frame(width: 54, height: 54)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(.quaternary, lineWidth: 0.5)
+        }
+
+      Button(action: remove) {
+        Image(systemName: "xmark")
+          .font(.caption2.weight(.bold))
+          .padding(4)
+          .background(.thinMaterial, in: Circle())
+      }
+      .buttonStyle(.plain)
+      .offset(x: 6, y: -6)
+      .accessibilityLabel("Remove attachment")
+    }
+    .padding(.top, 6)
+  }
+
+  @ViewBuilder
+  private var thumbnail: some View {
+    if let data = Data(base64Encoded: image.data),
+       let uiImage = UIImage(data: data) {
+      Image(uiImage: uiImage)
+        .resizable()
+        .scaledToFill()
+    } else {
+      Image(systemName: "photo")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.regularMaterial)
+    }
+  }
+}
+
+private struct CameraImagePicker: UIViewControllerRepresentable {
+  var addImage: (Data, String) -> Void
+  @Environment(\.dismiss) private var dismiss
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(parent: self)
+  }
+
+  func makeUIViewController(context: Context) -> UIImagePickerController {
+    let picker = UIImagePickerController()
+    picker.delegate = context.coordinator
+    picker.sourceType = .camera
+    picker.mediaTypes = [UTType.image.identifier]
+    return picker
+  }
+
+  func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+  final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+    var parent: CameraImagePicker
+
+    init(parent: CameraImagePicker) {
+      self.parent = parent
+    }
+
+    func imagePickerController(
+      _ picker: UIImagePickerController,
+      didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+    ) {
+      defer { parent.dismiss() }
+
+      guard let image = info[.originalImage] as? UIImage,
+            let data = image.jpegData(compressionQuality: 0.86) else {
+        return
+      }
+
+      parent.addImage(data, "image/jpeg")
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+      parent.dismiss()
+    }
+  }
+}
+
+private struct ComposerSessionOptionsBar: View {
+  @Bindable var model: AppModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      ComposerDirectorySelectorView(model: model)
+
+      if model.composerGitStatus != nil {
+        ComposerGitBranchSelectorView(model: model)
+      }
+    }
+  }
+}
+
+private struct ComposerDirectorySelectorView: View {
+  @Bindable var model: AppModel
+  @State private var isShowingAddDirectory = false
+
+  var body: some View {
+    Menu {
+      Section("Directories") {
+        ForEach(directoryOptions, id: \.self) { directory in
+          Button(action: { select(directory) }) {
+            if isSelected(directory) {
+              Label(
+                DirectoryPathFormatter.displayPath(directory),
+                systemImage: "checkmark"
+              )
+            } else {
+              Text(DirectoryPathFormatter.displayPath(directory))
+            }
+          }
+        }
+      }
+
+      Divider()
+
+      Button("Add another…", systemImage: "folder.badge.plus") {
+        isShowingAddDirectory = true
+      }
+    } label: {
+      ComposerDirectoryChip(
+        title: DirectoryPathFormatter.folderName(selectedDirectory)
+      )
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.capsule)
+    .accessibilityLabel("Select directory")
+    .sheet(isPresented: $isShowingAddDirectory) {
+      SidebarAddDirectoryView(
+        model: model,
+        onDismiss: { isShowingAddDirectory = false },
+        onAdded: { directory in
+          await model.selectComposerDirectory(directory)
+        }
+      )
+    }
+  }
+
+  private var selectedDirectory: String {
+    DirectoryPathFormatter.normalizedDirectoryPrefix(model.composerDirectory)
+  }
+
+  private var directoryOptions: [String] {
+    var seen = Set<String>()
+    var options: [String] = []
+
+    func append(_ directory: String) {
+      let normalizedDirectory = DirectoryPathFormatter.normalizedDirectoryPrefix(directory)
+      guard !normalizedDirectory.isEmpty, !seen.contains(normalizedDirectory) else {
+        return
+      }
+      seen.insert(normalizedDirectory)
+      options.append(normalizedDirectory)
+    }
+
+    append(selectedDirectory)
+    for directory in model.sidebarDirectories {
+      append(directory)
+    }
+
+    return options
+  }
+
+  private func isSelected(_ directory: String) -> Bool {
+    DirectoryPathFormatter.normalizedDirectoryPrefix(directory) == selectedDirectory
+  }
+
+  private func select(_ directory: String) {
+    guard !isSelected(directory) else { return }
+
+    Task {
+      await model.selectComposerDirectory(directory)
+    }
+  }
+}
+
+private struct ComposerGitBranchSelectorView: View {
+  @Bindable var model: AppModel
+  @State private var isShowingCreateBranch = false
+  @State private var createBranchName = ""
+
+  var body: some View {
+    Menu {
+      Section("Branches") {
+        Button("Create branch…", systemImage: "plus") {
+          isShowingCreateBranch = true
+        }
+        .disabled(model.isCheckingOutGitBranch)
+
+        if model.isLoadingGitBranches &&
+          model.composerGitLocalBranches.isEmpty {
+          Label("Loading branches…", systemImage: "hourglass")
+        } else if model.composerGitLocalBranches.isEmpty {
+          Text("No local branches")
+        } else {
+          ForEach(model.composerGitLocalBranches) { branch in
+            Button(action: { switchBranch(branch) }) {
+              if branch.current {
+                Label(branchTitle(branch), systemImage: "checkmark")
+              } else {
+                Text(branchTitle(branch))
+              }
+            }
+            .disabled(model.isCheckingOutGitBranch)
+          }
+        }
+      }
+    } label: {
+      ComposerBranchChip(
+        title: model.composerGitBranchLabel ?? "Branch",
+        isLoading: model.isCheckingOutGitBranch ||
+          (model.isLoadingGitBranches && model.composerGitLocalBranches.isEmpty)
+      )
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.capsule)
+    .disabled(model.isCheckingOutGitBranch)
+    .accessibilityLabel("Select git branch")
+    .task(id: selectedDirectory) {
+      model.refreshComposerGitBranches()
+    }
+    .alert("Create branch", isPresented: $isShowingCreateBranch) {
+      TextField("branch-name", text: $createBranchName)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+      Button("Cancel", role: .cancel) {
+        createBranchName = ""
+      }
+      Button("Create") {
+        createBranch()
+      }
+      .disabled(
+        createBranchName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      )
+    } message: {
+      Text("Create and switch from the current HEAD.")
+    }
+  }
+
+  private var selectedDirectory: String {
+    DirectoryPathFormatter.normalizedDirectoryPrefix(model.composerDirectory)
+  }
+
+  private func switchBranch(_ branch: GitLocalBranch) {
+    guard !branch.current else { return }
+
+    Task {
+      await model.checkoutComposerGitBranch(branch)
+    }
+  }
+
+  private func createBranch() {
+    let branchName = createBranchName.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    guard !branchName.isEmpty else { return }
+
+    createBranchName = ""
+    Task {
+      await model.createComposerGitBranch(named: branchName)
+    }
+  }
+
+  private func branchTitle(_ branch: GitLocalBranch) -> String {
+    let detail = branchDetail(branch)
+    return detail.isEmpty ? branch.name : "\(branch.name) · \(detail)"
+  }
+
+  private func branchDetail(_ branch: GitLocalBranch) -> String {
+    if let tracking = branchTrackingText(branch), !tracking.isEmpty {
+      return tracking
+    }
+
+    return branch.subject?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  }
+
+  private func branchTrackingText(_ branch: GitLocalBranch) -> String? {
+    guard let upstream = branch.upstream?.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    ), !upstream.isEmpty else {
+      return nil
+    }
+
+    if branch.upstreamGone { return "gone" }
+    if branch.ahead > 0, branch.behind > 0 {
+      return "ahead \(branch.ahead), behind \(branch.behind)"
+    }
+    if branch.ahead > 0 { return "ahead \(branch.ahead)" }
+    if branch.behind > 0 { return "behind \(branch.behind)" }
+    return "synced"
+  }
+}
+
+private struct ComposerDirectoryChip: View {
+  var title: String
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: "folder")
+        .font(.caption.weight(.semibold))
+        .accessibilityHidden(true)
+
+      Text(title)
+        .lineLimit(1)
+        .truncationMode(.tail)
+
+      Image(systemName: "chevron.down")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+    .font(.subheadline.weight(.semibold))
+    .foregroundStyle(.primary)
+    .padding(.horizontal, 10)
+    .frame(height: 30)
+    .contentShape(Capsule())
+  }
+}
+
+private struct ComposerBranchChip: View {
+  var title: String
+  var isLoading: Bool
+
+  var body: some View {
+    HStack(spacing: 6) {
+      if isLoading {
+        ProgressView()
+          .controlSize(.small)
+      } else {
+        Image(systemName: "arrow.triangle.branch")
+          .font(.caption.weight(.semibold))
+          .accessibilityHidden(true)
+      }
+
+      Text(title)
+        .lineLimit(1)
+        .truncationMode(.tail)
+
+      Image(systemName: "chevron.down")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+    .font(.subheadline.weight(.semibold))
+    .foregroundStyle(.primary)
+    .padding(.horizontal, 10)
+    .frame(height: 30)
+    .contentShape(Capsule())
+  }
+}
+
+#Preview {
+  ComposerView(model: AppModel())
+}

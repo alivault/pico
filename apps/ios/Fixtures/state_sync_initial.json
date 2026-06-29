@@ -1,0 +1,45 @@
+{
+  "type": "state_sync",
+  "sessionKey": "session:demo",
+  "sessionId": "demo",
+  "sessionName": "Demo session",
+  "firstMessage": "Build a SwiftUI app",
+  "cwd": "/Users/alice/project",
+  "draft": false,
+  "streaming": true,
+  "compacting": false,
+  "thinkingLevel": "medium",
+  "availableThinkingLevels": ["low", "medium", "high"],
+  "availableModels": [
+    {
+      "id": "claude-sonnet-4-5",
+      "provider": "anthropic",
+      "name": "Claude Sonnet 4.5",
+      "reasoning": true
+    }
+  ],
+  "items": [
+    {
+      "kind": "user",
+      "itemKey": "u1",
+      "text": "Build a SwiftUI app",
+      "images": []
+    },
+    {
+      "kind": "assistant",
+      "itemKey": "a1",
+      "streaming": true,
+      "blocks": [
+        {
+          "type": "text",
+          "blockKey": "t1",
+          "text": "I'll start with the native client skeleton."
+        }
+      ]
+    }
+  ],
+  "uiState": {
+    "statuses": {},
+    "workingMessage": "Working…"
+  }
+}

@@ -12,3 +12,7 @@ count.txt
 .vinxi
 __unconfig*
 todos.json
+
+# Xcode user-specific state
+*.xcuserstate
+xcuserdata/

@@ -345,7 +345,7 @@ function visibleAssistantBlockKey(
     case "text":
       return block.text.trim() ? `text:${block.text}` : ""
     case "compaction":
-      return `compaction:${block.tokensBefore}:${block.summary}`
+      return `compaction:${block.tokensBefore}:${block.estimatedTokensAfter ?? ""}:${block.summary}`
     case "thinking":
       return options.hideThinking
         ? ""

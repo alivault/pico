@@ -1,0 +1,25 @@
+{
+  "type": "state_sync",
+  "sessionKey": "session:demo",
+  "streaming": false,
+  "itemsPatch": {
+    "previousLength": 2,
+    "start": 1,
+    "deleteCount": 1,
+    "items": [
+      {
+        "kind": "assistant",
+        "itemKey": "a1",
+        "streaming": false,
+        "done": true,
+        "blocks": [
+          {
+            "type": "text",
+            "blockKey": "t1",
+            "text": "The native client skeleton is ready."
+          }
+        ]
+      }
+    ]
+  }
+}

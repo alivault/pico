@@ -62,7 +62,7 @@ function assistantBlockKey(
     case "tool":
       return `tool:${block.callId || block.name || "tool"}:${toolArgsKey(block.args)}`
     case "compaction":
-      return `compaction:${block.tokensBefore}:${block.summary}`
+      return `compaction:${block.tokensBefore}:${block.estimatedTokensAfter ?? ""}:${block.summary}`
     default:
       return "block"
   }
@@ -706,7 +706,8 @@ function sameAssistantBlock(
       if (right.type !== "compaction") return false
       return (
         left.summary === right.summary &&
-        left.tokensBefore === right.tokensBefore
+        left.tokensBefore === right.tokensBefore &&
+        left.estimatedTokensAfter === right.estimatedTokensAfter
       )
     default:
       return false
@@ -1344,9 +1345,11 @@ function compactionTriggerText(
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
 ) {
   if (block.type !== "compaction") return "Compaction"
-  return block.tokensBefore > 0
-    ? `Compaction: Compacted from ${block.tokensBefore.toLocaleString()} tokens`
-    : "Compaction"
+  if (block.tokensBefore <= 0) return "Compaction"
+
+  return block.estimatedTokensAfter && block.estimatedTokensAfter > 0
+    ? `Compaction: ${block.tokensBefore.toLocaleString()} → ~${block.estimatedTokensAfter.toLocaleString()} tokens`
+    : `Compaction: Compacted from ${block.tokensBefore.toLocaleString()} tokens`
 }
 
 type AnsiStyleState = {

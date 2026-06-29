@@ -1,0 +1,31 @@
+{
+  "type": "sessions",
+  "activeSessionId": "demo",
+  "activeSessionKey": "session:demo",
+  "directories": ["/Users/alice/project"],
+  "directoryStates": [
+    {
+      "path": "/Users/alice/project",
+      "totalCount": 1,
+      "revision": "1"
+    }
+  ],
+  "directoryIndexes": {
+    "/Users/alice/project": {
+      "directory": "/Users/alice/project",
+      "totalCount": 1,
+      "revision": "1",
+      "sessions": [
+        {
+          "id": "demo",
+          "cwd": "/Users/alice/project",
+          "title": "Demo session",
+          "lastMessagePreview": "The native client skeleton is ready.",
+          "messageCount": 2,
+          "streaming": false,
+          "unread": false
+        }
+      ]
+    }
+  }
+}

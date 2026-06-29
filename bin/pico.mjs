@@ -9,6 +9,33 @@ import { fileURLToPath } from "node:url"
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const packageJsonPath = join(packageRoot, "package.json")
 const serverEntry = join(packageRoot, ".output", "server", "index.mjs")
+const minimumNodeVersion = [22, 19, 0]
+const minimumNodeVersionLabel = "22.19.0"
+
+function nodeVersionMeetsMinimum(version) {
+  const parts = version.split(".").map((part) => Number(part))
+
+  for (let index = 0; index < minimumNodeVersion.length; index += 1) {
+    const actual = Number.isFinite(parts[index]) ? parts[index] : 0
+    const required = minimumNodeVersion[index]
+    if (actual > required) return true
+    if (actual < required) return false
+  }
+
+  return true
+}
+
+function ensureSupportedNodeVersion() {
+  if (nodeVersionMeetsMinimum(process.versions.node)) return
+
+  console.error(
+    `Pico requires Node.js >=${minimumNodeVersionLabel}; current version is ${process.versions.node}.`
+  )
+  console.error("Upgrade Node.js and run Pico again.")
+  process.exit(1)
+}
+
+ensureSupportedNodeVersion()
 
 function readPackageMetadata() {
   try {

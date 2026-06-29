@@ -1,0 +1,385 @@
+import SwiftUI
+
+struct ConversationView: View {
+  private static let bottomAnchorId = "conversation-bottom"
+  private static let bottomStickyThreshold: CGFloat = 48
+
+  var items: [ConversationItem]
+  var hideThinking: Bool
+  var hideToolBlocks: Bool = false
+  var hiddenThinkingPreview: String?
+  var isStreaming: Bool = false
+  var isCompacting: Bool = false
+  var workingLabel: String = "Working…"
+  var bottomContentInset: CGFloat = 0
+  var onCancelCompaction: () -> Void = {}
+
+  @State private var isNearBottom = true
+  @State private var followsLatestContent = true
+  @State private var scrollPhase: ScrollPhase = .idle
+  @State private var interactionStartOffsetY: CGFloat = 0
+
+  var body: some View {
+    ScrollViewReader { proxy in
+      ZStack(alignment: .bottom) {
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 16, pinnedViews: [.sectionHeaders]) {
+            if items.isEmpty {
+              ContentUnavailableView(
+                "No conversation yet",
+                systemImage: "message",
+                description: Text("Start a session from the composer below.")
+              )
+              .frame(maxWidth: .infinity, minHeight: 280)
+            } else {
+              ForEach(visibleElements) { element in
+                ConversationElementView(element: element)
+                  .id(element.id)
+              }
+
+              if shouldShowWorkingIndicator {
+                ConversationWorkingIndicator(
+                  label: workingIndicatorLabel,
+                  onCancel: isCompacting ? onCancelCompaction : nil
+                )
+              }
+
+              Color.clear
+                .frame(height: max(1, bottomContentInset))
+                .id(Self.bottomAnchorId)
+            }
+          }
+          .padding()
+        }
+        .defaultScrollAnchor(.bottom)
+        .defaultScrollAnchor(.topLeading, for: .alignment)
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+          Self.isScrollGeometryNearBottom(geometry)
+        } action: { _, isNearBottom in
+          self.isNearBottom = isNearBottom
+          if isNearBottom {
+            followsLatestContent = true
+          } else if scrollPhase == .interacting {
+            followsLatestContent = false
+          }
+        }
+        .onScrollPhaseChange { oldPhase, newPhase, context in
+          updateFollowState(
+            oldPhase: oldPhase,
+            newPhase: newPhase,
+            geometry: context.geometry
+          )
+        }
+        .onChange(of: conversationIdentity) {
+          followsLatestContent = true
+          scrollToBottom(proxy)
+        }
+        .onChange(of: isStreaming) {
+          guard isStreaming else { return }
+          followsLatestContent = true
+          scrollToBottom(proxy)
+        }
+        .onChange(of: isCompacting) {
+          guard isCompacting else { return }
+          followsLatestContent = true
+          scrollToBottom(proxy)
+        }
+        .onChange(of: scrollSignature) {
+          guard followsLatestContent else { return }
+          scrollToBottom(proxy)
+        }
+
+        if shouldShowBackToBottomButton {
+          BackToBottomButton {
+            followsLatestContent = true
+            scrollToBottom(proxy)
+          }
+          .padding(.bottom, backToBottomButtonBottomPadding)
+          .transition(.opacity.combined(with: .scale(scale: 0.92)))
+          .zIndex(1)
+        }
+      }
+      .animation(.smooth(duration: 0.2), value: shouldShowBackToBottomButton)
+    }
+  }
+
+  private var visibleItems: [ConversationItem] {
+    items.filter { item in
+      switch item {
+      case .assistant(let assistant):
+        Self.assistantItemHasVisibleContent(
+          assistant,
+          hideThinking: hideThinking,
+          hideToolBlocks: hideToolBlocks
+        )
+      case .user:
+        true
+      case .unknown:
+        false
+      }
+    }
+  }
+
+  private var visibleElements: [ConversationElement] {
+    visibleItems.flatMap { item -> [ConversationElement] in
+      switch item {
+      case .assistant(let assistant):
+        Self.visibleAssistantBlocks(
+          assistant,
+          hideThinking: hideThinking,
+          hideToolBlocks: hideToolBlocks
+        ).map { block in
+          .assistantBlock(assistantId: assistant.id, block: block)
+        }
+      case .user(let user):
+        [.user(user)]
+      case .unknown:
+        []
+      }
+    }
+  }
+
+  private var shouldShowBackToBottomButton: Bool {
+    !isNearBottom && !visibleItems.isEmpty
+  }
+
+  private var backToBottomButtonBottomPadding: CGFloat {
+    max(16, bottomContentInset)
+  }
+
+  private var shouldShowWorkingIndicator: Bool {
+    isCompacting ||
+      (isStreaming && (hasHiddenThinkingPreview || !hasVisibleStreamingAssistant))
+  }
+
+  private var hasHiddenThinkingPreview: Bool {
+    hideThinking && normalized(hiddenThinkingPreview) != nil
+  }
+
+  private var workingIndicatorLabel: String {
+    if isCompacting {
+      return "Compacting context…"
+    }
+
+    if hasHiddenThinkingPreview, let hiddenThinkingPreview = normalized(hiddenThinkingPreview) {
+      return hiddenThinkingPreview
+    }
+
+    return normalized(workingLabel) ?? "Working…"
+  }
+
+  private var hasVisibleStreamingAssistant: Bool {
+    items.contains { item in
+      guard case .assistant(let assistant) = item,
+            assistant.streaming == true else {
+        return false
+      }
+
+      return Self.assistantItemHasVisibleContent(
+        assistant,
+        hideThinking: hideThinking,
+        hideToolBlocks: hideToolBlocks
+      )
+    }
+  }
+
+  private var conversationIdentity: String {
+    items.first?.id ?? "empty"
+  }
+
+  private var scrollSignature: String {
+    let itemSignature = items.suffix(4).map(Self.itemScrollSignature).joined(separator: "|")
+    return [
+      "count:\(items.count)",
+      "streaming:\(isStreaming)",
+      "compacting:\(isCompacting)",
+      "hideThinking:\(hideThinking)",
+      "hideToolBlocks:\(hideToolBlocks)",
+      "working:\(workingIndicatorLabel)",
+      itemSignature,
+    ].joined(separator: "|")
+  }
+
+  private static func itemScrollSignature(_ item: ConversationItem) -> String {
+    switch item {
+    case .user(let user):
+      "user:\(user.id):\(user.text.count):\(user.images.count)"
+    case .assistant(let assistant):
+      "assistant:\(assistant.id):\(assistant.streaming == true):" +
+        assistant.blocks.map(blockScrollSignature).joined(separator: ",")
+    case .unknown(let kind):
+      "unknown:\(kind)"
+    }
+  }
+
+  private static func blockScrollSignature(_ block: AssistantBlock) -> String {
+    switch block {
+    case .text(let text):
+      "text:\(text.id):\(text.text.count)"
+    case .thinking(let thinking):
+      "thinking:\(thinking.id):\(thinking.text.count):\(thinking.summaryLabel ?? "")"
+    case .tool(let tool):
+      ToolFormatting.scrollSignature(for: tool)
+    case .compaction(let compaction):
+      "compaction:\(compaction.id):\(compaction.summary.count)"
+    case .unknown(let block):
+      "unknown:\(block.id)"
+    }
+  }
+
+  private static func assistantItemHasVisibleContent(
+    _ item: AssistantConversationItem,
+    hideThinking: Bool,
+    hideToolBlocks: Bool
+  ) -> Bool {
+    item.blocks.contains { block in
+      isVisibleAssistantBlock(
+        block,
+        hideThinking: hideThinking,
+        hideToolBlocks: hideToolBlocks
+      )
+    }
+  }
+
+  private static func visibleAssistantBlocks(
+    _ item: AssistantConversationItem,
+    hideThinking: Bool,
+    hideToolBlocks: Bool
+  ) -> [AssistantBlock] {
+    item.blocks.filter { block in
+      isVisibleAssistantBlock(
+        block,
+        hideThinking: hideThinking,
+        hideToolBlocks: hideToolBlocks
+      )
+    }
+  }
+
+  private static func isVisibleAssistantBlock(
+    _ block: AssistantBlock,
+    hideThinking: Bool,
+    hideToolBlocks: Bool
+  ) -> Bool {
+    if case .thinking = block, hideThinking { return false }
+    if case .tool(let tool) = block {
+      if hideToolBlocks { return false }
+      if ToolFormatting.isPendingUnclassifiedToolBlock(tool) { return false }
+    }
+    return true
+  }
+
+  private func normalized(_ value: String?) -> String? {
+    let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmedValue.isEmpty ? nil : trimmedValue
+  }
+
+  private func updateFollowState(
+    oldPhase: ScrollPhase,
+    newPhase: ScrollPhase,
+    geometry: ScrollGeometry
+  ) {
+    scrollPhase = newPhase
+
+    if newPhase == .interacting {
+      interactionStartOffsetY = geometry.contentOffset.y
+    }
+
+    if Self.isScrollGeometryNearBottom(geometry) {
+      followsLatestContent = true
+      return
+    }
+
+    if oldPhase == .interacting, newPhase != .animating,
+       geometry.contentOffset.y < interactionStartOffsetY - 1 {
+      followsLatestContent = false
+    }
+  }
+
+  private static func isScrollGeometryNearBottom(_ geometry: ScrollGeometry) -> Bool {
+    let bottomDistance = geometry.contentSize.height - geometry.visibleRect.maxY
+    return bottomDistance < bottomStickyThreshold
+  }
+
+  private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    withAnimation(.smooth(duration: 0.2)) {
+      proxy.scrollTo(Self.bottomAnchorId, anchor: .bottom)
+    }
+  }
+}
+
+private enum ConversationElement: Identifiable {
+  case user(UserConversationItem)
+  case assistantBlock(assistantId: String, block: AssistantBlock)
+
+  var id: String {
+    switch self {
+    case .user(let user):
+      user.id
+    case .assistantBlock(let assistantId, let block):
+      "\(assistantId):\(block.id)"
+    }
+  }
+}
+
+private struct ConversationElementView: View {
+  var element: ConversationElement
+
+  var body: some View {
+    switch element {
+    case .user(let user):
+      UserMessageView(item: user)
+    case .assistantBlock(_, let block):
+      AssistantBlockView(block: block)
+    }
+  }
+}
+
+private struct BackToBottomButton: View {
+  var action: () -> Void
+
+  var body: some View {
+    Button("Jump to latest message", systemImage: "arrow.down", action: action)
+      .labelStyle(.iconOnly)
+      .font(.headline.weight(.semibold))
+      .foregroundStyle(.primary)
+      .frame(width: 44, height: 44)
+      .contentShape(Circle())
+      .glassEffect(.regular, in: Circle())
+      .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+      .buttonStyle(.plain)
+      .highPriorityGesture(TapGesture().onEnded(action), including: .all)
+      .accessibilityLabel("Jump to latest message")
+  }
+}
+
+private struct ConversationWorkingIndicator: View {
+  var label: String
+  var onCancel: (() -> Void)?
+
+  var body: some View {
+    HStack(spacing: 10) {
+      ProgressView()
+
+      Text(label)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .lineLimit(3)
+
+      if let onCancel {
+        Button("Cancel", action: onCancel)
+          .font(.caption.weight(.semibold))
+          .buttonStyle(.glass)
+          .buttonBorderShape(.capsule)
+          .controlSize(.small)
+          .keyboardShortcut(.cancelAction)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: onCancel == nil ? .combine : .contain)
+  }
+}
+
+#Preview {
+  ConversationView(items: [], hideThinking: false, isStreaming: true)
+}

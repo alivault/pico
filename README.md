@@ -27,7 +27,7 @@ It gives you a persistent session browser, a live conversation shell, git tools,
 
 ## Built on Pi
 
-Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.74.0` for reproducible installs. You do not need a separate global Pi install for normal use.
+Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.79.8` for reproducible installs. You do not need a separate global Pi install for normal use.
 
 If you intentionally want to test Pico against a different Pi SDK checkout or install, set:
 
@@ -43,7 +43,7 @@ pnpm update:pi
 
 ## Getting started
 
-Run Pico without cloning the repo:
+Run Pico without cloning the repo (Node.js 22.19.0 or newer is required):
 
 ```bash
 npx @alivault/pico

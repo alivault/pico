@@ -59,6 +59,7 @@ import { Route as ApiFilesTreeRouteImport } from './routes/api.files.tree'
 import { Route as ApiFilesReadRouteImport } from './routes/api.files.read'
 import { Route as ApiDirectoryResolveRouteImport } from './routes/api.directory.resolve'
 import { Route as ApiDirectorySessionsCleanupRouteImport } from './routes/api.directory-sessions.cleanup'
+import { Route as ApiClientManifestRouteImport } from './routes/api/client/manifest'
 import { Route as ApiAuthProvidersRouteImport } from './routes/api.auth.providers'
 import { Route as ApiAuthOauthRouteImport } from './routes/api.auth.oauth'
 import { Route as ApiAuthLogoutRouteImport } from './routes/api.auth.logout'
@@ -323,6 +324,11 @@ const ApiDirectorySessionsCleanupRoute =
     path: '/cleanup',
     getParentRoute: () => ApiDirectorySessionsRoute,
   } as any)
+const ApiClientManifestRoute = ApiClientManifestRouteImport.update({
+  id: '/api/client/manifest',
+  path: '/api/client/manifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthProvidersRoute = ApiAuthProvidersRouteImport.update({
   id: '/api/auth/providers',
   path: '/api/auth/providers',
@@ -405,6 +411,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/oauth': typeof ApiAuthOauthRoute
   '/api/auth/providers': typeof ApiAuthProvidersRoute
+  '/api/client/manifest': typeof ApiClientManifestRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/files/read': typeof ApiFilesReadRoute
@@ -466,6 +473,7 @@ export interface FileRoutesByTo {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/oauth': typeof ApiAuthOauthRoute
   '/api/auth/providers': typeof ApiAuthProvidersRoute
+  '/api/client/manifest': typeof ApiClientManifestRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/files/read': typeof ApiFilesReadRoute
@@ -528,6 +536,7 @@ export interface FileRoutesById {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/oauth': typeof ApiAuthOauthRoute
   '/api/auth/providers': typeof ApiAuthProvidersRoute
+  '/api/client/manifest': typeof ApiClientManifestRoute
   '/api/directory-sessions/cleanup': typeof ApiDirectorySessionsCleanupRoute
   '/api/directory/resolve': typeof ApiDirectoryResolveRoute
   '/api/files/read': typeof ApiFilesReadRoute
@@ -591,6 +600,7 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/oauth'
     | '/api/auth/providers'
+    | '/api/client/manifest'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/files/read'
@@ -652,6 +662,7 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/oauth'
     | '/api/auth/providers'
+    | '/api/client/manifest'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/files/read'
@@ -713,6 +724,7 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/oauth'
     | '/api/auth/providers'
+    | '/api/client/manifest'
     | '/api/directory-sessions/cleanup'
     | '/api/directory/resolve'
     | '/api/files/read'
@@ -775,6 +787,7 @@ export interface RootRouteChildren {
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthOauthRoute: typeof ApiAuthOauthRoute
   ApiAuthProvidersRoute: typeof ApiAuthProvidersRoute
+  ApiClientManifestRoute: typeof ApiClientManifestRoute
   ApiDirectoryResolveRoute: typeof ApiDirectoryResolveRoute
   ApiFilesReadRoute: typeof ApiFilesReadRoute
   ApiFilesTreeRoute: typeof ApiFilesTreeRoute
@@ -1147,6 +1160,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDirectorySessionsCleanupRouteImport
       parentRoute: typeof ApiDirectorySessionsRoute
     }
+    '/api/client/manifest': {
+      id: '/api/client/manifest'
+      path: '/api/client/manifest'
+      fullPath: '/api/client/manifest'
+      preLoaderRoute: typeof ApiClientManifestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/providers': {
       id: '/api/auth/providers'
       path: '/api/auth/providers'
@@ -1290,6 +1310,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthOauthRoute: ApiAuthOauthRoute,
   ApiAuthProvidersRoute: ApiAuthProvidersRoute,
+  ApiClientManifestRoute: ApiClientManifestRoute,
   ApiDirectoryResolveRoute: ApiDirectoryResolveRoute,
   ApiFilesReadRoute: ApiFilesReadRoute,
   ApiFilesTreeRoute: ApiFilesTreeRoute,

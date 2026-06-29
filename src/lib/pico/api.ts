@@ -1,5 +1,6 @@
 import type {
   DirectoryState,
+  ModelOption,
   PromptImage,
   SessionState,
   SessionsPayload,
@@ -13,6 +14,30 @@ export type ApiErrorResponse = {
   error: string
   routePath?: string
 }
+
+export type ClientManifestResponse =
+  | {
+      ok: true
+      name: string
+      version: string
+      displayName: string
+      apiContractVersion: number
+      pairingRequired: boolean
+      authentication: {
+        type: "none" | "bearer"
+      }
+      transport: {
+        sse: boolean
+        httpsRequired: boolean
+        localHttpAllowed: boolean
+      }
+      capabilities: {
+        events: Array<string>
+        endpoints: Array<string>
+        features: Array<string>
+      }
+    }
+  | ApiErrorResponse
 
 export type CompletionItem = {
   value: string
@@ -325,6 +350,16 @@ export type SimpleOkResponse =
     }
   | ApiErrorResponse
 
+export type ModelResponse =
+  | {
+      ok: true
+      model?: ModelOption
+      thinkingLevel?: string
+      availableThinkingLevels?: Array<string>
+      availableModels?: Array<ModelOption>
+    }
+  | ApiErrorResponse
+
 export type SessionNewResponse =
   | {
       ok: true
@@ -530,6 +565,12 @@ export type AuthProvidersResponse =
       oauthProviders: Array<AuthProviderOption>
       apiKeyProviders: Array<AuthProviderOption>
       loggedInProviders: Array<AuthProviderOption>
+      availableModels: Array<{
+        id: string
+        provider?: string
+        name?: string
+        reasoning?: boolean
+      }>
     }
   | ApiErrorResponse
 

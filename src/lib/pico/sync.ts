@@ -202,7 +202,8 @@ function sameAssistantBlockPayload(
       return (
         right.type === "compaction" &&
         left.summary === right.summary &&
-        left.tokensBefore === right.tokensBefore
+        left.tokensBefore === right.tokensBefore &&
+        left.estimatedTokensAfter === right.estimatedTokensAfter
       )
     default:
       return false
@@ -610,8 +611,12 @@ export function assistantBlocksFromMessage(
 export function createCompactionSummaryItem(
   summary: unknown,
   tokensBefore: unknown,
-  itemKey = "compaction"
+  itemKey = "compaction",
+  estimatedTokensAfter?: unknown
 ) {
+  const normalizedEstimatedTokensAfter =
+    estimatedTokensAfter == null ? NaN : Number(estimatedTokensAfter)
+
   return {
     kind: "assistant",
     itemKey,
@@ -623,6 +628,9 @@ export function createCompactionSummaryItem(
         tokensBefore: Number.isFinite(Number(tokensBefore))
           ? Number(tokensBefore)
           : 0,
+        ...(Number.isFinite(normalizedEstimatedTokensAfter)
+          ? { estimatedTokensAfter: normalizedEstimatedTokensAfter }
+          : {}),
       },
     ],
     streaming: false,
@@ -1079,7 +1087,8 @@ export function buildItemsFromSync(
         createCompactionSummaryItem(
           message.summary,
           message.tokensBefore,
-          itemKey
+          itemKey,
+          message.estimatedTokensAfter
         )
       )
       continue
@@ -1282,8 +1291,15 @@ export function createInitialSessionState(): SessionState {
     historyOffset: 0,
     historyTotalCount: 0,
     firstMessage: "",
-    thinkingLevel: "off",
-    availableThinkingLevels: ["off"],
+    thinkingLevel: "xhigh",
+    availableThinkingLevels: [
+      "off",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ],
     availableModels: [],
     availableSkills: [],
     hideThinkingBlock: false,

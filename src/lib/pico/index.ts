@@ -200,6 +200,7 @@ type CompactionBlock = {
   renderKey?: string
   summary: string
   tokensBefore: number
+  estimatedTokensAfter?: number
 }
 
 export type AssistantBlock =
@@ -294,6 +295,7 @@ export type MessagePayload = UnknownRecord & {
   deliverAs?: unknown
   summary?: unknown
   tokensBefore?: unknown
+  estimatedTokensAfter?: unknown
   toolCallId?: unknown
   details?: unknown
   isError?: unknown
