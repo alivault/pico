@@ -76,6 +76,19 @@ struct DirectorySessionsSectionView: View {
         "\(DirectoryPathFormatter.displayPath(snapshot.directory)), \(isExpanded ? "expanded" : "collapsed")"
       )
       .accessibilityHint(isExpanded ? "Collapse directory" : "Expand directory")
+
+      Button(action: startNewSession) {
+        Image(systemName: "square.and.pencil")
+          .font(.subheadline.weight(.semibold))
+          .frame(width: 44, height: 32)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel(
+        "New session in \(DirectoryPathFormatter.displayPath(snapshot.directory))"
+      )
+      .accessibilityHint("Starts a new draft in this directory")
     }
     .textCase(nil)
   }
@@ -94,6 +107,11 @@ struct DirectorySessionsSectionView: View {
 
   private func toggleExpanded() {
     isExpanded.toggle()
+  }
+
+  private func startNewSession() {
+    model.beginNewChat(cwd: snapshot.directory)
+    openDetail()
   }
 }
 
