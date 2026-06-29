@@ -26,6 +26,9 @@ struct WorkspaceView: View {
         .fill(sidebarBackgroundColor)
         .ignoresSafeArea()
     }
+    .onChange(of: model.conversationPresentationRequest) {
+      openConversation()
+    }
   }
 
   private var chatScreen: some View {
@@ -80,6 +83,9 @@ private struct CompactWorkspaceView: View {
       Rectangle()
         .fill(sidebarBackgroundColor)
         .ignoresSafeArea()
+    }
+    .onChange(of: model.conversationPresentationRequest) {
+      openConversation()
     }
   }
 

@@ -2,7 +2,10 @@ import SwiftUI
 import UIKit
 
 extension Notification.Name {
-  static let picoOpenNewChatShortcut = Notification.Name("PicoOpenNewChatShortcut")
+  static let picoOpenNewChatShortcut = Notification.Name(
+    "PicoOpenNewChatShortcut"
+  )
+  static let picoOpenDeepLink = Notification.Name("PicoOpenDeepLink")
 }
 
 @main
@@ -38,6 +41,7 @@ private final class PicoAppDelegate: NSObject, UIApplicationDelegate {
 
 private final class PicoSceneDelegate: NSObject, UIWindowSceneDelegate {
   private var pendingShortcutItem: UIApplicationShortcutItem?
+  private var pendingDeepLinkURLs: [URL] = []
 
   func scene(
     _ scene: UIScene,
@@ -45,13 +49,31 @@ private final class PicoSceneDelegate: NSObject, UIWindowSceneDelegate {
     options connectionOptions: UIScene.ConnectionOptions
   ) {
     pendingShortcutItem = connectionOptions.shortcutItem
+    pendingDeepLinkURLs = connectionOptions.urlContexts.map(\.url)
   }
 
   func sceneDidBecomeActive(_ scene: UIScene) {
-    guard let shortcutItem = pendingShortcutItem else { return }
+    if let shortcutItem = pendingShortcutItem {
+      pendingShortcutItem = nil
+      _ = handle(shortcutItem)
+    }
 
-    pendingShortcutItem = nil
-    _ = handle(shortcutItem)
+    guard !pendingDeepLinkURLs.isEmpty else { return }
+
+    let urls = pendingDeepLinkURLs
+    pendingDeepLinkURLs = []
+    for url in urls {
+      postDeepLink(url)
+    }
+  }
+
+  func scene(
+    _ scene: UIScene,
+    openURLContexts URLContexts: Set<UIOpenURLContext>
+  ) {
+    for context in URLContexts {
+      postDeepLink(context.url)
+    }
   }
 
   func windowScene(
@@ -67,5 +89,9 @@ private final class PicoSceneDelegate: NSObject, UIWindowSceneDelegate {
 
     NotificationCenter.default.post(name: .picoOpenNewChatShortcut, object: nil)
     return true
+  }
+
+  private func postDeepLink(_ url: URL) {
+    NotificationCenter.default.post(name: .picoOpenDeepLink, object: url)
   }
 }

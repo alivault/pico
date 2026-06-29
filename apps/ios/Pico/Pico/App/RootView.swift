@@ -24,8 +24,16 @@ struct RootView: View {
     .onChange(of: scenePhase, initial: true) {
       model.setSceneActive(scenePhase == .active)
     }
-    .onReceive(NotificationCenter.default.publisher(for: .picoOpenNewChatShortcut)) { _ in
+    .onReceive(
+      NotificationCenter.default.publisher(for: .picoOpenNewChatShortcut)
+    ) { _ in
       model.beginNewChat()
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .picoOpenDeepLink)
+    ) { notification in
+      guard let url = notification.object as? URL else { return }
+      model.handleDeepLink(url)
     }
     .alert(item: $model.alert) { alert in
       Alert(

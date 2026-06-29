@@ -56,15 +56,24 @@ public actor PicoAPIClient {
   public func selectSession(
     baseURL: URL,
     contextId: String,
-    sessionId: String
+    sessionId: String?,
+    sessionPath: String? = nil
   ) async throws -> SimpleOkResponse {
-    try await send(
-      endpoint: .sessionSelect,
-      baseURL: baseURL,
-      method: "POST",
-      contextId: contextId,
-      sessionId: sessionId
+    let sessionPath = sessionPath?.trimmingCharacters(
+      in: .whitespacesAndNewlines
     )
+    let extraQueryItems = sessionPath?.isEmpty == false
+      ? [URLQueryItem(name: "sessionPath", value: sessionPath)]
+      : []
+    let url = try PicoEndpoint.sessionSelect.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      sessionId: sessionId,
+      extraQueryItems: extraQueryItems
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    return try await perform(request)
   }
 
   public func renameSession(

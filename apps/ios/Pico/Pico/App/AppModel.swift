@@ -12,6 +12,7 @@ public final class AppModel {
   @ObservationIgnored private let sessionDoneNotifications = SessionDoneNotificationClient()
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var directoryIndexRefreshSignature = ""
+  @ObservationIgnored private var pendingSessionDeepLink: PicoSessionDeepLink?
   @ObservationIgnored private var isSceneActive = true
   @ObservationIgnored private var notifiedSessionDoneIds = Set<String>()
   @ObservationIgnored private var compactAbortRequested = false
@@ -65,6 +66,7 @@ public final class AppModel {
   public var alert: AppAlert?
   public var isSubmitting = false
   public var lastSessionDoneEvent: SessionDoneEvent?
+  public var conversationPresentationRequest = 0
   public var hideToolBlocks: Bool
   public private(set) var currentGitStatus: GitStatusSummary?
   public private(set) var currentGitLocalBranches: [GitLocalBranch] = []
@@ -84,6 +86,9 @@ public final class AppModel {
     serverURLText = connectionStore.serverURLText
     sidebarDirectories = connectionStore.sidebarDirectories
     hideToolBlocks = connectionStore.hideToolBlocks
+    sessionDoneNotifications.deepLinkHandler = { [weak self] url in
+      self?.handleDeepLink(url)
+    }
   }
 
   public var isConnected: Bool {
@@ -349,6 +354,7 @@ public final class AppModel {
       beginNewChat()
       await refreshAuthProviders()
       await prepareSessionDoneNotifications()
+      await openPendingSessionDeepLinkIfNeeded()
     } catch {
       let message = Self.message(for: error)
       connectionStatus = .failed(message)
@@ -363,6 +369,14 @@ public final class AppModel {
 
   public func prepareSessionDoneNotifications() async {
     await sessionDoneNotifications.requestAuthorizationIfNeeded()
+  }
+
+  public func handleDeepLink(_ url: URL) {
+    guard let deepLink = PicoSessionDeepLink(url: url) else { return }
+
+    Task {
+      await openSession(from: deepLink)
+    }
   }
 
   public func disconnect() {
@@ -383,14 +397,21 @@ public final class AppModel {
     supplementalDirectoryIndexes = [:]
     loadingDirectorySessionIndexes = []
     directoryIndexRefreshSignature = ""
+    pendingSessionDeepLink = nil
     sessionState = SessionState()
     sessionsEvent = nil
   }
 
-  public func selectSession(_ entry: SessionListEntry) async {
-    guard let selectionId = entry.selectionId else { return }
-    guard let baseURL else { return }
+  @discardableResult
+  public func selectSession(_ entry: SessionListEntry) async -> Bool {
+    let selectionSessionId = Self.normalizedText(entry.sessionId)
+    let selectionSessionPath = Self.normalizedText(entry.path)
+    guard selectionSessionId != nil || selectionSessionPath != nil else {
+      return false
+    }
+    guard let baseURL else { return false }
 
+    let selectionId = selectionSessionId ?? selectionSessionPath
     let previousSelectedSessionId = selectedSessionId
     let previousLoadingSessionTitle = loadingSessionTitle
     let previousLoadingSessionCwd = loadingSessionCwd
@@ -423,9 +444,14 @@ public final class AppModel {
       _ = try await apiClient.selectSession(
         baseURL: baseURL,
         contextId: connectionStore.contextId,
-        sessionId: selectionId
+        sessionId: selectionSessionId,
+        sessionPath: selectionSessionPath
       )
-      startEvents(sessionId: selectionId)
+      startEvents(
+        sessionId: selectionSessionId,
+        sessionKey: selectionSessionId == nil ? selectionSessionPath : nil
+      )
+      return true
     } catch {
       selectedSessionId = previousSelectedSessionId
       loadingSessionTitle = previousLoadingSessionTitle
@@ -441,6 +467,7 @@ public final class AppModel {
         title: "Could not select session",
         message: Self.message(for: error)
       )
+      return false
     }
   }
 
@@ -2131,6 +2158,47 @@ public final class AppModel {
     }
   }
 
+  private func openPendingSessionDeepLinkIfNeeded() async {
+    guard let deepLink = pendingSessionDeepLink else { return }
+
+    pendingSessionDeepLink = nil
+    await openSession(from: deepLink)
+  }
+
+  private func openSession(from deepLink: PicoSessionDeepLink) async {
+    guard baseURL != nil else {
+      pendingSessionDeepLink = deepLink
+      await restoreConnection()
+      return
+    }
+
+    guard let entry = sessionListEntry(matching: deepLink) ??
+      deepLink.fallbackEntry else {
+      alert = AppAlert(
+        title: "Could not open session",
+        message: "The deep link does not include a session identifier."
+      )
+      return
+    }
+
+    let selected = await selectSession(entry)
+    if selected {
+      conversationPresentationRequest &+= 1
+    }
+  }
+
+  private func sessionListEntry(
+    matching deepLink: PicoSessionDeepLink
+  ) -> SessionListEntry? {
+    for snapshot in sessionSnapshots {
+      if let entry = snapshot.sessions.first(where: { deepLink.matches($0) }) {
+        return entry
+      }
+    }
+
+    return nil
+  }
+
   private func apply(_ done: SessionDoneEvent) {
     lastSessionDoneEvent = done
 
@@ -2237,10 +2305,138 @@ public final class AppModel {
   }
 }
 
+private struct PicoSessionDeepLink: Equatable, Sendable {
+  static let scheme = "pico"
+  private static let sessionRoute = "session"
+
+  var sessionId: String?
+  var sessionKey: String?
+  var sessionPath: String?
+  var cwd: String?
+  var title: String?
+
+  init?(url: URL) {
+    guard url.scheme?.lowercased() == Self.scheme,
+          Self.routeName(for: url) == Self.sessionRoute,
+          let components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+          ) else {
+      return nil
+    }
+
+    sessionId = Self.queryValue(
+      in: components,
+      names: ["sessionId", "session"]
+    )
+    sessionKey = Self.queryValue(in: components, names: ["sessionKey"])
+    sessionPath = Self.queryValue(
+      in: components,
+      names: ["sessionPath", "path"]
+    )
+    cwd = Self.queryValue(in: components, names: ["cwd"])
+    title = Self.queryValue(in: components, names: ["title"])
+
+    guard sessionId != nil || sessionKey != nil || sessionPath != nil else {
+      return nil
+    }
+  }
+
+  var fallbackEntry: SessionListEntry? {
+    let path = sessionPath ?? sessionKey
+    guard sessionId != nil || path != nil else { return nil }
+
+    return SessionListEntry(
+      path: path,
+      sessionId: sessionId,
+      cwd: cwd,
+      title: title ?? "Session"
+    )
+  }
+
+  func matches(_ entry: SessionListEntry) -> Bool {
+    if let sessionId, entry.sessionId == sessionId {
+      return true
+    }
+
+    if let sessionPath, entry.path == sessionPath {
+      return true
+    }
+
+    if let sessionKey,
+       entry.path == sessionKey || entry.sessionId == sessionKey {
+      return true
+    }
+
+    return false
+  }
+
+  static func url(for event: SessionDoneEvent) -> URL? {
+    var queryItems: [URLQueryItem] = []
+    appendQueryItem("sessionId", value: event.sessionId, to: &queryItems)
+    appendQueryItem("sessionKey", value: event.sessionKey, to: &queryItems)
+    appendQueryItem("sessionPath", value: event.sessionPath, to: &queryItems)
+    appendQueryItem("cwd", value: event.cwd, to: &queryItems)
+    appendQueryItem("title", value: event.title, to: &queryItems)
+
+    guard queryItems.contains(where: {
+      $0.name == "sessionId" ||
+        $0.name == "sessionKey" ||
+        $0.name == "sessionPath"
+    }) else {
+      return nil
+    }
+
+    var components = URLComponents()
+    components.scheme = scheme
+    components.host = sessionRoute
+    components.queryItems = queryItems
+    return components.url
+  }
+
+  private static func routeName(for url: URL) -> String? {
+    if let host = url.host(percentEncoded: false), !host.isEmpty {
+      return host.lowercased()
+    }
+
+    return url.pathComponents.dropFirst().first?.lowercased()
+  }
+
+  private static func queryValue(
+    in components: URLComponents,
+    names: [String]
+  ) -> String? {
+    for name in names {
+      guard let value = components.queryItems?.first(where: { $0.name == name })?.value?
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+        !value.isEmpty else {
+        continue
+      }
+
+      return value
+    }
+
+    return nil
+  }
+
+  private static func appendQueryItem(
+    _ name: String,
+    value: String?,
+    to queryItems: inout [URLQueryItem]
+  ) {
+    let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !value.isEmpty else { return }
+
+    queryItems.append(URLQueryItem(name: name, value: value))
+  }
+}
+
 private final class SessionDoneNotificationClient: NSObject,
   UNUserNotificationCenterDelegate,
   @unchecked Sendable {
   private let center = UNUserNotificationCenter.current()
+
+  var deepLinkHandler: (@MainActor (URL) -> Void)?
 
   override init() {
     super.init()
@@ -2259,7 +2455,12 @@ private final class SessionDoneNotificationClient: NSObject,
     content.body = notificationBody(for: event)
     content.sound = .default
     content.threadIdentifier = notificationThreadIdentifier(for: event)
-    content.userInfo = notificationUserInfo(for: event)
+    let deepLinkURL = PicoSessionDeepLink.url(for: event)
+    content.targetContentIdentifier = deepLinkURL?.absoluteString
+    content.userInfo = notificationUserInfo(
+      for: event,
+      deepLinkURL: deepLinkURL
+    )
 
     let request = UNNotificationRequest(
       identifier: "pico-session-done-\(event.id)",
@@ -2275,6 +2476,17 @@ private final class SessionDoneNotificationClient: NSObject,
     willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
     [.banner, .list, .sound]
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse
+  ) async {
+    guard let url = deepLinkURL(for: response.notification.request.content) else {
+      return
+    }
+
+    await deepLinkHandler?(url)
   }
 
   private func canPostNotifications() async -> Bool {
@@ -2328,8 +2540,15 @@ private final class SessionDoneNotificationClient: NSObject,
     return "pico-session-done"
   }
 
-  private func notificationUserInfo(for event: SessionDoneEvent) -> [String: String] {
+  private func notificationUserInfo(
+    for event: SessionDoneEvent,
+    deepLinkURL: URL?
+  ) -> [String: String] {
     var userInfo = ["sessionDoneId": event.id]
+
+    if let deepLinkURL {
+      userInfo["deepLink"] = deepLinkURL.absoluteString
+    }
 
     if let sessionId = normalized(event.sessionId) {
       userInfo["sessionId"] = sessionId
@@ -2342,6 +2561,20 @@ private final class SessionDoneNotificationClient: NSObject,
     }
 
     return userInfo
+  }
+
+  private func deepLinkURL(for content: UNNotificationContent) -> URL? {
+    if let deepLink = content.userInfo["deepLink"] as? String,
+       let url = URL(string: deepLink) {
+      return url
+    }
+
+    if let targetContentIdentifier = content.targetContentIdentifier,
+       let url = URL(string: targetContentIdentifier) {
+      return url
+    }
+
+    return nil
   }
 
   private func normalized(_ value: String?) -> String? {
