@@ -980,7 +980,7 @@ export function useAppShellSessionMutations({
   })
 
   const deleteSessions = React.useCallback(
-    async (targets: Array<SessionListEntry>) => {
+    (targets: Array<SessionListEntry>) => {
       if (!viewerContextId || targets.length === 0) return false
 
       const orderedTargets = [

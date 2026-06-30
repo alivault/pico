@@ -362,25 +362,25 @@ function DeleteSessionsDialog({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="max-h-[90svh] overflow-hidden">
-          <DrawerHeader>
-            <DrawerTitle>{title}</DrawerTitle>
-            <DrawerDescription>{description}</DrawerDescription>
-          </DrawerHeader>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90svh] overflow-hidden p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {body}
           </div>
-          <DrawerFooter className="border-t border-border/70">
+          <DialogFooter className="flex-col-reverse gap-2 border-t border-border/70 p-3 sm:flex-row">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={onDeleteSession}>
               Delete
             </Button>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     )
   }
 
