@@ -38,6 +38,7 @@ struct DirectorySessionsSectionView: View {
               )
             } label: {
               Text("See all")
+                .foregroundStyle(.blue)
             }
           }
         }
@@ -46,13 +47,25 @@ struct DirectorySessionsSectionView: View {
       directoryHeaderRow
     }
     .listSectionSpacing(8)
+    .headerProminence(.increased)
   }
 
   private var directoryHeaderRow: some View {
     HStack(spacing: 8) {
       Button(action: toggleExpanded) {
         HStack(spacing: 8) {
+          Image(systemName: "folder")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 20, height: 28)
+
           SidebarDirectoryPathLabel(path: snapshot.directory)
+
+          Image(systemName: "chevron.down")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.secondary)
+            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+            .frame(width: 20, height: 28)
 
           Spacer(minLength: 8)
 
@@ -61,12 +74,6 @@ struct DirectorySessionsSectionView: View {
               .controlSize(.small)
               .accessibilityLabel("Loading sessions")
           }
-
-          Image(systemName: "chevron.down")
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.secondary)
-            .rotationEffect(.degrees(isExpanded ? 0 : -90))
-            .frame(width: 20, height: 28)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -89,6 +96,22 @@ struct DirectorySessionsSectionView: View {
         "New session in \(DirectoryPathFormatter.displayPath(snapshot.directory))"
       )
       .accessibilityHint("Starts a new draft in this directory")
+
+      Menu {
+        Button(role: .destructive, action: removeDirectory) {
+          Label("Remove Directory", systemImage: "minus.circle")
+        }
+      } label: {
+        Image(systemName: "ellipsis")
+          .font(.subheadline.weight(.semibold))
+          .frame(width: 44, height: 32)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel(
+        "Actions for \(DirectoryPathFormatter.displayPath(snapshot.directory))"
+      )
     }
     .textCase(nil)
   }
@@ -112,6 +135,10 @@ struct DirectorySessionsSectionView: View {
   private func startNewSession() {
     model.beginNewChat(cwd: snapshot.directory)
     openDetail()
+  }
+
+  private func removeDirectory() {
+    model.removeSidebarDirectory(snapshot.directory)
   }
 }
 
