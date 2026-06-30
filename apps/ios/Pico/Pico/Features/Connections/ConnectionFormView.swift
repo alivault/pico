@@ -15,9 +15,13 @@ struct ConnectionFormView: View {
         .submitLabel(.go)
         .onSubmit(connect)
 
-      Button("Connect", action: connect)
-        .buttonStyle(.borderedProminent)
-        .disabled(model.connectionStatus == .connecting)
+      Button(action: connect) {
+        Text("Connect")
+          .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.large)
+      .disabled(model.connectionStatus == .connecting)
     }
   }
 

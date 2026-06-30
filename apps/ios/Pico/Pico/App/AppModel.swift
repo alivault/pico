@@ -102,7 +102,7 @@ public final class AppModel {
     case .failed(let message):
       message
     default:
-      manifest.map { "\($0.displayName) \($0.version)" } ?? "Enter a Pico server URL."
+      manifest.map { "\($0.displayName) \($0.version)" } ?? ""
     }
   }
 
