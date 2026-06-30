@@ -5,9 +5,9 @@ import UserNotifications
 @MainActor
 @Observable
 public final class AppModel {
-  @ObservationIgnored private let apiClient: PicoAPIClient
+  @ObservationIgnored let apiClient: PicoAPIClient
   @ObservationIgnored private let eventStream: PicoEventStream
-  @ObservationIgnored private let connectionStore: ConnectionStore
+  @ObservationIgnored let connectionStore: ConnectionStore
   @ObservationIgnored private let draftStore: DraftStore
   @ObservationIgnored private let sessionDoneNotifications = SessionDoneNotificationClient()
   @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -39,6 +39,7 @@ public final class AppModel {
     var composerText: String
     var composerSelectedDirectory: String?
     var composerImages: [PromptImage]
+    var composerGitComments: [ComposerGitCommentAttachment]
     var isSubmitting: Bool
     var sessionState: SessionState
   }
@@ -62,6 +63,7 @@ public final class AppModel {
   public var isComposingNewSession = true
   public var composerText = ""
   public var composerImages: [PromptImage] = []
+  public var composerGitComments: [ComposerGitCommentAttachment] = []
   public var composerSelectedModel: ModelOption?
   public var composerSelectedDirectory: String?
   public var selectedStreamingBehavior: StreamingBehavior = .steer
@@ -70,6 +72,7 @@ public final class AppModel {
   public var lastSessionDoneEvent: SessionDoneEvent?
   public var conversationPresentationRequest = 0
   public var hideToolBlocks: Bool
+  public var gitRefreshRevision = 0
   public private(set) var currentGitStatus: GitStatusSummary?
   public private(set) var currentGitLocalBranches: [GitLocalBranch] = []
   public private(set) var isLoadingGitBranches = false
@@ -393,6 +396,7 @@ public final class AppModel {
     composerSelectedDirectory = nil
     composerSelectedModel = nil
     composerImages = []
+    composerGitComments = []
     isComposingNewSession = true
     loadingSessionTitle = nil
     loadingSessionCwd = nil
@@ -419,6 +423,7 @@ public final class AppModel {
     let previousLoadingSessionCwd = loadingSessionCwd
     let previousIsComposingNewSession = isComposingNewSession
     let previousComposerText = composerText
+    let previousComposerGitComments = composerGitComments
     let previousComposerSelectedDirectory = composerSelectedDirectory
     let previousComposerSelectedModel = composerSelectedModel
     let previousSessionState = sessionState
@@ -437,6 +442,7 @@ public final class AppModel {
     isComposingNewSession = false
     composerText = ""
     composerImages = []
+    composerGitComments = []
     composerSelectedDirectory = nil
     composerSelectedModel = nil
     sessionState = SessionState(connected: sessionState.connected)
@@ -460,6 +466,7 @@ public final class AppModel {
       loadingSessionCwd = previousLoadingSessionCwd
       isComposingNewSession = previousIsComposingNewSession
       composerText = previousComposerText
+      composerGitComments = previousComposerGitComments
       composerSelectedDirectory = previousComposerSelectedDirectory
       composerSelectedModel = previousComposerSelectedModel
       sessionState = previousSessionState
@@ -715,6 +722,7 @@ public final class AppModel {
     isComposingNewSession = true
     composerText = ""
     composerImages = []
+    composerGitComments = []
     composerSelectedDirectory = targetCwd
     composerSelectedModel = targetModel
     sessionState = SessionState(
@@ -878,12 +886,16 @@ public final class AppModel {
   public func submitComposerPrompt(
     streamingBehavior: StreamingBehavior? = nil
   ) async -> Bool {
-    let trimmedPrompt = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let message = promptMessageWithGitComments(
+      text: composerText,
+      gitComments: composerGitComments
+    )
+    let trimmedPrompt = message.trimmingCharacters(in: .whitespacesAndNewlines)
     let images = composerImages
     guard !trimmedPrompt.isEmpty || !images.isEmpty else {
       alert = AppAlert(
         title: "Message required",
-        message: "Enter a message or attach an image before sending."
+        message: "Enter a message, attach an image, or attach a Git comment before sending."
       )
       return false
     }
@@ -1270,15 +1282,17 @@ public final class AppModel {
     guard !message.isEmpty || !images.isEmpty else {
       alert = AppAlert(
         title: "Message required",
-        message: "Enter a message or attach an image before sending."
+        message: "Enter a message, attach an image, or attach a Git comment before sending."
       )
       return false
     }
 
     let previousDraft = composerText
     let previousImages = composerImages
+    let previousGitComments = composerGitComments
     composerText = ""
     composerImages = []
+    composerGitComments = []
     draftStore.saveDraft(
       "",
       contextId: connectionStore.contextId,
@@ -1308,6 +1322,7 @@ public final class AppModel {
     } catch {
       composerText = previousDraft
       composerImages = previousImages
+      composerGitComments = previousGitComments
       draftStore.saveDraft(
         previousDraft,
         contextId: connectionStore.contextId,
@@ -1845,6 +1860,7 @@ public final class AppModel {
       composerText: composerText,
       composerSelectedDirectory: composerSelectedDirectory,
       composerImages: composerImages,
+      composerGitComments: composerGitComments,
       isSubmitting: isSubmitting,
       sessionState: sessionState
     )
@@ -1852,6 +1868,7 @@ public final class AppModel {
     isComposingNewSession = false
     composerText = ""
     composerImages = []
+    composerGitComments = []
     draftStore.saveDraft(
       "",
       contextId: connectionStore.contextId,
@@ -1873,6 +1890,7 @@ public final class AppModel {
     composerText = rollback.composerText
     composerSelectedDirectory = rollback.composerSelectedDirectory
     composerImages = rollback.composerImages
+    composerGitComments = rollback.composerGitComments
     isSubmitting = rollback.isSubmitting
     sessionState = rollback.sessionState
     draftStore.saveDraft(
@@ -2271,6 +2289,7 @@ public final class AppModel {
       return
     }
 
+    gitRefreshRevision &+= 1
     refreshConversationGitStatusIfNeeded(force: true)
     if scopes.isEmpty || scopes.contains("refs") {
       refreshComposerGitBranches(force: true)
@@ -2293,7 +2312,7 @@ public final class AppModel {
     isLoadingGitBranches = false
   }
 
-  private func refreshConversationGitStatusIfNeeded(force: Bool = false) {
+  func refreshConversationGitStatusIfNeeded(force: Bool = false) {
     guard let cwd = Self.normalizedText(conversationHeaderDirectory) else {
       clearGitStatus()
       return

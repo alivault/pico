@@ -4,13 +4,19 @@ import SwiftUI
 struct PierrePatchDiffView: View {
   var patch: String
   var fileName: String?
+  var maxHeight: CGFloat? = 384
+  var scrollsVertically = true
 
   private var diff: PierrePatchDiff {
     PierrePatchDiff(patch: patch, fallbackFileName: fileName)
   }
 
   var body: some View {
-    PierrePatchDiffRowsView(diff: diff)
+    PierrePatchDiffRowsView(
+      diff: diff,
+      maxHeight: maxHeight,
+      scrollsVertically: scrollsVertically
+    )
   }
 }
 
@@ -407,6 +413,8 @@ enum PierrePatchDiffLineType: Equatable {
 
 private struct PierrePatchDiffRowsView: View {
   var diff: PierrePatchDiff
+  var maxHeight: CGFloat? = 384
+  var scrollsVertically = true
 
   @Environment(\.colorScheme) private var colorScheme
 
@@ -415,16 +423,16 @@ private struct PierrePatchDiffRowsView: View {
   }
 
   var body: some View {
-    ScrollView(.vertical) {
-      LazyVStack(alignment: .leading, spacing: 0) {
-        ForEach(diff.lines) { line in
-          PierrePatchDiffLineView(line: line, palette: palette)
+    Group {
+      if scrollsVertically {
+        ScrollView(.vertical) {
+          rows
         }
+        .frame(maxHeight: maxHeight)
+      } else {
+        rows
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.vertical, 6)
     }
-    .frame(maxHeight: 384)
     .background(palette.containerBackground, in: .rect(cornerRadius: 12))
     .overlay {
       RoundedRectangle(cornerRadius: 12)
@@ -432,6 +440,16 @@ private struct PierrePatchDiffRowsView: View {
     }
     .clipShape(.rect(cornerRadius: 12))
     .textSelection(.enabled)
+  }
+
+  private var rows: some View {
+    LazyVStack(alignment: .leading, spacing: 0) {
+      ForEach(diff.lines) { line in
+        PierrePatchDiffLineView(line: line, palette: palette)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, 6)
   }
 }
 

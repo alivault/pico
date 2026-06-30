@@ -129,6 +129,18 @@
 		FB562EAB8187C4F75CC72356 /* Core/Models/ClientManifestAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7917B053F3BE284252496E51 /* Core/Models/ClientManifestAuthentication.swift */; };
 		FCB974B9E760FACA0D4B73B7 /* Features/Conversation/ToolBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C26CFC542C49E40A1FC540D2 /* Features/Conversation/ToolBlockView.swift */; };
 		FD2B6D6D25C7EA4773022D3F /* App/AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A93FBCDF8E4B32FF6A8C75 /* App/AppModel.swift */; };
+		C50000000000000000000001 /* App/AppModel+Git.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000001 /* App/AppModel+Git.swift */; };
+		C50000000000000000000002 /* Features/Git/GitFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000002 /* Features/Git/GitFormatting.swift */; };
+		C50000000000000000000003 /* Features/Git/ProjectFileTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000003 /* Features/Git/ProjectFileTree.swift */; };
+		C50000000000000000000004 /* Features/Git/GitSharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000004 /* Features/Git/GitSharedViews.swift */; };
+		C50000000000000000000005 /* Features/Git/GitPatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000005 /* Features/Git/GitPatchView.swift */; };
+		C50000000000000000000006 /* Features/Git/GitWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000006 /* Features/Git/GitWorkspaceView.swift */; };
+		C50000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift */; };
+		C50000000000000000000008 /* Features/Git/GitHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000008 /* Features/Git/GitHistoryView.swift */; };
+		C50000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift */; };
+		C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */; };
+		C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */; };
+		C5000000000000000000000C /* GitFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000C /* GitFeatureTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -267,6 +279,18 @@
 		FB21F912F8DF9DA36E5237AB /* Core/Models/GitChangedEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitChangedEvent.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitStatusResponse.swift; sourceTree = "<group>"; };
 		FFEB0A8714341A1CDD708DD4 /* Features/Conversation/AssistantBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AssistantBlockView.swift; sourceTree = "<group>"; };
+		C40000000000000000000001 /* App/AppModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/AppModel+Git.swift"; sourceTree = "<group>"; };
+		C40000000000000000000002 /* Features/Git/GitFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitFormatting.swift; sourceTree = "<group>"; };
+		C40000000000000000000003 /* Features/Git/ProjectFileTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/ProjectFileTree.swift; sourceTree = "<group>"; };
+		C40000000000000000000004 /* Features/Git/GitSharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitSharedViews.swift; sourceTree = "<group>"; };
+		C40000000000000000000005 /* Features/Git/GitPatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitPatchView.swift; sourceTree = "<group>"; };
+		C40000000000000000000006 /* Features/Git/GitWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitWorkspaceView.swift; sourceTree = "<group>"; };
+		C40000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitChangesWorkspaceView.swift; sourceTree = "<group>"; };
+		C40000000000000000000008 /* Features/Git/GitHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitHistoryView.swift; sourceTree = "<group>"; };
+		C40000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/ProjectFilesWorkspaceView.swift; sourceTree = "<group>"; };
+		C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitBranchSheetView.swift; sourceTree = "<group>"; };
+		C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitCommitSheetView.swift; sourceTree = "<group>"; };
+		C4000000000000000000000C /* GitFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitFeatureTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -292,6 +316,7 @@
 			children = (
 				DF036FD3DDADFE43FD5B6F63 /* App/AppAlert.swift */,
 				B6A93FBCDF8E4B32FF6A8C75 /* App/AppModel.swift */,
+				C40000000000000000000001 /* App/AppModel+Git.swift */,
 				B1E447475068E9268F083D08 /* App/ConnectionStatus.swift */,
 				11E8B4150A6FF58BBCED5F14 /* App/RootView.swift */,
 				8A99C79EE95E2FAFC35B9211 /* App/WorkspaceView.swift */,
@@ -380,6 +405,16 @@
 				F30000000000000000000006 /* Features/Conversation/AnsiTextView.swift */,
 				F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */,
 				A5237E7C9CC1ECEDD20771E8 /* Features/Conversation/UserMessageView.swift */,
+				C40000000000000000000002 /* Features/Git/GitFormatting.swift */,
+				C40000000000000000000003 /* Features/Git/ProjectFileTree.swift */,
+				C40000000000000000000004 /* Features/Git/GitSharedViews.swift */,
+				C40000000000000000000005 /* Features/Git/GitPatchView.swift */,
+				C40000000000000000000006 /* Features/Git/GitWorkspaceView.swift */,
+				C40000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift */,
+				C40000000000000000000008 /* Features/Git/GitHistoryView.swift */,
+				C40000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift */,
+				C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */,
+				C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */,
 				B2885B1058D12CC8500CA0F8 /* Features/Sessions/ConnectionStatusBadge.swift */,
 				544DDDAE75B2CB2572A56D97 /* Features/Sessions/DirectorySessionsSectionView.swift */,
 				B10000000000000000000004 /* Features/Sessions/DirectoryPathFormatter.swift */,
@@ -417,6 +452,7 @@
 				604C09F156DF1907DC203561 /* SSEEventParserTests.swift */,
 				289C7DE7F440C3014996C6DB /* SessionStateReducerTests.swift */,
 				F30000000000000000000004 /* ToolFormattingTests.swift */,
+				C4000000000000000000000C /* GitFeatureTests.swift */,
 			);
 			path = PicoTests;
 			sourceTree = "<group>";
@@ -555,6 +591,7 @@
 			files = (
 				8CF94CC6DC666351130A9A9B /* App/AppAlert.swift in Sources */,
 				FD2B6D6D25C7EA4773022D3F /* App/AppModel.swift in Sources */,
+				C50000000000000000000001 /* App/AppModel+Git.swift in Sources */,
 				902C83A4A472CFD0AFBF14D4 /* App/ConnectionStatus.swift in Sources */,
 				D1A0B7AD3FD98F9CB326AA46 /* App/RootView.swift in Sources */,
 				34D4E50F6B15CB6912CCFE86 /* App/WorkspaceView.swift in Sources */,
@@ -639,6 +676,16 @@
 				F30000000000000000000005 /* Features/Conversation/AnsiTextView.swift in Sources */,
 				F30000000000000000000009 /* Features/Conversation/PierrePatchDiffView.swift in Sources */,
 				C69946379F7163E80069A38B /* Features/Conversation/UserMessageView.swift in Sources */,
+				C50000000000000000000002 /* Features/Git/GitFormatting.swift in Sources */,
+				C50000000000000000000003 /* Features/Git/ProjectFileTree.swift in Sources */,
+				C50000000000000000000004 /* Features/Git/GitSharedViews.swift in Sources */,
+				C50000000000000000000005 /* Features/Git/GitPatchView.swift in Sources */,
+				C50000000000000000000006 /* Features/Git/GitWorkspaceView.swift in Sources */,
+				C50000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift in Sources */,
+				C50000000000000000000008 /* Features/Git/GitHistoryView.swift in Sources */,
+				C50000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift in Sources */,
+				C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */,
+				C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */,
 				0BC9F6CDD845F0BC1752F918 /* Features/Sessions/ConnectionStatusBadge.swift in Sources */,
 				DC3AB145623AC20BE6590832 /* Features/Sessions/DirectorySessionsSectionView.swift in Sources */,
 				A10000000000000000000001 /* Core/Models/CompletionItem.swift in Sources */,
@@ -677,6 +724,7 @@
 				1E90CFDAF5F3EEE6FFD73ED1 /* SSEEventParserTests.swift in Sources */,
 				4838CA16507E6CD34206D173 /* SessionStateReducerTests.swift in Sources */,
 				F30000000000000000000003 /* ToolFormattingTests.swift in Sources */,
+				C5000000000000000000000C /* GitFeatureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

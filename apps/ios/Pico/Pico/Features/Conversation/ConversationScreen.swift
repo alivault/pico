@@ -12,6 +12,7 @@ struct ConversationScreen: View {
   @State private var renameTitle = ""
   @State private var isShowingRenameAlert = false
   @State private var isShowingDeleteConfirmation = false
+  @State private var isShowingFilesDrawer = false
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -94,6 +95,7 @@ struct ConversationScreen: View {
         )
         ConversationHeaderOptionsMenu(
           model: model,
+          openFiles: showFilesDrawer,
           renameSession: showRenameSessionAlert,
           deleteSession: showDeleteSessionConfirmation
         )
@@ -120,6 +122,25 @@ struct ConversationScreen: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text("This removes the session from Pico and moves it to Trash when possible.")
+    }
+    .sheet(isPresented: $isShowingFilesDrawer) {
+      NavigationStack {
+        GitWorkspaceView(model: model)
+          .navigationTitle("Files")
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+              Button {
+                isShowingFilesDrawer = false
+              } label: {
+                Image(systemName: "xmark")
+              }
+              .accessibilityLabel("Close")
+            }
+          }
+      }
+      .presentationDetents([.large])
+      .presentationDragIndicator(.visible)
     }
   }
 
@@ -166,6 +187,10 @@ struct ConversationScreen: View {
     let trailingReserve: CGFloat = 132
     let measuredWidth = contentWidth > 0 ? contentWidth : 390
     return max(120, measuredWidth - leadingReserve - trailingReserve)
+  }
+
+  private func showFilesDrawer() {
+    isShowingFilesDrawer = true
   }
 
   private func showRenameSessionAlert() {
@@ -260,6 +285,7 @@ private struct ConversationNavigationTitleView: View {
 
 private struct ConversationHeaderOptionsMenu: View {
   @Bindable var model: AppModel
+  var openFiles: () -> Void
   var renameSession: () -> Void
   var deleteSession: () -> Void
 
@@ -272,6 +298,12 @@ private struct ConversationHeaderOptionsMenu: View {
 
       thinkingVisibilityButton
       toolVisibilityButton
+
+      Divider()
+
+      Button(action: openFiles) {
+        Label("Files", systemImage: "folder")
+      }
 
       Divider()
 
@@ -398,7 +430,6 @@ private struct ConversationHeaderOptionsMenu: View {
       )
     }
   }
-
 
   private func selectModel(_ option: ModelOption) {
     Task {

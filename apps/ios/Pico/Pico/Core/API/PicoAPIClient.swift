@@ -197,14 +197,341 @@ public actor PicoAPIClient {
     baseURL: URL,
     contextId: String,
     cwd: String,
-    scope: String
+    scope: String,
+    commitsLimit: Int? = nil
   ) async throws -> GitChangesResponse {
+    var queryItems = [
+      URLQueryItem(name: "cwd", value: cwd),
+      URLQueryItem(name: "gitScope", value: scope),
+    ]
+    if let commitsLimit {
+      queryItems.append(
+        URLQueryItem(name: "commitsLimit", value: String(commitsLimit))
+      )
+    }
     let url = try PicoEndpoint.gitChanges.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: queryItems
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func gitFileDiff(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    path: String
+  ) async throws -> GitFileDiffResponse {
+    let url = try PicoEndpoint.gitDiff.url(
       baseURL: baseURL,
       contextId: contextId,
       extraQueryItems: [
         URLQueryItem(name: "cwd", value: cwd),
-        URLQueryItem(name: "gitScope", value: scope),
+        URLQueryItem(name: "path", value: path),
+      ]
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func gitFileReview(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    path: String,
+    previousPath: String? = nil
+  ) async throws -> GitFileReviewResponse {
+    var queryItems = [
+      URLQueryItem(name: "cwd", value: cwd),
+      URLQueryItem(name: "path", value: path),
+    ]
+    if let previousPath, !previousPath.isEmpty {
+      queryItems.append(URLQueryItem(name: "previousPath", value: previousPath))
+    }
+    let url = try PicoEndpoint.gitReview.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: queryItems
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func stageGitFile(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    path: String,
+    previousPath: String? = nil,
+    unstage: Bool = false
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitStage,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitStageRequestBody(
+        action: unstage ? "unstage" : nil,
+        cwd: cwd,
+        path: path,
+        previousPath: previousPath
+      )
+    )
+  }
+
+  public func stageGitAll(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    unstage: Bool = false
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitStage,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitStageRequestBody(
+        action: unstage ? "unstage-all" : "stage-all",
+        all: true,
+        cwd: cwd
+      )
+    )
+  }
+
+  public func discardGitFile(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    path: String,
+    previousPath: String? = nil,
+    status: String? = nil
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitDiscard,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitDiscardRequestBody(
+        cwd: cwd,
+        path: path,
+        previousPath: previousPath,
+        status: status
+      )
+    )
+  }
+
+  public func discardGitAll(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    nukeWorkingTree: Bool = false
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitDiscard,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitDiscardRequestBody(
+        action: nukeWorkingTree ? "nuke-working-tree" : "discard-all",
+        all: true,
+        cwd: cwd
+      )
+    )
+  }
+
+  public func commitGitChanges(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    message: String,
+    push: Bool = false,
+    forcePush: Bool = false,
+    includeUnstaged: Bool = true
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitCommit,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitCommitRequestBody(
+        cwd: cwd,
+        message: message,
+        push: push,
+        forcePush: forcePush,
+        includeUnstaged: includeUnstaged
+      )
+    )
+  }
+
+  public func generateGitCommitMessage(
+    baseURL: URL,
+    contextId: String,
+    cwd: String
+  ) async throws -> GitCommitMessageResponse {
+    try await send(
+      endpoint: .gitCommitMessage,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: ["cwd": cwd]
+    )
+  }
+
+  public func pushGitChanges(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    force: Bool = false
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitPush,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitPushRequestBody(cwd: cwd, force: force)
+    )
+  }
+
+  public func pullGitChanges(
+    baseURL: URL,
+    contextId: String,
+    cwd: String
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitPull,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: ["cwd": cwd]
+    )
+  }
+
+  public func gitCommitFiles(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    commit: String
+  ) async throws -> GitCommitFilesResponse {
+    let url = try PicoEndpoint.gitCommitFiles.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: [
+        URLQueryItem(name: "cwd", value: cwd),
+        URLQueryItem(name: "commit", value: commit),
+      ]
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func gitCommitDiff(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    commit: String,
+    mode: GitCommitDiffMode,
+    path: String? = nil,
+    previousPath: String? = nil
+  ) async throws -> GitCommitDiffResponse {
+    var queryItems = [
+      URLQueryItem(name: "cwd", value: cwd),
+      URLQueryItem(name: "commit", value: commit),
+      URLQueryItem(name: "mode", value: mode.rawValue),
+    ]
+    if let path, !path.isEmpty {
+      queryItems.append(URLQueryItem(name: "path", value: path))
+    }
+    if let previousPath, !previousPath.isEmpty {
+      queryItems.append(URLQueryItem(name: "previousPath", value: previousPath))
+    }
+    let url = try PicoEndpoint.gitCommitDiff.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: queryItems
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func gitCommitRemoteUrl(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    commit: String
+  ) async throws -> GitCommitRemoteUrlResponse {
+    let url = try PicoEndpoint.gitCommitRemoteUrl.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: [
+        URLQueryItem(name: "cwd", value: cwd),
+        URLQueryItem(name: "commit", value: commit),
+      ]
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func runGitCommitAction(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    action: String,
+    commit: String,
+    tagName: String? = nil,
+    resetMode: String? = nil,
+    message: String? = nil
+  ) async throws -> GitActionResponse {
+    try await send(
+      endpoint: .gitCommitAction,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: GitCommitActionRequestBody(
+        cwd: cwd,
+        action: action,
+        commit: commit,
+        tagName: tagName,
+        resetMode: resetMode,
+        message: message
+      )
+    )
+  }
+
+  public func projectFileTree(
+    baseURL: URL,
+    contextId: String,
+    cwd: String
+  ) async throws -> ProjectFileTreeResponse {
+    let url = try PicoEndpoint.filesTree.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: [URLQueryItem(name: "cwd", value: cwd)]
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
+  public func projectFileRead(
+    baseURL: URL,
+    contextId: String,
+    cwd: String,
+    path: String
+  ) async throws -> ProjectFileReadResponse {
+    let url = try PicoEndpoint.filesRead.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      extraQueryItems: [
+        URLQueryItem(name: "cwd", value: cwd),
+        URLQueryItem(name: "path", value: path),
       ]
     )
     var request = URLRequest(url: url)
@@ -217,7 +544,9 @@ public actor PicoAPIClient {
     contextId: String,
     cwd: String,
     branch: String,
-    create: Bool = false
+    create: Bool = false,
+    startPoint: String? = nil,
+    track: Bool = false
   ) async throws -> GitActionResponse {
     try await send(
       endpoint: .gitCheckout,
@@ -227,7 +556,9 @@ public actor PicoAPIClient {
       body: GitCheckoutBranchRequestBody(
         cwd: cwd,
         branch: branch,
-        create: create ? true : nil
+        create: create ? true : nil,
+        startPoint: startPoint,
+        track: track ? true : nil
       )
     )
   }
@@ -524,8 +855,49 @@ public actor PicoAPIClient {
   }
 }
 
+private struct GitStageRequestBody: Encodable, Sendable {
+  var action: String?
+  var all: Bool?
+  var cwd: String
+  var path: String?
+  var previousPath: String?
+}
+
+private struct GitDiscardRequestBody: Encodable, Sendable {
+  var action: String?
+  var all: Bool?
+  var cwd: String
+  var path: String?
+  var previousPath: String?
+  var status: String?
+}
+
+private struct GitCommitRequestBody: Encodable, Sendable {
+  var cwd: String
+  var message: String
+  var push: Bool
+  var forcePush: Bool
+  var includeUnstaged: Bool
+}
+
+private struct GitPushRequestBody: Encodable, Sendable {
+  var cwd: String
+  var force: Bool
+}
+
+private struct GitCommitActionRequestBody: Encodable, Sendable {
+  var cwd: String
+  var action: String
+  var commit: String
+  var tagName: String?
+  var resetMode: String?
+  var message: String?
+}
+
 private struct GitCheckoutBranchRequestBody: Encodable, Sendable {
   var cwd: String
   var branch: String
   var create: Bool?
+  var startPoint: String?
+  var track: Bool?
 }

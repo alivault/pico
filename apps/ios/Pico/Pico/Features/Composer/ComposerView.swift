@@ -9,6 +9,7 @@ struct ComposerView: View {
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
   @State private var isShowingCameraPicker = false
   @State private var isShowingFileImporter = false
+  @State private var editingGitComment: ComposerGitCommentAttachment?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -32,6 +33,26 @@ struct ComposerView: View {
         .padding(.horizontal)
         .padding(.top, 6)
     }
+    .sheet(item: $editingGitComment) { comment in
+      NavigationStack {
+        GitCommentSheetView(
+          previewTitle: comment.title,
+          previewSubtitle: comment.subtitle,
+          previewSystemImage: comment.systemImage,
+          initialComment: comment.comment,
+          primaryActionTitle: "Save",
+          delete: {
+            model.removeComposerGitComment(comment.id)
+            editingGitComment = nil
+          }
+        ) { updatedComment in
+          model.updateComposerGitComment(comment.id, comment: updatedComment)
+          editingGitComment = nil
+        }
+      }
+      .presentationDetents([.medium, .large])
+      .presentationDragIndicator(.visible)
+    }
     .sheet(isPresented: $isShowingCameraPicker) {
       CameraImagePicker { data, mimeType in
         model.addComposerImage(data: data, mimeType: mimeType)
@@ -54,9 +75,19 @@ struct ComposerView: View {
 
   private var composerCard: some View {
     VStack(alignment: .leading, spacing: 0) {
+      if !model.composerGitComments.isEmpty {
+        ComposerGitCommentChipStrip(
+          comments: model.composerGitComments,
+          openComment: { editingGitComment = $0 },
+          removeComment: model.removeComposerGitComment
+        )
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+      }
+
       composerTextField
         .padding(.horizontal, 18)
-        .padding(.top, 16)
+        .padding(.top, model.composerGitComments.isEmpty ? 16 : 8)
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
 
@@ -135,12 +166,12 @@ struct ComposerView: View {
     }
     .buttonStyle(.glass)
     .buttonBorderShape(.capsule)
-    .disabled(model.isSubmitting || !hasPromptText)
+    .disabled(model.isSubmitting || !hasPromptContent)
     .accessibilityLabel("Send as \(behavior.label)")
   }
 
   private var showsStreamingBehaviorButtons: Bool {
-    model.sessionState.streaming && hasPromptText
+    model.sessionState.streaming && hasPromptContent
   }
 
   private var hasPromptText: Bool {
@@ -148,7 +179,7 @@ struct ComposerView: View {
   }
 
   private var hasPromptContent: Bool {
-    hasPromptText || !model.composerImages.isEmpty
+    hasPromptText || !model.composerImages.isEmpty || !model.composerGitComments.isEmpty
   }
 
   private var submitDisabled: Bool {
@@ -262,6 +293,70 @@ struct ComposerView: View {
         message: error.localizedDescription
       )
     }
+  }
+}
+
+private struct ComposerGitCommentChipStrip: View {
+  var comments: [ComposerGitCommentAttachment]
+  var openComment: (ComposerGitCommentAttachment) -> Void
+  var removeComment: (String) -> Void
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(comments) { comment in
+          ComposerGitCommentChip(
+            comment: comment,
+            openComment: { openComment(comment) },
+            removeComment: { removeComment(comment.id) }
+          )
+        }
+      }
+      .padding(.vertical, 2)
+    }
+  }
+}
+
+private struct ComposerGitCommentChip: View {
+  var comment: ComposerGitCommentAttachment
+  var openComment: () -> Void
+  var removeComment: () -> Void
+
+  var body: some View {
+    HStack(spacing: 2) {
+      Button(action: openComment) {
+        HStack(spacing: 6) {
+          Image(systemName: comment.systemImage)
+            .font(.caption.weight(.semibold))
+            .accessibilityHidden(true)
+
+          Text("Comment: \(GitFormatting.baseName(comment.title))")
+            .lineLimit(1)
+        }
+        .frame(maxWidth: 220, alignment: .leading)
+        .contentShape(Capsule())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Edit Git comment for \(comment.title)")
+
+      Button(action: removeComment) {
+        Image(systemName: "xmark")
+          .font(.caption.weight(.bold))
+          .frame(width: 24, height: 24)
+          .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Remove Git comment for \(comment.title)")
+    }
+    .font(.caption.weight(.semibold))
+    .foregroundStyle(Color(uiColor: .systemOrange))
+    .padding(.leading, 9)
+    .padding(.trailing, 3)
+    .frame(height: 30)
+    .background(
+      Color(uiColor: .systemOrange).opacity(0.12),
+      in: Capsule()
+    )
   }
 }
 
@@ -670,7 +765,7 @@ private struct ComposerGitBranchSelectorView: View {
         }
       }
     } label: {
-      ComposerBranchChip(
+      GitBranchChip(
         title: model.composerGitBranchLabel ?? "Branch",
         isLoading: model.isCheckingOutGitBranch ||
           (model.isLoadingGitBranches && model.composerGitLocalBranches.isEmpty)
@@ -726,32 +821,7 @@ private struct ComposerGitBranchSelectorView: View {
   }
 
   private func branchTitle(_ branch: GitLocalBranch) -> String {
-    let detail = branchDetail(branch)
-    return detail.isEmpty ? branch.name : "\(branch.name) · \(detail)"
-  }
-
-  private func branchDetail(_ branch: GitLocalBranch) -> String {
-    if let tracking = branchTrackingText(branch), !tracking.isEmpty {
-      return tracking
-    }
-
-    return branch.subject?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-  }
-
-  private func branchTrackingText(_ branch: GitLocalBranch) -> String? {
-    guard let upstream = branch.upstream?.trimmingCharacters(
-      in: .whitespacesAndNewlines
-    ), !upstream.isEmpty else {
-      return nil
-    }
-
-    if branch.upstreamGone { return "gone" }
-    if branch.ahead > 0, branch.behind > 0 {
-      return "ahead \(branch.ahead), behind \(branch.behind)"
-    }
-    if branch.ahead > 0 { return "ahead \(branch.ahead)" }
-    if branch.behind > 0 { return "behind \(branch.behind)" }
-    return "synced"
+    GitFormatting.localBranchMenuTitle(branch)
   }
 }
 
@@ -763,38 +833,6 @@ private struct ComposerDirectoryChip: View {
       Image(systemName: "folder")
         .font(.caption.weight(.semibold))
         .accessibilityHidden(true)
-
-      Text(title)
-        .lineLimit(1)
-        .truncationMode(.tail)
-
-      Image(systemName: "chevron.down")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
-    }
-    .font(.subheadline.weight(.semibold))
-    .foregroundStyle(.primary)
-    .padding(.horizontal, 10)
-    .frame(height: 30)
-    .contentShape(Capsule())
-  }
-}
-
-private struct ComposerBranchChip: View {
-  var title: String
-  var isLoading: Bool
-
-  var body: some View {
-    HStack(spacing: 6) {
-      if isLoading {
-        ProgressView()
-          .controlSize(.small)
-      } else {
-        Image(systemName: "arrow.triangle.branch")
-          .font(.caption.weight(.semibold))
-          .accessibilityHidden(true)
-      }
 
       Text(title)
         .lineLimit(1)

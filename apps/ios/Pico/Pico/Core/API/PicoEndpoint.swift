@@ -15,7 +15,21 @@ public enum PicoEndpoint: Sendable {
   case directorySessionsIndexes
   case gitStatus
   case gitChanges
+  case gitDiff
+  case gitReview
+  case gitStage
+  case gitDiscard
+  case gitCommit
+  case gitCommitMessage
+  case gitCommitFiles
+  case gitCommitDiff
+  case gitCommitRemoteUrl
+  case gitCommitAction
+  case gitPush
+  case gitPull
   case gitCheckout
+  case filesTree
+  case filesRead
   case pathCompletions
   case pendingMessagesReorder
   case slashCommand
@@ -58,8 +72,36 @@ public enum PicoEndpoint: Sendable {
       "/api/git-status"
     case .gitChanges:
       "/api/git-changes"
+    case .gitDiff:
+      "/api/git-diff"
+    case .gitReview:
+      "/api/git-review"
+    case .gitStage:
+      "/api/git-stage"
+    case .gitDiscard:
+      "/api/git-discard"
+    case .gitCommit:
+      "/api/git-commit"
+    case .gitCommitMessage:
+      "/api/git-commit-message"
+    case .gitCommitFiles:
+      "/api/git-commit-files"
+    case .gitCommitDiff:
+      "/api/git-commit-diff"
+    case .gitCommitRemoteUrl:
+      "/api/git-commit-remote-url"
+    case .gitCommitAction:
+      "/api/git-commit-action"
+    case .gitPush:
+      "/api/git-push"
+    case .gitPull:
+      "/api/git-pull"
     case .gitCheckout:
       "/api/git-checkout"
+    case .filesTree:
+      "/api/files/tree"
+    case .filesRead:
+      "/api/files/read"
     case .pathCompletions:
       "/api/path-completions"
     case .pendingMessagesReorder:

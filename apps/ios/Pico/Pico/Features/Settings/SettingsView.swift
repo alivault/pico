@@ -31,8 +31,11 @@ struct SettingsView: View {
     }
     .navigationTitle("Settings")
     .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        Button("Close", action: dismiss.callAsFunction)
+      ToolbarItem(placement: .topBarLeading) {
+        Button(action: dismiss.callAsFunction) {
+          Image(systemName: "xmark")
+        }
+        .accessibilityLabel("Close")
       }
     }
     .task {
