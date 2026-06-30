@@ -11,6 +11,7 @@ public enum PicoEndpoint: Sendable {
   case sessionDelete
   case directoryResolve
   case directorySearch
+  case directorySessionsCleanup
   case directorySessionsIndexes
   case gitStatus
   case gitChanges
@@ -49,6 +50,8 @@ public enum PicoEndpoint: Sendable {
       "/api/directory/resolve"
     case .directorySearch:
       "/api/directory-search"
+    case .directorySessionsCleanup:
+      "/api/directory-sessions/cleanup"
     case .directorySessionsIndexes:
       "/api/directory-sessions-indexes"
     case .gitStatus:

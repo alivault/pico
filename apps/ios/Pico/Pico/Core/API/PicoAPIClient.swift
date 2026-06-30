@@ -136,6 +136,26 @@ public actor PicoAPIClient {
     )
   }
 
+  public func cleanupDirectorySessions(
+    baseURL: URL,
+    contextId: String,
+    directory: String,
+    olderThanMs: Int,
+    dryRun: Bool
+  ) async throws -> DeleteOldDirectorySessionsResponse {
+    try await send(
+      endpoint: .directorySessionsCleanup,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: DeleteOldDirectorySessionsRequest(
+        directory: directory,
+        olderThanMs: olderThanMs,
+        dryRun: dryRun
+      )
+    )
+  }
+
   public func directorySessionIndexes(
     baseURL: URL,
     contextId: String,

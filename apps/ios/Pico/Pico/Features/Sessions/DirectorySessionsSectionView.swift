@@ -4,6 +4,7 @@ struct DirectorySessionsSectionView: View {
   var snapshot: DirectorySessionsIndexSnapshot
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
+  var openPurge: (String) -> Void = { _ in }
   var isSearchActive = false
   var isLoading = false
   @State private var isExpanded = true
@@ -34,7 +35,8 @@ struct DirectorySessionsSectionView: View {
               DirectorySessionsFullListView(
                 directory: snapshot.directory,
                 model: model,
-                openDetail: openDetail
+                openDetail: openDetail,
+                openPurge: openPurge
               )
             } label: {
               Text("See all")
@@ -98,6 +100,10 @@ struct DirectorySessionsSectionView: View {
       .accessibilityHint("Starts a new draft in this directory")
 
       Menu {
+        Button(action: showPurgeSheet) {
+          Label("Purge Sessions…", systemImage: "trash")
+        }
+
         Button(role: .destructive, action: removeDirectory) {
           Label("Remove Directory", systemImage: "minus.circle")
         }
@@ -137,6 +143,10 @@ struct DirectorySessionsSectionView: View {
     openDetail()
   }
 
+  private func showPurgeSheet() {
+    openPurge(snapshot.directory)
+  }
+
   private func removeDirectory() {
     model.removeSidebarDirectory(snapshot.directory)
   }
@@ -147,6 +157,7 @@ private struct DirectorySessionsFullListView: View {
   @Bindable var model: AppModel
   @Environment(\.dismiss) private var dismiss
   var openDetail: () -> Void = {}
+  var openPurge: (String) -> Void = { _ in }
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
   @FocusState private var isSessionSearchFocused: Bool
@@ -195,6 +206,10 @@ private struct DirectorySessionsFullListView: View {
           )
 
           Menu {
+            Button(action: showPurgeSheet) {
+              Label("Purge Sessions…", systemImage: "trash")
+            }
+
             Button(role: .destructive, action: removeDirectory) {
               Label("Remove Directory", systemImage: "minus.circle")
             }
@@ -288,9 +303,187 @@ private struct DirectorySessionsFullListView: View {
     openDetail()
   }
 
+  private func showPurgeSheet() {
+    openPurge(directory)
+  }
+
   private func removeDirectory() {
     model.removeSidebarDirectory(directory)
     dismiss()
+  }
+}
+
+private enum DirectorySessionPurgeRange: CaseIterable, Hashable, Identifiable {
+  case oneWeek
+  case oneMonth
+  case oneYear
+
+  var id: Self { self }
+
+  var title: String {
+    switch self {
+    case .oneWeek:
+      "1 week"
+    case .oneMonth:
+      "1 month"
+    case .oneYear:
+      "1 year"
+    }
+  }
+
+  var olderThanMilliseconds: Int {
+    days * 24 * 60 * 60 * 1000
+  }
+
+  private var days: Int {
+    switch self {
+    case .oneWeek:
+      7
+    case .oneMonth:
+      30
+    case .oneYear:
+      365
+    }
+  }
+}
+
+struct DirectorySessionPurgeSheet: View {
+  @Bindable var model: AppModel
+  var directory: String
+  @Environment(\.dismiss) private var dismiss
+  @State private var selectedRange: DirectorySessionPurgeRange = .oneMonth
+  @State private var preview: DeleteOldDirectorySessionsResponse?
+  @State private var isPreviewing = false
+
+  init(model: AppModel, directory: String) {
+    self.model = model
+    self.directory = directory
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section("Directory") {
+          Text(directory)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+
+        Section {
+          Picker("Older than", selection: $selectedRange) {
+            ForEach(DirectorySessionPurgeRange.allCases) { range in
+              Text(range.title).tag(range)
+            }
+          }
+          .pickerStyle(.menu)
+        } footer: {
+          Text(
+            "Preview updates automatically. Active and streaming sessions are skipped."
+          )
+        }
+
+        Section("Preview") {
+          previewContent
+        }
+      }
+      .navigationTitle("Purge Sessions")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+          Button("Purge") {
+            purge()
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(.accentColor)
+          .foregroundStyle(.white)
+          .disabled(!canPurge)
+        }
+      }
+      .task(id: selectedRange) {
+        await refreshPreview()
+      }
+    }
+    .presentationDetents([.large])
+    .presentationDragIndicator(.visible)
+  }
+
+  @ViewBuilder
+  private var previewContent: some View {
+    if isPreviewing {
+      HStack(spacing: 8) {
+        ProgressView()
+          .controlSize(.small)
+
+        Text("Loading preview…")
+          .foregroundStyle(.secondary)
+      }
+    } else if let preview {
+      if preview.matchingSessions.isEmpty {
+        Text("No old sessions found.")
+          .foregroundStyle(.secondary)
+      } else {
+        Text(
+          "\(preview.matchingSessions.count) session\(preview.matchingSessions.count == 1 ? "" : "s") will be purged."
+        )
+        .fontWeight(.semibold)
+
+        ForEach(Array(preview.matchingSessions.prefix(20))) { session in
+          Text(session.title)
+            .lineLimit(1)
+        }
+
+        if preview.matchingSessions.count > 20 {
+          Text("…and \(preview.matchingSessions.count - 20) more")
+            .foregroundStyle(.secondary)
+        }
+      }
+    } else {
+      Text("Preview unavailable.")
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var olderThanMilliseconds: Int {
+    selectedRange.olderThanMilliseconds
+  }
+
+  private var canPurge: Bool {
+    preview?.matchingSessions.isEmpty == false && !isPreviewing
+  }
+
+  private func refreshPreview() async {
+    let range = selectedRange
+    isPreviewing = true
+    preview = nil
+
+    let nextPreview = await model.previewDirectorySessionPurge(
+      directory: directory,
+      olderThanMs: range.olderThanMilliseconds
+    )
+    guard !Task.isCancelled, range == selectedRange else { return }
+
+    preview = nextPreview
+    isPreviewing = false
+  }
+
+  private func purge() {
+    guard let matchingSessions = preview?.matchingSessions,
+          !matchingSessions.isEmpty else {
+      return
+    }
+
+    dismiss()
+    model.purgeDirectorySessionsOptimistically(
+      directory: directory,
+      olderThanMs: olderThanMilliseconds,
+      matchingSessions: matchingSessions
+    )
   }
 }
 

@@ -7,6 +7,7 @@ struct SessionSidebarView: View {
   @State private var isShowingSettings = false
   @State private var isShowingAddDirectory = false
   @State private var isShowingManageDirectories = false
+  @State private var purgeRequest: SidebarPurgeDirectoryRequest?
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
   @FocusState private var isSessionSearchFocused: Bool
@@ -28,6 +29,7 @@ struct SessionSidebarView: View {
           snapshot: snapshot,
           model: model,
           openDetail: openConversation,
+          openPurge: showPurgeDirectory,
           isSearchActive: isSessionSearchActive,
           isLoading: model.loadingDirectorySessionIndexes.contains(
             snapshot.directory
@@ -91,6 +93,12 @@ struct SessionSidebarView: View {
       }
       .presentationDetents([.large])
       .presentationDragIndicator(.visible)
+    }
+    .sheet(item: $purgeRequest) { request in
+      DirectorySessionPurgeSheet(
+        model: model,
+        directory: request.directory
+      )
     }
     .onChange(of: isSessionSearchPresented) { _, isPresented in
       if isPresented {
@@ -182,6 +190,15 @@ struct SessionSidebarView: View {
   private func showManageDirectories() {
     isShowingManageDirectories = true
   }
+
+  private func showPurgeDirectory(_ directory: String) {
+    purgeRequest = SidebarPurgeDirectoryRequest(directory: directory)
+  }
+}
+
+private struct SidebarPurgeDirectoryRequest: Identifiable {
+  var directory: String
+  var id: String { directory }
 }
 
 struct SidebarSessionSearchField: View {

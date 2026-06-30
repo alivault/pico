@@ -1174,6 +1174,85 @@ public final class AppModel {
     }
   }
 
+  public func previewDirectorySessionPurge(
+    directory: String,
+    olderThanMs: Int
+  ) async -> DeleteOldDirectorySessionsResponse? {
+    guard let baseURL else {
+      alert = AppAlert(
+        title: "Not connected",
+        message: "Connect to a Pico server before purging sessions."
+      )
+      return nil
+    }
+
+    do {
+      return try await apiClient.cleanupDirectorySessions(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        directory: directory,
+        olderThanMs: olderThanMs,
+        dryRun: true
+      )
+    } catch {
+      guard !Self.isCancellation(error) else { return nil }
+
+      alert = AppAlert(
+        title: "Could not preview sessions",
+        message: Self.message(for: error)
+      )
+      return nil
+    }
+  }
+
+  public func purgeDirectorySessionsOptimistically(
+    directory: String,
+    olderThanMs: Int,
+    matchingSessions: [SessionListEntry]
+  ) {
+    guard let baseURL else {
+      alert = AppAlert(
+        title: "Not connected",
+        message: "Connect to a Pico server before purging sessions."
+      )
+      return
+    }
+
+    let previousSupplementalDirectoryIndexes = supplementalDirectoryIndexes
+    let previousSessionsDirectoryIndexes = sessionsEvent?.directoryIndexes
+    let previousRefreshSignature = directoryIndexRefreshSignature
+
+    applyOptimisticDirectorySessionPurge(
+      directory: directory,
+      matchingSessions: matchingSessions
+    )
+
+    Task {
+      do {
+        _ = try await apiClient.cleanupDirectorySessions(
+          baseURL: baseURL,
+          contextId: connectionStore.contextId,
+          directory: directory,
+          olderThanMs: olderThanMs,
+          dryRun: false
+        )
+        directoryIndexRefreshSignature = ""
+        sessionsEvent?.directoryIndexes = nil
+        await refreshDirectorySessionIndexes(for: [directory])
+      } catch {
+        guard !Self.isCancellation(error) else { return }
+
+        supplementalDirectoryIndexes = previousSupplementalDirectoryIndexes
+        sessionsEvent?.directoryIndexes = previousSessionsDirectoryIndexes
+        directoryIndexRefreshSignature = previousRefreshSignature
+        alert = AppAlert(
+          title: "Could not purge sessions",
+          message: Self.message(for: error)
+        )
+      }
+    }
+  }
+
   @discardableResult
   public func submitPrompt(
     message: String,
@@ -1916,6 +1995,49 @@ public final class AppModel {
     }
   }
 
+  private func applyOptimisticDirectorySessionPurge(
+    directory: String,
+    matchingSessions: [SessionListEntry]
+  ) {
+    guard !matchingSessions.isEmpty else { return }
+
+    if let snapshot = supplementalDirectoryIndexes[directory] {
+      supplementalDirectoryIndexes[directory] = Self.directorySnapshot(
+        snapshot,
+        removing: matchingSessions
+      )
+    }
+
+    if var directoryIndexes = sessionsEvent?.directoryIndexes,
+       let snapshot = directoryIndexes[directory] {
+      directoryIndexes[directory] = Self.directorySnapshot(
+        snapshot,
+        removing: matchingSessions
+      )
+      sessionsEvent?.directoryIndexes = directoryIndexes
+    }
+
+    directoryIndexRefreshSignature = ""
+  }
+
+  private static func directorySnapshot(
+    _ snapshot: DirectorySessionsIndexSnapshot,
+    removing matchingSessions: [SessionListEntry]
+  ) -> DirectorySessionsIndexSnapshot {
+    let visibleSessions = snapshot.sessions.filter { session in
+      !matchingSessions.contains { sessionListEntry(session, matches: $0) }
+    }
+    let removedVisibleCount = snapshot.sessions.count - visibleSessions.count
+    let removedCount = max(removedVisibleCount, matchingSessions.count)
+
+    return DirectorySessionsIndexSnapshot(
+      directory: snapshot.directory,
+      totalCount: max(0, snapshot.totalCount - removedCount),
+      revision: "\(snapshot.revision):purge",
+      sessions: visibleSessions
+    )
+  }
+
   private static func sessionListEntry(
     _ left: SessionListEntry,
     matches right: SessionListEntry
@@ -2379,6 +2501,14 @@ public final class AppModel {
       return nil
     }
     return url
+  }
+
+  private static func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError { return true }
+    if let urlError = error as? URLError, urlError.code == .cancelled {
+      return true
+    }
+    return false
   }
 
   private static func message(for error: Error) -> String {
