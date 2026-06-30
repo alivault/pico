@@ -145,6 +145,7 @@ struct DirectorySessionsSectionView: View {
 private struct DirectorySessionsFullListView: View {
   var directory: String
   @Bindable var model: AppModel
+  @Environment(\.dismiss) private var dismiss
   var openDetail: () -> Void = {}
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
@@ -178,12 +179,32 @@ private struct DirectorySessionsFullListView: View {
     .navigationTitle(DirectoryPathFormatter.folderName(directory))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
+      ToolbarItemGroup(placement: .topBarTrailing) {
         Button(action: showSearch) {
           Image(systemName: "magnifyingglass")
         }
         .disabled(snapshot.sessions.isEmpty)
         .accessibilityLabel("Search sessions")
+
+        ControlGroup {
+          Button(action: startNewSession) {
+            Image(systemName: "square.and.pencil")
+          }
+          .accessibilityLabel(
+            "New session in \(DirectoryPathFormatter.displayPath(directory))"
+          )
+
+          Menu {
+            Button(role: .destructive, action: removeDirectory) {
+              Label("Remove Directory", systemImage: "minus.circle")
+            }
+          } label: {
+            Image(systemName: "ellipsis")
+          }
+          .accessibilityLabel(
+            "Actions for \(DirectoryPathFormatter.displayPath(directory))"
+          )
+        }
       }
     }
     .safeAreaBar(edge: .bottom, alignment: .center) {
@@ -260,6 +281,16 @@ private struct DirectorySessionsFullListView: View {
     sessionSearchText = ""
     isSessionSearchFocused = false
     isSessionSearchPresented = false
+  }
+
+  private func startNewSession() {
+    model.beginNewChat(cwd: directory)
+    openDetail()
+  }
+
+  private func removeDirectory() {
+    model.removeSidebarDirectory(directory)
+    dismiss()
   }
 }
 
