@@ -183,7 +183,14 @@ enum ToolFormatting {
   static func patchText(for block: ToolBlock) -> String {
     guard block.name == "edit" else { return "" }
     guard let details = normalizedObject(from: block.details) else { return "" }
-    return text(details["patch"])?.trimmingTrailingNewlines() ?? ""
+
+    for key in ["patch", "diff"] {
+      if let value = text(details[key])?.trimmingTrailingNewlines(), !value.isEmpty {
+        return value
+      }
+    }
+
+    return ""
   }
 
   static func writePayload(for block: ToolBlock) -> ToolWritePayload? {

@@ -7,6 +7,7 @@ struct PierrePatchDiffView: View {
   var fileName: String?
 
   @State private var contentHeight: CGFloat = 220
+  @State private var webRenderState = PierreDiffWebRenderState.loading
 
   private var patchContents: PierrePatchContents {
     PierrePatchContents(patch: patch, fallbackFileName: fileName)
@@ -14,31 +15,69 @@ struct PierrePatchDiffView: View {
 
   var body: some View {
     if patchContents.hasRenderableChanges {
-      PierreDiffWebView(
-        oldContent: patchContents.oldContent,
-        newContent: patchContents.newContent,
-        fileName: patchContents.fileName,
-        diffStyle: .unified,
-        overflowMode: .wrap,
-        renderOptions: PierreDiffRenderOptions(
-          diffIndicators: .bars,
-          hunkSeparators: .lineInfo,
-          lineDiffType: .wordAlt,
-          disableFileHeader: true,
-          maxLineDiffLength: 1000
-        ),
-        onHeightChange: updateContentHeight
-      )
-      .frame(height: contentHeight)
-      .background(Color(uiColor: .systemBackground), in: .rect(cornerRadius: 12))
-      .overlay {
-        RoundedRectangle(cornerRadius: 12)
-          .stroke(.secondary.opacity(0.18), lineWidth: 1)
+      ZStack(alignment: .center) {
+        switch webRenderState {
+        case .loading:
+          PierreDiffStatusView(
+            systemImage: "arrow.triangle.2.circlepath",
+            title: "Rendering diff…",
+            showsProgress: true
+          )
+          .transition(.opacity)
+        case .failed:
+          PierreDiffStatusView(
+            systemImage: "exclamationmark.triangle",
+            title: "Couldn’t render diff",
+            message: "The edit succeeded, but the rich diff renderer failed."
+          )
+          .transition(.opacity)
+        case .rendered:
+          EmptyView()
+        }
+
+        if webRenderState != .failed {
+          webDiffView
+        }
       }
-      .clipShape(.rect(cornerRadius: 12))
+      .onChange(of: patch) {
+        resetWebRenderer()
+      }
     } else {
-      ToolDiffBlockView(patch: patch)
+      PierreDiffStatusView(
+        systemImage: "doc.text.magnifyingglass",
+        title: "Rendering diff…",
+        showsProgress: true
+      )
     }
+  }
+
+  private var webDiffView: some View {
+    PierreDiffWebView(
+      oldContent: patchContents.oldContent,
+      newContent: patchContents.newContent,
+      fileName: patchContents.fileName,
+      diffStyle: .unified,
+      overflowMode: .wrap,
+      renderOptions: PierreDiffRenderOptions(
+        diffIndicators: .bars,
+        hunkSeparators: .lineInfo,
+        lineDiffType: .wordAlt,
+        disableFileHeader: true,
+        maxLineDiffLength: 1000
+      ),
+      onHeightChange: updateContentHeight,
+      onRenderStateChange: updateWebRenderState
+    )
+    .frame(height: contentHeight)
+    .background(Color(uiColor: .systemBackground), in: .rect(cornerRadius: 12))
+    .overlay {
+      RoundedRectangle(cornerRadius: 12)
+        .stroke(.secondary.opacity(0.18), lineWidth: 1)
+    }
+    .clipShape(.rect(cornerRadius: 12))
+    .opacity(webRenderState == .rendered ? 1 : 0)
+    .allowsHitTesting(webRenderState == .rendered)
+    .accessibilityHidden(webRenderState != .rendered)
   }
 
   private func updateContentHeight(_ height: CGFloat) {
@@ -47,6 +86,66 @@ struct PierrePatchDiffView: View {
 
     withAnimation(.smooth(duration: 0.2)) {
       contentHeight = nextHeight
+    }
+  }
+
+  private func updateWebRenderState(_ state: PierreDiffWebRenderState) {
+    guard state != webRenderState else { return }
+
+    withAnimation(.smooth(duration: 0.16)) {
+      webRenderState = state
+    }
+  }
+
+  private func resetWebRenderer() {
+    contentHeight = 220
+    webRenderState = .loading
+  }
+}
+
+private enum PierreDiffWebRenderState: Equatable {
+  case loading
+  case rendered
+  case failed
+}
+
+private struct PierreDiffStatusView: View {
+  var systemImage: String
+  var title: String
+  var message: String?
+  var showsProgress = false
+
+  var body: some View {
+    VStack(spacing: 10) {
+      if showsProgress {
+        ProgressView()
+          .controlSize(.small)
+      } else {
+        Image(systemName: systemImage)
+          .font(.title3)
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      }
+
+      VStack(spacing: 4) {
+        Text(title)
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.primary)
+
+        if let message {
+          Text(message)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, minHeight: 160)
+    .padding(16)
+    .background(Color(uiColor: .systemBackground), in: .rect(cornerRadius: 12))
+    .overlay {
+      RoundedRectangle(cornerRadius: 12)
+        .stroke(.secondary.opacity(0.18), lineWidth: 1)
     }
   }
 }
@@ -143,6 +242,7 @@ private struct PierreDiffWebView: UIViewRepresentable {
   var overflowMode: PierreOverflowMode
   var renderOptions: PierreDiffRenderOptions
   var onHeightChange: (CGFloat) -> Void
+  var onRenderStateChange: (PierreDiffWebRenderState) -> Void
 
   @Environment(\.colorScheme) private var colorScheme
 
@@ -168,6 +268,7 @@ private struct PierreDiffWebView: UIViewRepresentable {
   func updateUIView(_ webView: WKWebView, context: Context) {
     let coordinator = context.coordinator
     coordinator.onHeightChange = onHeightChange
+    coordinator.onRenderStateChange = onRenderStateChange
     let theme = colorScheme == .dark ? "dark" : "light"
 
     let contentChanged = coordinator.lastOldContent != oldContent ||
@@ -211,6 +312,7 @@ private struct PierreDiffWebView: UIViewRepresentable {
 private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
   weak var webView: WKWebView?
   var onHeightChange: ((CGFloat) -> Void)?
+  var onRenderStateChange: ((PierreDiffWebRenderState) -> Void)?
 
   var lastOldContent: String?
   var lastNewContent: String?
@@ -240,10 +342,21 @@ private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate
         return
       }
 
-      if type == "bridgeReady" || type == "ready" {
+      switch type {
+      case "bridgeReady", "ready":
         isReady = true
         executePendingOperations()
         scheduleContentHeightUpdate()
+      case "rendered":
+        handleRenderedMessage(body)
+      case "empty":
+        scheduleContentHeightUpdate()
+      case "error":
+        let message = body["message"] as? String ?? "Unknown Pierre diff renderer error"
+        print("PierreDiffWebViewCoordinator: JavaScript renderer error: \(message)")
+        onRenderStateChange?(.failed)
+      default:
+        break
       }
     }
   }
@@ -282,6 +395,15 @@ private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate
     webView = nil
     pendingOperations.removeAll()
     onHeightChange = nil
+    onRenderStateChange = nil
+  }
+
+  private func handleRenderedMessage(_ body: [String: Any]) {
+    if let height = finiteDouble(body["height"]) {
+      onHeightChange?(CGFloat(height))
+    }
+
+    onRenderStateChange?(.rendered)
   }
 
   private func scheduleContentHeightUpdate() {
@@ -307,18 +429,23 @@ private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate
     webView?.evaluateJavaScript(script) { [weak self] result, _ in
       guard let self else { return }
 
-      let numberValue: Double?
-      if let number = result as? NSNumber {
-        numberValue = number.doubleValue
-      } else if let double = result as? Double {
-        numberValue = double
-      } else {
-        numberValue = nil
-      }
-
-      guard let numberValue, numberValue.isFinite else { return }
+      guard let numberValue = self.finiteDouble(result) else { return }
       self.onHeightChange?(CGFloat(numberValue))
     }
+  }
+
+  private func finiteDouble(_ value: Any?) -> Double? {
+    let numberValue: Double?
+    if let number = value as? NSNumber {
+      numberValue = number.doubleValue
+    } else if let double = value as? Double {
+      numberValue = double
+    } else {
+      numberValue = nil
+    }
+
+    guard let numberValue, numberValue.isFinite else { return nil }
+    return numberValue
   }
 
   private func executeWhenReady(_ operation: @escaping () -> Void) {
@@ -344,7 +471,14 @@ private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate
         try {
           const decoded = atob('\(base64String)');
           const input = JSON.parse(decoded);
-          window.pierreBridge.\(method)(input);
+          const bridge = window.pierreBridge;
+          if (!bridge || typeof bridge.\(method) !== 'function') {
+            throw new Error('Pierre diff bridge is not ready.');
+          }
+          bridge.\(method)(input);
+          if ('\(method)' === 'renderDiff') {
+            window.picoDiffBridge?.scheduleRenderCheck?.();
+          }
         } catch (error) {
           console.error('Failed to render Pierre diff:', error);
           if (window.webkit?.messageHandlers?.diffBridge) {
@@ -513,6 +647,7 @@ private enum PierreDiffHTMLTemplate {
       <div id="diff-container"></div>
       <script>
         \(bundleJS)
+        \(bridgeJavaScript)
       </script>
     </body>
     </html>
@@ -543,6 +678,126 @@ private enum PierreDiffHTMLTemplate {
       }
     }
   };
+  """
+
+  private static let bridgeJavaScript = """
+  window.picoDiffBridge = (function() {
+    let renderToken = 0;
+    let didInstallRenderHook = false;
+
+    function post(message) {
+      if (window.webkit?.messageHandlers?.diffBridge) {
+        window.webkit.messageHandlers.diffBridge.postMessage(message);
+      }
+    }
+
+    function finiteNumber(value) {
+      return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+    }
+
+    function renderedHeight(container, host, shadowRoot) {
+      const candidates = [
+        shadowRoot?.querySelector('pre')?.scrollHeight,
+        shadowRoot?.querySelector('[data-diff]')?.scrollHeight,
+        shadowRoot?.firstElementChild?.scrollHeight,
+        host?.scrollHeight,
+        container?.scrollHeight,
+        document.body?.scrollHeight,
+        document.documentElement?.scrollHeight,
+      ].map(finiteNumber);
+
+      return Math.max(0, ...candidates);
+    }
+
+    function currentRenderStatus() {
+      const container = document.getElementById('diff-container');
+      const host = container?.querySelector('diffs-container');
+      const shadowRoot = host?.shadowRoot;
+      const errorText = shadowRoot
+        ?.querySelector('[data-error-wrapper]')
+        ?.textContent
+        ?.trim();
+      const text = (
+        shadowRoot?.querySelector('pre')?.textContent ||
+        shadowRoot?.textContent ||
+        container?.textContent ||
+        ''
+      ).trim();
+
+      return {
+        errorText,
+        hasContent: text.length > 0,
+        height: renderedHeight(container, host, shadowRoot),
+        textLength: text.length,
+      };
+    }
+
+    function postRenderStatus() {
+      const status = currentRenderStatus();
+
+      if (status.errorText) {
+        post({ type: 'error', message: status.errorText });
+        return true;
+      }
+
+      if (status.hasContent) {
+        post({
+          type: 'rendered',
+          height: status.height,
+          textLength: status.textLength,
+        });
+        return true;
+      }
+
+      post({ type: 'empty', height: status.height });
+      return false;
+    }
+
+    function scheduleRenderCheck() {
+      installRenderHook();
+      const token = ++renderToken;
+      const delays = [0, 50, 150, 350, 750, 1500, 3000, 6000, 10000];
+
+      for (const delay of delays) {
+        window.setTimeout(function() {
+          if (token !== renderToken) return;
+          const didFinish = postRenderStatus();
+          if (didFinish) renderToken += 1;
+        }, delay);
+      }
+    }
+
+    function installRenderHook() {
+      if (didInstallRenderHook) return true;
+
+      const FileDiff = window.PierreDiffs?.FileDiff;
+      const prototype = FileDiff?.prototype;
+      const originalRender = prototype?.render;
+      if (typeof originalRender !== 'function') return false;
+
+      prototype.render = function(...args) {
+        const result = originalRender.apply(this, args);
+        window.picoDiffBridge?.scheduleRenderCheck?.();
+        return result;
+      };
+      didInstallRenderHook = true;
+      return true;
+    }
+
+    window.addEventListener('error', function(event) {
+      post({ type: 'error', message: event.message || 'Pierre diff JavaScript error' });
+    });
+    window.addEventListener('unhandledrejection', function(event) {
+      const reason = event.reason;
+      post({
+        type: 'error',
+        message: reason?.message || String(reason || 'Pierre diff promise rejection'),
+      });
+    });
+    installRenderHook();
+
+    return { scheduleRenderCheck };
+  })();
   """
 
   private static let styles = """

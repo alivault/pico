@@ -96,12 +96,16 @@ private struct EditToolOutputView: View {
     return output == patch ? "" : output
   }
 
+  private var fallbackOutput: String {
+    let output = ToolFormatting.outputText(for: block)
+    let cleanedOutput = ToolFormatting.editOutputWithoutSuccessMessage(output)
+    return cleanedOutput.isEmpty ? output : cleanedOutput
+  }
+
   var body: some View {
     if patch.isEmpty {
       PlainToolOutput(
-        text: ToolFormatting.editOutputWithoutSuccessMessage(
-          ToolFormatting.outputText(for: block)
-        ),
+        text: fallbackOutput,
         isError: block.isError,
         autoScroll: block.running
       )
@@ -352,80 +356,6 @@ private struct ToolCodeBlockView: View {
         copied = false
       }
     }
-  }
-}
-
-struct ToolDiffBlockView: View {
-  var patch: String
-
-  private var lines: [String] {
-    patch.components(separatedBy: "\n")
-  }
-
-  var body: some View {
-    ScrollView(.vertical) {
-      ScrollView(.horizontal) {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-            ToolDiffLineView(line: line)
-          }
-        }
-        .padding(.vertical, 6)
-      }
-    }
-    .frame(maxHeight: 384)
-    .background(.background, in: .rect(cornerRadius: 12))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(.secondary.opacity(0.18), lineWidth: 1)
-    }
-    .textSelection(.enabled)
-  }
-}
-
-private struct ToolDiffLineView: View {
-  var line: String
-
-  var body: some View {
-    Text(verbatim: line.isEmpty ? " " : line)
-      .font(.system(.caption, design: .monospaced))
-      .foregroundStyle(foregroundColor)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 1)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(backgroundColor)
-  }
-
-  private var foregroundColor: Color {
-    if line.hasPrefix("+") && !line.hasPrefix("+++") {
-      return .green
-    }
-
-    if line.hasPrefix("-") && !line.hasPrefix("---") {
-      return .red
-    }
-
-    if line.hasPrefix("@@") {
-      return .blue
-    }
-
-    return .primary
-  }
-
-  private var backgroundColor: Color {
-    if line.hasPrefix("+") && !line.hasPrefix("+++") {
-      return .green.opacity(0.10)
-    }
-
-    if line.hasPrefix("-") && !line.hasPrefix("---") {
-      return .red.opacity(0.10)
-    }
-
-    if line.hasPrefix("@@") {
-      return .blue.opacity(0.10)
-    }
-
-    return .clear
   }
 }
 

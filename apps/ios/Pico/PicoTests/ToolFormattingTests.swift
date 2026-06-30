@@ -98,6 +98,14 @@ struct ToolFormattingTests {
         "Successfully replaced 1 block(s) in README.md.\nextra"
       ) == "extra"
     )
+
+    let diffOnlyBlock = ToolBlock(
+      name: "edit",
+      output: "",
+      details: .object(["diff": .string(patch)]),
+      running: false
+    )
+    #expect(ToolFormatting.patchText(for: diffOnlyBlock) == patch)
     #expect(
       ToolFormatting.writeOutputWithoutSuccessMessage(
         "Successfully wrote 128 bytes to README.md\nextra"
