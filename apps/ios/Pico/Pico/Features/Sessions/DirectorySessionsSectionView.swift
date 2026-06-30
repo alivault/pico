@@ -7,8 +7,6 @@ struct DirectorySessionsSectionView: View {
   var isSearchActive = false
   var isLoading = false
   @State private var isExpanded = true
-  @State private var deleteConfirmationEntry: SessionListEntry?
-  @State private var isShowingDeleteConfirmation = false
 
   private static let visibleSessionPreviewCount = 4
 
@@ -27,8 +25,7 @@ struct DirectorySessionsSectionView: View {
             DirectorySessionRowButton(
               entry: entry,
               model: model,
-              openDetail: openDetail,
-              onRequestDelete: requestDeleteSession
+              openDetail: openDetail
             )
           }
 
@@ -49,26 +46,6 @@ struct DirectorySessionsSectionView: View {
       directoryHeaderRow
     }
     .listSectionSpacing(8)
-    .confirmationDialog(
-      "Delete session?",
-      isPresented: $isShowingDeleteConfirmation,
-      titleVisibility: .visible,
-      presenting: deleteConfirmationEntry
-    ) { entry in
-      Button("Delete Session", role: .destructive) {
-        deleteSession(entry)
-      }
-      Button("Cancel", role: .cancel) {
-        deleteConfirmationEntry = nil
-      }
-    } message: { _ in
-      Text("This removes the session from Pico and moves it to Trash when possible.")
-    }
-    .onChange(of: isShowingDeleteConfirmation) { _, isPresented in
-      if !isPresented {
-        deleteConfirmationEntry = nil
-      }
-    }
   }
 
   private var directoryHeaderRow: some View {
@@ -136,18 +113,6 @@ struct DirectorySessionsSectionView: View {
     model.beginNewChat(cwd: snapshot.directory)
     openDetail()
   }
-
-  private func requestDeleteSession(_ entry: SessionListEntry) {
-    deleteConfirmationEntry = entry
-    isShowingDeleteConfirmation = true
-  }
-
-  private func deleteSession(_ entry: SessionListEntry) {
-    deleteConfirmationEntry = nil
-    Task {
-      await model.deleteSession(entry)
-    }
-  }
 }
 
 private struct DirectorySessionsFullListView: View {
@@ -156,8 +121,6 @@ private struct DirectorySessionsFullListView: View {
   var openDetail: () -> Void = {}
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
-  @State private var deleteConfirmationEntry: SessionListEntry?
-  @State private var isShowingDeleteConfirmation = false
   @FocusState private var isSessionSearchFocused: Bool
 
   var body: some View {
@@ -176,8 +139,7 @@ private struct DirectorySessionsFullListView: View {
             DirectorySessionRowButton(
               entry: entry,
               model: model,
-              openDetail: openDetail,
-              onRequestDelete: requestDeleteSession
+              openDetail: openDetail
             )
           }
         } header: {
@@ -200,26 +162,6 @@ private struct DirectorySessionsFullListView: View {
     .safeAreaBar(edge: .bottom, alignment: .center) {
       if isSessionSearchVisible {
         sessionSearchBar
-      }
-    }
-    .confirmationDialog(
-      "Delete session?",
-      isPresented: $isShowingDeleteConfirmation,
-      titleVisibility: .visible,
-      presenting: deleteConfirmationEntry
-    ) { entry in
-      Button("Delete Session", role: .destructive) {
-        deleteSession(entry)
-      }
-      Button("Cancel", role: .cancel) {
-        deleteConfirmationEntry = nil
-      }
-    } message: { _ in
-      Text("This removes the session from Pico and moves it to Trash when possible.")
-    }
-    .onChange(of: isShowingDeleteConfirmation) { _, isPresented in
-      if !isPresented {
-        deleteConfirmationEntry = nil
       }
     }
     .onChange(of: isSessionSearchPresented) { _, isPresented in
@@ -292,27 +234,15 @@ private struct DirectorySessionsFullListView: View {
     isSessionSearchFocused = false
     isSessionSearchPresented = false
   }
-
-  private func requestDeleteSession(_ entry: SessionListEntry) {
-    deleteConfirmationEntry = entry
-    isShowingDeleteConfirmation = true
-  }
-
-  private func deleteSession(_ entry: SessionListEntry) {
-    deleteConfirmationEntry = nil
-    Task {
-      await model.deleteSession(entry)
-    }
-  }
 }
 
 private struct DirectorySessionRowButton: View {
   var entry: SessionListEntry
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
-  var onRequestDelete: (SessionListEntry) -> Void
   @State private var renameTitle = ""
   @State private var isShowingRenameAlert = false
+  @State private var isShowingDeleteConfirmation = false
 
   var body: some View {
     Button {
@@ -325,7 +255,7 @@ private struct DirectorySessionRowButton: View {
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
       if canMutateSession {
         Button {
-          onRequestDelete(entry)
+          showDeleteSessionConfirmation()
         } label: {
           Label("Delete", systemImage: "trash")
         }
@@ -347,6 +277,18 @@ private struct DirectorySessionRowButton: View {
       }
     } message: {
       Text("Enter a new name for this session.")
+    }
+    .confirmationDialog(
+      "Delete session?",
+      isPresented: $isShowingDeleteConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Delete Session", role: .destructive) {
+        deleteSession()
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("This removes the session from Pico and moves it to Trash when possible.")
     }
   }
 
@@ -392,6 +334,10 @@ private struct DirectorySessionRowButton: View {
     }
   }
 
+  private func showDeleteSessionConfirmation() {
+    isShowingDeleteConfirmation = true
+  }
+
   private func showRenameSessionAlert() {
     let name = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let name, !name.isEmpty {
@@ -406,6 +352,12 @@ private struct DirectorySessionRowButton: View {
     let name = renameTitle
     Task {
       await model.renameSession(entry, to: name)
+    }
+  }
+
+  private func deleteSession() {
+    Task {
+      await model.deleteSession(entry)
     }
   }
 }
