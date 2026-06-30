@@ -86,10 +86,7 @@ function devAssetFetchMetadataFallback(): Plugin {
 
 const config = defineConfig({
   lint: {
-    ignorePatterns: [
-      "apps/ios/Pico/Pico/Resources/pierre-diffs-bundle.js",
-      "src/routeTree.gen.ts",
-    ],
+    ignorePatterns: ["src/routeTree.gen.ts"],
     options: { typeAware: true, typeCheck: true },
   },
   fmt: {
@@ -105,7 +102,6 @@ const config = defineConfig({
     },
     sortPackageJson: false,
     ignorePatterns: [
-      "apps/ios/Pico/Pico/Resources/pierre-diffs-bundle.js",
       "package-lock.json",
       "pnpm-lock.yaml",
       "src/routeTree.gen.ts",

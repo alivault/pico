@@ -1,205 +1,282 @@
 import Foundation
 import SwiftUI
-import WebKit
 
 struct PierrePatchDiffView: View {
   var patch: String
   var fileName: String?
 
-  @State private var contentHeight: CGFloat = 220
-  @State private var webRenderState = PierreDiffWebRenderState.loading
-
-  private var patchContents: PierrePatchContents {
-    PierrePatchContents(patch: patch, fallbackFileName: fileName)
+  private var diff: PierrePatchDiff {
+    PierrePatchDiff(patch: patch, fallbackFileName: fileName)
   }
 
   var body: some View {
-    if patchContents.hasRenderableChanges {
-      ZStack(alignment: .center) {
-        switch webRenderState {
-        case .loading:
-          PierreDiffStatusView(
-            systemImage: "arrow.triangle.2.circlepath",
-            title: "Rendering diff…",
-            showsProgress: true
-          )
-          .transition(.opacity)
-        case .failed:
-          PierreDiffStatusView(
-            systemImage: "exclamationmark.triangle",
-            title: "Couldn’t render diff",
-            message: "The edit succeeded, but the rich diff renderer failed."
-          )
-          .transition(.opacity)
-        case .rendered:
-          EmptyView()
-        }
-
-        if webRenderState != .failed {
-          webDiffView
-        }
-      }
-      .onChange(of: patch) {
-        resetWebRenderer()
-      }
-    } else {
-      PierreDiffStatusView(
-        systemImage: "doc.text.magnifyingglass",
-        title: "Rendering diff…",
-        showsProgress: true
-      )
-    }
-  }
-
-  private var webDiffView: some View {
-    PierreDiffWebView(
-      oldContent: patchContents.oldContent,
-      newContent: patchContents.newContent,
-      fileName: patchContents.fileName,
-      diffStyle: .unified,
-      overflowMode: .wrap,
-      renderOptions: PierreDiffRenderOptions(
-        diffIndicators: .bars,
-        hunkSeparators: .lineInfo,
-        lineDiffType: .wordAlt,
-        disableFileHeader: true,
-        maxLineDiffLength: 1000
-      ),
-      onHeightChange: updateContentHeight,
-      onRenderStateChange: updateWebRenderState
-    )
-    .frame(height: contentHeight)
-    .background(Color(uiColor: .systemBackground), in: .rect(cornerRadius: 12))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(.secondary.opacity(0.18), lineWidth: 1)
-    }
-    .clipShape(.rect(cornerRadius: 12))
-    .opacity(webRenderState == .rendered ? 1 : 0)
-    .allowsHitTesting(webRenderState == .rendered)
-    .accessibilityHidden(webRenderState != .rendered)
-  }
-
-  private func updateContentHeight(_ height: CGFloat) {
-    let nextHeight = min(384, max(160, height))
-    guard abs(nextHeight - contentHeight) > 1 else { return }
-
-    withAnimation(.smooth(duration: 0.2)) {
-      contentHeight = nextHeight
-    }
-  }
-
-  private func updateWebRenderState(_ state: PierreDiffWebRenderState) {
-    guard state != webRenderState else { return }
-
-    withAnimation(.smooth(duration: 0.16)) {
-      webRenderState = state
-    }
-  }
-
-  private func resetWebRenderer() {
-    contentHeight = 220
-    webRenderState = .loading
+    PierrePatchDiffRowsView(diff: diff)
   }
 }
 
-private enum PierreDiffWebRenderState: Equatable {
-  case loading
-  case rendered
-  case failed
-}
-
-private struct PierreDiffStatusView: View {
-  var systemImage: String
-  var title: String
-  var message: String?
-  var showsProgress = false
-
-  var body: some View {
-    VStack(spacing: 10) {
-      if showsProgress {
-        ProgressView()
-          .controlSize(.small)
-      } else {
-        Image(systemName: systemImage)
-          .font(.title3)
-          .foregroundStyle(.secondary)
-          .accessibilityHidden(true)
-      }
-
-      VStack(spacing: 4) {
-        Text(title)
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.primary)
-
-        if let message {
-          Text(message)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-        }
-      }
-    }
-    .frame(maxWidth: .infinity, minHeight: 160)
-    .padding(16)
-    .background(Color(uiColor: .systemBackground), in: .rect(cornerRadius: 12))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(.secondary.opacity(0.18), lineWidth: 1)
-    }
-  }
-}
-
-private struct PierrePatchContents: Equatable {
-  var oldContent: String
-  var newContent: String
+struct PierrePatchDiff: Equatable {
   var fileName: String
-
-  var hasRenderableChanges: Bool {
-    oldContent != newContent || !oldContent.isEmpty || !newContent.isEmpty
-  }
+  var lines: [PierrePatchDiffLine]
 
   init(patch: String, fallbackFileName: String?) {
-    let lines = patch
+    let normalizedPatch = patch
       .replacingOccurrences(of: "\r\n", with: "\n")
       .replacingOccurrences(of: "\r", with: "\n")
-      .components(separatedBy: "\n")
+    var patchLines = normalizedPatch.components(separatedBy: "\n")
 
-    var oldLines: [String] = []
-    var newLines: [String] = []
+    if patchLines.last == "" {
+      patchLines.removeLast()
+    }
+
     var parsedFileName = fallbackFileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    var parsedLines: [PierrePatchDiffLine] = []
     var isInsideHunk = false
+    var oldLineNumber = 0
+    var newLineNumber = 0
 
-    for line in lines {
+    for line in patchLines {
       if parsedFileName.isEmpty {
         parsedFileName = Self.fileName(fromPatchHeaderLine: line)
       }
 
       if line.hasPrefix("@@") {
+        let hunk = Self.hunkInfo(from: line)
+        oldLineNumber = hunk.oldStart
+        newLineNumber = hunk.newStart
         isInsideHunk = true
         continue
       }
 
       guard isInsideHunk else { continue }
-      guard !line.hasPrefix("\\") else { continue }
 
-      if line.hasPrefix("+") && !line.hasPrefix("+++") {
-        newLines.append(String(line.dropFirst()))
+      if line.hasPrefix("\\") {
+        parsedLines.append(
+          PierrePatchDiffLine(
+            id: parsedLines.count,
+            type: .note,
+            oldLineNumber: nil,
+            newLineNumber: nil,
+            content: line
+          )
+        )
+      } else if line.hasPrefix("+") && !line.hasPrefix("+++") {
+        parsedLines.append(
+          PierrePatchDiffLine(
+            id: parsedLines.count,
+            type: .addition,
+            oldLineNumber: nil,
+            newLineNumber: newLineNumber,
+            content: String(line.dropFirst())
+          )
+        )
+        newLineNumber += 1
       } else if line.hasPrefix("-") && !line.hasPrefix("---") {
-        oldLines.append(String(line.dropFirst()))
+        parsedLines.append(
+          PierrePatchDiffLine(
+            id: parsedLines.count,
+            type: .deletion,
+            oldLineNumber: oldLineNumber,
+            newLineNumber: nil,
+            content: String(line.dropFirst())
+          )
+        )
+        oldLineNumber += 1
       } else if line.hasPrefix(" ") {
-        let contextLine = String(line.dropFirst())
-        oldLines.append(contextLine)
-        newLines.append(contextLine)
+        parsedLines.append(
+          PierrePatchDiffLine(
+            id: parsedLines.count,
+            type: .context,
+            oldLineNumber: oldLineNumber,
+            newLineNumber: newLineNumber,
+            content: String(line.dropFirst())
+          )
+        )
+        oldLineNumber += 1
+        newLineNumber += 1
       } else if line.isEmpty {
-        oldLines.append("")
-        newLines.append("")
+        parsedLines.append(
+          PierrePatchDiffLine(
+            id: parsedLines.count,
+            type: .context,
+            oldLineNumber: oldLineNumber,
+            newLineNumber: newLineNumber,
+            content: ""
+          )
+        )
+        oldLineNumber += 1
+        newLineNumber += 1
       }
     }
 
-    oldContent = oldLines.joined(separator: "\n")
-    newContent = newLines.joined(separator: "\n")
+    if parsedLines.isEmpty && !patchLines.isEmpty {
+      parsedLines = patchLines.enumerated().map { offset, line in
+        PierrePatchDiffLine(
+          id: offset,
+          type: .metadata,
+          oldLineNumber: nil,
+          newLineNumber: nil,
+          content: line
+        )
+      }
+    }
+
     fileName = parsedFileName.isEmpty ? "changes.diff" : parsedFileName
+    lines = Self.linesWithIntralineHighlights(parsedLines)
+  }
+
+  private static func linesWithIntralineHighlights(
+    _ lines: [PierrePatchDiffLine]
+  ) -> [PierrePatchDiffLine] {
+    var highlightedLines = lines
+    var changeBlockStart: Int?
+
+    func flushChangeBlock(upTo endIndex: Int) {
+      guard let startIndex = changeBlockStart else { return }
+
+      applyIntralineHighlights(
+        in: startIndex..<endIndex,
+        to: &highlightedLines
+      )
+      changeBlockStart = nil
+    }
+
+    for index in lines.indices {
+      switch lines[index].type {
+      case .addition, .deletion:
+        changeBlockStart = changeBlockStart ?? index
+      case .context, .hunk, .metadata, .note:
+        flushChangeBlock(upTo: index)
+      }
+    }
+
+    flushChangeBlock(upTo: lines.endIndex)
+    return highlightedLines
+  }
+
+  private static func applyIntralineHighlights(
+    in range: Range<Int>,
+    to lines: inout [PierrePatchDiffLine]
+  ) {
+    let deletionIndexes = range.filter { lines[$0].type == .deletion }
+    let additionIndexes = range.filter { lines[$0].type == .addition }
+    let pairCount = min(deletionIndexes.count, additionIndexes.count)
+
+    guard pairCount > 0 else { return }
+
+    for pairIndex in 0..<pairCount {
+      let deletionIndex = deletionIndexes[pairIndex]
+      let additionIndex = additionIndexes[pairIndex]
+      let ranges = intralineHighlightRanges(
+        oldContent: lines[deletionIndex].content,
+        newContent: lines[additionIndex].content
+      )
+
+      lines[deletionIndex].highlightRanges = ranges.old
+      lines[additionIndex].highlightRanges = ranges.new
+    }
+  }
+
+  private static func intralineHighlightRanges(
+    oldContent: String,
+    newContent: String
+  ) -> (old: [PierrePatchDiffHighlightRange], new: [PierrePatchDiffHighlightRange]) {
+    guard oldContent != newContent else { return ([], []) }
+
+    let oldTokens = PierrePatchDiffToken.tokens(in: oldContent)
+    let newTokens = PierrePatchDiffToken.tokens(in: newContent)
+    let matches = lcsMatchedTokenIndexes(oldTokens: oldTokens, newTokens: newTokens)
+    let matchedOldIndexes = Set(matches.map(\.oldIndex))
+    let matchedNewIndexes = Set(matches.map(\.newIndex))
+
+    let oldRanges = oldTokens.enumerated().compactMap { index, token in
+      matchedOldIndexes.contains(index) || token.isWhitespace ? nil : token.highlightRange
+    }
+    let newRanges = newTokens.enumerated().compactMap { index, token in
+      matchedNewIndexes.contains(index) || token.isWhitespace ? nil : token.highlightRange
+    }
+
+    return (
+      mergedHighlightRanges(oldRanges),
+      mergedHighlightRanges(newRanges)
+    )
+  }
+
+  private static func lcsMatchedTokenIndexes(
+    oldTokens: [PierrePatchDiffToken],
+    newTokens: [PierrePatchDiffToken]
+  ) -> [(oldIndex: Int, newIndex: Int)] {
+    guard !oldTokens.isEmpty, !newTokens.isEmpty else { return [] }
+
+    var lengths = Array(
+      repeating: Array(repeating: 0, count: newTokens.count + 1),
+      count: oldTokens.count + 1
+    )
+
+    for oldIndex in stride(from: oldTokens.count - 1, through: 0, by: -1) {
+      for newIndex in stride(from: newTokens.count - 1, through: 0, by: -1) {
+        if oldTokens[oldIndex].text == newTokens[newIndex].text {
+          lengths[oldIndex][newIndex] = lengths[oldIndex + 1][newIndex + 1] + 1
+        } else {
+          lengths[oldIndex][newIndex] = max(
+            lengths[oldIndex + 1][newIndex],
+            lengths[oldIndex][newIndex + 1]
+          )
+        }
+      }
+    }
+
+    var matches: [(oldIndex: Int, newIndex: Int)] = []
+    var oldIndex = 0
+    var newIndex = 0
+
+    while oldIndex < oldTokens.count, newIndex < newTokens.count {
+      if oldTokens[oldIndex].text == newTokens[newIndex].text {
+        matches.append((oldIndex, newIndex))
+        oldIndex += 1
+        newIndex += 1
+      } else if lengths[oldIndex + 1][newIndex] >= lengths[oldIndex][newIndex + 1] {
+        oldIndex += 1
+      } else {
+        newIndex += 1
+      }
+    }
+
+    return matches
+  }
+
+  private static func mergedHighlightRanges(
+    _ ranges: [PierrePatchDiffHighlightRange]
+  ) -> [PierrePatchDiffHighlightRange] {
+    guard var current = ranges.first else { return [] }
+
+    var merged: [PierrePatchDiffHighlightRange] = []
+
+    for range in ranges.dropFirst() {
+      if range.lowerBound <= current.upperBound {
+        current.upperBound = max(current.upperBound, range.upperBound)
+      } else {
+        merged.append(current)
+        current = range
+      }
+    }
+
+    merged.append(current)
+    return merged
+  }
+
+  private static func hunkInfo(from line: String) -> (oldStart: Int, newStart: Int) {
+    let parts = line.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    let oldStart = parts.compactMap { hunkStart(from: $0, marker: "-") }.first ?? 0
+    let newStart = parts.compactMap { hunkStart(from: $0, marker: "+") }.first ?? 0
+
+    return (oldStart, newStart)
+  }
+
+  private static func hunkStart(from component: String, marker: String) -> Int? {
+    guard component.hasPrefix(marker) else { return nil }
+
+    let rangeText = component.dropFirst().split(separator: ",", maxSplits: 1).first.map(String.init) ?? ""
+    return Int(rangeText)
   }
 
   private static func fileName(fromPatchHeaderLine line: String) -> String {
@@ -234,626 +311,301 @@ private struct PierrePatchContents: Equatable {
   }
 }
 
-private struct PierreDiffWebView: UIViewRepresentable {
-  var oldContent: String
-  var newContent: String
-  var fileName: String
-  var diffStyle: PierreDiffStyle
-  var overflowMode: PierreOverflowMode
-  var renderOptions: PierreDiffRenderOptions
-  var onHeightChange: (CGFloat) -> Void
-  var onRenderStateChange: (PierreDiffWebRenderState) -> Void
+struct PierrePatchDiffLine: Equatable, Identifiable {
+  var id: Int
+  var type: PierrePatchDiffLineType
+  var oldLineNumber: Int?
+  var newLineNumber: Int?
+  var content: String
+  var highlightRanges: [PierrePatchDiffHighlightRange] = []
+}
+
+struct PierrePatchDiffHighlightRange: Equatable {
+  var lowerBound: Int
+  var upperBound: Int
+}
+
+private struct PierrePatchDiffToken: Equatable {
+  var text: String
+  var lowerBound: Int
+  var upperBound: Int
+  var kind: Kind
+
+  var isWhitespace: Bool {
+    kind == .whitespace
+  }
+
+  var highlightRange: PierrePatchDiffHighlightRange {
+    PierrePatchDiffHighlightRange(lowerBound: lowerBound, upperBound: upperBound)
+  }
+
+  static func tokens(in text: String) -> [PierrePatchDiffToken] {
+    var tokens: [PierrePatchDiffToken] = []
+    var tokenText = ""
+    var tokenKind: Kind?
+    var tokenStart = 0
+    var offset = 0
+
+    func flushToken() {
+      guard let kind = tokenKind else { return }
+
+      tokens.append(
+        PierrePatchDiffToken(
+          text: tokenText,
+          lowerBound: tokenStart,
+          upperBound: offset,
+          kind: kind
+        )
+      )
+      tokenText = ""
+      tokenKind = nil
+    }
+
+    for character in text {
+      let nextKind = Kind(character: character)
+      let continuesToken = tokenKind == nextKind && nextKind != .symbol
+
+      if !continuesToken {
+        flushToken()
+        tokenStart = offset
+        tokenKind = nextKind
+      }
+
+      tokenText.append(character)
+      offset += 1
+    }
+
+    flushToken()
+    return tokens
+  }
+
+  enum Kind: Equatable {
+    case word
+    case whitespace
+    case symbol
+
+    init(character: Character) {
+      if character.isWhitespace {
+        self = .whitespace
+      } else if character.isLetter || character.isNumber || character == "_" {
+        self = .word
+      } else {
+        self = .symbol
+      }
+    }
+  }
+}
+
+enum PierrePatchDiffLineType: Equatable {
+  case context
+  case addition
+  case deletion
+  case hunk
+  case note
+  case metadata
+}
+
+private struct PierrePatchDiffRowsView: View {
+  var diff: PierrePatchDiff
 
   @Environment(\.colorScheme) private var colorScheme
 
-  func makeUIView(context: Context) -> WKWebView {
-    let configuration = WKWebViewConfiguration()
-    configuration.userContentController.add(context.coordinator, name: "diffBridge")
-
-    let webView = WKWebView(frame: .zero, configuration: configuration)
-    webView.navigationDelegate = context.coordinator
-    webView.isOpaque = false
-    webView.backgroundColor = .clear
-    webView.scrollView.backgroundColor = .clear
-    webView.scrollView.showsVerticalScrollIndicator = true
-    webView.scrollView.showsHorizontalScrollIndicator = true
-    webView.scrollView.bounces = false
-
-    context.coordinator.webView = webView
-    webView.loadHTMLString(PierreDiffHTMLTemplate.html, baseURL: Bundle.main.resourceURL)
-
-    return webView
+  private var palette: PierrePatchDiffPalette {
+    PierrePatchDiffPalette(colorScheme: colorScheme)
   }
 
-  func updateUIView(_ webView: WKWebView, context: Context) {
-    let coordinator = context.coordinator
-    coordinator.onHeightChange = onHeightChange
-    coordinator.onRenderStateChange = onRenderStateChange
-    let theme = colorScheme == .dark ? "dark" : "light"
-
-    let contentChanged = coordinator.lastOldContent != oldContent ||
-      coordinator.lastNewContent != newContent ||
-      coordinator.lastFileName != fileName
-    let styleChanged = coordinator.lastDiffStyle != diffStyle
-    let overflowChanged = coordinator.lastOverflowMode != overflowMode
-    let themeChanged = coordinator.lastTheme != theme
-    let optionsChanged = coordinator.lastRenderOptions != renderOptions
-
-    if contentChanged || styleChanged || overflowChanged || themeChanged || optionsChanged {
-      coordinator.lastOldContent = oldContent
-      coordinator.lastNewContent = newContent
-      coordinator.lastFileName = fileName
-      coordinator.lastDiffStyle = diffStyle
-      coordinator.lastOverflowMode = overflowMode
-      coordinator.lastTheme = theme
-      coordinator.lastRenderOptions = renderOptions
-      coordinator.renderDiff(
-        oldContent: oldContent,
-        newContent: newContent,
-        fileName: fileName,
-        theme: theme,
-        diffStyle: diffStyle,
-        overflowMode: overflowMode,
-        renderOptions: renderOptions
-      )
-    }
-  }
-
-  func makeCoordinator() -> PierreDiffWebViewCoordinator {
-    PierreDiffWebViewCoordinator()
-  }
-
-  static func dismantleUIView(_ uiView: WKWebView, coordinator: PierreDiffWebViewCoordinator) {
-    coordinator.cleanup()
-  }
-}
-
-@MainActor
-private final class PierreDiffWebViewCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-  weak var webView: WKWebView?
-  var onHeightChange: ((CGFloat) -> Void)?
-  var onRenderStateChange: ((PierreDiffWebRenderState) -> Void)?
-
-  var lastOldContent: String?
-  var lastNewContent: String?
-  var lastFileName: String?
-  var lastDiffStyle: PierreDiffStyle?
-  var lastOverflowMode: PierreOverflowMode?
-  var lastTheme: String?
-  var lastRenderOptions: PierreDiffRenderOptions?
-
-  private var isReady = false
-  private var pendingOperations: [() -> Void] = []
-
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    isReady = true
-    executePendingOperations()
-  }
-
-  nonisolated func userContentController(
-    _ userContentController: WKUserContentController,
-    didReceive message: WKScriptMessage
-  ) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-
-      guard let body = message.body as? [String: Any],
-            let type = body["type"] as? String else {
-        return
-      }
-
-      switch type {
-      case "bridgeReady", "ready":
-        isReady = true
-        executePendingOperations()
-        scheduleContentHeightUpdate()
-      case "rendered":
-        handleRenderedMessage(body)
-      case "empty":
-        scheduleContentHeightUpdate()
-      case "error":
-        let message = body["message"] as? String ?? "Unknown Pierre diff renderer error"
-        print("PierreDiffWebViewCoordinator: JavaScript renderer error: \(message)")
-        onRenderStateChange?(.failed)
-      default:
-        break
-      }
-    }
-  }
-
-  func renderDiff(
-    oldContent: String,
-    newContent: String,
-    fileName: String,
-    theme: String,
-    diffStyle: PierreDiffStyle,
-    overflowMode: PierreOverflowMode,
-    renderOptions: PierreDiffRenderOptions
-  ) {
-    let input = PierreDiffInput(
-      oldFile: PierreDiffInput.FileContents(name: fileName, contents: oldContent),
-      newFile: PierreDiffInput.FileContents(name: fileName, contents: newContent),
-      options: PierreDiffInput.Options(
-        theme: renderOptions.theme.config,
-        themeType: theme,
-        diffStyle: diffStyle.rawValue,
-        overflow: overflowMode.rawValue,
-        enableLineSelection: false,
-        renderOptions: renderOptions
-      )
-    )
-
-    executeWhenReady { [weak self] in
-      self?.callJavaScript("renderDiff", with: input)
-    }
-  }
-
-  func cleanup() {
-    webView?.stopLoading()
-    webView?.navigationDelegate = nil
-    webView?.configuration.userContentController.removeScriptMessageHandler(forName: "diffBridge")
-    webView = nil
-    pendingOperations.removeAll()
-    onHeightChange = nil
-    onRenderStateChange = nil
-  }
-
-  private func handleRenderedMessage(_ body: [String: Any]) {
-    if let height = finiteDouble(body["height"]) {
-      onHeightChange?(CGFloat(height))
-    }
-
-    onRenderStateChange?(.rendered)
-  }
-
-  private func scheduleContentHeightUpdate() {
-    Task { @MainActor [weak self] in
-      try? await Task.sleep(nanoseconds: 120_000_000)
-      self?.requestContentHeight()
-    }
-  }
-
-  private func requestContentHeight() {
-    let script = """
-    (function() {
-      const container = document.getElementById('diff-container');
-      const height = Math.max(
-        container ? container.scrollHeight : 0,
-        document.body ? document.body.scrollHeight : 0,
-        document.documentElement ? document.documentElement.scrollHeight : 0
-      );
-      return height;
-    })();
-    """
-
-    webView?.evaluateJavaScript(script) { [weak self] result, _ in
-      guard let self else { return }
-
-      guard let numberValue = self.finiteDouble(result) else { return }
-      self.onHeightChange?(CGFloat(numberValue))
-    }
-  }
-
-  private func finiteDouble(_ value: Any?) -> Double? {
-    let numberValue: Double?
-    if let number = value as? NSNumber {
-      numberValue = number.doubleValue
-    } else if let double = value as? Double {
-      numberValue = double
-    } else {
-      numberValue = nil
-    }
-
-    guard let numberValue, numberValue.isFinite else { return nil }
-    return numberValue
-  }
-
-  private func executeWhenReady(_ operation: @escaping () -> Void) {
-    if isReady {
-      operation()
-    } else {
-      pendingOperations.append(operation)
-    }
-  }
-
-  private func executePendingOperations() {
-    let operations = pendingOperations
-    pendingOperations.removeAll()
-    operations.forEach { $0() }
-  }
-
-  private func callJavaScript<T: Encodable>(_ method: String, with input: T) {
-    do {
-      let data = try JSONEncoder().encode(input)
-      let base64String = data.base64EncodedString()
-      let script = """
-      (function() {
-        try {
-          const decoded = atob('\(base64String)');
-          const input = JSON.parse(decoded);
-          const bridge = window.pierreBridge;
-          if (!bridge || typeof bridge.\(method) !== 'function') {
-            throw new Error('Pierre diff bridge is not ready.');
-          }
-          bridge.\(method)(input);
-          if ('\(method)' === 'renderDiff') {
-            window.picoDiffBridge?.scheduleRenderCheck?.();
-          }
-        } catch (error) {
-          console.error('Failed to render Pierre diff:', error);
-          if (window.webkit?.messageHandlers?.diffBridge) {
-            window.webkit.messageHandlers.diffBridge.postMessage({ type: 'error', message: error.message });
-          }
+  var body: some View {
+    ScrollView(.vertical) {
+      LazyVStack(alignment: .leading, spacing: 0) {
+        ForEach(diff.lines) { line in
+          PierrePatchDiffLineView(line: line, palette: palette)
         }
-      })();
-      """
-      evaluateJavaScript(script)
-    } catch {
-      print("PierreDiffWebViewCoordinator: Failed to encode diff input: \(error)")
-    }
-  }
-
-  private func evaluateJavaScript(_ script: String) {
-    webView?.evaluateJavaScript(script) { _, error in
-      if let error {
-        print("PierreDiffWebViewCoordinator: JavaScript error: \(error)")
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 6)
     }
+    .frame(maxHeight: 384)
+    .background(palette.containerBackground, in: .rect(cornerRadius: 12))
+    .overlay {
+      RoundedRectangle(cornerRadius: 12)
+        .stroke(palette.border, lineWidth: 1)
+    }
+    .clipShape(.rect(cornerRadius: 12))
+    .textSelection(.enabled)
   }
 }
 
-private struct PierreDiffInput: Codable, Sendable {
-  struct FileContents: Codable, Sendable {
-    var name: String
-    var contents: String
-    var lang: String?
+private struct PierrePatchDiffLineView: View {
+  var line: PierrePatchDiffLine
+  var palette: PierrePatchDiffPalette
+
+  private let accentWidth: CGFloat = 3
+  private let numberColumnWidth: CGFloat = 46
+  private let numberColumnGapWidth: CGFloat = 1
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 0) {
+      Rectangle()
+        .fill(palette.accent(for: line.type))
+        .frame(width: accentWidth)
+        .accessibilityHidden(true)
+
+      lineNumberColumn(lineNumber)
+
+      Text(attributedContent)
+        .font(.system(size: 12, design: .monospaced))
+        .foregroundStyle(palette.foreground(for: line.type))
+        .lineSpacing(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, line.type == .hunk ? 5 : 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background {
+      Rectangle()
+        .fill(palette.background(for: line.type))
+    }
+    .overlay(alignment: .leading) {
+      Rectangle()
+        .fill(palette.containerBackground)
+        .frame(width: numberColumnGapWidth)
+        .offset(x: accentWidth + numberColumnWidth - numberColumnGapWidth)
+        .accessibilityHidden(true)
+    }
+    .accessibilityElement(children: .combine)
   }
 
-  struct Options: Codable, Sendable {
-    var theme: PierreDiffThemeConfig
-    var themeType: String?
-    var diffStyle: String
-    var overflow: String
-    var enableLineSelection: Bool
-    var diffIndicators: String
-    var hunkSeparators: String
-    var lineDiffType: String
-    var disableLineNumbers: Bool
-    var disableFileHeader: Bool
-    var disableBackground: Bool
-    var expandUnchanged: Bool
-    var collapsedContextThreshold: Int?
-    var maxLineDiffLength: Int?
-    var expansionLineCount: Int?
-    var tokenizeMaxLength: Int?
-    var tokenizeMaxLineLength: Int?
-    var stickyHeader: Bool
-
-    init(
-      theme: PierreDiffThemeConfig,
-      themeType: String?,
-      diffStyle: String,
-      overflow: String,
-      enableLineSelection: Bool,
-      renderOptions: PierreDiffRenderOptions
-    ) {
-      self.theme = theme
-      self.themeType = themeType
-      self.diffStyle = diffStyle
-      self.overflow = overflow
-      self.enableLineSelection = enableLineSelection
-      diffIndicators = renderOptions.diffIndicators.rawValue
-      hunkSeparators = renderOptions.hunkSeparators.rawValue
-      lineDiffType = renderOptions.lineDiffType.rawValue
-      disableLineNumbers = renderOptions.disableLineNumbers
-      disableFileHeader = renderOptions.disableFileHeader
-      disableBackground = renderOptions.disableBackground
-      expandUnchanged = renderOptions.expandUnchanged
-      collapsedContextThreshold = renderOptions.collapsedContextThreshold
-      maxLineDiffLength = renderOptions.maxLineDiffLength
-      expansionLineCount = renderOptions.expansionLineCount
-      tokenizeMaxLength = renderOptions.tokenizeMaxLength
-      tokenizeMaxLineLength = renderOptions.tokenizeMaxLineLength
-      stickyHeader = renderOptions.stickyHeader
-    }
+  private var displayContent: String {
+    line.content.isEmpty ? " " : line.content
   }
 
-  var oldFile: FileContents
-  var newFile: FileContents
-  var options: Options
-}
+  private var attributedContent: AttributedString {
+    var attributed = AttributedString(displayContent)
 
-private enum PierreDiffStyle: String, Sendable {
-  case split
-  case unified
-}
-
-private enum PierreOverflowMode: String, Sendable {
-  case scroll
-  case wrap
-}
-
-private struct PierreDiffRenderOptions: Equatable, Sendable {
-  var theme: PierreDiffTheme = .pierreSoft
-  var diffIndicators: PierreDiffIndicatorStyle = .bars
-  var hunkSeparators: PierreHunkSeparatorStyle = .lineInfo
-  var lineDiffType: PierreLineDiffType = .wordAlt
-  var disableLineNumbers = false
-  var disableFileHeader = false
-  var disableBackground = false
-  var expandUnchanged = false
-  var collapsedContextThreshold: Int?
-  var maxLineDiffLength: Int?
-  var expansionLineCount: Int?
-  var tokenizeMaxLength: Int?
-  var tokenizeMaxLineLength: Int?
-  var stickyHeader = false
-}
-
-private enum PierreDiffTheme: Equatable, Sendable {
-  case pierre
-  case pierreSoft
-
-  var config: PierreDiffThemeConfig {
-    switch self {
-    case .pierre:
-      PierreDiffThemeConfig(dark: "pierre-dark", light: "pierre-light")
-    case .pierreSoft:
-      PierreDiffThemeConfig(dark: "pierre-dark-soft", light: "pierre-light-soft")
-    }
-  }
-}
-
-private struct PierreDiffThemeConfig: Codable, Equatable, Sendable {
-  var dark: String
-  var light: String
-}
-
-private enum PierreDiffIndicatorStyle: String, Sendable {
-  case classic
-  case bars
-  case none
-}
-
-private enum PierreLineDiffType: String, Sendable {
-  case wordAlt = "word-alt"
-  case word
-  case char
-  case none
-}
-
-private enum PierreHunkSeparatorStyle: String, Sendable {
-  case simple
-  case metadata
-  case lineInfo = "line-info"
-  case lineInfoBasic = "line-info-basic"
-}
-
-private enum PierreDiffHTMLTemplate {
-  static let html: String = {
-    let bundleJS = loadBundledJavaScript()
-
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        \(styles)
-      </style>
-    </head>
-    <body>
-      <div id="diff-container"></div>
-      <script>
-        \(bundleJS)
-        \(bridgeJavaScript)
-      </script>
-    </body>
-    </html>
-    """
-  }()
-
-  private static func loadBundledJavaScript() -> String {
-    let urls = [
-      Bundle.main.url(forResource: "pierre-diffs-bundle", withExtension: "js", subdirectory: "Resources"),
-      Bundle.main.url(forResource: "pierre-diffs-bundle", withExtension: "js"),
-    ]
-
-    guard let url = urls.compactMap({ $0 }).first,
-          let content = try? String(contentsOf: url, encoding: .utf8) else {
-      return fallbackJavaScript
-    }
-
-    return content
-  }
-
-  private static let fallbackJavaScript = """
-  window.pierreBridge = {
-    renderDiff: function() {
-      const container = document.getElementById('diff-container');
-      container.innerHTML = '<div style="color: red; padding: 16px; font-family: -apple-system, sans-serif;">Failed to load Pierre diff renderer.</div>';
-      if (window.webkit?.messageHandlers?.diffBridge) {
-        window.webkit.messageHandlers.diffBridge.postMessage({ type: 'error', message: 'Bundle not loaded' });
-      }
-    }
-  };
-  """
-
-  private static let bridgeJavaScript = """
-  window.picoDiffBridge = (function() {
-    let renderToken = 0;
-    let didInstallRenderHook = false;
-
-    function post(message) {
-      if (window.webkit?.messageHandlers?.diffBridge) {
-        window.webkit.messageHandlers.diffBridge.postMessage(message);
-      }
-    }
-
-    function finiteNumber(value) {
-      return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-    }
-
-    function renderedHeight(container, host, shadowRoot) {
-      const candidates = [
-        shadowRoot?.querySelector('pre')?.scrollHeight,
-        shadowRoot?.querySelector('[data-diff]')?.scrollHeight,
-        shadowRoot?.firstElementChild?.scrollHeight,
-        host?.scrollHeight,
-        container?.scrollHeight,
-        document.body?.scrollHeight,
-        document.documentElement?.scrollHeight,
-      ].map(finiteNumber);
-
-      return Math.max(0, ...candidates);
-    }
-
-    function currentRenderStatus() {
-      const container = document.getElementById('diff-container');
-      const host = container?.querySelector('diffs-container');
-      const shadowRoot = host?.shadowRoot;
-      const errorText = shadowRoot
-        ?.querySelector('[data-error-wrapper]')
-        ?.textContent
-        ?.trim();
-      const text = (
-        shadowRoot?.querySelector('pre')?.textContent ||
-        shadowRoot?.textContent ||
-        container?.textContent ||
-        ''
-      ).trim();
-
-      return {
-        errorText,
-        hasContent: text.length > 0,
-        height: renderedHeight(container, host, shadowRoot),
-        textLength: text.length,
-      };
-    }
-
-    function postRenderStatus() {
-      const status = currentRenderStatus();
-
-      if (status.errorText) {
-        post({ type: 'error', message: status.errorText });
-        return true;
+    for range in line.highlightRanges {
+      guard let lowerBound = attributed.characters.index(
+        attributed.startIndex,
+        offsetBy: range.lowerBound,
+        limitedBy: attributed.endIndex
+      ),
+            let upperBound = attributed.characters.index(
+              attributed.startIndex,
+              offsetBy: range.upperBound,
+              limitedBy: attributed.endIndex
+            ),
+            lowerBound < upperBound else {
+        continue
       }
 
-      if (status.hasContent) {
-        post({
-          type: 'rendered',
-          height: status.height,
-          textLength: status.textLength,
-        });
-        return true;
-      }
-
-      post({ type: 'empty', height: status.height });
-      return false;
+      attributed[lowerBound..<upperBound].backgroundColor = palette.intralineBackground(
+        for: line.type
+      )
     }
 
-    function scheduleRenderCheck() {
-      installRenderHook();
-      const token = ++renderToken;
-      const delays = [0, 50, 150, 350, 750, 1500, 3000, 6000, 10000];
+    return attributed
+  }
 
-      for (const delay of delays) {
-        window.setTimeout(function() {
-          if (token !== renderToken) return;
-          const didFinish = postRenderStatus();
-          if (didFinish) renderToken += 1;
-        }, delay);
-      }
+  private var lineNumber: Int? {
+    switch line.type {
+    case .addition:
+      line.newLineNumber
+    case .deletion:
+      line.oldLineNumber
+    case .context:
+      line.newLineNumber ?? line.oldLineNumber
+    case .hunk, .metadata, .note:
+      nil
     }
+  }
 
-    function installRenderHook() {
-      if (didInstallRenderHook) return true;
+  private func lineNumberColumn(_ value: Int?) -> some View {
+    Text(value.map { String($0) } ?? "")
+      .font(.system(size: 11, weight: .medium, design: .monospaced))
+      .foregroundStyle(palette.lineNumberForeground(for: line.type))
+      .padding(.vertical, line.type == .hunk ? 5 : 2)
+      .padding(.horizontal, 6)
+      .frame(width: numberColumnWidth, alignment: .trailing)
+  }
+}
 
-      const FileDiff = window.PierreDiffs?.FileDiff;
-      const prototype = FileDiff?.prototype;
-      const originalRender = prototype?.render;
-      if (typeof originalRender !== 'function') return false;
+private struct PierrePatchDiffPalette {
+  var colorScheme: ColorScheme
 
-      prototype.render = function(...args) {
-        const result = originalRender.apply(this, args);
-        window.picoDiffBridge?.scheduleRenderCheck?.();
-        return result;
-      };
-      didInstallRenderHook = true;
-      return true;
+  var containerBackground: Color {
+    Color(uiColor: .systemBackground)
+  }
+
+  var border: Color {
+    .secondary.opacity(colorScheme == .dark ? 0.22 : 0.18)
+  }
+
+  func accent(for type: PierrePatchDiffLineType) -> Color {
+    switch type {
+    case .addition:
+      Color(uiColor: .systemGreen)
+    case .deletion:
+      Color(uiColor: .systemRed)
+    case .hunk:
+      Color(uiColor: .systemBlue)
+    case .note:
+      Color(uiColor: .systemOrange)
+    case .context, .metadata:
+      .clear
     }
-
-    window.addEventListener('error', function(event) {
-      post({ type: 'error', message: event.message || 'Pierre diff JavaScript error' });
-    });
-    window.addEventListener('unhandledrejection', function(event) {
-      const reason = event.reason;
-      post({
-        type: 'error',
-        message: reason?.message || String(reason || 'Pierre diff promise rejection'),
-      });
-    });
-    installRenderHook();
-
-    return { scheduleRenderCheck };
-  })();
-  """
-
-  private static let styles = """
-  * {
-    box-sizing: border-box;
   }
 
-  :root {
-    --diffs-font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
-    --diffs-font-size: 12px;
-    --diffs-line-height: 1.5;
-    --diffs-tab-size: 2;
-    --diffs-header-font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-    --diffs-min-number-column-width: 4ch;
+  func background(for type: PierrePatchDiffLineType) -> Color {
+    switch type {
+    case .addition:
+      Color(uiColor: .systemGreen).opacity(colorScheme == .dark ? 0.18 : 0.11)
+    case .deletion:
+      Color(uiColor: .systemRed).opacity(colorScheme == .dark ? 0.18 : 0.11)
+    case .hunk:
+      Color(uiColor: .systemBlue).opacity(colorScheme == .dark ? 0.16 : 0.08)
+    case .note:
+      Color(uiColor: .systemOrange).opacity(colorScheme == .dark ? 0.14 : 0.08)
+    case .context, .metadata:
+      .clear
+    }
   }
 
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-    background: transparent;
-    font-family: var(--diffs-font-family);
-    font-size: var(--diffs-font-size);
-    line-height: var(--diffs-line-height);
-    -webkit-font-smoothing: antialiased;
+  func foreground(for type: PierrePatchDiffLineType) -> Color {
+    switch type {
+    case .hunk:
+      Color(uiColor: .systemBlue)
+    case .note:
+      Color(uiColor: .systemOrange)
+    case .metadata:
+      .secondary
+    case .context, .addition, .deletion:
+      .primary
+    }
   }
 
-  #diff-container {
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background: transparent;
+  func intralineBackground(for type: PierrePatchDiffLineType) -> Color {
+    switch type {
+    case .addition:
+      Color(uiColor: .systemGreen).opacity(colorScheme == .dark ? 0.38 : 0.22)
+    case .deletion:
+      Color(uiColor: .systemRed).opacity(colorScheme == .dark ? 0.38 : 0.22)
+    case .context, .hunk, .metadata, .note:
+      .clear
+    }
   }
 
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  func lineNumberForeground(for type: PierrePatchDiffLineType) -> Color {
+    switch type {
+    case .addition:
+      Color(uiColor: .systemGreen).opacity(0.92)
+    case .deletion:
+      Color(uiColor: .systemRed).opacity(0.92)
+    case .hunk:
+      Color(uiColor: .systemBlue).opacity(0.92)
+    case .note:
+      Color(uiColor: .systemOrange).opacity(0.84)
+    case .context, .metadata:
+      .secondary.opacity(0.72)
+    }
   }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: rgba(128, 128, 128, 0.3);
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(128, 128, 128, 0.5);
-  }
-
-  ::selection {
-    background-color: rgba(59, 130, 246, 0.3);
-  }
-  """
 }

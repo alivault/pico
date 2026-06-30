@@ -123,7 +123,6 @@
 		F30000000000000000000005 /* Features/Conversation/AnsiTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000006 /* Features/Conversation/AnsiTextView.swift */; };
 		F30000000000000000000007 /* Features/Conversation/ToolOutputViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30000000000000000000008 /* Features/Conversation/ToolOutputViews.swift */; };
 		F30000000000000000000009 /* Features/Conversation/PierrePatchDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */; };
-		F3000000000000000000000B /* pierre-diffs-bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = F3000000000000000000000C /* pierre-diffs-bundle.js */; };
 		F3000000000000000000000D /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = F3000000000000000000000E /* AppIcon.icon */; };
 		F7BD872D5626166C6308A356 /* Core/Models/UiRequestOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = A364872CADA7E769CAB69098 /* Core/Models/UiRequestOption.swift */; };
 		F82F82DC8CEECC76EC0C0453 /* Core/Models/CompactionBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5BE202ADC469EB1351A79C1 /* Core/Models/CompactionBlock.swift */; };
@@ -262,7 +261,6 @@
 		F30000000000000000000006 /* Features/Conversation/AnsiTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AnsiTextView.swift; sourceTree = "<group>"; };
 		F30000000000000000000008 /* Features/Conversation/ToolOutputViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ToolOutputViews.swift; sourceTree = "<group>"; };
 		F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/PierrePatchDiffView.swift; sourceTree = "<group>"; };
-		F3000000000000000000000C /* pierre-diffs-bundle.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Resources/pierre-diffs-bundle.js; sourceTree = "<group>"; };
 		F3000000000000000000000E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = com.apple.iconcomposer.icon; path = Resources/AppIcon.icon; sourceTree = "<group>"; };
 		F431A05270D409C8F34759DF /* Core/Models/ToolBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ToolBlock.swift; sourceTree = "<group>"; };
 		F97C68B3538AC695A155E2FB /* Core/Models/StateSyncPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/StateSyncPayload.swift; sourceTree = "<group>"; };
@@ -407,7 +405,6 @@
 				AE83A36614257B098F0A2991 /* Resources/Info.plist */,
 				3AA418C32398BF54AB67A201 /* Resources/Assets.xcassets */,
 				F3000000000000000000000E /* AppIcon.icon */,
-				F3000000000000000000000C /* pierre-diffs-bundle.js */,
 			);
 			path = Pico;
 			sourceTree = "<group>";
@@ -536,7 +533,6 @@
 			files = (
 				1718BE091536A0BFDE545DD2 /* Resources/Assets.xcassets in Resources */,
 				F3000000000000000000000D /* AppIcon.icon in Resources */,
-				F3000000000000000000000B /* pierre-diffs-bundle.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

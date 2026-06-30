@@ -113,6 +113,43 @@ struct ToolFormattingTests {
     )
   }
 
+  @Test func parsesPierreStyledPatchDiffRows() throws {
+    let patch = """
+    diff --git a/README.md b/README.md
+    --- a/README.md
+    +++ b/README.md
+    @@ -2,3 +2,4 @@
+     shared line
+    -old line
+    +new line
+    +second new line
+    \\ No newline at end of file
+    """
+
+    let diff = PierrePatchDiff(patch: patch, fallbackFileName: nil)
+
+    #expect(diff.fileName == "README.md")
+    #expect(diff.lines.map(\.type) == [.context, .deletion, .addition, .addition, .note])
+    #expect(diff.lines[0].oldLineNumber == 2)
+    #expect(diff.lines[0].newLineNumber == 2)
+    #expect(diff.lines[1].oldLineNumber == 3)
+    #expect(diff.lines[1].newLineNumber == nil)
+    #expect(diff.lines[2].oldLineNumber == nil)
+    #expect(diff.lines[2].newLineNumber == 3)
+    #expect(diff.lines[3].newLineNumber == 4)
+    #expect(diff.lines[2].content == "new line")
+    #expect(
+      diff.lines[1].highlightRanges == [
+        PierrePatchDiffHighlightRange(lowerBound: 0, upperBound: 3)
+      ]
+    )
+    #expect(
+      diff.lines[2].highlightRanges == [
+        PierrePatchDiffHighlightRange(lowerBound: 0, upperBound: 3)
+      ]
+    )
+  }
+
   @Test func decodesToolBlocksFromStateSyncPayload() throws {
     let data = Data(
       #"""
