@@ -141,6 +141,8 @@
 		C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */; };
 		C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */; };
 		C5000000000000000000000C /* GitFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000C /* GitFeatureTests.swift */; };
+		C5000000000000000000000D /* Features/Git/GitCommitGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000D /* Features/Git/GitCommitGraph.swift */; };
+		C5000000000000000000000E /* Features/Git/GitCommitGraphColumnView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000E /* Features/Git/GitCommitGraphColumnView.swift */; };
 		D50000000000000000000001 /* Core/Models/HighlightResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000001 /* Core/Models/HighlightResponse.swift */; };
 		D50000000000000000000002 /* Features/Git/CodeFileLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */; };
 		D50000000000000000000003 /* Features/Git/CodeHighlightResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000003 /* Features/Git/CodeHighlightResult.swift */; };
@@ -299,6 +301,8 @@
 		C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitBranchSheetView.swift; sourceTree = "<group>"; };
 		C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitCommitSheetView.swift; sourceTree = "<group>"; };
 		C4000000000000000000000C /* GitFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitFeatureTests.swift; sourceTree = "<group>"; };
+		C4000000000000000000000D /* Features/Git/GitCommitGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitCommitGraph.swift; sourceTree = "<group>"; };
+		C4000000000000000000000E /* Features/Git/GitCommitGraphColumnView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitCommitGraphColumnView.swift; sourceTree = "<group>"; };
 		D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeFileLanguage.swift; sourceTree = "<group>"; };
 		D40000000000000000000003 /* Features/Git/CodeHighlightResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeHighlightResult.swift; sourceTree = "<group>"; };
 		D40000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeSyntaxPalette.swift; sourceTree = "<group>"; };
@@ -432,6 +436,8 @@
 				C40000000000000000000006 /* Features/Git/GitWorkspaceView.swift */,
 				C40000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift */,
 				C40000000000000000000008 /* Features/Git/GitHistoryView.swift */,
+				C4000000000000000000000D /* Features/Git/GitCommitGraph.swift */,
+				C4000000000000000000000E /* Features/Git/GitCommitGraphColumnView.swift */,
 				C40000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift */,
 				C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */,
 				C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */,
@@ -710,6 +716,8 @@
 				C50000000000000000000006 /* Features/Git/GitWorkspaceView.swift in Sources */,
 				C50000000000000000000007 /* Features/Git/GitChangesWorkspaceView.swift in Sources */,
 				C50000000000000000000008 /* Features/Git/GitHistoryView.swift in Sources */,
+				C5000000000000000000000D /* Features/Git/GitCommitGraph.swift in Sources */,
+				C5000000000000000000000E /* Features/Git/GitCommitGraphColumnView.swift in Sources */,
 				C50000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift in Sources */,
 				C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */,
 				C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */,

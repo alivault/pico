@@ -18,11 +18,13 @@ struct GitPatchView: View {
       VStack(alignment: .leading, spacing: 12) {
         ForEach(files) { file in
           VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
               GitFileIcon(path: file.fileName)
-              Text(file.fileName)
+                .padding(.top, 1)
+              Text(GitFormatting.wrappablePath(file.fileName))
                 .font(.caption.weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
               Spacer(minLength: 0)
             }
             PierrePatchDiffView(

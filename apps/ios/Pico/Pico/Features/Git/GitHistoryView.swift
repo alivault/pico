@@ -5,6 +5,7 @@ struct GitHistoryView: View {
   @Bindable var model: AppModel
   var cwd: String
   var commits: [GitCommitGraphEntry]
+  var unpushedCommitHashes: [String] = []
   var hasMore: Bool
   var isLoading: Bool
   var loadMore: () -> Void
@@ -101,12 +102,18 @@ struct GitHistoryView: View {
   }
 
   private var commitList: some View {
-    LazyVStack(alignment: .leading, spacing: 0) {
-      ForEach(commits) { commit in
+    let graphLayout = GitCommitGraphLayout.build(commits: commits)
+    let unpushedCommitHashSet = Set(unpushedCommitHashes)
+
+    return LazyVStack(alignment: .leading, spacing: 0) {
+      ForEach(Array(commits.enumerated()), id: \.element.id) { index, commit in
         GitCommitRowView(
           model: model,
           cwd: cwd,
           commit: commit,
+          graphRow: graphLayout.rows[index],
+          graphLaneCount: graphLayout.maxLaneCount,
+          isUnpushed: unpushedCommitHashSet.contains(commit.fullHash),
           openDiff: openDiff,
           openFiles: { selectedCommitForFiles = commit },
           refresh: refresh
@@ -181,6 +188,9 @@ private struct GitCommitRowView: View {
   @Bindable var model: AppModel
   var cwd: String
   var commit: GitCommitGraphEntry
+  var graphRow: GitCommitGraphRowLayout
+  var graphLaneCount: Int
+  var isUnpushed: Bool
   var openDiff: (GitCommitDiffRequest) -> Void
   var openFiles: () -> Void
   var refresh: () -> Void
@@ -193,11 +203,8 @@ private struct GitCommitRowView: View {
     HStack(alignment: .top, spacing: 10) {
       Button(action: openFiles) {
         HStack(alignment: .top, spacing: 10) {
-          Text(commit.graph.isEmpty ? "•" : commit.graph)
-            .font(.system(size: 12, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .frame(width: 54, alignment: .leading)
-            .lineLimit(2)
+          Color.clear
+            .frame(width: graphColumnWidth)
             .accessibilityHidden(true)
 
           VStack(alignment: .leading, spacing: 5) {
@@ -286,6 +293,15 @@ private struct GitCommitRowView: View {
     .padding(12)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Color(uiColor: .systemBackground))
+    .overlay(alignment: .leading) {
+      GitCommitGraphColumnView(
+        row: graphRow,
+        maxLaneCount: graphLaneCount,
+        isUnpushed: isUnpushed
+      )
+      .padding(.leading, 12)
+      .allowsHitTesting(false)
+    }
     .overlay(alignment: .bottom) {
       Divider()
     }
@@ -332,6 +348,10 @@ private struct GitCommitRowView: View {
         )
       }
     }
+  }
+
+  private var graphColumnWidth: CGFloat {
+    GitCommitGraphColumnView.width(for: graphLaneCount)
   }
 
   private func copy(_ text: String, label: String) {
@@ -540,17 +560,9 @@ private struct GitCommitFilesSheetView: View {
             HStack(spacing: 10) {
               GitStatusBadge(status: file.status)
               GitFileIcon(path: file.path)
-              VStack(alignment: .leading, spacing: 2) {
-                Text(file.path)
-                  .foregroundStyle(.primary)
-                  .lineLimit(2)
-                if let previousPath = file.previousPath, previousPath != file.path {
-                  Text("from \(previousPath)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                }
-              }
+              GitDiffFilePathLabel(path: file.path, previousPath: file.previousPath)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
               Spacer(minLength: 0)
               GitLineCountBadge(added: file.linesAdded, deleted: file.linesDeleted)
             }

@@ -158,6 +158,68 @@ struct GitFileIcon: View {
   }
 }
 
+struct GitDiffFilePathLabel: View {
+  var path: String
+  var previousPath: String?
+
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      candidate(fullPathText, fixedWidth: true)
+      candidate(abbreviatedPathText, fixedWidth: true)
+      candidate(baseNameText, fixedWidth: false)
+    }
+    .layoutPriority(1)
+  }
+
+  private func candidate(_ text: Text, fixedWidth: Bool) -> some View {
+    text
+      .font(.subheadline)
+      .lineLimit(1)
+      .truncationMode(.middle)
+      .fixedSize(horizontal: fixedWidth, vertical: false)
+  }
+
+  private var showsPreviousPath: Bool {
+    guard let previousPath else { return false }
+    return previousPath != path
+  }
+
+  private var fullPathText: Text {
+    pathText(currentPath: path, previousPath: previousPath)
+  }
+
+  private var abbreviatedPathText: Text {
+    pathText(
+      currentPath: GitFormatting.abbreviatedParentPath(path),
+      previousPath: previousPath.map(GitFormatting.abbreviatedParentPath)
+    )
+  }
+
+  private var baseNameText: Text {
+    pathText(
+      currentPath: GitFormatting.baseName(path),
+      previousPath: previousPath.map(GitFormatting.baseName)
+    )
+  }
+
+  private func pathText(currentPath: String, previousPath: String?) -> Text {
+    guard let previousPath, showsPreviousPath else {
+      return formattedPathText(currentPath)
+    }
+
+    return Text("\(formattedPathText(previousPath)) → \(formattedPathText(currentPath))")
+  }
+
+  private func formattedPathText(_ value: String) -> Text {
+    let parentPath = GitFormatting.parentPath(value)
+    let baseName = GitFormatting.baseName(value)
+    guard !parentPath.isEmpty else {
+      return Text(baseName).fontWeight(.semibold)
+    }
+    return Text("\(Text("\(parentPath)/"))\(Text(baseName).fontWeight(.semibold))")
+  }
+}
+
 struct GitLoadingView: View {
   var title: String
 

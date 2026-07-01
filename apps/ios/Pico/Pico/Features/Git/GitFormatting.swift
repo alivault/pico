@@ -46,6 +46,10 @@ enum GitFormatting {
     return (parentInitials + [parts.last ?? path]).joined(separator: "/")
   }
 
+  static func wrappablePath(_ path: String) -> String {
+    path.replacingOccurrences(of: "/", with: "/\u{200B}")
+  }
+
   static func statusCharacters(_ status: String?) -> (index: Character, worktree: Character) {
     let padded = String((status ?? "").prefix(2)).padding(toLength: 2, withPad: " ", startingAt: 0)
     let characters = Array(padded)

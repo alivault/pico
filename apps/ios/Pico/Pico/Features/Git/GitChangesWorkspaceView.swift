@@ -134,62 +134,6 @@ private struct GitChangedFileAccordionHeader: View {
   }
 }
 
-private struct GitDiffFilePathLabel: View {
-  var path: String
-  var previousPath: String?
-
-  var body: some View {
-    ViewThatFits(in: .horizontal) {
-      candidate(fullPathText, fixedWidth: true)
-      candidate(abbreviatedPathText, fixedWidth: true)
-      candidate(baseNameText, fixedWidth: false)
-    }
-  }
-
-  private func candidate(_ text: Text, fixedWidth: Bool) -> some View {
-    text
-      .font(.subheadline)
-      .lineLimit(1)
-      .truncationMode(.middle)
-      .fixedSize(horizontal: fixedWidth, vertical: false)
-  }
-
-  private var fullPathText: Text {
-    pathText(currentPath: path, previousPath: previousPath)
-  }
-
-  private var abbreviatedPathText: Text {
-    pathText(
-      currentPath: GitFormatting.abbreviatedParentPath(path),
-      previousPath: previousPath.map(GitFormatting.abbreviatedParentPath)
-    )
-  }
-
-  private var baseNameText: Text {
-    pathText(
-      currentPath: GitFormatting.baseName(path),
-      previousPath: previousPath.map(GitFormatting.baseName)
-    )
-  }
-
-  private func pathText(currentPath: String, previousPath: String?) -> Text {
-    guard let previousPath, previousPath != currentPath else {
-      return formattedPathText(currentPath)
-    }
-
-    return Text("\(formattedPathText(previousPath)) → \(formattedPathText(currentPath))")
-  }
-
-  private func formattedPathText(_ value: String) -> Text {
-    let parentPath = GitFormatting.parentPath(value)
-    let baseName = GitFormatting.baseName(value)
-    guard !parentPath.isEmpty else {
-      return Text(baseName).fontWeight(.semibold)
-    }
-    return Text("\(Text("\(parentPath)/"))\(Text(baseName).fontWeight(.semibold))")
-  }
-}
-
 private struct GitFileDiffDetailView: View {
   @Bindable var model: AppModel
   var cwd: String
@@ -260,17 +204,8 @@ private struct GitFileDiffDetailView: View {
   private var fileSummaryHeader: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       GitStatusBadge(status: file.status)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(file.path)
-          .font(.subheadline.weight(.semibold))
-          .lineLimit(2)
-        if let previousPath = file.previousPath, previousPath != file.path {
-          Text("from \(previousPath)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-      }
+      GitDiffFilePathLabel(path: file.path, previousPath: file.previousPath)
+        .frame(maxWidth: .infinity, alignment: .leading)
       Spacer(minLength: 0)
       GitLineCountBadge(added: file.linesAdded, deleted: file.linesDeleted)
     }

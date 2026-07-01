@@ -165,6 +165,7 @@ struct GitWorkspaceView: View {
         model: model,
         cwd: cwd ?? "",
         commits: data.commitEntries,
+        unpushedCommitHashes: data.unpushedCommitHashes,
         hasMore: data.commitsHasMore,
         isLoading: data.isLoadingCommits,
         loadMore: loadMoreCommits,
@@ -450,13 +451,18 @@ struct GitWorkspaceToolbar: View {
             }
           }
           .frame(width: 18, height: 18)
+          .padding(7)
           .contentShape(Circle())
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .accessibilityLabel("Git actions")
 
-        Button("Commit", action: openCommitSheet)
+        Button(action: openCommitSheet) {
+          Text("Commit")
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+        }
         .buttonStyle(.glassProminent)
         .tint(Color.accentColor)
         .foregroundStyle(.white)

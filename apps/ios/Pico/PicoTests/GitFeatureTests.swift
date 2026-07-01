@@ -27,6 +27,52 @@ struct GitFeatureTests {
     #expect(GitFormatting.abbreviatedParentPath("README.md") == "README.md")
   }
 
+  @Test func makesPathsWrappableAtFolderBoundaries() {
+    #expect(
+      GitFormatting.wrappablePath("apps/ios/Pico/App.swift") ==
+        "apps/\u{200B}ios/\u{200B}Pico/\u{200B}App.swift"
+    )
+    #expect(GitFormatting.wrappablePath("README.md") == "README.md")
+  }
+
+  @Test func buildsNativeCommitGraphLayout() {
+    let root = String(repeating: "a", count: 40)
+    let middle = String(repeating: "b", count: 40)
+    let head = String(repeating: "c", count: 40)
+    let commits = [
+      commit(fullHash: head, parents: [middle]),
+      commit(fullHash: middle, parents: [root]),
+      commit(fullHash: root, parents: []),
+    ]
+
+    let layout = GitCommitGraphLayout.build(commits: commits)
+
+    #expect(layout.maxLaneCount == 1)
+    #expect(layout.rows.map(\.commitLane) == [0, 0, 0])
+    #expect(layout.rows[0].outgoingSegments.count == 1)
+    #expect(layout.rows[1].incomingSegments.count == 1)
+    #expect(layout.rows[1].outgoingSegments.count == 1)
+  }
+
+  @Test func buildsNativeMergeCommitGraphLayout() {
+    let root = String(repeating: "a", count: 40)
+    let left = String(repeating: "b", count: 40)
+    let right = String(repeating: "c", count: 40)
+    let merge = String(repeating: "d", count: 40)
+    let commits = [
+      commit(fullHash: merge, parents: [left, right]),
+      commit(fullHash: left, parents: [root]),
+      commit(fullHash: right, parents: [root]),
+      commit(fullHash: root, parents: []),
+    ]
+
+    let layout = GitCommitGraphLayout.build(commits: commits)
+
+    #expect(layout.maxLaneCount > 1)
+    #expect(layout.rows.allSatisfy { $0.commitLane >= 0 })
+    #expect(layout.rows[0].outgoingSegments.count == 2)
+  }
+
   @Test func buildsProjectFileTreeWithGitStatus() {
     let file = GitChangeFile(
       status: " M",
@@ -79,5 +125,22 @@ struct GitFeatureTests {
     #expect(lines[1].isEmpty)
     #expect(lines[2].first?.text == "print")
     #expect(lines[2].first?.cssVariable == "--sh-token-function")
+  }
+
+  private func commit(
+    fullHash: String,
+    parents: [String]
+  ) -> GitCommitGraphEntry {
+    GitCommitGraphEntry(
+      graph: "",
+      hash: String(fullHash.prefix(8)),
+      fullHash: fullHash,
+      parents: parents,
+      author: "Ali",
+      relativeDate: "now",
+      fullDate: "",
+      stats: "",
+      subject: "Test commit"
+    )
   }
 }
