@@ -181,9 +181,20 @@ struct ConversationView: View {
     visibleBlocks: [AssistantBlock],
     showsBranch: Bool
   ) -> Bool {
-    assistant.streaming != true && !visibleBlocks.isEmpty &&
+    !Self.assistantItemIsWorking(assistant) && !visibleBlocks.isEmpty &&
       (Self.assistantText(assistant) != nil ||
         (showsBranch && assistant.branchEntryId?.isEmpty == false))
+  }
+
+  private static func assistantItemIsWorking(
+    _ item: AssistantConversationItem
+  ) -> Bool {
+    item.streaming == true ||
+      item.done == false ||
+      item.blocks.contains { block in
+        guard case .tool(let tool) = block else { return false }
+        return tool.running
+      }
   }
 
   private func isLastAssistantMessageInTurn(
