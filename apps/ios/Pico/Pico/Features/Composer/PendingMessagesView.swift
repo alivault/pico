@@ -2,9 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct PendingMessagesView: View {
+  private static let maxExpandedBodyHeight: CGFloat = 320
+
   var messages: [PendingUserMessage]
   var onReorderMessages: ([PendingUserMessage]) -> Void = { _ in }
   @State private var isExpanded = false
+  @State private var expandedBodyContentHeight: CGFloat = 0
   @State private var pendingOrder: [String] = []
   @State private var pendingBehaviorOverrides: [String: StreamingBehavior] = [:]
   @State private var draggingPendingId: String?
@@ -42,8 +45,20 @@ struct PendingMessagesView: View {
                 )
               }
             }
+            .background {
+              GeometryReader { proxy in
+                Color.clear.preference(
+                  key: PendingQueueBodyHeightPreferenceKey.self,
+                  value: proxy.size.height
+                )
+              }
+            }
           }
-          .frame(maxHeight: 320, alignment: .top)
+          .frame(height: expandedBodyHeight, alignment: .top)
+          .frame(maxHeight: Self.maxExpandedBodyHeight, alignment: .top)
+          .onPreferenceChange(PendingQueueBodyHeightPreferenceKey.self) { height in
+            expandedBodyContentHeight = height
+          }
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,6 +108,11 @@ struct PendingMessagesView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
     .contentShape(Rectangle())
+  }
+
+  private var expandedBodyHeight: CGFloat? {
+    guard expandedBodyContentHeight > 0 else { return nil }
+    return min(expandedBodyContentHeight, Self.maxExpandedBodyHeight)
   }
 
   private var visibleMessages: [PendingUserMessage] {
@@ -247,6 +267,14 @@ private struct PendingMessagesSection: Identifiable {
   var behavior: StreamingBehavior
   var messages: [PendingUserMessage]
   var emptyLabel: String
+}
+
+private struct PendingQueueBodyHeightPreferenceKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
+  }
 }
 
 private struct PendingMessagesSectionView: View {
