@@ -318,30 +318,32 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                   {formatShortcutLabel("Control+O")}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!sessionHeaderState.sessionHasFile}
-                onClick={() => {
-                  actionsRef.current.onRenameSession()
-                }}
-              >
-                <span>Rename session</span>
-                <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+E")}
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={!sessionHeaderState.sessionHasFile}
-                onClick={() => {
-                  actionsRef.current.onDeleteCurrentSession()
-                }}
-              >
-                <span>Delete session</span>
-                <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+X")}
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
+              {sessionHeaderState.sessionHasFile ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      actionsRef.current.onRenameSession()
+                    }}
+                  >
+                    <span>Rename session</span>
+                    <DropdownMenuShortcut>
+                      {formatShortcutLabel("Control+E")}
+                    </DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => {
+                      actionsRef.current.onDeleteCurrentSession()
+                    }}
+                  >
+                    <span>Delete session</span>
+                    <DropdownMenuShortcut>
+                      {formatShortcutLabel("Control+X")}
+                    </DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
           <TitleTooltip

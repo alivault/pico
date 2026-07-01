@@ -148,10 +148,12 @@ function buildComposerSlashCommands({
   availableSkills,
   hideThinkingBlock,
   hideToolBlocks,
+  sessionHasFile,
 }: {
   availableSkills: SessionState["availableSkills"]
   hideThinkingBlock: boolean
   hideToolBlocks: boolean
+  sessionHasFile: boolean
 }) {
   return [
     {
@@ -174,11 +176,15 @@ function buildComposerSlashCommands({
       name: "clone",
       description: "Duplicate the current active branch into a new session",
     },
-    {
-      kind: "builtin" as const,
-      name: "delete",
-      description: "Delete the current session",
-    },
+    ...(sessionHasFile
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "delete",
+            description: "Delete the current session",
+          },
+        ]
+      : []),
     {
       kind: "builtin" as const,
       name: "fork",
@@ -189,11 +195,15 @@ function buildComposerSlashCommands({
       name: "tree",
       description: "Navigate to an earlier point in the current session tree",
     },
-    {
-      kind: "builtin" as const,
-      name: "rename",
-      description: "Rename the current session",
-    },
+    ...(sessionHasFile
+      ? [
+          {
+            kind: "builtin" as const,
+            name: "rename",
+            description: "Rename the current session",
+          },
+        ]
+      : []),
     ...(hideThinkingBlock
       ? [
           {
@@ -242,11 +252,12 @@ function useComposerSlashCommands({
   displaySettingsStore: ComposerDisplaySettingsStore
   sessionStore: ComposerSessionStore
 }) {
-  const { availableSkills, hideThinkingBlock } = useSelector(
+  const { availableSkills, hideThinkingBlock, sessionHasFile } = useSelector(
     sessionStore,
     (sessionState) => ({
       availableSkills: sessionState.availableSkills,
       hideThinkingBlock: sessionState.hideThinkingBlock,
+      sessionHasFile: Boolean(sessionState.sessionFile),
     }),
     { compare: shallow }
   )
@@ -261,8 +272,9 @@ function useComposerSlashCommands({
         availableSkills,
         hideThinkingBlock,
         hideToolBlocks,
+        sessionHasFile,
       }),
-    [availableSkills, hideThinkingBlock, hideToolBlocks]
+    [availableSkills, hideThinkingBlock, hideToolBlocks, sessionHasFile]
   )
 }
 
