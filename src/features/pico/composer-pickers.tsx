@@ -242,16 +242,10 @@ const ComposerContextUsageIndicatorHost = React.memo(
     sessionStore: ComposerPickerSessionStore
     viewerContextId: string
   }) {
-    const isDraft = useSelector(
-      sessionStore,
-      (sessionState) => sessionState.draft
-    )
     const modelProvider = useSelector(
       sessionStore,
       (sessionState) => sessionState.model?.provider
     )
-
-    if (isDraft) return null
 
     return (
       <ComposerContextUsageIndicator

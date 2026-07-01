@@ -680,6 +680,24 @@ public actor PicoAPIClient {
     )
   }
 
+  public func removePendingMessage(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?,
+    pendingId: String
+  ) async throws -> PendingMessageRemoveResponse {
+    try await send(
+      endpoint: .pendingMessageRemove,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey,
+      body: PendingMessageRemoveRequest(pendingId: pendingId)
+    )
+  }
+
   public func abort(
     baseURL: URL,
     contextId: String,

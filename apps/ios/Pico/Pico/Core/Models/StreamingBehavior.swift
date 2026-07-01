@@ -1,15 +1,15 @@
 import Foundation
 
 public enum StreamingBehavior: String, Codable, Hashable, Sendable, CaseIterable {
-  case followUp
   case steer
+  case followUp
 
   var label: String {
     switch self {
-    case .followUp:
-      "Follow-up"
     case .steer:
       "Steer"
+    case .followUp:
+      "Follow-up"
     }
   }
 }

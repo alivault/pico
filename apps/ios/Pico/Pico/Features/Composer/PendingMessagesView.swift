@@ -1,64 +1,30 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import UIKit
 
 struct PendingMessagesView: View {
-  private static let maxExpandedBodyHeight: CGFloat = 320
+  private static let maxListHeight: CGFloat = 320
+  private static let estimatedRowHeight: CGFloat = 64
+  private static let estimatedSectionHeaderHeight: CGFloat = 30
 
   var messages: [PendingUserMessage]
   var onReorderMessages: ([PendingUserMessage]) -> Void = { _ in }
+  var onEditMessage: (PendingUserMessage, String) -> Void = { _, _ in }
+  var onDeleteMessage: (PendingUserMessage) -> Void = { _ in }
   @State private var isExpanded = false
-  @State private var expandedBodyContentHeight: CGFloat = 0
   @State private var pendingOrder: [String] = []
   @State private var pendingBehaviorOverrides: [String: StreamingBehavior] = [:]
-  @State private var draggingPendingId: String?
+  @State private var editingMessage: PendingUserMessage?
+  @State private var editText = ""
+  @State private var editError: String?
 
   var body: some View {
     if !messages.isEmpty {
       VStack(alignment: .leading, spacing: 0) {
-        Button(action: toggleExpanded) {
-          header
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Queue")
-        .accessibilityValue(accessibilityValue)
+        header
 
         if isExpanded {
           Divider()
-
-          ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-              ForEach(
-                Array(sections.enumerated()),
-                id: \.element.id
-              ) { index, section in
-                if index > 0 {
-                  Divider()
-                }
-
-                PendingMessagesSectionView(
-                  section: section,
-                  draggingPendingId: $draggingPendingId,
-                  onDrag: beginDragging,
-                  moveMessage: movePendingMessage,
-                  moveMessageToSectionEnd: movePendingMessageToSectionEnd,
-                  commitReorder: commitPendingReorder
-                )
-              }
-            }
-            .background {
-              GeometryReader { proxy in
-                Color.clear.preference(
-                  key: PendingQueueBodyHeightPreferenceKey.self,
-                  value: proxy.size.height
-                )
-              }
-            }
-          }
-          .frame(height: expandedBodyHeight, alignment: .top)
-          .frame(maxHeight: Self.maxExpandedBodyHeight, alignment: .top)
-          .onPreferenceChange(PendingQueueBodyHeightPreferenceKey.self) { height in
-            expandedBodyContentHeight = height
-          }
+          pendingMessagesList
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,51 +39,66 @@ struct PendingMessagesView: View {
       .onChange(of: messages) {
         syncPendingOrder()
       }
-      .onDrop(
-        of: [.text],
-        delegate: PendingQueueDropDelegate(
-          draggingPendingId: $draggingPendingId,
-          resetDrag: resetPendingDrag,
-          commitReorder: commitPendingReorder
+      .sheet(item: $editingMessage, onDismiss: cancelEditing) { message in
+        PendingMessageEditSheet(
+          message: message,
+          text: $editText,
+          error: $editError,
+          save: { saveEditing(message) },
+          cancel: cancelEditing
         )
-      )
+      }
     }
   }
 
   private var header: some View {
     HStack(spacing: 10) {
-      HStack(spacing: 8) {
-        Text("Queue")
-          .font(.subheadline.weight(.semibold))
+      Button(action: toggleExpanded) {
+        HStack(spacing: 10) {
+          HStack(spacing: 8) {
+            Text("Queue")
+              .font(.subheadline.weight(.semibold))
 
-        Text("\(messages.count)")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.secondary)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 2)
-          .background(.quaternary, in: Capsule())
+            Text("\(messages.count)")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
+              .padding(.horizontal, 7)
+              .padding(.vertical, 2)
+              .background(.quaternary, in: Capsule())
+          }
+
+          Spacer(minLength: 8)
+
+          Image(systemName: "chevron.down")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.secondary)
+            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+        }
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Queue")
+      .accessibilityValue(accessibilityValue)
 
-      Spacer(minLength: 8)
-
-      Image(systemName: "chevron.down")
-        .font(.caption.weight(.bold))
-        .foregroundStyle(.secondary)
-        .rotationEffect(.degrees(isExpanded ? 0 : -90))
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
-    .contentShape(Rectangle())
   }
 
-  private var expandedBodyHeight: CGFloat? {
-    guard expandedBodyContentHeight > 0 else { return nil }
-    return min(expandedBodyContentHeight, Self.maxExpandedBodyHeight)
+  private var pendingMessagesList: some View {
+    PendingMessagesTableView(
+      sections: sections,
+      isScrollEnabled: estimatedListHeight > Self.maxListHeight,
+      onReorderMessages: commitPendingReorder,
+      onEditMessage: beginEditing,
+      onDeleteMessage: deletePendingMessage
+    )
+    .frame(height: listHeight)
   }
 
   private var visibleMessages: [PendingUserMessage] {
     let ids = messages.map(\.pendingId)
-    let order = sameIds(ids, pendingOrder) ? pendingOrder : ids
+    let order = sameIdSet(ids, pendingOrder) ? pendingOrder : ids
     var messagesById: [String: PendingUserMessage] = [:]
     for message in messages {
       messagesById[message.pendingId] = message
@@ -139,17 +120,31 @@ struct PendingMessagesView: View {
         id: "steer",
         title: "Steer",
         behavior: .steer,
-        messages: messages.filter { $0.streamingBehavior == .steer },
-        emptyLabel: "Steer prompts will interrupt the current response."
+        emptyLabel: "Steer prompts will interrupt the current response.",
+        messages: messages.filter { $0.streamingBehavior == .steer }
       ),
       PendingMessagesSection(
         id: "follow-up",
         title: "Follow-up",
         behavior: .followUp,
-        messages: messages.filter { $0.streamingBehavior != .steer },
-        emptyLabel: "Follow-up prompts will run after the current response."
+        emptyLabel: "Follow-up prompts will run after the current response.",
+        messages: messages.filter { $0.streamingBehavior != .steer }
       ),
     ]
+  }
+
+  private var estimatedListHeight: CGFloat {
+    let rowCount = CGFloat(
+      sections.reduce(0) { count, section in
+        count + max(1, section.messages.count)
+      }
+    )
+    let headerHeight = CGFloat(sections.count) * Self.estimatedSectionHeaderHeight
+    return rowCount * Self.estimatedRowHeight + headerHeight
+  }
+
+  private var listHeight: CGFloat {
+    min(Self.maxListHeight, estimatedListHeight)
   }
 
   private var accessibilityValue: String {
@@ -162,226 +157,470 @@ struct PendingMessagesView: View {
     isExpanded.toggle()
   }
 
-  private func beginDragging(_ message: PendingUserMessage) -> NSItemProvider {
-    if !sameIds(messages.map(\.pendingId), pendingOrder) {
-      pendingOrder = messages.map(\.pendingId)
-    }
-    draggingPendingId = message.pendingId
-    return NSItemProvider(object: message.pendingId as NSString)
+  private func beginEditing(_ message: PendingUserMessage) {
+    editingMessage = message
+    editText = message.text
+    editError = nil
   }
 
-  private func movePendingMessage(
-    _ pendingId: String,
-    to targetPendingId: String,
-    behavior: StreamingBehavior
-  ) {
-    var ids = currentOrderIds()
-    guard let sourceIndex = ids.firstIndex(of: pendingId) else { return }
+  private func cancelEditing() {
+    editingMessage = nil
+    editText = ""
+    editError = nil
+  }
 
-    pendingBehaviorOverrides[pendingId] = behavior
-
-    guard pendingId != targetPendingId,
-          let targetIndex = ids.firstIndex(of: targetPendingId) else {
+  private func saveEditing(_ message: PendingUserMessage) {
+    guard !editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+      !message.images.isEmpty else {
+      editError = "Enter a message or keep at least one image."
       return
     }
 
-    withAnimation(.smooth(duration: 0.16)) {
-      let destination = targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-      ids.move(fromOffsets: IndexSet(integer: sourceIndex), toOffset: destination)
-      pendingOrder = ids
-    }
+    onEditMessage(message, editText)
+    cancelEditing()
   }
 
-  private func movePendingMessageToSectionEnd(
-    _ pendingId: String,
-    behavior: StreamingBehavior
-  ) {
-    var ids = currentOrderIds()
-    guard let sourceIndex = ids.firstIndex(of: pendingId) else { return }
-
-    withAnimation(.smooth(duration: 0.16)) {
-      ids.remove(at: sourceIndex)
-      pendingBehaviorOverrides[pendingId] = behavior
-      let insertionIndex = sectionEndInsertionIndex(for: behavior, in: ids)
-      ids.insert(pendingId, at: insertionIndex)
-      pendingOrder = ids
+  private func deletePendingMessage(_ message: PendingUserMessage) {
+    if editingMessage?.pendingId == message.pendingId {
+      cancelEditing()
     }
+    onDeleteMessage(message)
   }
 
-  private func commitPendingReorder() {
-    let nextMessages = visibleMessages
-    draggingPendingId = nil
+  private func commitPendingReorder(_ nextMessages: [PendingUserMessage]) {
     pendingOrder = nextMessages.map(\.pendingId)
+    pendingBehaviorOverrides = behaviorOverrides(for: nextMessages)
     onReorderMessages(nextMessages)
   }
 
-  private func resetPendingDrag() {
-    draggingPendingId = nil
-    syncPendingOrder(force: true)
-  }
-
-  private func currentOrderIds() -> [String] {
-    let ids = messages.map(\.pendingId)
-    return sameIds(ids, pendingOrder) ? pendingOrder : ids
-  }
-
-  private func sectionEndInsertionIndex(
-    for behavior: StreamingBehavior,
-    in ids: [String]
-  ) -> Int {
-    if let lastMatchingIndex = ids.lastIndex(where: { pendingId in
-      behaviorForPendingId(pendingId) == behavior
-    }) {
-      return ids.index(after: lastMatchingIndex)
+  private func behaviorOverrides(
+    for nextMessages: [PendingUserMessage]
+  ) -> [String: StreamingBehavior] {
+    var currentBehaviorById: [String: StreamingBehavior] = [:]
+    for message in messages {
+      currentBehaviorById[message.pendingId] = message.streamingBehavior
     }
 
-    return behavior == .steer ? 0 : ids.count
-  }
-
-  private func behaviorForPendingId(_ pendingId: String) -> StreamingBehavior {
-    if let override = pendingBehaviorOverrides[pendingId] {
-      return override
+    var overrides: [String: StreamingBehavior] = [:]
+    for message in nextMessages
+      where currentBehaviorById[message.pendingId] != message.streamingBehavior {
+      overrides[message.pendingId] = message.streamingBehavior
     }
-
-    return messages.first { $0.pendingId == pendingId }?.streamingBehavior ?? .followUp
+    return overrides
   }
 
   private func syncPendingOrder(force: Bool = false) {
     let ids = messages.map(\.pendingId)
-    guard force || draggingPendingId == nil || !sameIds(ids, pendingOrder) else {
-      return
+    pendingBehaviorOverrides = pendingBehaviorOverrides.filter {
+      pendingId,
+      behavior in
+      guard let message = messages.first(where: {
+        $0.pendingId == pendingId
+      }) else {
+        return false
+      }
+      return message.streamingBehavior != behavior
     }
 
+    guard force || ids != pendingOrder else { return }
     pendingOrder = ids
-    pendingBehaviorOverrides = [:]
   }
 
-  private func sameIds(_ left: [String], _ right: [String]) -> Bool {
+  private func sameIdSet(_ left: [String], _ right: [String]) -> Bool {
     left.count == right.count && Set(left) == Set(right)
   }
 }
 
-private struct PendingMessagesSection: Identifiable {
+private struct PendingMessagesSection: Identifiable, Hashable {
   var id: String
   var title: String
   var behavior: StreamingBehavior
-  var messages: [PendingUserMessage]
   var emptyLabel: String
+  var messages: [PendingUserMessage]
 }
 
-private struct PendingQueueBodyHeightPreferenceKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
+private struct PendingMessagesTableView: UIViewRepresentable {
+  var sections: [PendingMessagesSection]
+  var isScrollEnabled: Bool
+  var onReorderMessages: ([PendingUserMessage]) -> Void
+  var onEditMessage: (PendingUserMessage) -> Void
+  var onDeleteMessage: (PendingUserMessage) -> Void
 
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
+  func makeCoordinator() -> Coordinator {
+    Coordinator(parent: self)
+  }
+
+  func makeUIView(context: Context) -> UITableView {
+    let tableView = UITableView(frame: .zero, style: .plain)
+    tableView.register(
+      UITableViewCell.self,
+      forCellReuseIdentifier: Coordinator.messageReuseIdentifier
+    )
+    tableView.register(
+      UITableViewHeaderFooterView.self,
+      forHeaderFooterViewReuseIdentifier: Coordinator.headerReuseIdentifier
+    )
+    tableView.dataSource = context.coordinator
+    tableView.delegate = context.coordinator
+    tableView.dragDelegate = context.coordinator
+    tableView.dropDelegate = context.coordinator
+    tableView.dragInteractionEnabled = true
+    tableView.allowsSelection = false
+    tableView.backgroundColor = .clear
+    tableView.separatorStyle = .singleLine
+    tableView.separatorColor = UIColor.separator.withAlphaComponent(0.45)
+    tableView.separatorInset = UIEdgeInsets(
+      top: 0,
+      left: 12,
+      bottom: 0,
+      right: 0
+    )
+    tableView.layoutMargins = .zero
+    tableView.contentInset = .zero
+    tableView.scrollIndicatorInsets = .zero
+    tableView.keyboardDismissMode = .interactive
+    tableView.estimatedRowHeight = 64
+    tableView.rowHeight = UITableView.automaticDimension
+    tableView.estimatedSectionHeaderHeight = 30
+    tableView.sectionHeaderHeight = UITableView.automaticDimension
+    tableView.sectionFooterHeight = 0
+    tableView.estimatedSectionFooterHeight = 0
+    tableView.tableFooterView = UIView(frame: .zero)
+    tableView.sectionHeaderTopPadding = 0
+    return tableView
+  }
+
+  func updateUIView(_ tableView: UITableView, context: Context) {
+    context.coordinator.parent = self
+    tableView.isScrollEnabled = isScrollEnabled
+    tableView.reloadData()
+  }
+
+  final class Coordinator: NSObject,
+    UITableViewDataSource,
+    UITableViewDelegate,
+    UITableViewDragDelegate,
+    UITableViewDropDelegate {
+    static let messageReuseIdentifier = "PendingMessageCell"
+    static let headerReuseIdentifier = "PendingMessageHeader"
+
+    var parent: PendingMessagesTableView
+
+    init(parent: PendingMessagesTableView) {
+      self.parent = parent
+    }
+
+    func numberOfSections(in tableView: UITableView) -> Int {
+      parent.sections.count
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      numberOfRowsInSection section: Int
+    ) -> Int {
+      guard let section = sectionModel(at: section) else { return 0 }
+      return max(1, section.messages.count)
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      cellForRowAt indexPath: IndexPath
+    ) -> UITableViewCell {
+      let cell = tableView.dequeueReusableCell(
+        withIdentifier: Self.messageReuseIdentifier,
+        for: indexPath
+      )
+      cell.selectionStyle = .none
+      cell.backgroundColor = .clear
+      cell.contentView.backgroundColor = .clear
+      cell.backgroundConfiguration = .clear()
+      cell.preservesSuperviewLayoutMargins = false
+      cell.layoutMargins = .zero
+      cell.separatorInset = UIEdgeInsets(
+        top: 0,
+        left: 12,
+        bottom: 0,
+        right: 0
+      )
+
+      if let message = message(at: indexPath) {
+        cell.contentConfiguration = UIHostingConfiguration {
+          PendingMessageTableRow(message: message)
+        }
+        .margins(.all, 0)
+      } else if let section = sectionModel(at: indexPath.section) {
+        cell.contentConfiguration = UIHostingConfiguration {
+          PendingEmptySectionRow(text: section.emptyLabel)
+        }
+        .margins(.all, 0)
+      }
+
+      return cell
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      viewForHeaderInSection section: Int
+    ) -> UIView? {
+      guard let section = sectionModel(at: section) else { return nil }
+      let header = tableView.dequeueReusableHeaderFooterView(
+        withIdentifier: Self.headerReuseIdentifier
+      ) ?? UITableViewHeaderFooterView(
+        reuseIdentifier: Self.headerReuseIdentifier
+      )
+      header.backgroundConfiguration = .clear()
+      header.contentConfiguration = UIHostingConfiguration {
+        PendingSectionHeaderRow(section: section)
+      }
+      .margins(.all, 0)
+      return header
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      heightForFooterInSection section: Int
+    ) -> CGFloat {
+      0.01
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      canEditRowAt indexPath: IndexPath
+    ) -> Bool {
+      message(at: indexPath) != nil
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+    ) -> UISwipeActionsConfiguration? {
+      guard let message = message(at: indexPath) else { return nil }
+
+      let deleteAction = UIContextualAction(
+        style: .destructive,
+        title: "Delete"
+      ) { [weak self] _, _, complete in
+        self?.parent.onDeleteMessage(message)
+        complete(true)
+      }
+      deleteAction.image = UIImage(systemName: "trash")
+
+      let editAction = UIContextualAction(
+        style: .normal,
+        title: "Edit"
+      ) { [weak self] _, _, complete in
+        self?.parent.onEditMessage(message)
+        complete(true)
+      }
+      editAction.image = UIImage(systemName: "pencil")
+      editAction.backgroundColor = .systemBlue
+
+      let configuration = UISwipeActionsConfiguration(actions: [
+        deleteAction,
+        editAction,
+      ])
+      configuration.performsFirstActionWithFullSwipe = false
+      return configuration
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      itemsForBeginning session: UIDragSession,
+      at indexPath: IndexPath
+    ) -> [UIDragItem] {
+      guard let message = message(at: indexPath) else { return [] }
+      let itemProvider = NSItemProvider(object: message.pendingId as NSString)
+      let item = UIDragItem(itemProvider: itemProvider)
+      item.localObject = message.pendingId
+      return [item]
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      canHandle session: UIDropSession
+    ) -> Bool {
+      session.localDragSession != nil
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      dropSessionDidUpdate session: UIDropSession,
+      withDestinationIndexPath destinationIndexPath: IndexPath?
+    ) -> UITableViewDropProposal {
+      guard session.localDragSession != nil else {
+        return UITableViewDropProposal(operation: .cancel)
+      }
+
+      return UITableViewDropProposal(
+        operation: .move,
+        intent: .insertAtDestinationIndexPath
+      )
+    }
+
+    func tableView(
+      _ tableView: UITableView,
+      performDropWith coordinator: UITableViewDropCoordinator
+    ) {
+      guard let dropItem = coordinator.items.first,
+            let pendingId = dropItem.dragItem.localObject as? String,
+            let destination = normalizedDestinationIndexPath(
+              coordinator.destinationIndexPath,
+              moving: pendingId
+            ) else {
+        return
+      }
+
+      let nextMessages = reorderedMessages(
+        moving: pendingId,
+        to: destination
+      )
+      parent.onReorderMessages(nextMessages)
+      coordinator.drop(dropItem.dragItem, toRowAt: destination)
+    }
+
+    private func sectionModel(at index: Int) -> PendingMessagesSection? {
+      guard parent.sections.indices.contains(index) else { return nil }
+      return parent.sections[index]
+    }
+
+    private func message(at indexPath: IndexPath) -> PendingUserMessage? {
+      guard let section = sectionModel(at: indexPath.section),
+            section.messages.indices.contains(indexPath.row) else {
+        return nil
+      }
+      return section.messages[indexPath.row]
+    }
+
+    private func indexPath(for pendingId: String) -> IndexPath? {
+      for sectionIndex in parent.sections.indices {
+        guard let row = parent.sections[sectionIndex].messages.firstIndex(
+          where: { $0.pendingId == pendingId }
+        ) else {
+          continue
+        }
+        return IndexPath(row: row, section: sectionIndex)
+      }
+      return nil
+    }
+
+    private func normalizedDestinationIndexPath(
+      _ proposedIndexPath: IndexPath?,
+      moving pendingId: String
+    ) -> IndexPath? {
+      guard !parent.sections.isEmpty,
+            indexPath(for: pendingId) != nil else {
+        return nil
+      }
+
+      let proposedSection = proposedIndexPath?.section ?? 0
+      let sectionIndex = min(
+        max(0, proposedSection),
+        parent.sections.count - 1
+      )
+      let messageCount = parent.sections[sectionIndex].messages.count
+      let proposedRow = proposedIndexPath?.row ?? messageCount
+      let row = min(max(0, proposedRow), messageCount)
+      return IndexPath(row: row, section: sectionIndex)
+    }
+
+    private func reorderedMessages(
+      moving pendingId: String,
+      to destination: IndexPath
+    ) -> [PendingUserMessage] {
+      var nextSections = parent.sections
+      guard let sourceSectionIndex = nextSections.firstIndex(where: {
+              section in
+              section.messages.contains { $0.pendingId == pendingId }
+            }),
+            let sourceRow = nextSections[sourceSectionIndex].messages
+              .firstIndex(where: { $0.pendingId == pendingId }) else {
+        return parent.sections.flatMap(\.messages)
+      }
+
+      var movingMessage = nextSections[sourceSectionIndex].messages.remove(
+        at: sourceRow
+      )
+      let destinationSectionIndex = min(
+        max(0, destination.section),
+        nextSections.count - 1
+      )
+      movingMessage.streamingBehavior = nextSections[destinationSectionIndex]
+        .behavior
+
+      var destinationRow = min(
+        max(0, destination.row),
+        nextSections[destinationSectionIndex].messages.count
+      )
+      if destinationSectionIndex == sourceSectionIndex,
+         sourceRow < destinationRow {
+        destinationRow -= 1
+      }
+
+      nextSections[destinationSectionIndex].messages.insert(
+        movingMessage,
+        at: destinationRow
+      )
+      return nextSections.flatMap(\.messages)
+    }
   }
 }
 
-private struct PendingMessagesSectionView: View {
+private struct PendingSectionHeaderRow: View {
   var section: PendingMessagesSection
-  @Binding var draggingPendingId: String?
-  var onDrag: (PendingUserMessage) -> NSItemProvider
-  var moveMessage: (String, String, StreamingBehavior) -> Void
-  var moveMessageToSectionEnd: (String, StreamingBehavior) -> Void
-  var commitReorder: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Text(section.title.uppercased())
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+
+      Spacer(minLength: 8)
+
+      Text("\(section.messages.count)")
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.tertiary)
+    }
+    .padding(.horizontal, 12)
+    .padding(.top, 9)
+    .padding(.bottom, 5)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.clear)
+  }
+}
+
+private struct PendingMessageTableRow: View {
+  var message: PendingUserMessage
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text(section.title.uppercased())
+      Text(displayText)
+        .font(.footnote)
+        .foregroundStyle(.primary)
+        .lineLimit(3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      HStack(spacing: 6) {
+        Text(message.streamingBehavior.label)
           .font(.caption2.weight(.semibold))
           .foregroundStyle(.secondary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(.quaternary, in: Capsule())
 
-        Spacer(minLength: 8)
-
-        Text("\(section.messages.count)")
-          .font(.caption2.weight(.semibold))
-          .foregroundStyle(.tertiary)
-      }
-
-      if section.messages.isEmpty {
-        PendingSectionDropTarget(
-          section: section,
-          isDragging: draggingPendingId != nil,
-          draggingPendingId: $draggingPendingId,
-          moveMessageToSectionEnd: moveMessageToSectionEnd,
-          commitReorder: commitReorder
-        )
-      } else {
-        ForEach(section.messages) { message in
-          PendingMessageCard(
-            message: message,
-            isDragging: draggingPendingId == message.pendingId
-          )
-          .onDrag { onDrag(message) }
-          .onDrop(
-            of: [.text],
-            delegate: PendingMessageDropDelegate(
-              targetPendingId: message.pendingId,
-              targetBehavior: section.behavior,
-              draggingPendingId: $draggingPendingId,
-              moveMessage: moveMessage,
-              commitReorder: commitReorder
-            )
-          )
-        }
-
-        PendingSectionDropTarget(
-          section: section,
-          isDragging: draggingPendingId != nil,
-          draggingPendingId: $draggingPendingId,
-          moveMessageToSectionEnd: moveMessageToSectionEnd,
-          commitReorder: commitReorder
-        )
-      }
-    }
-    .padding(12)
-  }
-}
-
-private struct PendingMessageCard: View {
-  var message: PendingUserMessage
-  var isDragging: Bool
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .top, spacing: 8) {
-        Image(systemName: "line.3.horizontal")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.tertiary)
-          .padding(.top, 3)
-          .accessibilityHidden(true)
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text(displayText)
-            .font(.footnote)
-            .foregroundStyle(.primary)
-            .lineLimit(3)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-          if !message.images.isEmpty {
-            Text(imageCountLabel)
-              .font(.caption2)
-              .foregroundStyle(.secondary)
-          }
+        if !message.images.isEmpty {
+          Text(imageCountLabel)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
       }
     }
-    .padding(10)
-    .background(
-      .secondary.opacity(0.08),
-      in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+    .accessibilityHint(
+      "Swipe for edit and delete actions. Long-press and drag to reorder."
     )
-    .overlay {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(.quaternary, lineWidth: 0.5)
-    }
-    .opacity(isDragging ? 0.55 : 1)
-    .contentShape(
-      .dragPreview,
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-    )
-    .accessibilityHint("Drag to reorder queued prompts")
   }
 
   private var displayText: String {
@@ -403,125 +642,89 @@ private struct PendingMessageCard: View {
   }
 }
 
-private struct PendingSectionDropTarget: View {
-  var section: PendingMessagesSection
-  var isDragging: Bool
-  @Binding var draggingPendingId: String?
-  var moveMessageToSectionEnd: (String, StreamingBehavior) -> Void
-  var commitReorder: () -> Void
+private struct PendingEmptySectionRow: View {
+  var text: String
 
   var body: some View {
-    Group {
-      if section.messages.isEmpty {
-        Text(section.emptyLabel)
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 12)
-          .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-              .stroke(
-                .quaternary,
-                style: StrokeStyle(lineWidth: 0.75, dash: [4])
-              )
+    Text(text)
+      .font(.footnote)
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 12)
+      .contentShape(Rectangle())
+      .accessibilityHint("Drop queued prompts here to move them into this section.")
+  }
+}
+
+private struct PendingMessageEditSheet: View {
+  var message: PendingUserMessage
+  @Binding var text: String
+  @Binding var error: String?
+  var save: () -> Void
+  var cancel: () -> Void
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          TextField(textPlaceholder, text: $text, axis: .vertical)
+            .lineLimit(4...10)
+            .textInputAutocapitalization(.sentences)
+            .onChange(of: text) {
+              error = nil
+            }
+
+          if let error {
+            Text(error)
+              .font(.caption)
+              .foregroundStyle(.red)
           }
-      } else if isDragging {
-        Text("Drop here to move to \(section.title)")
-          .font(.caption2.weight(.medium))
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .center)
-          .padding(.vertical, 8)
-          .overlay {
-            Capsule()
-              .stroke(
-                .quaternary,
-                style: StrokeStyle(lineWidth: 0.75, dash: [4])
-              )
+        } footer: {
+          if !message.images.isEmpty {
+            Text("Images stay attached to this queued prompt.")
           }
-      } else {
-        Color.clear
-          .frame(height: 1)
+        }
+
+        if !message.images.isEmpty {
+          Section("Attachments") {
+            Label(imageCountLabel, systemImage: "photo")
+          }
+        }
+      }
+      .navigationTitle("Edit Queue Message")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            cancel()
+          }
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+          Button("Save") {
+            save()
+          }
+          .disabled(!canSave)
+        }
       }
     }
-    .onDrop(
-      of: [.text],
-      delegate: PendingSectionDropDelegate(
-        targetBehavior: section.behavior,
-        draggingPendingId: $draggingPendingId,
-        moveMessageToSectionEnd: moveMessageToSectionEnd,
-        commitReorder: commitReorder
-      )
-    )
-  }
-}
-
-private struct PendingQueueDropDelegate: DropDelegate {
-  @Binding var draggingPendingId: String?
-  var resetDrag: () -> Void
-  var commitReorder: () -> Void
-
-  func dropUpdated(info: DropInfo) -> DropProposal? {
-    draggingPendingId == nil ? nil : DropProposal(operation: .move)
+    .presentationDetents([.medium, .large])
+    .presentationDragIndicator(.visible)
   }
 
-  func dropExited(info: DropInfo) {
-    resetDrag()
+  private var textPlaceholder: String {
+    message.images.isEmpty ? "Queued message" : "Optional image prompt text"
   }
 
-  func performDrop(info: DropInfo) -> Bool {
-    guard draggingPendingId != nil else { return false }
-    commitReorder()
-    return true
-  }
-}
-
-private struct PendingMessageDropDelegate: DropDelegate {
-  var targetPendingId: String
-  var targetBehavior: StreamingBehavior
-  @Binding var draggingPendingId: String?
-  var moveMessage: (String, String, StreamingBehavior) -> Void
-  var commitReorder: () -> Void
-
-  func dropEntered(info: DropInfo) {
-    guard let draggingPendingId else { return }
-    moveMessage(draggingPendingId, targetPendingId, targetBehavior)
+  private var canSave: Bool {
+    !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+      !message.images.isEmpty
   }
 
-  func dropUpdated(info: DropInfo) -> DropProposal? {
-    draggingPendingId == nil ? nil : DropProposal(operation: .move)
-  }
-
-  func performDrop(info: DropInfo) -> Bool {
-    guard let draggingPendingId else { return false }
-    moveMessage(draggingPendingId, targetPendingId, targetBehavior)
-    self.draggingPendingId = nil
-    commitReorder()
-    return true
-  }
-}
-
-private struct PendingSectionDropDelegate: DropDelegate {
-  var targetBehavior: StreamingBehavior
-  @Binding var draggingPendingId: String?
-  var moveMessageToSectionEnd: (String, StreamingBehavior) -> Void
-  var commitReorder: () -> Void
-
-  func dropEntered(info: DropInfo) {
-    guard let draggingPendingId else { return }
-    moveMessageToSectionEnd(draggingPendingId, targetBehavior)
-  }
-
-  func dropUpdated(info: DropInfo) -> DropProposal? {
-    draggingPendingId == nil ? nil : DropProposal(operation: .move)
-  }
-
-  func performDrop(info: DropInfo) -> Bool {
-    guard let draggingPendingId else { return false }
-    moveMessageToSectionEnd(draggingPendingId, targetBehavior)
-    self.draggingPendingId = nil
-    commitReorder()
-    return true
+  private var imageCountLabel: String {
+    let imageLabel = message.images.count == 1 ? "image" : "images"
+    return "\(message.images.count) \(imageLabel)"
   }
 }
 

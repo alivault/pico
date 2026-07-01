@@ -17,7 +17,9 @@ struct ComposerView: View {
       if !model.sessionState.pendingMessages.isEmpty {
         PendingMessagesView(
           messages: model.sessionState.pendingMessages,
-          onReorderMessages: reorderPendingMessages
+          onReorderMessages: reorderPendingMessages,
+          onEditMessage: editPendingMessage,
+          onDeleteMessage: deletePendingMessage
         )
       }
 
@@ -155,8 +157,8 @@ struct ComposerView: View {
 
   private var streamingBehaviorButtons: some View {
     HStack(spacing: 8) {
-      streamingBehaviorButton(.followUp)
       streamingBehaviorButton(.steer)
+      streamingBehaviorButton(.followUp)
     }
   }
 
@@ -242,6 +244,18 @@ struct ComposerView: View {
   private func reorderPendingMessages(_ messages: [PendingUserMessage]) {
     Task {
       await model.reorderPendingMessages(messages)
+    }
+  }
+
+  private func editPendingMessage(_ message: PendingUserMessage, text: String) {
+    Task {
+      await model.editPendingMessage(message, text: text)
+    }
+  }
+
+  private func deletePendingMessage(_ message: PendingUserMessage) {
+    Task {
+      await model.deletePendingMessage(message)
     }
   }
 

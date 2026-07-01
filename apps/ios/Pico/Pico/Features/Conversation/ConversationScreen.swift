@@ -95,12 +95,13 @@ struct ConversationScreen: View {
       }
       .sharedBackgroundVisibility(.hidden)
       ToolbarItemGroup(placement: .topBarTrailing) {
-        ContextUsageRingMenu(
-          contextUsage: model.sessionState.contextUsage,
-          isCompacting: model.sessionState.compacting,
-          compactSession: compactSession,
-          showsCompactAction: !model.isComposingNewSession
-        )
+        if model.hasRealCurrentSession {
+          ContextUsageRingMenu(
+            contextUsage: model.sessionState.contextUsage,
+            isCompacting: model.sessionState.compacting,
+            compactSession: compactSession
+          )
+        }
         ConversationHeaderOptionsMenu(
           model: model,
           isPreparingCommit: isPreparingHeaderCommit,
@@ -335,11 +336,13 @@ struct ConversationScreen: View {
   }
 
   private func showRenameSessionAlert() {
+    guard model.canRenameCurrentSession else { return }
     renameTitle = model.currentSessionRenameTitle
     isShowingRenameAlert = true
   }
 
   private func showDeleteSessionConfirmation() {
+    guard model.canDeleteCurrentSession else { return }
     isShowingDeleteConfirmation = true
   }
 
@@ -560,17 +563,18 @@ private struct ConversationHeaderOptionsMenu: View {
         Label("Files", systemImage: "folder")
       }
 
-      Divider()
+      if model.canRenameCurrentSession {
+        Divider()
 
-      Button(action: renameSession) {
-        Label("Rename", systemImage: "pencil")
-      }
-      .disabled(!model.canRenameCurrentSession)
+        Button(action: renameSession) {
+          Label("Rename", systemImage: "pencil")
+        }
 
-      Button(role: .destructive, action: deleteSession) {
-        Label("Delete", systemImage: "trash")
+        Button(role: .destructive, action: deleteSession) {
+          Label("Delete", systemImage: "trash")
+        }
+        .disabled(!model.canDeleteCurrentSession)
       }
-      .disabled(!model.canDeleteCurrentSession)
     } label: {
       Label("More", systemImage: "ellipsis")
     }

@@ -30,7 +30,8 @@ struct ConversationHeaderView: View {
       HStack(spacing: 12) {
         ModelMenuView(model: model)
         ThinkingMenuView(model: model)
-        if let percent = model.sessionState.contextUsage?.displayPercent {
+        if model.hasRealCurrentSession,
+           let percent = model.sessionState.contextUsage?.displayPercent {
           Label(percent, systemImage: "gauge.with.dots.needle.67percent")
             .font(.caption)
             .foregroundStyle(.secondary)

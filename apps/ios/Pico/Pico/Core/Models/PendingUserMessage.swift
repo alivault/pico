@@ -51,7 +51,16 @@ public struct PendingMessagesReorderRequest: Encodable, Sendable {
   public var pendingMessages: [PendingUserMessage]
 }
 
+public struct PendingMessageRemoveRequest: Encodable, Sendable {
+  public var pendingId: String
+}
+
 public struct PendingMessagesResponse: Decodable, Sendable {
   public var ok: Bool
   public var pendingMessages: [PendingUserMessage]
+}
+
+public struct PendingMessageRemoveResponse: Decodable, Sendable {
+  public var ok: Bool
+  public var pendingId: String
 }

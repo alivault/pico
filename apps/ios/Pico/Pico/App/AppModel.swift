@@ -283,12 +283,19 @@ public final class AppModel {
     !isComposingNewSession && selectedSessionId != nil && sessionState.replaying
   }
 
+  public var hasRealCurrentSession: Bool {
+    !isComposingNewSession &&
+      !sessionState.draft &&
+      !isLoadingSelectedSession &&
+      currentSessionPath != nil
+  }
+
   public var canRenameCurrentSession: Bool {
-    !isComposingNewSession && !isLoadingSelectedSession && currentSessionPath != nil
+    hasRealCurrentSession
   }
 
   public var canDeleteCurrentSession: Bool {
-    canRenameCurrentSession && !sessionState.streaming && !isSubmitting
+    hasRealCurrentSession && !sessionState.streaming && !isSubmitting
   }
 
   public var canForkUserMessages: Bool {
@@ -1665,6 +1672,65 @@ public final class AppModel {
       sessionState.pendingMessages = previousPendingMessages
       alert = AppAlert(
         title: "Could not update queue",
+        message: Self.message(for: error)
+      )
+      return false
+    }
+  }
+
+  @discardableResult
+  public func editPendingMessage(
+    _ message: PendingUserMessage,
+    text: String
+  ) async -> Bool {
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+      !message.images.isEmpty else {
+      alert = AppAlert(
+        title: "Message required",
+        message: "Enter a message or keep at least one image."
+      )
+      return false
+    }
+
+    var pendingMessages = sessionState.pendingMessages
+    guard let index = pendingMessages.firstIndex(where: {
+      $0.pendingId == message.pendingId
+    }) else {
+      return false
+    }
+
+    pendingMessages[index].text = text
+    return await reorderPendingMessages(pendingMessages)
+  }
+
+  @discardableResult
+  public func deletePendingMessage(_ message: PendingUserMessage) async -> Bool {
+    guard let baseURL else { return false }
+
+    let previousPendingMessages = sessionState.pendingMessages
+    guard previousPendingMessages.contains(where: {
+      $0.pendingId == message.pendingId
+    }) else {
+      return false
+    }
+
+    sessionState.pendingMessages.removeAll {
+      $0.pendingId == message.pendingId
+    }
+
+    do {
+      _ = try await apiClient.removePendingMessage(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: requestSessionId,
+        sessionKey: requestSessionKey,
+        pendingId: message.pendingId
+      )
+      return true
+    } catch {
+      sessionState.pendingMessages = previousPendingMessages
+      alert = AppAlert(
+        title: "Could not delete queued message",
         message: Self.message(for: error)
       )
       return false
