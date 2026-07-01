@@ -259,6 +259,34 @@ export function serializeSessionTreeNode(
   return serialized
 }
 
+export function extractBranchableMessages(entry: ForkableSessionEntry) {
+  const manager = entry.session.sessionManager
+  const leafId = manager.getLeafId?.() ?? null
+  const branchEntries = manager.getBranch?.(leafId) ?? []
+  const entries = branchEntries.length > 0 ? branchEntries : []
+
+  return entries.flatMap((entry) => {
+    const entryId = typeof entry.id === "string" ? entry.id.trim() : ""
+    const message = entry.message
+    const role = typeof message?.role === "string" ? message.role : ""
+    if (
+      !entryId ||
+      entry.type !== "message" ||
+      (role !== "user" && role !== "assistant")
+    ) {
+      return []
+    }
+
+    return [
+      {
+        entryId,
+        role,
+        text: extractMessageText(message),
+      },
+    ]
+  })
+}
+
 export function extractForkableUserMessages(entry: ForkableSessionEntry) {
   const messages = entry.session.getUserMessagesForForking?.()
   if (Array.isArray(messages) && messages.length > 0) {

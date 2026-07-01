@@ -214,6 +214,7 @@ type UserItem = {
   itemKey?: string
   renderKey?: string
   pendingId?: string
+  forkEntryId?: string
   text: string
   images: Array<PromptImage>
   queued?: boolean
@@ -224,6 +225,7 @@ export type AssistantItem = {
   kind: "assistant"
   itemKey?: string
   renderKey?: string
+  branchEntryId?: string
   blocks: Array<AssistantBlock>
   streaming?: boolean
   done?: boolean

@@ -76,6 +76,58 @@ public actor PicoAPIClient {
     return try await perform(request)
   }
 
+  public func forkableMessages(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?
+  ) async throws -> ForkableMessagesResponse {
+    try await send(
+      endpoint: .sessionFork,
+      baseURL: baseURL,
+      method: "GET",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey
+    )
+  }
+
+  public func forkSession(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?,
+    entryId: String
+  ) async throws -> ForkSessionResponse {
+    try await send(
+      endpoint: .sessionFork,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey,
+      body: ForkSessionRequestBody(entryId: entryId)
+    )
+  }
+
+  public func branchSessionAtMessage(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?,
+    entryId: String
+  ) async throws -> ForkSessionResponse {
+    try await send(
+      endpoint: .sessionFork,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey,
+      body: ForkSessionRequestBody(entryId: entryId, position: "at")
+    )
+  }
+
   public func renameSession(
     baseURL: URL,
     contextId: String,
@@ -920,4 +972,9 @@ private struct GitCheckoutBranchRequestBody: Encodable, Sendable {
 private struct HighlightRequestBody: Encodable, Sendable {
   var code: String
   var language: String
+}
+
+private struct ForkSessionRequestBody: Encodable, Sendable {
+  var entryId: String
+  var position: String? = nil
 }

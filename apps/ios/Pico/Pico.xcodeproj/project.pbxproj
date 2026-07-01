@@ -33,6 +33,7 @@
 		3E44A66F62D4FD305DADFD45 /* state_sync_initial.json in Resources */ = {isa = PBXBuildFile; fileRef = 4235466D4537838F00690942 /* state_sync_initial.json */; };
 		40390048DF7F630AC2D47A42 /* Core/Models/UserConversationItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E33471E59825791C2B50904 /* Core/Models/UserConversationItem.swift */; };
 		439B0008E232B4FB1F6D18E9 /* Core/Models/PromptResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5403C17E9C154187C52A69F0 /* Core/Models/PromptResponse.swift */; };
+		A40000000000000000000001 /* Core/Models/ForkSessionResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000002 /* Core/Models/ForkSessionResponse.swift */; };
 		470540A65D6F78FD0AA75007 /* Features/Conversation/ConversationHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E721977D6C21211F8C74574 /* Features/Conversation/ConversationHeaderView.swift */; };
 		4838CA16507E6CD34206D173 /* SessionStateReducerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 289C7DE7F440C3014996C6DB /* SessionStateReducerTests.swift */; };
 		49604C4E34846C79B8430365 /* Core/API/PicoEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E96355AEF5B561C25C23E50 /* Core/API/PicoEndpoint.swift */; };
@@ -188,6 +189,7 @@
 		3FCB064155DBB48B0CCB62DF /* Core/Models/ThinkingBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ThinkingBlock.swift; sourceTree = "<group>"; };
 		4235466D4537838F00690942 /* state_sync_initial.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = state_sync_initial.json; sourceTree = "<group>"; };
 		427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/SimpleOkResponse.swift; sourceTree = "<group>"; };
+		A40000000000000000000002 /* Core/Models/ForkSessionResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ForkSessionResponse.swift; sourceTree = "<group>"; };
 		43217CBD44C9114EF53E463C /* PicoServerEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicoServerEventTests.swift; sourceTree = "<group>"; };
 		45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Composer/ComposerView.swift; sourceTree = "<group>"; };
 		4A02F898202D843650506CF7 /* Features/Conversation/ThinkingBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ThinkingBlockView.swift; sourceTree = "<group>"; };
@@ -380,6 +382,7 @@
 				544DB39957D59EC6A5C97568 /* Core/Models/SessionListEntry.swift */,
 				83A904DB0A48E167DA7BA7EE /* Core/Models/SessionNewRequestBody.swift */,
 				8F444D4E61BD917237691C10 /* Core/Models/SessionNewResponse.swift */,
+				A40000000000000000000002 /* Core/Models/ForkSessionResponse.swift */,
 				128F2174D3B7BC0730339FA2 /* Core/Models/SessionState.swift */,
 				1AEF0E9964CCFFD923E6988A /* Core/Models/SessionStatusEvent.swift */,
 				2BD961FD2F8D078F274A37A6 /* Core/Models/SessionUiState.swift */,
@@ -660,6 +663,7 @@
 				A89422B1DD6F4107628C34B6 /* Core/Models/SessionListEntry.swift in Sources */,
 				C05904751CBBB5813D20D61B /* Core/Models/SessionNewRequestBody.swift in Sources */,
 				EEA1F0613547A1DDE62FA55D /* Core/Models/SessionNewResponse.swift in Sources */,
+				A40000000000000000000001 /* Core/Models/ForkSessionResponse.swift in Sources */,
 				0152DB3236EA0880514BDAB0 /* Core/Models/SessionState.swift in Sources */,
 				00F6ACAB7604A055D89430E2 /* Core/Models/SessionStatusEvent.swift in Sources */,
 				274D11033AF02F056E9D1133 /* Core/Models/SessionUiState.swift in Sources */,

@@ -18,7 +18,10 @@ export const Route = createFileRoute("/api/session/fork")({
       },
       POST: async ({ request }) => {
         try {
-          const body = await readRequestJson<{ entryId?: unknown }>(request)
+          const body = await readRequestJson<{
+            entryId?: unknown
+            position?: unknown
+          }>(request)
           return jsonResponse(await getPicoRuntime().forkSession(request, body))
         } catch (error) {
           return routeErrorResponse(error, "Failed to fork session")

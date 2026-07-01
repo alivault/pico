@@ -1,7 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct UserMessageView: View {
   var item: UserConversationItem
+  var canEdit = true
+  var onEdit: (UserConversationItem) -> Void = { _ in }
 
   var body: some View {
     HStack(alignment: .top) {
@@ -26,7 +29,30 @@ struct UserMessageView: View {
       }
       .padding(12)
       .background(.tint.opacity(0.12), in: .rect(cornerRadius: 16))
+      .contextMenu {
+        Button(action: copyMessage) {
+          Label("Copy", systemImage: "doc.on.doc")
+        }
+        .disabled(!hasCopyableText)
+
+        Button(action: { onEdit(item) }) {
+          Label("Edit", systemImage: "pencil")
+        }
+        .disabled(!canEdit || !hasEditableText)
+      }
     }
+  }
+
+  private var hasCopyableText: Bool {
+    !item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var hasEditableText: Bool {
+    hasCopyableText
+  }
+
+  private func copyMessage() {
+    UIPasteboard.general.string = item.text
   }
 }
 

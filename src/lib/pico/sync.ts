@@ -154,7 +154,8 @@ function sameUserMessageBody(
     left.text === right.text &&
     samePromptImages(left.images, right.images) &&
     Boolean(left.queued) === Boolean(right.queued) &&
-    left.streamingBehavior === right.streamingBehavior
+    left.streamingBehavior === right.streamingBehavior &&
+    (left.forkEntryId || "") === (right.forkEntryId || "")
   )
 }
 
@@ -235,7 +236,8 @@ function sameAssistantModel(
 function sameAssistantMessageMeta(left: AssistantItem, right: AssistantItem) {
   return (
     sameAssistantModel(left.model, right.model) &&
-    (left.done === false) === (right.done === false)
+    (left.done === false) === (right.done === false) &&
+    (left.branchEntryId || "") === (right.branchEntryId || "")
   )
 }
 

@@ -13,6 +13,8 @@ struct ConversationScreen: View {
   @State private var isShowingRenameAlert = false
   @State private var isShowingDeleteConfirmation = false
   @State private var isShowingFilesDrawer = false
+  @State private var editingUserMessage: EditableUserMessage?
+  @State private var assistantBranchTarget: BranchableAssistantMessage?
 
   var body: some View {
     ZStack(alignment: .bottom) {
@@ -123,6 +125,24 @@ struct ConversationScreen: View {
     } message: {
       Text("This removes the session from Pico and moves it to Trash when possible.")
     }
+    .confirmationDialog(
+      "Branch in new chat?",
+      isPresented: branchConfirmationBinding,
+      titleVisibility: .visible
+    ) {
+      Button("Branch in New Chat") {
+        branchFromAssistantMessage()
+      }
+      .disabled(model.isSubmitting)
+
+      Button("Cancel", role: .cancel) {
+        assistantBranchTarget = nil
+      }
+    } message: {
+      Text(
+        "Pico will create a new chat that contains this conversation up through the selected assistant response. Future prompts continue in the new branch, and this chat stays unchanged."
+      )
+    }
     .sheet(isPresented: $isShowingFilesDrawer) {
       NavigationStack {
         GitWorkspaceView(model: model)
@@ -141,6 +161,18 @@ struct ConversationScreen: View {
       }
       .presentationDetents([.large])
       .presentationDragIndicator(.visible)
+    }
+    .sheet(item: $editingUserMessage) { editingMessage in
+      EditUserMessageSheet(
+        item: editingMessage.item,
+        isSubmitting: model.isSubmitting,
+        onResend: { editedText in
+          await model.forkAndSubmitEditedMessage(
+            editingMessage.item,
+            editedText: editedText
+          )
+        }
+      )
     }
   }
 
@@ -169,6 +201,10 @@ struct ConversationScreen: View {
           isCompacting: model.sessionState.compacting,
           workingLabel: model.conversationWorkingLabel,
           bottomContentInset: composerContentInset,
+          canEditUserMessages: model.canForkUserMessages,
+          canBranchAssistantMessages: model.canBranchAssistantMessages,
+          onEditUserMessage: editUserMessage,
+          onBranchAssistantMessage: confirmBranchAssistantMessage,
           onCancelCompaction: cancelCompaction
         )
       }
@@ -183,6 +219,17 @@ struct ConversationScreen: View {
     model.conversationTitle
   }
 
+  private var branchConfirmationBinding: Binding<Bool> {
+    Binding(
+      get: { assistantBranchTarget != nil },
+      set: { isPresented in
+        if !isPresented {
+          assistantBranchTarget = nil
+        }
+      }
+    )
+  }
+
   private var navigationTitleMaxWidth: CGFloat {
     let leadingReserve: CGFloat = horizontalSizeClass == .compact ? 84 : 132
     let trailingReserve: CGFloat = 132
@@ -192,6 +239,23 @@ struct ConversationScreen: View {
 
   private func showFilesDrawer() {
     isShowingFilesDrawer = true
+  }
+
+  private func editUserMessage(_ item: UserConversationItem) {
+    editingUserMessage = EditableUserMessage(item: item)
+  }
+
+  private func confirmBranchAssistantMessage(_ item: AssistantConversationItem) {
+    assistantBranchTarget = BranchableAssistantMessage(item: item)
+  }
+
+  private func branchFromAssistantMessage() {
+    guard let target = assistantBranchTarget else { return }
+
+    assistantBranchTarget = nil
+    Task {
+      await model.branchFromAssistantMessage(target.item)
+    }
   }
 
   private func showRenameSessionAlert() {
@@ -225,6 +289,110 @@ struct ConversationScreen: View {
   private func cancelCompaction() {
     Task {
       await model.cancelCompaction()
+    }
+  }
+}
+
+private struct EditableUserMessage: Identifiable {
+  var id: String { item.id }
+  var item: UserConversationItem
+}
+
+private struct BranchableAssistantMessage: Identifiable {
+  var id: String { item.id }
+  var item: AssistantConversationItem
+}
+
+private struct EditUserMessageSheet: View {
+  var item: UserConversationItem
+  var isSubmitting: Bool
+  var onResend: (String) async -> Bool
+
+  @Environment(\.dismiss) private var dismiss
+  @State private var text: String
+  @State private var isResending = false
+
+  init(
+    item: UserConversationItem,
+    isSubmitting: Bool,
+    onResend: @escaping (String) async -> Bool
+  ) {
+    self.item = item
+    self.isSubmitting = isSubmitting
+    self.onResend = onResend
+    _text = State(initialValue: item.text)
+  }
+
+  var body: some View {
+    NavigationStack {
+      VStack(alignment: .leading, spacing: 12) {
+        Text("Edit the message, then resend it from this point in the conversation.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+
+        TextEditor(text: $text)
+          .font(.body)
+          .scrollContentBackground(.hidden)
+          .background(.clear)
+          .frame(minHeight: 180)
+          .padding(8)
+          .background(
+            Color(uiColor: .secondarySystemBackground),
+            in: .rect(cornerRadius: 14)
+          )
+          .accessibilityLabel("Edited message")
+
+        if !item.images.isEmpty {
+          Label(attachmentLabel, systemImage: "photo")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
+        Spacer(minLength: 0)
+      }
+      .padding()
+      .navigationTitle("Edit Message")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") {
+            dismiss()
+          }
+          .disabled(isResending)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Resend") {
+            resend()
+          }
+          .disabled(submitDisabled)
+        }
+      }
+    }
+    .presentationDetents([.medium, .large])
+    .presentationDragIndicator(.visible)
+  }
+
+  private var submitDisabled: Bool {
+    isSubmitting || isResending ||
+      (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        item.images.isEmpty)
+  }
+
+  private var attachmentLabel: String {
+    let suffix = item.images.count == 1 ? "" : "s"
+    return "Resends \(item.images.count) image attachment\(suffix)"
+  }
+
+  private func resend() {
+    guard !submitDisabled else { return }
+
+    isResending = true
+    Task {
+      let success = await onResend(text)
+      isResending = false
+      if success {
+        dismiss()
+      }
     }
   }
 }

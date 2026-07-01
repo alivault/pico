@@ -263,6 +263,15 @@ public final class AppModel {
     canRenameCurrentSession && !sessionState.streaming && !isSubmitting
   }
 
+  public var canForkUserMessages: Bool {
+    !isComposingNewSession && !isLoadingSelectedSession &&
+      !sessionState.streaming && !isSubmitting
+  }
+
+  public var canBranchAssistantMessages: Bool {
+    canForkUserMessages
+  }
+
   public var currentSessionRenameTitle: String {
     if let name = sessionState.sessionName?.trimmingCharacters(in: .whitespacesAndNewlines),
        !name.isEmpty {
@@ -982,6 +991,249 @@ public final class AppModel {
       )
     }
     return submitted
+  }
+
+  @discardableResult
+  public func forkAndSubmitEditedMessage(
+    _ item: UserConversationItem,
+    editedText: String
+  ) async -> Bool {
+    guard let baseURL else {
+      alert = AppAlert(
+        title: "Not connected",
+        message: "Connect to a Pico server before editing a previous message."
+      )
+      return false
+    }
+
+    guard canForkUserMessages else {
+      alert = AppAlert(
+        title: "Session is busy",
+        message: "Wait for the current response to finish before editing a previous message."
+      )
+      return false
+    }
+
+    let message = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let images = item.images
+    guard !message.isEmpty || !images.isEmpty else {
+      alert = AppAlert(
+        title: "Message required",
+        message: "Enter a message or keep an image attachment before resending."
+      )
+      return false
+    }
+
+    guard let entryId = await forkEntryId(for: item) else {
+      alert = AppAlert(
+        title: "Could not edit message",
+        message: "Pico could not find a fork point for that message."
+      )
+      return false
+    }
+
+    let previousEventSessionId = requestSessionId
+    let previousEventSessionKey = requestSessionKey
+    let previousState = sessionState
+    let previousSelectedSessionId = selectedSessionId
+    let previousLoadingSessionTitle = loadingSessionTitle
+    let previousLoadingSessionCwd = loadingSessionCwd
+    let previousIsComposingNewSession = isComposingNewSession
+    let previousComposerText = composerText
+    let previousComposerImages = composerImages
+    let previousComposerGitComments = composerGitComments
+    let previousComposerSelectedDirectory = composerSelectedDirectory
+    let previousComposerSelectedModel = composerSelectedModel
+    let thinkingLevel = sessionState.thinkingLevel
+    var didFork = false
+    var forkedSessionKey: String?
+
+    eventTask?.cancel()
+    eventTask = nil
+    isSubmitting = true
+    defer { isSubmitting = false }
+
+    do {
+      let forkResponse = try await apiClient.forkSession(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: previousEventSessionId,
+        sessionKey: previousEventSessionKey,
+        entryId: entryId
+      )
+
+      if forkResponse.cancelled == true {
+        startEvents(
+          sessionId: previousEventSessionId,
+          sessionKey: previousEventSessionKey
+        )
+        return false
+      }
+
+      didFork = true
+      forkedSessionKey = Self.normalizedText(forkResponse.sessionKey)
+      showForkedSessionLoading(
+        forkResponse,
+        fallbackState: previousState
+      )
+
+      _ = try await apiClient.submitPrompt(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: nil,
+        sessionKey: forkedSessionKey,
+        body: PromptRequestBody(
+          message: message,
+          images: images,
+          streamingBehavior: nil,
+          pendingId: nil,
+          clientRequestId: "prompt:ios-fork-" + UUID().uuidString.lowercased(),
+          thinkingLevel: thinkingLevel,
+          draftOwnerKey: nil,
+          draftCwd: nil
+        )
+      )
+
+      composerText = ""
+      composerImages = []
+      composerGitComments = []
+      startEvents(sessionId: nil, sessionKey: forkedSessionKey)
+      return true
+    } catch {
+      if didFork {
+        composerText = message
+        composerImages = images
+        composerGitComments = []
+        if let forkedSessionKey {
+          draftStore.saveDraft(
+            message,
+            contextId: connectionStore.contextId,
+            sessionKey: forkedSessionKey
+          )
+        }
+        startEvents(sessionId: nil, sessionKey: forkedSessionKey)
+      } else {
+        selectedSessionId = previousSelectedSessionId
+        loadingSessionTitle = previousLoadingSessionTitle
+        loadingSessionCwd = previousLoadingSessionCwd
+        isComposingNewSession = previousIsComposingNewSession
+        composerText = previousComposerText
+        composerImages = previousComposerImages
+        composerGitComments = previousComposerGitComments
+        composerSelectedDirectory = previousComposerSelectedDirectory
+        composerSelectedModel = previousComposerSelectedModel
+        sessionState = previousState
+        refreshConversationGitStatusIfNeeded()
+        startEvents(
+          sessionId: previousEventSessionId,
+          sessionKey: previousEventSessionKey
+        )
+      }
+
+      alert = AppAlert(
+        title: "Could not resend edited message",
+        message: Self.message(for: error)
+      )
+      return false
+    }
+  }
+
+  @discardableResult
+  public func branchFromAssistantMessage(_ item: AssistantConversationItem) async -> Bool {
+    guard let baseURL else {
+      alert = AppAlert(
+        title: "Not connected",
+        message: "Connect to a Pico server before branching the chat."
+      )
+      return false
+    }
+
+    guard canBranchAssistantMessages else {
+      alert = AppAlert(
+        title: "Session is busy",
+        message: "Wait for the current response to finish before branching the chat."
+      )
+      return false
+    }
+
+    guard let entryId = Self.normalizedText(item.branchEntryId) else {
+      alert = AppAlert(
+        title: "Could not branch chat",
+        message: "Pico could not find a branch point for that response."
+      )
+      return false
+    }
+
+    let previousEventSessionId = requestSessionId
+    let previousEventSessionKey = requestSessionKey
+    let previousState = sessionState
+    let previousSelectedSessionId = selectedSessionId
+    let previousLoadingSessionTitle = loadingSessionTitle
+    let previousLoadingSessionCwd = loadingSessionCwd
+    let previousIsComposingNewSession = isComposingNewSession
+    let previousComposerText = composerText
+    let previousComposerImages = composerImages
+    let previousComposerGitComments = composerGitComments
+    let previousComposerSelectedDirectory = composerSelectedDirectory
+    let previousComposerSelectedModel = composerSelectedModel
+
+    eventTask?.cancel()
+    eventTask = nil
+    isSubmitting = true
+    defer { isSubmitting = false }
+
+    do {
+      let response = try await apiClient.branchSessionAtMessage(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: previousEventSessionId,
+        sessionKey: previousEventSessionKey,
+        entryId: entryId
+      )
+
+      if response.cancelled == true {
+        startEvents(
+          sessionId: previousEventSessionId,
+          sessionKey: previousEventSessionKey
+        )
+        return false
+      }
+
+      showForkedSessionLoading(
+        response,
+        fallbackState: previousState,
+        loadingTitle: "Branched chat"
+      )
+      composerText = ""
+      composerImages = []
+      composerGitComments = []
+      startEvents(
+        sessionId: nil,
+        sessionKey: Self.normalizedText(response.sessionKey)
+      )
+      return true
+    } catch {
+      selectedSessionId = previousSelectedSessionId
+      loadingSessionTitle = previousLoadingSessionTitle
+      loadingSessionCwd = previousLoadingSessionCwd
+      isComposingNewSession = previousIsComposingNewSession
+      composerText = previousComposerText
+      composerImages = previousComposerImages
+      composerGitComments = previousComposerGitComments
+      composerSelectedDirectory = previousComposerSelectedDirectory
+      composerSelectedModel = previousComposerSelectedModel
+      sessionState = previousState
+      refreshConversationGitStatusIfNeeded()
+      startEvents(
+        sessionId: previousEventSessionId,
+        sessionKey: previousEventSessionKey
+      )
+      alert = AppAlert(
+        title: "Could not branch chat",
+        message: Self.message(for: error)
+      )
+      return false
+    }
   }
 
   public func startNewSession(
@@ -1850,6 +2102,92 @@ public final class AppModel {
     )
   }
 
+  private func showForkedSessionLoading(
+    _ response: ForkSessionResponse,
+    fallbackState: SessionState,
+    loadingTitle: String = "Forked session"
+  ) {
+    selectedSessionId = Self.normalizedText(response.sessionId) ??
+      Self.normalizedText(response.sessionFile) ??
+      Self.normalizedText(response.sessionKey)
+    loadingSessionTitle = loadingTitle
+    loadingSessionCwd = fallbackState.cwd
+    isComposingNewSession = false
+    composerText = ""
+    composerImages = []
+    composerGitComments = []
+    composerSelectedDirectory = nil
+    composerSelectedModel = nil
+    sessionState = SessionState(
+      connected: fallbackState.connected || isConnected,
+      replaying: true,
+      cwd: fallbackState.cwd,
+      model: fallbackState.model,
+      thinkingLevel: fallbackState.thinkingLevel,
+      availableThinkingLevels: fallbackState.availableThinkingLevels,
+      availableModels: fallbackState.availableModels,
+      availableSkills: fallbackState.availableSkills,
+      hideThinkingBlock: fallbackState.hideThinkingBlock
+    )
+    refreshConversationGitStatusIfNeeded()
+  }
+
+  private func forkEntryId(for item: UserConversationItem) async -> String? {
+    if let forkEntryId = Self.normalizedText(item.forkEntryId) {
+      return forkEntryId
+    }
+
+    guard let baseURL else { return nil }
+
+    do {
+      let response = try await apiClient.forkableMessages(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: requestSessionId,
+        sessionKey: requestSessionKey
+      )
+      return matchingForkEntryId(for: item, in: response.messages)
+    } catch {
+      return nil
+    }
+  }
+
+  private func matchingForkEntryId(
+    for item: UserConversationItem,
+    in messages: [ForkableMessage]
+  ) -> String? {
+    guard let targetText = Self.normalizedText(item.text) else { return nil }
+
+    let targetOccurrence = userMessageOccurrence(of: item, matching: targetText)
+    let matchingMessages = messages.filter {
+      Self.normalizedText($0.text) == targetText
+    }
+    guard !matchingMessages.isEmpty else { return nil }
+
+    if targetOccurrence < matchingMessages.count {
+      return matchingMessages[targetOccurrence].entryId
+    }
+
+    return matchingMessages.last?.entryId
+  }
+
+  private func userMessageOccurrence(
+    of item: UserConversationItem,
+    matching targetText: String
+  ) -> Int {
+    var occurrence = 0
+
+    for conversationItem in sessionState.items {
+      guard case .user(let user) = conversationItem else { continue }
+      if user.id == item.id { break }
+      if Self.normalizedText(user.text) == targetText {
+        occurrence += 1
+      }
+    }
+
+    return occurrence
+  }
+
   private func applyOptimisticSubmittedPrompt(
     _ message: String,
     images: [PromptImage],
@@ -2220,6 +2558,7 @@ public final class AppModel {
     switch event {
     case .stateSync(let sync):
       let wasComposingNewSession = isComposingNewSession
+      let previousEditorText = sessionState.uiState.editorText ?? ""
       sessionState.apply(sync)
 
       if wasComposingNewSession {
@@ -2236,6 +2575,10 @@ public final class AppModel {
           if composerText.isEmpty, let editorText = sessionState.uiState.editorText {
             composerText = editorText
           }
+        } else if !previousEditorText.isEmpty,
+                  composerText == previousEditorText,
+                  (sessionState.uiState.editorText ?? "").isEmpty {
+          composerText = ""
         }
       }
       refreshConversationGitStatusIfNeeded()

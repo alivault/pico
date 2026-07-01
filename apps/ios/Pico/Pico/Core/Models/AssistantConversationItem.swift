@@ -7,6 +7,7 @@ public struct AssistantConversationItem: Decodable, Hashable, Identifiable, Send
 
   public var itemKey: String?
   public var renderKey: String?
+  public var branchEntryId: String?
   public var blocks: [AssistantBlock]
   public var streaming: Bool?
   public var done: Bool?
@@ -15,6 +16,7 @@ public struct AssistantConversationItem: Decodable, Hashable, Identifiable, Send
   private enum CodingKeys: String, CodingKey {
     case itemKey
     case renderKey
+    case branchEntryId
     case blocks
     case streaming
     case done
@@ -25,6 +27,7 @@ public struct AssistantConversationItem: Decodable, Hashable, Identifiable, Send
     let container = try decoder.container(keyedBy: CodingKeys.self)
     itemKey = try container.decodeIfPresent(String.self, forKey: .itemKey)
     renderKey = try container.decodeIfPresent(String.self, forKey: .renderKey)
+    branchEntryId = try container.decodeIfPresent(String.self, forKey: .branchEntryId)
     blocks = try container.decodeIfPresent([AssistantBlock].self, forKey: .blocks) ?? []
     streaming = try container.decodeIfPresent(Bool.self, forKey: .streaming)
     done = try container.decodeIfPresent(Bool.self, forKey: .done)
@@ -34,6 +37,7 @@ public struct AssistantConversationItem: Decodable, Hashable, Identifiable, Send
   public init(
     itemKey: String? = nil,
     renderKey: String? = nil,
+    branchEntryId: String? = nil,
     blocks: [AssistantBlock],
     streaming: Bool? = nil,
     done: Bool? = nil,
@@ -41,6 +45,7 @@ public struct AssistantConversationItem: Decodable, Hashable, Identifiable, Send
   ) {
     self.itemKey = itemKey
     self.renderKey = renderKey
+    self.branchEntryId = branchEntryId
     self.blocks = blocks
     self.streaming = streaming
     self.done = done

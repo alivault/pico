@@ -69,6 +69,7 @@ import {
 } from "@/server/pico-runtime/session-list"
 import {
   createForkedInMemorySessionManager,
+  extractBranchableMessages,
   extractForkableUserMessages,
   extractMessageText,
   serializeSessionTreeNode,
@@ -1463,6 +1464,72 @@ class PicoRuntime {
     return lastValue
   }
 
+  private stateConversationItems(entry: SessionEntry): Array<ConversationItem> {
+    const branchableMessages = extractBranchableMessages(entry)
+    const forkableMessages =
+      branchableMessages.length === 0 ? extractForkableUserMessages(entry) : []
+    if (branchableMessages.length === 0 && forkableMessages.length === 0) {
+      return entry.retainedConversationItems
+    }
+
+    let branchableIndex = 0
+    let forkableIndex = 0
+    let changed = false
+    const nextBranchableMessage = (role: "user" | "assistant") => {
+      const matchedIndex = branchableMessages.findIndex(
+        (message, index) => index >= branchableIndex && message.role === role
+      )
+      if (matchedIndex < 0) return undefined
+
+      branchableIndex = matchedIndex + 1
+      return branchableMessages[matchedIndex]
+    }
+    const nextForkableUserEntryId = (text: string) => {
+      const normalizedText = text.trim()
+      if (!normalizedText) return undefined
+
+      const matchedIndex = forkableMessages.findIndex(
+        (message, index) =>
+          index >= forkableIndex && message.text.trim() === normalizedText
+      )
+      if (matchedIndex < 0) return undefined
+
+      forkableIndex = matchedIndex + 1
+      return forkableMessages[matchedIndex]?.entryId
+    }
+
+    const items = entry.retainedConversationItems.map((item) => {
+      if (item.kind === "user") {
+        const entryId =
+          nextBranchableMessage("user")?.entryId ??
+          nextForkableUserEntryId(item.text)
+        if (!entryId || item.forkEntryId === entryId) return item
+
+        changed = true
+        return {
+          ...item,
+          forkEntryId: entryId,
+        } satisfies ConversationItem
+      }
+
+      if (item.streaming) return item
+
+      const entryId = nextBranchableMessage("assistant")?.entryId
+      if (!entryId || item.branchEntryId === entryId) return item
+
+      changed = true
+      return {
+        ...item,
+        branchEntryId: entryId,
+      } satisfies ConversationItem
+    })
+
+    if (changed) {
+      entry.retainedConversationItems = items
+    }
+    return entry.retainedConversationItems
+  }
+
   private currentStatePayload(
     entry: SessionEntry,
     context: ContextState
@@ -1474,7 +1541,7 @@ class PicoRuntime {
       type: "state_sync",
       activationRevision: context.activeRevision,
       sessionKey: entry.key,
-      items: entry.retainedConversationItems,
+      items: this.stateConversationItems(entry),
       pendingUserMessages: entry.pendingUserMessages.map((message) =>
         clonePendingUserMessage(message)
       ),
@@ -4167,6 +4234,9 @@ class PicoRuntime {
             images.length
           )
         }
+        if (activeEntry.uiState.editorText) {
+          activeEntry.uiState.editorText = ""
+        }
 
         if (isAlreadyStreaming) {
           const queuedStreamingBehavior = streamingBehavior ?? "steer"
@@ -4804,30 +4874,43 @@ class PicoRuntime {
     return await this.cloneSessionForEntry(context, activeEntry)
   }
 
-  async forkSession(request: Request, body: { entryId?: unknown }) {
+  async forkSession(
+    request: Request,
+    body: { entryId?: unknown; position?: unknown }
+  ) {
     const { context, activeEntry } = await this.resolveRequest(request)
     const entryId = typeof body.entryId === "string" ? body.entryId.trim() : ""
     if (!entryId) {
       throw new Error("entryId is required")
     }
 
+    const forkPosition = body.position === "at" ? "at" : "before"
+    const isEditFork = forkPosition === "before"
     const currentManager = activeEntry.session.sessionManager
     const selectedEntry = currentManager.getEntry?.(entryId)
     const selectedParentId =
       typeof selectedEntry?.parentId === "string"
         ? selectedEntry.parentId
         : undefined
+    const selectedRole =
+      typeof selectedEntry?.message?.role === "string"
+        ? selectedEntry.message.role
+        : ""
     if (
       !selectedEntry ||
       selectedEntry.type !== "message" ||
-      selectedEntry.message?.role !== "user"
+      (isEditFork ? selectedRole !== "user" : selectedRole !== "assistant")
     ) {
       throw new Error("Invalid entry ID for forking")
     }
 
-    const selectedText = extractMessageText(selectedEntry.message)
+    const selectedText = isEditFork
+      ? extractMessageText(selectedEntry.message)
+      : ""
     const previousSessionFile = activeEntry.session.sessionFile
     const sourceSessionDir = currentManager.getSessionDir?.()
+    const forkLeafId = isEditFork ? selectedParentId : entryId
+    const draft = isEditFork ? !selectedParentId : false
 
     let nextEntry: SessionEntry
     if (currentManager.isPersisted?.()) {
@@ -4845,7 +4928,7 @@ class PicoRuntime {
       const runtime = await this.createSessionRuntime(sourceManager)
       try {
         const result = await runtime.fork(entryId, {
-          position: "before",
+          position: forkPosition,
         })
         if (result.cancelled) {
           await runtime.dispose()
@@ -4853,9 +4936,9 @@ class PicoRuntime {
         }
 
         nextEntry = await this.createSessionEntryFromRuntime(runtime, {
-          draft: !selectedParentId,
+          draft,
         })
-        if (result.selectedText) {
+        if (isEditFork && result.selectedText) {
           nextEntry.uiState.editorText = result.selectedText
         }
       } catch (error) {
@@ -4870,15 +4953,16 @@ class PicoRuntime {
       }
       const sessionManager = await this.createForkedInMemorySessionManager(
         currentManager,
-        selectedParentId,
+        forkLeafId,
         previousSessionFile
       )
       nextEntry = await this.createSessionEntry(sessionManager, {
-        draft: !selectedParentId,
+        draft,
         sessionStartEvent,
       })
     }
-    if (!nextEntry.uiState.editorText) {
+
+    if (isEditFork && !nextEntry.uiState.editorText) {
       nextEntry.uiState.editorText = selectedText
     }
     const baseName =
@@ -4889,12 +4973,16 @@ class PicoRuntime {
       })
     if (baseName) {
       nextEntry.session.setSessionName(
-        clampSessionNameLength(`${baseName} fork`)
+        clampSessionNameLength(`${baseName} ${isEditFork ? "fork" : "branch"}`)
       )
     }
-    nextEntry.uiState.editorText = selectedText
-    if (!selectedParentId) {
-      nextEntry.firstMessageHint = selectedText
+    if (isEditFork) {
+      nextEntry.uiState.editorText = selectedText
+      if (!selectedParentId) {
+        nextEntry.firstMessageHint = selectedText
+      }
+    } else {
+      nextEntry.uiState.editorText = ""
     }
     this.touchSessionEntry(nextEntry)
 
@@ -4903,6 +4991,7 @@ class PicoRuntime {
     return {
       ok: true,
       draft: this.isDraftEntry(nextEntry),
+      sessionKey: nextEntry.key,
       sessionId: nextEntry.session.sessionId,
       sessionFile: nextEntry.session.sessionFile,
     }

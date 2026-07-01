@@ -501,6 +501,7 @@ export type ForkSessionResponse =
       ok: true
       cancelled?: boolean
       draft?: boolean
+      sessionKey?: string
       sessionId?: string
       sessionFile?: string
     }

@@ -8,6 +8,7 @@ public struct UserConversationItem: Decodable, Hashable, Identifiable, Sendable 
   public var itemKey: String?
   public var renderKey: String?
   public var pendingId: String?
+  public var forkEntryId: String?
   public var text: String
   public var images: [PromptImage]
   public var queued: Bool?
@@ -17,6 +18,7 @@ public struct UserConversationItem: Decodable, Hashable, Identifiable, Sendable 
     case itemKey
     case renderKey
     case pendingId
+    case forkEntryId
     case text
     case images
     case queued
@@ -28,6 +30,7 @@ public struct UserConversationItem: Decodable, Hashable, Identifiable, Sendable 
     itemKey = try container.decodeIfPresent(String.self, forKey: .itemKey)
     renderKey = try container.decodeIfPresent(String.self, forKey: .renderKey)
     pendingId = try container.decodeIfPresent(String.self, forKey: .pendingId)
+    forkEntryId = try container.decodeIfPresent(String.self, forKey: .forkEntryId)
     text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
     images = try container.decodeIfPresent([PromptImage].self, forKey: .images) ?? []
     queued = try container.decodeIfPresent(Bool.self, forKey: .queued)
@@ -41,6 +44,7 @@ public struct UserConversationItem: Decodable, Hashable, Identifiable, Sendable 
     itemKey: String? = nil,
     renderKey: String? = nil,
     pendingId: String? = nil,
+    forkEntryId: String? = nil,
     text: String,
     images: [PromptImage],
     queued: Bool? = nil,
@@ -49,6 +53,7 @@ public struct UserConversationItem: Decodable, Hashable, Identifiable, Sendable 
     self.itemKey = itemKey
     self.renderKey = renderKey
     self.pendingId = pendingId
+    self.forkEntryId = forkEntryId
     self.text = text
     self.images = images
     self.queued = queued

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ConversationView: View {
   private static let bottomAnchorId = "conversation-bottom"
@@ -13,6 +14,10 @@ struct ConversationView: View {
   var isCompacting: Bool = false
   var workingLabel: String = "Working…"
   var bottomContentInset: CGFloat = 0
+  var canEditUserMessages = true
+  var canBranchAssistantMessages = true
+  var onEditUserMessage: (UserConversationItem) -> Void = { _ in }
+  var onBranchAssistantMessage: (AssistantConversationItem) -> Void = { _ in }
   var onCancelCompaction: () -> Void = {}
 
   @State private var isNearBottom = true
@@ -34,8 +39,15 @@ struct ConversationView: View {
               .frame(maxWidth: .infinity, minHeight: 280)
             } else {
               ForEach(visibleElements) { element in
-                ConversationElementView(model: model, element: element)
-                  .id(element.id)
+                ConversationElementView(
+                  model: model,
+                  element: element,
+                  canEditUserMessages: canEditUserMessages,
+                  canBranchAssistantMessages: canBranchAssistantMessages,
+                  onEditUserMessage: onEditUserMessage,
+                  onBranchAssistantMessage: onBranchAssistantMessage
+                )
+                .id(element.id)
               }
 
               if shouldShowWorkingIndicator {
@@ -124,20 +136,34 @@ struct ConversationView: View {
   }
 
   private var visibleElements: [ConversationElement] {
-    visibleItems.flatMap { item -> [ConversationElement] in
+    let items = visibleItems
+    return items.indices.flatMap { index -> [ConversationElement] in
+      let item = items[index]
+
       switch item {
       case .assistant(let assistant):
-        Self.visibleAssistantBlocks(
+        let blocks = Self.visibleAssistantBlocks(
           assistant,
           hideThinking: hideThinking,
           hideToolBlocks: hideToolBlocks
-        ).map { block in
+        )
+        let blockElements: [ConversationElement] = blocks.map { block in
           .assistantBlock(assistantId: assistant.id, block: block)
         }
+        let showsBranch = isLastAssistantMessageInTurn(at: index, in: items)
+        guard shouldShowAssistantActions(
+          assistant,
+          visibleBlocks: blocks,
+          showsBranch: showsBranch
+        ) else {
+          return blockElements
+        }
+
+        return blockElements + [.assistantActions(assistant, showsBranch: showsBranch)]
       case .user(let user):
-        [.user(user)]
+        return [.user(user)]
       case .unknown:
-        []
+        return []
       }
     }
   }
@@ -148,6 +174,50 @@ struct ConversationView: View {
 
   private var backToBottomButtonBottomPadding: CGFloat {
     max(16, bottomContentInset)
+  }
+
+  private func shouldShowAssistantActions(
+    _ assistant: AssistantConversationItem,
+    visibleBlocks: [AssistantBlock],
+    showsBranch: Bool
+  ) -> Bool {
+    assistant.streaming != true && !visibleBlocks.isEmpty &&
+      (Self.assistantText(assistant) != nil ||
+        (showsBranch && assistant.branchEntryId?.isEmpty == false))
+  }
+
+  private func isLastAssistantMessageInTurn(
+    at index: Int,
+    in items: [ConversationItem]
+  ) -> Bool {
+    guard items.indices.contains(index),
+          case .assistant = items[index] else {
+      return false
+    }
+
+    for nextItem in items.dropFirst(index + 1) {
+      switch nextItem {
+      case .assistant:
+        return false
+      case .user:
+        return true
+      case .unknown:
+        continue
+      }
+    }
+
+    return true
+  }
+
+  fileprivate static func assistantText(_ assistant: AssistantConversationItem) -> String? {
+    let text = assistant.blocks.compactMap { block in
+      guard case .text(let text) = block else { return nil }
+      let trimmedText = text.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmedText.isEmpty ? nil : trimmedText
+    }
+    .joined(separator: "\n\n")
+
+    return text.isEmpty ? nil : text
   }
 
   private var shouldShowWorkingIndicator: Bool {
@@ -313,6 +383,7 @@ struct ConversationView: View {
 private enum ConversationElement: Identifiable {
   case user(UserConversationItem)
   case assistantBlock(assistantId: String, block: AssistantBlock)
+  case assistantActions(AssistantConversationItem, showsBranch: Bool)
 
   var id: String {
     switch self {
@@ -320,6 +391,8 @@ private enum ConversationElement: Identifiable {
       user.id
     case .assistantBlock(let assistantId, let block):
       "\(assistantId):\(block.id)"
+    case .assistantActions(let assistant, _):
+      "\(assistant.id):actions"
     }
   }
 }
@@ -327,13 +400,92 @@ private enum ConversationElement: Identifiable {
 private struct ConversationElementView: View {
   var model: AppModel?
   var element: ConversationElement
+  var canEditUserMessages: Bool
+  var canBranchAssistantMessages: Bool
+  var onEditUserMessage: (UserConversationItem) -> Void
+  var onBranchAssistantMessage: (AssistantConversationItem) -> Void
 
   var body: some View {
     switch element {
     case .user(let user):
-      UserMessageView(item: user)
+      UserMessageView(
+        item: user,
+        canEdit: canEditUserMessages,
+        onEdit: onEditUserMessage
+      )
     case .assistantBlock(_, let block):
       AssistantBlockView(model: model, block: block)
+    case .assistantActions(let assistant, let showsBranch):
+      AssistantMessageActionsView(
+        item: assistant,
+        canBranch: canBranchAssistantMessages,
+        showsBranch: showsBranch,
+        onBranch: onBranchAssistantMessage
+      )
+    }
+  }
+}
+
+private struct AssistantMessageActionsView: View {
+  var item: AssistantConversationItem
+  var canBranch: Bool
+  var showsBranch: Bool
+  var onBranch: (AssistantConversationItem) -> Void
+
+  @State private var didCopy = false
+  @State private var copyFeedbackToken = 0
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Button(action: copyMessage) {
+        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+          .contentTransition(.symbolEffect(.replace))
+          .frame(width: 30, height: 30)
+          .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .disabled(copyText.isEmpty)
+      .accessibilityLabel(didCopy ? "Copied" : "Copy")
+
+      if showsBranch {
+        Button(action: { onBranch(item) }) {
+          Image(systemName: "arrow.triangle.branch")
+            .frame(width: 30, height: 30)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .disabled(!canBranch || item.branchEntryId?.isEmpty != false)
+        .accessibilityLabel("Branch in New Chat")
+      }
+    }
+    .font(.subheadline.weight(.semibold))
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .contain)
+  }
+
+  private var copyText: String {
+    ConversationView.assistantText(item) ?? ""
+  }
+
+  private func copyMessage() {
+    let text = copyText
+    guard !text.isEmpty else { return }
+
+    UIPasteboard.general.string = text
+    showCopiedConfirmation()
+  }
+
+  private func showCopiedConfirmation() {
+    copyFeedbackToken += 1
+    let token = copyFeedbackToken
+    didCopy = true
+
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(1400))
+      guard copyFeedbackToken == token else { return }
+      didCopy = false
     }
   }
 }

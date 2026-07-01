@@ -76,6 +76,7 @@ function buildClientManifest(): ClientManifestResponse {
         "/api/abort",
         "/api/session/new",
         "/api/session/select",
+        "/api/session/fork",
         "/api/session/rename",
         "/api/session/delete",
         "/api/session/read-state",
@@ -105,6 +106,8 @@ function buildClientManifest(): ClientManifestResponse {
         "provider-authentication",
         "native-directory-browser",
         "post-compaction-token-estimates",
+        "edit-user-message-fork",
+        "assistant-message-actions",
       ],
     },
   }
