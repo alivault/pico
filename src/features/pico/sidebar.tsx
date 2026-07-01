@@ -86,7 +86,10 @@ import {
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
-import { formatDisplayPath } from "@/features/pico/app-shell-common"
+import {
+  formatDisplayPath,
+  formatFolderName,
+} from "@/features/pico/app-shell-common"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import {
   createPicoStore,
@@ -127,48 +130,12 @@ function useDelayedTrue(value: boolean, delayMs: number) {
   return delayedValue
 }
 
-function tildePath(value: string) {
-  return value
-    .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
-    .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
-}
-
-function splitDisplayPath(value: string) {
-  if (!value) return { leading: "", trailing: "" }
-
-  const trimmed = value.replace(/[\\/]+$/, "")
-  if (!trimmed) {
-    return { leading: "", trailing: value }
-  }
-
-  const suffix = value.slice(trimmed.length)
-  const separatorIndex = Math.max(
-    trimmed.lastIndexOf("/"),
-    trimmed.lastIndexOf("\\")
-  )
-
-  if (separatorIndex < 0 || separatorIndex === trimmed.length - 1) {
-    return { leading: "", trailing: `${trimmed}${suffix}` }
-  }
-
-  return {
-    leading: trimmed.slice(0, separatorIndex + 1),
-    trailing: `${trimmed.slice(separatorIndex + 1)}${suffix}`,
-  }
-}
-
 function DirectoryPathLabel({ path }: { path: string }) {
-  const displayPath = tildePath(path)
-  const { leading, trailing } = splitDisplayPath(displayPath)
+  const folderName = formatFolderName(path) || path
 
   return (
-    <span className="block min-w-0 text-sm text-sidebar-foreground">
-      <span className="flex min-w-0 items-center">
-        {leading ? (
-          <span className="truncate text-sidebar-foreground/60">{leading}</span>
-        ) : null}
-        <span className="shrink-0 font-medium">{trailing || displayPath}</span>
-      </span>
+    <span className="block min-w-0 truncate text-sm font-medium text-sidebar-foreground">
+      {folderName}
     </span>
   )
 }
@@ -688,7 +655,7 @@ function SidebarSessionItem({
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
   const lastMessagePreview = entry.lastMessagePreview?.trim() || ""
   const pinnedDirectoryLabel = isPinned
-    ? formatDisplayPath(entry.cwd?.trim() || entry.path?.trim() || "")
+    ? formatFolderName(entry.cwd?.trim() || entry.path?.trim() || "")
     : ""
   const exactTimestamp =
     hasTimestamp && timestamp ? new Date(timestamp).toLocaleString() : undefined
