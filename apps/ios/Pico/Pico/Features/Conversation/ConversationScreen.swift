@@ -13,6 +13,12 @@ struct ConversationScreen: View {
   @State private var isShowingRenameAlert = false
   @State private var isShowingDeleteConfirmation = false
   @State private var isShowingFilesDrawer = false
+  @State private var isShowingHeaderCommitSheet = false
+  @State private var headerCommitCwd: String?
+  @State private var headerCommitStatus: GitStatusSummary?
+  @State private var headerCommitFiles: [GitChangeFile] = []
+  @State private var isPreparingHeaderCommit = false
+  @State private var isPushingHeaderGit = false
   @State private var editingUserMessage: EditableUserMessage?
   @State private var assistantBranchTarget: BranchableAssistantMessage?
 
@@ -97,7 +103,11 @@ struct ConversationScreen: View {
         )
         ConversationHeaderOptionsMenu(
           model: model,
+          isPreparingCommit: isPreparingHeaderCommit,
+          isPushing: isPushingHeaderGit,
           openFiles: showFilesDrawer,
+          commitChanges: showHeaderCommitSheet,
+          pushChanges: pushHeaderGit,
           renameSession: showRenameSessionAlert,
           deleteSession: showDeleteSessionConfirmation
         )
@@ -157,6 +167,19 @@ struct ConversationScreen: View {
       }
       .presentationDetents([.large])
       .presentationDragIndicator(.visible)
+    }
+    .sheet(isPresented: $isShowingHeaderCommitSheet) {
+      if let cwd = headerCommitCwd {
+        NavigationStack {
+          GitCommitSheetView(
+            model: model,
+            cwd: cwd,
+            status: headerCommitStatus,
+            files: headerCommitFiles,
+            onComplete: completeHeaderCommit
+          )
+        }
+      }
     }
     .sheet(item: $editingUserMessage) { editingMessage in
       EditUserMessageSheet(
@@ -235,6 +258,63 @@ struct ConversationScreen: View {
 
   private func showFilesDrawer() {
     isShowingFilesDrawer = true
+  }
+
+  private func showHeaderCommitSheet() {
+    guard !isPreparingHeaderCommit,
+          let cwd = model.conversationGitDirectory else {
+      return
+    }
+
+    isPreparingHeaderCommit = true
+    Task {
+      defer { isPreparingHeaderCommit = false }
+
+      do {
+        async let statusResponse = model.fetchGitStatus(cwd: cwd)
+        async let changesResponse = model.fetchGitChanges(cwd: cwd, scope: "files")
+        let (status, changes) = try await (statusResponse, changesResponse)
+
+        headerCommitCwd = cwd
+        headerCommitStatus = status.gitStatus ?? model.conversationGitStatus
+        headerCommitFiles = changes.files ?? []
+        isShowingHeaderCommitSheet = true
+      } catch is CancellationError {
+        return
+      } catch {
+        model.alert = AppAlert(
+          title: "Could not load changes",
+          message: Self.message(for: error)
+        )
+      }
+    }
+  }
+
+  private func completeHeaderCommit() {
+    isShowingHeaderCommitSheet = false
+    _ = model.refreshFilesGitStateAfterMutation(force: true)
+  }
+
+  private func pushHeaderGit() {
+    guard !isPushingHeaderGit,
+          let cwd = model.conversationGitDirectory else {
+      return
+    }
+
+    isPushingHeaderGit = true
+    Task {
+      _ = await model.pushGitChanges(cwd: cwd)
+      isPushingHeaderGit = false
+    }
+  }
+
+  private static func message(for error: Error) -> String {
+    if let localizedError = error as? LocalizedError,
+       let description = localizedError.errorDescription {
+      return description
+    }
+
+    return error.localizedDescription
   }
 
   private func editUserMessage(_ item: UserConversationItem) {
@@ -450,7 +530,11 @@ private struct ConversationNavigationTitleView: View {
 
 private struct ConversationHeaderOptionsMenu: View {
   @Bindable var model: AppModel
+  var isPreparingCommit: Bool
+  var isPushing: Bool
   var openFiles: () -> Void
+  var commitChanges: () -> Void
+  var pushChanges: () -> Void
   var renameSession: () -> Void
   var deleteSession: () -> Void
 
@@ -463,6 +547,12 @@ private struct ConversationHeaderOptionsMenu: View {
 
       thinkingVisibilityButton
       toolVisibilityButton
+
+      if showsGitActions {
+        Divider()
+
+        gitActionButtons
+      }
 
       Divider()
 
@@ -485,6 +575,39 @@ private struct ConversationHeaderOptionsMenu: View {
       Label("More", systemImage: "ellipsis")
     }
     .accessibilityLabel("Session options")
+  }
+
+  private var showsGitActions: Bool {
+    model.hasConversationGitChangesToCommit || model.hasConversationGitCommitsToPush
+  }
+
+  @ViewBuilder
+  private var gitActionButtons: some View {
+    if model.hasConversationGitChangesToCommit {
+      Button(action: commitChanges) {
+        Label(commitTitle, systemImage: "checkmark.circle")
+      }
+      .disabled(isPreparingCommit)
+    }
+
+    if model.hasConversationGitCommitsToPush {
+      Button(action: pushChanges) {
+        Label(pushTitle, systemImage: "arrow.up.circle")
+      }
+      .disabled(isPushing)
+    }
+  }
+
+  private var commitTitle: String {
+    let count = model.conversationGitStatus?.changedFileCount ?? 0
+    guard count > 0 else { return "Commit" }
+    return count == 1 ? "Commit 1 Change" : "Commit \(count) Changes"
+  }
+
+  private var pushTitle: String {
+    let count = model.conversationGitStatus?.ahead ?? 0
+    guard count > 0 else { return "Push" }
+    return count == 1 ? "Push 1 Commit" : "Push \(count) Commits"
   }
 
   private var modelMenu: some View {

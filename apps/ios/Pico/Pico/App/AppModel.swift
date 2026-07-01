@@ -226,6 +226,23 @@ public final class AppModel {
     return conversationItems.isEmpty ? "New session" : sessionState.displayTitle
   }
 
+  public var conversationGitDirectory: String? {
+    Self.normalizedText(conversationHeaderDirectory)
+  }
+
+  public var conversationGitStatus: GitStatusSummary? {
+    visibleGitStatus
+  }
+
+  public var hasConversationGitChangesToCommit: Bool {
+    guard let gitStatus = conversationGitStatus else { return false }
+    return gitStatus.dirty || gitStatus.changedFileCount > 0
+  }
+
+  public var hasConversationGitCommitsToPush: Bool {
+    (conversationGitStatus?.ahead ?? 0) > 0
+  }
+
   public var conversationHeaderSubtitle: String? {
     var parts: [String] = []
 
