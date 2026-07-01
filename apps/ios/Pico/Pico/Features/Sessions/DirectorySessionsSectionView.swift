@@ -25,6 +25,7 @@ struct DirectorySessionsSectionView: View {
           ForEach(visibleSessions) { entry in
             DirectorySessionRowButton(
               entry: entry,
+              directory: snapshot.directory,
               model: model,
               openDetail: openDetail
             )
@@ -177,6 +178,7 @@ private struct DirectorySessionsFullListView: View {
           ForEach(visibleSessions) { entry in
             DirectorySessionRowButton(
               entry: entry,
+              directory: snapshot.directory,
               model: model,
               openDetail: openDetail
             )
@@ -489,11 +491,11 @@ struct DirectorySessionPurgeSheet: View {
 
 private struct DirectorySessionRowButton: View {
   var entry: SessionListEntry
+  var directory: String
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
   @State private var renameTitle = ""
   @State private var isShowingRenameAlert = false
-  @State private var isShowingDeleteConfirmation = false
 
   var body: some View {
     Button {
@@ -503,10 +505,10 @@ private struct DirectorySessionRowButton: View {
     }
     .buttonStyle(.plain)
     .listRowBackground(selectedRowBackground)
-    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
       if canMutateSession {
-        Button {
-          showDeleteSessionConfirmation()
+        Button(role: .destructive) {
+          deleteSession()
         } label: {
           Label("Delete", systemImage: "trash")
         }
@@ -528,18 +530,6 @@ private struct DirectorySessionRowButton: View {
       }
     } message: {
       Text("Enter a new name for this session.")
-    }
-    .confirmationDialog(
-      "Delete session?",
-      isPresented: $isShowingDeleteConfirmation,
-      titleVisibility: .visible
-    ) {
-      Button("Delete Session", role: .destructive) {
-        deleteSession()
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text("This removes the session from Pico and moves it to Trash when possible.")
     }
   }
 
@@ -585,10 +575,6 @@ private struct DirectorySessionRowButton: View {
     }
   }
 
-  private func showDeleteSessionConfirmation() {
-    isShowingDeleteConfirmation = true
-  }
-
   private func showRenameSessionAlert() {
     let name = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let name, !name.isEmpty {
@@ -608,7 +594,7 @@ private struct DirectorySessionRowButton: View {
 
   private func deleteSession() {
     Task {
-      await model.deleteSession(entry)
+      await model.deleteSession(entry, directory: directory)
     }
   }
 }

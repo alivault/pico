@@ -12,6 +12,7 @@ public final class AppModel {
   @ObservationIgnored private let sessionDoneNotifications = SessionDoneNotificationClient()
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var directoryIndexRefreshSignature = ""
+  private var optimisticDeletedSessions: [SessionListEntry] = []
   @ObservationIgnored private var pendingSessionDeepLink: PicoSessionDeepLink?
   @ObservationIgnored private var isSceneActive = true
   @ObservationIgnored private var notifiedSessionDoneIds = Set<String>()
@@ -134,8 +135,18 @@ public final class AppModel {
         sessions: []
       )
 
+      if !optimisticDeletedSessions.isEmpty {
+        snapshot = Self.directorySnapshot(
+          snapshot,
+          removing: optimisticDeletedSessions,
+          countHiddenMatches: false,
+          revisionSuffix: "optimistic-delete"
+        )
+      }
+
       if let activeEntry,
          activeDirectory == directory,
+         !Self.sessionListEntry(activeEntry, isIn: optimisticDeletedSessions),
          !snapshot.sessions.contains(
            where: { Self.sessionListEntry($0, matches: activeEntry) }
          ) {
@@ -598,12 +609,28 @@ public final class AppModel {
   }
 
   @discardableResult
-  public func deleteSession(_ entry: SessionListEntry) async -> Bool {
+  public func deleteSession(
+    _ entry: SessionListEntry,
+    directory: String? = nil
+  ) async -> Bool {
     guard let baseURL else { return false }
     guard let path = Self.sessionPath(for: entry) else { return false }
 
     let deletesFocusedSession = isFocusedSession(entry)
-    let fallbackCwd = entry.cwd ?? sessionState.cwd
+    let fallbackCwd = Self.normalizedText(directory) ??
+      entry.cwd ??
+      sessionState.cwd
+    let previousSupplementalDirectoryIndexes = supplementalDirectoryIndexes
+    let previousSessionsDirectoryIndexes = sessionsEvent?.directoryIndexes
+    let previousRefreshSignature = directoryIndexRefreshSignature
+
+    addOptimisticDeletedSession(entry)
+    applyOptimisticSessionDeletion(
+      entry,
+      directory: Self.normalizedText(directory) ??
+        Self.normalizedText(entry.cwd)
+    )
+
     do {
       _ = try await apiClient.deleteSession(
         baseURL: baseURL,
@@ -614,12 +641,20 @@ public final class AppModel {
         beginNewChat(cwd: fallbackCwd)
       }
       await refreshSidebarSessionsAfterSessionMutation()
+      removeOptimisticDeletedSession(entry)
       return true
     } catch {
-      alert = AppAlert(
-        title: "Could not delete session",
-        message: Self.message(for: error)
-      )
+      supplementalDirectoryIndexes = previousSupplementalDirectoryIndexes
+      sessionsEvent?.directoryIndexes = previousSessionsDirectoryIndexes
+      directoryIndexRefreshSignature = previousRefreshSignature
+      removeOptimisticDeletedSession(entry)
+
+      if !Self.isCancellation(error) {
+        alert = AppAlert(
+          title: "Could not delete session",
+          message: Self.message(for: error)
+        )
+      }
       return false
     }
   }
@@ -2368,16 +2403,89 @@ public final class AppModel {
     }
   }
 
+  private func addOptimisticDeletedSession(_ entry: SessionListEntry) {
+    guard !Self.sessionListEntry(entry, isIn: optimisticDeletedSessions) else {
+      return
+    }
+
+    optimisticDeletedSessions.append(entry)
+  }
+
+  private func removeOptimisticDeletedSession(_ entry: SessionListEntry) {
+    optimisticDeletedSessions.removeAll {
+      Self.sessionListEntry($0, matches: entry)
+    }
+  }
+
+  private func applyOptimisticSessionDeletion(
+    _ entry: SessionListEntry,
+    directory: String?
+  ) {
+    let matchingSessions = [entry]
+    guard let directory else {
+      applyOptimisticSessionDeletionToVisibleSnapshots(matchingSessions)
+      return
+    }
+
+    applyOptimisticDirectorySessionPurge(
+      directory: directory,
+      matchingSessions: matchingSessions,
+      revisionSuffix: "delete"
+    )
+  }
+
+  private func applyOptimisticSessionDeletionToVisibleSnapshots(
+    _ matchingSessions: [SessionListEntry]
+  ) {
+    guard !matchingSessions.isEmpty else { return }
+    var didChange = false
+
+    for (directory, snapshot) in supplementalDirectoryIndexes {
+      let nextSnapshot = Self.directorySnapshot(
+        snapshot,
+        removing: matchingSessions,
+        countHiddenMatches: false,
+        revisionSuffix: "delete"
+      )
+      guard nextSnapshot != snapshot else { continue }
+
+      supplementalDirectoryIndexes[directory] = nextSnapshot
+      didChange = true
+    }
+
+    if var directoryIndexes = sessionsEvent?.directoryIndexes {
+      for (directory, snapshot) in directoryIndexes {
+        let nextSnapshot = Self.directorySnapshot(
+          snapshot,
+          removing: matchingSessions,
+          countHiddenMatches: false,
+          revisionSuffix: "delete"
+        )
+        guard nextSnapshot != snapshot else { continue }
+
+        directoryIndexes[directory] = nextSnapshot
+        didChange = true
+      }
+      sessionsEvent?.directoryIndexes = directoryIndexes
+    }
+
+    if didChange {
+      directoryIndexRefreshSignature = ""
+    }
+  }
+
   private func applyOptimisticDirectorySessionPurge(
     directory: String,
-    matchingSessions: [SessionListEntry]
+    matchingSessions: [SessionListEntry],
+    revisionSuffix: String = "purge"
   ) {
     guard !matchingSessions.isEmpty else { return }
 
     if let snapshot = supplementalDirectoryIndexes[directory] {
       supplementalDirectoryIndexes[directory] = Self.directorySnapshot(
         snapshot,
-        removing: matchingSessions
+        removing: matchingSessions,
+        revisionSuffix: revisionSuffix
       )
     }
 
@@ -2385,7 +2493,8 @@ public final class AppModel {
        let snapshot = directoryIndexes[directory] {
       directoryIndexes[directory] = Self.directorySnapshot(
         snapshot,
-        removing: matchingSessions
+        removing: matchingSessions,
+        revisionSuffix: revisionSuffix
       )
       sessionsEvent?.directoryIndexes = directoryIndexes
     }
@@ -2395,20 +2504,35 @@ public final class AppModel {
 
   private static func directorySnapshot(
     _ snapshot: DirectorySessionsIndexSnapshot,
-    removing matchingSessions: [SessionListEntry]
+    removing matchingSessions: [SessionListEntry],
+    countHiddenMatches: Bool = true,
+    revisionSuffix: String = "purge"
   ) -> DirectorySessionsIndexSnapshot {
     let visibleSessions = snapshot.sessions.filter { session in
       !matchingSessions.contains { sessionListEntry(session, matches: $0) }
     }
     let removedVisibleCount = snapshot.sessions.count - visibleSessions.count
-    let removedCount = max(removedVisibleCount, matchingSessions.count)
+    let removedCount: Int
+    if countHiddenMatches {
+      removedCount = max(removedVisibleCount, matchingSessions.count)
+    } else {
+      removedCount = removedVisibleCount
+    }
+    guard removedCount > 0 else { return snapshot }
 
     return DirectorySessionsIndexSnapshot(
       directory: snapshot.directory,
       totalCount: max(0, snapshot.totalCount - removedCount),
-      revision: "\(snapshot.revision):purge",
+      revision: "\(snapshot.revision):\(revisionSuffix)",
       sessions: visibleSessions
     )
+  }
+
+  private static func sessionListEntry(
+    _ entry: SessionListEntry,
+    isIn entries: [SessionListEntry]
+  ) -> Bool {
+    entries.contains { sessionListEntry(entry, matches: $0) }
   }
 
   private static func sessionListEntry(
