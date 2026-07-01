@@ -200,7 +200,7 @@ private struct GitCommitRowView: View {
   @State private var isShowingResetPicker = false
 
   var body: some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .center, spacing: 10) {
       Button(action: openFiles) {
         HStack(alignment: .top, spacing: 10) {
           Color.clear
