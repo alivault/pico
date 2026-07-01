@@ -163,6 +163,7 @@ struct ProjectFilesWorkspaceView: View {
 private struct ProjectFileContentCacheEntry: Equatable {
   var content: String
   var errorMessage: String?
+  var highlight: CodeHighlightResult?
 }
 
 private struct ProjectFilePreview: Identifiable {
@@ -234,6 +235,7 @@ private struct ProjectFileDetailView: View {
   @Binding var cachedFile: ProjectFileContentCacheEntry?
 
   @State private var isLoading = false
+  @State private var highlightingRequestID: String?
   @State private var isShowingDiff = false
   @State private var isShowingCommentSheet = false
   @State private var markdownMode: MarkdownMode = .preview
@@ -251,6 +253,30 @@ private struct ProjectFileDetailView: View {
     return lowercased.hasSuffix(".md") || lowercased.hasSuffix(".markdown")
   }
 
+  private var codeLanguage: CodeFileLanguage? {
+    CodeFileLanguageDetector.detect(path: path)
+  }
+
+  private var shouldRenderCode: Bool {
+    guard codeLanguage != nil else { return false }
+    return !isMarkdown || markdownMode == .source
+  }
+
+  private var highlightRequestID: String? {
+    guard shouldRenderCode,
+          let codeLanguage,
+          errorMessage == nil,
+          !content.isEmpty else {
+      return nil
+    }
+
+    return "\(path)\u{0}\(codeLanguage.shikiLanguage)\u{0}\(content.count)"
+  }
+
+  private var isHighlightingCode: Bool {
+    highlightingRequestID != nil && highlightingRequestID == highlightRequestID
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       header
@@ -259,6 +285,9 @@ private struct ProjectFileDetailView: View {
     }
     .task(id: path) {
       await loadFileIfNeeded()
+    }
+    .task(id: highlightRequestID) {
+      await loadHighlightIfNeeded()
     }
     .sheet(isPresented: $isShowingDiff) {
       if let gitFile {
@@ -352,6 +381,14 @@ private struct ProjectFileDetailView: View {
         MarkdownTextView(text: content)
           .padding()
       }
+    } else if shouldRenderCode, let codeLanguage {
+      CodeFileTextView(
+        path: path,
+        content: content,
+        language: codeLanguage,
+        highlight: cachedFile?.highlight,
+        isHighlighting: isHighlightingCode
+      )
     } else {
       GeometryReader { proxy in
         ScrollView([.vertical, .horizontal]) {
@@ -374,8 +411,54 @@ private struct ProjectFileDetailView: View {
     await loadFile()
   }
 
+  private func loadHighlightIfNeeded() async {
+    guard let requestID = highlightRequestID,
+          let codeLanguage,
+          cachedFile?.highlight?.requestID != requestID else {
+      return
+    }
+
+    let requestedContent = content
+    let requestedLanguage = codeLanguage.shikiLanguage
+    highlightingRequestID = requestID
+    defer {
+      if highlightingRequestID == requestID {
+        highlightingRequestID = nil
+      }
+    }
+
+    do {
+      let response = try await model.highlightCode(
+        code: requestedContent,
+        language: requestedLanguage
+      )
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      updateHighlight(
+        CodeHighlightResult(
+          requestID: requestID,
+          requestedLanguage: requestedLanguage,
+          response: response
+        )
+      )
+    } catch is CancellationError {
+      return
+    } catch {
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      updateHighlight(
+        .unavailable(requestID: requestID, language: requestedLanguage)
+      )
+    }
+  }
+
+  private func updateHighlight(_ highlight: CodeHighlightResult) {
+    guard var cachedFile else { return }
+    cachedFile.highlight = highlight
+    self.cachedFile = cachedFile
+  }
+
   private func loadFile() async {
     let requestedPath = path
+    highlightingRequestID = nil
     isLoading = true
     defer {
       isLoading = false
@@ -386,7 +469,8 @@ private struct ProjectFileDetailView: View {
       guard !Task.isCancelled else { return }
       cachedFile = ProjectFileContentCacheEntry(
         content: response.content,
-        errorMessage: nil
+        errorMessage: nil,
+        highlight: nil
       )
     } catch is CancellationError {
       return
@@ -394,7 +478,8 @@ private struct ProjectFileDetailView: View {
       guard !Task.isCancelled else { return }
       cachedFile = ProjectFileContentCacheEntry(
         content: "",
-        errorMessage: Self.message(for: error)
+        errorMessage: Self.message(for: error),
+        highlight: nil
       )
     }
   }

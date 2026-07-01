@@ -121,6 +121,20 @@ extension AppModel {
     }
   }
 
+  public func highlightCode(
+    code: String,
+    language: String
+  ) async throws -> HighlightResponse {
+    try await gitRequest { baseURL, contextId in
+      try await apiClient.highlightCode(
+        baseURL: baseURL,
+        contextId: contextId,
+        code: code,
+        language: language
+      )
+    }
+  }
+
   @discardableResult
   public func stageGitFile(
     cwd: String,

@@ -141,6 +141,13 @@
 		C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */; };
 		C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */; };
 		C5000000000000000000000C /* GitFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000C /* GitFeatureTests.swift */; };
+		D50000000000000000000001 /* Core/Models/HighlightResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000001 /* Core/Models/HighlightResponse.swift */; };
+		D50000000000000000000002 /* Features/Git/CodeFileLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */; };
+		D50000000000000000000003 /* Features/Git/CodeHighlightResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000003 /* Features/Git/CodeHighlightResult.swift */; };
+		D50000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift */; };
+		D50000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift */; };
+		D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */; };
+		D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -278,6 +285,7 @@
 		F97C68B3538AC695A155E2FB /* Core/Models/StateSyncPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/StateSyncPayload.swift; sourceTree = "<group>"; };
 		FB21F912F8DF9DA36E5237AB /* Core/Models/GitChangedEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitChangedEvent.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitStatusResponse.swift; sourceTree = "<group>"; };
+		D40000000000000000000001 /* Core/Models/HighlightResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/HighlightResponse.swift; sourceTree = "<group>"; };
 		FFEB0A8714341A1CDD708DD4 /* Features/Conversation/AssistantBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AssistantBlockView.swift; sourceTree = "<group>"; };
 		C40000000000000000000001 /* App/AppModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/AppModel+Git.swift"; sourceTree = "<group>"; };
 		C40000000000000000000002 /* Features/Git/GitFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitFormatting.swift; sourceTree = "<group>"; };
@@ -291,6 +299,12 @@
 		C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitBranchSheetView.swift; sourceTree = "<group>"; };
 		C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitCommitSheetView.swift; sourceTree = "<group>"; };
 		C4000000000000000000000C /* GitFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitFeatureTests.swift; sourceTree = "<group>"; };
+		D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeFileLanguage.swift; sourceTree = "<group>"; };
+		D40000000000000000000003 /* Features/Git/CodeHighlightResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeHighlightResult.swift; sourceTree = "<group>"; };
+		D40000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeSyntaxPalette.swift; sourceTree = "<group>"; };
+		D40000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/ShikiHighlightedHTMLParser.swift; sourceTree = "<group>"; };
+		D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeAttributedStringBuilder.swift; sourceTree = "<group>"; };
+		D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/CodeFileTextView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -347,6 +361,7 @@
 				E43D73223A172FDB176A3039 /* Core/Models/ExtensionErrorEvent.swift */,
 				FB21F912F8DF9DA36E5237AB /* Core/Models/GitChangedEvent.swift */,
 				B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */,
+				D40000000000000000000001 /* Core/Models/HighlightResponse.swift */,
 				D1C39A4CAF49FBFE0E9AD69E /* Core/Models/JSONValue.swift */,
 				7FB0CA216AB038CBB0AE04D9 /* Core/Models/ModelOption.swift */,
 				A92C3B2D5E0733AA0BF6A01F /* Core/Models/ModelResponse.swift */,
@@ -405,6 +420,11 @@
 				F30000000000000000000006 /* Features/Conversation/AnsiTextView.swift */,
 				F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */,
 				A5237E7C9CC1ECEDD20771E8 /* Features/Conversation/UserMessageView.swift */,
+				D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */,
+				D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */,
+				D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */,
+				D40000000000000000000003 /* Features/Git/CodeHighlightResult.swift */,
+				D40000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift */,
 				C40000000000000000000002 /* Features/Git/GitFormatting.swift */,
 				C40000000000000000000003 /* Features/Git/ProjectFileTree.swift */,
 				C40000000000000000000004 /* Features/Git/GitSharedViews.swift */,
@@ -415,6 +435,7 @@
 				C40000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift */,
 				C4000000000000000000000A /* Features/Git/GitBranchSheetView.swift */,
 				C4000000000000000000000B /* Features/Git/GitCommitSheetView.swift */,
+				D40000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift */,
 				B2885B1058D12CC8500CA0F8 /* Features/Sessions/ConnectionStatusBadge.swift */,
 				544DDDAE75B2CB2572A56D97 /* Features/Sessions/DirectorySessionsSectionView.swift */,
 				B10000000000000000000004 /* Features/Sessions/DirectoryPathFormatter.swift */,
@@ -619,6 +640,7 @@
 				CB64958F99A1DE5F080F3EA5 /* Core/Models/ExtensionErrorEvent.swift in Sources */,
 				7B1B278D50C1E7BCDA0F6E37 /* Core/Models/GitChangedEvent.swift in Sources */,
 				A30000000000000000000001 /* Core/Models/GitStatusResponse.swift in Sources */,
+				D50000000000000000000001 /* Core/Models/HighlightResponse.swift in Sources */,
 				34ECB8B0CC8D2DE3146DD651 /* Core/Models/JSONValue.swift in Sources */,
 				AF6CB0A8AE07F2068FCFABD9 /* Core/Models/ModelOption.swift in Sources */,
 				98D14931C9DC99AFD169CA58 /* Core/Models/ModelResponse.swift in Sources */,
@@ -676,6 +698,11 @@
 				F30000000000000000000005 /* Features/Conversation/AnsiTextView.swift in Sources */,
 				F30000000000000000000009 /* Features/Conversation/PierrePatchDiffView.swift in Sources */,
 				C69946379F7163E80069A38B /* Features/Conversation/UserMessageView.swift in Sources */,
+				D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */,
+				D50000000000000000000002 /* Features/Git/CodeFileLanguage.swift in Sources */,
+				D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */,
+				D50000000000000000000003 /* Features/Git/CodeHighlightResult.swift in Sources */,
+				D50000000000000000000004 /* Features/Git/CodeSyntaxPalette.swift in Sources */,
 				C50000000000000000000002 /* Features/Git/GitFormatting.swift in Sources */,
 				C50000000000000000000003 /* Features/Git/ProjectFileTree.swift in Sources */,
 				C50000000000000000000004 /* Features/Git/GitSharedViews.swift in Sources */,
@@ -686,6 +713,7 @@
 				C50000000000000000000009 /* Features/Git/ProjectFilesWorkspaceView.swift in Sources */,
 				C5000000000000000000000A /* Features/Git/GitBranchSheetView.swift in Sources */,
 				C5000000000000000000000B /* Features/Git/GitCommitSheetView.swift in Sources */,
+				D50000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift in Sources */,
 				0BC9F6CDD845F0BC1752F918 /* Features/Sessions/ConnectionStatusBadge.swift in Sources */,
 				DC3AB145623AC20BE6590832 /* Features/Sessions/DirectorySessionsSectionView.swift in Sources */,
 				A10000000000000000000001 /* Core/Models/CompletionItem.swift in Sources */,

@@ -30,6 +30,7 @@ public enum PicoEndpoint: Sendable {
   case gitCheckout
   case filesTree
   case filesRead
+  case highlight
   case pathCompletions
   case pendingMessagesReorder
   case slashCommand
@@ -102,6 +103,8 @@ public enum PicoEndpoint: Sendable {
       "/api/files/tree"
     case .filesRead:
       "/api/files/read"
+    case .highlight:
+      "/api/highlight"
     case .pathCompletions:
       "/api/path-completions"
     case .pendingMessagesReorder:

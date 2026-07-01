@@ -539,6 +539,21 @@ public actor PicoAPIClient {
     return try await perform(request)
   }
 
+  public func highlightCode(
+    baseURL: URL,
+    contextId: String,
+    code: String,
+    language: String
+  ) async throws -> HighlightResponse {
+    try await send(
+      endpoint: .highlight,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: HighlightRequestBody(code: code, language: language)
+    )
+  }
+
   public func checkoutGitBranch(
     baseURL: URL,
     contextId: String,
@@ -900,4 +915,9 @@ private struct GitCheckoutBranchRequestBody: Encodable, Sendable {
   var create: Bool?
   var startPoint: String?
   var track: Bool?
+}
+
+private struct HighlightRequestBody: Encodable, Sendable {
+  var code: String
+  var language: String
 }

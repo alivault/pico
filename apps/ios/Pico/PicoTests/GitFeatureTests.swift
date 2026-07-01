@@ -48,4 +48,23 @@ struct GitFeatureTests {
     #expect(app?.gitStatus == file)
     #expect(roots.contains { $0.path == "README.md" })
   }
+
+  @Test func detectsCodeFileLanguages() {
+    #expect(CodeFileLanguageDetector.detect(path: "Sources/App.swift")?.shikiLanguage == "swift")
+    #expect(CodeFileLanguageDetector.detect(path: "src/App.tsx")?.shikiLanguage == "tsx")
+    #expect(CodeFileLanguageDetector.detect(path: "Dockerfile.dev")?.shikiLanguage == "dockerfile")
+    #expect(CodeFileLanguageDetector.detect(path: "README.md")?.shikiLanguage == "markdown")
+    #expect(CodeFileLanguageDetector.detect(path: "notes.txt") == nil)
+  }
+
+  @Test func parsesShikiHighlightedHTMLIntoSegments() {
+    let html = "<span class=\"line\"><span style=\"color:var(--sh-token-keyword)\">let</span> value = &lt;tag attr=&quot;x&quot;&gt;</span>"
+
+    let segments = ShikiHighlightedHTMLParser.parse(html)
+
+    #expect(ShikiHighlightedHTMLParser.plainText(from: html) == "let value = <tag attr=\"x\">")
+    #expect(segments.first?.text == "let")
+    #expect(segments.first?.cssVariable == "--sh-token-keyword")
+    #expect(segments.last?.text == " value = <tag attr=\"x\">")
+  }
 }
