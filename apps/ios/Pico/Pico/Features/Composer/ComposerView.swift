@@ -7,6 +7,7 @@ struct ComposerView: View {
   @Bindable var model: AppModel
   @FocusState private var isPromptFocused: Bool
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
+  @State private var isShowingPhotoPicker = false
   @State private var isShowingCameraPicker = false
   @State private var isShowingFileImporter = false
   @State private var editingGitComment: ComposerGitCommentAttachment?
@@ -64,6 +65,12 @@ struct ComposerView: View {
       allowsMultipleSelection: true,
       onCompletion: addFileImages
     )
+    .photosPicker(
+      isPresented: $isShowingPhotoPicker,
+      selection: $selectedPhotoItems,
+      maxSelectionCount: max(1, model.remainingComposerImageSlots),
+      matching: .images
+    )
     .onChange(of: selectedPhotoItems) {
       let items = selectedPhotoItems
       selectedPhotoItems = []
@@ -93,7 +100,7 @@ struct ComposerView: View {
 
       HStack(alignment: .center, spacing: 10) {
         ComposerAttachmentMenu(
-          selectedPhotoItems: $selectedPhotoItems,
+          isShowingPhotoPicker: $isShowingPhotoPicker,
           isShowingCameraPicker: $isShowingCameraPicker,
           isShowingFileImporter: $isShowingFileImporter,
           remainingImageSlots: model.remainingComposerImageSlots
@@ -361,7 +368,7 @@ private struct ComposerGitCommentChip: View {
 }
 
 private struct ComposerAttachmentMenu: View {
-  @Binding var selectedPhotoItems: [PhotosPickerItem]
+  @Binding var isShowingPhotoPicker: Bool
   @Binding var isShowingCameraPicker: Bool
   @Binding var isShowingFileImporter: Bool
   var remainingImageSlots: Int
@@ -373,12 +380,8 @@ private struct ComposerAttachmentMenu: View {
       }
       .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera) || remainingImageSlots == 0)
 
-      PhotosPicker(
-        selection: $selectedPhotoItems,
-        maxSelectionCount: max(1, remainingImageSlots),
-        matching: .images
-      ) {
-        Label("Photos", systemImage: "photo.on.rectangle")
+      Button("Photos", systemImage: "photo.on.rectangle") {
+        isShowingPhotoPicker = true
       }
       .disabled(remainingImageSlots == 0)
 
