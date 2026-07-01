@@ -8,6 +8,8 @@ struct PendingMessagesView: View {
 
   var messages: [PendingUserMessage]
   @Binding var isExpanded: Bool
+  var canStartQueue = false
+  var onStartQueue: () -> Void = {}
   var onReorderMessages: ([PendingUserMessage]) -> Void = { _ in }
   var onEditMessage: (PendingUserMessage, String) -> Void = { _, _ in }
   var onDeleteMessage: (PendingUserMessage) -> Void = { _ in }
@@ -73,12 +75,20 @@ struct PendingMessagesView: View {
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isExpanded ? 0 : -90))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Queue")
       .accessibilityValue(accessibilityValue)
 
+      if canStartQueue {
+        Button("Start", action: onStartQueue)
+          .font(.caption.weight(.semibold))
+          .buttonStyle(.borderedProminent)
+          .controlSize(.small)
+          .accessibilityLabel("Start queue")
+      }
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)

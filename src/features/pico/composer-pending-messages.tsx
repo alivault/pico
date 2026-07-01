@@ -39,9 +39,11 @@ function groupPendingMessages(messages: Array<PendingComposerMessage>) {
 
 type ComposerPendingMessagesProps = {
   currentPendingMessages: Array<PendingComposerMessage>
+  canStartQueue: boolean
   onEditPendingMessage: (pendingId: string, text: string) => void
   onRemovePendingMessage: (pendingId: string) => void
   onReorderPending: (pendingId: string, direction: -1 | 1) => void
+  onStartPendingQueue: () => void
 }
 
 type PendingMessageEditState = {
@@ -89,9 +91,11 @@ function pendingMessageEditReducer(
 export const ComposerPendingMessages = React.memo(
   function ComposerPendingMessages({
     currentPendingMessages,
+    canStartQueue,
     onEditPendingMessage,
     onRemovePendingMessage,
     onReorderPending,
+    onStartPendingQueue,
   }: ComposerPendingMessagesProps) {
     const [editState, dispatchEditState] = React.useReducer(
       pendingMessageEditReducer,
@@ -145,14 +149,21 @@ export const ComposerPendingMessages = React.memo(
         className="rounded-2xl border bg-card"
       >
         <AccordionItem value="pending-prompts" className="border-0">
-          <AccordionTrigger className="min-h-10 items-center gap-3 px-3 py-2 hover:no-underline">
-            <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-              <span className="truncate">Queue</span>
-              <Badge variant="outline" className="shrink-0">
-                {currentPendingMessages.length}
-              </Badge>
-            </span>
-          </AccordionTrigger>
+          <div className="flex min-h-10 items-center gap-2 px-3 py-2">
+            <AccordionTrigger className="min-h-0 flex-1 p-0 hover:no-underline">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                <span className="truncate">Queue</span>
+                <Badge variant="outline" className="shrink-0">
+                  {currentPendingMessages.length}
+                </Badge>
+              </span>
+            </AccordionTrigger>
+            {canStartQueue ? (
+              <Button size="sm" onClick={onStartPendingQueue}>
+                Start
+              </Button>
+            ) : null}
+          </div>
 
           <AccordionContent className="p-0">
             <div className="max-h-[min(34vh,320px)] overflow-y-auto border-t">

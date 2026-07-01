@@ -94,6 +94,7 @@ function buildClientManifest(): ClientManifestResponse {
         "/api/settings/hide-thinking",
         "/api/pending-message/remove",
         "/api/pending-messages/reorder",
+        "/api/pending-messages/start",
       ],
       features: [
         "sse",

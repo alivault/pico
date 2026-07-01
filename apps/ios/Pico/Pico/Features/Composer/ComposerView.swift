@@ -19,6 +19,8 @@ struct ComposerView: View {
         PendingMessagesView(
           messages: model.sessionState.pendingMessages,
           isExpanded: $isQueueExpanded,
+          canStartQueue: canStartQueue,
+          onStartQueue: startPendingQueue,
           onReorderMessages: reorderPendingMessages,
           onEditMessage: editPendingMessage,
           onDeleteMessage: deletePendingMessage
@@ -189,6 +191,13 @@ struct ComposerView: View {
     model.sessionState.streaming || model.sessionState.compacting
   }
 
+  private var canStartQueue: Bool {
+    !model.sessionState.pendingMessages.isEmpty &&
+      !model.sessionState.streaming &&
+      !model.sessionState.compacting &&
+      !model.isSubmitting
+  }
+
   private var hasPromptText: Bool {
     !model.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
@@ -256,6 +265,12 @@ struct ComposerView: View {
   private func editPendingMessage(_ message: PendingUserMessage, text: String) {
     Task {
       await model.editPendingMessage(message, text: text)
+    }
+  }
+
+  private func startPendingQueue() {
+    Task {
+      await model.startPendingQueue()
     }
   }
 

@@ -1706,6 +1706,35 @@ public final class AppModel {
   }
 
   @discardableResult
+  public func startPendingQueue() async -> Bool {
+    guard let baseURL else { return false }
+    guard !sessionState.pendingMessages.isEmpty else { return false }
+    guard !sessionState.streaming, !sessionState.compacting, !isSubmitting else {
+      return false
+    }
+
+    isSubmitting = true
+    defer { isSubmitting = false }
+
+    do {
+      let response = try await apiClient.startPendingQueue(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: requestSessionId,
+        sessionKey: requestSessionKey
+      )
+      sessionState.pendingMessages = response.pendingMessages
+      return true
+    } catch {
+      alert = AppAlert(
+        title: "Could not start queue",
+        message: Self.message(for: error)
+      )
+      return false
+    }
+  }
+
+  @discardableResult
   public func deletePendingMessage(_ message: PendingUserMessage) async -> Bool {
     guard let baseURL else { return false }
 

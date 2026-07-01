@@ -324,6 +324,7 @@ type SessionEntry = {
   pendingUserMessages: Array<PendingUserMessage>
   pendingQueueMutation: boolean
   pendingQueueDrainPromise?: Promise<void>
+  pausedPendingUserMessageIds: Set<string>
   canceledPendingUserMessageIds: Set<string>
   firstMessageHint: string
   modifiedAt?: string
@@ -2902,6 +2903,7 @@ class PicoRuntime {
       ).items,
       pendingUserMessages: [],
       pendingQueueMutation: false,
+      pausedPendingUserMessageIds: new Set(),
       canceledPendingUserMessageIds: new Set(),
       firstMessageHint: "",
       modifiedAt: undefined,
@@ -3312,8 +3314,17 @@ class PicoRuntime {
     const followUp = [...nextQueueState.followUp].filter(
       (text): text is string => typeof text === "string"
     )
-    const pending = entry.pendingUserMessages.map((message) =>
+    const allPending = entry.pendingUserMessages.map((message) =>
       clonePendingUserMessage(message)
+    )
+    const pausedPending = allPending.filter((message) =>
+      entry.pausedPendingUserMessageIds.has(message.pendingId)
+    )
+    const pending = allPending.filter(
+      (message) => !entry.pausedPendingUserMessageIds.has(message.pendingId)
+    )
+    entry.pausedPendingUserMessageIds = new Set(
+      pausedPending.map((message) => message.pendingId)
     )
 
     const steeringCounts = new Map<string, number>()
@@ -3351,7 +3362,10 @@ class PicoRuntime {
       followUpCounts.set(text, count - 1)
     }
 
-    entry.pendingUserMessages = sortPendingUserMessages(nextPending)
+    entry.pendingUserMessages = sortPendingUserMessages([
+      ...pausedPending,
+      ...nextPending,
+    ])
     return entry.pendingUserMessages
   }
 
@@ -4560,19 +4574,70 @@ class PicoRuntime {
     }
 
     activeEntry.canceledPendingUserMessageIds.delete(pendingId)
+    activeEntry.pausedPendingUserMessageIds.delete(pendingId)
     pendingMessages.splice(pendingIndex, 1)
 
     await this.replacePendingUserMessages(activeEntry, pendingMessages)
     return { ok: true, pendingId }
   }
 
+  async startPendingQueue(request: Request) {
+    const { activeEntry } = await this.resolveRequest(request)
+    if (activeEntry.pendingUserMessages.length === 0) {
+      return { ok: true, pendingMessages: [] }
+    }
+
+    if (
+      this.getEntryStreamingState(activeEntry) ||
+      activeEntry.session.isStreaming ||
+      this.getEntryCompactingState(activeEntry) ||
+      activeEntry.session.isCompacting
+    ) {
+      throw new Error(
+        "Wait for the current response to finish before starting the queue."
+      )
+    }
+
+    activeEntry.pausedPendingUserMessageIds.clear()
+    await this.drainPendingUserMessagesWhenIdle(activeEntry)
+
+    return {
+      ok: true,
+      pendingMessages: activeEntry.pendingUserMessages.map((message) => ({
+        pendingId: message.pendingId,
+        text: message.text,
+        images: message.images,
+        streamingBehavior: message.streamingBehavior,
+      })),
+    }
+  }
+
   async abort(request: Request) {
     const { activeEntry } = await this.resolveRequest(request)
     activeEntry.doneNotificationSuppressed = true
     this.clearPendingSessionDone(activeEntry)
+
+    const pendingMessages = activeEntry.pendingUserMessages.map((message) =>
+      clonePendingUserMessage(message)
+    )
+    if (pendingMessages.length > 0) {
+      for (const message of pendingMessages) {
+        activeEntry.pausedPendingUserMessageIds.add(message.pendingId)
+      }
+    }
+
+    activeEntry.pendingQueueMutation = true
+    try {
+      activeEntry.session.clearQueue?.()
+      activeEntry.pendingUserMessages = pendingMessages
+    } finally {
+      activeEntry.pendingQueueMutation = false
+    }
+
     activeEntry.session.abortCompaction?.()
     activeEntry.session.abortBranchSummary?.()
     await activeEntry.session.abort()
+    await this.broadcastEntryState(activeEntry)
     return { ok: true }
   }
 

@@ -495,6 +495,10 @@ export const AppShellComposerController = React.memo(
         void actionsRef.current.reorderPending(pendingId, direction)
       }
     )
+    const onStartPendingQueue = useStableEvent(() => {
+      if (snapshotRef.current.disabled) return
+      void actionsRef.current.startPendingQueue()
+    })
     const onRunBuiltinSlashCommand = useStableEvent(
       (name: string, args: string) => {
         if (snapshotRef.current.disabled) return
@@ -556,6 +560,7 @@ export const AppShellComposerController = React.memo(
         composerText={snapshot.composerText}
         composerSkill={snapshot.composerSkill}
         composerSyncNonce={snapshot.composerSyncNonce}
+        canStartPendingQueue={snapshot.canStartPendingQueue}
         centerMessages={centerMessages}
         contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
@@ -580,6 +585,7 @@ export const AppShellComposerController = React.memo(
         onEditPendingMessage={onEditPendingMessage}
         onRemovePendingMessage={onRemovePendingMessage}
         onReorderPending={onReorderPending}
+        onStartPendingQueue={onStartPendingQueue}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
         onSelectModel={onSelectModel}
         onSelectThinkingLevel={onSelectThinkingLevel}

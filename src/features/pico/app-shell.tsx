@@ -2285,6 +2285,7 @@ function useAppShellSessionWorkspaceView({
     editPendingMessage,
     removePendingMessage,
     reorderPending,
+    startPendingQueue,
     submitPrompt,
   } = useAppShellPromptMutations({
     viewerContextId,
@@ -2917,6 +2918,13 @@ function useAppShellSessionWorkspaceView({
   const composerSnapshot = {
     activeSessionId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
+    canStartPendingQueue:
+      !composerDisabled &&
+      pendingMessages.length > 0 &&
+      !sessionStateRef.current.streaming &&
+      !sessionStateRef.current.compacting &&
+      !awaitingFirstTurn &&
+      !isSubmitting,
     centerMessages: displaySettingsRef.current.centerMessages,
     composerDiffLineComments: displayedDiffLineComments,
     composerImages: displayedComposerImages,
@@ -2954,6 +2962,7 @@ function useAppShellSessionWorkspaceView({
     removePendingMessage,
     reorderPending,
     reorderPendingDraftFollowUp,
+    startPendingQueue,
     runBuiltinSlashCommand,
     setModel,
     setThinkingLevel,

@@ -33,6 +33,7 @@ import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  normalizePromptImage,
   normalizeStoredDirectoryList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
@@ -77,6 +78,23 @@ type PendingComposerMessage = {
 }
 
 type SessionStateStore = PicoStore<SessionState>
+
+function pendingMessagesFromResponse(
+  response: PendingMessagesResponse
+): Array<PendingComposerMessage> | null {
+  if (!("ok" in response) || !response.ok) return null
+
+  return response.pendingMessages.map((message) => ({
+    pendingId: message.pendingId,
+    text: message.text,
+    images: message.images.flatMap((image) => {
+      const normalizedImage = normalizePromptImage(image)
+      return normalizedImage ? [normalizedImage] : []
+    }),
+    streamingBehavior:
+      message.streamingBehavior === "steer" ? "steer" : "followUp",
+  }))
+}
 
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
@@ -1555,6 +1573,58 @@ export function useAppShellPromptMutations({
     ]
   )
 
+  const startPendingQueueMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewerContextId) {
+        throw new Error("Viewer context unavailable")
+      }
+
+      return await fetchJson<PendingMessagesResponse>(
+        buildCurrentSessionRequestUrl("/api/pending-messages/start", {
+          contextId: viewerContextId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
+        }),
+        { method: "POST" }
+      )
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.sessionTree(
+          viewerContextId,
+          picoSessionScopeKey(sessionStateRef.current)
+        ),
+        refetchType: "active",
+      })
+    },
+  })
+
+  const startPendingQueue = React.useCallback(async () => {
+    if (!viewerContextId) return
+    if (pendingMessagesRef.current.length === 0) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await startPendingQueueMutation.mutateAsync()
+      const nextPendingMessages = pendingMessagesFromResponse(response)
+      if (nextPendingMessages) {
+        updatePendingMessages(() => nextPendingMessages)
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start queue"
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [
+    pendingMessagesRef,
+    setIsSubmitting,
+    startPendingQueueMutation,
+    updatePendingMessages,
+    viewerContextId,
+  ])
+
   const removePendingMessageMutation = useMutation({
     mutationFn: async (pendingId: string) => {
       if (!viewerContextId) {
@@ -1655,6 +1725,7 @@ export function useAppShellPromptMutations({
     editPendingMessage,
     removePendingMessage,
     reorderPending,
+    startPendingQueue,
     submitPrompt,
   }
 }

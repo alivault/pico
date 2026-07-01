@@ -680,6 +680,22 @@ public actor PicoAPIClient {
     )
   }
 
+  public func startPendingQueue(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?
+  ) async throws -> PendingMessagesResponse {
+    try await send(
+      endpoint: .pendingMessagesStart,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey
+    )
+  }
+
   public func removePendingMessage(
     baseURL: URL,
     contextId: String,

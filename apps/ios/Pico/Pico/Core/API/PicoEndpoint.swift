@@ -34,6 +34,7 @@ public enum PicoEndpoint: Sendable {
   case highlight
   case pathCompletions
   case pendingMessagesReorder
+  case pendingMessagesStart
   case pendingMessageRemove
   case slashCommand
   case model
@@ -113,6 +114,8 @@ public enum PicoEndpoint: Sendable {
       "/api/path-completions"
     case .pendingMessagesReorder:
       "/api/pending-messages/reorder"
+    case .pendingMessagesStart:
+      "/api/pending-messages/start"
     case .pendingMessageRemove:
       "/api/pending-message/remove"
     case .slashCommand:

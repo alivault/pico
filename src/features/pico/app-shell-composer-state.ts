@@ -101,6 +101,7 @@ export type ComposerDiffLineComment = {
 export type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
+  canStartPendingQueue: boolean
   centerMessages: boolean
   composerDiffLineComments: Array<ComposerDiffLineComment>
   composerImages: Array<PromptImage>
@@ -197,6 +198,7 @@ export function sameAppShellComposerSnapshot(
   return (
     left.activeSessionId === right.activeSessionId &&
     left.awaitingFirstTurn === right.awaitingFirstTurn &&
+    left.canStartPendingQueue === right.canStartPendingQueue &&
     left.centerMessages === right.centerMessages &&
     sameComposerDiffLineComments(
       left.composerDiffLineComments,
@@ -230,6 +232,7 @@ export type AppShellComposerActions = {
   removeDiffLineComment: (id: string) => void
   removePendingDraftFollowUp: (pendingId: string) => boolean
   removePendingMessage: (pendingId: string) => void | Promise<unknown>
+  startPendingQueue: () => void | Promise<unknown>
   reorderPending: (
     pendingId: string,
     direction: -1 | 1
@@ -253,6 +256,7 @@ export function createInitialAppShellComposerSnapshot(
   return {
     activeSessionId: undefined,
     awaitingFirstTurn: false,
+    canStartPendingQueue: false,
     centerMessages: false,
     composerDiffLineComments: EMPTY_COMPOSER_DIFF_LINE_COMMENTS,
     composerImages: EMPTY_COMPOSER_IMAGES,

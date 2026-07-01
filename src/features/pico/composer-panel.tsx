@@ -72,6 +72,7 @@ type ComposerPanelProps = {
   composerText: string
   composerSkill?: string
   composerSyncNonce: number
+  canStartPendingQueue: boolean
   centerMessages: boolean
   contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: ComposerDisplaySettingsStore
@@ -94,6 +95,7 @@ type ComposerPanelProps = {
   onEditPendingMessage: (pendingId: string, text: string) => void
   onRemovePendingMessage: (pendingId: string) => void
   onReorderPending: (pendingId: string, direction: -1 | 1) => void
+  onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
   onSelectModel: (value: string) => void
   onSelectThinkingLevel: (level: string) => void
@@ -345,6 +347,7 @@ export function ComposerPanel({
   composerText,
   composerSkill,
   composerSyncNonce,
+  canStartPendingQueue,
   centerMessages,
   contextUsageStore,
   displaySettingsStore,
@@ -367,6 +370,7 @@ export function ComposerPanel({
   onEditPendingMessage,
   onRemovePendingMessage,
   onReorderPending,
+  onStartPendingQueue,
   onRunBuiltinSlashCommand,
   onSelectModel,
   onSelectThinkingLevel,
@@ -417,9 +421,11 @@ export function ComposerPanel({
 
         <ComposerPendingMessages
           currentPendingMessages={currentPendingMessages}
+          canStartQueue={canStartPendingQueue}
           onEditPendingMessage={onEditPendingMessage}
           onRemovePendingMessage={onRemovePendingMessage}
           onReorderPending={onReorderPending}
+          onStartPendingQueue={onStartPendingQueue}
         />
 
         <div className="overflow-visible rounded-[18px] border bg-card">
