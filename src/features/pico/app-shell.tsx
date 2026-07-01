@@ -2925,6 +2925,7 @@ function useAppShellSessionWorkspaceView({
     composerText: displayedComposerText,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
+    isCompacting: composerDisabled ? false : sessionStateRef.current.compacting,
     isStreaming: composerDisabled ? false : sessionStateRef.current.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
     viewerContextId,

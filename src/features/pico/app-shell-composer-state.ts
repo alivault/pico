@@ -109,6 +109,7 @@ export type AppShellComposerSnapshot = {
   composerText: string
   currentPendingMessages: Array<PendingComposerMessage>
   disabled: boolean
+  isCompacting: boolean
   isStreaming: boolean
   isSubmitting: boolean
   viewerContextId: string
@@ -205,6 +206,7 @@ export function sameAppShellComposerSnapshot(
     left.composerSyncNonce === right.composerSyncNonce &&
     left.composerText === right.composerText &&
     left.disabled === right.disabled &&
+    left.isCompacting === right.isCompacting &&
     left.isStreaming === right.isStreaming &&
     left.isSubmitting === right.isSubmitting &&
     left.viewerContextId === right.viewerContextId &&
@@ -259,6 +261,7 @@ export function createInitialAppShellComposerSnapshot(
     composerText: "",
     currentPendingMessages: EMPTY_COMPOSER_PENDING_MESSAGES,
     disabled: false,
+    isCompacting: false,
     isStreaming: false,
     isSubmitting: false,
     viewerContextId,

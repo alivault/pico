@@ -14,6 +14,7 @@ struct ConversationScreen: View {
   @State private var isShowingDeleteConfirmation = false
   @State private var isShowingFilesDrawer = false
   @State private var isShowingHeaderCommitSheet = false
+  @State private var isQueueExpanded = false
   @State private var headerCommitCwd: String?
   @State private var headerCommitStatus: GitStatusSummary?
   @State private var headerCommitFiles: [GitChangeFile] = []
@@ -197,7 +198,7 @@ struct ConversationScreen: View {
   }
 
   private var composerOverlay: some View {
-    ComposerView(model: model)
+    ComposerView(model: model, isQueueExpanded: $isQueueExpanded)
       .padding(.bottom, isKeyboardVisible ? 8 : 0)
   }
 

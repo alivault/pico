@@ -8,6 +8,7 @@ struct ComposerView: View {
   @FocusState private var isPromptFocused: Bool
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
   @State private var isShowingPhotoPicker = false
+  @Binding var isQueueExpanded: Bool
   @State private var isShowingCameraPicker = false
   @State private var isShowingFileImporter = false
   @State private var editingGitComment: ComposerGitCommentAttachment?
@@ -17,6 +18,7 @@ struct ComposerView: View {
       if !model.sessionState.pendingMessages.isEmpty {
         PendingMessagesView(
           messages: model.sessionState.pendingMessages,
+          isExpanded: $isQueueExpanded,
           onReorderMessages: reorderPendingMessages,
           onEditMessage: editPendingMessage,
           onDeleteMessage: deletePendingMessage
@@ -114,7 +116,7 @@ struct ComposerView: View {
           streamingBehaviorButtons
         }
 
-        if !model.sessionState.streaming {
+        if !isQueueingPrompt {
           sendButton
         }
 
@@ -180,7 +182,11 @@ struct ComposerView: View {
   }
 
   private var showsStreamingBehaviorButtons: Bool {
-    model.sessionState.streaming && hasPromptContent
+    isQueueingPrompt && hasPromptContent
+  }
+
+  private var isQueueingPrompt: Bool {
+    model.sessionState.streaming || model.sessionState.compacting
   }
 
   private var hasPromptText: Bool {
@@ -223,7 +229,7 @@ struct ComposerView: View {
   }
 
   private func submit() {
-    submit(streamingBehavior: model.sessionState.streaming ? .steer : nil)
+    submit(streamingBehavior: isQueueingPrompt ? .steer : nil)
   }
 
   private func submit(streamingBehavior: StreamingBehavior?) {
@@ -869,5 +875,5 @@ private struct ComposerDirectoryChip: View {
 }
 
 #Preview {
-  ComposerView(model: AppModel())
+  ComposerView(model: AppModel(), isQueueExpanded: .constant(false))
 }

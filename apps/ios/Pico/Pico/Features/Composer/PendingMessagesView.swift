@@ -7,10 +7,10 @@ struct PendingMessagesView: View {
   private static let estimatedSectionHeaderHeight: CGFloat = 30
 
   var messages: [PendingUserMessage]
+  @Binding var isExpanded: Bool
   var onReorderMessages: ([PendingUserMessage]) -> Void = { _ in }
   var onEditMessage: (PendingUserMessage, String) -> Void = { _, _ in }
   var onDeleteMessage: (PendingUserMessage) -> Void = { _ in }
-  @State private var isExpanded = false
   @State private var pendingOrder: [String] = []
   @State private var pendingBehaviorOverrides: [String: StreamingBehavior] = [:]
   @State private var editingMessage: PendingUserMessage?
@@ -32,7 +32,6 @@ struct PendingMessagesView: View {
         .regular,
         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
       )
-      .padding(.horizontal)
       .onAppear {
         syncPendingOrder(force: true)
       }
@@ -250,151 +249,253 @@ private struct PendingMessagesTableView: UIViewRepresentable {
     Coordinator(parent: self)
   }
 
-  func makeUIView(context: Context) -> UITableView {
-    let tableView = UITableView(frame: .zero, style: .plain)
-    tableView.register(
-      UITableViewCell.self,
-      forCellReuseIdentifier: Coordinator.messageReuseIdentifier
+  func makeUIView(context: Context) -> UICollectionView {
+    let coordinator = context.coordinator
+    var configuration = UICollectionLayoutListConfiguration(appearance: .plain)
+    configuration.backgroundColor = .clear
+    configuration.showsSeparators = true
+    configuration.headerMode = .supplementary
+    configuration.footerMode = .none
+    configuration.headerTopPadding = 0
+    configuration.trailingSwipeActionsConfigurationProvider = {
+      [weak coordinator] indexPath in
+      coordinator?.swipeActions(at: indexPath)
+    }
+
+    let layout = UICollectionViewCompositionalLayout.list(
+      using: configuration
     )
-    tableView.register(
-      UITableViewHeaderFooterView.self,
-      forHeaderFooterViewReuseIdentifier: Coordinator.headerReuseIdentifier
+    let collectionView = UICollectionView(
+      frame: .zero,
+      collectionViewLayout: layout
     )
-    tableView.dataSource = context.coordinator
-    tableView.delegate = context.coordinator
-    tableView.dragDelegate = context.coordinator
-    tableView.dropDelegate = context.coordinator
-    tableView.dragInteractionEnabled = true
-    tableView.allowsSelection = false
-    tableView.backgroundColor = .clear
-    tableView.separatorStyle = .singleLine
-    tableView.separatorColor = UIColor.separator.withAlphaComponent(0.45)
-    tableView.separatorInset = UIEdgeInsets(
-      top: 0,
-      left: 12,
-      bottom: 0,
-      right: 0
+    collectionView.backgroundColor = .clear
+    collectionView.alwaysBounceVertical = false
+    collectionView.keyboardDismissMode = .interactive
+    collectionView.dragInteractionEnabled = true
+    collectionView.allowsSelection = false
+    collectionView.delegate = coordinator
+
+    let reorderGesture = UILongPressGestureRecognizer(
+      target: coordinator,
+      action: #selector(Coordinator.handleLongPress(_:))
     )
-    tableView.layoutMargins = .zero
-    tableView.contentInset = .zero
-    tableView.scrollIndicatorInsets = .zero
-    tableView.keyboardDismissMode = .interactive
-    tableView.estimatedRowHeight = 64
-    tableView.rowHeight = UITableView.automaticDimension
-    tableView.estimatedSectionHeaderHeight = 30
-    tableView.sectionHeaderHeight = UITableView.automaticDimension
-    tableView.sectionFooterHeight = 0
-    tableView.estimatedSectionFooterHeight = 0
-    tableView.tableFooterView = UIView(frame: .zero)
-    tableView.sectionHeaderTopPadding = 0
-    return tableView
+    reorderGesture.minimumPressDuration = 0.35
+    reorderGesture.cancelsTouchesInView = false
+    reorderGesture.delegate = coordinator
+    collectionView.addGestureRecognizer(reorderGesture)
+    collectionView.contentInset = .zero
+    collectionView.scrollIndicatorInsets = .zero
+
+    coordinator.configureDataSource(for: collectionView)
+    coordinator.apply(
+      sections: sections,
+      to: collectionView,
+      animatingDifferences: false
+    )
+    return collectionView
   }
 
-  func updateUIView(_ tableView: UITableView, context: Context) {
+  func updateUIView(_ collectionView: UICollectionView, context: Context) {
     context.coordinator.parent = self
-    tableView.isScrollEnabled = isScrollEnabled
-    tableView.reloadData()
+    collectionView.isScrollEnabled = isScrollEnabled
+    context.coordinator.apply(sections: sections, to: collectionView)
   }
 
+  private static func signature(for sections: [PendingMessagesSection]) -> String {
+    sections.map { section in
+      let messages = section.messages.map { message in
+        [
+          message.pendingId,
+          message.streamingBehavior.rawValue,
+          message.text,
+          String(message.images.count),
+        ].joined(separator: "\u{1f}")
+      }
+      .joined(separator: "\u{1e}")
+
+      return [section.id, section.behavior.rawValue, messages]
+        .joined(separator: "\u{1d}")
+    }
+    .joined(separator: "\u{1c}")
+  }
+
+  @MainActor
   final class Coordinator: NSObject,
-    UITableViewDataSource,
-    UITableViewDelegate,
-    UITableViewDragDelegate,
-    UITableViewDropDelegate {
-    static let messageReuseIdentifier = "PendingMessageCell"
-    static let headerReuseIdentifier = "PendingMessageHeader"
+    UICollectionViewDelegate,
+    UIGestureRecognizerDelegate {
+    typealias DataSource = UICollectionViewDiffableDataSource<String, String>
+    typealias Snapshot = NSDiffableDataSourceSnapshot<String, String>
 
     var parent: PendingMessagesTableView
+    private var sections: [PendingMessagesSection] = []
+    private var sectionsSignature = ""
+    private var messageById: [String: PendingUserMessage] = [:]
+    private var sectionById: [String: PendingMessagesSection] = [:]
+    private var dataSource: DataSource?
+    private var isInteractiveMoving = false
+    private var deferredSections: [PendingMessagesSection]?
 
     init(parent: PendingMessagesTableView) {
       self.parent = parent
     }
 
-    func numberOfSections(in tableView: UITableView) -> Int {
-      parent.sections.count
-    }
-
-    func tableView(
-      _ tableView: UITableView,
-      numberOfRowsInSection section: Int
-    ) -> Int {
-      guard let section = sectionModel(at: section) else { return 0 }
-      return max(1, section.messages.count)
-    }
-
-    func tableView(
-      _ tableView: UITableView,
-      cellForRowAt indexPath: IndexPath
-    ) -> UITableViewCell {
-      let cell = tableView.dequeueReusableCell(
-        withIdentifier: Self.messageReuseIdentifier,
-        for: indexPath
-      )
-      cell.selectionStyle = .none
-      cell.backgroundColor = .clear
-      cell.contentView.backgroundColor = .clear
-      cell.backgroundConfiguration = .clear()
-      cell.preservesSuperviewLayoutMargins = false
-      cell.layoutMargins = .zero
-      cell.separatorInset = UIEdgeInsets(
-        top: 0,
-        left: 12,
-        bottom: 0,
-        right: 0
-      )
-
-      if let message = message(at: indexPath) {
-        cell.contentConfiguration = UIHostingConfiguration {
-          PendingMessageTableRow(message: message)
+    func configureDataSource(for collectionView: UICollectionView) {
+      let cellRegistration = UICollectionView.CellRegistration<
+        UICollectionViewListCell,
+        String
+      > { [weak self] cell, _, pendingId in
+        if let message = self?.messageById[pendingId] {
+          cell.contentConfiguration = UIHostingConfiguration {
+            PendingMessageTableRow(message: message)
+          }
+          .margins(.all, 0)
+        } else if let section = self?.placeholderSection(for: pendingId) {
+          cell.contentConfiguration = UIHostingConfiguration {
+            PendingEmptySectionRow(text: section.emptyLabel)
+          }
+          .margins(.all, 0)
+        } else {
+          cell.contentConfiguration = nil
         }
-        .margins(.all, 0)
-      } else if let section = sectionModel(at: indexPath.section) {
-        cell.contentConfiguration = UIHostingConfiguration {
-          PendingEmptySectionRow(text: section.emptyLabel)
-        }
-        .margins(.all, 0)
+
+        cell.backgroundConfiguration = .clear()
+        cell.accessories = []
       }
 
-      return cell
-    }
+      let headerRegistration = UICollectionView.SupplementaryRegistration<
+        UICollectionViewListCell
+      >(
+        elementKind: UICollectionView.elementKindSectionHeader
+      ) { [weak self] supplementaryView, _, indexPath in
+        guard let self,
+              let section = section(at: indexPath.section) else {
+          supplementaryView.contentConfiguration = nil
+          supplementaryView.backgroundConfiguration = .clear()
+          return
+        }
 
-    func tableView(
-      _ tableView: UITableView,
-      viewForHeaderInSection section: Int
-    ) -> UIView? {
-      guard let section = sectionModel(at: section) else { return nil }
-      let header = tableView.dequeueReusableHeaderFooterView(
-        withIdentifier: Self.headerReuseIdentifier
-      ) ?? UITableViewHeaderFooterView(
-        reuseIdentifier: Self.headerReuseIdentifier
-      )
-      header.backgroundConfiguration = .clear()
-      header.contentConfiguration = UIHostingConfiguration {
-        PendingSectionHeaderRow(section: section)
+        supplementaryView.contentConfiguration = UIHostingConfiguration {
+          PendingSectionHeaderRow(section: section)
+        }
+        .margins(.all, 0)
+        supplementaryView.backgroundConfiguration = .clear()
+        supplementaryView.accessories = []
       }
-      .margins(.all, 0)
-      return header
+
+      let dataSource = DataSource(collectionView: collectionView) {
+        collectionView,
+        indexPath,
+        pendingId in
+        collectionView.dequeueConfiguredReusableCell(
+          using: cellRegistration,
+          for: indexPath,
+          item: pendingId
+        )
+      }
+
+      dataSource.supplementaryViewProvider = {
+        collectionView,
+        elementKind,
+        indexPath in
+        switch elementKind {
+        case UICollectionView.elementKindSectionHeader:
+          collectionView.dequeueConfiguredReusableSupplementary(
+            using: headerRegistration,
+            for: indexPath
+          )
+        default:
+          nil
+        }
+      }
+
+      var reorderingHandlers = dataSource.reorderingHandlers
+      reorderingHandlers.canReorderItem = { [weak self] pendingId in
+        self?.messageById[pendingId] != nil
+      }
+      reorderingHandlers.didReorder = { [weak self] transaction in
+        self?.handleReorder(transaction.finalSnapshot)
+      }
+      dataSource.reorderingHandlers = reorderingHandlers
+
+      self.dataSource = dataSource
     }
 
-    func tableView(
-      _ tableView: UITableView,
-      heightForFooterInSection section: Int
-    ) -> CGFloat {
-      0.01
+    func apply(
+      sections newSections: [PendingMessagesSection],
+      to collectionView: UICollectionView,
+      animatingDifferences: Bool = false
+    ) {
+      let nextSignature = PendingMessagesTableView.signature(for: newSections)
+      guard nextSignature != sectionsSignature else { return }
+
+      guard !isInteractiveMoving else {
+        deferredSections = newSections
+        return
+      }
+
+      sections = newSections
+      rebuildIndexes()
+      sectionsSignature = nextSignature
+      dataSource?.apply(
+        snapshot(for: newSections),
+        animatingDifferences: animatingDifferences
+      )
     }
 
-    func tableView(
-      _ tableView: UITableView,
-      canEditRowAt indexPath: IndexPath
+    @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+      guard let collectionView = gesture.view as? UICollectionView else {
+        return
+      }
+
+      let location = gesture.location(in: collectionView)
+      switch gesture.state {
+      case .began:
+        guard let indexPath = collectionView.indexPathForItem(at: location),
+              let pendingId = dataSource?.itemIdentifier(for: indexPath),
+              messageById[pendingId] != nil,
+              collectionView.beginInteractiveMovementForItem(
+                at: indexPath
+              ) else {
+          return
+        }
+        isInteractiveMoving = true
+      case .changed:
+        collectionView.updateInteractiveMovementTargetPosition(location)
+      case .ended:
+        collectionView.endInteractiveMovement()
+        finishInteractiveMovement(in: collectionView)
+      case .cancelled, .failed:
+        collectionView.cancelInteractiveMovement()
+        finishInteractiveMovement(in: collectionView)
+      default:
+        break
+      }
+    }
+
+    func gestureRecognizerShouldBegin(
+      _ gestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-      message(at: indexPath) != nil
+      guard let collectionView = gestureRecognizer.view as? UICollectionView else {
+        return true
+      }
+
+      let location = gestureRecognizer.location(in: collectionView)
+      guard let indexPath = collectionView.indexPathForItem(at: location) else {
+        return false
+      }
+      guard let pendingId = dataSource?.itemIdentifier(for: indexPath) else {
+        return false
+      }
+      return messageById[pendingId] != nil
     }
 
-    func tableView(
-      _ tableView: UITableView,
-      trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
-    ) -> UISwipeActionsConfiguration? {
-      guard let message = message(at: indexPath) else { return nil }
+    func swipeActions(at indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+      guard let dataSource,
+            let pendingId = dataSource.itemIdentifier(for: indexPath),
+            let message = messageById[pendingId] else {
+        return nil
+      }
 
       let deleteAction = UIContextualAction(
         style: .destructive,
@@ -423,144 +524,84 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       return configuration
     }
 
-    func tableView(
-      _ tableView: UITableView,
-      itemsForBeginning session: UIDragSession,
-      at indexPath: IndexPath
-    ) -> [UIDragItem] {
-      guard let message = message(at: indexPath) else { return [] }
-      let itemProvider = NSItemProvider(object: message.pendingId as NSString)
-      let item = UIDragItem(itemProvider: itemProvider)
-      item.localObject = message.pendingId
-      return [item]
-    }
-
-    func tableView(
-      _ tableView: UITableView,
-      canHandle session: UIDropSession
-    ) -> Bool {
-      session.localDragSession != nil
-    }
-
-    func tableView(
-      _ tableView: UITableView,
-      dropSessionDidUpdate session: UIDropSession,
-      withDestinationIndexPath destinationIndexPath: IndexPath?
-    ) -> UITableViewDropProposal {
-      guard session.localDragSession != nil else {
-        return UITableViewDropProposal(operation: .cancel)
-      }
-
-      return UITableViewDropProposal(
-        operation: .move,
-        intent: .insertAtDestinationIndexPath
-      )
-    }
-
-    func tableView(
-      _ tableView: UITableView,
-      performDropWith coordinator: UITableViewDropCoordinator
-    ) {
-      guard let dropItem = coordinator.items.first,
-            let pendingId = dropItem.dragItem.localObject as? String,
-            let destination = normalizedDestinationIndexPath(
-              coordinator.destinationIndexPath,
-              moving: pendingId
-            ) else {
-        return
-      }
-
-      let nextMessages = reorderedMessages(
-        moving: pendingId,
-        to: destination
-      )
-      parent.onReorderMessages(nextMessages)
-      coordinator.drop(dropItem.dragItem, toRowAt: destination)
-    }
-
-    private func sectionModel(at index: Int) -> PendingMessagesSection? {
-      guard parent.sections.indices.contains(index) else { return nil }
-      return parent.sections[index]
-    }
-
-    private func message(at indexPath: IndexPath) -> PendingUserMessage? {
-      guard let section = sectionModel(at: indexPath.section),
-            section.messages.indices.contains(indexPath.row) else {
-        return nil
-      }
-      return section.messages[indexPath.row]
-    }
-
-    private func indexPath(for pendingId: String) -> IndexPath? {
-      for sectionIndex in parent.sections.indices {
-        guard let row = parent.sections[sectionIndex].messages.firstIndex(
-          where: { $0.pendingId == pendingId }
-        ) else {
-          continue
+    private func handleReorder(_ finalSnapshot: Snapshot) {
+      var nextSections = sections
+      for sectionIndex in nextSections.indices {
+        let sectionId = nextSections[sectionIndex].id
+        let itemIds = finalSnapshot.itemIdentifiers(inSection: sectionId)
+        nextSections[sectionIndex].messages = itemIds.compactMap { pendingId in
+          guard var message = messageById[pendingId] else { return nil }
+          message.streamingBehavior = nextSections[sectionIndex].behavior
+          return message
         }
-        return IndexPath(row: row, section: sectionIndex)
       }
-      return nil
+
+      sections = nextSections
+      rebuildIndexes()
+      sectionsSignature = PendingMessagesTableView.signature(for: nextSections)
+      parent.onReorderMessages(nextSections.flatMap(\.messages))
     }
 
-    private func normalizedDestinationIndexPath(
-      _ proposedIndexPath: IndexPath?,
-      moving pendingId: String
-    ) -> IndexPath? {
-      guard !parent.sections.isEmpty,
-            indexPath(for: pendingId) != nil else {
-        return nil
-      }
+    private func finishInteractiveMovement(in collectionView: UICollectionView) {
+      isInteractiveMoving = false
+      guard let deferredSections else { return }
 
-      let proposedSection = proposedIndexPath?.section ?? 0
-      let sectionIndex = min(
-        max(0, proposedSection),
-        parent.sections.count - 1
+      self.deferredSections = nil
+      apply(
+        sections: deferredSections,
+        to: collectionView,
+        animatingDifferences: false
       )
-      let messageCount = parent.sections[sectionIndex].messages.count
-      let proposedRow = proposedIndexPath?.row ?? messageCount
-      let row = min(max(0, proposedRow), messageCount)
-      return IndexPath(row: row, section: sectionIndex)
     }
 
-    private func reorderedMessages(
-      moving pendingId: String,
-      to destination: IndexPath
-    ) -> [PendingUserMessage] {
-      var nextSections = parent.sections
-      guard let sourceSectionIndex = nextSections.firstIndex(where: {
-              section in
-              section.messages.contains { $0.pendingId == pendingId }
-            }),
-            let sourceRow = nextSections[sourceSectionIndex].messages
-              .firstIndex(where: { $0.pendingId == pendingId }) else {
-        return parent.sections.flatMap(\.messages)
+    private func snapshot(for sections: [PendingMessagesSection]) -> Snapshot {
+      var snapshot = Snapshot()
+      snapshot.appendSections(sections.map(\.id))
+      for section in sections {
+        let itemIds = section.messages.isEmpty
+          ? [Self.placeholderId(for: section.id)]
+          : section.messages.map(\.pendingId)
+        snapshot.appendItems(itemIds, toSection: section.id)
       }
+      return snapshot
+    }
 
-      var movingMessage = nextSections[sourceSectionIndex].messages.remove(
-        at: sourceRow
-      )
-      let destinationSectionIndex = min(
-        max(0, destination.section),
-        nextSections.count - 1
-      )
-      movingMessage.streamingBehavior = nextSections[destinationSectionIndex]
-        .behavior
-
-      var destinationRow = min(
-        max(0, destination.row),
-        nextSections[destinationSectionIndex].messages.count
-      )
-      if destinationSectionIndex == sourceSectionIndex,
-         sourceRow < destinationRow {
-        destinationRow -= 1
+    private func rebuildIndexes() {
+      messageById = [:]
+      sectionById = [:]
+      for section in sections {
+        sectionById[section.id] = section
+        for message in section.messages {
+          messageById[message.pendingId] = message
+        }
       }
+    }
 
-      nextSections[destinationSectionIndex].messages.insert(
-        movingMessage,
-        at: destinationRow
-      )
-      return nextSections.flatMap(\.messages)
+    func collectionView(
+      _ collectionView: UICollectionView,
+      targetIndexPathForMoveOfItemFromOriginalIndexPath originalIndexPath: IndexPath,
+      atCurrentIndexPath currentIndexPath: IndexPath,
+      toProposedIndexPath proposedIndexPath: IndexPath
+    ) -> IndexPath {
+      proposedIndexPath
+    }
+
+    private func section(at index: Int) -> PendingMessagesSection? {
+      guard sections.indices.contains(index) else { return nil }
+      return sections[index]
+    }
+
+    private func placeholderSection(for itemId: String) -> PendingMessagesSection? {
+      guard itemId.hasPrefix(Self.placeholderPrefix) else { return nil }
+
+      let sectionId = String(itemId.dropFirst(Self.placeholderPrefix.count))
+      return sectionById[sectionId]
+    }
+
+    private static let placeholderPrefix = "__pico_pending_empty_section__:"
+
+    private static func placeholderId(for sectionId: String) -> String {
+      "\(placeholderPrefix)\(sectionId)"
     }
   }
 }
@@ -617,6 +658,7 @@ private struct PendingMessageTableRow: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.secondary.opacity(0.08))
     .contentShape(Rectangle())
     .accessibilityHint(
       "Swipe for edit and delete actions. Long-press and drag to reorder."
@@ -729,5 +771,5 @@ private struct PendingMessageEditSheet: View {
 }
 
 #Preview {
-  PendingMessagesView(messages: [])
+  PendingMessagesView(messages: [], isExpanded: .constant(false))
 }

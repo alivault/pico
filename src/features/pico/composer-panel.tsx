@@ -77,6 +77,7 @@ type ComposerPanelProps = {
   displaySettingsStore: ComposerDisplaySettingsStore
   sessionStore: ComposerSessionStore
   isSubmitting: boolean
+  isCompacting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
   disabled?: boolean
@@ -116,6 +117,7 @@ type ComposerPromptEditorProps = {
   composerSkill?: string
   composerSyncNonce: number
   isSubmitting: boolean
+  isCompacting: boolean
   isStreaming: boolean
   awaitingFirstTurn: boolean
   disabled?: boolean
@@ -348,6 +350,7 @@ export function ComposerPanel({
   displaySettingsStore,
   sessionStore,
   isSubmitting,
+  isCompacting,
   isStreaming,
   awaitingFirstTurn,
   disabled = false,
@@ -427,6 +430,7 @@ export function ComposerPanel({
             composerSkill={composerSkill}
             composerSyncNonce={composerSyncNonce}
             isSubmitting={isSubmitting}
+            isCompacting={isCompacting}
             isStreaming={isStreaming}
             awaitingFirstTurn={awaitingFirstTurn}
             disabled={disabled}
@@ -529,6 +533,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   composerSkill,
   composerSyncNonce,
   isSubmitting,
+  isCompacting,
   isStreaming,
   awaitingFirstTurn,
   disabled = false,
@@ -682,7 +687,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     hasDraftText ||
     composerDiffLineComments.length > 0 ||
     composerImages.length > 0
-  const responseInFlight = isStreaming || awaitingFirstTurn || isSubmitting
+  const responseInFlight =
+    isStreaming || isCompacting || awaitingFirstTurn || isSubmitting
   const acceptFollowUps = responseInFlight
   const setAssistPointerSelectionSuppressedValue = (next: boolean) => {
     assistPointerSelectionSuppressedRef.current = next

@@ -561,6 +561,7 @@ export const AppShellComposerController = React.memo(
         displaySettingsStore={displaySettingsStore}
         sessionStore={sessionStore}
         isSubmitting={snapshot.isSubmitting}
+        isCompacting={snapshot.isCompacting}
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
         disabled={snapshot.disabled}

@@ -1020,7 +1020,11 @@ export function useAppShellPromptMutations({
 
       const treatAsQueuedPrompt = options?.forceFirstPrompt
         ? false
-        : Boolean(currentSessionState.streaming || awaitingFirstTurnRef.current)
+        : Boolean(
+            currentSessionState.streaming ||
+            currentSessionState.compacting ||
+            awaitingFirstTurnRef.current
+          )
       const normalizedStreamingBehavior = treatAsQueuedPrompt
         ? normalizeQueuedStreamingBehavior(streamingBehavior)
         : undefined

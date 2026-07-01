@@ -323,6 +323,7 @@ type SessionEntry = {
   retainedConversationItems: Array<ConversationItem>
   pendingUserMessages: Array<PendingUserMessage>
   pendingQueueMutation: boolean
+  pendingQueueDrainPromise?: Promise<void>
   canceledPendingUserMessageIds: Set<string>
   firstMessageHint: string
   modifiedAt?: string
@@ -3483,6 +3484,111 @@ class PicoRuntime {
     return entry.pendingUserMessages
   }
 
+  private drainPendingUserMessagesWhenIdle(entry: SessionEntry) {
+    if (entry.pendingQueueDrainPromise) {
+      return entry.pendingQueueDrainPromise
+    }
+
+    const drainPromise = this.runSerializedPromptRequest(entry, async () => {
+      if (
+        this.getEntryStreamingState(entry) ||
+        entry.session.isStreaming ||
+        this.getEntryCompactingState(entry) ||
+        entry.session.isCompacting
+      ) {
+        return
+      }
+
+      const pendingMessages = sortPendingUserMessages(
+        entry.pendingUserMessages.map((message) =>
+          clonePendingUserMessage(message)
+        )
+      )
+      const pendingMessage = pendingMessages[0]
+      if (!pendingMessage) return
+
+      const remainingMessages = pendingMessages.slice(1)
+      const message = pendingMessage.text
+      const images = normalizePromptImages(pendingMessage.images)
+      if (!message.trim() && images.length === 0) {
+        await this.replacePendingUserMessages(entry, remainingMessages)
+        return
+      }
+
+      entry.streamingState = true
+      this.markSessionUserMessage(entry)
+      entry.pendingUserMessages = remainingMessages
+      await this.broadcastEntryState(entry)
+      await this.broadcastSessionsAll()
+
+      this.broadcastToViewers(entry.key, {
+        type: "user_message",
+        message,
+        images,
+        queued: false,
+      })
+
+      let promptPreflightComplete: (() => void) | undefined
+      let promptPreflightSettled = false
+      const promptPreflight = new Promise<void>((resolve) => {
+        promptPreflightComplete = resolve
+      })
+      const settlePromptPreflight = () => {
+        if (promptPreflightSettled) return
+        promptPreflightSettled = true
+        promptPreflightComplete?.()
+      }
+      const promptOptions = images.length > 0 ? { images } : undefined
+      const promptPromise = entry.session.prompt(message, {
+        ...promptOptions,
+        preflightResult: settlePromptPreflight,
+      })
+      const finishPromptIfIdle = async () => {
+        if (!entry.streamingState || entry.session.isStreaming) {
+          return
+        }
+
+        entry.streamingState = false
+        this.reconcilePendingUserMessages(entry)
+        await this.broadcastEntryState(entry)
+        await this.broadcastSessionsAll()
+      }
+
+      void promptPromise
+        .then(() => {
+          // Successful runs are finalized by session events.
+        })
+        .catch(async (error) => {
+          await finishPromptIfIdle()
+          console.error("[pico] queued prompt error", error)
+          this.broadcastToViewers(entry.key, {
+            type: "request_error",
+            scope: "prompt",
+            message,
+            error: formatError(error),
+          })
+        })
+        .finally(() => {
+          settlePromptPreflight()
+        })
+
+      await promptPreflight
+
+      if (remainingMessages.length > 0) {
+        await this.replacePendingUserMessages(entry, remainingMessages)
+      }
+    })
+
+    let trackedPromise: Promise<void> = Promise.resolve()
+    trackedPromise = drainPromise.finally(() => {
+      if (entry.pendingQueueDrainPromise === trackedPromise) {
+        entry.pendingQueueDrainPromise = undefined
+      }
+    })
+    entry.pendingQueueDrainPromise = trackedPromise
+    return trackedPromise
+  }
+
   private refreshRetainedConversationItems(entry: SessionEntry) {
     entry.retainedConversationItems = createRetainedConversationState(
       entry.session.messages.map((message) => sanitizeSessionMessage(message))
@@ -3872,6 +3978,8 @@ class PicoRuntime {
           entry.pendingDoneOutcome ?? "success"
         )
       }
+
+      void this.drainPendingUserMessagesWhenIdle(entry)
     }
 
     if (type === "auto_retry_end") {
@@ -4212,6 +4320,13 @@ class PicoRuntime {
         const promptOptions = images.length > 0 ? { images } : undefined
         const promotedDraft = this.isDraftEntry(activeEntry)
         const isAlreadyStreaming = this.getEntryStreamingState(activeEntry)
+        const isCompactingOnly =
+          !isAlreadyStreaming &&
+          Boolean(
+            this.getEntryCompactingState(activeEntry) ||
+            activeEntry.session.isCompacting
+          )
+        const isAlreadyBusy = isAlreadyStreaming || isCompactingOnly
         if (
           clientPendingId &&
           activeEntry.canceledPendingUserMessageIds.delete(clientPendingId)
@@ -4219,7 +4334,7 @@ class PicoRuntime {
           await this.broadcastEntryState(activeEntry)
           return {
             ok: true,
-            queued: isAlreadyStreaming,
+            queued: isAlreadyBusy,
             pendingId: clientPendingId,
             canceled: true,
           }
@@ -4238,7 +4353,7 @@ class PicoRuntime {
           activeEntry.uiState.editorText = ""
         }
 
-        if (isAlreadyStreaming) {
+        if (isAlreadyBusy) {
           const queuedStreamingBehavior = streamingBehavior ?? "steer"
           const pendingMessage = createPendingUserMessage(
             message,
@@ -4251,7 +4366,19 @@ class PicoRuntime {
             pendingMessage.pendingId
           )
           activeEntry.pendingUserMessages.push(pendingMessage)
+          activeEntry.pendingUserMessages = sortPendingUserMessages(
+            activeEntry.pendingUserMessages
+          )
           await this.broadcastEntryState(activeEntry)
+
+          if (isCompactingOnly) {
+            await this.broadcastSessionsAll()
+            return {
+              ok: true,
+              queued: true,
+              pendingId: pendingMessage.pendingId,
+            }
+          }
 
           try {
             await activeEntry.session.prompt(message, {
@@ -5782,6 +5909,7 @@ class PicoRuntime {
       activeEntry.compactingState = false
       await this.broadcastEntryState(activeEntry)
       await this.broadcastSessionsAll()
+      void this.drainPendingUserMessagesWhenIdle(activeEntry)
     }
   }
 

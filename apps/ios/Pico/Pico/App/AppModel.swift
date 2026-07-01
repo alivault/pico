@@ -214,7 +214,9 @@ public final class AppModel {
   }
 
   public var canEditComposerSessionOptions: Bool {
-    guard !sessionState.streaming, !isSubmitting else { return false }
+    guard !sessionState.streaming, !sessionState.compacting, !isSubmitting else {
+      return false
+    }
 
     return isComposingNewSession ||
       sessionState.draft ||
@@ -993,7 +995,7 @@ public final class AppModel {
         normalizedComposerDirectory != normalizedSessionDirectory
     }
 
-    let wasStreamingPrompt = sessionState.streaming
+    let wasBusyPrompt = sessionState.streaming || sessionState.compacting
     let suspendsEventsForNewSession = canEditSessionOptions && needsNewSession
     if suspendsEventsForNewSession {
       eventTask?.cancel()
@@ -1001,7 +1003,7 @@ public final class AppModel {
     }
 
     var rollback: PromptOptimisticRollback?
-    if !wasStreamingPrompt {
+    if !wasBusyPrompt {
       rollback = applyOptimisticSubmittedPrompt(
         trimmedPrompt,
         images: images,
@@ -1620,7 +1622,7 @@ public final class AppModel {
         body: PromptRequestBody(
           message: message,
           images: images,
-          streamingBehavior: sessionState.streaming
+          streamingBehavior: sessionState.streaming || sessionState.compacting
             ? streamingBehavior ?? selectedStreamingBehavior
             : nil,
           pendingId: nil,
