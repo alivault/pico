@@ -125,19 +125,15 @@ struct ConversationScreen: View {
     } message: {
       Text("This removes the session from Pico and moves it to Trash when possible.")
     }
-    .confirmationDialog(
-      "Branch in new chat?",
-      isPresented: branchConfirmationBinding,
-      titleVisibility: .visible
-    ) {
+    .alert("Branch in new chat?", isPresented: branchConfirmationBinding) {
+      Button("Cancel", role: .cancel) {
+        assistantBranchTarget = nil
+      }
+
       Button("Branch in New Chat") {
         branchFromAssistantMessage()
       }
       .disabled(model.isSubmitting)
-
-      Button("Cancel", role: .cancel) {
-        assistantBranchTarget = nil
-      }
     } message: {
       Text(
         "Pico will create a new chat that contains this conversation up through the selected assistant response. Future prompts continue in the new branch, and this chat stays unchanged."
