@@ -81,6 +81,26 @@ xcodebuild -project apps/ios/Pico/Pico.xcodeproj -scheme Pico -destination 'plat
 
 Use any available simulator from `xcrun simctl list devices available` if `iPhone 16 Pro` is not installed.
 
+When the user asks to launch a new iOS build on their iPhone, use the physical device id `00008150-00110C2A1A88401C` and run this from the repo root:
+
+```bash
+DEVICE_ID="00008150-00110C2A1A88401C"
+DERIVED_DATA="/tmp/pico-ios-device-build"
+APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/Pico.app"
+
+xcodebuild \
+  -project apps/ios/Pico/Pico.xcodeproj \
+  -scheme Pico \
+  -destination "platform=iOS,id=$DEVICE_ID" \
+  -derivedDataPath "$DERIVED_DATA" \
+  build
+
+xcrun devicectl device install app --device "$DEVICE_ID" "$APP_PATH"
+xcrun devicectl device process launch --device "$DEVICE_ID" com.alivault.pico.ios
+```
+
+This builds, installs, and launches the app on the connected iPhone.
+
 Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
