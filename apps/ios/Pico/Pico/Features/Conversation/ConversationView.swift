@@ -51,6 +51,7 @@ struct ConversationView: View {
             }
           }
           .padding()
+          .textSelection(.enabled)
         }
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.topLeading, for: .alignment)
