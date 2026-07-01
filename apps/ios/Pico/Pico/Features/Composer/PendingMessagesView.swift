@@ -47,14 +47,10 @@ struct PendingMessagesView: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        .regularMaterial,
+      .glassEffect(
+        .regular,
         in: RoundedRectangle(cornerRadius: 16, style: .continuous)
       )
-      .overlay {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .stroke(.quaternary, lineWidth: 0.5)
-      }
       .padding(.horizontal)
       .onAppear {
         syncPendingOrder(force: true)
