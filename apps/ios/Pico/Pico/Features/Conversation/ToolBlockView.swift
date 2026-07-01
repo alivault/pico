@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ToolBlockView: View {
+  var model: AppModel?
   var block: ToolBlock
 
   @State private var isExpanded = false
@@ -13,7 +14,7 @@ struct ToolBlockView: View {
       if isExpanded {
         Divider()
           .zIndex(0)
-        ToolBlockBodyView(block: block)
+        ToolBlockBodyView(model: model, block: block)
           .padding(12)
           .transition(.opacity)
           .zIndex(0)
@@ -180,6 +181,7 @@ private struct EditDiffStatCountsView: View {
 #Preview {
   VStack(spacing: 12) {
     ToolBlockView(
+      model: nil,
       block: ToolBlock(
         name: "bash",
         args: .object(["command": .string("rg \"Tool\" apps/ios")]),
@@ -189,6 +191,7 @@ private struct EditDiffStatCountsView: View {
     )
 
     ToolBlockView(
+      model: nil,
       block: ToolBlock(
         name: "edit",
         output: "Successfully replaced 1 block(s) in README.md.",

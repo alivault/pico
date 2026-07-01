@@ -29,6 +29,29 @@ enum CodeAttributedStringBuilder {
     return highlightedString
   }
 
+  static func makeSwiftUI(
+    content: String,
+    highlight: CodeHighlightResult?,
+    palette: CodeSyntaxPalette
+  ) -> AttributedString {
+    guard let html = highlight?.html, !html.isEmpty else {
+      var attributed = AttributedString(content.isEmpty ? " " : content)
+      attributed.foregroundColor = Color(uiColor: palette.foreground)
+      return attributed
+    }
+
+    var highlightedString = AttributedString()
+    for segment in ShikiHighlightedHTMLParser.parse(html) {
+      var attributedSegment = AttributedString(segment.text)
+      attributedSegment.foregroundColor = Color(
+        uiColor: palette.color(forCSSVariable: segment.cssVariable)
+      )
+      highlightedString.append(attributedSegment)
+    }
+
+    return highlightedString
+  }
+
   @MainActor
   private static func baseAttributes(
     palette: CodeSyntaxPalette

@@ -160,6 +160,7 @@ struct ConversationScreen: View {
         )
       } else {
         ConversationView(
+          model: model,
           items: model.conversationItems,
           hideThinking: model.sessionState.hideThinkingBlock,
           hideToolBlocks: model.hideToolBlocks,

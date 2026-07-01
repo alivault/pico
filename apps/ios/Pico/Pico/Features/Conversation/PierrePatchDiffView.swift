@@ -2,21 +2,124 @@ import Foundation
 import SwiftUI
 
 struct PierrePatchDiffView: View {
+  var model: AppModel?
   var patch: String
   var fileName: String?
   var maxHeight: CGFloat? = 384
   var scrollsVertically = true
+  var isStreaming = false
+
+  @State private var highlight: CodeHighlightResult?
+  @State private var highlightingRequestID: String?
 
   private var diff: PierrePatchDiff {
     PierrePatchDiff(patch: patch, fallbackFileName: fileName)
   }
 
+  private var codeLanguage: CodeFileLanguage? {
+    CodeFileLanguageDetector.detect(path: diff.fileName)
+  }
+
+  private var highlightCode: String {
+    diff.lines
+      .map { $0.type.isCode ? $0.content : "" }
+      .joined(separator: "\n")
+  }
+
+  private var highlightRequestID: String? {
+    guard !isStreaming,
+          model != nil,
+          let codeLanguage,
+          !highlightCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return nil
+    }
+
+    return "\(diff.fileName)\u{0}\(codeLanguage.shikiLanguage)\u{0}\(highlightCode.count)\u{0}\(highlightCode.hashValue)"
+  }
+
+  private var syntaxSegmentsByLineID: [Int: [PierrePatchDiffSyntaxSegment]] {
+    guard let html = highlight?.html, !html.isEmpty else { return [:] }
+
+    let parsedLines = ShikiHighlightedHTMLParser.parseLines(html)
+    var segmentsByLineID: [Int: [PierrePatchDiffSyntaxSegment]] = [:]
+
+    for (index, line) in diff.lines.enumerated() where line.type.isCode {
+      guard parsedLines.indices.contains(index) else { continue }
+      segmentsByLineID[line.id] = Self.syntaxSegments(from: parsedLines[index])
+    }
+
+    return segmentsByLineID
+  }
+
   var body: some View {
     PierrePatchDiffRowsView(
       diff: diff,
+      syntaxSegmentsByLineID: syntaxSegmentsByLineID,
       maxHeight: maxHeight,
       scrollsVertically: scrollsVertically
     )
+    .task(id: highlightRequestID) {
+      await loadHighlightIfNeeded()
+    }
+  }
+
+  private func loadHighlightIfNeeded() async {
+    guard let requestID = highlightRequestID,
+          let model,
+          let codeLanguage,
+          highlight?.requestID != requestID else {
+      return
+    }
+
+    let requestedCode = highlightCode
+    let requestedLanguage = codeLanguage.shikiLanguage
+    highlightingRequestID = requestID
+    defer {
+      if highlightingRequestID == requestID {
+        highlightingRequestID = nil
+      }
+    }
+
+    do {
+      let response = try await model.highlightCode(
+        code: requestedCode,
+        language: requestedLanguage
+      )
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      highlight = CodeHighlightResult(
+        requestID: requestID,
+        requestedLanguage: requestedLanguage,
+        response: response
+      )
+    } catch is CancellationError {
+      return
+    } catch {
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      highlight = .unavailable(requestID: requestID, language: requestedLanguage)
+    }
+  }
+
+  private static func syntaxSegments(
+    from segments: [ShikiHighlightedSegment]
+  ) -> [PierrePatchDiffSyntaxSegment] {
+    var offset = 0
+    var syntaxSegments: [PierrePatchDiffSyntaxSegment] = []
+
+    for segment in segments {
+      let length = segment.text.count
+      defer { offset += length }
+      guard length > 0, segment.cssVariable != nil else { continue }
+
+      syntaxSegments.append(
+        PierrePatchDiffSyntaxSegment(
+          lowerBound: offset,
+          upperBound: offset + length,
+          cssVariable: segment.cssVariable
+        )
+      )
+    }
+
+    return syntaxSegments
   }
 }
 
@@ -331,6 +434,23 @@ struct PierrePatchDiffHighlightRange: Equatable {
   var upperBound: Int
 }
 
+struct PierrePatchDiffSyntaxSegment: Equatable {
+  var lowerBound: Int
+  var upperBound: Int
+  var cssVariable: String?
+}
+
+private extension PierrePatchDiffLineType {
+  var isCode: Bool {
+    switch self {
+    case .addition, .deletion, .context:
+      true
+    case .hunk, .metadata, .note:
+      false
+    }
+  }
+}
+
 private struct PierrePatchDiffToken: Equatable {
   var text: String
   var lowerBound: Int
@@ -413,6 +533,7 @@ enum PierrePatchDiffLineType: Equatable {
 
 private struct PierrePatchDiffRowsView: View {
   var diff: PierrePatchDiff
+  var syntaxSegmentsByLineID: [Int: [PierrePatchDiffSyntaxSegment]] = [:]
   var maxHeight: CGFloat? = 384
   var scrollsVertically = true
 
@@ -445,7 +566,11 @@ private struct PierrePatchDiffRowsView: View {
   private var rows: some View {
     LazyVStack(alignment: .leading, spacing: 0) {
       ForEach(diff.lines) { line in
-        PierrePatchDiffLineView(line: line, palette: palette)
+        PierrePatchDiffLineView(
+          line: line,
+          syntaxSegments: syntaxSegmentsByLineID[line.id] ?? [],
+          palette: palette
+        )
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -455,6 +580,7 @@ private struct PierrePatchDiffRowsView: View {
 
 private struct PierrePatchDiffLineView: View {
   var line: PierrePatchDiffLine
+  var syntaxSegments: [PierrePatchDiffSyntaxSegment]
   var palette: PierrePatchDiffPalette
 
   private let accentWidth: CGFloat = 3
@@ -472,7 +598,6 @@ private struct PierrePatchDiffLineView: View {
 
       Text(attributedContent)
         .font(.system(size: 12, design: .monospaced))
-        .foregroundStyle(palette.foreground(for: line.type))
         .lineSpacing(1)
         .padding(.horizontal, 10)
         .padding(.vertical, line.type == .hunk ? 5 : 2)
@@ -500,28 +625,59 @@ private struct PierrePatchDiffLineView: View {
 
   private var attributedContent: AttributedString {
     var attributed = AttributedString(displayContent)
+    attributed.foregroundColor = palette.foreground(for: line.type)
 
-    for range in line.highlightRanges {
-      guard let lowerBound = attributed.characters.index(
-        attributed.startIndex,
-        offsetBy: range.lowerBound,
-        limitedBy: attributed.endIndex
-      ),
-            let upperBound = attributed.characters.index(
-              attributed.startIndex,
-              offsetBy: range.upperBound,
-              limitedBy: attributed.endIndex
-            ),
-            lowerBound < upperBound else {
+    for segment in syntaxSegments {
+      guard let range = attributedRange(
+        lowerBound: segment.lowerBound,
+        upperBound: segment.upperBound,
+        in: attributed
+      ) else {
         continue
       }
 
-      attributed[lowerBound..<upperBound].backgroundColor = palette.intralineBackground(
+      attributed[range].foregroundColor = palette.syntaxColor(
+        forCSSVariable: segment.cssVariable
+      )
+    }
+
+    for range in line.highlightRanges {
+      guard let attributedRange = attributedRange(
+        lowerBound: range.lowerBound,
+        upperBound: range.upperBound,
+        in: attributed
+      ) else {
+        continue
+      }
+
+      attributed[attributedRange].backgroundColor = palette.intralineBackground(
         for: line.type
       )
     }
 
     return attributed
+  }
+
+  private func attributedRange(
+    lowerBound: Int,
+    upperBound: Int,
+    in attributed: AttributedString
+  ) -> Range<AttributedString.Index>? {
+    guard let lowerBound = attributed.characters.index(
+      attributed.startIndex,
+      offsetBy: lowerBound,
+      limitedBy: attributed.endIndex
+    ),
+          let upperBound = attributed.characters.index(
+            attributed.startIndex,
+            offsetBy: upperBound,
+            limitedBy: attributed.endIndex
+          ),
+          lowerBound < upperBound else {
+      return nil
+    }
+
+    return lowerBound..<upperBound
   }
 
   private var lineNumber: Int? {
@@ -549,6 +705,10 @@ private struct PierrePatchDiffLineView: View {
 
 private struct PierrePatchDiffPalette {
   var colorScheme: ColorScheme
+
+  private var syntaxPalette: CodeSyntaxPalette {
+    CodeSyntaxPalette(colorScheme: colorScheme)
+  }
 
   var containerBackground: Color {
     Color(uiColor: .systemBackground)
@@ -610,6 +770,10 @@ private struct PierrePatchDiffPalette {
     case .context, .hunk, .metadata, .note:
       .clear
     }
+  }
+
+  func syntaxColor(forCSSVariable cssVariable: String?) -> Color {
+    Color(uiColor: syntaxPalette.color(forCSSVariable: cssVariable))
   }
 
   func lineNumberForeground(for type: PierrePatchDiffLineType) -> Color {

@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct ToolBlockBodyView: View {
+  var model: AppModel?
   var block: ToolBlock
 
   var body: some View {
@@ -9,9 +10,9 @@ struct ToolBlockBodyView: View {
     case "bash":
       BashToolOutputView(block: block)
     case "write":
-      WriteToolOutputView(block: block)
+      WriteToolOutputView(model: model, block: block)
     case "edit":
-      EditToolOutputView(block: block)
+      EditToolOutputView(model: model, block: block)
     default:
       GenericToolOutputView(block: block)
     }
@@ -47,6 +48,7 @@ private struct BashToolOutputView: View {
 }
 
 private struct WriteToolOutputView: View {
+  var model: AppModel?
   var block: ToolBlock
 
   private var payload: ToolWritePayload? {
@@ -67,7 +69,9 @@ private struct WriteToolOutputView: View {
     } else if let payload, let content = payload.content {
       VStack(alignment: .leading, spacing: 10) {
         ToolCodeBlockView(
+          model: model,
           code: content,
+          path: payload.path,
           language: ToolFormatting.codeLanguage(fromPath: payload.path),
           autoScroll: block.running
         )
@@ -83,6 +87,7 @@ private struct WriteToolOutputView: View {
 }
 
 private struct EditToolOutputView: View {
+  var model: AppModel?
   var block: ToolBlock
 
   private var patch: String {
@@ -111,7 +116,12 @@ private struct EditToolOutputView: View {
       )
     } else {
       VStack(alignment: .leading, spacing: 10) {
-        PierrePatchDiffView(patch: patch, fileName: ToolFormatting.summary(for: block))
+        PierrePatchDiffView(
+          model: model,
+          patch: patch,
+          fileName: ToolFormatting.summary(for: block),
+          isStreaming: block.running
+        )
 
         if !extraOutput.isEmpty {
           PlainToolOutput(text: extraOutput, isError: block.isError)
@@ -264,18 +274,55 @@ private struct ToolScrollableOutput<Content: View>: View {
 private struct ToolCodeBlockView: View {
   private static let bottomAnchorId = "tool-code-bottom"
 
+  var model: AppModel?
   var code: String
+  var path: String?
   var language: String?
   var autoScroll: Bool
 
+  @Environment(\.colorScheme) private var colorScheme
   @State private var copied = false
   @State private var followsLatestContent = true
+  @State private var highlight: CodeHighlightResult?
+  @State private var highlightingRequestID: String?
+
+  private var codeLanguage: CodeFileLanguage? {
+    if let path,
+       let detectedLanguage = CodeFileLanguageDetector.detect(path: path) {
+      return detectedLanguage
+    }
+
+    guard let language, !language.isEmpty, language != "plaintext" else {
+      return nil
+    }
+    return CodeFileLanguage(shikiLanguage: language, displayName: language)
+  }
+
+  private var highlightRequestID: String? {
+    guard !autoScroll,
+          model != nil,
+          let codeLanguage,
+          !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return nil
+    }
+
+    return "\(path ?? "")\u{0}\(codeLanguage.shikiLanguage)\u{0}\(code.count)\u{0}\(code.hashValue)"
+  }
+
+  private var attributedCode: AttributedString {
+    CodeAttributedStringBuilder.makeSwiftUI(
+      content: code,
+      highlight: highlight?.isHighlighted == true ? highlight : nil,
+      palette: CodeSyntaxPalette(colorScheme: colorScheme)
+    )
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 8) {
-        if let language, !language.isEmpty {
-          Text(language)
+        if let displayLanguage = codeLanguage?.displayName ?? language,
+           !displayLanguage.isEmpty {
+          Text(displayLanguage)
             .font(.caption.monospaced())
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
@@ -300,9 +347,8 @@ private struct ToolCodeBlockView: View {
       ScrollViewReader { proxy in
         ScrollView(.vertical) {
           ScrollView(.horizontal) {
-            Text(verbatim: code.isEmpty ? " " : code)
+            Text(attributedCode)
               .font(.system(.caption, design: .monospaced))
-              .foregroundStyle(.primary)
               .padding(12)
               .fixedSize(horizontal: true, vertical: true)
               .textSelection(.enabled)
@@ -328,10 +374,49 @@ private struct ToolCodeBlockView: View {
         }
       }
     }
+    .task(id: highlightRequestID) {
+      await loadHighlightIfNeeded()
+    }
     .background(.background, in: .rect(cornerRadius: 12))
     .overlay {
       RoundedRectangle(cornerRadius: 12)
         .stroke(.secondary.opacity(0.18), lineWidth: 1)
+    }
+  }
+
+  private func loadHighlightIfNeeded() async {
+    guard let requestID = highlightRequestID,
+          let model,
+          let codeLanguage,
+          highlight?.requestID != requestID else {
+      return
+    }
+
+    let requestedCode = code
+    let requestedLanguage = codeLanguage.shikiLanguage
+    highlightingRequestID = requestID
+    defer {
+      if highlightingRequestID == requestID {
+        highlightingRequestID = nil
+      }
+    }
+
+    do {
+      let response = try await model.highlightCode(
+        code: requestedCode,
+        language: requestedLanguage
+      )
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      highlight = CodeHighlightResult(
+        requestID: requestID,
+        requestedLanguage: requestedLanguage,
+        response: response
+      )
+    } catch is CancellationError {
+      return
+    } catch {
+      guard !Task.isCancelled, highlightRequestID == requestID else { return }
+      highlight = .unavailable(requestID: requestID, language: requestedLanguage)
     }
   }
 

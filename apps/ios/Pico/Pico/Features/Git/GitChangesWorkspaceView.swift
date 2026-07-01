@@ -215,6 +215,7 @@ private struct GitFileDiffDetailView: View {
         GitInlineNote(title: errorMessage, systemImage: "exclamationmark.triangle", isError: true)
       } else {
         GitPatchView(
+          model: model,
           patch: patch,
           fallbackFileName: file.path,
           maxHeight: showsFileSummary ? 360 : nil,

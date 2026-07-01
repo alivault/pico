@@ -47,8 +47,96 @@ enum ShikiHighlightedHTMLParser {
     return segments
   }
 
+  static func parseLines(_ html: String) -> [[ShikiHighlightedSegment]] {
+    var lines: [[ShikiHighlightedSegment]] = []
+    var currentLine: [ShikiHighlightedSegment] = []
+    var stack: [ShikiHTMLStackEntry] = [
+      ShikiHTMLStackEntry(cssVariable: nil, isLine: false),
+    ]
+    var index = html.startIndex
+    var foundLineSpans = false
+
+    while index < html.endIndex {
+      if html[index] == "<" {
+        guard let tagEnd = html[index...].firstIndex(of: ">") else {
+          appendText(
+            String(html[index...]),
+            cssVariable: stack.last?.cssVariable,
+            to: &currentLine
+          )
+          break
+        }
+
+        let tag = String(html[index...tagEnd])
+        if isClosingSpan(tag) {
+          if let entry = stack.popLast(), entry.isLine {
+            lines.append(currentLine)
+            currentLine = []
+          }
+          if stack.isEmpty {
+            stack.append(ShikiHTMLStackEntry(cssVariable: nil, isLine: false))
+          }
+        } else if isOpeningSpan(tag) {
+          let isLine = isLineSpan(tag)
+          foundLineSpans = foundLineSpans || isLine
+          stack.append(
+            ShikiHTMLStackEntry(
+              cssVariable: cssVariable(in: tag) ?? stack.last?.cssVariable,
+              isLine: isLine
+            )
+          )
+        }
+
+        index = html.index(after: tagEnd)
+        continue
+      }
+
+      let nextTag = html[index...].firstIndex(of: "<") ?? html.endIndex
+      if stack.contains(where: \.isLine) {
+        appendText(
+          String(html[index..<nextTag]),
+          cssVariable: stack.last?.cssVariable,
+          to: &currentLine
+        )
+      }
+      index = nextTag
+    }
+
+    if foundLineSpans {
+      if !currentLine.isEmpty {
+        lines.append(currentLine)
+      }
+      return lines
+    }
+
+    return splitSegmentsIntoLines(parse(html))
+  }
+
   static func plainText(from html: String) -> String {
     parse(html).map(\.text).joined()
+  }
+
+  private static func splitSegmentsIntoLines(
+    _ segments: [ShikiHighlightedSegment]
+  ) -> [[ShikiHighlightedSegment]] {
+    var lines: [[ShikiHighlightedSegment]] = [[]]
+
+    for segment in segments {
+      let pieces = segment.text.components(separatedBy: "\n")
+      for index in pieces.indices {
+        appendText(
+          pieces[index],
+          cssVariable: segment.cssVariable,
+          to: &lines[lines.count - 1]
+        )
+
+        if index != pieces.indices.last {
+          lines.append([])
+        }
+      }
+    }
+
+    return lines
   }
 
   private static func appendText(
@@ -77,6 +165,12 @@ enum ShikiHighlightedHTMLParser {
 
   private static func isClosingSpan(_ tag: String) -> Bool {
     tag.lowercased().hasPrefix("</span")
+  }
+
+  private static func isLineSpan(_ tag: String) -> Bool {
+    quotedAttribute("class", in: tag)?
+      .split(whereSeparator: { $0.isWhitespace })
+      .contains("line") == true
   }
 
   private static func cssVariable(in tag: String) -> String? {
@@ -198,4 +292,9 @@ enum ShikiHighlightedHTMLParser {
 
     return Character(scalar)
   }
+}
+
+private struct ShikiHTMLStackEntry {
+  var cssVariable: String?
+  var isLine: Bool
 }

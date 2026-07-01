@@ -4,6 +4,7 @@ struct ConversationView: View {
   private static let bottomAnchorId = "conversation-bottom"
   private static let bottomStickyThreshold: CGFloat = 48
 
+  var model: AppModel? = nil
   var items: [ConversationItem]
   var hideThinking: Bool
   var hideToolBlocks: Bool = false
@@ -33,7 +34,7 @@ struct ConversationView: View {
               .frame(maxWidth: .infinity, minHeight: 280)
             } else {
               ForEach(visibleElements) { element in
-                ConversationElementView(element: element)
+                ConversationElementView(model: model, element: element)
                   .id(element.id)
               }
 
@@ -323,6 +324,7 @@ private enum ConversationElement: Identifiable {
 }
 
 private struct ConversationElementView: View {
+  var model: AppModel?
   var element: ConversationElement
 
   var body: some View {
@@ -330,7 +332,7 @@ private struct ConversationElementView: View {
     case .user(let user):
       UserMessageView(item: user)
     case .assistantBlock(_, let block):
-      AssistantBlockView(block: block)
+      AssistantBlockView(model: model, block: block)
     }
   }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AssistantBlockView: View {
+  var model: AppModel?
   var block: AssistantBlock
 
   var body: some View {
@@ -10,7 +11,7 @@ struct AssistantBlockView: View {
     case .thinking(let thinking):
       ThinkingBlockView(block: thinking)
     case .tool(let tool):
-      ToolBlockView(block: tool)
+      ToolBlockView(model: model, block: tool)
     case .compaction(let compaction):
       CompactionBlockView(block: compaction)
     case .unknown:
@@ -20,6 +21,6 @@ struct AssistantBlockView: View {
 }
 
 #Preview {
-  AssistantBlockView(block: .text(TextBlock(text: "Hello **Pico**.")))
+  AssistantBlockView(model: nil, block: .text(TextBlock(text: "Hello **Pico**.")))
     .padding()
 }

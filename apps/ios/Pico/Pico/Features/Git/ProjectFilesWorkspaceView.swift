@@ -270,7 +270,7 @@ private struct ProjectFileDetailView: View {
       return nil
     }
 
-    return "\(path)\u{0}\(codeLanguage.shikiLanguage)\u{0}\(content.count)"
+    return "\(path)\u{0}\(codeLanguage.shikiLanguage)\u{0}\(content.count)\u{0}\(content.hashValue)"
   }
 
   private var isHighlightingCode: Bool {
@@ -549,7 +549,7 @@ private struct GitFileDiffSheetContent: View {
       } else if let errorMessage {
         GitInlineNote(title: errorMessage, systemImage: "exclamationmark.triangle", isError: true)
       } else {
-        GitPatchView(patch: patch, fallbackFileName: file.path, maxHeight: nil)
+        GitPatchView(model: model, patch: patch, fallbackFileName: file.path, maxHeight: nil)
       }
     }
     .task(id: file.id) {

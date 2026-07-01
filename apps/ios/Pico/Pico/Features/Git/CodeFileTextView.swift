@@ -117,7 +117,7 @@ private struct CodeFileNativeTextView: UIViewRepresentable {
       return "\(styleID):\(language.shikiLanguage):highlight:\(highlight.requestID)"
     }
 
-    return "\(styleID):\(language.shikiLanguage):plain:\(path):\(content.count)"
+    return "\(styleID):\(language.shikiLanguage):plain:\(path):\(content.count):\(content.hashValue)"
   }
 
   final class Coordinator {

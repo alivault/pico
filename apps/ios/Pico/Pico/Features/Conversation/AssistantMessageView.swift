@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AssistantMessageView: View {
+  var model: AppModel?
   var item: AssistantConversationItem
   var hideThinking: Bool
   var hideToolBlocks: Bool
@@ -8,7 +9,7 @@ struct AssistantMessageView: View {
   var body: some View {
     LazyVStack(alignment: .leading, spacing: 10, pinnedViews: [.sectionHeaders]) {
       ForEach(visibleBlocks) { block in
-        AssistantBlockView(block: block)
+        AssistantBlockView(model: model, block: block)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -30,6 +31,7 @@ struct AssistantMessageView: View {
 
 #Preview {
   AssistantMessageView(
+    model: nil,
     item: AssistantConversationItem(
       blocks: [.text(TextBlock(text: "Hello from Pico."))],
       streaming: false

@@ -442,7 +442,7 @@ private struct GitCommitDiffPanel: View {
       } else if let errorMessage {
         GitInlineNote(title: errorMessage, systemImage: "exclamationmark.triangle", isError: true)
       } else if let response {
-        GitPatchView(patch: response.patch, fallbackFileName: response.path, maxHeight: 360)
+        GitPatchView(model: model, patch: response.patch, fallbackFileName: response.path, maxHeight: 360)
       }
     }
     .padding(12)
@@ -635,6 +635,7 @@ private struct GitCommitFileDiffSheetView: View {
           GitInlineNote(title: errorMessage, systemImage: "exclamationmark.triangle", isError: true)
         } else if let response {
           GitPatchView(
+            model: model,
             patch: response.patch,
             fallbackFileName: response.path,
             maxHeight: nil,

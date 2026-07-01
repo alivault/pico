@@ -67,4 +67,17 @@ struct GitFeatureTests {
     #expect(segments.first?.cssVariable == "--sh-token-keyword")
     #expect(segments.last?.text == " value = <tag attr=\"x\">")
   }
+
+  @Test func parsesShikiHighlightedHTMLByLine() {
+    let html = "<span class=\"line\"><span style=\"color:var(--sh-token-keyword)\">let</span></span>\n<span class=\"line\"></span>\n<span class=\"line\"><span style=\"color:var(--sh-token-function)\">print</span>()</span>"
+
+    let lines = ShikiHighlightedHTMLParser.parseLines(html)
+
+    #expect(lines.count == 3)
+    #expect(lines[0].first?.text == "let")
+    #expect(lines[0].first?.cssVariable == "--sh-token-keyword")
+    #expect(lines[1].isEmpty)
+    #expect(lines[2].first?.text == "print")
+    #expect(lines[2].first?.cssVariable == "--sh-token-function")
+  }
 }

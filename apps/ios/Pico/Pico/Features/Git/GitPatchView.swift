@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct GitPatchView: View {
+  var model: AppModel?
   var patch: String
   var fallbackFileName: String?
   var maxHeight: CGFloat? = nil
@@ -25,6 +26,7 @@ struct GitPatchView: View {
               Spacer(minLength: 0)
             }
             PierrePatchDiffView(
+              model: model,
               patch: file.patch,
               fileName: file.fileName,
               maxHeight: maxHeight,
