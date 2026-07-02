@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 
 struct PendingMessagesView: View {
-  private static let maxListHeight: CGFloat = 320
-  private static let estimatedRowHeight: CGFloat = 64
+  private static let listBodyHeight: CGFloat = 320
+  private static let estimatedRowHeight: CGFloat = 76
   private static let estimatedSectionHeaderHeight: CGFloat = 30
+  private static let listBodyPadding: CGFloat = 10
 
   var messages: [PendingUserMessage]
   @Binding var isExpanded: Bool
@@ -97,12 +98,13 @@ struct PendingMessagesView: View {
   private var pendingMessagesList: some View {
     PendingMessagesTableView(
       sections: sections,
-      isScrollEnabled: estimatedListHeight > Self.maxListHeight,
+      isScrollEnabled: estimatedListHeight > Self.listBodyHeight,
       onReorderMessages: commitPendingReorder,
       onEditMessage: beginEditing,
       onDeleteMessage: deletePendingMessage
     )
-    .frame(height: listHeight)
+    .frame(height: Self.listContentHeight)
+    .padding(Self.listBodyPadding)
   }
 
   private var visibleMessages: [PendingUserMessage] {
@@ -149,11 +151,12 @@ struct PendingMessagesView: View {
       }
     )
     let headerHeight = CGFloat(sections.count) * Self.estimatedSectionHeaderHeight
-    return rowCount * Self.estimatedRowHeight + headerHeight
+    return rowCount * Self.estimatedRowHeight + headerHeight +
+      Self.listBodyPadding * 2
   }
 
-  private var listHeight: CGFloat {
-    min(Self.maxListHeight, estimatedListHeight)
+  private static var listContentHeight: CGFloat {
+    max(1, listBodyHeight - listBodyPadding * 2)
   }
 
   private var accessibilityValue: String {
@@ -263,7 +266,7 @@ private struct PendingMessagesTableView: UIViewRepresentable {
     let coordinator = context.coordinator
     var configuration = UICollectionLayoutListConfiguration(appearance: .plain)
     configuration.backgroundColor = .clear
-    configuration.showsSeparators = true
+    configuration.showsSeparators = false
     configuration.headerMode = .supplementary
     configuration.footerMode = .none
     configuration.headerTopPadding = 0
@@ -650,25 +653,24 @@ private struct PendingMessageTableRow: View {
         .lineLimit(3)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-      HStack(spacing: 6) {
-        Text(message.streamingBehavior.label)
-          .font(.caption2.weight(.semibold))
+      if !message.images.isEmpty {
+        Text(imageCountLabel)
+          .font(.caption2)
           .foregroundStyle(.secondary)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 2)
-          .background(.quaternary, in: Capsule())
-
-        if !message.images.isEmpty {
-          Text(imageCountLabel)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
       }
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.secondary.opacity(0.08))
+    .background(
+      .secondary.opacity(0.08),
+      in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(Color(uiColor: .separator).opacity(0.35), lineWidth: 0.5)
+    }
+    .padding(.vertical, 4)
     .contentShape(Rectangle())
     .accessibilityHint(
       "Swipe for edit and delete actions. Long-press and drag to reorder."
@@ -704,6 +706,15 @@ private struct PendingEmptySectionRow: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 12)
       .padding(.vertical, 12)
+      .background(
+        .secondary.opacity(0.05),
+        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(Color(uiColor: .separator).opacity(0.25), lineWidth: 0.5)
+      }
+      .padding(.vertical, 4)
       .contentShape(Rectangle())
       .accessibilityHint("Drop queued prompts here to move them into this section.")
   }
