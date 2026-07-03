@@ -62,7 +62,7 @@ struct DirectorySessionsSectionView: View {
             .foregroundStyle(.secondary)
             .frame(width: 20, height: 28)
 
-          SidebarDirectoryPathLabel(path: snapshot.directory)
+          SidebarDirectoryNameLabel(path: snapshot.directory)
 
           Image(systemName: "chevron.down")
             .font(.caption2.weight(.bold))
@@ -83,7 +83,7 @@ struct DirectorySessionsSectionView: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel(
-        "\(DirectoryPathFormatter.displayPath(snapshot.directory)), \(isExpanded ? "expanded" : "collapsed")"
+        "\(DirectoryPathFormatter.folderName(snapshot.directory)), \(isExpanded ? "expanded" : "collapsed")"
       )
       .accessibilityHint(isExpanded ? "Collapse directory" : "Expand directory")
 
@@ -96,7 +96,7 @@ struct DirectorySessionsSectionView: View {
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
       .accessibilityLabel(
-        "New session in \(DirectoryPathFormatter.displayPath(snapshot.directory))"
+        "New session in \(DirectoryPathFormatter.folderName(snapshot.directory))"
       )
       .accessibilityHint("Starts a new draft in this directory")
 
@@ -117,7 +117,7 @@ struct DirectorySessionsSectionView: View {
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
       .accessibilityLabel(
-        "Actions for \(DirectoryPathFormatter.displayPath(snapshot.directory))"
+        "Actions for \(DirectoryPathFormatter.folderName(snapshot.directory))"
       )
     }
     .textCase(nil)
@@ -184,7 +184,7 @@ private struct DirectorySessionsFullListView: View {
             )
           }
         } header: {
-          SidebarDirectoryPathLabel(path: snapshot.directory)
+          SidebarDirectoryNameLabel(path: snapshot.directory)
             .textCase(nil)
         }
       }
@@ -204,7 +204,7 @@ private struct DirectorySessionsFullListView: View {
             Image(systemName: "square.and.pencil")
           }
           .accessibilityLabel(
-            "New session in \(DirectoryPathFormatter.displayPath(directory))"
+            "New session in \(DirectoryPathFormatter.folderName(directory))"
           )
 
           Menu {
@@ -219,7 +219,7 @@ private struct DirectorySessionsFullListView: View {
             Image(systemName: "ellipsis")
           }
           .accessibilityLabel(
-            "Actions for \(DirectoryPathFormatter.displayPath(directory))"
+            "Actions for \(DirectoryPathFormatter.folderName(directory))"
           )
         }
       }
@@ -612,63 +612,16 @@ private struct DirectorySessionsLoadingRow: View {
   }
 }
 
-private struct SidebarDirectoryPathLabel: View {
+private struct SidebarDirectoryNameLabel: View {
   var path: String
 
   var body: some View {
-    let splitPath = splitDisplayPath(
-      DirectoryPathFormatter.displayPath(path)
-    )
-
-    HStack(spacing: 0) {
-      if !splitPath.leading.isEmpty {
-        Text(splitPath.leading)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-
-      Text(splitPath.trailing)
-        .foregroundStyle(.primary)
-        .lineLimit(1)
-        .layoutPriority(1)
-    }
-    .font(.body)
-    .fontWeight(.bold)
-  }
-
-  private func splitDisplayPath(_ value: String) -> (
-    leading: String,
-    trailing: String
-  ) {
-    guard !value.isEmpty else {
-      return (leading: "", trailing: "")
-    }
-
-    var trimmedEnd = value.endIndex
-    while trimmedEnd > value.startIndex {
-      let previousIndex = value.index(before: trimmedEnd)
-      let character = value[previousIndex]
-      guard character == "/" || character == "\\" else { break }
-      trimmedEnd = previousIndex
-    }
-
-    let trimmedPath = String(value[..<trimmedEnd])
-    guard !trimmedPath.isEmpty else {
-      return (leading: "", trailing: value)
-    }
-
-    let suffix = String(value[trimmedEnd...])
-    guard let separatorIndex = trimmedPath.lastIndex(where: {
-      $0 == "/" || $0 == "\\"
-    }) else {
-      return (leading: "", trailing: "\(trimmedPath)\(suffix)")
-    }
-
-    let trailingStart = trimmedPath.index(after: separatorIndex)
-    return (
-      leading: String(trimmedPath[...separatorIndex]),
-      trailing: "\(String(trimmedPath[trailingStart...]))\(suffix)"
-    )
+    Text(DirectoryPathFormatter.folderName(path))
+      .foregroundStyle(.primary)
+      .lineLimit(1)
+      .layoutPriority(1)
+      .font(.body)
+      .fontWeight(.bold)
   }
 }
 

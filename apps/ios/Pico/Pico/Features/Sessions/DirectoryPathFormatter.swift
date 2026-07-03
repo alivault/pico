@@ -24,12 +24,19 @@ enum DirectoryPathFormatter {
   }
 
   static func folderName(_ value: String) -> String {
-    let displayValue = displayPath(value)
-    if displayValue == homePrefix { return "Home" }
+    let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedValue.isEmpty else { return value }
 
-    let formattedPath = displayValue.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    guard !formattedPath.isEmpty else { return value }
-    return formattedPath.split(separator: "/").last.map(String.init) ?? formattedPath
+    let path = trimmedValue.trimmingCharacters(
+      in: CharacterSet(charactersIn: "/\\")
+    )
+    guard !path.isEmpty else { return trimmedValue }
+    if path == "~" { return "Home" }
+
+    return path
+      .components(separatedBy: CharacterSet(charactersIn: "/\\"))
+      .filter { !$0.isEmpty }
+      .last ?? path
   }
 
   static func matches(_ directory: String, query: String) -> Bool {
