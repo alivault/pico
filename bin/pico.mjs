@@ -2,6 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
+import { createServer } from "node:net"
 import process from "node:process"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -11,6 +12,7 @@ const packageJsonPath = join(packageRoot, "package.json")
 const serverEntry = join(packageRoot, ".output", "server", "index.mjs")
 const minimumNodeVersion = [22, 19, 0]
 const minimumNodeVersionLabel = "22.19.0"
+const portSearchLimit = 100
 
 function nodeVersionMeetsMinimum(version) {
   const parts = version.split(".").map((part) => Number(part))
@@ -68,7 +70,7 @@ Commands:
   update           Update the globally installed Pico package to latest
 
 Options:
-  --port <port>    Port to listen on (default: 3141)
+  --port <port>    Port to listen on (default: 3141; tries next free port)
   --host <host>    Host to bind to
   --open           Open Pico in your browser (default)
   --no-open        Do not open a browser window
@@ -236,6 +238,67 @@ function browserHostFor(host) {
   return host
 }
 
+function normalizePort(port) {
+  const portNumber = Number(port)
+  if (!Number.isInteger(portNumber) || portNumber < 0 || portNumber > 65_535) {
+    console.error(`Invalid port: ${port}`)
+    process.exit(1)
+  }
+  return portNumber
+}
+
+function canRetryPortError(error) {
+  return error?.code === "EADDRINUSE"
+}
+
+function isPortAvailable(port, host) {
+  return new Promise((resolve, reject) => {
+    const probe = createServer()
+    const listenOptions = host ? { port, host } : { port }
+
+    probe.once("error", (error) => {
+      if (canRetryPortError(error)) {
+        resolve(false)
+        return
+      }
+      reject(error)
+    })
+    probe.once("listening", () => {
+      probe.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve(true)
+      })
+    })
+    probe.listen(listenOptions)
+  })
+}
+
+async function resolveAvailablePort(port, host) {
+  const requestedPort = normalizePort(port)
+  if (requestedPort === 0) return String(requestedPort)
+
+  const lastPort = Math.min(65_535, requestedPort + portSearchLimit - 1)
+
+  for (let candidate = requestedPort; candidate <= lastPort; candidate += 1) {
+    if (await isPortAvailable(candidate, host)) {
+      if (candidate !== requestedPort) {
+        console.warn(
+          `Port ${requestedPort} is not available; using ${candidate} instead.`
+        )
+      }
+      return String(candidate)
+    }
+  }
+
+  console.error(
+    `No available port found between ${requestedPort} and ${lastPort}.`
+  )
+  process.exit(1)
+}
+
 async function waitForServer(url, timeoutMs = 15_000) {
   const startedAt = Date.now()
 
@@ -278,6 +341,18 @@ const options = parseArgs(args)
 if (!existsSync(serverEntry)) {
   console.error("Pico server build was not found in this package.")
   console.error("If you are developing Pico locally, run `pnpm build` first.")
+  process.exit(1)
+}
+
+try {
+  options.port = await resolveAvailablePort(options.port, options.host)
+} catch (error) {
+  console.error(
+    `Could not check port ${options.port}${
+      options.host ? ` on ${options.host}` : ""
+    }.`
+  )
+  console.error(error?.message ?? String(error))
   process.exit(1)
 }
 
