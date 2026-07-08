@@ -66,6 +66,7 @@ export type SessionEventLike = UnknownRecord & {
   steering?: unknown
   followUp?: unknown
   message?: MessageLike
+  name?: unknown
 }
 
 type SessionTreeEntryLike = UnknownRecord & {

@@ -3969,6 +3969,10 @@ class PicoRuntime {
       }
     }
 
+    if (type === "session_info_changed") {
+      this.touchSessionEntry(entry)
+    }
+
     if (type === "message_end" && event.message?.role === "user") {
       this.touchSessionEntry(entry)
       this.reconcilePendingUserMessages(entry)
@@ -4030,7 +4034,8 @@ class PicoRuntime {
       type === "agent_end" ||
       type === "message_end" ||
       type === "compaction_end" ||
-      type === "queue_update"
+      type === "queue_update" ||
+      type === "session_info_changed"
     ) {
       await this.broadcastSessionsAll()
     }
