@@ -96,11 +96,13 @@ struct ConversationScreen: View {
       }
       .sharedBackgroundVisibility(.hidden)
       ToolbarItemGroup(placement: .topBarTrailing) {
-        if model.hasRealCurrentSession {
+        if model.hasRealCurrentSession || model.isLoadingSelectedSession {
           ContextUsageRingMenu(
             contextUsage: model.sessionState.contextUsage,
             isCompacting: model.sessionState.compacting,
-            compactSession: compactSession
+            isLoading: model.isLoadingSelectedSession,
+            compactSession: compactSession,
+            showsCompactAction: model.hasRealCurrentSession
           )
         }
         ConversationHeaderOptionsMenu(

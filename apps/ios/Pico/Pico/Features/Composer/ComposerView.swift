@@ -438,6 +438,7 @@ private struct ComposerAttachmentMenu: View {
 struct ContextUsageRingMenu: View {
   var contextUsage: ContextUsage?
   var isCompacting: Bool
+  var isLoading = false
   var compactSession: () -> Void
   var showsCompactAction = true
 
@@ -453,7 +454,9 @@ struct ContextUsageRingMenu: View {
         }
       }
 
-      if let snapshot {
+      if showsLoadingIndicator {
+        Text("Loading context usage…")
+      } else if let snapshot {
         Section("Context window") {
           Text(snapshot.displayPercent)
           Text(snapshot.displayTokens)
@@ -462,10 +465,17 @@ struct ContextUsageRingMenu: View {
         Text("Context usage unavailable")
       }
     } label: {
-      ContextUsageRing(percent: snapshot?.percent)
-        .frame(width: 20, height: 20)
-        .frame(width: 30, height: 30)
-        .contentShape(Circle())
+      ZStack {
+        if showsLoadingIndicator {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          ContextUsageRing(percent: snapshot?.percent)
+        }
+      }
+      .frame(width: 20, height: 20)
+      .frame(width: 30, height: 30)
+      .contentShape(Circle())
     }
     .buttonStyle(.glass)
     .buttonBorderShape(.circle)
@@ -477,7 +487,12 @@ struct ContextUsageRingMenu: View {
     return ContextUsageSnapshot(contextUsage: contextUsage)
   }
 
+  private var showsLoadingIndicator: Bool {
+    isLoading || contextUsage == nil
+  }
+
   private var accessibilityLabel: String {
+    if showsLoadingIndicator { return "Loading context usage" }
     guard let snapshot else { return "Context usage unavailable" }
     return "Context usage, \(snapshot.displayPercent), \(snapshot.displayTokens)"
   }
