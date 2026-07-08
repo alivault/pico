@@ -76,7 +76,7 @@ struct ProjectFilesWorkspaceView: View {
             Button {
               previewedFile = nil
             } label: {
-              Image(systemName: "xmark")
+              PicoIcon(systemName: "xmark")
             }
             .accessibilityLabel("Close")
           }
@@ -104,7 +104,7 @@ struct ProjectFilesWorkspaceView: View {
   private var fileSearchBar: some View {
     HStack(spacing: 10) {
       HStack(spacing: 8) {
-        Image(systemName: "magnifyingglass")
+        PicoIcon(systemName: "magnifyingglass")
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
         TextField("Search files", text: $searchText)
@@ -114,7 +114,7 @@ struct ProjectFilesWorkspaceView: View {
           .submitLabel(.search)
         if !searchText.isEmpty {
           Button(action: clearSearch) {
-            Image(systemName: "xmark.circle.fill")
+            PicoIcon(systemName: "xmark.circle.fill")
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)

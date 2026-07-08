@@ -57,14 +57,14 @@ struct DirectorySessionsSectionView: View {
     HStack(spacing: 8) {
       Button(action: toggleExpanded) {
         HStack(spacing: 8) {
-          Image(systemName: "folder")
+          PicoIcon(systemName: "folder")
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(width: 20, height: 28)
 
           SidebarDirectoryNameLabel(path: snapshot.directory)
 
-          Image(systemName: "chevron.down")
+          PicoIcon(systemName: "chevron.down")
             .font(.caption2.weight(.bold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isExpanded ? 0 : -90))
@@ -88,7 +88,7 @@ struct DirectorySessionsSectionView: View {
       .accessibilityHint(isExpanded ? "Collapse directory" : "Expand directory")
 
       Button(action: startNewSession) {
-        Image(systemName: "square.and.pencil")
+        PicoIcon(systemName: "square.and.pencil")
           .font(.subheadline.weight(.semibold))
           .frame(width: 44, height: 32)
           .contentShape(Rectangle())
@@ -102,15 +102,14 @@ struct DirectorySessionsSectionView: View {
 
       Menu {
         Button(action: showPurgeSheet) {
-          Label("Purge Sessions…", systemImage: "trash")
+          Label("Purge Sessions…", picoSystemImage: "trash")
         }
 
         Button(role: .destructive, action: removeDirectory) {
-          Label("Remove Directory", systemImage: "minus.circle")
+          Label("Remove Directory", picoSystemImage: "minus.circle")
         }
       } label: {
-        Image(systemName: "ellipsis")
-          .font(.subheadline.weight(.semibold))
+        Image(picoSystemName: "ellipsis")
           .frame(width: 44, height: 32)
           .contentShape(Rectangle())
       }
@@ -168,11 +167,11 @@ private struct DirectorySessionsFullListView: View {
       if snapshot.sessions.isEmpty {
         ContentUnavailableView(
           "No sessions",
-          systemImage: "text.bubble",
+          picoSystemImage: "text.bubble",
           description: Text("This directory does not have any Pico sessions yet.")
         )
       } else if visibleSessions.isEmpty {
-        ContentUnavailableView.search(text: sessionSearchText)
+        PicoSearchUnavailableView(text: sessionSearchText)
       } else {
         Section {
           ForEach(visibleSessions) { entry in
@@ -194,14 +193,14 @@ private struct DirectorySessionsFullListView: View {
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
         Button(action: showSearch) {
-          Image(systemName: "magnifyingglass")
+          PicoIcon(systemName: "magnifyingglass")
         }
         .disabled(snapshot.sessions.isEmpty)
         .accessibilityLabel("Search sessions")
 
         ControlGroup {
           Button(action: startNewSession) {
-            Image(systemName: "square.and.pencil")
+            PicoIcon(systemName: "square.and.pencil")
           }
           .accessibilityLabel(
             "New session in \(DirectoryPathFormatter.folderName(directory))"
@@ -209,14 +208,14 @@ private struct DirectorySessionsFullListView: View {
 
           Menu {
             Button(action: showPurgeSheet) {
-              Label("Purge Sessions…", systemImage: "trash")
+              Label("Purge Sessions…", picoSystemImage: "trash")
             }
 
             Button(role: .destructive, action: removeDirectory) {
-              Label("Remove Directory", systemImage: "minus.circle")
+              Label("Remove Directory", picoSystemImage: "minus.circle")
             }
           } label: {
-            Image(systemName: "ellipsis")
+            Image(picoSystemName: "ellipsis")
           }
           .accessibilityLabel(
             "Actions for \(DirectoryPathFormatter.folderName(directory))"
@@ -510,14 +509,14 @@ private struct DirectorySessionRowButton: View {
         Button(role: .destructive) {
           deleteSession()
         } label: {
-          Label("Delete", systemImage: "trash")
+          Label("Delete", picoSystemImage: "trash")
         }
         .tint(.red)
 
         Button {
           showRenameSessionAlert()
         } label: {
-          Label("Rename", systemImage: "pencil")
+          Label("Rename", picoSystemImage: "pencil")
         }
         .tint(.blue)
       }

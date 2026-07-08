@@ -11,7 +11,7 @@ struct NewSessionModelPickerView: View {
       } else {
         Button(action: { selectedModel = nil }) {
           if selectedModel == nil {
-            Label("Default", systemImage: "checkmark")
+            Label("Default", picoSystemImage: "checkmark")
           } else {
             Text("Default")
           }
@@ -22,7 +22,7 @@ struct NewSessionModelPickerView: View {
             ForEach(models(for: provider), id: \.stableIdentifier) { model in
               Button(action: { selectedModel = model }) {
                 if selectedModel?.stableIdentifier == model.stableIdentifier {
-                  Label(model.displayName, systemImage: "checkmark")
+                  Label(model.displayName, picoSystemImage: "checkmark")
                 } else {
                   Text(model.displayName)
                 }

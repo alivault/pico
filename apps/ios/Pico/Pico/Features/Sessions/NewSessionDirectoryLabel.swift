@@ -7,7 +7,7 @@ struct NewSessionDirectoryLabel: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      Image(systemName: "folder")
+      PicoIcon(systemName: "folder")
         .foregroundStyle(.secondary)
         .frame(width: 24)
       VStack(alignment: .leading, spacing: 3) {
@@ -22,7 +22,7 @@ struct NewSessionDirectoryLabel: View {
       }
       Spacer(minLength: 8)
       if isSelected {
-        Image(systemName: "checkmark.circle.fill")
+        PicoIcon(systemName: "checkmark.circle.fill")
           .foregroundStyle(.tint)
           .accessibilityLabel("Selected")
       }

@@ -21,7 +21,7 @@ struct ConversationHeaderView: View {
         Spacer()
 
         if model.sessionState.streaming {
-          Label("Working", systemImage: "sparkles")
+          Label("Working", picoSystemImage: "sparkles")
             .font(.caption)
             .foregroundStyle(.green)
         }
@@ -32,7 +32,7 @@ struct ConversationHeaderView: View {
         ThinkingMenuView(model: model)
         if model.hasRealCurrentSession,
            let percent = model.sessionState.contextUsage?.displayPercent {
-          Label(percent, systemImage: "gauge.with.dots.needle.67percent")
+          Label(percent, picoSystemImage: "gauge.with.dots.needle.67percent")
             .font(.caption)
             .foregroundStyle(.secondary)
         }

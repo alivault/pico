@@ -33,7 +33,7 @@ struct SettingsView: View {
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
         Button(action: dismiss.callAsFunction) {
-          Image(systemName: "xmark")
+          PicoIcon(systemName: "xmark")
         }
         .accessibilityLabel("Close")
       }

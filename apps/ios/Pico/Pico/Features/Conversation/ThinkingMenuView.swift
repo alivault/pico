@@ -8,14 +8,14 @@ struct ThinkingMenuView: View {
       ForEach(model.composerThinkingLevels, id: \.self) { level in
         Button(action: { select(level) }) {
           if level == model.sessionState.thinkingLevel {
-            Label(Self.label(for: level), systemImage: "checkmark")
+            Label(Self.label(for: level), picoSystemImage: "checkmark")
           } else {
             Text(Self.label(for: level))
           }
         }
       }
     } label: {
-      Label(Self.label(for: model.sessionState.thinkingLevel), systemImage: "brain")
+      Label(Self.label(for: model.sessionState.thinkingLevel), picoSystemImage: "brain")
         .font(.caption)
     }
     .disabled(model.composerThinkingLevels.isEmpty)

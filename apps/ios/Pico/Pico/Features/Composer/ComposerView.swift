@@ -148,7 +148,7 @@ struct ComposerView: View {
 
   private var abortButton: some View {
     Button(action: abort) {
-      Image(systemName: "stop.fill")
+      PicoIcon(systemName: "stop.fill")
         .font(.system(size: 13, weight: .bold))
         .frame(width: 30, height: 30)
     }
@@ -232,7 +232,7 @@ struct ComposerView: View {
       ProgressView()
         .controlSize(.small)
     } else {
-      Image(systemName: "arrow.up")
+      PicoIcon(systemName: "arrow.up")
         .font(.system(size: 14, weight: .bold))
     }
   }
@@ -368,7 +368,7 @@ private struct ComposerGitCommentChip: View {
     HStack(spacing: 2) {
       Button(action: openComment) {
         HStack(spacing: 6) {
-          Image(systemName: comment.systemImage)
+          PicoIcon(systemName: comment.systemImage)
             .font(.caption.weight(.semibold))
             .accessibilityHidden(true)
 
@@ -382,7 +382,7 @@ private struct ComposerGitCommentChip: View {
       .accessibilityLabel("Edit Git comment for \(comment.title)")
 
       Button(action: removeComment) {
-        Image(systemName: "xmark")
+        PicoIcon(systemName: "xmark")
           .font(.caption.weight(.bold))
           .frame(width: 24, height: 24)
           .contentShape(Circle())
@@ -410,22 +410,22 @@ private struct ComposerAttachmentMenu: View {
 
   var body: some View {
     Menu {
-      Button("Camera", systemImage: "camera") {
+      Button("Camera", picoSystemImage: "camera") {
         isShowingCameraPicker = true
       }
       .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera) || remainingImageSlots == 0)
 
-      Button("Photos", systemImage: "photo.on.rectangle") {
+      Button("Photos", picoSystemImage: "photo.on.rectangle") {
         isShowingPhotoPicker = true
       }
       .disabled(remainingImageSlots == 0)
 
-      Button("Files", systemImage: "folder") {
+      Button("Files", picoSystemImage: "folder") {
         isShowingFileImporter = true
       }
       .disabled(remainingImageSlots == 0)
     } label: {
-      Image(systemName: "plus")
+      PicoIcon(systemName: "plus")
         .font(.headline)
         .frame(width: 34, height: 34)
     }
@@ -446,10 +446,12 @@ struct ContextUsageRingMenu: View {
     Menu {
       if showsCompactAction {
         Section("Session") {
-          Button(
-            isCompacting ? "Compacting…" : "Compact context",
-            action: compactSession
-          )
+          Button(action: compactSession) {
+            Label(
+              isCompacting ? "Compacting…" : "Compact context",
+              picoSystemImage: "summary"
+            )
+          }
           .disabled(isCompacting)
         }
       }
@@ -617,7 +619,7 @@ private struct ComposerImageAttachmentThumbnail: View {
         }
 
       Button(action: remove) {
-        Image(systemName: "xmark")
+        PicoIcon(systemName: "xmark")
           .font(.caption2.weight(.bold))
           .padding(4)
           .background(.thinMaterial, in: Circle())
@@ -637,7 +639,7 @@ private struct ComposerImageAttachmentThumbnail: View {
         .resizable()
         .scaledToFill()
     } else {
-      Image(systemName: "photo")
+      PicoIcon(systemName: "photo")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
     }
@@ -715,7 +717,7 @@ private struct ComposerDirectorySelectorView: View {
             if isSelected(directory) {
               Label(
                 DirectoryPathFormatter.displayPath(directory),
-                systemImage: "checkmark"
+                picoSystemImage: "checkmark"
               )
             } else {
               Text(DirectoryPathFormatter.displayPath(directory))
@@ -726,7 +728,7 @@ private struct ComposerDirectorySelectorView: View {
 
       Divider()
 
-      Button("Add another…", systemImage: "folder.badge.plus") {
+      Button("Add another…", picoSystemImage: "folder.badge.plus") {
         isShowingAddDirectory = true
       }
     } label: {
@@ -794,21 +796,21 @@ private struct ComposerGitBranchSelectorView: View {
   var body: some View {
     Menu {
       Section("Branches") {
-        Button("Create branch…", systemImage: "plus") {
+        Button("Create branch…", picoSystemImage: "plus") {
           isShowingCreateBranch = true
         }
         .disabled(model.isCheckingOutGitBranch)
 
         if model.isLoadingGitBranches &&
           model.composerGitLocalBranches.isEmpty {
-          Label("Loading branches…", systemImage: "hourglass")
+          Label("Loading branches…", picoSystemImage: "hourglass")
         } else if model.composerGitLocalBranches.isEmpty {
           Text("No local branches")
         } else {
           ForEach(model.composerGitLocalBranches) { branch in
             Button(action: { switchBranch(branch) }) {
               if branch.current {
-                Label(branchTitle(branch), systemImage: "checkmark")
+                Label(branchTitle(branch), picoSystemImage: "checkmark")
               } else {
                 Text(branchTitle(branch))
               }
@@ -883,7 +885,7 @@ private struct ComposerDirectoryChip: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      Image(systemName: "folder")
+      PicoIcon(systemName: "folder")
         .font(.caption.weight(.semibold))
         .accessibilityHidden(true)
 
@@ -891,7 +893,7 @@ private struct ComposerDirectoryChip: View {
         .lineLimit(1)
         .truncationMode(.tail)
 
-      Image(systemName: "chevron.down")
+      PicoIcon(systemName: "chevron.down")
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)

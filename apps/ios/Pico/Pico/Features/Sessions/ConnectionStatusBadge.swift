@@ -4,7 +4,7 @@ struct ConnectionStatusBadge: View {
   var status: ConnectionStatus
 
   var body: some View {
-    Label(status.label, systemImage: iconName)
+    Label(status.label, picoSystemImage: iconName)
       .font(.caption)
       .labelStyle(.titleAndIcon)
       .foregroundStyle(color)

@@ -33,7 +33,7 @@ struct ConversationView: View {
             if items.isEmpty {
               ContentUnavailableView(
                 "No conversation yet",
-                systemImage: "message",
+                picoSystemImage: "message",
                 description: Text("Start a session from the composer below.")
               )
               .frame(maxWidth: .infinity, minHeight: 280)
@@ -449,7 +449,7 @@ private struct AssistantMessageActionsView: View {
   var body: some View {
     HStack(spacing: 6) {
       Button(action: copyMessage) {
-        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+        PicoIcon(systemName: didCopy ? "checkmark" : "doc.on.doc")
           .contentTransition(.symbolEffect(.replace))
           .frame(width: 30, height: 30)
           .contentShape(Circle())
@@ -461,7 +461,7 @@ private struct AssistantMessageActionsView: View {
 
       if showsBranch {
         Button(action: { onBranch(item) }) {
-          Image(systemName: "arrow.triangle.branch")
+          PicoIcon(systemName: "arrow.triangle.branch")
             .frame(width: 30, height: 30)
             .contentShape(Circle())
         }
@@ -505,7 +505,7 @@ private struct BackToBottomButton: View {
   var action: () -> Void
 
   var body: some View {
-    Button("Jump to latest message", systemImage: "arrow.down", action: action)
+    Button("Jump to latest message", picoSystemImage: "arrow.down", action: action)
       .labelStyle(.iconOnly)
       .font(.headline.weight(.semibold))
       .foregroundStyle(.primary)

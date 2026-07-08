@@ -13,7 +13,7 @@ struct ModelMenuView: View {
             ForEach(models(for: provider), id: \.stableIdentifier) { option in
               Button(action: { select(option) }) {
                 if model.sessionState.model?.stableIdentifier == option.stableIdentifier {
-                  Label(option.displayName, systemImage: "checkmark")
+                  Label(option.displayName, picoSystemImage: "checkmark")
                 } else {
                   Text(option.displayName)
                 }
@@ -23,7 +23,7 @@ struct ModelMenuView: View {
         }
       }
     } label: {
-      Label(model.sessionState.model?.displayName ?? "Model", systemImage: "cpu")
+      Label(model.sessionState.model?.displayName ?? "Model", picoSystemImage: "cpu")
         .font(.caption)
     }
     .disabled(modelOptions.isEmpty)

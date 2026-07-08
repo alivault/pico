@@ -11,7 +11,7 @@ struct StreamingBehaviorMenu: View {
         }
       }
     } label: {
-      Label(selection.label, systemImage: "arrow.triangle.branch")
+      Label(selection.label, picoSystemImage: "arrow.triangle.branch")
         .labelStyle(.iconOnly)
     }
     .accessibilityLabel("Streaming behavior: \(selection.label)")

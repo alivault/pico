@@ -17,11 +17,11 @@ struct SessionSidebarView: View {
       if model.sessionSnapshots.isEmpty {
         ContentUnavailableView(
           "No directories",
-          systemImage: "folder",
+          picoSystemImage: "folder",
           description: Text("Add a directory to show its Pico sessions here.")
         )
       } else if visibleSessionSnapshots.isEmpty {
-        ContentUnavailableView.search(text: sessionSearchText)
+        PicoSearchUnavailableView(text: sessionSearchText)
       }
 
       ForEach(visibleSessionSnapshots) { snapshot in
@@ -46,27 +46,27 @@ struct SessionSidebarView: View {
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
         Button(action: showSearch) {
-          Image(systemName: "magnifyingglass")
+          PicoIcon(systemName: "magnifyingglass")
         }
         .disabled(model.sessionSnapshots.isEmpty)
         .accessibilityLabel("Search sessions")
 
         ControlGroup {
           Button(action: showAddDirectory) {
-            Image(systemName: "folder.badge.plus")
+            PicoIcon(systemName: "folder.badge.plus")
           }
           .accessibilityLabel("Add directory")
 
           Menu {
             Button(action: showManageDirectories) {
-              Label("Edit Directories", systemImage: "folder")
+              Label("Edit Directories", picoSystemImage: "folder")
             }
 
             Button(action: showSettings) {
-              Label("Settings", systemImage: "gearshape")
+              Label("Settings", picoSystemImage: "gearshape")
             }
           } label: {
-            Image(systemName: "ellipsis")
+            Image(picoSystemName: "ellipsis")
           }
           .accessibilityLabel("Sidebar actions")
         }
@@ -207,7 +207,7 @@ struct SidebarSessionSearchField: View {
 
   var body: some View {
     HStack(spacing: 8) {
-      Image(systemName: "magnifyingglass")
+      PicoIcon(systemName: "magnifyingglass")
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
 
@@ -219,7 +219,7 @@ struct SidebarSessionSearchField: View {
 
       if !text.isEmpty {
         Button(action: clearSearch) {
-          Image(systemName: "xmark.circle.fill")
+          PicoIcon(systemName: "xmark.circle.fill")
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
@@ -254,7 +254,7 @@ private struct SidebarManageDirectoriesView: View {
         if model.sidebarDirectories.isEmpty {
           ContentUnavailableView(
             "No directories",
-            systemImage: "folder",
+            picoSystemImage: "folder",
             description: Text("Add directories to show their Pico sessions.")
           )
           .listRowBackground(Color.clear)
@@ -278,7 +278,7 @@ private struct SidebarManageDirectoriesView: View {
 
         Section {
           Button(action: showAddDirectory) {
-            Label("Add Directory", systemImage: "folder.badge.plus")
+            Label("Add Directory", picoSystemImage: "folder.badge.plus")
           }
         }
       }
@@ -288,7 +288,7 @@ private struct SidebarManageDirectoriesView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button(action: closeAndMaybeDiscardChanges) {
-            Image(systemName: "xmark")
+            PicoIcon(systemName: "xmark")
           }
           .accessibilityLabel("Close and discard changes")
           .confirmationDialog(
@@ -308,7 +308,7 @@ private struct SidebarManageDirectoriesView: View {
         }
         ToolbarItem(placement: .primaryAction) {
           Button(action: onDismiss) {
-            Image(systemName: "checkmark")
+            PicoIcon(systemName: "checkmark")
           }
           .buttonStyle(.borderedProminent)
           .buttonBorderShape(.circle)
@@ -321,7 +321,7 @@ private struct SidebarManageDirectoriesView: View {
             Spacer()
 
             Button(role: .destructive, action: deleteSelectedDirectories) {
-              Label(deleteSelectedTitle, systemImage: "trash")
+              Label(deleteSelectedTitle, picoSystemImage: "trash")
             }
             .disabled(selectedDirectories.isEmpty)
           }
@@ -680,7 +680,7 @@ struct SidebarCloseSearchButton: View {
 
   var body: some View {
     Button(action: closeSearch) {
-      Image(systemName: "xmark")
+      PicoIcon(systemName: "xmark")
         .font(.system(size: 16, weight: .semibold))
         .frame(width: 33, height: 33)
         .contentShape(Circle())
@@ -696,7 +696,7 @@ private struct SidebarNewSessionButton: View {
 
   var body: some View {
     Button(action: openNewSession) {
-      Image(systemName: "square.and.pencil")
+      PicoIcon(systemName: "square.and.pencil")
         .font(.system(size: 20, weight: .semibold))
         .frame(width: 40, height: 40)
         .contentShape(Circle())

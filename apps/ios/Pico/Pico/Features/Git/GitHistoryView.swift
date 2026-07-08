@@ -74,7 +74,7 @@ struct GitHistoryView: View {
                 HStack(spacing: 6) {
                   Text(tab.title)
                     .lineLimit(1)
-                  Image(systemName: "xmark.circle.fill")
+                  PicoIcon(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
                     .onTapGesture {
                       closeDiff(tab)
@@ -285,7 +285,7 @@ private struct GitCommitRowView: View {
           formAction = GitCommitActionForm(action: .squash, commit: commit, value: commit.subject)
         }
       } label: {
-        Image(systemName: "ellipsis")
+        Image(picoSystemName: "ellipsis")
           .frame(width: 28, height: 28)
       }
       .accessibilityLabel("Commit actions")
@@ -451,7 +451,7 @@ private struct GitCommitDiffPanel: View {
           .font(.subheadline.weight(.semibold))
           .lineLimit(2)
         Spacer(minLength: 0)
-        Button("Comment", systemImage: "text.bubble") {
+        Button("Comment", picoSystemImage: "text.bubble") {
           isShowingCommentSheet = true
         }
         .disabled(response?.patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)
@@ -544,7 +544,7 @@ private struct GitCommitFilesSheetView: View {
       } else if let errorMessage {
         GitInlineNote(title: errorMessage, systemImage: "exclamationmark.triangle", isError: true)
       } else if files.isEmpty {
-        ContentUnavailableView("No files", systemImage: "doc", description: Text("This commit did not report changed files."))
+        ContentUnavailableView("No files", picoSystemImage: "doc", description: Text("This commit did not report changed files."))
       } else {
         ForEach(files) { file in
           Button {
@@ -579,7 +579,7 @@ private struct GitCommitFilesSheetView: View {
         Button {
           dismiss()
         } label: {
-          Image(systemName: "xmark")
+          PicoIcon(systemName: "xmark")
         }
         .accessibilityLabel("Close")
       }
@@ -666,12 +666,12 @@ private struct GitCommitFileDiffSheetView: View {
         Button {
           dismiss()
         } label: {
-          Image(systemName: "xmark")
+          PicoIcon(systemName: "xmark")
         }
         .accessibilityLabel("Close")
       }
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Comment", systemImage: "text.bubble") {
+        Button("Comment", picoSystemImage: "text.bubble") {
           isShowingCommentSheet = true
         }
         .disabled(response?.patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)

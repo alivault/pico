@@ -107,7 +107,7 @@ private struct GitChangedFileAccordionHeader: View {
         fileTitle
         Spacer(minLength: 0)
         GitLineCountBadge(added: file.linesAdded, deleted: file.linesDeleted)
-        Image(systemName: "chevron.right")
+        PicoIcon(systemName: "chevron.right")
           .font(.caption.weight(.semibold))
           .foregroundStyle(.secondary)
           .rotationEffect(.degrees(isExpanded ? 90 : 0))

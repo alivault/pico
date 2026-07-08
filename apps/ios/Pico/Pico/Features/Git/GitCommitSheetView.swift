@@ -25,9 +25,9 @@ struct GitCommitSheetView: View {
           generateMessage()
         } label: {
           if isGenerating {
-            Label("Generating…", systemImage: "wand.and.sparkles")
+            Label("Generating…", picoSystemImage: "wand.and.sparkles")
           } else {
-            Label("Generate Message", systemImage: "wand.and.sparkles")
+            Label("Generate Message", picoSystemImage: "wand.and.sparkles")
           }
         }
         .disabled(isGenerating || files.isEmpty)

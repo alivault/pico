@@ -53,7 +53,7 @@ struct AuthUiRequestSheetView: View {
   private var authSection: some View {
     Section {
       if let url = authURL {
-        Button("Open Login Page", systemImage: "safari") {
+        Button("Open Login Page", picoSystemImage: "safari") {
           openURL(url)
         }
       }

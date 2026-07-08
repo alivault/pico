@@ -71,7 +71,7 @@ struct GitBranchSheetView: View {
 
       Section {
         if renderedBranches.isEmpty {
-          ContentUnavailableView.search(text: searchText)
+          PicoSearchUnavailableView(text: searchText)
         } else {
           ForEach(renderedBranches) { branch in
             Button {
@@ -96,7 +96,7 @@ struct GitBranchSheetView: View {
               checkoutRemote(branch, localName: localName, localExists: localExists)
             } label: {
               HStack(spacing: 10) {
-                Image(systemName: "arrow.branch")
+                PicoIcon(systemName: "arrow.branch")
                   .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 4) {
                   HStack(spacing: 0) {
@@ -185,7 +185,7 @@ private struct GitBranchRow: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      Image(systemName: branch.current ? "checkmark" : "circle")
+      PicoIcon(systemName: branch.current ? "checkmark" : "circle")
         .foregroundStyle(branch.current ? Color(uiColor: .systemGreen) : .secondary)
       VStack(alignment: .leading, spacing: 4) {
         HStack {

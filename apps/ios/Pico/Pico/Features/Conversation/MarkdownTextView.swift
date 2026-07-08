@@ -166,7 +166,7 @@ private struct MarkdownCodeBlockView: View {
         Button {
           copyCode()
         } label: {
-          Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+          Label(copied ? "Copied" : "Copy", picoSystemImage: copied ? "checkmark" : "doc.on.doc")
             .labelStyle(.titleAndIcon)
         }
         .buttonStyle(.borderless)

@@ -81,7 +81,7 @@ struct ConversationScreen: View {
     .toolbar {
       if horizontalSizeClass != .compact {
         ToolbarItem(placement: .topBarLeading) {
-          Button("Sessions", systemImage: "sidebar.left", action: openSidebar)
+          Button("Sessions", picoSystemImage: "sidebar.left", action: openSidebar)
         }
       }
       ToolbarItem(placement: .topBarLeading) {
@@ -95,26 +95,29 @@ struct ConversationScreen: View {
         .allowsHitTesting(false)
       }
       .sharedBackgroundVisibility(.hidden)
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        if model.hasRealCurrentSession || model.isLoadingSelectedSession {
-          ContextUsageRingMenu(
-            contextUsage: model.sessionState.contextUsage,
-            isCompacting: model.sessionState.compacting,
-            isLoading: model.isLoadingSelectedSession,
-            compactSession: compactSession,
-            showsCompactAction: model.hasRealCurrentSession
+      ToolbarItem(placement: .primaryAction) {
+        HStack(spacing: 8) {
+          if model.hasRealCurrentSession || model.isLoadingSelectedSession {
+            ContextUsageRingMenu(
+              contextUsage: model.sessionState.contextUsage,
+              isCompacting: model.sessionState.compacting,
+              isLoading: model.isLoadingSelectedSession,
+              compactSession: compactSession,
+              showsCompactAction: model.hasRealCurrentSession
+            )
+          }
+
+          ConversationHeaderOptionsMenu(
+            model: model,
+            isPreparingCommit: isPreparingHeaderCommit,
+            isPushing: isPushingHeaderGit,
+            openFiles: showFilesDrawer,
+            commitChanges: showHeaderCommitSheet,
+            pushChanges: pushHeaderGit,
+            renameSession: showRenameSessionAlert,
+            deleteSession: showDeleteSessionConfirmation
           )
         }
-        ConversationHeaderOptionsMenu(
-          model: model,
-          isPreparingCommit: isPreparingHeaderCommit,
-          isPushing: isPushingHeaderGit,
-          openFiles: showFilesDrawer,
-          commitChanges: showHeaderCommitSheet,
-          pushChanges: pushHeaderGit,
-          renameSession: showRenameSessionAlert,
-          deleteSession: showDeleteSessionConfirmation
-        )
       }
     }
     .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
@@ -163,7 +166,7 @@ struct ConversationScreen: View {
               Button {
                 isShowingFilesDrawer = false
               } label: {
-                Image(systemName: "xmark")
+                PicoIcon(systemName: "xmark")
               }
               .accessibilityLabel("Close")
             }
@@ -425,7 +428,7 @@ private struct EditUserMessageSheet: View {
           .accessibilityLabel("Edited message")
 
         if !item.images.isEmpty {
-          Label(attachmentLabel, systemImage: "photo")
+          Label(attachmentLabel, picoSystemImage: "photo")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -563,23 +566,25 @@ private struct ConversationHeaderOptionsMenu: View {
       Divider()
 
       Button(action: openFiles) {
-        Label("Files", systemImage: "folder")
+        Label("Files", picoSystemImage: "folder")
       }
 
       if model.canRenameCurrentSession {
         Divider()
 
         Button(action: renameSession) {
-          Label("Rename", systemImage: "pencil")
+          Label("Rename", picoSystemImage: "pencil")
         }
 
         Button(role: .destructive, action: deleteSession) {
-          Label("Delete", systemImage: "trash")
+          Label("Delete", picoSystemImage: "trash")
         }
         .disabled(!model.canDeleteCurrentSession)
       }
     } label: {
-      Label("More", systemImage: "ellipsis")
+      Image(picoSystemName: "ellipsis")
+        .frame(width: 28, height: 28)
+        .contentShape(Circle())
     }
     .accessibilityLabel("Session options")
   }
@@ -592,14 +597,14 @@ private struct ConversationHeaderOptionsMenu: View {
   private var gitActionButtons: some View {
     if model.hasConversationGitChangesToCommit {
       Button(action: commitChanges) {
-        Label(commitTitle, systemImage: "checkmark.circle")
+        Label(commitTitle, picoSystemImage: "checkmark.circle")
       }
       .disabled(isPreparingCommit)
     }
 
     if model.hasConversationGitCommitsToPush {
       Button(action: pushChanges) {
-        Label(pushTitle, systemImage: "arrow.up.circle")
+        Label(pushTitle, picoSystemImage: "arrow.up.circle")
       }
       .disabled(isPushing)
     }
@@ -627,7 +632,7 @@ private struct ConversationHeaderOptionsMenu: View {
             ForEach(models(for: provider), id: \.stableIdentifier) { option in
               Button(action: { selectModel(option) }) {
                 if selectedModel?.stableIdentifier == option.stableIdentifier {
-                  Label(option.displayName, systemImage: "checkmark")
+                  Label(option.displayName, picoSystemImage: "checkmark")
                 } else {
                   Text(option.displayName)
                 }
@@ -637,7 +642,7 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      Text(modelMenuTitle)
+      Label(modelMenuTitle, picoSystemImage: "cpu")
     }
     .disabled(modelOptions.isEmpty)
   }
@@ -647,14 +652,14 @@ private struct ConversationHeaderOptionsMenu: View {
       ForEach(model.composerThinkingLevels, id: \.self) { level in
         Button(action: { selectThinkingLevel(level) }) {
           if level == model.sessionState.thinkingLevel {
-            Label(Self.reasoningLabel(for: level), systemImage: "checkmark")
+            Label(Self.reasoningLabel(for: level), picoSystemImage: "checkmark")
           } else {
             Text(Self.reasoningLabel(for: level))
           }
         }
       }
     } label: {
-      Text(reasoningMenuTitle)
+      Label(reasoningMenuTitle, picoSystemImage: "brain")
     }
     .disabled(model.composerThinkingLevels.isEmpty)
   }
@@ -664,15 +669,11 @@ private struct ConversationHeaderOptionsMenu: View {
   }
 
   private var modelMenuTitle: String {
-    if let selectedModel {
-      "Model: \(selectedModel.displayName)"
-    } else {
-      "Model"
-    }
+    selectedModel?.displayName ?? "Model"
   }
 
   private var reasoningMenuTitle: String {
-    "Reasoning: \(Self.reasoningLabel(for: model.sessionState.thinkingLevel))"
+    Self.reasoningLabel(for: model.sessionState.thinkingLevel)
   }
 
   private var modelOptions: [ModelOption] {
@@ -712,7 +713,7 @@ private struct ConversationHeaderOptionsMenu: View {
     Button(action: toggleThinkingVisibility) {
       Label(
         model.sessionState.hideThinkingBlock ? "Show thinking" : "Hide thinking",
-        systemImage: model.sessionState.hideThinkingBlock ? "eye" : "eye.slash"
+        picoSystemImage: model.sessionState.hideThinkingBlock ? "eye" : "eye.slash"
       )
     }
   }
@@ -721,7 +722,7 @@ private struct ConversationHeaderOptionsMenu: View {
     Button(action: toggleToolVisibility) {
       Label(
         model.hideToolBlocks ? "Show tools" : "Hide tools",
-        systemImage: model.hideToolBlocks ? "eye" : "eye.slash"
+        picoSystemImage: model.hideToolBlocks ? "eye" : "eye.slash"
       )
     }
   }

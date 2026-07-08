@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E60000000000000000000001 /* Core/UI/PicoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60000000000000000000002 /* Core/UI/PicoIcon.swift */; };
+		E60000000000000000000003 /* LucideSwift in Frameworks */ = {isa = PBXBuildFile; productRef = E60000000000000000000004 /* LucideSwift */; };
 		001D000E66261E1E7231FFBF /* Features/Composer/ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */; };
 		00F6ACAB7604A055D89430E2 /* Core/Models/SessionStatusEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEF0E9964CCFFD923E6988A /* Core/Models/SessionStatusEvent.swift */; };
 		0152DB3236EA0880514BDAB0 /* Core/Models/SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F2174D3B7BC0730339FA2 /* Core/Models/SessionState.swift */; };
@@ -164,6 +166,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E60000000000000000000002 /* Core/UI/PicoIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/UI/PicoIcon.swift; sourceTree = "<group>"; };
 		024183A22119797BA4E3812C /* Core/Persistence/CredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Persistence/CredentialStore.swift; sourceTree = "<group>"; };
 		07E8B7F815FE4A06E1C73866 /* state_sync_patch.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = state_sync_patch.json; sourceTree = "<group>"; };
 		0898037D501376B858C08E23 /* Core/Models/TextBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/TextBlock.swift; sourceTree = "<group>"; };
@@ -325,6 +328,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E60000000000000000000003 /* LucideSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,6 +408,7 @@
 				59F749AC43C6A833BD2D59B9 /* Core/Persistence/ConnectionStore.swift */,
 				024183A22119797BA4E3812C /* Core/Persistence/CredentialStore.swift */,
 				917CC3A1A04DF4E256D82202 /* Core/Persistence/DraftStore.swift */,
+				E60000000000000000000002 /* Core/UI/PicoIcon.swift */,
 				45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */,
 				5FF0827613EB43B5A1373BCE /* Features/Composer/PendingMessagesView.swift */,
 				4A5B98205CAC380630135192 /* Features/Composer/StreamingBehaviorMenu.swift */,
@@ -550,6 +555,9 @@
 			dependencies = (
 			);
 			name = Pico;
+			packageProductDependencies = (
+				E60000000000000000000004 /* LucideSwift */,
+			);
 			productName = Pico;
 			productReference = 8826B757F97B59CD37A46C73 /* Pico.app */;
 			productType = "com.apple.product-type.application";
@@ -582,6 +590,9 @@
 				Base,
 			);
 			mainGroup = F729E66E55007E055E036E6F;
+			packageReferences = (
+				E60000000000000000000005 /* XCLocalSwiftPackageReference "LucideSwift" */,
+			);
 			productRefGroup = B65B87CF128A44E5BA45FFD4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -685,6 +696,7 @@
 				29E94C8AE5710F96AD575412 /* Core/Persistence/ConnectionStore.swift in Sources */,
 				C0D532D56ABAA4CD8C0F2F2D /* Core/Persistence/CredentialStore.swift in Sources */,
 				DFF67019BB954EF276B4A72C /* Core/Persistence/DraftStore.swift in Sources */,
+				E60000000000000000000001 /* Core/UI/PicoIcon.swift in Sources */,
 				001D000E66261E1E7231FFBF /* Features/Composer/ComposerView.swift in Sources */,
 				8BE006BB949E15EEE5AB36D3 /* Features/Composer/PendingMessagesView.swift in Sources */,
 				0E06ECBE3EB06C1AFBB50479 /* Features/Composer/StreamingBehaviorMenu.swift in Sources */,
@@ -777,6 +789,21 @@
 			targetProxy = 1D23656230B134B5E7FC262B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E60000000000000000000005 /* XCLocalSwiftPackageReference "LucideSwift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LucideSwift;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E60000000000000000000004 /* LucideSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E60000000000000000000005 /* XCLocalSwiftPackageReference "LucideSwift" */;
+			productName = LucideSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		687E6A61460ED98F7478F186 /* Debug */ = {

@@ -11,7 +11,7 @@ struct GitSectionCard<Content: View>: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 8) {
         if let systemImage {
-          Image(systemName: systemImage)
+          PicoIcon(systemName: systemImage)
             .foregroundStyle(.secondary)
             .accessibilityHidden(true)
         }
@@ -43,7 +43,7 @@ struct GitInlineNote: View {
   var isError = false
 
   var body: some View {
-    Label(title, systemImage: systemImage)
+    Label(title, picoSystemImage: systemImage)
       .font(.callout)
       .foregroundStyle(isError ? Color(uiColor: .systemRed) : .secondary)
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,7 +106,7 @@ struct GitBranchChip: View {
         ProgressView()
           .controlSize(.small)
       } else {
-        Image(systemName: "arrow.triangle.branch")
+        PicoIcon(systemName: "arrow.triangle.branch")
           .font(.caption.weight(.semibold))
           .accessibilityHidden(true)
       }
@@ -115,7 +115,7 @@ struct GitBranchChip: View {
         .lineLimit(1)
         .truncationMode(.tail)
 
-      Image(systemName: "chevron.down")
+      PicoIcon(systemName: "chevron.down")
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
@@ -133,7 +133,7 @@ struct GitFileIcon: View {
   var isDirectory: Bool = false
 
   var body: some View {
-    Image(systemName: systemImage)
+    PicoIcon(systemName: systemImage)
       .foregroundStyle(isDirectory ? Color(uiColor: .systemBlue) : .secondary)
       .accessibilityHidden(true)
   }
@@ -240,7 +240,7 @@ struct GitEmptyView: View {
   var message: String
 
   var body: some View {
-    ContentUnavailableView(title, systemImage: systemImage, description: Text(message))
+    ContentUnavailableView(title, picoSystemImage: systemImage, description: Text(message))
       .frame(maxWidth: .infinity, minHeight: 180)
   }
 }
@@ -283,7 +283,7 @@ struct GitCommentSheetView: View {
     Form {
       Section("Commenting on") {
         HStack(spacing: 10) {
-          Image(systemName: previewSystemImage)
+          PicoIcon(systemName: previewSystemImage)
             .foregroundStyle(.secondary)
             .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 3) {
@@ -310,7 +310,7 @@ struct GitCommentSheetView: View {
 
       if let delete {
         Section {
-          Button("Delete Comment", systemImage: "trash", role: .destructive) {
+          Button("Delete Comment", picoSystemImage: "trash", role: .destructive) {
             delete()
             dismiss()
           }

@@ -18,7 +18,7 @@ struct GitWorkspaceView: View {
     VStack(spacing: 0) {
       Picker("Files", selection: $selectedTab) {
         ForEach(GitWorkspaceTab.allCases) { tab in
-          Label(tab.title, systemImage: tab.systemImage).tag(tab)
+          Label(tab.title, picoSystemImage: tab.systemImage).tag(tab)
         }
       }
       .pickerStyle(.segmented)
@@ -445,8 +445,7 @@ struct GitWorkspaceToolbar: View {
               ProgressView()
                 .controlSize(.small)
             } else {
-              Image(systemName: "ellipsis")
-                .font(.headline)
+              Image(picoSystemName: "ellipsis")
                 .accessibilityHidden(true)
             }
           }
@@ -502,7 +501,7 @@ struct GitWorkspaceToolbar: View {
 
   @ViewBuilder
   private var branchMenuContent: some View {
-    Button("Create branch…", systemImage: "plus") {
+    Button("Create branch…", picoSystemImage: "plus") {
       isShowingCreateBranch = true
     }
     .disabled(status == nil)
@@ -518,7 +517,7 @@ struct GitWorkspaceToolbar: View {
               checkoutBranch(branch.name, false, nil, false)
             } label: {
               if branch.current {
-                Label(GitFormatting.localBranchMenuTitle(branch), systemImage: "checkmark")
+                Label(GitFormatting.localBranchMenuTitle(branch), picoSystemImage: "checkmark")
               } else {
                 Text(GitFormatting.localBranchMenuTitle(branch))
               }
@@ -544,11 +543,11 @@ struct GitWorkspaceToolbar: View {
               )
             } label: {
               if isCurrent {
-                Label(branch.name, systemImage: "checkmark")
+                Label(branch.name, picoSystemImage: "checkmark")
               } else if localExists {
                 Text(branch.name)
               } else {
-                Label(branch.name, systemImage: "plus")
+                Label(branch.name, picoSystemImage: "plus")
               }
             }
             .disabled(isCurrent)

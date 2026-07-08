@@ -17,7 +17,7 @@ struct ProviderAuthSectionView: View {
           value: String(model.sessionState.availableModels.count)
         )
 
-        Button("Refresh Providers", systemImage: "arrow.clockwise") {
+        Button("Refresh Providers", picoSystemImage: "arrow.clockwise") {
           Task {
             await model.refreshAuthProviders()
           }

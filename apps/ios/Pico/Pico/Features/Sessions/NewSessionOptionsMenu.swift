@@ -6,10 +6,10 @@ struct NewSessionOptionsMenu: View {
   var body: some View {
     Menu {
       Toggle(isOn: $showHiddenDirectories) {
-        Label("Show Hidden Files and Folders", systemImage: "eye")
+        Label("Show Hidden Files and Folders", picoSystemImage: "eye")
       }
     } label: {
-      Image(systemName: "ellipsis")
+      Image(picoSystemName: "ellipsis")
     }
     .accessibilityLabel("Directory options")
   }

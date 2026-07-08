@@ -40,7 +40,7 @@ struct NewSessionBrowseFolderView: View {
     }
     .safeAreaInset(edge: .bottom) {
       Button(action: useDirectory) {
-        Label(useButtonTitle, systemImage: "checkmark")
+        Label(useButtonTitle, picoSystemImage: "checkmark")
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(.borderedProminent)

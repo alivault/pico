@@ -71,7 +71,7 @@ struct PendingMessagesView: View {
 
           Spacer(minLength: 8)
 
-          Image(systemName: "chevron.down")
+          PicoIcon(systemName: "chevron.down")
             .font(.caption.weight(.bold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isExpanded ? 0 : -90))
@@ -517,7 +517,7 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         self?.parent.onDeleteMessage(message)
         complete(true)
       }
-      deleteAction.image = UIImage(systemName: "trash")
+      deleteAction.image = PicoIcon.uiImage(systemName: "trash")
 
       let editAction = UIContextualAction(
         style: .normal,
@@ -526,7 +526,7 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         self?.parent.onEditMessage(message)
         complete(true)
       }
-      editAction.image = UIImage(systemName: "pencil")
+      editAction.image = PicoIcon.uiImage(systemName: "pencil")
       editAction.backgroundColor = .systemBlue
 
       let configuration = UISwipeActionsConfiguration(actions: [
@@ -751,7 +751,7 @@ private struct PendingMessageEditSheet: View {
 
         if !message.images.isEmpty {
           Section("Attachments") {
-            Label(imageCountLabel, systemImage: "photo")
+            Label(imageCountLabel, picoSystemImage: "photo")
           }
         }
       }

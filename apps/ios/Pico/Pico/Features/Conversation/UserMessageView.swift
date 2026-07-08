@@ -16,13 +16,13 @@ struct UserMessageView: View {
         if !item.images.isEmpty {
           Label(
             "\(item.images.count) image attachment\(item.images.count == 1 ? "" : "s")",
-            systemImage: "photo"
+            picoSystemImage: "photo"
           )
           .font(.caption)
           .foregroundStyle(.secondary)
         }
         if item.queued == true {
-          Label("Queued", systemImage: "clock")
+          Label("Queued", picoSystemImage: "clock")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -31,12 +31,12 @@ struct UserMessageView: View {
       .background(.tint.opacity(0.12), in: .rect(cornerRadius: 16))
       .contextMenu {
         Button(action: copyMessage) {
-          Label("Copy", systemImage: "doc.on.doc")
+          Label("Copy", picoSystemImage: "doc.on.doc")
         }
         .disabled(!hasCopyableText)
 
         Button(action: { onEdit(item) }) {
-          Label("Edit", systemImage: "pencil")
+          Label("Edit", picoSystemImage: "pencil")
         }
         .disabled(!canEdit || !hasEditableText)
       }

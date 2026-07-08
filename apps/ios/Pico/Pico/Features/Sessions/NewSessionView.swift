@@ -147,7 +147,7 @@ struct NewSessionView: View {
           if showsCancelButton {
             Button("Cancel", action: dismiss.callAsFunction)
           } else {
-            Button("Sessions", systemImage: "sidebar.left", action: openSidebar)
+            Button("Sessions", picoSystemImage: "sidebar.left", action: openSidebar)
           }
         }
         ToolbarItem(placement: .primaryAction) {

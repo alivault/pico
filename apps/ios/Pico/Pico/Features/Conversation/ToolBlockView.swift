@@ -66,7 +66,7 @@ struct ToolBlockView: View {
           EditDiffStatCountsView(stats: stats)
         }
 
-        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+        PicoIcon(systemName: isExpanded ? "chevron.down" : "chevron.right")
           .font(.caption.weight(.semibold))
           .foregroundStyle(.secondary)
           .frame(width: 12)

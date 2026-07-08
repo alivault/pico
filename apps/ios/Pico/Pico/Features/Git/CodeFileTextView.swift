@@ -21,7 +21,7 @@ struct CodeFileTextView: View {
       )
 
       if isHighlighting && highlight?.isHighlighted != true {
-        Label("Highlighting", systemImage: "sparkles")
+        Label("Highlighting", picoSystemImage: "sparkles")
           .font(.caption2.weight(.semibold))
           .foregroundStyle(.secondary)
           .padding(.horizontal, 10)
