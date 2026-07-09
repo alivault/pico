@@ -38,7 +38,8 @@ struct DirectorySessionsSectionView: View {
                 directory: snapshot.directory,
                 model: model,
                 openDetail: openDetail,
-                openPurge: openPurge
+                openPurge: openPurge,
+                openFiles: openFiles
               )
             } label: {
               Text("See all")
@@ -163,12 +164,14 @@ struct DirectorySessionsSectionView: View {
   }
 }
 
-private struct DirectorySessionsFullListView: View {
+struct DirectorySessionsFullListView: View {
   var directory: String
   @Bindable var model: AppModel
   @Environment(\.dismiss) private var dismiss
   var openDetail: () -> Void = {}
   var openPurge: (String) -> Void = { _ in }
+  var openFiles: (String) -> Void = { _ in }
+  var setFloatingNewSessionHidden: (Bool) -> Void = { _ in }
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
   @FocusState private var isSessionSearchFocused: Bool
@@ -184,23 +187,20 @@ private struct DirectorySessionsFullListView: View {
       } else if visibleSessions.isEmpty {
         PicoSearchUnavailableView(text: sessionSearchText)
       } else {
-        Section {
-          ForEach(visibleSessions) { entry in
-            DirectorySessionRowButton(
-              entry: entry,
-              directory: snapshot.directory,
-              model: model,
-              openDetail: openDetail
-            )
-          }
-        } header: {
-          SidebarDirectoryNameLabel(path: snapshot.directory)
-            .textCase(nil)
+        ForEach(visibleSessions) { entry in
+          DirectorySessionRowButton(
+            entry: entry,
+            directory: snapshot.directory,
+            model: model,
+            openDetail: openDetail
+          )
         }
       }
     }
+    .safeAreaPadding(.bottom, isSessionSearchVisible ? 0 : 48)
+    .animation(.smooth(duration: 0.2), value: isSessionSearchVisible)
     .navigationTitle(DirectoryPathFormatter.folderName(directory))
-    .navigationBarTitleDisplayMode(.inline)
+    .navigationBarTitleDisplayMode(.large)
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
         Button(action: showSearch) {
@@ -210,11 +210,11 @@ private struct DirectorySessionsFullListView: View {
         .accessibilityLabel("Search sessions")
 
         ControlGroup {
-          Button(action: startNewSession) {
-            PicoIcon(systemName: "square.and.pencil", size: 20)
+          Button(action: showFiles) {
+            PicoIcon(systemName: "folder", size: 20)
           }
           .accessibilityLabel(
-            "New session in \(DirectoryPathFormatter.folderName(directory))"
+            "Files for \(DirectoryPathFormatter.folderName(directory))"
           )
 
           Menu {
@@ -238,6 +238,10 @@ private struct DirectorySessionsFullListView: View {
       if isSessionSearchVisible {
         sessionSearchBar
       }
+    }
+    .onAppear(perform: updateFloatingNewSessionVisibility)
+    .onChange(of: isSessionSearchVisible) { _, _ in
+      updateFloatingNewSessionVisibility()
     }
     .onChange(of: isSessionSearchPresented) { _, isPresented in
       if isPresented {
@@ -310,13 +314,16 @@ private struct DirectorySessionsFullListView: View {
     isSessionSearchPresented = false
   }
 
-  private func startNewSession() {
-    model.beginNewChat(cwd: directory)
-    openDetail()
+  private func updateFloatingNewSessionVisibility() {
+    setFloatingNewSessionHidden(isSessionSearchVisible)
   }
 
   private func showPurgeSheet() {
     openPurge(directory)
+  }
+
+  private func showFiles() {
+    openFiles(directory)
   }
 
   private func removeDirectory() {

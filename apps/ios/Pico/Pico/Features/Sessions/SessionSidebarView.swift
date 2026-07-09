@@ -2,127 +2,162 @@ import SwiftUI
 
 struct SessionSidebarView: View {
   @Bindable var model: AppModel
-  var openNewSession: () -> Void = {}
-  var openConversation: () -> Void = {}
+  var openDirectory: (String) -> Void = { _ in }
+  var openPurge: (String) -> Void = { _ in }
+  var openFiles: (String) -> Void = { _ in }
+  var setFloatingNewSessionHidden: (Bool) -> Void = { _ in }
   @State private var isShowingSettings = false
   @State private var isShowingAddDirectory = false
-  @State private var isShowingManageDirectories = false
-  @State private var purgeRequest: SidebarPurgeDirectoryRequest?
-  @State private var filesRequest: SidebarFilesDirectoryRequest?
+  @State private var selectedDirectories = Set<String>()
+  @State private var editMode = EditMode.inactive
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
   @FocusState private var isSessionSearchFocused: Bool
 
   var body: some View {
-    List {
-      if model.sessionSnapshots.isEmpty {
-        ContentUnavailableView(
-          "No directories",
-          picoSystemImage: "folder",
-          description: Text("Add a directory to show its Pico sessions here.")
-        )
-      } else if visibleSessionSnapshots.isEmpty {
-        PicoSearchUnavailableView(text: sessionSearchText)
+    directoryList
+      .environment(\.editMode, $editMode)
+      .contentMargins(.top, 0, for: .scrollContent)
+      .safeAreaPadding(.bottom, isSessionSearchVisible ? 0 : 48)
+      .overlay(alignment: .bottomTrailing) {
+        floatingDeleteSelectedButton
       }
-
-      ForEach(visibleSessionSnapshots) { snapshot in
-        DirectorySessionsSectionView(
-          snapshot: snapshot,
-          model: model,
-          openDetail: openConversation,
-          openPurge: showPurgeDirectory,
-          openFiles: showFilesDirectory,
-          isSearchActive: isSessionSearchActive,
-          isLoading: model.loadingDirectorySessionIndexes.contains(
-            snapshot.directory
-          )
-        )
-      }
-    }
-    .contentMargins(.top, 0, for: .scrollContent)
-    .safeAreaPadding(.bottom, isSessionSearchVisible ? 0 : 48)
-    .overlay(alignment: .bottomTrailing) {
-      floatingNewSessionButton
-    }
-    .navigationTitle("Sessions")
-    .toolbar {
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        Button(action: showSearch) {
-          PicoIcon(systemName: "magnifyingglass")
-        }
-        .disabled(model.sessionSnapshots.isEmpty)
-        .accessibilityLabel("Search sessions")
-
-        ControlGroup {
-          Button(action: showAddDirectory) {
-            PicoIcon(systemName: "folder.badge.plus")
+      .animation(.smooth(duration: 0.2), value: isEditing)
+      .navigationTitle(sidebarNavigationTitle)
+      .toolbar {
+        if isEditing {
+          ToolbarItem(placement: .topBarLeading) {
+            selectAllDirectoriesButton
           }
-          .accessibilityLabel("Add directory")
 
-          Menu {
-            Button(action: showManageDirectories) {
-              Label("Edit Directories", picoSystemImage: "folder", size: 20)
-            }
-
-            Button(action: showSettings) {
-              Label("Settings", picoSystemImage: "gearshape", size: 20)
-            }
-          } label: {
-            Image(picoSystemName: "ellipsis")
+          ToolbarItem(placement: .topBarTrailing) {
+            Button("Done", action: finishEditing)
+              .fontWeight(.semibold)
           }
-          .accessibilityLabel("Sidebar actions")
-        }
-      }
-    }
-    .safeAreaBar(edge: .bottom, alignment: .center) {
-      if isSessionSearchVisible {
-        sidebarSearchBar
-      }
-    }
-    .sheet(isPresented: $isShowingSettings) {
-      NavigationStack {
-        SettingsView(model: model)
-      }
-    }
-    .sheet(isPresented: $isShowingAddDirectory) {
-      SidebarAddDirectoryView(model: model) {
-        isShowingAddDirectory = false
-      }
-    }
-    .sheet(isPresented: $isShowingManageDirectories) {
-      SidebarManageDirectoriesView(model: model) {
-        isShowingManageDirectories = false
-      }
-      .presentationDetents([.large])
-      .presentationDragIndicator(.visible)
-    }
-    .sheet(item: $purgeRequest) { request in
-      DirectorySessionPurgeSheet(
-        model: model,
-        directory: request.directory
-      )
-    }
-    .sheet(item: $filesRequest) { request in
-      NavigationStack {
-        GitWorkspaceView(model: model, directory: request.directory)
-          .navigationTitle("Files")
-          .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-              Button {
-                filesRequest = nil
-              } label: {
-                PicoIcon(systemName: "xmark")
+        } else {
+          ToolbarItemGroup(placement: .topBarTrailing) {
+            Button(action: showSearch) {
+              PicoIcon(systemName: "magnifyingglass")
+            }
+            .disabled(model.sessionSnapshots.isEmpty)
+            .accessibilityLabel("Search sessions")
+
+            ControlGroup {
+              Button(action: showAddDirectory) {
+                PicoIcon(systemName: "folder.badge.plus")
               }
-              .accessibilityLabel("Close files")
+              .accessibilityLabel("Add directory")
+
+              Menu {
+                Button(action: beginEditing) {
+                  Label("Edit Directories", picoSystemImage: "folder", size: 20)
+                }
+                .disabled(model.sidebarDirectories.isEmpty)
+
+                Button(action: showSettings) {
+                  Label("Settings", picoSystemImage: "gearshape", size: 20)
+                }
+              } label: {
+                Image(picoSystemName: "ellipsis")
+              }
+              .accessibilityLabel("Sidebar actions")
             }
           }
+        }
       }
+      .safeAreaBar(edge: .bottom, alignment: .center) {
+        if isSessionSearchVisible {
+          sidebarSearchBar
+        }
+      }
+      .sheet(isPresented: $isShowingSettings) {
+        NavigationStack {
+          SettingsView(model: model)
+        }
+      }
+      .sheet(isPresented: $isShowingAddDirectory) {
+        SidebarAddDirectoryView(model: model) {
+          isShowingAddDirectory = false
+        }
+      }
+      .onAppear(perform: updateFloatingNewSessionVisibility)
+      .onChange(of: shouldHideFloatingNewSessionButton) { _, _ in
+        updateFloatingNewSessionVisibility()
+      }
+      .onChange(of: isSessionSearchPresented) { _, isPresented in
+        if isPresented {
+          isSessionSearchFocused = true
+        }
+      }
+      .onChange(of: model.sidebarDirectories) { _, directories in
+        selectedDirectories.formIntersection(Set(directories))
+        if directories.isEmpty, isEditing {
+          finishEditing()
+        }
+      }
+  }
+
+  private var directoryList: some View {
+    List(selection: $selectedDirectories) {
+      directoryListContent
     }
-    .onChange(of: isSessionSearchPresented) { _, isPresented in
-      if isPresented {
-        isSessionSearchFocused = true
-      }
+  }
+
+  @ViewBuilder
+  private var directoryListContent: some View {
+    if model.sessionSnapshots.isEmpty {
+      ContentUnavailableView(
+        "No directories",
+        picoSystemImage: "folder",
+        description: Text("Add a directory to show its Pico sessions here.")
+      )
+    } else if visibleSessionSnapshots.isEmpty {
+      PicoSearchUnavailableView(text: sessionSearchText)
+    }
+
+    ForEach(visibleSessionSnapshots) { snapshot in
+      directoryRow(for: snapshot)
+        .tag(snapshot.directory)
+    }
+    .onMove(perform: moveDirectories)
+  }
+
+  @ViewBuilder
+  private func directoryRow(
+    for snapshot: DirectorySessionsIndexSnapshot
+  ) -> some View {
+    let directory = snapshot.directory
+    let row = SidebarDirectoryRowView(
+      snapshot: snapshot,
+      isEditing: isEditing,
+      isLoading: model.loadingDirectorySessionIndexes.contains(directory),
+      openDirectory: { openDirectory(directory) }
+    )
+
+    if isEditing {
+      row
+    } else {
+      row
+        .contextMenu {
+          Button(action: { openFiles(directory) }) {
+            Label("Files", picoSystemImage: "folder", size: 20)
+          }
+
+          Button(action: { openPurge(directory) }) {
+            Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
+          }
+
+          Divider()
+
+          Button(role: .destructive, action: { removeDirectory(directory) }) {
+            Label("Remove Directory", picoSystemImage: "minus.circle", size: 20)
+          }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+          Button(role: .destructive, action: { removeDirectory(directory) }) {
+            Label("Remove", picoSystemImage: "minus.circle", size: 20)
+          }
+        }
     }
   }
 
@@ -141,24 +176,62 @@ struct SessionSidebarView: View {
   }
 
   @ViewBuilder
-  private var floatingNewSessionButton: some View {
-    if !isSessionSearchVisible {
-      SidebarNewSessionButton(openNewSession: openNewSession)
-        .padding(.trailing)
+  private var floatingDeleteSelectedButton: some View {
+    if isEditing {
+      SidebarDeleteSelectedButton(
+        deleteSelected: deleteSelectedDirectories
+      )
+      .disabled(selectedDirectories.isEmpty)
+      .padding(.trailing)
+      .transition(.scale.combined(with: .opacity))
     }
   }
 
+  private var isEditing: Bool {
+    editMode.isEditing
+  }
+
+  private var sidebarNavigationTitle: String {
+    guard isEditing else { return "Directories" }
+    let selectedCount = selectedDirectories.count
+    guard selectedCount > 0 else { return "Select Directories" }
+    return "\(selectedCount) Selected"
+  }
+
   private var isSessionSearchVisible: Bool {
-    isSessionSearchPresented || isSessionSearchFocused || isSessionSearchActive
+    !isEditing &&
+      (isSessionSearchPresented || isSessionSearchFocused || isSessionSearchActive)
   }
 
   private var isSessionSearchActive: Bool {
     !sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  private var allDirectoriesAreSelected: Bool {
+    !model.sidebarDirectories.isEmpty &&
+      selectedDirectories.count == model.sidebarDirectories.count
+  }
+
+  @ViewBuilder
+  private var selectAllDirectoriesButton: some View {
+    if allDirectoriesAreSelected {
+      Button("Deselect All", action: toggleAllDirectoriesSelected)
+        .disabled(model.sidebarDirectories.isEmpty)
+        .accessibilityValue("All selected")
+    } else {
+      Button("Select All", action: toggleAllDirectoriesSelected)
+        .disabled(model.sidebarDirectories.isEmpty)
+        .accessibilityValue("Not all selected")
+    }
+  }
+
+  private var shouldHideFloatingNewSessionButton: Bool {
+    isEditing || isSessionSearchVisible
+  }
+
   private var visibleSessionSnapshots: [DirectorySessionsIndexSnapshot] {
     let query = sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return model.sessionSnapshots }
+    guard !isEditing, !query.isEmpty else { return model.sessionSnapshots }
 
     return model.sessionSnapshots.compactMap { snapshot in
       let sessions = snapshot.sessions.filter { sessionMatches($0, query: query) }
@@ -188,6 +261,7 @@ struct SessionSidebarView: View {
   }
 
   private func showSearch() {
+    guard !isEditing else { return }
     isSessionSearchPresented = true
     isSessionSearchFocused = true
   }
@@ -206,27 +280,150 @@ struct SessionSidebarView: View {
     isShowingAddDirectory = true
   }
 
-  private func showManageDirectories() {
-    isShowingManageDirectories = true
+  private func updateFloatingNewSessionVisibility() {
+    setFloatingNewSessionHidden(shouldHideFloatingNewSessionButton)
   }
 
-  private func showPurgeDirectory(_ directory: String) {
-    purgeRequest = SidebarPurgeDirectoryRequest(directory: directory)
+  private func beginEditing() {
+    closeSearch()
+    selectedDirectories.formIntersection(Set(model.sidebarDirectories))
+    withAnimation(.smooth(duration: 0.2)) {
+      editMode = .active
+    }
   }
 
-  private func showFilesDirectory(_ directory: String) {
-    filesRequest = SidebarFilesDirectoryRequest(directory: directory)
+  private func finishEditing() {
+    withAnimation(.smooth(duration: 0.2)) {
+      editMode = .inactive
+      selectedDirectories.removeAll()
+    }
+  }
+
+  private func toggleAllDirectoriesSelected() {
+    setAllDirectoriesSelected(!allDirectoriesAreSelected)
+  }
+
+  private func setAllDirectoriesSelected(_ isSelected: Bool) {
+    withAnimation(.smooth(duration: 0.2)) {
+      if isSelected {
+        selectedDirectories = Set(model.sidebarDirectories)
+      } else {
+        selectedDirectories.removeAll()
+      }
+    }
+  }
+
+  private func deleteSelectedDirectories() {
+    let directories = model.sidebarDirectories.filter {
+      selectedDirectories.contains($0)
+    }
+    guard !directories.isEmpty else { return }
+
+    withAnimation(.smooth(duration: 0.2)) {
+      selectedDirectories.removeAll()
+    }
+    model.removeSidebarDirectories(directories)
+    if model.sidebarDirectories.isEmpty {
+      finishEditing()
+    }
+  }
+
+  private func removeDirectory(_ directory: String) {
+    model.removeSidebarDirectory(directory)
+  }
+
+  private func moveDirectories(from source: IndexSet, to destination: Int) {
+    guard isEditing, !isSessionSearchActive else { return }
+    model.moveSidebarDirectories(fromOffsets: source, toOffset: destination)
+    selectedDirectories.formIntersection(Set(model.sidebarDirectories))
   }
 }
 
-private struct SidebarFilesDirectoryRequest: Identifiable {
-  var directory: String
-  var id: String { directory }
-}
+private struct SidebarDirectoryRowView: View {
+  var snapshot: DirectorySessionsIndexSnapshot
+  var isEditing: Bool
+  var isLoading: Bool
+  var openDirectory: () -> Void
 
-private struct SidebarPurgeDirectoryRequest: Identifiable {
-  var directory: String
-  var id: String { directory }
+  var body: some View {
+    Group {
+      if isEditing {
+        rowContent
+      } else {
+        Button(action: openDirectory) {
+          rowContent
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .accessibilityLabel(rowAccessibilityLabel)
+    .accessibilityHint(accessibilityHint)
+    .padding(.vertical, 2)
+  }
+
+  private var rowContent: some View {
+    HStack(spacing: 10) {
+      PicoIcon(systemName: "folder")
+        .font(.body.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: 24)
+
+      Text(folderName)
+        .font(.body)
+        .fontWeight(.semibold)
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+
+      Spacer(minLength: 8)
+
+      if unreadCount > 0 {
+        Text("\(unreadCount)")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.white)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 3)
+          .background(.tint, in: Capsule())
+          .accessibilityLabel(unreadCountAccessibilityLabel)
+      }
+
+      if isLoading {
+        ProgressView()
+          .controlSize(.small)
+          .accessibilityLabel("Loading sessions")
+      } else if !isEditing {
+        PicoIcon(systemName: "chevron.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+  }
+
+  private var folderName: String {
+    DirectoryPathFormatter.folderName(snapshot.directory)
+  }
+
+  private var unreadCount: Int {
+    snapshot.sessions.filter { $0.unread == true }.count
+  }
+
+  private var rowAccessibilityLabel: String {
+    guard unreadCount > 0 else { return folderName }
+    return "\(folderName), \(unreadCountAccessibilityLabel)"
+  }
+
+  private var accessibilityHint: String {
+    isEditing
+      ? "Select for bulk deletion, or use the move control to reorder."
+      : "Open sessions in this directory"
+  }
+
+  private var unreadCountAccessibilityLabel: String {
+    let suffix = unreadCount == 1 ? "unread session" : "unread sessions"
+    return "\(unreadCount) \(suffix)"
+  }
 }
 
 struct SidebarSessionSearchField: View {
@@ -263,186 +460,6 @@ struct SidebarSessionSearchField: View {
   private func clearSearch() {
     text = ""
     isFocused = true
-  }
-}
-
-private struct SidebarManageDirectoriesView: View {
-  @Bindable var model: AppModel
-  var onDismiss: () -> Void
-  @State private var isShowingAddDirectory = false
-  @State private var selectedDirectories = Set<String>()
-  @State private var editMode = EditMode.active
-  @State private var originalSidebarDirectories: [String] = []
-  @State private var didCaptureOriginalDirectories = false
-  @State private var isShowingDiscardConfirmation = false
-
-  var body: some View {
-    NavigationStack {
-      List(selection: $selectedDirectories) {
-        if model.sidebarDirectories.isEmpty {
-          ContentUnavailableView(
-            "No directories",
-            picoSystemImage: "folder",
-            description: Text("Add directories to show their Pico sessions.")
-          )
-          .listRowBackground(Color.clear)
-        } else {
-          Section {
-            ForEach(model.sidebarDirectories, id: \.self) { directory in
-              NewSessionDirectoryLabel(
-                path: directory,
-                isSelected: false
-              )
-              .tag(directory)
-            }
-            .onMove(perform: moveDirectories)
-            .onDelete(perform: deleteDirectories)
-          } footer: {
-            Text(
-              "Select directories to delete multiple, drag directories into a new order, or use the row delete button to remove one directory."
-            )
-          }
-        }
-
-        Section {
-          Button(action: showAddDirectory) {
-            Label("Add Directory", picoSystemImage: "folder.badge.plus")
-          }
-        }
-      }
-      .environment(\.editMode, $editMode)
-      .navigationTitle("Edit Directories")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button(action: closeAndMaybeDiscardChanges) {
-            PicoIcon(systemName: "xmark")
-          }
-          .accessibilityLabel("Close and discard changes")
-          .confirmationDialog(
-            "Discard directory changes?",
-            isPresented: $isShowingDiscardConfirmation,
-            titleVisibility: .visible
-          ) {
-            Button("Discard Changes", role: .destructive) {
-              discardChanges()
-            }
-            Button("Cancel", role: .cancel) {}
-          } message: {
-            Text(
-              "This restores the directory list to how it was when you opened Edit Directories."
-            )
-          }
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Button(action: onDismiss) {
-            PicoIcon(systemName: "checkmark")
-          }
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.circle)
-          .accessibilityLabel("Done")
-        }
-        ToolbarItemGroup(placement: .bottomBar) {
-          if editMode.isEditing && !model.sidebarDirectories.isEmpty {
-            Button(selectAllTitle, action: toggleSelectAll)
-
-            Spacer()
-
-            Button(role: .destructive, action: deleteSelectedDirectories) {
-              Label(deleteSelectedTitle, picoSystemImage: "trash")
-            }
-            .disabled(selectedDirectories.isEmpty)
-          }
-        }
-      }
-      .sheet(isPresented: $isShowingAddDirectory) {
-        SidebarAddDirectoryView(model: model) {
-          isShowingAddDirectory = false
-        }
-      }
-      .onAppear(perform: captureOriginalDirectoriesIfNeeded)
-      .onChange(of: model.sidebarDirectories) { _, directories in
-        selectedDirectories.formIntersection(Set(directories))
-      }
-    }
-  }
-
-  private var selectAllTitle: String {
-    selectedDirectories.count == model.sidebarDirectories.count
-      ? "Deselect All"
-      : "Select All"
-  }
-
-  private var deleteSelectedTitle: String {
-    selectedDirectories.isEmpty
-      ? "Delete"
-      : "Delete (\(selectedDirectories.count))"
-  }
-
-  private var hasDirectoryChanges: Bool {
-    didCaptureOriginalDirectories &&
-      model.sidebarDirectories != originalSidebarDirectories
-  }
-
-  private func showAddDirectory() {
-    isShowingAddDirectory = true
-  }
-
-  private func captureOriginalDirectoriesIfNeeded() {
-    guard !didCaptureOriginalDirectories else { return }
-    originalSidebarDirectories = model.sidebarDirectories
-    didCaptureOriginalDirectories = true
-  }
-
-  private func closeAndMaybeDiscardChanges() {
-    if hasDirectoryChanges {
-      isShowingDiscardConfirmation = true
-    } else {
-      onDismiss()
-    }
-  }
-
-  private func discardChanges() {
-    Task {
-      await model.replaceSidebarDirectories(originalSidebarDirectories)
-      selectedDirectories.formIntersection(Set(originalSidebarDirectories))
-      onDismiss()
-    }
-  }
-
-  private func toggleSelectAll() {
-    if selectedDirectories.count == model.sidebarDirectories.count {
-      selectedDirectories.removeAll()
-    } else {
-      selectedDirectories = Set(model.sidebarDirectories)
-    }
-  }
-
-  private func moveDirectories(from source: IndexSet, to destination: Int) {
-    model.moveSidebarDirectories(fromOffsets: source, toOffset: destination)
-  }
-
-  private func deleteDirectories(at offsets: IndexSet) {
-    let directories: [String] = offsets.compactMap { offset -> String? in
-      guard model.sidebarDirectories.indices.contains(offset) else {
-        return nil
-      }
-      return model.sidebarDirectories[offset]
-    }
-
-    guard !directories.isEmpty else { return }
-    selectedDirectories.subtract(Set(directories))
-    model.removeSidebarDirectories(directories)
-  }
-
-  private func deleteSelectedDirectories() {
-    let directories = model.sidebarDirectories.filter {
-      selectedDirectories.contains($0)
-    }
-    guard !directories.isEmpty else { return }
-
-    selectedDirectories.removeAll()
-    model.removeSidebarDirectories(directories)
   }
 }
 
@@ -719,7 +736,25 @@ struct SidebarCloseSearchButton: View {
   }
 }
 
-private struct SidebarNewSessionButton: View {
+private struct SidebarDeleteSelectedButton: View {
+  var deleteSelected: () -> Void
+
+  var body: some View {
+    Button(role: .destructive, action: deleteSelected) {
+      PicoIcon(systemName: "trash")
+        .font(.system(size: 20, weight: .semibold))
+        .frame(width: 40, height: 40)
+        .contentShape(Circle())
+    }
+    .buttonStyle(.glassProminent)
+    .buttonBorderShape(.circle)
+    .tint(.red)
+    .foregroundStyle(.white)
+    .accessibilityLabel("Delete selected directories")
+  }
+}
+
+struct SidebarNewSessionButton: View {
   var openNewSession: () -> Void
 
   var body: some View {
