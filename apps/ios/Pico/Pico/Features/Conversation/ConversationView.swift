@@ -449,7 +449,7 @@ private struct AssistantMessageActionsView: View {
   var body: some View {
     HStack(spacing: 6) {
       Button(action: copyMessage) {
-        PicoIcon(systemName: didCopy ? "checkmark" : "doc.on.doc")
+        PicoIcon(systemName: didCopy ? "checkmark" : "doc.on.doc", size: 20)
           .contentTransition(.symbolEffect(.replace))
           .frame(width: 30, height: 30)
           .contentShape(Circle())
@@ -461,7 +461,7 @@ private struct AssistantMessageActionsView: View {
 
       if showsBranch {
         Button(action: { onBranch(item) }) {
-          PicoIcon(systemName: "arrow.triangle.branch")
+          PicoIcon(systemName: "arrow.triangle.branch", size: 20)
             .frame(width: 30, height: 30)
             .contentShape(Circle())
         }

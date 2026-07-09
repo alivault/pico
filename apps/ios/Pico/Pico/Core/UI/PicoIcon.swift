@@ -257,7 +257,7 @@ enum PicoIconName: Sendable {
     case .sparkles:
       .sparkles
     case .stop:
-      .circleStop
+      .squareStop
     case .summary:
       .summary
     case .trash:
@@ -278,12 +278,12 @@ enum PicoIconName: Sendable {
 
 struct PicoIcon: View {
   var icon: PicoIconName
-  var size: CGFloat = 17
+  var size: CGFloat = 24
   var strokeWidth: CGFloat = 2
 
   nonisolated init(
     _ icon: PicoIconName,
-    size: CGFloat = 17,
+    size: CGFloat = 24,
     strokeWidth: CGFloat = 2
   ) {
     self.icon = icon
@@ -293,7 +293,7 @@ struct PicoIcon: View {
 
   nonisolated init(
     systemName: String,
-    size: CGFloat = 17,
+    size: CGFloat = 24,
     strokeWidth: CGFloat = 2
   ) {
     self.init(
@@ -364,7 +364,7 @@ extension Label where Title == Text, Icon == Image {
   init(
     _ titleKey: LocalizedStringKey,
     picoSystemImage systemName: String,
-    size: CGFloat = 18
+    size: CGFloat = 24
   ) {
     self.init(
       title: { Text(titleKey) },
@@ -375,7 +375,7 @@ extension Label where Title == Text, Icon == Image {
   init<S: StringProtocol>(
     _ title: S,
     picoSystemImage systemName: String,
-    size: CGFloat = 18
+    size: CGFloat = 24
   ) {
     self.init(
       title: { Text(title) },

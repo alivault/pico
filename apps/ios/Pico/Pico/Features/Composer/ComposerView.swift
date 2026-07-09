@@ -25,6 +25,7 @@ struct ComposerView: View {
           onEditMessage: editPendingMessage,
           onDeleteMessage: deletePendingMessage
         )
+        .padding(.horizontal)
       }
 
       if !model.composerImages.isEmpty {
