@@ -5,6 +5,7 @@ struct DirectorySessionsSectionView: View {
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
   var openPurge: (String) -> Void = { _ in }
+  var openFiles: (String) -> Void = { _ in }
   var isSearchActive = false
   var isLoading = false
   @State private var isExpanded = true
@@ -101,6 +102,12 @@ struct DirectorySessionsSectionView: View {
       .accessibilityHint("Starts a new draft in this directory")
 
       Menu {
+        Button(action: showFiles) {
+          Label("Files", picoSystemImage: "folder", size: 20)
+        }
+
+        Divider()
+
         Button(action: showPurgeSheet) {
           Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
         }
@@ -145,6 +152,10 @@ struct DirectorySessionsSectionView: View {
 
   private func showPurgeSheet() {
     openPurge(snapshot.directory)
+  }
+
+  private func showFiles() {
+    openFiles(snapshot.directory)
   }
 
   private func removeDirectory() {
@@ -536,33 +547,12 @@ private struct DirectorySessionRowButton: View {
   }
 
   private var selectedRowBackground: Color? {
-    isSelected ? Color(.tertiarySystemFill) : nil
+    nil
   }
 
   private var canMutateSession: Bool {
     entry.optimistic != true &&
       entry.path?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-  }
-
-  private var isSelected: Bool {
-    if let selectionId = entry.selectionId,
-       selectionId == model.selectedSessionId {
-      return true
-    }
-
-    if let sessionId = entry.sessionId,
-       sessionId == model.sessionState.sessionId {
-      return true
-    }
-
-    if let path = entry.path,
-       path == model.sessionState.sessionFile {
-      return true
-    }
-
-    return entry.optimistic == true &&
-      entry.cwd == model.sessionState.cwd &&
-      entry.title == model.sessionState.displayTitle
   }
 
   private func select() {

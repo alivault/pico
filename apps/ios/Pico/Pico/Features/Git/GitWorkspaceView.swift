@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GitWorkspaceView: View {
   @Bindable var model: AppModel
+  var directory: String? = nil
   @State private var selectedTab: GitWorkspaceTab = .changes
   @State private var data = GitWorkspaceData()
   @State private var loadTask: Task<Void, Never>?
@@ -11,7 +12,7 @@ struct GitWorkspaceView: View {
   @State private var isShowingNukeConfirmation = false
 
   private var cwd: String? {
-    model.filesWorkspaceDirectory
+    directory ?? model.filesWorkspaceDirectory
   }
 
   var body: some View {

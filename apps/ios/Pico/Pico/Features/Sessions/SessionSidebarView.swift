@@ -8,6 +8,7 @@ struct SessionSidebarView: View {
   @State private var isShowingAddDirectory = false
   @State private var isShowingManageDirectories = false
   @State private var purgeRequest: SidebarPurgeDirectoryRequest?
+  @State private var filesRequest: SidebarFilesDirectoryRequest?
   @State private var sessionSearchText = ""
   @State private var isSessionSearchPresented = false
   @FocusState private var isSessionSearchFocused: Bool
@@ -30,6 +31,7 @@ struct SessionSidebarView: View {
           model: model,
           openDetail: openConversation,
           openPurge: showPurgeDirectory,
+          openFiles: showFilesDirectory,
           isSearchActive: isSessionSearchActive,
           isLoading: model.loadingDirectorySessionIndexes.contains(
             snapshot.directory
@@ -99,6 +101,23 @@ struct SessionSidebarView: View {
         model: model,
         directory: request.directory
       )
+    }
+    .sheet(item: $filesRequest) { request in
+      NavigationStack {
+        GitWorkspaceView(model: model, directory: request.directory)
+          .navigationTitle("Files")
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+              Button {
+                filesRequest = nil
+              } label: {
+                PicoIcon(systemName: "xmark")
+              }
+              .accessibilityLabel("Close files")
+            }
+          }
+      }
     }
     .onChange(of: isSessionSearchPresented) { _, isPresented in
       if isPresented {
@@ -194,6 +213,15 @@ struct SessionSidebarView: View {
   private func showPurgeDirectory(_ directory: String) {
     purgeRequest = SidebarPurgeDirectoryRequest(directory: directory)
   }
+
+  private func showFilesDirectory(_ directory: String) {
+    filesRequest = SidebarFilesDirectoryRequest(directory: directory)
+  }
+}
+
+private struct SidebarFilesDirectoryRequest: Identifiable {
+  var directory: String
+  var id: String { directory }
 }
 
 private struct SidebarPurgeDirectoryRequest: Identifiable {
