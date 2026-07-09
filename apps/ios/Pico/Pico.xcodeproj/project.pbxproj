@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		E60000000000000000000001 /* Core/UI/PicoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60000000000000000000002 /* Core/UI/PicoIcon.swift */; };
+		E90000000000000000000001 /* App/AppToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90000000000000000000002 /* App/AppToast.swift */; };
+		E90000000000000000000003 /* Core/UI/AppToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90000000000000000000004 /* Core/UI/AppToastView.swift */; };
 		E60000000000000000000003 /* LucideSwift in Frameworks */ = {isa = PBXBuildFile; productRef = E60000000000000000000004 /* LucideSwift */; };
 		001D000E66261E1E7231FFBF /* Features/Composer/ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */; };
 		00F6ACAB7604A055D89430E2 /* Core/Models/SessionStatusEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEF0E9964CCFFD923E6988A /* Core/Models/SessionStatusEvent.swift */; };
@@ -170,6 +172,8 @@
 
 /* Begin PBXFileReference section */
 		E60000000000000000000002 /* Core/UI/PicoIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/UI/PicoIcon.swift; sourceTree = "<group>"; };
+		E90000000000000000000002 /* App/AppToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppToast.swift; sourceTree = "<group>"; };
+		E90000000000000000000004 /* Core/UI/AppToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/UI/AppToastView.swift; sourceTree = "<group>"; };
 		024183A22119797BA4E3812C /* Core/Persistence/CredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Persistence/CredentialStore.swift; sourceTree = "<group>"; };
 		07E8B7F815FE4A06E1C73866 /* state_sync_patch.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = state_sync_patch.json; sourceTree = "<group>"; };
 		0898037D501376B858C08E23 /* Core/Models/TextBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/TextBlock.swift; sourceTree = "<group>"; };
@@ -345,6 +349,7 @@
 			isa = PBXGroup;
 			children = (
 				DF036FD3DDADFE43FD5B6F63 /* App/AppAlert.swift */,
+				E90000000000000000000002 /* App/AppToast.swift */,
 				B6A93FBCDF8E4B32FF6A8C75 /* App/AppModel.swift */,
 				C40000000000000000000001 /* App/AppModel+Git.swift */,
 				B1E447475068E9268F083D08 /* App/ConnectionStatus.swift */,
@@ -415,6 +420,7 @@
 				59F749AC43C6A833BD2D59B9 /* Core/Persistence/ConnectionStore.swift */,
 				024183A22119797BA4E3812C /* Core/Persistence/CredentialStore.swift */,
 				917CC3A1A04DF4E256D82202 /* Core/Persistence/DraftStore.swift */,
+				E90000000000000000000004 /* Core/UI/AppToastView.swift */,
 				E60000000000000000000002 /* Core/UI/PicoIcon.swift */,
 				45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */,
 				5FF0827613EB43B5A1373BCE /* Features/Composer/PendingMessagesView.swift */,
@@ -640,6 +646,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8CF94CC6DC666351130A9A9B /* App/AppAlert.swift in Sources */,
+				E90000000000000000000001 /* App/AppToast.swift in Sources */,
 				FD2B6D6D25C7EA4773022D3F /* App/AppModel.swift in Sources */,
 				C50000000000000000000001 /* App/AppModel+Git.swift in Sources */,
 				902C83A4A472CFD0AFBF14D4 /* App/ConnectionStatus.swift in Sources */,
@@ -706,6 +713,7 @@
 				29E94C8AE5710F96AD575412 /* Core/Persistence/ConnectionStore.swift in Sources */,
 				C0D532D56ABAA4CD8C0F2F2D /* Core/Persistence/CredentialStore.swift in Sources */,
 				DFF67019BB954EF276B4A72C /* Core/Persistence/DraftStore.swift in Sources */,
+				E90000000000000000000003 /* Core/UI/AppToastView.swift in Sources */,
 				E60000000000000000000001 /* Core/UI/PicoIcon.swift in Sources */,
 				001D000E66261E1E7231FFBF /* Features/Composer/ComposerView.swift in Sources */,
 				8BE006BB949E15EEE5AB36D3 /* Features/Composer/PendingMessagesView.swift in Sources */,

@@ -19,6 +19,7 @@ public final class AppModel {
   @ObservationIgnored private var compactAbortRequested = false
   @ObservationIgnored private var gitStatusTask: Task<Void, Never>?
   @ObservationIgnored private var gitStatusCwd: String?
+  @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
   @ObservationIgnored private var gitBranchesTask: Task<Void, Never>?
   @ObservationIgnored private var gitBranchesCwd: String?
 
@@ -69,6 +70,7 @@ public final class AppModel {
   public var composerSelectedDirectory: String?
   public var selectedStreamingBehavior: StreamingBehavior = .steer
   public var alert: AppAlert?
+  public var toast: AppToast?
   public var isSubmitting = false
   public var lastSessionDoneEvent: SessionDoneEvent?
   public var conversationPresentationRequest = 0
@@ -95,6 +97,37 @@ public final class AppModel {
     sessionDoneNotifications.deepLinkHandler = { [weak self] url in
       self?.handleDeepLink(url)
     }
+  }
+
+  public func showToast(
+    title: String,
+    message: String? = nil,
+    style: AppToastStyle = .info,
+    duration: Duration = .seconds(4)
+  ) {
+    let nextToast = AppToast(
+      title: title,
+      message: message,
+      style: style,
+      duration: duration
+    )
+    toastDismissTask?.cancel()
+    toast = nextToast
+    toastDismissTask = Task { [weak self, id = nextToast.id, duration] in
+      do {
+        try await Task.sleep(for: duration)
+      } catch {
+        return
+      }
+      await self?.dismissToast(id: id)
+    }
+  }
+
+  public func dismissToast(id: UUID? = nil) {
+    guard id == nil || toast?.id == id else { return }
+    toastDismissTask?.cancel()
+    toastDismissTask = nil
+    toast = nil
   }
 
   public var isConnected: Bool {

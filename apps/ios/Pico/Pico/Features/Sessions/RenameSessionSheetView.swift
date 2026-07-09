@@ -73,6 +73,9 @@ struct RenameSessionSheetView: View {
         .disabled(saveDisabled)
       }
     }
+    .picoToast(toast: model.toast) { id in
+      model.dismissToast(id: id)
+    }
   }
 
   private var trimmedName: String {
@@ -96,9 +99,10 @@ struct RenameSessionSheetView: View {
         let response = try await model.generateSessionName(path: path)
         name = response.name
       } catch {
-        model.alert = AppAlert(
+        model.showToast(
           title: "Could not generate session name",
-          message: Self.message(for: error)
+          message: Self.message(for: error),
+          style: .error
         )
       }
       isGenerating = false

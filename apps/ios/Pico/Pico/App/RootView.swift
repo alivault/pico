@@ -18,6 +18,9 @@ struct RootView: View {
         .fill(.background)
         .ignoresSafeArea()
     }
+    .picoToast(toast: model.toast) { id in
+      model.dismissToast(id: id)
+    }
     .task {
       await model.restoreConnection()
     }
@@ -43,6 +46,9 @@ struct RootView: View {
     }
     .sheet(item: $model.activeUiRequest, onDismiss: model.clearActiveUiRequest) { request in
       AuthUiRequestSheetView(model: model, request: request)
+        .picoToast(toast: model.toast) { id in
+          model.dismissToast(id: id)
+        }
     }
   }
 }
