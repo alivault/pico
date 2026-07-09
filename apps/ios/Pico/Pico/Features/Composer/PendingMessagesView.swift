@@ -339,6 +339,7 @@ private struct PendingMessagesTableView: UIViewRepresentable {
     private var sectionsSignature = ""
     private var messageById: [String: PendingUserMessage] = [:]
     private var dataSource: DataSource?
+    private var highlightedDropSectionId: String?
 
     init(parent: PendingMessagesTableView) {
       self.parent = parent
@@ -367,19 +368,13 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       >(
         elementKind: UICollectionView.elementKindSectionHeader
       ) { [weak self] supplementaryView, _, indexPath in
-        guard let self,
-              let section = section(at: indexPath.section) else {
+        guard let self else {
           supplementaryView.contentConfiguration = nil
           supplementaryView.backgroundConfiguration = .clear()
           return
         }
 
-        supplementaryView.contentConfiguration = UIHostingConfiguration {
-          PendingSectionHeaderRow(section: section)
-        }
-        .margins(.all, 0)
-        supplementaryView.backgroundConfiguration = .clear()
-        supplementaryView.accessories = []
+        configure(supplementaryView, sectionIndex: indexPath.section)
       }
 
       let dataSource = DataSource(collectionView: collectionView) {
@@ -409,6 +404,28 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       }
 
       self.dataSource = dataSource
+    }
+
+    private func configure(
+      _ headerView: UICollectionViewListCell,
+      sectionIndex: Int
+    ) {
+      guard let section = section(at: sectionIndex) else {
+        headerView.contentConfiguration = nil
+        headerView.backgroundConfiguration = .clear()
+        headerView.accessories = []
+        return
+      }
+
+      headerView.contentConfiguration = UIHostingConfiguration {
+        PendingSectionHeaderRow(
+          section: section,
+          isDropTarget: section.id == highlightedDropSectionId
+        )
+      }
+      .margins(.all, 0)
+      headerView.backgroundConfiguration = .clear()
+      headerView.accessories = []
     }
 
     func apply(
@@ -462,6 +479,7 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       withDestinationIndexPath destinationIndexPath: IndexPath?
     ) -> UICollectionViewDropProposal {
       guard session.localDragSession != nil else {
+        setHighlightedDropSection(nil, in: collectionView)
         return UICollectionViewDropProposal(
           operation: .forbidden,
           intent: .unspecified
@@ -475,13 +493,18 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         session.location(in: collectionView),
         in: collectionView
       )
-      guard destination != nil else {
+      guard let destination else {
+        setHighlightedDropSection(nil, in: collectionView)
         return UICollectionViewDropProposal(
           operation: .forbidden,
           intent: .unspecified
         )
       }
 
+      setHighlightedDropSection(
+        section(at: destination.section)?.id,
+        in: collectionView
+      )
       return UICollectionViewDropProposal(
         operation: .move,
         intent: .insertAtDestinationIndexPath
@@ -490,8 +513,24 @@ private struct PendingMessagesTableView: UIViewRepresentable {
 
     func collectionView(
       _ collectionView: UICollectionView,
+      dropSessionDidExit session: any UIDropSession
+    ) {
+      setHighlightedDropSection(nil, in: collectionView)
+    }
+
+    func collectionView(
+      _ collectionView: UICollectionView,
+      dropSessionDidEnd session: any UIDropSession
+    ) {
+      setHighlightedDropSection(nil, in: collectionView)
+    }
+
+    func collectionView(
+      _ collectionView: UICollectionView,
       performDropWith coordinator: any UICollectionViewDropCoordinator
     ) {
+      defer { setHighlightedDropSection(nil, in: collectionView) }
+
       guard let item = coordinator.items.first,
             let pendingId = item.dragItem.localObject as? String else {
         return
@@ -555,6 +594,34 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       ])
       configuration.performsFirstActionWithFullSwipe = false
       return configuration
+    }
+
+    private func setHighlightedDropSection(
+      _ sectionId: String?,
+      in collectionView: UICollectionView
+    ) {
+      guard highlightedDropSectionId != sectionId else { return }
+      highlightedDropSectionId = sectionId
+      refreshVisibleSectionHeaders(in: collectionView)
+    }
+
+    private func refreshVisibleSectionHeaders(
+      in collectionView: UICollectionView
+    ) {
+      let indexPaths = collectionView.indexPathsForVisibleSupplementaryElements(
+        ofKind: UICollectionView.elementKindSectionHeader
+      )
+
+      for indexPath in indexPaths {
+        guard let headerView = collectionView.supplementaryView(
+          forElementKind: UICollectionView.elementKindSectionHeader,
+          at: indexPath
+        ) as? UICollectionViewListCell else {
+          continue
+        }
+
+        configure(headerView, sectionIndex: indexPath.section)
+      }
     }
 
     private func movePendingMessage(
@@ -752,6 +819,11 @@ private struct PendingMessagesTableView: UIViewRepresentable {
       signature: String,
       animatingDifferences: Bool
     ) {
+      if let highlightedDropSectionId,
+         !nextSections.contains(where: { $0.id == highlightedDropSectionId }) {
+        self.highlightedDropSectionId = nil
+      }
+
       sections = nextSections
       rebuildIndexes()
       sectionsSignature = signature
@@ -792,19 +864,20 @@ private struct PendingMessagesTableView: UIViewRepresentable {
 
 private struct PendingSectionHeaderRow: View {
   var section: PendingMessagesSection
+  var isDropTarget = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
         Text(section.title.uppercased())
           .font(.caption.weight(.semibold))
-          .foregroundStyle(.primary)
+          .foregroundStyle(isDropTarget ? Color.accentColor : Color.primary)
 
         Spacer(minLength: 8)
 
         Text("\(section.messages.count)")
           .font(.caption.weight(.semibold))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(isDropTarget ? Color.accentColor : Color.secondary)
       }
 
       if section.messages.isEmpty {
@@ -819,19 +892,28 @@ private struct PendingSectionHeaderRow: View {
     .padding(.bottom, section.messages.isEmpty ? 10 : 5)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background {
-      if section.messages.isEmpty {
+      if isDropTarget {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(Color.accentColor.opacity(0.16))
+      } else if section.messages.isEmpty {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
           .fill(.secondary.opacity(0.05))
       }
     }
     .overlay {
-      if section.messages.isEmpty {
+      if isDropTarget || section.messages.isEmpty {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(Color(uiColor: .separator).opacity(0.25), lineWidth: 0.5)
+          .stroke(
+            isDropTarget
+              ? Color.accentColor.opacity(0.8)
+              : Color(uiColor: .separator).opacity(0.25),
+            lineWidth: isDropTarget ? 1.5 : 0.5
+          )
       }
     }
     .padding(.vertical, section.messages.isEmpty ? 4 : 0)
     .contentShape(Rectangle())
+    .animation(.smooth(duration: 0.16), value: isDropTarget)
     .accessibilityHint(
       section.messages.isEmpty
         ? "Drop queued prompts here to move them into this section."
