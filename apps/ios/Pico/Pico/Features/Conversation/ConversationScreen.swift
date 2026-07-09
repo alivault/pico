@@ -537,21 +537,6 @@ private struct ConversationNavigationTitleView: View {
   }
 }
 
-private struct SessionToolbarDropdownLabel: View {
-  var title: String
-  var detail: String
-  var systemImage: String
-
-  var body: some View {
-    Label {
-      Text(title)
-      Text(detail)
-    } icon: {
-      Image(picoSystemName: systemImage, pointSize: 20)
-    }
-  }
-}
-
 private struct ConversationHeaderOptionsMenu: View {
   @Bindable var model: AppModel
   var isPreparingCommit: Bool
@@ -657,11 +642,8 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      SessionToolbarDropdownLabel(
-        title: "Model",
-        detail: modelMenuDetail,
-        systemImage: "cpu"
-      )
+      Label("Model", picoSystemImage: "cpu", size: 20)
+      Text(modelMenuDetail)
     }
     .disabled(modelOptions.isEmpty)
   }
@@ -678,11 +660,8 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      SessionToolbarDropdownLabel(
-        title: "Reasoning",
-        detail: reasoningMenuDetail,
-        systemImage: "brain"
-      )
+      Label("Reasoning", picoSystemImage: "brain", size: 20)
+      Text(reasoningMenuDetail)
     }
     .disabled(model.composerThinkingLevels.isEmpty)
   }
