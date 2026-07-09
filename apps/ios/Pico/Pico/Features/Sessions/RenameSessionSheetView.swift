@@ -4,26 +4,22 @@ struct RenameSessionSheetView: View {
   @Bindable var model: AppModel
   var initialName: String
   var path: String?
-  var canGenerateName: Bool
   var onSave: (String) async -> Bool
 
   @Environment(\.dismiss) private var dismiss
   @State private var name: String
   @State private var isGenerating = false
   @State private var isSaving = false
-  @State private var generatedName = false
 
   init(
     model: AppModel,
     initialName: String,
     path: String?,
-    canGenerateName: Bool,
     onSave: @escaping (String) async -> Bool
   ) {
     self.model = model
     self.initialName = initialName
     self.path = path
-    self.canGenerateName = canGenerateName
     self.onSave = onSave
     _name = State(initialValue: initialName)
   }
@@ -47,11 +43,7 @@ struct RenameSessionSheetView: View {
       } header: {
         Text("Name")
       } footer: {
-        if canGenerateName {
-          Text("Generate a name from the first user message.")
-        } else {
-          Text("A generated or saved session name already exists.")
-        }
+        Text("Generate a name from the first user message.")
       }
     }
     .navigationTitle("Rename Session")
@@ -88,7 +80,7 @@ struct RenameSessionSheetView: View {
   }
 
   private var generateDisabled: Bool {
-    isGenerating || isSaving || !canGenerateName || generatedName
+    isGenerating || isSaving
   }
 
   private var saveDisabled: Bool {
@@ -103,7 +95,6 @@ struct RenameSessionSheetView: View {
       do {
         let response = try await model.generateSessionName(path: path)
         name = response.name
-        generatedName = true
       } catch {
         model.alert = AppAlert(
           title: "Could not generate session name",

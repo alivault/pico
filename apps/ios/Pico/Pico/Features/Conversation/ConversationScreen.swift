@@ -126,10 +126,7 @@ struct ConversationScreen: View {
         RenameSessionSheetView(
           model: model,
           initialName: renameTitle,
-          path: nil,
-          canGenerateName: (model.sessionState.sessionName ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
+          path: nil
         ) { name in
           await model.renameCurrentSession(to: name)
         }

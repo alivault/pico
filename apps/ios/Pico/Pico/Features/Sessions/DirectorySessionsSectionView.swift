@@ -526,10 +526,7 @@ private struct DirectorySessionRowButton: View {
         RenameSessionSheetView(
           model: model,
           initialName: renameTitle,
-          path: entry.path,
-          canGenerateName: (entry.name ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
+          path: entry.path
         ) { name in
           await model.renameSession(entry, to: name)
         }
