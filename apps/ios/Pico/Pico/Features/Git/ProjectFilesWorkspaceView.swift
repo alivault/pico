@@ -12,21 +12,21 @@ struct ProjectFilesWorkspaceView: View {
   @State private var selectedPath: String?
   @State private var previewedFile: ProjectFilePreview?
   @State private var fileContentCache: [String: ProjectFileContentCacheEntry] = [:]
+  @State private var treeNodes: [ProjectFileTreeNode] = []
   @State private var searchText = ""
   @FocusState private var isSearchFocused: Bool
 
   private var visiblePaths: [String] {
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return paths }
-    return paths.filter { $0.localizedCaseInsensitiveContains(query) }
+    guard !normalizedSearchText.isEmpty else { return paths }
+    return paths.filter { $0.localizedCaseInsensitiveContains(normalizedSearchText) }
   }
 
-  private var treeNodes: [ProjectFileTreeNode] {
-    ProjectFileTreeBuilder.build(paths: visiblePaths, gitFiles: gitFiles)
+  private var normalizedSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private var isSearchActive: Bool {
-    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    !normalizedSearchText.isEmpty
   }
 
   private var isCloseSearchVisible: Bool {
@@ -50,6 +50,15 @@ struct ProjectFilesWorkspaceView: View {
     }
     .refreshable {
       refresh()
+    }
+    .onChange(of: paths, initial: true) {
+      rebuildTreeNodes()
+    }
+    .onChange(of: gitFiles) {
+      rebuildTreeNodes()
+    }
+    .onChange(of: searchText) {
+      rebuildTreeNodes()
     }
     .safeAreaBar(edge: .bottom, alignment: .center) {
       if !paths.isEmpty {
@@ -153,6 +162,10 @@ struct ProjectFilesWorkspaceView: View {
   private func openFile(_ path: String) {
     selectedPath = path
     previewedFile = ProjectFilePreview(path: path)
+  }
+
+  private func rebuildTreeNodes() {
+    treeNodes = ProjectFileTreeBuilder.build(paths: visiblePaths, gitFiles: gitFiles)
   }
 
   private func fileCacheKey(for path: String) -> String {
