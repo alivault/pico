@@ -16,26 +16,16 @@ struct UserMessageImagePreview: View {
   }
 
   var body: some View {
-    NavigationStack {
-      ZStack {
-        Color.black
-          .opacity(backgroundOpacity)
-          .ignoresSafeArea()
+    ZStack {
+      Color.black
+        .opacity(backgroundOpacity)
+        .ignoresSafeArea()
 
-        previewContent
-          .offset(y: dismissOffset)
-      }
-      .navigationTitle(navigationTitle)
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Done") {
-            dismiss()
-          }
-        }
-      }
+      previewContent
+        .offset(y: dismissOffset)
     }
     .preferredColorScheme(.dark)
+    .statusBarHidden()
   }
 
   @ViewBuilder
@@ -91,11 +81,6 @@ struct UserMessageImagePreview: View {
   private var backgroundOpacity: Double {
     let progress = min(max(dismissOffset / 260, 0), 1)
     return 1 - Double(progress) * 0.45
-  }
-
-  private var navigationTitle: String {
-    guard images.count > 1 else { return "Image preview" }
-    return "Image \(selectedIndex + 1) of \(images.count)"
   }
 
   private var isCurrentImageZoomed: Bool {
