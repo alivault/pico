@@ -486,11 +486,9 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         )
       }
 
-      let destination = normalizedDestinationIndexPath(
-        destinationIndexPath,
-        in: collectionView
-      ) ?? indexPathForDropLocation(
-        session.location(in: collectionView),
+      let destination = resolvedDestinationIndexPath(
+        for: session,
+        providedDestinationIndexPath: destinationIndexPath,
         in: collectionView
       )
       guard let destination else {
@@ -536,11 +534,9 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         return
       }
 
-      let destination = normalizedDestinationIndexPath(
-        coordinator.destinationIndexPath,
-        in: collectionView
-      ) ?? indexPathForDropLocation(
-        coordinator.session.location(in: collectionView),
+      let destination = resolvedDestinationIndexPath(
+        for: coordinator.session,
+        providedDestinationIndexPath: coordinator.destinationIndexPath,
         in: collectionView
       )
       guard let destination,
@@ -706,6 +702,20 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         cornerRadius: 12
       )
       return parameters
+    }
+
+    private func resolvedDestinationIndexPath(
+      for session: any UIDropSession,
+      providedDestinationIndexPath: IndexPath?,
+      in collectionView: UICollectionView
+    ) -> IndexPath? {
+      indexPathForDropLocation(
+        session.location(in: collectionView),
+        in: collectionView
+      ) ?? normalizedDestinationIndexPath(
+        providedDestinationIndexPath,
+        in: collectionView
+      )
     }
 
     private func normalizedDestinationIndexPath(
