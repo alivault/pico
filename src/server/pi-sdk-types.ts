@@ -17,6 +17,7 @@ export type ModelLike = {
   provider: string
   name?: string
   reasoning?: boolean
+  input?: Array<string>
 }
 
 type SkillLike = {

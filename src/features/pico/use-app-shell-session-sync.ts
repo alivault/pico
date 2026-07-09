@@ -177,6 +177,22 @@ function normalizePendingMessages(
   }))
 }
 
+type AutoSessionNamingErrorPayload = Extract<
+  PicoServerEvent,
+  { type: "auto_session_naming_error" }
+>
+
+function autoSessionNamingErrorDescription(
+  payload: AutoSessionNamingErrorPayload
+) {
+  return (
+    payload.refinementReason ||
+    payload.heuristicReason ||
+    payload.promptPreview ||
+    "The server could not generate a session name."
+  )
+}
+
 function sameStringArray(left: Array<string> = [], right: Array<string> = []) {
   if (left.length !== right.length) return false
 
@@ -958,6 +974,14 @@ export function useAppShellSessionSync({
             scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
           })
         }
+        return
+      }
+
+      if (payload.type === "auto_session_naming_error") {
+        console.warn("[pico] auto session naming failed", payload)
+        toast.warning("Could not name session", {
+          description: autoSessionNamingErrorDescription(payload),
+        })
         return
       }
 

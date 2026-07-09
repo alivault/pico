@@ -2859,7 +2859,12 @@ public final class AppModel {
       applyUserMessage(event)
     case .gitChanged(let event):
       apply(event)
-    case .autoSessionNamingError, .unknown:
+    case .autoSessionNamingError(let event):
+      alert = AppAlert(
+        title: "Could not name session",
+        message: Self.autoSessionNamingErrorMessage(for: event)
+      )
+    case .unknown:
       break
     }
   }
@@ -3101,6 +3106,20 @@ public final class AppModel {
       return nil
     }
     return url
+  }
+
+  private static func autoSessionNamingErrorMessage(
+    for event: AutoSessionNamingErrorEvent
+  ) -> String {
+    let reason = normalizedText(event.refinementReason) ??
+      normalizedText(event.heuristicReason) ??
+      "The server could not generate a session name."
+
+    guard let promptPreview = normalizedText(event.promptPreview) else {
+      return reason
+    }
+
+    return "\(reason)\n\nPrompt: \(promptPreview)"
   }
 
   private static func isCancellation(_ error: Error) -> Bool {

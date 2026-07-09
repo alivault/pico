@@ -3184,6 +3184,40 @@ class PicoRuntime {
     })
   }
 
+  private applyHeuristicSessionNameAttempt(
+    entry: SessionEntry,
+    text: string,
+    imageCount: number
+  ) {
+    const heuristic = deriveHeuristicSessionNameAttempt(text, imageCount)
+    if (heuristic.name) {
+      this.applyManagedSessionName(entry, heuristic.name, "initial")
+    }
+    return heuristic
+  }
+
+  private applySessionNameFallbackAfterRefinementFailure(
+    entry: SessionEntry,
+    text: string,
+    imageCount: number
+  ) {
+    if (this.getCurrentSessionName(entry)) return true
+
+    const heuristic = this.applyHeuristicSessionNameAttempt(
+      entry,
+      text,
+      imageCount
+    )
+    if (heuristic.name && this.getCurrentSessionName(entry)) return true
+
+    const fallbackName = cleanupSessionNameCandidate(
+      normalizeSessionListTitle(text, SESSION_NAME_MAX_LENGTH)
+    )
+    if (!fallbackName) return false
+
+    return this.applyManagedSessionName(entry, fallbackName, "initial")
+  }
+
   private scheduleSessionNameRefinement(
     entry: SessionEntry,
     text: string,
@@ -3201,6 +3235,7 @@ class PicoRuntime {
         const generated = await generateSessionNameWithLlm(
           {
             cwd: entry.cwd,
+            model: entry.session.model,
             services: {
               modelRegistry: entry.services.modelRegistry,
             },
@@ -3214,7 +3249,11 @@ class PicoRuntime {
             !entry.sessionNaming.disposed &&
             entry.sessionNaming.nonce === nonce &&
             sessionId === entry.session.sessionId &&
-            !this.getCurrentSessionName(entry)
+            !this.applySessionNameFallbackAfterRefinementFailure(
+              entry,
+              text,
+              imageCount
+            )
           ) {
             this.emitAutoSessionNamingFailure(entry, {
               heuristicReason,
@@ -3242,7 +3281,11 @@ class PicoRuntime {
           !entry.sessionNaming.disposed &&
           entry.sessionNaming.nonce === nonce &&
           sessionId === entry.session.sessionId &&
-          !this.getCurrentSessionName(entry)
+          !this.applySessionNameFallbackAfterRefinementFailure(
+            entry,
+            text,
+            imageCount
+          )
         ) {
           this.emitAutoSessionNamingFailure(entry, {
             heuristicReason,
@@ -3266,10 +3309,11 @@ class PicoRuntime {
   ) {
     if (this.getCurrentSessionName(entry)) return
 
-    const heuristic = deriveHeuristicSessionNameAttempt(text, imageCount)
-    if (heuristic.name) {
-      this.applyManagedSessionName(entry, heuristic.name, "initial")
-    }
+    const heuristic = this.applyHeuristicSessionNameAttempt(
+      entry,
+      text,
+      imageCount
+    )
     this.scheduleSessionNameRefinement(
       entry,
       text,

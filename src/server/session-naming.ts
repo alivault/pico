@@ -1,7 +1,7 @@
 import { basename } from "node:path"
 
 import { loadPiAi } from "@/server/pi-sdk"
-import type { ModelRegistryLike } from "@/server/pi-sdk-types"
+import type { ModelLike, ModelRegistryLike } from "@/server/pi-sdk-types"
 
 const MAX_SESSION_NAME_LENGTH = 48
 const MAX_SESSION_NAME_WORDS = 6
@@ -228,9 +228,99 @@ function buildSessionNamePrompt(
     .join("\n")
 }
 
+type SessionNamingModelCandidate = {
+  model: ModelLike
+  source: "active" | "available"
+}
+
+function modelLabel(model: ModelLike) {
+  return `${model.provider}/${model.id}`
+}
+
+function formatSessionNamingError(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
+
+function modelSupportsTextInput(model: ModelLike) {
+  if (!Array.isArray(model.input)) return true
+  return model.input.includes("text")
+}
+
+function collectSessionNamingModelCandidates(entry: {
+  model?: ModelLike
+  services: {
+    modelRegistry: ModelRegistryLike
+  }
+}) {
+  const candidates: Array<SessionNamingModelCandidate> = []
+  const seen = new Set<string>()
+  const addCandidate = (
+    model: ModelLike | undefined,
+    source: SessionNamingModelCandidate["source"]
+  ) => {
+    if (!model || !modelSupportsTextInput(model)) return
+    const key = modelLabel(model)
+    if (seen.has(key)) return
+    seen.add(key)
+    candidates.push({ model, source })
+  }
+
+  addCandidate(entry.model, "active")
+
+  for (const model of entry.services.modelRegistry.getAvailable()) {
+    addCandidate(model, "available")
+  }
+
+  return candidates
+}
+
+async function selectSessionNamingModel(entry: {
+  model?: ModelLike
+  services: {
+    modelRegistry: ModelRegistryLike
+  }
+}) {
+  const candidates = collectSessionNamingModelCandidates(entry)
+  if (candidates.length === 0) {
+    return {
+      ok: false as const,
+      reason: "no text-capable models are available for session naming",
+    }
+  }
+
+  const failures: Array<string> = []
+  for (const candidate of candidates) {
+    try {
+      const auth = await entry.services.modelRegistry.getApiKeyAndHeaders(
+        candidate.model
+      )
+      if (auth?.ok) {
+        return { ok: true as const, ...candidate, auth }
+      }
+      failures.push(
+        `${modelLabel(candidate.model)}: ${auth?.error || "not authenticated"}`
+      )
+    } catch (error) {
+      failures.push(
+        `${modelLabel(candidate.model)}: ${formatSessionNamingError(error)}`
+      )
+    }
+  }
+
+  return {
+    ok: false as const,
+    reason: `no authenticated text model is available for session naming${
+      failures.length > 0 ? ` (${failures.slice(0, 3).join("; ")})` : ""
+    }`,
+  }
+}
+
 export async function generateSessionNameWithLlm(
   entry: {
     cwd: string
+    model?: ModelLike
     services: {
       modelRegistry: ModelRegistryLike
     }
@@ -238,25 +328,12 @@ export async function generateSessionNameWithLlm(
   text: string,
   imageCount: number
 ) {
-  const model = entry.services.modelRegistry.find(
-    "openai-codex",
-    "gpt-5.4-mini"
-  )
-  if (!model) {
-    return {
-      reason: "refinement model openai-codex/gpt-5.4-mini is unavailable",
-    }
+  const selectedModel = await selectSessionNamingModel(entry)
+  if (!selectedModel.ok) {
+    return { reason: selectedModel.reason }
   }
 
-  const auth = await entry.services.modelRegistry.getApiKeyAndHeaders(model)
-  if (!auth?.ok) {
-    return {
-      reason:
-        auth?.error ||
-        `failed to authenticate ${model.provider}/${model.id} for session naming`,
-    }
-  }
-
+  const { model, auth } = selectedModel
   const piAi = await loadPiAi()
   const response = await piAi.complete(
     model,
