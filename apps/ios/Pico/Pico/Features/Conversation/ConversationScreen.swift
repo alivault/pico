@@ -566,18 +566,18 @@ private struct ConversationHeaderOptionsMenu: View {
       Divider()
 
       Button(action: openFiles) {
-        Label("Files", picoSystemImage: "folder")
+        Label("Files", picoSystemImage: "folder", size: 20)
       }
 
       if model.canRenameCurrentSession {
         Divider()
 
         Button(action: renameSession) {
-          Label("Rename", picoSystemImage: "pencil")
+          Label("Rename", picoSystemImage: "pencil", size: 20)
         }
 
         Button(role: .destructive, action: deleteSession) {
-          Label("Delete", picoSystemImage: "trash")
+          Label("Delete", picoSystemImage: "trash", size: 20)
         }
         .disabled(!model.canDeleteCurrentSession)
       }
@@ -597,14 +597,14 @@ private struct ConversationHeaderOptionsMenu: View {
   private var gitActionButtons: some View {
     if model.hasConversationGitChangesToCommit {
       Button(action: commitChanges) {
-        Label(commitTitle, picoSystemImage: "checkmark.circle")
+        Label(commitTitle, picoSystemImage: "checkmark.circle", size: 20)
       }
       .disabled(isPreparingCommit)
     }
 
     if model.hasConversationGitCommitsToPush {
       Button(action: pushChanges) {
-        Label(pushTitle, picoSystemImage: "arrow.up.circle")
+        Label(pushTitle, picoSystemImage: "arrow.up.circle", size: 20)
       }
       .disabled(isPushing)
     }
@@ -632,7 +632,7 @@ private struct ConversationHeaderOptionsMenu: View {
             ForEach(models(for: provider), id: \.stableIdentifier) { option in
               Button(action: { selectModel(option) }) {
                 if selectedModel?.stableIdentifier == option.stableIdentifier {
-                  Label(option.displayName, picoSystemImage: "checkmark")
+                  Label(option.displayName, picoSystemImage: "checkmark", size: 20)
                 } else {
                   Text(option.displayName)
                 }
@@ -642,7 +642,7 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      Label(modelMenuTitle, picoSystemImage: "cpu")
+      Label(modelMenuTitle, picoSystemImage: "cpu", size: 20)
     }
     .disabled(modelOptions.isEmpty)
   }
@@ -652,14 +652,14 @@ private struct ConversationHeaderOptionsMenu: View {
       ForEach(model.composerThinkingLevels, id: \.self) { level in
         Button(action: { selectThinkingLevel(level) }) {
           if level == model.sessionState.thinkingLevel {
-            Label(Self.reasoningLabel(for: level), picoSystemImage: "checkmark")
+            Label(Self.reasoningLabel(for: level), picoSystemImage: "checkmark", size: 20)
           } else {
             Text(Self.reasoningLabel(for: level))
           }
         }
       }
     } label: {
-      Label(reasoningMenuTitle, picoSystemImage: "brain")
+      Label(reasoningMenuTitle, picoSystemImage: "brain", size: 20)
     }
     .disabled(model.composerThinkingLevels.isEmpty)
   }
@@ -713,7 +713,8 @@ private struct ConversationHeaderOptionsMenu: View {
     Button(action: toggleThinkingVisibility) {
       Label(
         model.sessionState.hideThinkingBlock ? "Show thinking" : "Hide thinking",
-        picoSystemImage: model.sessionState.hideThinkingBlock ? "eye" : "eye.slash"
+        picoSystemImage: model.sessionState.hideThinkingBlock ? "eye" : "eye.slash",
+        size: 20
       )
     }
   }
@@ -722,7 +723,8 @@ private struct ConversationHeaderOptionsMenu: View {
     Button(action: toggleToolVisibility) {
       Label(
         model.hideToolBlocks ? "Show tools" : "Hide tools",
-        picoSystemImage: model.hideToolBlocks ? "eye" : "eye.slash"
+        picoSystemImage: model.hideToolBlocks ? "eye" : "eye.slash",
+        size: 20
       )
     }
   }

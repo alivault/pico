@@ -143,7 +143,7 @@ enum PicoIconName: Sendable {
       self = .sparkles
     case "square.and.pencil":
       self = .pencil
-    case "stop.fill":
+    case "stop", "stop.fill":
       self = .stop
     case "summary":
       self = .summary
@@ -309,6 +309,9 @@ struct PicoIcon: View {
     case .ellipsis:
       Image(systemName: "ellipsis")
         .accessibilityHidden(true)
+    case .stop:
+      Image(systemName: "stop.fill")
+        .accessibilityHidden(true)
     default:
       LucideIcon(
         icon.lucideName,
@@ -332,6 +335,9 @@ extension PicoIcon {
     if systemName == "ellipsis" {
       return UIImage(systemName: "ellipsis")
     }
+    if systemName == "stop" || systemName == "stop.fill" {
+      return UIImage(systemName: "stop.fill")
+    }
 
     let renderer = ImageRenderer(
       content: PicoIcon(systemName: systemName, size: pointSize, strokeWidth: 2)
@@ -347,6 +353,10 @@ extension Image {
   init(picoSystemName systemName: String, pointSize: CGFloat = 24) {
     if systemName == "ellipsis" {
       self.init(systemName: "ellipsis")
+      return
+    }
+    if systemName == "stop" || systemName == "stop.fill" {
+      self.init(systemName: "stop.fill")
       return
     }
 

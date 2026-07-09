@@ -5,13 +5,23 @@ struct NewSessionOptionsMenu: View {
 
   var body: some View {
     Menu {
-      Toggle(isOn: $showHiddenDirectories) {
-        Label("Show Hidden Files and Folders", picoSystemImage: "eye")
+      Button(action: toggleHiddenDirectories) {
+        Label(
+          showHiddenDirectories
+            ? "Hide Hidden Files and Folders"
+            : "Show Hidden Files and Folders",
+          picoSystemImage: showHiddenDirectories ? "eye.slash" : "eye",
+          size: 20
+        )
       }
     } label: {
       Image(picoSystemName: "ellipsis")
     }
     .accessibilityLabel("Directory options")
+  }
+
+  private func toggleHiddenDirectories() {
+    showHiddenDirectories.toggle()
   }
 }
 

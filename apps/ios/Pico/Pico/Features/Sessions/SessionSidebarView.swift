@@ -59,11 +59,11 @@ struct SessionSidebarView: View {
 
           Menu {
             Button(action: showManageDirectories) {
-              Label("Edit Directories", picoSystemImage: "folder")
+              Label("Edit Directories", picoSystemImage: "folder", size: 20)
             }
 
             Button(action: showSettings) {
-              Label("Settings", picoSystemImage: "gearshape")
+              Label("Settings", picoSystemImage: "gearshape", size: 20)
             }
           } label: {
             Image(picoSystemName: "ellipsis")

@@ -450,7 +450,8 @@ struct ContextUsageRingMenu: View {
           Button(action: compactSession) {
             Label(
               isCompacting ? "Compacting…" : "Compact context",
-              picoSystemImage: "summary"
+              picoSystemImage: "summary",
+              size: 20
             )
           }
           .disabled(isCompacting)
@@ -715,22 +716,17 @@ private struct ComposerDirectorySelectorView: View {
       Section("Directories") {
         ForEach(directoryOptions, id: \.self) { directory in
           Button(action: { select(directory) }) {
-            if isSelected(directory) {
-              Label(
-                DirectoryPathFormatter.displayPath(directory),
-                picoSystemImage: "checkmark"
-              )
-            } else {
-              Text(DirectoryPathFormatter.displayPath(directory))
-            }
+            directoryMenuLabel(for: directory)
           }
         }
       }
 
       Divider()
 
-      Button("Add another…", picoSystemImage: "folder.badge.plus") {
+      Button {
         isShowingAddDirectory = true
+      } label: {
+        Label("Add another…", picoSystemImage: "folder.badge.plus", size: 20)
       }
     } label: {
       ComposerDirectoryChip(
@@ -780,6 +776,17 @@ private struct ComposerDirectorySelectorView: View {
     DirectoryPathFormatter.normalizedDirectoryPrefix(directory) == selectedDirectory
   }
 
+  private func directoryMenuLabel(for directory: String) -> some View {
+    let selected = isSelected(directory)
+    return Label {
+      Text(DirectoryPathFormatter.displayPath(directory))
+    } icon: {
+      Image(picoSystemName: "checkmark", pointSize: 20)
+        .opacity(selected ? 1 : 0)
+        .accessibilityHidden(true)
+    }
+  }
+
   private func select(_ directory: String) {
     guard !isSelected(directory) else { return }
 
@@ -797,21 +804,23 @@ private struct ComposerGitBranchSelectorView: View {
   var body: some View {
     Menu {
       Section("Branches") {
-        Button("Create branch…", picoSystemImage: "plus") {
+        Button {
           isShowingCreateBranch = true
+        } label: {
+          Label("Create branch…", picoSystemImage: "plus", size: 20)
         }
         .disabled(model.isCheckingOutGitBranch)
 
         if model.isLoadingGitBranches &&
           model.composerGitLocalBranches.isEmpty {
-          Label("Loading branches…", picoSystemImage: "hourglass")
+          Label("Loading branches…", picoSystemImage: "hourglass", size: 20)
         } else if model.composerGitLocalBranches.isEmpty {
           Text("No local branches")
         } else {
           ForEach(model.composerGitLocalBranches) { branch in
             Button(action: { switchBranch(branch) }) {
               if branch.current {
-                Label(branchTitle(branch), picoSystemImage: "checkmark")
+                Label(branchTitle(branch), picoSystemImage: "checkmark", size: 20)
               } else {
                 Text(branchTitle(branch))
               }
@@ -886,7 +895,7 @@ private struct ComposerDirectoryChip: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      PicoIcon(systemName: "folder")
+      PicoIcon(systemName: "folder", size: 20)
         .font(.caption.weight(.semibold))
         .accessibilityHidden(true)
 

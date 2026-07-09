@@ -501,8 +501,10 @@ struct GitWorkspaceToolbar: View {
 
   @ViewBuilder
   private var branchMenuContent: some View {
-    Button("Create branch…", picoSystemImage: "plus") {
+    Button {
       isShowingCreateBranch = true
+    } label: {
+      Label("Create branch…", picoSystemImage: "plus", size: 20)
     }
     .disabled(status == nil)
 
@@ -517,7 +519,11 @@ struct GitWorkspaceToolbar: View {
               checkoutBranch(branch.name, false, nil, false)
             } label: {
               if branch.current {
-                Label(GitFormatting.localBranchMenuTitle(branch), picoSystemImage: "checkmark")
+                Label(
+                  GitFormatting.localBranchMenuTitle(branch),
+                  picoSystemImage: "checkmark",
+                  size: 20
+                )
               } else {
                 Text(GitFormatting.localBranchMenuTitle(branch))
               }
@@ -543,11 +549,11 @@ struct GitWorkspaceToolbar: View {
               )
             } label: {
               if isCurrent {
-                Label(branch.name, picoSystemImage: "checkmark")
+                Label(branch.name, picoSystemImage: "checkmark", size: 20)
               } else if localExists {
                 Text(branch.name)
               } else {
-                Label(branch.name, picoSystemImage: "plus")
+                Label(branch.name, picoSystemImage: "plus", size: 20)
               }
             }
             .disabled(isCurrent)

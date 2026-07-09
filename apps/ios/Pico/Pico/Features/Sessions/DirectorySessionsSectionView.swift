@@ -88,7 +88,7 @@ struct DirectorySessionsSectionView: View {
       .accessibilityHint(isExpanded ? "Collapse directory" : "Expand directory")
 
       Button(action: startNewSession) {
-        PicoIcon(systemName: "square.and.pencil")
+        PicoIcon(systemName: "square.and.pencil", size: 20)
           .font(.subheadline.weight(.semibold))
           .frame(width: 44, height: 32)
           .contentShape(Rectangle())
@@ -102,11 +102,11 @@ struct DirectorySessionsSectionView: View {
 
       Menu {
         Button(action: showPurgeSheet) {
-          Label("Purge Sessions…", picoSystemImage: "trash")
+          Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
         }
 
         Button(role: .destructive, action: removeDirectory) {
-          Label("Remove Directory", picoSystemImage: "minus.circle")
+          Label("Remove Directory", picoSystemImage: "minus.circle", size: 20)
         }
       } label: {
         Image(picoSystemName: "ellipsis")
@@ -200,7 +200,7 @@ private struct DirectorySessionsFullListView: View {
 
         ControlGroup {
           Button(action: startNewSession) {
-            PicoIcon(systemName: "square.and.pencil")
+            PicoIcon(systemName: "square.and.pencil", size: 20)
           }
           .accessibilityLabel(
             "New session in \(DirectoryPathFormatter.folderName(directory))"
@@ -208,11 +208,11 @@ private struct DirectorySessionsFullListView: View {
 
           Menu {
             Button(action: showPurgeSheet) {
-              Label("Purge Sessions…", picoSystemImage: "trash")
+              Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
             }
 
             Button(role: .destructive, action: removeDirectory) {
-              Label("Remove Directory", picoSystemImage: "minus.circle")
+              Label("Remove Directory", picoSystemImage: "minus.circle", size: 20)
             }
           } label: {
             Image(picoSystemName: "ellipsis")
@@ -509,14 +509,14 @@ private struct DirectorySessionRowButton: View {
         Button(role: .destructive) {
           deleteSession()
         } label: {
-          Label("Delete", picoSystemImage: "trash")
+          Label("Delete", picoSystemImage: "trash", size: 20)
         }
         .tint(.red)
 
         Button {
           showRenameSessionAlert()
         } label: {
-          Label("Rename", picoSystemImage: "pencil")
+          Label("Rename", picoSystemImage: "pencil", size: 20)
         }
         .tint(.blue)
       }

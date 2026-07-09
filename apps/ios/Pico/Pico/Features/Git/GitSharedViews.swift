@@ -106,7 +106,7 @@ struct GitBranchChip: View {
         ProgressView()
           .controlSize(.small)
       } else {
-        PicoIcon(systemName: "arrow.triangle.branch")
+        PicoIcon(systemName: "arrow.triangle.branch", size: 20)
           .font(.caption.weight(.semibold))
           .accessibilityHidden(true)
       }
