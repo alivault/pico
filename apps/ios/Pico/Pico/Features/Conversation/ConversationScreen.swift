@@ -537,6 +537,26 @@ private struct ConversationNavigationTitleView: View {
   }
 }
 
+private struct SessionToolbarDropdownLabel: View {
+  var title: String
+  var detail: String
+  var systemImage: String
+
+  var body: some View {
+    Label {
+      VStack(alignment: .leading, spacing: 1) {
+        Text(title)
+        Text(detail)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+    } icon: {
+      Image(picoSystemName: systemImage, pointSize: 20)
+    }
+  }
+}
+
 private struct ConversationHeaderOptionsMenu: View {
   @Bindable var model: AppModel
   var isPreparingCommit: Bool
@@ -642,7 +662,11 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      Label(modelMenuTitle, picoSystemImage: "cpu", size: 20)
+      SessionToolbarDropdownLabel(
+        title: "Model",
+        detail: modelMenuDetail,
+        systemImage: "cpu"
+      )
     }
     .disabled(modelOptions.isEmpty)
   }
@@ -659,7 +683,11 @@ private struct ConversationHeaderOptionsMenu: View {
         }
       }
     } label: {
-      Label(reasoningMenuTitle, picoSystemImage: "brain", size: 20)
+      SessionToolbarDropdownLabel(
+        title: "Reasoning",
+        detail: reasoningMenuDetail,
+        systemImage: "brain"
+      )
     }
     .disabled(model.composerThinkingLevels.isEmpty)
   }
@@ -668,11 +696,11 @@ private struct ConversationHeaderOptionsMenu: View {
     model.composerModel
   }
 
-  private var modelMenuTitle: String {
-    selectedModel?.displayName ?? "Model"
+  private var modelMenuDetail: String {
+    selectedModel?.displayName ?? "Default"
   }
 
-  private var reasoningMenuTitle: String {
+  private var reasoningMenuDetail: String {
     Self.reasoningLabel(for: model.sessionState.thinkingLevel)
   }
 
