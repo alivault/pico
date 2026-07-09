@@ -1638,6 +1638,7 @@ function useAppShellSessionWorkspaceView({
       title:
         currentState.sessionName ||
         getCurrentSessionTitleFromState(currentState),
+      hasGeneratedName: Boolean(currentState.sessionName?.trim()),
     })
   }
 

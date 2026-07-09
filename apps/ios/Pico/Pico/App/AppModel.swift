@@ -526,6 +526,17 @@ public final class AppModel {
     }
   }
 
+  public func generateSessionName(path: String?) async throws -> GenerateSessionNameResponse {
+    guard let baseURL else { throw PicoAPIError.notConnected }
+
+    let targetPath = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return try await apiClient.generateSessionName(
+      baseURL: baseURL,
+      contextId: connectionStore.contextId,
+      path: targetPath?.isEmpty == true ? nil : targetPath
+    )
+  }
+
   @discardableResult
   public func renameCurrentSession(to name: String) async -> Bool {
     guard let baseURL else { return false }

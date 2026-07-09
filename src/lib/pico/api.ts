@@ -525,6 +525,15 @@ export type RenameSessionResponse =
     }
   | ApiErrorResponse
 
+export type GenerateSessionNameResponse =
+  | {
+      ok: true
+      name: string
+      source: "llm" | "heuristic"
+      reason?: string
+    }
+  | ApiErrorResponse
+
 export type MoveSessionResponse =
   | {
       ok: true

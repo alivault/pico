@@ -48,6 +48,7 @@ import { Route as ApiSessionSelectRouteImport } from './routes/api.session.selec
 import { Route as ApiSessionRenameRouteImport } from './routes/api.session.rename'
 import { Route as ApiSessionReadStateRouteImport } from './routes/api.session.read-state'
 import { Route as ApiSessionNewRouteImport } from './routes/api.session.new'
+import { Route as ApiSessionNameRouteImport } from './routes/api.session.name'
 import { Route as ApiSessionMoveRouteImport } from './routes/api.session.move'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api.session.history'
 import { Route as ApiSessionForkRouteImport } from './routes/api.session.fork'
@@ -268,6 +269,11 @@ const ApiSessionNewRoute = ApiSessionNewRouteImport.update({
   path: '/api/session/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionNameRoute = ApiSessionNameRouteImport.update({
+  id: '/api/session/name',
+  path: '/api/session/name',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionMoveRoute = ApiSessionMoveRouteImport.update({
   id: '/api/session/move',
   path: '/api/session/move',
@@ -430,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
+  '/api/session/name': typeof ApiSessionNameRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
@@ -493,6 +500,7 @@ export interface FileRoutesByTo {
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
+  '/api/session/name': typeof ApiSessionNameRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
@@ -557,6 +565,7 @@ export interface FileRoutesById {
   '/api/session/fork': typeof ApiSessionForkRoute
   '/api/session/history': typeof ApiSessionHistoryRoute
   '/api/session/move': typeof ApiSessionMoveRoute
+  '/api/session/name': typeof ApiSessionNameRoute
   '/api/session/new': typeof ApiSessionNewRoute
   '/api/session/read-state': typeof ApiSessionReadStateRoute
   '/api/session/rename': typeof ApiSessionRenameRoute
@@ -622,6 +631,7 @@ export interface FileRouteTypes {
     | '/api/session/fork'
     | '/api/session/history'
     | '/api/session/move'
+    | '/api/session/name'
     | '/api/session/new'
     | '/api/session/read-state'
     | '/api/session/rename'
@@ -685,6 +695,7 @@ export interface FileRouteTypes {
     | '/api/session/fork'
     | '/api/session/history'
     | '/api/session/move'
+    | '/api/session/name'
     | '/api/session/new'
     | '/api/session/read-state'
     | '/api/session/rename'
@@ -748,6 +759,7 @@ export interface FileRouteTypes {
     | '/api/session/fork'
     | '/api/session/history'
     | '/api/session/move'
+    | '/api/session/name'
     | '/api/session/new'
     | '/api/session/read-state'
     | '/api/session/rename'
@@ -811,6 +823,7 @@ export interface RootRouteChildren {
   ApiSessionForkRoute: typeof ApiSessionForkRoute
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
   ApiSessionMoveRoute: typeof ApiSessionMoveRoute
+  ApiSessionNameRoute: typeof ApiSessionNameRoute
   ApiSessionNewRoute: typeof ApiSessionNewRoute
   ApiSessionReadStateRoute: typeof ApiSessionReadStateRoute
   ApiSessionRenameRoute: typeof ApiSessionRenameRoute
@@ -1096,6 +1109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/name': {
+      id: '/api/session/name'
+      path: '/api/session/name'
+      fullPath: '/api/session/name'
+      preLoaderRoute: typeof ApiSessionNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/move': {
       id: '/api/session/move'
       path: '/api/session/move'
@@ -1342,6 +1362,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSessionForkRoute: ApiSessionForkRoute,
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
   ApiSessionMoveRoute: ApiSessionMoveRoute,
+  ApiSessionNameRoute: ApiSessionNameRoute,
   ApiSessionNewRoute: ApiSessionNewRoute,
   ApiSessionReadStateRoute: ApiSessionReadStateRoute,
   ApiSessionRenameRoute: ApiSessionRenameRoute,

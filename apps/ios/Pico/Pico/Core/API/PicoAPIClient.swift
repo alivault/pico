@@ -128,6 +128,25 @@ public actor PicoAPIClient {
     )
   }
 
+  public func generateSessionName(
+    baseURL: URL,
+    contextId: String,
+    path: String?
+  ) async throws -> GenerateSessionNameResponse {
+    var body: [String: String] = [:]
+    if let path, !path.isEmpty {
+      body["path"] = path
+    }
+
+    return try await send(
+      endpoint: .sessionName,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      body: body
+    )
+  }
+
   public func renameSession(
     baseURL: URL,
     contextId: String,

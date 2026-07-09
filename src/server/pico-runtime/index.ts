@@ -3322,24 +3322,39 @@ class PicoRuntime {
     )
   }
 
-  private maybeAutoNameSession(entry: SessionEntry) {
-    if (this.getCurrentSessionName(entry)) return
-
-    for (const message of entry.session.messages) {
+  private getFirstPromptForNamingFromMessages(
+    messages: AgentSessionLike["messages"],
+    firstMessageHint = ""
+  ) {
+    for (const message of messages) {
       if (message?.role !== "user") continue
       const firstPrompt = summarizePromptContent(message.content)
       if (firstPrompt.text || firstPrompt.imageCount > 0) {
-        this.startAutoSessionNaming(
-          entry,
-          firstPrompt.text,
-          firstPrompt.imageCount
-        )
-        return
+        return firstPrompt
       }
     }
 
-    if (entry.firstMessageHint.trim()) {
-      this.startAutoSessionNaming(entry, entry.firstMessageHint.trim(), 0)
+    const trimmedHint = firstMessageHint.trim()
+    return trimmedHint ? { text: trimmedHint, imageCount: 0 } : null
+  }
+
+  private getSessionFirstPromptForNaming(entry: SessionEntry) {
+    return this.getFirstPromptForNamingFromMessages(
+      entry.session.messages,
+      entry.firstMessageHint
+    )
+  }
+
+  private maybeAutoNameSession(entry: SessionEntry) {
+    if (this.getCurrentSessionName(entry)) return
+
+    const firstPrompt = this.getSessionFirstPromptForNaming(entry)
+    if (firstPrompt) {
+      this.startAutoSessionNaming(
+        entry,
+        firstPrompt.text,
+        firstPrompt.imageCount
+      )
     }
   }
 
@@ -5235,6 +5250,124 @@ class PicoRuntime {
       sessionKey: nextEntry.key,
       sessionId: nextEntry.session.sessionId,
       sessionFile: nextEntry.session.sessionFile,
+    }
+  }
+
+  async generateSessionName(request: Request, body: { path?: unknown }) {
+    const sessionPath = typeof body.path === "string" ? body.path.trim() : ""
+    let source:
+      | {
+          cwd: string
+          model: AgentSessionLike["model"]
+          modelRegistry: SessionServicesLike["modelRegistry"]
+          firstPrompt: { text: string; imageCount: number }
+        }
+      | undefined
+    let temporaryRuntime: AgentSessionRuntimeLike | undefined
+
+    try {
+      if (sessionPath) {
+        const targetEntry = this.sessionEntries.get(sessionPath)
+        if (targetEntry) {
+          const firstPrompt = this.getSessionFirstPromptForNaming(targetEntry)
+          if (firstPrompt) {
+            source = {
+              cwd: targetEntry.cwd,
+              model: targetEntry.session.model,
+              modelRegistry: targetEntry.services.modelRegistry,
+              firstPrompt,
+            }
+          }
+        } else {
+          const sdk = await this.getSdk()
+          const sessionManager = sdk.SessionManager.open(sessionPath)
+          this.restoreSessionTreeLeafOverride(sessionManager, sessionPath)
+          temporaryRuntime = await this.createSessionRuntime(sessionManager)
+          const firstPrompt = this.getFirstPromptForNamingFromMessages(
+            temporaryRuntime.session.messages
+          )
+          if (firstPrompt) {
+            source = {
+              cwd: temporaryRuntime.cwd,
+              model: temporaryRuntime.session.model,
+              modelRegistry: temporaryRuntime.services.modelRegistry,
+              firstPrompt,
+            }
+          }
+        }
+      } else {
+        const { activeEntry } = await this.resolveRequest(request)
+        const firstPrompt = this.getSessionFirstPromptForNaming(activeEntry)
+        if (firstPrompt) {
+          source = {
+            cwd: activeEntry.cwd,
+            model: activeEntry.session.model,
+            modelRegistry: activeEntry.services.modelRegistry,
+            firstPrompt,
+          }
+        }
+      }
+
+      if (!source) {
+        throw new Error("Session has no user message to name from")
+      }
+
+      const heuristic = deriveHeuristicSessionNameAttempt(
+        source.firstPrompt.text,
+        source.firstPrompt.imageCount
+      )
+      const generated = await generateSessionNameWithLlm(
+        {
+          cwd: source.cwd,
+          model: source.model,
+          services: {
+            modelRegistry: source.modelRegistry,
+          },
+        },
+        source.firstPrompt.text,
+        source.firstPrompt.imageCount
+      )
+      if (generated.name) {
+        return {
+          ok: true as const,
+          name: clampSessionNameLength(generated.name),
+          source: "llm" as const,
+        }
+      }
+
+      if (heuristic.name) {
+        return {
+          ok: true as const,
+          name: clampSessionNameLength(heuristic.name),
+          source: "heuristic" as const,
+          reason: generated.reason || heuristic.reason,
+        }
+      }
+
+      const fallbackName = cleanupSessionNameCandidate(
+        normalizeSessionListTitle(
+          source.firstPrompt.text,
+          SESSION_NAME_MAX_LENGTH
+        )
+      )
+      if (fallbackName) {
+        return {
+          ok: true as const,
+          name: clampSessionNameLength(fallbackName),
+          source: "heuristic" as const,
+          reason: generated.reason || heuristic.reason,
+        }
+      }
+
+      throw new Error(
+        generated.reason ||
+          heuristic.reason ||
+          "Could not generate a session name from the first user message"
+      )
+    } finally {
+      await temporaryRuntime?.dispose().catch((error) => {
+        console.error("[pico] temporary session dispose error:", error)
+      })
     }
   }
 

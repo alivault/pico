@@ -50,6 +50,7 @@
 		65E51806F8F3579DBC4EA7A9 /* Core/Models/ClientManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1431759DC59340AAE7DEDE7 /* Core/Models/ClientManifest.swift */; };
 		664BECAE2E5639E5D5C021AC /* Core/Models/UiRequestOptionObject.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17A19A6DBF23F40D2E73922 /* Core/Models/UiRequestOptionObject.swift */; };
 		66CEBC3BA7A37C71AF9EEFDF /* Core/Models/SimpleOkResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */; };
+		E80000000000000000000001 /* Core/Models/GenerateSessionNameResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = E80000000000000000000002 /* Core/Models/GenerateSessionNameResponse.swift */; };
 		692F092544E23218782F8B62 /* Core/Models/RequestErrorEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51497360E15D7DBC49CBAE28 /* Core/Models/RequestErrorEvent.swift */; };
 		6D977BE53B09E224C6FC0078 /* Core/API/PicoAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FCFAE19EF4045665C95D048 /* Core/API/PicoAPIError.swift */; };
 		6E4B480FB2527DA7B6BA4A0C /* Core/Models/ToolBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = F431A05270D409C8F34759DF /* Core/Models/ToolBlock.swift */; };
@@ -118,6 +119,7 @@
 		D6DDD2E4A3B591E27F0CC58F /* Features/Conversation/AssistantMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D576CBC6EE486B0838C918F2 /* Features/Conversation/AssistantMessageView.swift */; };
 		D7B42CDE924BC2D2177D310B /* Core/Events/SSEEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816E3AED10A93376887AE171 /* Core/Events/SSEEvent.swift */; };
 		DC3AB145623AC20BE6590832 /* Features/Sessions/DirectorySessionsSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544DDDAE75B2CB2572A56D97 /* Features/Sessions/DirectorySessionsSectionView.swift */; };
+		E80000000000000000000003 /* Features/Sessions/RenameSessionSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E80000000000000000000004 /* Features/Sessions/RenameSessionSheetView.swift */; };
 		DFF67019BB954EF276B4A72C /* Core/Persistence/DraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917CC3A1A04DF4E256D82202 /* Core/Persistence/DraftStore.swift */; };
 		E68D62BC99F5DC1CD1F261E6 /* Core/Models/PromptRequestBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = C33DEB5D1B8020CEB5140416 /* Core/Models/PromptRequestBody.swift */; };
 		EEA1F0613547A1DDE62FA55D /* Core/Models/SessionNewResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F444D4E61BD917237691C10 /* Core/Models/SessionNewResponse.swift */; };
@@ -193,6 +195,7 @@
 		3FCB064155DBB48B0CCB62DF /* Core/Models/ThinkingBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ThinkingBlock.swift; sourceTree = "<group>"; };
 		4235466D4537838F00690942 /* state_sync_initial.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = state_sync_initial.json; sourceTree = "<group>"; };
 		427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/SimpleOkResponse.swift; sourceTree = "<group>"; };
+		E80000000000000000000002 /* Core/Models/GenerateSessionNameResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GenerateSessionNameResponse.swift; sourceTree = "<group>"; };
 		A40000000000000000000002 /* Core/Models/ForkSessionResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ForkSessionResponse.swift; sourceTree = "<group>"; };
 		43217CBD44C9114EF53E463C /* PicoServerEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicoServerEventTests.swift; sourceTree = "<group>"; };
 		45D498E92AC06FA340A26C6A /* Features/Composer/ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Composer/ComposerView.swift; sourceTree = "<group>"; };
@@ -207,6 +210,7 @@
 		5403C17E9C154187C52A69F0 /* Core/Models/PromptResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/PromptResponse.swift; sourceTree = "<group>"; };
 		544DB39957D59EC6A5C97568 /* Core/Models/SessionListEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/SessionListEntry.swift; sourceTree = "<group>"; };
 		544DDDAE75B2CB2572A56D97 /* Features/Sessions/DirectorySessionsSectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Sessions/DirectorySessionsSectionView.swift; sourceTree = "<group>"; };
+		E80000000000000000000004 /* Features/Sessions/RenameSessionSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Sessions/RenameSessionSheetView.swift; sourceTree = "<group>"; };
 		5925A9E1ACB662178411CAA4 /* Core/Models/PendingUserMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/PendingUserMessage.swift; sourceTree = "<group>"; };
 		59F749AC43C6A833BD2D59B9 /* Core/Persistence/ConnectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Persistence/ConnectionStore.swift; sourceTree = "<group>"; };
 		5FF0827613EB43B5A1373BCE /* Features/Composer/PendingMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Composer/PendingMessagesView.swift; sourceTree = "<group>"; };
@@ -394,6 +398,7 @@
 				2BD961FD2F8D078F274A37A6 /* Core/Models/SessionUiState.swift */,
 				A71E060A0A6BDCDA2D8027CE /* Core/Models/SessionsEvent.swift */,
 				427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */,
+				E80000000000000000000002 /* Core/Models/GenerateSessionNameResponse.swift */,
 				7C40095B960CD84D2329089C /* Core/Models/SkillOption.swift */,
 				F97C68B3538AC695A155E2FB /* Core/Models/StateSyncPayload.swift */,
 				168A9C08E01B2C0C076E36D0 /* Core/Models/StreamingBehavior.swift */,
@@ -455,6 +460,7 @@
 				D40000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift */,
 				B2885B1058D12CC8500CA0F8 /* Features/Sessions/ConnectionStatusBadge.swift */,
 				544DDDAE75B2CB2572A56D97 /* Features/Sessions/DirectorySessionsSectionView.swift */,
+				E80000000000000000000004 /* Features/Sessions/RenameSessionSheetView.swift */,
 				B10000000000000000000004 /* Features/Sessions/DirectoryPathFormatter.swift */,
 				B10000000000000000000005 /* Features/Sessions/NewSessionDirectoryRow.swift */,
 				B10000000000000000000006 /* Features/Sessions/NewSessionView.swift */,
@@ -683,6 +689,7 @@
 				274D11033AF02F056E9D1133 /* Core/Models/SessionUiState.swift in Sources */,
 				BFB7883FDFEF98891890556C /* Core/Models/SessionsEvent.swift in Sources */,
 				66CEBC3BA7A37C71AF9EEFDF /* Core/Models/SimpleOkResponse.swift in Sources */,
+				E80000000000000000000001 /* Core/Models/GenerateSessionNameResponse.swift in Sources */,
 				B4E31E13E0191D5027A99552 /* Core/Models/SkillOption.swift in Sources */,
 				8F342C8114D7BD2886277BA4 /* Core/Models/StateSyncPayload.swift in Sources */,
 				B2F6A64928961EB70A238201 /* Core/Models/StreamingBehavior.swift in Sources */,
@@ -744,6 +751,7 @@
 				D50000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift in Sources */,
 				0BC9F6CDD845F0BC1752F918 /* Features/Sessions/ConnectionStatusBadge.swift in Sources */,
 				DC3AB145623AC20BE6590832 /* Features/Sessions/DirectorySessionsSectionView.swift in Sources */,
+				E80000000000000000000003 /* Features/Sessions/RenameSessionSheetView.swift in Sources */,
 				A10000000000000000000001 /* Core/Models/CompletionItem.swift in Sources */,
 				A10000000000000000000002 /* Core/Models/DirectoryResolveResponse.swift in Sources */,
 				A10000000000000000000003 /* Core/Models/DirectorySearchResponse.swift in Sources */,

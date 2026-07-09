@@ -1,4 +1,5 @@
 import * as React from "react"
+import { WandSparklesIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -7,6 +8,7 @@ import type {
   DeleteOldDirectorySessionsResponse,
   ForkSessionResponse,
   ForkableMessagesResponse,
+  GenerateSessionNameResponse,
   SessionListEntry,
 } from "@/lib/pico/api"
 import { Button } from "@/components/ui/button"
@@ -47,6 +49,10 @@ type DeleteOldDirectorySessionsData = Extract<
   DeleteOldDirectorySessionsResponse,
   { ok: true }
 >
+type GenerateSessionNameData = Extract<
+  GenerateSessionNameResponse,
+  { ok: true }
+>
 
 function FooterKbd({ children }: { children: React.ReactNode }) {
   return <Kbd>{children}</Kbd>
@@ -56,7 +62,10 @@ type RenameSessionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   renameValue: string
+  generatingName: boolean
+  canGenerateName: boolean
   onRenameValueChange: (value: string) => void
+  onGenerateSessionName: () => void
   onRenameSession: () => void
 }
 
@@ -64,7 +73,10 @@ function RenameSessionDialog({
   open,
   onOpenChange,
   renameValue,
+  generatingName,
+  canGenerateName,
   onRenameValueChange,
+  onGenerateSessionName,
   onRenameSession,
 }: RenameSessionDialogProps) {
   const isMobile = useIsMobile()
@@ -95,6 +107,12 @@ function RenameSessionDialog({
           onOpenChange(false)
           return
         }
+        if (event.ctrlKey && event.key.toLowerCase() === "g") {
+          event.preventDefault()
+          event.stopPropagation()
+          onGenerateSessionName()
+          return
+        }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
         event.preventDefault()
         event.stopPropagation()
@@ -106,15 +124,32 @@ function RenameSessionDialog({
   )
   const body = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border/70 px-3 py-2">
-        <div className="truncate text-sm font-medium">Rename session</div>
-        <div className="truncate text-xs text-muted-foreground">
-          Update the display name shown in the sidebar.
+      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">Rename session</div>
+          <div className="truncate text-xs text-muted-foreground">
+            Update the display name shown in the sidebar.
+          </div>
         </div>
+        {isMobile ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={generatingName || !canGenerateName}
+            onClick={onGenerateSessionName}
+          >
+            {generatingName ? <Spinner /> : <WandSparklesIcon />}
+            Generate
+          </Button>
+        )}
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">{renameInput}</div>
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>Ctrl</FooterKbd>
+            <FooterKbd>G</FooterKbd> Generate
+          </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Save
           </span>
@@ -140,6 +175,14 @@ function RenameSessionDialog({
             {body}
           </div>
           <DrawerFooter className="border-t border-border/70">
+            <Button
+              variant="outline"
+              disabled={generatingName || !canGenerateName}
+              onClick={onGenerateSessionName}
+            >
+              {generatingName ? <Spinner /> : <WandSparklesIcon />}
+              Generate
+            </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
@@ -165,7 +208,11 @@ function RenameSessionDialog({
 }
 
 export type RenameSessionDialogHandle = {
-  open: (target: { path: string; title: string }) => void
+  open: (target: {
+    path: string
+    title: string
+    hasGeneratedName?: boolean
+  }) => void
   openForEntry: (entry: SessionListEntry) => void
   close: () => void
   isOpen: () => boolean
@@ -174,6 +221,7 @@ export type RenameSessionDialogHandle = {
 type RenameSessionDialogControllerProps = {
   ref?: React.Ref<RenameSessionDialogHandle>
   openStateRef?: React.RefObject<boolean>
+  viewerContextId: string
   onRenameSession: (
     path: string,
     name: string
@@ -183,10 +231,13 @@ type RenameSessionDialogControllerProps = {
 export function RenameSessionDialogController({
   ref,
   openStateRef,
+  viewerContextId,
   onRenameSession,
 }: RenameSessionDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [renameValue, setRenameValue] = React.useState("")
+  const [isGeneratingName, setIsGeneratingName] = React.useState(false)
+  const [canGenerateName, setCanGenerateName] = React.useState(false)
   const targetPathRef = React.useRef("")
   const openRef = React.useRef(open)
 
@@ -198,13 +249,58 @@ export function RenameSessionDialogController({
     setOpen(nextOpen)
   }
 
-  const openTarget = (target: { path: string; title: string }) => {
+  const openTarget = (target: {
+    path: string
+    title: string
+    hasGeneratedName?: boolean
+  }) => {
     const nextPath = target.path.trim()
     if (!nextPath) return
 
     targetPathRef.current = nextPath
     setRenameValue(target.title)
+    setCanGenerateName(!target.hasGeneratedName)
     setOpenState(true)
+  }
+
+  const generateSessionName = async () => {
+    if (
+      !viewerContextId ||
+      !targetPathRef.current ||
+      isGeneratingName ||
+      !canGenerateName
+    ) {
+      return
+    }
+
+    setIsGeneratingName(true)
+    try {
+      const response = await fetchJson<GenerateSessionNameData>(
+        buildRequestUrl("/api/session/name", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: targetPathRef.current }),
+        }
+      )
+      setRenameValue(response.name)
+      setCanGenerateName(false)
+      if (response.source === "heuristic" && response.reason) {
+        toast.info("Using heuristic session name", {
+          description: response.reason,
+        })
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate session name"
+      )
+    } finally {
+      setIsGeneratingName(false)
+    }
   }
 
   const submitRename = async () => {
@@ -220,7 +316,11 @@ export function RenameSessionDialogController({
       open: openTarget,
       openForEntry: (entry) => {
         if (!entry.path) return
-        openTarget({ path: entry.path, title: entry.title || "" })
+        openTarget({
+          path: entry.path,
+          title: entry.title || "",
+          hasGeneratedName: Boolean(entry.name?.trim()),
+        })
       },
       close: () => {
         setOpenState(false)
@@ -237,7 +337,14 @@ export function RenameSessionDialogController({
         setOpenState(nextOpen)
       }}
       renameValue={renameValue}
+      generatingName={isGeneratingName}
+      canGenerateName={
+        canGenerateName && Boolean(viewerContextId && targetPathRef.current)
+      }
       onRenameValueChange={setRenameValue}
+      onGenerateSessionName={() => {
+        void generateSessionName()
+      }}
       onRenameSession={() => {
         void submitRename()
       }}

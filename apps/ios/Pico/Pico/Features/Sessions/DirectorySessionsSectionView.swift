@@ -494,7 +494,7 @@ private struct DirectorySessionRowButton: View {
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
   @State private var renameTitle = ""
-  @State private var isShowingRenameAlert = false
+  @State private var isShowingRenameSheet = false
 
   var body: some View {
     Button {
@@ -514,21 +514,27 @@ private struct DirectorySessionRowButton: View {
         .tint(.red)
 
         Button {
-          showRenameSessionAlert()
+          showRenameSessionSheet()
         } label: {
           Label("Rename", picoSystemImage: "pencil", size: 20)
         }
         .tint(.blue)
       }
     }
-    .alert("Rename session", isPresented: $isShowingRenameAlert) {
-      TextField("Session name", text: $renameTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Rename") {
-        renameSession()
+    .sheet(isPresented: $isShowingRenameSheet) {
+      NavigationStack {
+        RenameSessionSheetView(
+          model: model,
+          initialName: renameTitle,
+          path: entry.path,
+          canGenerateName: (entry.name ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        ) { name in
+          await model.renameSession(entry, to: name)
+        }
       }
-    } message: {
-      Text("Enter a new name for this session.")
+      .presentationDetents([.medium, .large])
     }
   }
 
@@ -574,21 +580,14 @@ private struct DirectorySessionRowButton: View {
     }
   }
 
-  private func showRenameSessionAlert() {
+  private func showRenameSessionSheet() {
     let name = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let name, !name.isEmpty {
       renameTitle = name
     } else {
       renameTitle = entry.title
     }
-    isShowingRenameAlert = true
-  }
-
-  private func renameSession() {
-    let name = renameTitle
-    Task {
-      await model.renameSession(entry, to: name)
-    }
+    isShowingRenameSheet = true
   }
 
   private func deleteSession() {

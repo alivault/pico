@@ -379,14 +379,19 @@ const AppShellRenameSessionDialogHost = React.memo(
     renameDialogRef,
     renameOpenRef,
     renameSessionPath,
+    viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    "renameDialogRef" | "renameOpenRef" | "renameSessionPath"
+    | "renameDialogRef"
+    | "renameOpenRef"
+    | "renameSessionPath"
+    | "viewerContextId"
   >) {
     return (
       <RenameSessionDialogController
         ref={renameDialogRef}
         openStateRef={renameOpenRef}
+        viewerContextId={viewerContextId}
         onRenameSession={renameSessionPath}
       />
     )
@@ -751,6 +756,7 @@ export const AppShellFloatingControllers = React.memo(
           renameDialogRef={renameDialogRef}
           renameOpenRef={renameOpenRef}
           renameSessionPath={renameSessionPath}
+          viewerContextId={viewerContextId}
         />
 
         <AppShellDeleteSessionsDialogHost

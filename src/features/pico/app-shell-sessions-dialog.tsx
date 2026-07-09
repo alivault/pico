@@ -1,9 +1,11 @@
 import * as React from "react"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, WandSparklesIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import type {
   DirectorySessionsIndexesResponse,
   DirectorySessionsIndexSnapshot,
+  GenerateSessionNameResponse,
   SessionListEntry,
   SessionStatusEvent,
 } from "@/lib/pico/api"
@@ -40,6 +42,11 @@ import { cn } from "@/lib/utils"
 
 type SessionsDialogScope = "current" | "all"
 type SessionsDialogStage = "browse" | "rename" | "delete"
+
+type GenerateSessionNameData = Extract<
+  GenerateSessionNameResponse,
+  { ok: true }
+>
 
 type SessionStatusByKey = Record<string, Omit<SessionStatusEvent, "type">>
 
@@ -442,6 +449,8 @@ function useAppShellSessionsDialogView({
   onError,
 }: AppShellSessionsDialogProps) {
   const isMobile = useIsMobile()
+  const [isGeneratingName, setIsGeneratingName] = React.useState(false)
+  const [generatedNamePath, setGeneratedNamePath] = React.useState("")
   const [state, dispatch] = React.useReducer(
     sessionsDialogReducer,
     initialSessionsDialogState
@@ -502,6 +511,11 @@ function useAppShellSessionsDialogView({
   const selectedSession = selectedSessionKey
     ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
     : undefined
+  const canGenerateSelectedSessionName = Boolean(
+    selectedSession?.path &&
+    !selectedSession.name?.trim() &&
+    generatedNamePath !== selectedSession.path
+  )
   const loading = visibleGroups.some((group) => group.loading)
   const browseInputRef = React.useRef<HTMLInputElement | null>(null)
   const deletePanelRef = React.useRef<HTMLDivElement | null>(null)
@@ -614,6 +628,7 @@ function useAppShellSessionsDialogView({
 
   const renameSelectedSession = () => {
     if (!selectedSession?.path) return
+    setGeneratedNamePath("")
     dispatch({ type: "renameRequested", value: selectedSession.title })
   }
 
@@ -626,6 +641,38 @@ function useAppShellSessionsDialogView({
     if (success === false) return
 
     dispatch({ type: "renameSaved", path: targetPath, name: nextName })
+  }
+
+  const generateSelectedSessionName = async () => {
+    const targetPath = selectedSession?.path
+    if (!targetPath || isGeneratingName || !canGenerateSelectedSessionName) {
+      return
+    }
+
+    setIsGeneratingName(true)
+    try {
+      const response = await fetchJson<GenerateSessionNameData>(
+        buildRequestUrl("/api/session/name", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: targetPath }),
+        }
+      )
+      dispatch({ type: "renameValueChanged", value: response.name })
+      setGeneratedNamePath(targetPath)
+      if (response.source === "heuristic" && response.reason) {
+        toast.info("Using heuristic session name", {
+          description: response.reason,
+        })
+      }
+    } catch (error) {
+      onError?.(error)
+    } finally {
+      setIsGeneratingName(false)
+    }
   }
 
   const deleteSelectedSession = () => {
@@ -824,6 +871,17 @@ function useAppShellSessionsDialogView({
             {selectedSession?.title || "Selected session"}
           </div>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={isGeneratingName || !canGenerateSelectedSessionName}
+          onClick={() => {
+            void generateSelectedSessionName()
+          }}
+        >
+          {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
+          Generate
+        </Button>
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <Input
@@ -841,6 +899,12 @@ function useAppShellSessionsDialogView({
               dispatch({ type: "browseRequested" })
               return
             }
+            if (matchesShortcutEvent(event.nativeEvent, "Control+G")) {
+              event.preventDefault()
+              event.stopPropagation()
+              void generateSelectedSessionName()
+              return
+            }
             if (event.key !== "Enter" || event.nativeEvent.isComposing) return
             event.preventDefault()
             event.stopPropagation()
@@ -852,6 +916,9 @@ function useAppShellSessionsDialogView({
       </div>
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
+          <span className="inline-flex items-center gap-1">
+            <FooterKbd>{formatShortcutLabel("Control+G")}</FooterKbd> Generate
+          </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Save
           </span>

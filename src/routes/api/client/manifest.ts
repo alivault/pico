@@ -77,6 +77,7 @@ function buildClientManifest(): ClientManifestResponse {
         "/api/session/new",
         "/api/session/select",
         "/api/session/fork",
+        "/api/session/name",
         "/api/session/rename",
         "/api/session/delete",
         "/api/session/read-state",

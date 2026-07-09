@@ -10,7 +10,7 @@ struct ConversationScreen: View {
   @State private var contentWidth: CGFloat = 0
   @State private var isKeyboardVisible = false
   @State private var renameTitle = ""
-  @State private var isShowingRenameAlert = false
+  @State private var isShowingRenameSheet = false
   @State private var isShowingDeleteConfirmation = false
   @State private var isShowingFilesDrawer = false
   @State private var isShowingHeaderCommitSheet = false
@@ -114,21 +114,27 @@ struct ConversationScreen: View {
             openFiles: showFilesDrawer,
             commitChanges: showHeaderCommitSheet,
             pushChanges: pushHeaderGit,
-            renameSession: showRenameSessionAlert,
+            renameSession: showRenameSessionSheet,
             deleteSession: showDeleteSessionConfirmation
           )
         }
       }
     }
     .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
-    .alert("Rename session", isPresented: $isShowingRenameAlert) {
-      TextField("Session name", text: $renameTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Rename") {
-        renameCurrentSession()
+    .sheet(isPresented: $isShowingRenameSheet) {
+      NavigationStack {
+        RenameSessionSheetView(
+          model: model,
+          initialName: renameTitle,
+          path: nil,
+          canGenerateName: (model.sessionState.sessionName ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        ) { name in
+          await model.renameCurrentSession(to: name)
+        }
       }
-    } message: {
-      Text("Enter a new name for this session.")
+      .presentationDetents([.medium, .large])
     }
     .confirmationDialog(
       "Delete session?",
@@ -341,22 +347,15 @@ struct ConversationScreen: View {
     }
   }
 
-  private func showRenameSessionAlert() {
+  private func showRenameSessionSheet() {
     guard model.canRenameCurrentSession else { return }
     renameTitle = model.currentSessionRenameTitle
-    isShowingRenameAlert = true
+    isShowingRenameSheet = true
   }
 
   private func showDeleteSessionConfirmation() {
     guard model.canDeleteCurrentSession else { return }
     isShowingDeleteConfirmation = true
-  }
-
-  private func renameCurrentSession() {
-    let name = renameTitle
-    Task {
-      await model.renameCurrentSession(to: name)
-    }
   }
 
   private func deleteCurrentSession() {
