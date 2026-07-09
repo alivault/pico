@@ -119,7 +119,7 @@ public final class AppModel {
       } catch {
         return
       }
-      await self?.dismissToast(id: id)
+      self?.dismissToast(id: id)
     }
   }
 
