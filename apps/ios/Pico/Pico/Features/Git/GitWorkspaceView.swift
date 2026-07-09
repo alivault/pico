@@ -418,27 +418,51 @@ struct GitWorkspaceToolbar: View {
         branchDropdown
         Spacer(minLength: 8)
         Menu {
-          Button("Refresh", action: refresh)
-          Button("Pull", action: pull)
-            .disabled(status == nil)
-          Button("Push", action: push)
-            .disabled(status == nil)
-          Button("Force Push with Lease", role: .destructive, action: confirmForcePush)
-            .disabled(status == nil)
+          Button(action: refresh) {
+            Label("Refresh", picoSystemImage: "arrow.clockwise", size: 20)
+          }
+          Button(action: pull) {
+            Label("Pull", picoSystemImage: "arrow.down", size: 20)
+          }
+          .disabled(status == nil)
+          Button(action: push) {
+            Label("Push", picoSystemImage: "arrow.up.circle", size: 20)
+          }
+          .disabled(status == nil)
+          Button(role: .destructive, action: confirmForcePush) {
+            Label(
+              "Force Push with Lease",
+              picoSystemImage: "exclamationmark.triangle",
+              size: 20
+            )
+          }
+          .disabled(status == nil)
 
           Divider()
 
-          Button("Stage All", action: stageAll)
-            .disabled(status == nil || files.isEmpty)
-          Button("Unstage All", action: unstageAll)
-            .disabled(status == nil || files.isEmpty)
+          Button(action: stageAll) {
+            Label("Stage All", picoSystemImage: "checkmark.circle", size: 20)
+          }
+          .disabled(status == nil || files.isEmpty)
+          Button(action: unstageAll) {
+            Label("Unstage All", picoSystemImage: "minus.circle", size: 20)
+          }
+          .disabled(status == nil || files.isEmpty)
 
           Divider()
 
-          Button("Discard All", role: .destructive, action: confirmDiscardAll)
-            .disabled(status == nil || files.isEmpty)
-          Button("Nuke Working Tree", role: .destructive, action: confirmNukeWorkingTree)
-            .disabled(status == nil || files.isEmpty)
+          Button(role: .destructive, action: confirmDiscardAll) {
+            Label("Discard All", picoSystemImage: "trash", size: 20)
+          }
+          .disabled(status == nil || files.isEmpty)
+          Button(role: .destructive, action: confirmNukeWorkingTree) {
+            Label(
+              "Nuke Working Tree",
+              picoSystemImage: "exclamationmark.triangle",
+              size: 20
+            )
+          }
+          .disabled(status == nil || files.isEmpty)
         } label: {
           Group {
             if isLoading {
