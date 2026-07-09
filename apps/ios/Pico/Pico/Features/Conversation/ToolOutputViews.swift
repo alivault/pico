@@ -333,7 +333,11 @@ private struct ToolCodeBlockView: View {
         Button {
           copyCode()
         } label: {
-          Label(copied ? "Copied" : "Copy", picoSystemImage: copied ? "checkmark" : "doc.on.doc")
+          Label(
+            copied ? "Copied" : "Copy",
+            picoSystemImage: copied ? "checkmark" : "doc.on.doc",
+            size: 20
+          )
             .labelStyle(.titleAndIcon)
         }
         .buttonStyle(.borderless)
