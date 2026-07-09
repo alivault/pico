@@ -51,6 +51,9 @@ export type SessionListInfoLike = {
 export type MessageContentPartLike = UnknownRecord & {
   type?: unknown
   text?: unknown
+  thinking?: unknown
+  thinkingSignature?: unknown
+  summaryLabel?: unknown
 }
 
 export type MessageLike = UnknownRecord & {

@@ -300,9 +300,73 @@ private enum MarkdownBlockParser {
     let normalized = source
       .replacingOccurrences(of: "\r\n", with: "\n")
       .replacingOccurrences(of: "\r", with: "\n")
-    let lines = normalized.components(separatedBy: "\n")
+    let lines = stripHtmlCommentsOutsideCodeBlocks(normalized)
+      .components(separatedBy: "\n")
     var parser = Parser(lines: lines)
     return parser.parseBlocks()
+  }
+
+  private static func stripHtmlCommentsOutsideCodeBlocks(_ source: String) -> String {
+    var strippedLines: [String] = []
+    var activeFence: MarkdownFence?
+    var insideComment = false
+
+    for line in source.components(separatedBy: "\n") {
+      if let fence = activeFence {
+        strippedLines.append(line)
+        if fence.closes(line) {
+          activeFence = nil
+        }
+        continue
+      }
+
+      if !insideComment, let fence = MarkdownFence(line: line) {
+        activeFence = fence
+        strippedLines.append(line)
+        continue
+      }
+
+      strippedLines.append(
+        stripHtmlComments(from: line, insideComment: &insideComment)
+      )
+    }
+
+    return strippedLines.joined(separator: "\n")
+  }
+
+  private static func stripHtmlComments(
+    from line: String,
+    insideComment: inout Bool
+  ) -> String {
+    var remaining = line[...]
+    var output = ""
+
+    while !remaining.isEmpty {
+      if insideComment {
+        guard let endRange = remaining.range(of: "-->") else {
+          return output
+        }
+        remaining = remaining[endRange.upperBound...]
+        insideComment = false
+        continue
+      }
+
+      guard let startRange = remaining.range(of: "<!--") else {
+        output.append(contentsOf: remaining)
+        break
+      }
+
+      output.append(contentsOf: remaining[..<startRange.lowerBound])
+      remaining = remaining[startRange.upperBound...]
+
+      guard let endRange = remaining.range(of: "-->") else {
+        insideComment = true
+        break
+      }
+      remaining = remaining[endRange.upperBound...]
+    }
+
+    return output
   }
 
   private struct Parser {

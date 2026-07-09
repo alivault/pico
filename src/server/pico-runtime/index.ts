@@ -475,6 +475,35 @@ function normalizeRequestedDirectories(values: Array<string>) {
   return nextDirectories
 }
 
+function textFromThinkingSignature(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return ""
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return ""
+  }
+
+  if (!parsed || typeof parsed !== "object") return ""
+  const content = (parsed as { content?: unknown }).content
+  if (!Array.isArray(content)) return ""
+
+  return content
+    .flatMap((part) => {
+      if (!part || typeof part !== "object") return []
+      const type = (part as { type?: unknown }).type
+      const text = (part as { text?: unknown }).text
+      return type === "reasoning_text" &&
+        typeof text === "string" &&
+        text.trim()
+        ? [text]
+        : []
+    })
+    .join("\n\n")
+    .trim()
+}
+
 function sanitizeMessageContentPart(part: MessageContentPartLike) {
   const type = typeof part?.type === "string" ? part.type : ""
 
@@ -486,12 +515,19 @@ function sanitizeMessageContentPart(part: MessageContentPartLike) {
   }
 
   if (type === "thinking") {
+    const rawThinking = typeof part.thinking === "string" ? part.thinking : ""
+    const signatureThinking = textFromThinkingSignature(part.thinkingSignature)
+    const summaryLabel =
+      typeof part.summaryLabel === "string"
+        ? part.summaryLabel
+        : signatureThinking && rawThinking.trim()
+          ? rawThinking
+          : undefined
+
     return {
       type: "thinking",
-      thinking: typeof part.thinking === "string" ? part.thinking : "",
-      ...(typeof part.summaryLabel === "string"
-        ? { summaryLabel: part.summaryLabel }
-        : {}),
+      thinking: signatureThinking || rawThinking,
+      ...(summaryLabel ? { summaryLabel } : {}),
     }
   }
 
