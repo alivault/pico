@@ -330,6 +330,7 @@ extension PicoIcon {
   static func uiImage(
     systemName: String,
     pointSize: CGFloat = 24,
+    strokeWidth: CGFloat = 2,
     color: UIColor = .white
   ) -> UIImage? {
     if systemName == "ellipsis" {
@@ -340,9 +341,13 @@ extension PicoIcon {
     }
 
     let renderer = ImageRenderer(
-      content: PicoIcon(systemName: systemName, size: pointSize, strokeWidth: 2)
-        .foregroundStyle(Color(uiColor: color))
-        .frame(width: pointSize, height: pointSize)
+      content: PicoIcon(
+        systemName: systemName,
+        size: pointSize,
+        strokeWidth: strokeWidth
+      )
+      .foregroundStyle(Color(uiColor: color))
+      .frame(width: pointSize, height: pointSize)
     )
     renderer.scale = 3
     return renderer.uiImage

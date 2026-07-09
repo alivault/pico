@@ -517,7 +517,11 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         self?.parent.onDeleteMessage(message)
         complete(true)
       }
-      deleteAction.image = PicoIcon.uiImage(systemName: "trash", pointSize: 20)
+      deleteAction.image = PicoIcon.uiImage(
+        systemName: "trash",
+        pointSize: 16,
+        strokeWidth: 1.5
+      )
 
       let editAction = UIContextualAction(
         style: .normal,
@@ -526,7 +530,11 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         self?.parent.onEditMessage(message)
         complete(true)
       }
-      editAction.image = PicoIcon.uiImage(systemName: "pencil", pointSize: 20)
+      editAction.image = PicoIcon.uiImage(
+        systemName: "pencil",
+        pointSize: 16,
+        strokeWidth: 1.5
+      )
       editAction.backgroundColor = .systemBlue
 
       let configuration = UISwipeActionsConfiguration(actions: [
