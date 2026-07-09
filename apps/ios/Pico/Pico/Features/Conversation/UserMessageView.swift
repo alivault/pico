@@ -6,7 +6,7 @@ struct UserMessageView: View {
   var canEdit = true
   var onEdit: (UserConversationItem) -> Void = { _ in }
 
-  @State private var previewImage: PromptImage?
+  @State private var previewRequest: UserMessageImagePreviewRequest?
 
   var body: some View {
     HStack(alignment: .top) {
@@ -22,7 +22,7 @@ struct UserMessageView: View {
                 image: image,
                 accessibilityLabel: imageAccessibilityLabel(at: index)
               ) {
-                previewImage = image
+                previewRequest = UserMessageImagePreviewRequest(index: index)
               }
             }
           }
@@ -47,8 +47,8 @@ struct UserMessageView: View {
         .disabled(!canEdit || !hasEditableText)
       }
     }
-    .fullScreenCover(item: $previewImage) { image in
-      UserMessageImagePreview(image: image)
+    .fullScreenCover(item: $previewRequest) { request in
+      UserMessageImagePreview(images: item.images, initialIndex: request.index)
     }
   }
 
@@ -68,6 +68,12 @@ struct UserMessageView: View {
     guard item.images.count > 1 else { return "Preview image attachment" }
     return "Preview image attachment \(index + 1) of \(item.images.count)"
   }
+}
+
+private struct UserMessageImagePreviewRequest: Identifiable {
+  var index: Int
+
+  var id: Int { index }
 }
 
 private struct UserMessageImageAttachmentButton: View {
@@ -100,6 +106,7 @@ private struct UserMessageImageAttachmentButton: View {
         .resizable()
         .scaledToFit()
         .frame(width: displaySize.width, height: displaySize.height)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
           RoundedRectangle(cornerRadius: 12, style: .continuous)
             .stroke(.quaternary, lineWidth: 0.5)
@@ -126,53 +133,6 @@ private struct UserMessageImageAttachmentButton: View {
   }
 }
 
-private struct UserMessageImagePreview: View {
-  var image: PromptImage
-
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    NavigationStack {
-      Group {
-        if let uiImage = image.uiImage {
-          ZStack {
-            Color.black.ignoresSafeArea()
-
-            GeometryReader { proxy in
-              Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: proxy.size.width, height: proxy.size.height)
-            }
-            .padding()
-          }
-        } else {
-          ContentUnavailableView(
-            "Image unavailable",
-            picoSystemImage: "photo",
-            description: Text("Pico could not load this image attachment.")
-          )
-        }
-      }
-      .navigationTitle("Image preview")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Done") {
-            dismiss()
-          }
-        }
-      }
-    }
-  }
-}
-
-private extension PromptImage {
-  var uiImage: UIImage? {
-    guard let imageData = Data(base64Encoded: data) else { return nil }
-    return UIImage(data: imageData)
-  }
-}
 
 #Preview {
   UserMessageView(item: UserConversationItem(text: "Build an iOS app", images: []))

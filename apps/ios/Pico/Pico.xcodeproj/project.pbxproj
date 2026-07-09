@@ -111,6 +111,7 @@
 		C05904751CBBB5813D20D61B /* Core/Models/SessionNewRequestBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83A904DB0A48E167DA7BA7EE /* Core/Models/SessionNewRequestBody.swift */; };
 		C0D532D56ABAA4CD8C0F2F2D /* Core/Persistence/CredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 024183A22119797BA4E3812C /* Core/Persistence/CredentialStore.swift */; };
 		C69946379F7163E80069A38B /* Features/Conversation/UserMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5237E7C9CC1ECEDD20771E8 /* Features/Conversation/UserMessageView.swift */; };
+		E70000000000000000000001 /* Features/Conversation/UserMessageImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70000000000000000000002 /* Features/Conversation/UserMessageImagePreview.swift */; };
 		CB64958F99A1DE5F080F3EA5 /* Core/Models/ExtensionErrorEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43D73223A172FDB176A3039 /* Core/Models/ExtensionErrorEvent.swift */; };
 		D026655FA48D1220F9FA6827 /* Core/Models/DirectoryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4ABD94DFE86DD531A6A656 /* Core/Models/DirectoryState.swift */; };
 		D1A0B7AD3FD98F9CB326AA46 /* App/RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E8B4150A6FF58BBCED5F14 /* App/RootView.swift */; };
@@ -238,6 +239,7 @@
 		9A0AFCA4A18163BE4601A640 /* Features/Settings/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Settings/SettingsView.swift; sourceTree = "<group>"; };
 		A364872CADA7E769CAB69098 /* Core/Models/UiRequestOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/UiRequestOption.swift; sourceTree = "<group>"; };
 		A5237E7C9CC1ECEDD20771E8 /* Features/Conversation/UserMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/UserMessageView.swift; sourceTree = "<group>"; };
+		E70000000000000000000002 /* Features/Conversation/UserMessageImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/UserMessageImagePreview.swift; sourceTree = "<group>"; };
 		A71E060A0A6BDCDA2D8027CE /* Core/Models/SessionsEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/SessionsEvent.swift; sourceTree = "<group>"; };
 		A92C3B2D5E0733AA0BF6A01F /* Core/Models/ModelResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ModelResponse.swift; sourceTree = "<group>"; };
 		AE83A36614257B098F0A2991 /* Resources/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Resources/Info.plist; sourceTree = "<group>"; };
@@ -432,6 +434,7 @@
 				F30000000000000000000006 /* Features/Conversation/AnsiTextView.swift */,
 				F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */,
 				A5237E7C9CC1ECEDD20771E8 /* Features/Conversation/UserMessageView.swift */,
+				E70000000000000000000002 /* Features/Conversation/UserMessageImagePreview.swift */,
 				D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */,
 				D40000000000000000000002 /* Features/Git/CodeFileLanguage.swift */,
 				D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */,
@@ -720,6 +723,7 @@
 				F30000000000000000000005 /* Features/Conversation/AnsiTextView.swift in Sources */,
 				F30000000000000000000009 /* Features/Conversation/PierrePatchDiffView.swift in Sources */,
 				C69946379F7163E80069A38B /* Features/Conversation/UserMessageView.swift in Sources */,
+				E70000000000000000000001 /* Features/Conversation/UserMessageImagePreview.swift in Sources */,
 				D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */,
 				D50000000000000000000002 /* Features/Git/CodeFileLanguage.swift in Sources */,
 				D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */,
