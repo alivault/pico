@@ -544,13 +544,11 @@ private struct SessionToolbarDropdownLabel: View {
 
   var body: some View {
     Label {
-      VStack(alignment: .leading, spacing: 1) {
-        Text(title)
-        Text(detail)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
+      Text(title)
+      Text(detail)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     } icon: {
       Image(picoSystemName: systemImage, pointSize: 20)
     }
