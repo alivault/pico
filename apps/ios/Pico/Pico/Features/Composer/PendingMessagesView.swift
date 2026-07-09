@@ -625,14 +625,14 @@ private struct PendingSectionHeaderRow: View {
   var body: some View {
     HStack(spacing: 8) {
       Text(section.title.uppercased())
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.primary)
 
       Spacer(minLength: 8)
 
       Text("\(section.messages.count)")
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.tertiary)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
     }
     .padding(.horizontal, 12)
     .padding(.top, 9)
