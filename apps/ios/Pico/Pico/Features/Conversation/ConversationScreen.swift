@@ -546,9 +546,6 @@ private struct SessionToolbarDropdownLabel: View {
     Label {
       Text(title)
       Text(detail)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
     } icon: {
       Image(picoSystemName: systemImage, pointSize: 20)
     }
