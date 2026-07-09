@@ -11,6 +11,8 @@ struct WorkspaceView: View {
   @State private var purgeRequest: DirectoryActionRequest?
   @State private var filesRequest: DirectoryActionRequest?
   @State private var isSidebarNewSessionHiddenByContent = false
+  @State private var sidebarSessionSearchText = ""
+  @FocusState private var isSidebarSessionSearchFocused: Bool
 
   var body: some View {
     Group {
@@ -52,10 +54,13 @@ struct WorkspaceView: View {
     NavigationStack(path: $sidebarPath) {
       SessionSidebarView(
         model: model,
+        sessionSearchText: $sidebarSessionSearchText,
+        openDetail: openConversation,
         openDirectory: openDirectory,
         openPurge: showPurgeDirectory,
         openFiles: showFilesDirectory,
-        setFloatingNewSessionHidden: setSidebarNewSessionHidden
+        setFloatingNewSessionHidden: setSidebarNewSessionHidden,
+        clearFloatingSearch: clearSidebarSessionSearch
       )
       .navigationDestination(for: SidebarNavigationDestination.self) { destination in
         switch destination {
@@ -63,6 +68,7 @@ struct WorkspaceView: View {
           DirectorySessionsFullListView(
             directory: directory,
             model: model,
+            sessionSearchText: $sidebarSessionSearchText,
             openDetail: openConversation,
             openPurge: showPurgeDirectory,
             openFiles: showFilesDirectory,
@@ -71,8 +77,8 @@ struct WorkspaceView: View {
         }
       }
     }
-    .overlay(alignment: .bottomTrailing) {
-      sidebarFloatingNewSessionButton
+    .overlay(alignment: .bottom) {
+      sidebarFloatingControls
     }
     .animation(.smooth(duration: 0.2), value: sidebarNewSessionDirectory)
     .animation(
@@ -82,15 +88,35 @@ struct WorkspaceView: View {
   }
 
   @ViewBuilder
-  private var sidebarFloatingNewSessionButton: some View {
-    if let directory = sidebarNewSessionDirectory,
-       !isSidebarNewSessionHiddenByContent {
-      SidebarNewSessionButton {
-        openNewSession(in: directory)
+  private var sidebarFloatingControls: some View {
+    if shouldShowSidebarFloatingControls {
+      HStack(spacing: 10) {
+        SidebarSessionSearchField(
+          text: $sidebarSessionSearchText,
+          isFocused: $isSidebarSessionSearchFocused,
+          placeholder: sidebarSearchPlaceholder
+        )
+
+        if let directory = sidebarNewSessionDirectory {
+          SidebarNewSessionButton {
+            openNewSession(in: directory)
+          }
+          .transition(.scale.combined(with: .opacity))
+        }
       }
-      .padding(.trailing)
-      .transition(.scale.combined(with: .opacity))
+      .padding(.horizontal)
+      .padding(.bottom, 8)
+      .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+  }
+
+  private var shouldShowSidebarFloatingControls: Bool {
+    !isSidebarNewSessionHiddenByContent &&
+      (sidebarNewSessionDirectory != nil || !model.sessionSnapshots.isEmpty)
+  }
+
+  private var sidebarSearchPlaceholder: String {
+    activeSidebarDirectory == nil ? "Search all sessions" : "Search this directory"
   }
 
   private var sidebarNewSessionDirectory: String? {
@@ -121,6 +147,7 @@ struct WorkspaceView: View {
   }
 
   private func openConversation() {
+    isSidebarSessionSearchFocused = false
     columnVisibility = .detailOnly
   }
 
@@ -142,6 +169,11 @@ struct WorkspaceView: View {
       isSidebarNewSessionHiddenByContent = hidden
     }
   }
+
+  private func clearSidebarSessionSearch() {
+    sidebarSessionSearchText = ""
+    isSidebarSessionSearchFocused = false
+  }
 }
 
 private struct CompactWorkspaceView: View {
@@ -150,6 +182,8 @@ private struct CompactWorkspaceView: View {
   @State private var purgeRequest: DirectoryActionRequest?
   @State private var filesRequest: DirectoryActionRequest?
   @State private var isSidebarNewSessionHiddenByContent = false
+  @State private var sidebarSessionSearchText = ""
+  @FocusState private var isSidebarSessionSearchFocused: Bool
 
   private enum CompactWorkspaceDestination: Hashable {
     case directory(String)
@@ -165,6 +199,7 @@ private struct CompactWorkspaceView: View {
             DirectorySessionsFullListView(
               directory: directory,
               model: model,
+              sessionSearchText: $sidebarSessionSearchText,
               openDetail: openConversation,
               openPurge: showPurgeDirectory,
               openFiles: showFilesDirectory,
@@ -175,8 +210,8 @@ private struct CompactWorkspaceView: View {
           }
         }
     }
-    .overlay(alignment: .bottomTrailing) {
-      sidebarFloatingNewSessionButton
+    .overlay(alignment: .bottom) {
+      sidebarFloatingControls
     }
     .animation(.smooth(duration: 0.2), value: sidebarNewSessionDirectory)
     .animation(
@@ -209,23 +244,47 @@ private struct CompactWorkspaceView: View {
   private var sidebar: some View {
     SessionSidebarView(
       model: model,
+      sessionSearchText: $sidebarSessionSearchText,
+      openDetail: openConversation,
       openDirectory: openDirectory,
       openPurge: showPurgeDirectory,
       openFiles: showFilesDirectory,
-      setFloatingNewSessionHidden: setSidebarNewSessionHidden
+      setFloatingNewSessionHidden: setSidebarNewSessionHidden,
+      clearFloatingSearch: clearSidebarSessionSearch
     )
   }
 
   @ViewBuilder
-  private var sidebarFloatingNewSessionButton: some View {
-    if let directory = sidebarNewSessionDirectory,
-       !isSidebarNewSessionHiddenByContent {
-      SidebarNewSessionButton {
-        openNewSession(in: directory)
+  private var sidebarFloatingControls: some View {
+    if shouldShowSidebarFloatingControls {
+      HStack(spacing: 10) {
+        SidebarSessionSearchField(
+          text: $sidebarSessionSearchText,
+          isFocused: $isSidebarSessionSearchFocused,
+          placeholder: sidebarSearchPlaceholder
+        )
+
+        if let directory = sidebarNewSessionDirectory {
+          SidebarNewSessionButton {
+            openNewSession(in: directory)
+          }
+          .transition(.scale.combined(with: .opacity))
+        }
       }
-      .padding(.trailing)
-      .transition(.scale.combined(with: .opacity))
+      .padding(.horizontal)
+      .padding(.bottom, 8)
+      .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+  }
+
+  private var shouldShowSidebarFloatingControls: Bool {
+    isShowingSessionSidebarContent &&
+      !isSidebarNewSessionHiddenByContent &&
+      (sidebarNewSessionDirectory != nil || !model.sessionSnapshots.isEmpty)
+  }
+
+  private var sidebarSearchPlaceholder: String {
+    activeSidebarDirectory == nil ? "Search all sessions" : "Search this directory"
   }
 
   private var sidebarNewSessionDirectory: String? {
@@ -268,6 +327,7 @@ private struct CompactWorkspaceView: View {
   }
 
   private func openConversation() {
+    isSidebarSessionSearchFocused = false
     guard navigationPath.last != .conversation else { return }
     navigationPath.append(.conversation)
   }
@@ -285,6 +345,11 @@ private struct CompactWorkspaceView: View {
     withAnimation(.smooth(duration: 0.2)) {
       isSidebarNewSessionHiddenByContent = hidden
     }
+  }
+
+  private func clearSidebarSessionSearch() {
+    sidebarSessionSearchText = ""
+    isSidebarSessionSearchFocused = false
   }
 }
 

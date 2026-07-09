@@ -2,23 +2,23 @@ import SwiftUI
 
 struct SessionSidebarView: View {
   @Bindable var model: AppModel
+  @Binding var sessionSearchText: String
+  var openDetail: () -> Void = {}
   var openDirectory: (String) -> Void = { _ in }
   var openPurge: (String) -> Void = { _ in }
   var openFiles: (String) -> Void = { _ in }
   var setFloatingNewSessionHidden: (Bool) -> Void = { _ in }
+  var clearFloatingSearch: () -> Void = {}
   @State private var isShowingSettings = false
   @State private var isShowingAddDirectory = false
   @State private var selectedDirectories = Set<String>()
   @State private var editMode = EditMode.inactive
-  @State private var sessionSearchText = ""
-  @State private var isSessionSearchPresented = false
-  @FocusState private var isSessionSearchFocused: Bool
 
   var body: some View {
     directoryList
       .environment(\.editMode, $editMode)
       .contentMargins(.top, 0, for: .scrollContent)
-      .safeAreaPadding(.bottom, isSessionSearchVisible ? 0 : 48)
+      .safeAreaPadding(.bottom, isEditing ? 48 : 72)
       .overlay(alignment: .bottomTrailing) {
         floatingDeleteSelectedButton
       }
@@ -36,12 +36,6 @@ struct SessionSidebarView: View {
           }
         } else {
           ToolbarItemGroup(placement: .topBarTrailing) {
-            Button(action: showSearch) {
-              PicoIcon(systemName: "magnifyingglass")
-            }
-            .disabled(model.sessionSnapshots.isEmpty)
-            .accessibilityLabel("Search sessions")
-
             ControlGroup {
               Button(action: showAddDirectory) {
                 PicoIcon(systemName: "folder.badge.plus")
@@ -65,11 +59,6 @@ struct SessionSidebarView: View {
           }
         }
       }
-      .safeAreaBar(edge: .bottom, alignment: .center) {
-        if isSessionSearchVisible {
-          sidebarSearchBar
-        }
-      }
       .sheet(isPresented: $isShowingSettings) {
         NavigationStack {
           SettingsView(model: model)
@@ -83,11 +72,6 @@ struct SessionSidebarView: View {
       .onAppear(perform: updateFloatingNewSessionVisibility)
       .onChange(of: shouldHideFloatingNewSessionButton) { _, _ in
         updateFloatingNewSessionVisibility()
-      }
-      .onChange(of: isSessionSearchPresented) { _, isPresented in
-        if isPresented {
-          isSessionSearchFocused = true
-        }
       }
       .onChange(of: model.sidebarDirectories) { _, directories in
         selectedDirectories.formIntersection(Set(directories))
@@ -111,15 +95,32 @@ struct SessionSidebarView: View {
         picoSystemImage: "folder",
         description: Text("Add a directory to show its Pico sessions here.")
       )
-    } else if visibleSessionSnapshots.isEmpty {
-      PicoSearchUnavailableView(text: sessionSearchText)
+    } else if isSessionSearchActive {
+      if visibleSessionSnapshots.isEmpty {
+        PicoSearchUnavailableView(text: sessionSearchText)
+      } else {
+        ForEach(visibleSessionSnapshots) { snapshot in
+          Section {
+            ForEach(snapshot.sessions) { entry in
+              DirectorySessionRowButton(
+                entry: entry,
+                directory: snapshot.directory,
+                model: model,
+                openDetail: openDetail
+              )
+            }
+          } header: {
+            SidebarSearchDirectoryHeader(directory: snapshot.directory)
+          }
+        }
+      }
+    } else {
+      ForEach(visibleSessionSnapshots) { snapshot in
+        directoryRow(for: snapshot)
+          .tag(snapshot.directory)
+      }
+      .onMove(perform: moveDirectories)
     }
-
-    ForEach(visibleSessionSnapshots) { snapshot in
-      directoryRow(for: snapshot)
-        .tag(snapshot.directory)
-    }
-    .onMove(perform: moveDirectories)
   }
 
   @ViewBuilder
@@ -161,20 +162,6 @@ struct SessionSidebarView: View {
     }
   }
 
-  private var sidebarSearchBar: some View {
-    HStack(spacing: 10) {
-      SidebarSessionSearchField(
-        text: $sessionSearchText,
-        isFocused: $isSessionSearchFocused
-      )
-
-      SidebarCloseSearchButton(closeSearch: closeSearch)
-    }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
-    .animation(.smooth(duration: 0.2), value: isSessionSearchVisible)
-  }
-
   @ViewBuilder
   private var floatingDeleteSelectedButton: some View {
     if isEditing {
@@ -196,11 +183,6 @@ struct SessionSidebarView: View {
     let selectedCount = selectedDirectories.count
     guard selectedCount > 0 else { return "Select Directories" }
     return "\(selectedCount) Selected"
-  }
-
-  private var isSessionSearchVisible: Bool {
-    !isEditing &&
-      (isSessionSearchPresented || isSessionSearchFocused || isSessionSearchActive)
   }
 
   private var isSessionSearchActive: Bool {
@@ -226,7 +208,7 @@ struct SessionSidebarView: View {
   }
 
   private var shouldHideFloatingNewSessionButton: Bool {
-    isEditing || isSessionSearchVisible
+    isEditing
   }
 
   private var visibleSessionSnapshots: [DirectorySessionsIndexSnapshot] {
@@ -260,18 +242,6 @@ struct SessionSidebarView: View {
     }
   }
 
-  private func showSearch() {
-    guard !isEditing else { return }
-    isSessionSearchPresented = true
-    isSessionSearchFocused = true
-  }
-
-  private func closeSearch() {
-    sessionSearchText = ""
-    isSessionSearchFocused = false
-    isSessionSearchPresented = false
-  }
-
   private func showSettings() {
     isShowingSettings = true
   }
@@ -285,7 +255,7 @@ struct SessionSidebarView: View {
   }
 
   private func beginEditing() {
-    closeSearch()
+    clearFloatingSearch()
     selectedDirectories.formIntersection(Set(model.sidebarDirectories))
     withAnimation(.smooth(duration: 0.2)) {
       editMode = .active
@@ -426,9 +396,33 @@ private struct SidebarDirectoryRowView: View {
   }
 }
 
+private struct SidebarSearchDirectoryHeader: View {
+  var directory: String
+
+  var body: some View {
+    HStack(spacing: 8) {
+      PicoIcon(systemName: "folder")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: 20, height: 28)
+
+      Text(DirectoryPathFormatter.folderName(directory))
+        .font(.body)
+        .fontWeight(.bold)
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+
+      Spacer(minLength: 8)
+    }
+    .textCase(nil)
+    .accessibilityLabel(DirectoryPathFormatter.folderName(directory))
+  }
+}
+
 struct SidebarSessionSearchField: View {
   @Binding var text: String
   @FocusState.Binding var isFocused: Bool
+  var placeholder: String
 
   var body: some View {
     HStack(spacing: 8) {
@@ -436,7 +430,7 @@ struct SidebarSessionSearchField: View {
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
 
-      TextField("Search sessions", text: $text)
+      TextField(placeholder, text: $text)
         .focused($isFocused)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
@@ -772,6 +766,9 @@ struct SidebarNewSessionButton: View {
 
 #Preview {
   NavigationStack {
-    SessionSidebarView(model: AppModel())
+    SessionSidebarView(
+      model: AppModel(),
+      sessionSearchText: .constant("")
+    )
   }
 }

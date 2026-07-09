@@ -37,6 +37,7 @@ struct DirectorySessionsSectionView: View {
               DirectorySessionsFullListView(
                 directory: snapshot.directory,
                 model: model,
+                sessionSearchText: .constant(""),
                 openDetail: openDetail,
                 openPurge: openPurge,
                 openFiles: openFiles
@@ -167,14 +168,12 @@ struct DirectorySessionsSectionView: View {
 struct DirectorySessionsFullListView: View {
   var directory: String
   @Bindable var model: AppModel
+  @Binding var sessionSearchText: String
   @Environment(\.dismiss) private var dismiss
   var openDetail: () -> Void = {}
   var openPurge: (String) -> Void = { _ in }
   var openFiles: (String) -> Void = { _ in }
   var setFloatingNewSessionHidden: (Bool) -> Void = { _ in }
-  @State private var sessionSearchText = ""
-  @State private var isSessionSearchPresented = false
-  @FocusState private var isSessionSearchFocused: Bool
 
   var body: some View {
     List {
@@ -197,18 +196,11 @@ struct DirectorySessionsFullListView: View {
         }
       }
     }
-    .safeAreaPadding(.bottom, isSessionSearchVisible ? 0 : 48)
-    .animation(.smooth(duration: 0.2), value: isSessionSearchVisible)
+    .safeAreaPadding(.bottom, 72)
     .navigationTitle(DirectoryPathFormatter.folderName(directory))
     .navigationBarTitleDisplayMode(.large)
     .toolbar {
       ToolbarItemGroup(placement: .topBarTrailing) {
-        Button(action: showSearch) {
-          PicoIcon(systemName: "magnifyingglass")
-        }
-        .disabled(snapshot.sessions.isEmpty)
-        .accessibilityLabel("Search sessions")
-
         ControlGroup {
           Button(action: showFiles) {
             PicoIcon(systemName: "folder", size: 20)
@@ -234,42 +226,7 @@ struct DirectorySessionsFullListView: View {
         }
       }
     }
-    .safeAreaBar(edge: .bottom, alignment: .center) {
-      if isSessionSearchVisible {
-        sessionSearchBar
-      }
-    }
     .onAppear(perform: updateFloatingNewSessionVisibility)
-    .onChange(of: isSessionSearchVisible) { _, _ in
-      updateFloatingNewSessionVisibility()
-    }
-    .onChange(of: isSessionSearchPresented) { _, isPresented in
-      if isPresented {
-        isSessionSearchFocused = true
-      }
-    }
-  }
-
-  private var sessionSearchBar: some View {
-    HStack(spacing: 10) {
-      SidebarSessionSearchField(
-        text: $sessionSearchText,
-        isFocused: $isSessionSearchFocused
-      )
-
-      SidebarCloseSearchButton(closeSearch: closeSearch)
-    }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
-    .animation(.smooth(duration: 0.2), value: isSessionSearchVisible)
-  }
-
-  private var isSessionSearchVisible: Bool {
-    isSessionSearchPresented || isSessionSearchFocused || isSessionSearchActive
-  }
-
-  private var isSessionSearchActive: Bool {
-    !sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   private var visibleSessions: [SessionListEntry] {
@@ -303,19 +260,8 @@ struct DirectorySessionsFullListView: View {
     }
   }
 
-  private func showSearch() {
-    isSessionSearchPresented = true
-    isSessionSearchFocused = true
-  }
-
-  private func closeSearch() {
-    sessionSearchText = ""
-    isSessionSearchFocused = false
-    isSessionSearchPresented = false
-  }
-
   private func updateFloatingNewSessionVisibility() {
-    setFloatingNewSessionHidden(isSessionSearchVisible)
+    setFloatingNewSessionHidden(false)
   }
 
   private func showPurgeSheet() {
@@ -506,7 +452,7 @@ struct DirectorySessionPurgeSheet: View {
   }
 }
 
-private struct DirectorySessionRowButton: View {
+struct DirectorySessionRowButton: View {
   var entry: SessionListEntry
   var directory: String
   @Bindable var model: AppModel
