@@ -444,6 +444,20 @@ private struct PendingMessagesTableView: UIViewRepresentable {
 
     func collectionView(
       _ collectionView: UICollectionView,
+      dragPreviewParametersForItemAt indexPath: IndexPath
+    ) -> UIDragPreviewParameters? {
+      previewParameters(forItemAt: indexPath, in: collectionView)
+    }
+
+    func collectionView(
+      _ collectionView: UICollectionView,
+      dropPreviewParametersForItemAt indexPath: IndexPath
+    ) -> UIDragPreviewParameters? {
+      previewParameters(forItemAt: indexPath, in: collectionView)
+    }
+
+    func collectionView(
+      _ collectionView: UICollectionView,
       dropSessionDidUpdate session: any UIDropSession,
       withDestinationIndexPath destinationIndexPath: IndexPath?
     ) -> UICollectionViewDropProposal {
@@ -604,6 +618,27 @@ private struct PendingMessagesTableView: UIViewRepresentable {
         item: destinationItemIndex,
         section: destinationSectionIndex
       )
+    }
+
+    private func previewParameters(
+      forItemAt indexPath: IndexPath,
+      in collectionView: UICollectionView
+    ) -> UIDragPreviewParameters? {
+      guard collectionView.cellForItem(at: indexPath) != nil else {
+        return nil
+      }
+
+      let parameters = UIDragPreviewParameters()
+      let previewBounds = collectionView.layoutAttributesForItem(
+        at: indexPath
+      )?.bounds ?? collectionView.cellForItem(at: indexPath)?.bounds ?? .zero
+      let visibleRect = previewBounds.insetBy(dx: 0, dy: 4)
+      parameters.backgroundColor = .clear
+      parameters.visiblePath = UIBezierPath(
+        roundedRect: visibleRect,
+        cornerRadius: 12
+      )
+      return parameters
     }
 
     private func normalizedDestinationIndexPath(
