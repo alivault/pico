@@ -18,7 +18,7 @@ struct SessionSidebarView: View {
     directoryList
       .environment(\.editMode, $editMode)
       .contentMargins(.top, 0, for: .scrollContent)
-      .safeAreaPadding(.bottom, isEditing ? 48 : 72)
+      .safeAreaPadding(.bottom, isEditing ? 48 : 0)
       .overlay(alignment: .bottomTrailing) {
         floatingDeleteSelectedButton
       }
@@ -419,44 +419,6 @@ private struct SidebarSearchDirectoryHeader: View {
   }
 }
 
-struct SidebarSessionSearchField: View {
-  @Binding var text: String
-  @FocusState.Binding var isFocused: Bool
-  var placeholder: String
-
-  var body: some View {
-    HStack(spacing: 8) {
-      PicoIcon(systemName: "magnifyingglass")
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
-
-      TextField(placeholder, text: $text)
-        .focused($isFocused)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .submitLabel(.search)
-
-      if !text.isEmpty {
-        Button(action: clearSearch) {
-          PicoIcon(systemName: "xmark.circle.fill")
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel("Clear search")
-      }
-    }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .frame(maxWidth: .infinity)
-    .glassEffect(.regular, in: Capsule())
-  }
-
-  private func clearSearch() {
-    text = ""
-    isFocused = true
-  }
-}
-
 struct SidebarAddDirectoryView: View {
   @Bindable var model: AppModel
   var onDismiss: () -> Void
@@ -720,8 +682,8 @@ struct SidebarCloseSearchButton: View {
   var body: some View {
     Button(action: closeSearch) {
       PicoIcon(systemName: "xmark")
-        .font(.system(size: 16, weight: .semibold))
-        .frame(width: 33, height: 33)
+        .font(.system(size: 20, weight: .semibold))
+        .frame(width: 34, height: 34)
         .contentShape(Circle())
     }
     .buttonStyle(.glass)
@@ -752,14 +714,12 @@ struct SidebarNewSessionButton: View {
   var openNewSession: () -> Void
 
   var body: some View {
-    Button(action: openNewSession) {
-      PicoIcon(systemName: "square.and.pencil")
-        .font(.system(size: 20, weight: .semibold))
-        .frame(width: 40, height: 40)
-        .contentShape(Circle())
-    }
-    .buttonStyle(.glassProminent)
-    .buttonBorderShape(.circle)
+    Button(
+      "New Session",
+      picoSystemImage: "square.and.pencil",
+      action: openNewSession
+    )
+    .labelStyle(.iconOnly)
     .accessibilityLabel("New Session")
   }
 }

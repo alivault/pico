@@ -196,7 +196,6 @@ struct DirectorySessionsFullListView: View {
         }
       }
     }
-    .safeAreaPadding(.bottom, 72)
     .navigationTitle(DirectoryPathFormatter.folderName(directory))
     .navigationBarTitleDisplayMode(.large)
     .toolbar {
