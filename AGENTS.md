@@ -105,7 +105,7 @@ Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline browser/server validation command.
-- `xcodebuild ... test` is the baseline validation command after non-trivial iOS changes.
+- Do not build or run the iOS app to validate small, localized changes. Reserve `xcodebuild ... test` for large or broad iOS changes.
 - For simulator-to-Mac testing, the default iOS server URL is `http://localhost:3141`; physical devices need a trusted host-reachable Pico server URL.
 - `npx -y react-doctor@latest` is useful for architecture/performance/dead-code checks, but has known intentional false positives listed under Validation expectations.
 - Avoid leaving ad hoc long-lived dev/preview server processes running. Reuse an existing terminal/session manager if one is already set up by the user.
@@ -956,7 +956,7 @@ At minimum after non-trivial browser/server changes:
 pnpm check:fix
 ```
 
-At minimum after non-trivial native iOS changes:
+Do not build or run the native iOS app to validate small, localized changes. Only run the full iOS test build after large or broad native changes:
 
 ```bash
 xcodebuild -project apps/ios/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
