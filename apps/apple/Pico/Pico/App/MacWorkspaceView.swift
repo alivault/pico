@@ -28,17 +28,6 @@
           .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
       } detail: {
         detailWorkspace
-          .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-              Button(
-                "Files",
-                picoSystemImage: "folder",
-                action: toggleFilesSidebar
-              )
-              .help(isFilesSidebarPresented ? "Hide Files" : "Show Files")
-              .disabled(selectedDirectory == nil)
-            }
-          }
       }
       .navigationSplitViewStyle(.balanced)
       .toolbar {
@@ -50,10 +39,6 @@
           )
           .help("New Session")
           .disabled(selectedDirectory == nil)
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-          sessionSearchToolbarItem
         }
       }
       .sheet(item: $purgeRequest) { request in
@@ -159,30 +144,41 @@
       }
     }
 
-    @ViewBuilder
     private var detailColumn: some View {
-      if selectedSessionCount > 1 {
-        ContentUnavailableView(
-          "\(selectedSessionCount) Sessions Selected",
-          picoSystemImage: "checkmark.circle",
-          description: Text(
-            "Use the session list context menu to delete the selected sessions."
-          )
+      ConversationScreen(
+        model: model,
+        openSidebar: showAllColumns,
+        openNewSession: startNewSession,
+        macTrailingToolbar: AnyView(macTrailingToolbar),
+        isConversationPresented: showsConversation && selectedSessionCount == 1,
+        unavailableTitle: detailUnavailableTitle,
+        unavailableDescription: detailUnavailableDescription
+      )
+    }
+
+    private var detailUnavailableTitle: String {
+      selectedSessionCount > 1
+        ? "\(selectedSessionCount) Sessions Selected"
+        : "Select a session"
+    }
+
+    private var detailUnavailableDescription: String {
+      selectedSessionCount > 1
+        ? "Use the session list context menu to delete the selected sessions."
+        : "Choose a session from the middle column."
+    }
+
+    private var macTrailingToolbar: some View {
+      HStack(spacing: 8) {
+        sessionSearchToolbarItem
+
+        Button(
+          "Files",
+          picoSystemImage: "folder",
+          action: toggleFilesSidebar
         )
-        .navigationTitle("Sessions")
-      } else if showsConversation {
-        ConversationScreen(
-          model: model,
-          openSidebar: showAllColumns,
-          openNewSession: startNewSession
-        )
-      } else {
-        ContentUnavailableView(
-          "Select a session",
-          picoSystemImage: "text.bubble",
-          description: Text("Choose a session from the middle column.")
-        )
-        .navigationTitle("Session")
+        .help(isFilesSidebarPresented ? "Hide Files" : "Show Files")
+        .disabled(selectedDirectory == nil)
       }
     }
 

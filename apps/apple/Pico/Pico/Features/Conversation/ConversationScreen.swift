@@ -10,6 +10,10 @@ struct ConversationScreen: View {
   @Bindable var model: AppModel
   var openSidebar: () -> Void = {}
   var openNewSession: () -> Void = {}
+  var macTrailingToolbar: AnyView? = nil
+  var isConversationPresented = true
+  var unavailableTitle = "Select a session"
+  var unavailableDescription = "Choose a session to view its conversation."
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @State private var composerHeight: CGFloat = 0
   @State private var contentWidth: CGFloat = 0
@@ -30,10 +34,19 @@ struct ConversationScreen: View {
 
   var body: some View {
     ZStack(alignment: .bottom) {
-      conversationContent
+      if isConversationPresented {
+        conversationContent
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        ContentUnavailableView(
+          unavailableTitle,
+          picoSystemImage: "text.bubble",
+          description: Text(unavailableDescription)
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
 
-      if !model.isLoadingSelectedSession {
+      if isConversationPresented && !model.isLoadingSelectedSession {
         composerOverlay
           .background {
             GeometryReader { proxy in
@@ -112,17 +125,14 @@ struct ConversationScreen: View {
         }
       #endif
 
-      ToolbarItemGroup(placement: .primaryAction) {
-        #if os(macOS)
-          if showsContextUsageMenu {
+      #if os(macOS)
+        ToolbarItemGroup(placement: .primaryAction) {
+          HStack(spacing: 8) {
             contextUsageMenu
-          }
+            ModelMenuView(model: model)
+            ThinkingMenuView(model: model)
+            ConversationHeaderVisibilityToggles(model: model)
 
-          ModelMenuView(model: model)
-          ThinkingMenuView(model: model)
-          ConversationHeaderVisibilityToggles(model: model)
-
-          if model.canRenameCurrentSession {
             Button(
               "Delete",
               picoSystemImage: "trash",
@@ -132,22 +142,14 @@ struct ConversationScreen: View {
             .help("Delete Session")
             .disabled(!model.canDeleteCurrentSession)
           }
+          .disabled(!isConversationPresented)
 
-          if model.hasConversationGitChangesToCommit
-            || model.hasConversationGitCommitsToPush
-          {
-            ConversationHeaderOptionsMenu(
-              model: model,
-              isPreparingCommit: isPreparingHeaderCommit,
-              isPushing: isPushingHeaderGit,
-              openFiles: showFilesDrawer,
-              commitChanges: showHeaderCommitSheet,
-              pushChanges: pushHeaderGit,
-              renameSession: showRenameSessionSheet,
-              deleteSession: showDeleteSessionConfirmation
-            )
+          if let macTrailingToolbar {
+            macTrailingToolbar
           }
-        #else
+        }
+      #else
+        ToolbarItemGroup(placement: .primaryAction) {
           ConversationHeaderOptionsMenu(
             model: model,
             isPreparingCommit: isPreparingHeaderCommit,
@@ -158,8 +160,8 @@ struct ConversationScreen: View {
             renameSession: showRenameSessionSheet,
             deleteSession: showDeleteSessionConfirmation
           )
-        #endif
-      }
+        }
+      #endif
     }
     .picoNavigationToolbarBackgroundHidden()
     .sheet(isPresented: $isShowingRenameSheet) {
