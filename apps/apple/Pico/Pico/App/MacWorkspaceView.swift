@@ -292,7 +292,7 @@
           Button {
             isShowingAddDirectory = true
           } label: {
-            Image(picoSystemName: "plus.circle", pointSize: 18)
+            PicoIcon(systemName: "plus.circle", size: 12, strokeWidth: 1)
           }
           .accessibilityLabel("Add Directory")
 
@@ -301,11 +301,12 @@
               isDirectoriesExpanded.toggle()
             }
           } label: {
-            Image(
-              picoSystemName: isDirectoriesExpanded
+            PicoIcon(
+              systemName: isDirectoriesExpanded
                 ? "chevron.down"
                 : "chevron.right",
-              pointSize: 16
+              size: 12,
+              strokeWidth: 1
             )
           }
           .accessibilityLabel(
@@ -325,7 +326,7 @@
         value: isDirectoriesHeaderHovered
       )
       .listRowInsets(
-        EdgeInsets(top: 6, leading: 12, bottom: 4, trailing: 12)
+        EdgeInsets(top: 6, leading: 4, bottom: 4, trailing: 4)
       )
       .listRowSeparator(.hidden)
       .listRowBackground(Color.clear)
