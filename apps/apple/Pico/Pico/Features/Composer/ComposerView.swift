@@ -92,6 +92,12 @@ struct ComposerView: View {
         await addPhotoItems(items)
       }
     }
+    #if os(macOS)
+      .task {
+        await Task.yield()
+        isPromptFocused = true
+      }
+    #endif
   }
 
   private var composerCard: some View {
@@ -109,8 +115,7 @@ struct ComposerView: View {
       composerTextField
         .padding(.horizontal, 18)
         .padding(.top, model.composerGitComments.isEmpty ? 16 : 8)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
 
       HStack(alignment: .center, spacing: 10) {
         ComposerAttachmentMenu(
@@ -137,11 +142,20 @@ struct ComposerView: View {
       .padding(.horizontal, 14)
       .padding(.bottom, 14)
     }
+    .background {
+      RoundedRectangle(cornerRadius: 28, style: .continuous)
+        .fill(.clear)
+        .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .onTapGesture {
+          isPromptFocused = true
+        }
+    }
     .picoGlassEffect(in: RoundedRectangle(cornerRadius: 28, style: .continuous))
   }
 
   private var composerTextField: some View {
     TextField("Ask Pico anything", text: $model.composerText, axis: .vertical)
+      .textFieldStyle(.plain)
       .focused($isPromptFocused)
       .lineLimit(1...6)
       .submitLabel(.return)
@@ -218,6 +232,8 @@ struct ComposerView: View {
         .contentShape(Circle())
     }
     .picoGlassButtonStyle(.prominent, shape: .circle)
+    .frame(width: 34, height: 34)
+    .clipShape(Circle())
     .tint(Color.accentColor)
     .foregroundStyle(.white)
     .opacity(submitDisabled ? 0.45 : 1)
