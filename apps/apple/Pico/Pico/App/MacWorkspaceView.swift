@@ -9,7 +9,6 @@
     @State private var selectedDirectory: String?
     @State private var sessionSearchText = ""
     @State private var isSessionSearchPresented = false
-    @FocusState private var isSessionSearchFocused: Bool
     @State private var purgeRequest: MacDirectoryActionRequest?
     @State private var isFilesSidebarPresented = false
     @State private var isSessionSelectionCleared = false
@@ -30,6 +29,12 @@
         detailWorkspace
       }
       .navigationSplitViewStyle(.balanced)
+      .searchable(
+        text: $sessionSearchText,
+        isPresented: $isSessionSearchPresented,
+        placement: .toolbar,
+        prompt: "Search sessions"
+      )
       .toolbar {
         ToolbarItem(placement: .navigation) {
           Button(
@@ -73,28 +78,6 @@
     }
 
     @ViewBuilder
-    private var sessionSearchToolbarItem: some View {
-      if isSessionSearchPresented {
-        TextField("Search sessions", text: $sessionSearchText)
-          .textFieldStyle(.roundedBorder)
-          .frame(width: 220)
-          .focused($isSessionSearchFocused)
-          .onExitCommand(perform: closeSessionSearch)
-          .onChange(of: isSessionSearchFocused) { _, isFocused in
-            guard !isFocused else { return }
-            closeSessionSearch()
-          }
-      } else {
-        Button(
-          "Search Sessions",
-          picoSystemImage: "magnifyingglass",
-          action: openSessionSearch
-        )
-        .labelStyle(.iconOnly)
-      }
-    }
-
-    @ViewBuilder
     private var sessionsColumn: some View {
       if let selectedDirectory {
         NavigationStack {
@@ -129,8 +112,7 @@
 
           GitWorkspaceView(
             model: model,
-            directory: selectedDirectory,
-            initiallyShowsFiles: true
+            directory: selectedDirectory
           )
           .frame(
             minWidth: 320,
@@ -149,7 +131,7 @@
         model: model,
         openSidebar: showAllColumns,
         openNewSession: startNewSession,
-        macTrailingToolbar: AnyView(macTrailingToolbar),
+        macFilesToolbar: AnyView(macFilesToolbarButton),
         isConversationPresented: showsConversation && selectedSessionCount == 1,
         unavailableTitle: detailUnavailableTitle,
         unavailableDescription: detailUnavailableDescription
@@ -168,18 +150,14 @@
         : "Choose a session from the middle column."
     }
 
-    private var macTrailingToolbar: some View {
-      HStack(spacing: 8) {
-        sessionSearchToolbarItem
-
-        Button(
-          "Files",
-          picoSystemImage: "folder",
-          action: toggleFilesSidebar
-        )
-        .help(isFilesSidebarPresented ? "Hide Files" : "Show Files")
-        .disabled(selectedDirectory == nil)
-      }
+    private var macFilesToolbarButton: some View {
+      Button(
+        "Files",
+        picoSystemImage: "folder",
+        action: toggleFilesSidebar
+      )
+      .help(isFilesSidebarPresented ? "Hide Files" : "Show Files")
+      .disabled(selectedDirectory == nil)
     }
 
     private var showsConversation: Bool {
@@ -212,16 +190,7 @@
       }
     }
 
-    private func openSessionSearch() {
-      isSessionSearchPresented = true
-      Task { @MainActor in
-        await Task.yield()
-        isSessionSearchFocused = true
-      }
-    }
-
     private func closeSessionSearch() {
-      isSessionSearchFocused = false
       isSessionSearchPresented = false
       sessionSearchText = ""
     }

@@ -10,7 +10,7 @@ struct ConversationScreen: View {
   @Bindable var model: AppModel
   var openSidebar: () -> Void = {}
   var openNewSession: () -> Void = {}
-  var macTrailingToolbar: AnyView? = nil
+  var macFilesToolbar: AnyView? = nil
   var isConversationPresented = true
   var unavailableTitle = "Select a session"
   var unavailableDescription = "Choose a session to view its conversation."
@@ -111,7 +111,11 @@ struct ConversationScreen: View {
             subtitle: model.conversationHeaderSubtitle
           )
         }
-        .frame(width: navigationTitleMaxWidth, alignment: .leading)
+        .frame(
+          minWidth: 120,
+          maxWidth: navigationTitleMaxWidth,
+          alignment: .leading
+        )
         .allowsHitTesting(false)
       }
       #if os(iOS)
@@ -127,25 +131,31 @@ struct ConversationScreen: View {
 
       #if os(macOS)
         ToolbarItemGroup(placement: .primaryAction) {
-          HStack(spacing: 8) {
-            contextUsageMenu
-            ModelMenuView(model: model)
-            ThinkingMenuView(model: model)
-            ConversationHeaderVisibilityToggles(model: model)
+          contextUsageMenu
+            .disabled(!isConversationPresented)
 
-            Button(
-              "Delete",
-              picoSystemImage: "trash",
-              role: .destructive,
-              action: showDeleteSessionConfirmation
-            )
-            .help("Delete Session")
-            .disabled(!model.canDeleteCurrentSession)
-          }
-          .disabled(!isConversationPresented)
+          ModelMenuView(model: model)
+            .disabled(!isConversationPresented)
 
-          if let macTrailingToolbar {
-            macTrailingToolbar
+          ThinkingMenuView(model: model)
+            .disabled(!isConversationPresented)
+
+          ConversationHeaderVisibilityToggles(model: model)
+            .disabled(!isConversationPresented)
+
+          Button(
+            "Delete",
+            picoSystemImage: "trash",
+            role: .destructive,
+            action: showDeleteSessionConfirmation
+          )
+          .help("Delete Session")
+          .disabled(
+            !isConversationPresented || !model.canDeleteCurrentSession
+          )
+
+          if let macFilesToolbar {
+            macFilesToolbar
           }
         }
       #else
@@ -335,11 +345,10 @@ struct ConversationScreen: View {
   }
 
   private var navigationTitleMaxWidth: CGFloat {
-    let measuredWidth = contentWidth > 0 ? contentWidth : 390
     #if os(macOS)
-      let availableWidth = measuredWidth - 80 - 360
-      return min(320, max(120, availableWidth))
+      return .infinity
     #else
+      let measuredWidth = contentWidth > 0 ? contentWidth : 390
       let leadingReserve: CGFloat = horizontalSizeClass == .compact ? 84 : 132
       let trailingReserve: CGFloat = 132
       return max(120, measuredWidth - leadingReserve - trailingReserve)
