@@ -104,22 +104,20 @@ struct ConversationScreen: View {
       #if os(iOS)
         .sharedBackgroundVisibility(.hidden)
       #endif
-      if model.hasRealCurrentSession || model.isLoadingSelectedSession {
-        ToolbarItem(placement: .primaryAction) {
-          HStack(spacing: 0) {
-            ContextUsageRingMenu(
-              contextUsage: model.sessionState.contextUsage,
-              isCompacting: model.sessionState.compacting,
-              isLoading: model.isLoadingSelectedSession,
-              compactSession: compactSession,
-              showsCompactAction: model.hasRealCurrentSession
-            )
+      #if os(iOS)
+        if showsContextUsageMenu {
+          ToolbarItem(placement: .primaryAction) {
+            contextUsageMenu
           }
         }
-      }
+      #endif
 
       ToolbarItemGroup(placement: .primaryAction) {
         #if os(macOS)
+          if showsContextUsageMenu {
+            contextUsageMenu
+          }
+
           ModelMenuView(model: model)
           ThinkingMenuView(model: model)
           ConversationHeaderVisibilityToggles(model: model)
@@ -248,6 +246,20 @@ struct ConversationScreen: View {
         }
       )
     }
+  }
+
+  private var showsContextUsageMenu: Bool {
+    model.hasRealCurrentSession || model.isLoadingSelectedSession
+  }
+
+  private var contextUsageMenu: some View {
+    ContextUsageRingMenu(
+      contextUsage: model.sessionState.contextUsage,
+      isCompacting: model.sessionState.compacting,
+      isLoading: model.isLoadingSelectedSession,
+      compactSession: compactSession,
+      showsCompactAction: model.hasRealCurrentSession
+    )
   }
 
   private var composerOverlay: some View {

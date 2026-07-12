@@ -491,7 +491,11 @@ struct ContextUsageRingMenu: View {
           ProgressView()
             .controlSize(.small)
         } else {
-          ContextUsageRing(percent: snapshot?.percent)
+          #if os(macOS)
+            ContextUsageRingImage(percent: snapshot?.percent)
+          #else
+            ContextUsageRing(percent: snapshot?.percent)
+          #endif
         }
       }
       .frame(width: 20, height: 20)
@@ -499,7 +503,7 @@ struct ContextUsageRingMenu: View {
       .contentShape(Circle())
     }
     .menuIndicator(.hidden)
-    .picoGlassButtonStyle(shape: .circle)
+    .picoContextUsageMenuStyle()
     .accessibilityLabel(accessibilityLabel)
     .help(accessibilityLabel)
   }
@@ -510,7 +514,7 @@ struct ContextUsageRingMenu: View {
   }
 
   private var showsLoadingIndicator: Bool {
-    isLoading || contextUsage == nil
+    isLoading
   }
 
   private var accessibilityLabel: String {
@@ -526,7 +530,7 @@ private struct ContextUsageRing: View {
   var body: some View {
     ZStack {
       Circle()
-        .stroke(.quaternary, lineWidth: 2.5)
+        .stroke(Color.secondary.opacity(0.55), lineWidth: 2.5)
 
       if let clampedPercent {
         Circle()
@@ -538,6 +542,8 @@ private struct ContextUsageRing: View {
           .rotationEffect(.degrees(-90))
       }
     }
+    .frame(width: 16, height: 16)
+    .frame(width: 20, height: 20)
   }
 
   private var clampedPercent: Double? {
@@ -551,6 +557,32 @@ private struct ContextUsageRing: View {
     return .accentColor
   }
 }
+
+#if os(macOS)
+  private struct ContextUsageRingImage: View {
+    var percent: Double?
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+      if let image = renderedImage {
+        Image(nsImage: image)
+          .resizable()
+          .frame(width: 20, height: 20)
+      } else {
+        Image(picoSystemName: "circle", pointSize: 20)
+      }
+    }
+
+    private var renderedImage: NSImage? {
+      let renderer = ImageRenderer(
+        content: ContextUsageRing(percent: percent)
+          .environment(\.colorScheme, colorScheme)
+      )
+      renderer.scale = 2
+      return renderer.nsImage
+    }
+  }
+#endif
 
 private struct ContextUsageSnapshot {
   var tokens: Double?

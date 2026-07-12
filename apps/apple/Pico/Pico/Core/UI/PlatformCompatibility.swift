@@ -189,6 +189,15 @@ extension View {
   }
 
   @ViewBuilder
+  func picoContextUsageMenuStyle() -> some View {
+    #if os(macOS)
+      buttonStyle(.plain)
+    #else
+      picoGlassButtonStyle(shape: .circle)
+    #endif
+  }
+
+  @ViewBuilder
   func picoBottomSafeAreaBar<Content: View>(
     @ViewBuilder content: () -> Content
   ) -> some View {
