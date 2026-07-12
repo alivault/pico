@@ -7,11 +7,11 @@ This file is the repo-specific guide for coding agents working in Pico.
 Pico is a local, keyboard-friendly workspace for Pi coding-agent sessions. The repo now contains two first-party clients that share the same Pico server/runtime contracts:
 
 - the browser app published as the public `@alivault/pico` package and runnable with `npx @alivault/pico`
-- the native SwiftUI iOS companion app in `apps/ios/Pico`, which connects to an already-running Pico server over HTTP JSON + SSE
+- the native SwiftUI companion app in `apps/apple/Pico`, which builds for iOS and macOS and connects to an already-running Pico server over HTTP JSON + SSE
 
 The product provides a persistent session browser, live conversation shell, project-aware prompt helpers, provider authentication flows, git tooling, project file browsing, and settings around display, thinking/tools visibility, and completion notifications.
 
-When behavior is ambiguous, prefer the behavior currently implemented in this repo and documented in `README.md`. For native iOS behavior, prefer the implementation under `apps/ios/Pico` over the historical plan in `apps/ios/SWIFTUI_CLIENT_PLAN.md` when they differ. Do not rely on private checkouts, machine-local paths, or git history as product references.
+When behavior is ambiguous, prefer the behavior currently implemented in this repo and documented in `README.md`. For native iOS behavior, prefer the implementation under `apps/apple/Pico` over the historical plan in `apps/apple/SWIFTUI_CLIENT_PLAN.md` when they differ. Do not rely on private checkouts, machine-local paths, or git history as product references.
 
 ## Stack
 
@@ -34,19 +34,20 @@ When behavior is ambiguous, prefer the behavior currently implemented in this re
 - @pierre/diffs / @pierre/trees plus @dnd-kit for git diffs and project file trees
 - Pi SDK loaded from the repo-local `@earendil-works/pi-coding-agent` dependency by default
 
-### Native iOS stack
+### Native Apple stack
 
-- Native SwiftUI app under `apps/ios/Pico`
-- Swift 6.2, iOS 26 deployment target
+- Native SwiftUI app under `apps/apple/Pico`, built from one multiplatform `Pico` target
+- Swift 6.2, iOS 26 and macOS 15 deployment targets
 - Observation (`@Observable`, `@Bindable`) with `@MainActor` app state
 - Swift Concurrency (`async`/`await`, `Task`, actor-backed API/SSE clients)
 - First-party Apple frameworks only by default: SwiftUI, Foundation, PhotosUI, UserNotifications, UniformTypeIdentifiers, Security/Keychain when pairing is implemented, and limited UIKit bridges for app delegate, keyboard, pasteboard, camera, and system colors
 - Swift Testing for unit tests
-- No React Native, Expo, WebView shell, or third-party Swift packages unless explicitly approved
+- Limited AppKit adapters for macOS pasteboard, URL opening, colors/images, and the native code text view
+- No React Native, Expo, WebView shell, or new third-party Swift packages unless explicitly approved
 
 ## Pi SDK dependency
 
-The browser/server runtime is intended to be self-contained and uses the repo-local `@earendil-works/pi-coding-agent` dependency by default. The iOS app does not load the Pi SDK directly; it connects to this runtime.
+The browser/server runtime is intended to be self-contained and uses the repo-local `@earendil-works/pi-coding-agent` dependency by default. The native Apple app does not load the Pi SDK directly; it connects to this runtime.
 
 Resolution happens in `src/server/pi-sdk-path.ts` and tries, in order:
 
@@ -72,11 +73,19 @@ pnpm check
 pnpm check:fix
 ```
 
-Run native iOS checks from the repo root with Xcode installed:
+Run native Apple checks from the repo root with Xcode installed:
 
 ```bash
-xcodebuild -list -project apps/ios/Pico/Pico.xcodeproj
-xcodebuild -project apps/ios/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
+xcodebuild -list -project apps/apple/Pico/Pico.xcodeproj
+xcodebuild -project apps/apple/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=macOS' test
+xcodebuild -project apps/apple/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
+```
+
+Build and launch the native macOS app:
+
+```bash
+xcodebuild -project apps/apple/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=macOS' -derivedDataPath /tmp/pico-macos-build build
+open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
 ```
 
 Use any available simulator from `xcrun simctl list devices available` if `iPhone 16 Pro` is not installed.
@@ -89,7 +98,7 @@ DERIVED_DATA="/tmp/pico-ios-device-build"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/Pico.app"
 
 xcodebuild \
-  -project apps/ios/Pico/Pico.xcodeproj \
+  -project apps/apple/Pico/Pico.xcodeproj \
   -scheme Pico \
   -destination "platform=iOS,id=$DEVICE_ID" \
   -derivedDataPath "$DERIVED_DATA" \
@@ -105,7 +114,7 @@ Notes:
 
 - Dev server port is `3141` from `vite.config.ts`.
 - `pnpm check:fix` is the baseline browser/server validation command.
-- Do not build or run the iOS app to validate small, localized changes. Reserve `xcodebuild ... test` for large or broad iOS changes.
+- Do not build or run the native app to validate small, localized changes. Reserve platform builds/tests for native changes, and test both macOS and iOS after broad shared changes.
 - For simulator-to-Mac testing, the default iOS server URL is `http://localhost:3141`; physical devices need a trusted host-reachable Pico server URL.
 - `npx -y react-doctor@latest` is useful for architecture/performance/dead-code checks, but has known intentional false positives listed under Validation expectations.
 - Avoid leaving ad hoc long-lived dev/preview server processes running. Reuse an existing terminal/session manager if one is already set up by the user.
@@ -275,39 +284,39 @@ Notes:
 - `src/styles.css` and `src/styles/themes/*`
   - Tailwind entrypoint, design tokens, theme class variables, and Shiki/Pico code color variables
 
-### Native iOS app
+### Native Apple app (iOS and macOS)
 
-- `apps/ios/SWIFTUI_CLIENT_PLAN.md`
-  - historical design/roadmap for the SwiftUI client; useful context, but the implementation under `apps/ios/Pico` is authoritative when it has moved ahead of the plan
-- `apps/ios/Pico/Pico.xcodeproj`
+- `apps/apple/SWIFTUI_CLIENT_PLAN.md`
+  - historical design/roadmap for the SwiftUI client; useful context, but the implementation under `apps/apple/Pico` is authoritative when it has moved ahead of the plan
+- `apps/apple/Pico/Pico.xcodeproj`
   - Xcode project with `Pico` and `PicoTests` targets and shared `Pico` scheme
-- `apps/ios/Pico/Pico/PicoApp.swift`
+- `apps/apple/Pico/Pico/PicoApp.swift`
   - SwiftUI entry point, UIKit app/scene delegates for quick actions and deep links, and root `AppModel` ownership
-- `apps/ios/Pico/Pico/App/*`
+- `apps/apple/Pico/Pico/App/*`
   - `RootView` connection/workspace switcher, adaptive `WorkspaceView`, `AppModel` orchestration, Git extension methods, alerts, and connection status
-- `apps/ios/Pico/Pico/Core/API/*`
+- `apps/apple/Pico/Pico/Core/API/*`
   - `PicoEndpoint` centralized route/query builder and actor-backed `PicoAPIClient`
-- `apps/ios/Pico/Pico/Core/Events/*`
+- `apps/apple/Pico/Pico/Core/Events/*`
   - SSE parser, stream actor, and decoded stream event wrapper
-- `apps/ios/Pico/Pico/Core/Models/*`
+- `apps/apple/Pico/Pico/Core/Models/*`
   - Swift mirrors of shared API/SSE contracts, patchable session state, conversation items, auth, Git, files, and UI request models
-- `apps/ios/Pico/Pico/Core/Persistence/*`
+- `apps/apple/Pico/Pico/Core/Persistence/*`
   - `ConnectionStore` (`pico.ios.*` UserDefaults keys), `DraftStore`, and placeholder `CredentialStore` for future pairing/bearer tokens
-- `apps/ios/Pico/Pico/Features/Connections/*`
+- `apps/apple/Pico/Pico/Features/Connections/*`
   - server URL entry and connection hero/form UI
-- `apps/ios/Pico/Pico/Features/Sessions/*`
+- `apps/apple/Pico/Pico/Features/Sessions/*`
   - directory-organized session sidebar, session rows, new-session flow, directory search/browse/manage/purge UI
-- `apps/ios/Pico/Pico/Features/Conversation/*`
+- `apps/apple/Pico/Pico/Features/Conversation/*`
   - conversation screen, native markdown renderer, assistant/user/tool/thinking/compaction rendering, model/thinking menus, and scroll behavior
-- `apps/ios/Pico/Pico/Features/Composer/*`
+- `apps/apple/Pico/Pico/Features/Composer/*`
   - prompt composer, image attachments, queue/steer controls, pending-message reorder UI, and Git comment chips
-- `apps/ios/Pico/Pico/Features/Settings/*`
+- `apps/apple/Pico/Pico/Features/Settings/*`
   - settings, provider auth lists, API-key sheet, and server-driven UI request sheets
-- `apps/ios/Pico/Pico/Features/Git/*`
+- `apps/apple/Pico/Pico/Features/Git/*`
   - mobile files/Git workspace, project tree/read-only file viewer, Shiki highlight parsing, working-tree diffs/review, branch/commit sheets, commit history, and native commit graph rendering
-- `apps/ios/Pico/Pico/Resources/Info.plist`
+- `apps/apple/Pico/Pico/Resources/Info.plist`
   - app metadata, `pico://` URL scheme, quick action, local-network/photos/camera/notification usage strings, and local-network ATS allowance
-- `apps/ios/Pico/PicoTests/*` and `apps/ios/Fixtures/*`
+- `apps/apple/Pico/PicoTests/*` and `apps/apple/Fixtures/*`
   - Swift Testing coverage for SSE parsing, event decoding, session-state merge/patch behavior, Git formatting/tree/highlight helpers, and shared JSON fixtures
 
 ## Core architecture
@@ -318,7 +327,7 @@ The browser-facing app is the `/` route. Most browser interaction happens inside
 
 ### 2) Viewer context is required
 
-The browser uses a viewer context id stored in local storage (`pico-context-id`). The iOS app uses `ConnectionStore.contextId`, persisted under `pico.ios.contextId`.
+The browser uses a viewer context id stored in local storage (`pico-context-id`). The native app uses `ConnectionStore.contextId`, persisted under `pico.ios.contextId` on iOS and `pico.macos.contextId` on macOS.
 
 Browser requests should usually be built with `buildRequestUrl()` from `src/features/pico/app-shell-utils.ts`, which appends:
 
@@ -374,9 +383,9 @@ If you change a runtime payload or route response shape:
 - update `src/lib/pico/api.ts`
 - update `src/lib/pico/index.ts` if domain/state helpers depend on it
 - update relevant browser renderers and client handlers
-- update the matching Swift model(s) under `apps/ios/Pico/Pico/Core/Models`
+- update the matching Swift model(s) under `apps/apple/Pico/Pico/Core/Models`
 - update `PicoEndpoint`/`PicoAPIClient` when route paths, query params, methods, or bodies change
-- update `apps/ios/Fixtures/*` and Swift tests when SSE/API contract behavior changes
+- update `apps/apple/Fixtures/*` and Swift tests when SSE/API contract behavior changes
 - update `/api/client/manifest` capabilities when native-client compatibility depends on a new endpoint/event/feature
 
 Do not change server payloads silently.
@@ -412,14 +421,15 @@ Notable current client-side state patterns:
 
 When adding new workspace state, first decide whether it belongs in one of these stores or in a new narrow store. Use local React state only for truly local UI concerns.
 
-### 7) Native iOS client architecture
+### 7) Native Apple client architecture
 
-The iOS app is a native companion client for an existing Pico server. It does not embed the Pi SDK runtime, spawn shell/git tools, or read arbitrary project files locally. Keep Pi SDK, filesystem, git, auth storage, and session runtime behavior on the server.
+The iOS/macOS app is a native companion client for an existing Pico server. It does not embed the Pi SDK runtime, spawn shell/git tools, or read arbitrary project files locally. Keep Pi SDK, filesystem, git, auth storage, and session runtime behavior on the server.
 
 Current native architecture:
 
-- `PicoApp` owns one `@State` `AppModel` and bridges home-screen quick actions plus `pico://` deep links through UIKit delegates and notifications.
+- `PicoApp` owns one `@State` `AppModel`; iOS bridges home-screen quick actions through UIKit delegates, while both platforms support `pico://` deep links.
 - `RootView` switches between `ConnectionView` and `WorkspaceView` based on `model.isConnected`, restores saved connections on task startup, tracks scene phase, and hosts global alert/UI-request sheets.
+- macOS uses a Mail-style three-column `NavigationSplitView` (directories, selected-directory sessions, conversation), native app commands and Settings scene, platform persistence keys, AppKit pasteboard/URL/image adapters, an `NSTextView` code viewer, and a native SwiftUI pending-queue editor.
 - `WorkspaceView` is adaptive: compact width uses `NavigationStack`; regular width uses `NavigationSplitView` with `SessionSidebarView` and `ConversationScreen`.
 - `AppModel` is `@MainActor @Observable` and is the single native app coordinator for connection state, active `SessionState`, directory/session snapshots, composer state, auth/UI requests, notifications, Git status, and event application.
 - `PicoAPIClient` is an actor for JSON requests and response/error decoding. Add API calls there instead of creating ad hoc `URLSession` calls from views.
@@ -547,7 +557,7 @@ If you change auth contracts, update:
 - `src/server/pi-sdk-types.ts` for local SDK adapter type changes
 - `src/features/pico/app-shell-auth-dialog.tsx`
 - `src/features/pico/app-shell-ui-request-dialog.tsx`
-- iOS auth/UI-request models and views in `apps/ios/Pico/Pico/Core/Models` and `apps/ios/Pico/Pico/Features/Settings`
+- iOS auth/UI-request models and views in `apps/apple/Pico/Pico/Core/Models` and `apps/apple/Pico/Pico/Features/Settings`
 - the relevant `src/routes/api.auth.*.ts` route
 
 ### Composer behavior
@@ -589,12 +599,12 @@ If you touch conversation/session sync behavior, inspect all of:
 - `src/lib/pico/sync.ts`
 - `src/server/pico-runtime/index.ts`
 - `src/routes/api.session.history.ts`
-- `apps/ios/Pico/Pico/Core/Models/SessionState.swift`
-- `apps/ios/Pico/Pico/Core/Models/StateSyncPayload.swift`
-- `apps/ios/Pico/Pico/Core/Models/ConversationItem.swift`
-- `apps/ios/Pico/Pico/App/AppModel.swift`
-- `apps/ios/Pico/Pico/Features/Conversation/*`
-- `apps/ios/Fixtures/*` and `apps/ios/Pico/PicoTests/*`
+- `apps/apple/Pico/Pico/Core/Models/SessionState.swift`
+- `apps/apple/Pico/Pico/Core/Models/StateSyncPayload.swift`
+- `apps/apple/Pico/Pico/Core/Models/ConversationItem.swift`
+- `apps/apple/Pico/Pico/App/AppModel.swift`
+- `apps/apple/Pico/Pico/Features/Conversation/*`
+- `apps/apple/Fixtures/*` and `apps/apple/Pico/PicoTests/*`
 
 Be careful not to break the distinction between:
 
@@ -620,7 +630,7 @@ Server-side code highlighting uses Shiki via `/api/highlight`, with the Pico CSS
 
 ### Draft persistence
 
-Browser prompt drafts are stored in session storage and keyed by session/file/draft target. Native iOS prompt drafts are stored by `DraftStore` under `pico.ios.draft.<context>.<sessionKey-or-draft>`.
+Browser prompt drafts are stored in session storage and keyed by session/file/draft target. Native prompt drafts are stored by `DraftStore` under `pico.ios.draft.<context>.<sessionKey-or-draft>` on iOS and `pico.macos.draft.<context>.<sessionKey-or-draft>` on macOS.
 
 If you change browser draft behavior, update helper logic in `src/lib/pico/storage.ts` (re-exported via `src/lib/pico/index.ts`) instead of adding duplicate storage code. If you change server draft ownership/session-key semantics, update `DraftStore`, `AppModel.currentPromptDraftOwnerKey`, Swift fixtures/tests, and browser draft helpers together.
 
@@ -637,7 +647,7 @@ Display and notification settings are mirrored through external stores in `app-s
 
 Theme family/color-mode state flows through `src/features/pico/use-pico-theme.ts`, next-themes, `APPLIED_THEME_STORAGE_KEY`, and the theme helpers in `src/lib/pico/themes.ts`. Keep theme storage keys, `src/styles/themes/*`, and `APPLIED_THEME_CLASSES` in sync when changing theme behavior.
 
-## Native iOS client conventions
+## Native Apple client conventions
 
 ### Data fetching and request construction
 
@@ -775,7 +785,7 @@ Code style conventions already used in the repo:
 
 ### Native Swift/SwiftUI
 
-Follow the style already used under `apps/ios/Pico`:
+Follow the style already used under `apps/apple/Pico`:
 
 - 2-space indentation
 - one primary type per Swift file when practical; keep large model/feature helpers split by domain
@@ -825,15 +835,15 @@ The right-sidebar Git workspace renders files, branches, commits, diffs, history
 
 The right-sidebar Git workspace can show review and history areas together; the history tab/sidebar visibility is persisted. Preserve commit diff tabs across Git tab/history/review changes unless the user explicitly closes them.
 
-The iOS Git/files workspace (`apps/ios/Pico/Pico/Features/Git`) uses the same server endpoints for status, changes, diffs, reviews, branches, commits, project tree/file reads, and `/api/highlight`. It keeps local view data in `GitWorkspaceView`/focused views and routes mutations through `AppModel+Git` so refresh revisions and header status stay coherent.
+The iOS Git/files workspace (`apps/apple/Pico/Pico/Features/Git`) uses the same server endpoints for status, changes, diffs, reviews, branches, commits, project tree/file reads, and `/api/highlight`. It keeps local view data in `GitWorkspaceView`/focused views and routes mutations through `AppModel+Git` so refresh revisions and header status stay coherent.
 
 If you extend git UI, update:
 
 - server helper types/logic in `src/server/git.ts`
 - shared response types in `src/lib/pico/api.ts`
 - browser rendering in `src/features/pico/right-sidebar.tsx` and the focused right-sidebar Git modules
-- Swift response/request models in `apps/ios/Pico/Pico/Core/Models`
-- native Git/file UI and helpers in `apps/ios/Pico/Pico/Features/Git`
+- Swift response/request models in `apps/apple/Pico/Pico/Core/Models`
+- native Git/file UI and helpers in `apps/apple/Pico/Pico/Features/Git`
 - Swift Git tests/fixtures when formatting, graph, tree, diff, or highlight behavior changes
 
 ## Common change recipes
@@ -853,9 +863,9 @@ If you extend git UI, update:
 1. update the server/runtime payload or route response
 2. update TypeScript contracts in `src/lib/pico/api.ts` and domain helpers in `src/lib/pico/*`
 3. update browser handlers/renderers that consume the contract
-4. update Swift models under `apps/ios/Pico/Pico/Core/Models`
+4. update Swift models under `apps/apple/Pico/Pico/Core/Models`
 5. update Swift merge/decoder logic such as `PicoServerEvent`, `SessionState.apply(_:)`, or `ConversationItem`/`AssistantBlock` as needed
-6. update `apps/ios/Fixtures/*` and Swift tests for representative full and patch payloads
+6. update `apps/apple/Fixtures/*` and Swift tests for representative full and patch payloads
 7. update `/api/client/manifest` if native compatibility/capability reporting changes
 
 ### Add a native iOS feature
@@ -906,7 +916,7 @@ If you extend git UI, update:
 
 ## Release workflow
 
-The public npm package is released through `.github/workflows/release.yml` on pushed `v*.*.*` tags. This workflow publishes the browser/server package; the native iOS app is not shipped through npm and would need a separate TestFlight/App Store flow.
+The public npm package is released through `.github/workflows/release.yml` on pushed `v*.*.*` tags. This workflow publishes the browser/server package; the native iOS/macOS app is not shipped through npm and needs separate TestFlight/App Store distribution flows.
 
 Release setup:
 
@@ -959,7 +969,7 @@ pnpm check:fix
 Do not build or run the native iOS app to validate small, localized changes. Only run the full iOS test build after large or broad native changes:
 
 ```bash
-xcodebuild -project apps/ios/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
+xcodebuild -project apps/apple/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
 ```
 
 Use another installed simulator if needed.
@@ -1035,9 +1045,9 @@ Keep public repo docs aligned with the implementation:
 - public package name is `@alivault/pico`
 - CLI binary is `pico-app`
 - bundled Pi SDK updates are handled by `pnpm update:pi`
-- native iOS app path is `apps/ios/Pico`
-- iOS bundle identifier is `com.alivault.pico.ios`
-- iOS client/server topology is native SwiftUI app ↔ Pico HTTP JSON/SSE server ↔ Pi SDK/git/filesystem runtime
+- native Apple app path is `apps/apple/Pico`
+- iOS bundle identifier is `com.alivault.pico.ios`; macOS bundle identifier is `com.alivault.pico.macos`
+- native client/server topology is SwiftUI app ↔ Pico HTTP JSON/SSE server ↔ Pi SDK/git/filesystem runtime
 - iOS currently targets Swift 6.2 and iOS 26, with a local-network HTTP development allowance
 
-If README, `apps/ios/SWIFTUI_CLIENT_PLAN.md`, or future docs drift from the code, update them as part of the same change or explicitly note that a plan document is historical.
+If README, `apps/apple/SWIFTUI_CLIENT_PLAN.md`, or future docs drift from the code, update them as part of the same change or explicitly note that a plan document is historical.

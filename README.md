@@ -1,6 +1,6 @@
 # Pico
 
-Pico is a local, keyboard-friendly browser workspace for Pi coding-agent sessions.
+Pico is a local, keyboard-friendly workspace for Pi coding-agent sessions, available in the browser and as a native SwiftUI app for macOS and iOS.
 
 It gives you a persistent session browser, a live conversation shell, git tools, and project-aware prompt helpers in one app.
 
@@ -94,6 +94,45 @@ Then open:
 http://localhost:3141
 ```
 
+## Native macOS and iOS app
+
+The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. It connects to an already-running Pico server over HTTP JSON and SSE; it does not embed the Pi runtime.
+
+Build and launch the macOS app:
+
+```bash
+xcodebuild \
+  -project apps/apple/Pico/Pico.xcodeproj \
+  -scheme Pico \
+  -destination 'platform=macOS' \
+  -derivedDataPath /tmp/pico-macos-build \
+  build
+
+open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
+```
+
+The macOS client defaults to `http://localhost:3141`. Keep Pico on a trusted local machine or network; the server does not currently provide remote pairing or token authentication.
+
+Run the shared native tests on macOS:
+
+```bash
+xcodebuild \
+  -project apps/apple/Pico/Pico.xcodeproj \
+  -scheme Pico \
+  -destination 'platform=macOS' \
+  test
+```
+
+Run the iOS tests with an installed simulator:
+
+```bash
+xcodebuild \
+  -project apps/apple/Pico/Pico.xcodeproj \
+  -scheme Pico \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  test
+```
+
 ## Development commands
 
 ```bash
@@ -122,6 +161,7 @@ The release script verifies a clean, up-to-date `main`, runs checks and build, b
 Pico is built with:
 
 - TanStack Start, Router, Query, Store, Hotkeys, and Pacer
+- Native SwiftUI for macOS and iOS
 - React 19
 - TypeScript
 - Vite+ and Nitro
