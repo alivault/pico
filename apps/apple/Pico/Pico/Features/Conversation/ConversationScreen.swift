@@ -252,7 +252,15 @@ struct ConversationScreen: View {
 
   private var composerOverlay: some View {
     ComposerView(model: model, isQueueExpanded: $isQueueExpanded)
-      .padding(.bottom, isKeyboardVisible ? 8 : 0)
+      .padding(.bottom, composerBottomPadding)
+  }
+
+  private var composerBottomPadding: CGFloat {
+    #if os(macOS)
+      12
+    #else
+      isKeyboardVisible ? 8 : 0
+    #endif
   }
 
   private var conversationContent: some View {
