@@ -304,12 +304,12 @@ enum PicoIconName: Sendable {
 struct PicoIcon: View {
   var icon: PicoIconName
   var size: CGFloat = 20
-  var strokeWidth: CGFloat = 2
+  var strokeWidth: CGFloat = 1.5
 
   nonisolated init(
     _ icon: PicoIconName,
     size: CGFloat = 20,
-    strokeWidth: CGFloat = 2
+    strokeWidth: CGFloat = 1.5
   ) {
     self.icon = icon
     self.size = size
@@ -319,7 +319,7 @@ struct PicoIcon: View {
   nonisolated init(
     systemName: String,
     size: CGFloat = 20,
-    strokeWidth: CGFloat = 2
+    strokeWidth: CGFloat = 1.5
   ) {
     self.init(
       PicoIconName(systemName: systemName),
@@ -345,7 +345,7 @@ extension PicoIcon {
   static func uiImage(
     systemName: String,
     pointSize: CGFloat = 20,
-    strokeWidth: CGFloat = 2,
+    strokeWidth: CGFloat = 1.5,
     color: UIColor = .white
   ) -> UIImage? {
     let renderer = ImageRenderer(
@@ -372,7 +372,7 @@ extension Image {
     self.init(
       lucide: icon.lucideName,
       size: CGSize(width: pointSize, height: pointSize),
-      strokeWidth: 2,
+      strokeWidth: 1.5,
       style: icon.lucideStyle
     )
   }
