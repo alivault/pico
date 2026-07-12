@@ -66,7 +66,11 @@
       }
       .onChange(of: selectedDirectory) {
         closeSessionSearch()
-        if selectedDirectory == nil {
+        if let selectedDirectory,
+          model.isComposingNewSession
+        {
+          model.beginNewChat(cwd: selectedDirectory)
+        } else if selectedDirectory == nil {
           isFilesSidebarPresented = false
         }
       }
