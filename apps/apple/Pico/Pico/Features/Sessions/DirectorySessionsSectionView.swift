@@ -488,6 +488,13 @@ struct DirectorySessionPurgeSheet: View {
           previewContent
         }
       }
+      #if os(macOS)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: 720)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .top)
+      #endif
       .navigationTitle("Purge Sessions")
       .picoNavigationTitleDisplayMode(.inline)
       .toolbar {
