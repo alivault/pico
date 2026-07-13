@@ -47,6 +47,7 @@ enum PicoIconName: Sendable {
   case image
   case images
   case info
+  case key
   case message
   case messageText
   case panelLeft
@@ -54,6 +55,7 @@ enum PicoIconName: Sendable {
   case plus
   case refresh
   case search
+  case server
   case settings
   case sparkles
   case stop
@@ -134,6 +136,8 @@ enum PicoIconName: Sendable {
       self = .hourglass
     case "info.circle", "info.circle.fill":
       self = .info
+    case "key":
+      self = .key
     case "magnifyingglass":
       self = .search
     case "message":
@@ -152,6 +156,8 @@ enum PicoIconName: Sendable {
       self = .circlePlus
     case "safari":
       self = .compass
+    case "server", "server.rack":
+      self = .server
     case "sidebar.left":
       self = .panelLeft
     case "sparkles":
@@ -261,6 +267,8 @@ enum PicoIconName: Sendable {
       .images
     case .info:
       .info
+    case .key:
+      .key
     case .message:
       .messageSquare
     case .messageText:
@@ -275,6 +283,8 @@ enum PicoIconName: Sendable {
       .refreshCw
     case .search:
       .search
+    case .server:
+      .server
     case .settings:
       .settings
     case .sparkles:
