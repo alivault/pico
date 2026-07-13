@@ -40,20 +40,22 @@ struct RenameSessionSheetView: View {
           }
         }
         .disabled(generateDisabled)
-      } header: {
-        Text("Name")
       } footer: {
         Text("Generate a name from the first user message.")
       }
     }
+    #if os(macOS)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 16)
+    #endif
     .navigationTitle("Rename Session")
     .picoNavigationTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .picoLeading) {
+      ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") { dismiss() }
           .disabled(isSaving)
       }
-      ToolbarItem(placement: .picoTrailing) {
+      ToolbarItem(placement: .confirmationAction) {
         Button {
           saveName()
         } label: {
