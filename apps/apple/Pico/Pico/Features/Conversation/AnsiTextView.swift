@@ -5,7 +5,7 @@ struct AnsiText: View {
 
   var body: some View {
     ansiSegments.reduce(Text("")) { partial, segment in
-      partial + segment.textView
+      Text("\(partial)\(segment.textView)")
     }
   }
 
