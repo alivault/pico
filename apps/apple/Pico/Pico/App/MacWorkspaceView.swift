@@ -246,7 +246,6 @@
     var openPurge: (String) -> Void
     @State private var isShowingAddDirectory = false
     @State private var isDirectoriesExpanded = true
-    @State private var isDirectoriesHeaderHovered = false
 
     var body: some View {
       List(selection: $selectedDirectory) {
@@ -320,15 +319,9 @@
           )
         }
         .buttonStyle(.plain)
-        .opacity(isDirectoriesHeaderHovered ? 1 : 0)
-        .allowsHitTesting(isDirectoriesHeaderHovered)
+        .frame(minHeight: 24)
       }
       .contentShape(Rectangle())
-      .onHover { isDirectoriesHeaderHovered = $0 }
-      .animation(
-        .easeInOut(duration: 0.12),
-        value: isDirectoriesHeaderHovered
-      )
       .listRowInsets(
         EdgeInsets(top: 6, leading: 4, bottom: 4, trailing: 4)
       )
