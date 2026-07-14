@@ -291,11 +291,13 @@
 
         Spacer()
 
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
           Button {
             isShowingAddDirectory = true
           } label: {
             PicoIcon(systemName: "plus.circle", size: 12, strokeWidth: 1)
+              .frame(width: 24, height: 24)
+              .contentShape(Rectangle())
           }
           .accessibilityLabel("Add Directory")
 
@@ -311,6 +313,8 @@
               size: 12,
               strokeWidth: 1
             )
+            .frame(width: 24, height: 24, alignment: .trailing)
+            .contentShape(Rectangle())
           }
           .accessibilityLabel(
             isDirectoriesExpanded
