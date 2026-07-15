@@ -530,6 +530,9 @@ private struct ConversationWorkingIndicator: View {
   var body: some View {
     HStack(spacing: 10) {
       ProgressView()
+        #if os(macOS)
+          .controlSize(.small)
+        #endif
 
       Text(label)
         .font(.subheadline)
