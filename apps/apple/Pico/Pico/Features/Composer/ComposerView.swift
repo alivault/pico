@@ -468,46 +468,69 @@ private struct ComposerAttachmentMenu: View {
   var remainingImageSlots: Int
 
   var body: some View {
-    Button {
-      isShowingAttachmentPopover.toggle()
-    } label: {
+    #if os(macOS)
+      Menu {
+        attachmentActions
+      } label: {
+        attachmentLabel
+      }
+      .menuIndicator(.hidden)
+      .buttonStyle(.bordered)
+      .fixedSize()
+      .accessibilityLabel("Add attachment")
+    #else
+      Button {
+        isShowingAttachmentPopover.toggle()
+      } label: {
+        attachmentLabel
+      }
+      .picoGlassButtonStyle(shape: .circle)
+      .popover(isPresented: $isShowingAttachmentPopover, arrowEdge: .bottom) {
+        VStack(alignment: .leading, spacing: 10) {
+          attachmentActions
+        }
+        .buttonStyle(.plain)
+        .padding(12)
+      }
+      .accessibilityLabel("Add attachment")
+    #endif
+  }
+
+  @ViewBuilder
+  private var attachmentLabel: some View {
+    #if os(macOS)
+      Image(systemName: "plus")
+        .font(.headline)
+    #else
       PicoIcon(systemName: "plus")
         .font(.headline)
-    }
-    #if os(macOS)
-      .buttonStyle(.bordered)
-    #else
-      .picoGlassButtonStyle(shape: .circle)
     #endif
-    .popover(isPresented: $isShowingAttachmentPopover, arrowEdge: .bottom) {
-      VStack(alignment: .leading, spacing: 10) {
-        #if os(iOS)
-          Button("Camera", picoSystemImage: "camera") {
-            isShowingAttachmentPopover = false
-            isShowingCameraPicker = true
-          }
-          .disabled(
-            !UIImagePickerController.isSourceTypeAvailable(.camera)
-              || remainingImageSlots == 0
-          )
-        #endif
+  }
 
-        Button("Photos", picoSystemImage: "photo.on.rectangle") {
-          isShowingAttachmentPopover = false
-          isShowingPhotoPicker = true
-        }
-        .disabled(remainingImageSlots == 0)
-
-        Button("Files", picoSystemImage: "folder") {
-          isShowingAttachmentPopover = false
-          isShowingFileImporter = true
-        }
-        .disabled(remainingImageSlots == 0)
+  @ViewBuilder
+  private var attachmentActions: some View {
+    #if os(iOS)
+      Button("Camera", picoSystemImage: "camera") {
+        isShowingAttachmentPopover = false
+        isShowingCameraPicker = true
       }
-      .buttonStyle(.plain)
-      .padding(12)
+      .disabled(
+        !UIImagePickerController.isSourceTypeAvailable(.camera)
+          || remainingImageSlots == 0
+      )
+    #endif
+
+    Button("Photos", picoSystemImage: "photo.on.rectangle") {
+      isShowingAttachmentPopover = false
+      isShowingPhotoPicker = true
     }
-    .accessibilityLabel("Add attachment")
+    .disabled(remainingImageSlots == 0)
+
+    Button("Files", picoSystemImage: "folder") {
+      isShowingAttachmentPopover = false
+      isShowingFileImporter = true
+    }
+    .disabled(remainingImageSlots == 0)
   }
 }
 
