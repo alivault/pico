@@ -187,7 +187,32 @@ struct ComposerView: View {
       .onChange(of: model.composerText) {
         model.saveDraft()
       }
+      #if os(macOS)
+        .onKeyPress(.return, phases: .down, action: handleComposerReturn)
+      #endif
   }
+
+  #if os(macOS)
+    private func handleComposerReturn(_ keyPress: KeyPress) -> KeyPress.Result {
+      if keyPress.modifiers.contains(.shift)
+        || keyPress.modifiers.contains(.command)
+        || keyPress.modifiers.contains(.control) {
+        return .ignored
+      }
+
+      guard !model.isSubmitting, hasPromptContent else { return .handled }
+
+      let streamingBehavior: StreamingBehavior?
+      if isQueueingPrompt {
+        streamingBehavior = keyPress.modifiers.contains(.option) ? .followUp : .steer
+      } else {
+        streamingBehavior = nil
+      }
+
+      submit(streamingBehavior: streamingBehavior)
+      return .handled
+    }
+  #endif
 
   private var abortButton: some View {
     Button(action: abort) {
