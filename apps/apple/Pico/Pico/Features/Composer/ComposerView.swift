@@ -1,3 +1,4 @@
+import HotSwiftUI
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -8,7 +9,16 @@ import UniformTypeIdentifiers
   import AppKit
 #endif
 
+#if os(macOS)
+  private let composerCardCornerRadius: CGFloat = 16
+  private let composerTextFieldMinHeight: CGFloat = 52
+#else
+  private let composerCardCornerRadius: CGFloat = 28
+  private let composerTextFieldMinHeight: CGFloat = 64
+#endif
+
 struct ComposerView: View {
+  @ObserveInjection private var forceRedraw
   @Bindable var model: AppModel
   @FocusState private var isPromptFocused: Bool
   @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -115,7 +125,16 @@ struct ComposerView: View {
       composerTextField
         .padding(.horizontal, 18)
         .padding(.top, model.composerGitComments.isEmpty ? 16 : 8)
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+        #if os(macOS)
+          .padding(.bottom, 6)
+        #else
+          .padding(.bottom, 10)
+        #endif
+        .frame(
+          maxWidth: .infinity,
+          minHeight: composerTextFieldMinHeight,
+          alignment: .topLeading
+        )
 
       HStack(alignment: .center, spacing: 10) {
         ComposerAttachmentMenu(
@@ -139,18 +158,23 @@ struct ComposerView: View {
           abortButton
         }
       }
-      .padding(.horizontal, 14)
-      .padding(.bottom, 14)
+      .controlSize(.large)
+      .padding(.horizontal, 8)
+      .padding(.bottom, 8)
     }
     .background {
-      RoundedRectangle(cornerRadius: 28, style: .continuous)
+      RoundedRectangle(cornerRadius: composerCardCornerRadius, style: .continuous)
         .fill(.clear)
-        .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .contentShape(
+          RoundedRectangle(cornerRadius: composerCardCornerRadius, style: .continuous)
+        )
         .onTapGesture {
           isPromptFocused = true
         }
     }
-    .picoGlassEffect(in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    .picoGlassEffect(
+      in: RoundedRectangle(cornerRadius: composerCardCornerRadius, style: .continuous)
+    )
   }
 
   private var composerTextField: some View {
@@ -167,9 +191,8 @@ struct ComposerView: View {
 
   private var abortButton: some View {
     Button(action: abort) {
-      PicoIcon(systemName: "stop.fill")
+      Image(systemName: "stop.fill")
         .font(.system(size: 13, weight: .bold))
-        .frame(width: 30, height: 30)
     }
     .picoGlassButtonStyle(.prominent, shape: .circle)
     .tint(.red)
@@ -191,8 +214,6 @@ struct ComposerView: View {
       Text(behavior.label)
         .font(.body)
         .foregroundStyle(.primary)
-        .padding(.horizontal, 10)
-        .frame(height: 30)
         .contentShape(Capsule())
     }
     .picoGlassButtonStyle(shape: .capsule)
@@ -228,12 +249,9 @@ struct ComposerView: View {
   private var sendButton: some View {
     Button(action: submit) {
       sendButtonLabel
-        .frame(width: 34, height: 34)
         .contentShape(Circle())
     }
     .picoGlassButtonStyle(.prominent, shape: .circle)
-    .frame(width: 34, height: 34)
-    .clipShape(Circle())
     .tint(Color.accentColor)
     .foregroundStyle(.white)
     .opacity(submitDisabled ? 0.45 : 1)
@@ -419,36 +437,53 @@ private struct ComposerGitCommentChip: View {
 }
 
 private struct ComposerAttachmentMenu: View {
+  @ObserveInjection private var forceRedraw
   @Binding var isShowingPhotoPicker: Bool
   @Binding var isShowingCameraPicker: Bool
   @Binding var isShowingFileImporter: Bool
+  @State private var isShowingAttachmentPopover = false
   var remainingImageSlots: Int
 
   var body: some View {
-    Menu {
-      #if os(iOS)
-        Button("Camera", picoSystemImage: "camera") {
-          isShowingCameraPicker = true
-        }
-        .disabled(
-          !UIImagePickerController.isSourceTypeAvailable(.camera) || remainingImageSlots == 0)
-      #endif
-
-      Button("Photos", picoSystemImage: "photo.on.rectangle") {
-        isShowingPhotoPicker = true
-      }
-      .disabled(remainingImageSlots == 0)
-
-      Button("Files", picoSystemImage: "folder") {
-        isShowingFileImporter = true
-      }
-      .disabled(remainingImageSlots == 0)
+    Button {
+      isShowingAttachmentPopover.toggle()
     } label: {
       PicoIcon(systemName: "plus")
         .font(.headline)
-        .frame(width: 34, height: 34)
     }
-    .picoGlassButtonStyle(shape: .circle)
+    #if os(macOS)
+      .buttonStyle(.bordered)
+    #else
+      .picoGlassButtonStyle(shape: .circle)
+    #endif
+    .popover(isPresented: $isShowingAttachmentPopover, arrowEdge: .bottom) {
+      VStack(alignment: .leading, spacing: 10) {
+        #if os(iOS)
+          Button("Camera", picoSystemImage: "camera") {
+            isShowingAttachmentPopover = false
+            isShowingCameraPicker = true
+          }
+          .disabled(
+            !UIImagePickerController.isSourceTypeAvailable(.camera)
+              || remainingImageSlots == 0
+          )
+        #endif
+
+        Button("Photos", picoSystemImage: "photo.on.rectangle") {
+          isShowingAttachmentPopover = false
+          isShowingPhotoPicker = true
+        }
+        .disabled(remainingImageSlots == 0)
+
+        Button("Files", picoSystemImage: "folder") {
+          isShowingAttachmentPopover = false
+          isShowingFileImporter = true
+        }
+        .disabled(remainingImageSlots == 0)
+      }
+      .buttonStyle(.plain)
+      .padding(12)
+    }
     .accessibilityLabel("Add attachment")
   }
 }

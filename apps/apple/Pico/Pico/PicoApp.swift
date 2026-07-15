@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 #if os(iOS)
@@ -14,6 +15,20 @@ extension Notification.Name {
 
 @main
 struct PicoApp: App {
+  init() {
+    #if DEBUG
+      #if os(iOS)
+        _ = Bundle(
+          path: "/Applications/InjectionIII.app/Contents/Resources/iOSInjection.bundle"
+        )?.load()
+      #elseif os(macOS)
+        _ = Bundle(
+          path: "/Applications/InjectionIII.app/Contents/Resources/macOSInjection.bundle"
+        )?.load()
+      #endif
+    #endif
+  }
+
   #if os(iOS)
     @UIApplicationDelegateAdaptor(PicoAppDelegate.self) private var appDelegate
   #endif

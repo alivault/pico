@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F70000000000000000000001 /* HotSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F70000000000000000000002 /* HotSwiftUI */; };
 		E60000000000000000000001 /* Core/UI/PicoIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60000000000000000000002 /* Core/UI/PicoIcon.swift */; };
 		E61000000000000000000001 /* Core/UI/PlatformCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61000000000000000000002 /* Core/UI/PlatformCompatibility.swift */; };
 		E90000000000000000000001 /* App/AppToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90000000000000000000002 /* App/AppToast.swift */; };
@@ -347,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E60000000000000000000003 /* LucideSwift in Frameworks */,
+				F70000000000000000000001 /* HotSwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -584,6 +586,7 @@
 			name = Pico;
 			packageProductDependencies = (
 				E60000000000000000000004 /* LucideSwift */,
+				F70000000000000000000002 /* HotSwiftUI */,
 			);
 			productName = Pico;
 			productReference = 8826B757F97B59CD37A46C73 /* Pico.app */;
@@ -619,6 +622,7 @@
 			mainGroup = F729E66E55007E055E036E6F;
 			packageReferences = (
 				E60000000000000000000005 /* XCLocalSwiftPackageReference "LucideSwift" */,
+				F70000000000000000000003 /* XCRemoteSwiftPackageReference "HotSwiftUI" */,
 			);
 			productRefGroup = B65B87CF128A44E5BA45FFD4 /* Products */;
 			projectDirPath = "";
@@ -833,11 +837,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		F70000000000000000000003 /* XCRemoteSwiftPackageReference "HotSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/johnno1962/HotSwiftUI.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.5;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		E60000000000000000000004 /* LucideSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E60000000000000000000005 /* XCLocalSwiftPackageReference "LucideSwift" */;
 			productName = LucideSwift;
+		};
+		F70000000000000000000002 /* HotSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F70000000000000000000003 /* XCRemoteSwiftPackageReference "HotSwiftUI" */;
+			productName = HotSwiftUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 
@@ -870,6 +890,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				EMIT_FRONTEND_COMMAND_LINES = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1002,12 +1023,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS-Debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZJDZ622NMU;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_PREVIEWS = YES;
+				OTHER_LDFLAGS = (
+					-Xlinker,
+					-interposable,
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pico/Resources/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = Pico/Resources/Info-macOS.plist;

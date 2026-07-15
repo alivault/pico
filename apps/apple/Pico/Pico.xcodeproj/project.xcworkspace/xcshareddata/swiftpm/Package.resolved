@@ -1,0 +1,15 @@
+{
+  "originHash" : "3bbec73aef5c274760ea61396621a703c6d0bd690a06b507d0b838308060cdac",
+  "pins" : [
+    {
+      "identity" : "hotswiftui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/johnno1962/HotSwiftUI.git",
+      "state" : {
+        "revision" : "868e889cf8d79e1641bdd9bc3816d0a245a145bc",
+        "version" : "1.2.5"
+      }
+    }
+  ],
+  "version" : 3
+}
