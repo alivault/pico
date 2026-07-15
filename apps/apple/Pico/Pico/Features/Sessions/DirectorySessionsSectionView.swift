@@ -259,7 +259,6 @@ struct DirectorySessionsFullListView: View {
           directory: snapshot.directory,
           model: model,
           openDetail: openDetail,
-          showsSelection: showsSessionSelection,
           contextSelectionCount: contextSelectionCount(for: entry),
           deleteContextSelection: { deleteContextSelection(including: entry) }
         )
@@ -602,7 +601,6 @@ struct DirectorySessionRowButton: View {
   var directory: String
   @Bindable var model: AppModel
   var openDetail: () -> Void = {}
-  var showsSelection = true
   var contextSelectionCount = 1
   var deleteContextSelection: () -> Void = {}
   @State private var renameTitle = ""
@@ -611,7 +609,6 @@ struct DirectorySessionRowButton: View {
   var body: some View {
     rowControl
       .buttonStyle(.plain)
-      .listRowBackground(selectedRowBackground)
       #if os(macOS)
         .contextMenu {
           if canMutateSession {
@@ -676,27 +673,6 @@ struct DirectorySessionRowButton: View {
       } label: {
         SessionRowView(entry: entry)
       }
-    #endif
-  }
-
-  private var selectedRowBackground: Color? {
-    #if os(macOS)
-      return nil
-    #else
-      guard showsSelection,
-        !model.isComposingNewSession,
-        let selectionId = entry.selectionId
-      else {
-        return nil
-      }
-      let activeSelectionIds = [
-        model.selectedSessionId,
-        model.sessionState.sessionId,
-        model.sessionState.sessionFile,
-        model.sessionState.sessionKey,
-      ].compactMap { $0 }
-      guard activeSelectionIds.contains(selectionId) else { return nil }
-      return Color.accentColor.opacity(0.16)
     #endif
   }
 
