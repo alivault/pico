@@ -5,8 +5,6 @@ import UniformTypeIdentifiers
 
 #if os(iOS)
   import UIKit
-#elseif os(macOS)
-  import AppKit
 #endif
 
 #if os(macOS)
@@ -519,53 +517,100 @@ struct ContextUsageRingMenu: View {
   var isLoading = false
   var compactSession: () -> Void
   var showsCompactAction = true
+  @State private var isShowingPopover = false
 
   var body: some View {
-    Menu {
-      if showsCompactAction {
-        Section("Session") {
-          Button(action: compactSession) {
-            Label(
-              isCompacting ? "Compacting…" : "Compact context",
-              picoSystemImage: "summary",
-              size: 20
-            )
-          }
-          .disabled(isCompacting)
-        }
+    #if os(macOS)
+      Button {
+        isShowingPopover.toggle()
+      } label: {
+        indicatorLabel
       }
+      .buttonStyle(.plain)
+      .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+        VStack(alignment: .leading, spacing: 10) {
+          if showsCompactAction {
+            Button(action: compactSession) {
+              Label(
+                isCompacting ? "Compacting…" : "Compact context",
+                picoSystemImage: "summary",
+                size: 20
+              )
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isCompacting)
 
+            Divider()
+          }
+
+          contextUsageDetails
+        }
+        .padding(12)
+        .frame(minWidth: 220, alignment: .leading)
+      }
+      .accessibilityLabel(accessibilityLabel)
+      .help(accessibilityLabel)
+    #else
+      Menu {
+        if showsCompactAction {
+          Section("Session") {
+            Button(action: compactSession) {
+              Label(
+                isCompacting ? "Compacting…" : "Compact context",
+                picoSystemImage: "summary",
+                size: 20
+              )
+            }
+            .disabled(isCompacting)
+          }
+        }
+
+        contextUsageDetails
+      } label: {
+        indicatorLabel
+      }
+      .menuIndicator(.hidden)
+      .picoContextUsageMenuStyle()
+      .accessibilityLabel(accessibilityLabel)
+      .help(accessibilityLabel)
+    #endif
+  }
+
+  private var indicatorLabel: some View {
+    ZStack {
       if showsLoadingIndicator {
-        Text("Loading context usage…")
-      } else if let snapshot {
+        ProgressView()
+          .controlSize(.small)
+      } else {
+        ContextUsageRing(percent: snapshot?.percent)
+      }
+    }
+    .frame(width: 20, height: 20)
+    .frame(width: 30, height: 30)
+    .contentShape(Circle())
+  }
+
+  @ViewBuilder
+  private var contextUsageDetails: some View {
+    if showsLoadingIndicator {
+      Text("Loading context usage…")
+    } else if let snapshot {
+      #if os(iOS)
         Section("Context window") {
           Text(snapshot.displayPercent)
           Text(snapshot.displayTokens)
         }
-      } else {
-        Text("Context usage unavailable")
-      }
-    } label: {
-      ZStack {
-        if showsLoadingIndicator {
-          ProgressView()
-            .controlSize(.small)
-        } else {
-          #if os(macOS)
-            ContextUsageRingImage(percent: snapshot?.percent)
-          #else
-            ContextUsageRing(percent: snapshot?.percent)
-          #endif
-        }
-      }
-      .frame(width: 20, height: 20)
-      .frame(width: 30, height: 30)
-      .contentShape(Circle())
+      #else
+        Text("Context window")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.secondary)
+        Text(snapshot.displayPercent)
+        Text(snapshot.displayTokens)
+      #endif
+    } else {
+      Text("Context usage unavailable")
     }
-    .menuIndicator(.hidden)
-    .picoContextUsageMenuStyle()
-    .accessibilityLabel(accessibilityLabel)
-    .help(accessibilityLabel)
   }
 
   private var snapshot: ContextUsageSnapshot? {
@@ -617,32 +662,6 @@ private struct ContextUsageRing: View {
     return .accentColor
   }
 }
-
-#if os(macOS)
-  private struct ContextUsageRingImage: View {
-    var percent: Double?
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-      if let image = renderedImage {
-        Image(nsImage: image)
-          .resizable()
-          .frame(width: 20, height: 20)
-      } else {
-        Image(picoSystemName: "circle", pointSize: 20)
-      }
-    }
-
-    private var renderedImage: NSImage? {
-      let renderer = ImageRenderer(
-        content: ContextUsageRing(percent: percent)
-          .environment(\.colorScheme, colorScheme)
-      )
-      renderer.scale = 2
-      return renderer.nsImage
-    }
-  }
-#endif
 
 private struct ContextUsageSnapshot {
   var tokens: Double?
