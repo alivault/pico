@@ -244,7 +244,13 @@ struct DirectorySessionsFullListView: View {
 
   @ViewBuilder
   private var sessionsListContent: some View {
-    if snapshot.sessions.isEmpty {
+    if snapshot.sessions.isEmpty, isLoading {
+      ContentUnavailableView(
+        "Loading sessions",
+        picoSystemImage: "clock",
+        description: Text("Sessions are still loading.")
+      )
+    } else if snapshot.sessions.isEmpty {
       ContentUnavailableView(
         "No sessions",
         picoSystemImage: "text.bubble",
@@ -265,6 +271,10 @@ struct DirectorySessionsFullListView: View {
         .tag(entry.id)
       }
     }
+  }
+
+  private var isLoading: Bool {
+    model.loadingDirectorySessionIndexes.contains(directory)
   }
 
   private var directoryNavigationTitle: String {
