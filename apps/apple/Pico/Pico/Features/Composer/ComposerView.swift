@@ -464,36 +464,22 @@ private struct ComposerAttachmentMenu: View {
   @Binding var isShowingPhotoPicker: Bool
   @Binding var isShowingCameraPicker: Bool
   @Binding var isShowingFileImporter: Bool
-  @State private var isShowingAttachmentPopover = false
   var remainingImageSlots: Int
 
   var body: some View {
+    Menu {
+      attachmentActions
+    } label: {
+      attachmentLabel
+    }
+    .menuIndicator(.hidden)
     #if os(macOS)
-      Menu {
-        attachmentActions
-      } label: {
-        attachmentLabel
-      }
-      .menuIndicator(.hidden)
       .buttonStyle(.bordered)
       .fixedSize()
-      .accessibilityLabel("Add attachment")
     #else
-      Button {
-        isShowingAttachmentPopover.toggle()
-      } label: {
-        attachmentLabel
-      }
       .picoGlassButtonStyle(shape: .circle)
-      .popover(isPresented: $isShowingAttachmentPopover, arrowEdge: .bottom) {
-        VStack(alignment: .leading, spacing: 10) {
-          attachmentActions
-        }
-        .buttonStyle(.plain)
-        .padding(12)
-      }
-      .accessibilityLabel("Add attachment")
     #endif
+    .accessibilityLabel("Add attachment")
   }
 
   @ViewBuilder
@@ -511,7 +497,6 @@ private struct ComposerAttachmentMenu: View {
   private var attachmentActions: some View {
     #if os(iOS)
       Button("Camera", picoSystemImage: "camera") {
-        isShowingAttachmentPopover = false
         isShowingCameraPicker = true
       }
       .disabled(
@@ -521,13 +506,11 @@ private struct ComposerAttachmentMenu: View {
     #endif
 
     Button("Photos", picoSystemImage: "photo.on.rectangle") {
-      isShowingAttachmentPopover = false
       isShowingPhotoPicker = true
     }
     .disabled(remainingImageSlots == 0)
 
     Button("Files", picoSystemImage: "folder") {
-      isShowingAttachmentPopover = false
       isShowingFileImporter = true
     }
     .disabled(remainingImageSlots == 0)
