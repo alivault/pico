@@ -215,7 +215,7 @@ struct ComposerView: View {
   private var abortButton: some View {
     Button(action: abort) {
       Image(systemName: "stop.fill")
-        .font(.system(size: 13, weight: .bold))
+        .font(.system(size: 20, weight: .bold))
     }
     .picoGlassButtonStyle(.prominent, shape: .circle)
     .tint(.red)
