@@ -187,30 +187,28 @@ struct DirectorySessionsFullListView: View {
       .toolbar {
         #if os(iOS)
           ToolbarItemGroup(placement: .picoTrailing) {
-            ControlGroup {
-              Button(action: showFiles) {
-                PicoIcon(systemName: "folder", size: 20)
-              }
-              .accessibilityLabel(
-                "Files for \(DirectoryPathFormatter.folderName(directory))"
-              )
-              .help("Toggle Files Sidebar")
-
-              Menu {
-                Button(action: showPurgeSheet) {
-                  Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
-                }
-
-                Button(role: .destructive, action: removeDirectory) {
-                  Label("Remove Directory", picoSystemImage: "minus.circle", size: 20)
-                }
-              } label: {
-                Image(picoSystemName: "ellipsis")
-              }
-              .accessibilityLabel(
-                "Actions for \(DirectoryPathFormatter.folderName(directory))"
-              )
+            Button(action: showFiles) {
+              Label("Files", picoSystemImage: "folder", size: 20)
             }
+            .accessibilityLabel(
+              "Files for \(DirectoryPathFormatter.folderName(directory))"
+            )
+            .help("Toggle Files Sidebar")
+
+            Menu {
+              Button(action: showPurgeSheet) {
+                Label("Purge Sessions…", picoSystemImage: "trash", size: 20)
+              }
+
+              Button(role: .destructive, action: removeDirectory) {
+                Label("Remove Directory", picoSystemImage: "minus.circle", size: 20)
+              }
+            } label: {
+              Image(picoSystemName: "ellipsis")
+            }
+            .accessibilityLabel(
+              "Actions for \(DirectoryPathFormatter.folderName(directory))"
+            )
           }
         #endif
       }
