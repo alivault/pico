@@ -4,13 +4,27 @@ Pico is a local, keyboard-friendly workspace for Pi coding-agent sessions, avail
 
 It gives you a persistent session browser, a live conversation shell, git tools, and project-aware prompt helpers in one app.
 
+## Browser workspace
+
 ![Pico workspace showing the session browser, conversation shell, composer, and git tools](public/screenshots/pico-workspace.png)
 
 ![Pico workspace showing project-aware context and coding-agent workflow](public/screenshots/pico-workspace-alt.png)
 
-| Dark mobile                                                                  | Light mobile                                                                      |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| ![Pico mobile session view in dark mode](public/screenshots/pico-mobile.png) | ![Pico mobile session view in light mode](public/screenshots/pico-mobile-alt.png) |
+| Dark mobile browser                                                     | Light mobile browser                                                         |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| ![Pico mobile browser in dark mode](public/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](public/screenshots/pico-mobile-alt.png) |
+
+## Native Apple clients
+
+Pico also includes a shared SwiftUI client with platform-native layouts for macOS and iOS. Both clients connect to the same local Pico server, stream live session updates, manage conversations, and provide native Git and project-file workflows.
+
+| macOS dark                                                                       | macOS light                                                                        |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| ![Pico native macOS client in dark mode](public/screenshots/pico-macos-dark.jpg) | ![Pico native macOS client in light mode](public/screenshots/pico-macos-light.jpg) |
+
+| iOS dark                                                                     | iOS light                                                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| ![Pico native iOS client in dark mode](public/screenshots/pico-ios-dark.png) | ![Pico native iOS client in light mode](public/screenshots/pico-ios-light.png) |
 
 ## What Pico gives you
 
@@ -27,7 +41,7 @@ It gives you a persistent session browser, a live conversation shell, git tools,
 
 ## Built on Pi
 
-Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.80.3` for reproducible installs. You do not need a separate global Pi install for normal use.
+Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.80.6` for reproducible installs. You do not need a separate global Pi install for normal use.
 
 If you intentionally want to test Pico against a different Pi SDK checkout or install, set:
 
@@ -94,9 +108,17 @@ Then open:
 http://localhost:3141
 ```
 
-## Native macOS and iOS app
+## Developing the native macOS and iOS app
 
-The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. It connects to an already-running Pico server over HTTP JSON and SSE; it does not embed the Pi runtime.
+The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. It connects to an already-running Pico server over HTTP JSON and SSE; it does not embed the Pi runtime. The native clients are currently built from source and are not distributed through the npm package.
+
+Open the shared project in Xcode:
+
+```bash
+open apps/apple/Pico/Pico.xcodeproj
+```
+
+Select the `Pico` scheme and a macOS, iPhone, or iPad destination.
 
 Build and launch the macOS app:
 
