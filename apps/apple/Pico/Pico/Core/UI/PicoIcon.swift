@@ -314,17 +314,43 @@ enum PicoIconName: Sendable {
 struct PicoSelectionMenuLabel: View {
   var title: String
   var isSelected: Bool
-  var size: CGFloat = 20
 
   var body: some View {
     Label {
       Text(title)
     } icon: {
-      Image(picoSystemName: "checkmark", pointSize: size)
-        .opacity(isSelected ? 1 : 0)
+      selectionIcon
         .accessibilityHidden(true)
     }
   }
+
+  private var selectionIcon: Image {
+    if isSelected {
+      return Image(picoSystemName: "checkmark", pointSize: 20)
+    }
+
+    #if os(iOS)
+      return Image(uiImage: Self.emptyIcon)
+    #else
+      return Image(nsImage: Self.emptyIcon)
+    #endif
+  }
+
+  #if os(iOS)
+    private static let emptyIcon: UIImage = {
+      let renderer = ImageRenderer(
+        content: Color.clear.frame(width: 20, height: 20)
+      )
+      return renderer.uiImage ?? UIImage()
+    }()
+  #else
+    private static let emptyIcon: NSImage = {
+      let renderer = ImageRenderer(
+        content: Color.clear.frame(width: 20, height: 20)
+      )
+      return renderer.nsImage ?? NSImage(size: CGSize(width: 20, height: 20))
+    }()
+  #endif
 }
 
 struct PicoIcon: View {
