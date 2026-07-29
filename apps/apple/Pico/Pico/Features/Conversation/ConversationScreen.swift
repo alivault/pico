@@ -111,11 +111,11 @@ struct ConversationScreen: View {
             subtitle: model.conversationHeaderSubtitle
           )
         }
-        .frame(
-          minWidth: 120,
-          maxWidth: navigationTitleMaxWidth,
-          alignment: .leading
-        )
+        #if os(iOS)
+          .frame(width: navigationTitleMaxWidth, alignment: .leading)
+        #else
+          .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+        #endif
         .allowsHitTesting(false)
       }
       #if os(iOS)
