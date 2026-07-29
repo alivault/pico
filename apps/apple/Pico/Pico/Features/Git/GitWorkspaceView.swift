@@ -555,15 +555,10 @@ struct GitWorkspaceToolbar: View {
             Button {
               checkoutBranch(branch.name, false, nil, false)
             } label: {
-              if branch.current {
-                Label(
-                  GitFormatting.localBranchMenuTitle(branch),
-                  picoSystemImage: "checkmark",
-                  size: 20
-                )
-              } else {
-                Text(GitFormatting.localBranchMenuTitle(branch))
-              }
+              PicoSelectionMenuLabel(
+                title: GitFormatting.localBranchMenuTitle(branch),
+                isSelected: branch.current
+              )
             }
             .disabled(branch.current)
           }
@@ -585,10 +580,11 @@ struct GitWorkspaceToolbar: View {
                 !localExists
               )
             } label: {
-              if isCurrent {
-                Label(branch.name, picoSystemImage: "checkmark", size: 20)
-              } else if localExists {
-                Text(branch.name)
+              if localExists || isCurrent {
+                PicoSelectionMenuLabel(
+                  title: branch.name,
+                  isSelected: isCurrent
+                )
               } else {
                 Label(branch.name, picoSystemImage: "plus", size: 20)
               }

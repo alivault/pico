@@ -311,6 +311,22 @@ enum PicoIconName: Sendable {
   }
 }
 
+struct PicoSelectionMenuLabel: View {
+  var title: String
+  var isSelected: Bool
+  var size: CGFloat = 20
+
+  var body: some View {
+    Label {
+      Text(title)
+    } icon: {
+      Image(picoSystemName: "checkmark", pointSize: size)
+        .opacity(isSelected ? 1 : 0)
+        .accessibilityHidden(true)
+    }
+  }
+}
+
 struct PicoIcon: View {
   var icon: PicoIconName
   var size: CGFloat = 20

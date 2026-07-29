@@ -12,11 +12,10 @@ struct ModelMenuView: View {
           Menu(provider) {
             ForEach(models(for: provider), id: \.stableIdentifier) { option in
               Button(action: { select(option) }) {
-                if selectedModel?.stableIdentifier == option.stableIdentifier {
-                  Label(option.displayName, picoSystemImage: "checkmark")
-                } else {
-                  Text(option.displayName)
-                }
+                PicoSelectionMenuLabel(
+                  title: option.displayName,
+                  isSelected: selectedModel?.stableIdentifier == option.stableIdentifier
+                )
               }
             }
           }

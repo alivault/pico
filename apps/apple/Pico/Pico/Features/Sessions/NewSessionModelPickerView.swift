@@ -10,22 +10,20 @@ struct NewSessionModelPickerView: View {
         Text("No models")
       } else {
         Button(action: { selectedModel = nil }) {
-          if selectedModel == nil {
-            Label("Default", picoSystemImage: "checkmark")
-          } else {
-            Text("Default")
-          }
+          PicoSelectionMenuLabel(
+            title: "Default",
+            isSelected: selectedModel == nil
+          )
         }
 
         ForEach(providerNames, id: \.self) { provider in
           Menu(provider) {
             ForEach(models(for: provider), id: \.stableIdentifier) { model in
               Button(action: { selectedModel = model }) {
-                if selectedModel?.stableIdentifier == model.stableIdentifier {
-                  Label(model.displayName, picoSystemImage: "checkmark")
-                } else {
-                  Text(model.displayName)
-                }
+                PicoSelectionMenuLabel(
+                  title: model.displayName,
+                  isSelected: selectedModel?.stableIdentifier == model.stableIdentifier
+                )
               }
             }
           }

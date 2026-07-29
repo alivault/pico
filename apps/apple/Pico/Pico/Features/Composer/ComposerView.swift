@@ -918,14 +918,10 @@ private struct ComposerDirectorySelectorView: View {
   }
 
   private func directoryMenuLabel(for directory: String) -> some View {
-    let selected = isSelected(directory)
-    return Label {
-      Text(DirectoryPathFormatter.displayPath(directory))
-    } icon: {
-      Image(picoSystemName: "checkmark", pointSize: 20)
-        .opacity(selected ? 1 : 0)
-        .accessibilityHidden(true)
-    }
+    PicoSelectionMenuLabel(
+      title: DirectoryPathFormatter.displayPath(directory),
+      isSelected: isSelected(directory)
+    )
   }
 
   private func select(_ directory: String) {
@@ -959,11 +955,10 @@ private struct ComposerGitBranchSelectorView: View {
         } else {
           ForEach(model.composerGitLocalBranches) { branch in
             Button(action: { switchBranch(branch) }) {
-              if branch.current {
-                Label(branchTitle(branch), picoSystemImage: "checkmark", size: 20)
-              } else {
-                Text(branchTitle(branch))
-              }
+              PicoSelectionMenuLabel(
+                title: branchTitle(branch),
+                isSelected: branch.current
+              )
             }
             .disabled(model.isCheckingOutGitBranch)
           }

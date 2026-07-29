@@ -728,11 +728,10 @@ private struct ConversationHeaderOptionsMenu: View {
           Menu(provider) {
             ForEach(models(for: provider), id: \.stableIdentifier) { option in
               Button(action: { selectModel(option) }) {
-                if selectedModel?.stableIdentifier == option.stableIdentifier {
-                  Label(option.displayName, picoSystemImage: "checkmark", size: 20)
-                } else {
-                  Text(option.displayName)
-                }
+                PicoSelectionMenuLabel(
+                  title: option.displayName,
+                  isSelected: selectedModel?.stableIdentifier == option.stableIdentifier
+                )
               }
             }
           }
@@ -749,11 +748,10 @@ private struct ConversationHeaderOptionsMenu: View {
     Menu {
       ForEach(model.composerThinkingLevels, id: \.self) { level in
         Button(action: { selectThinkingLevel(level) }) {
-          if level == model.sessionState.thinkingLevel {
-            Label(Self.reasoningLabel(for: level), picoSystemImage: "checkmark", size: 20)
-          } else {
-            Text(Self.reasoningLabel(for: level))
-          }
+          PicoSelectionMenuLabel(
+            title: Self.reasoningLabel(for: level),
+            isSelected: level == model.sessionState.thinkingLevel
+          )
         }
       }
     } label: {

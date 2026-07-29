@@ -7,11 +7,10 @@ struct ThinkingMenuView: View {
     Menu {
       ForEach(model.composerThinkingLevels, id: \.self) { level in
         Button(action: { select(level) }) {
-          if level == model.sessionState.thinkingLevel {
-            Label(Self.label(for: level), picoSystemImage: "checkmark")
-          } else {
-            Text(Self.label(for: level))
-          }
+          PicoSelectionMenuLabel(
+            title: Self.label(for: level),
+            isSelected: level == model.sessionState.thinkingLevel
+          )
         }
       }
     } label: {
