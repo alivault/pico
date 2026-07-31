@@ -510,11 +510,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         Err(error) => (None, Some(error.to_string())),
     };
     let control_status = Arc::new(RwLock::new(initial_status(
-        config
-            .listen_hosts
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
+        listeners.iter().map(|(host, _)| host.to_string()).collect(),
         config.port,
     )));
     let context = ServerContext {
@@ -647,13 +643,22 @@ async fn bind_listeners(
     let mut listeners = Vec::with_capacity(hosts.len());
     for host in hosts {
         let address = SocketAddr::new(*host, port);
-        let listener = TcpListener::bind(address).await.map_err(|error| {
-            std::io::Error::new(
-                error.kind(),
-                format!("could not listen on {address}: {error}"),
-            )
-        })?;
-        listeners.push((*host, listener));
+        match TcpListener::bind(address).await {
+            Ok(listener) => listeners.push((*host, listener)),
+            Err(error) if listeners.is_empty() => {
+                return Err(std::io::Error::new(
+                    error.kind(),
+                    format!("could not listen on {address}: {error}"),
+                ));
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %address,
+                    %error,
+                    "optional Pico listener is unavailable; continuing with local access"
+                );
+            }
+        }
     }
     Ok(listeners)
 }
@@ -5869,6 +5874,28 @@ for line in sys.stdin:
         assert_eq!(health["pi"]["available"], true);
         assert_eq!(health["piBridge"]["available"], false);
         assert_eq!(health["web"]["available"], false);
+    }
+
+    #[tokio::test]
+    async fn unavailable_optional_listener_preserves_local_access() {
+        let occupied = TcpListener::bind("[::1]:0")
+            .await
+            .expect("occupy optional address");
+        let port = occupied.local_addr().expect("occupied address").port();
+        let listeners = bind_listeners(
+            &[
+                "127.0.0.1".parse().expect("local address"),
+                "::1".parse().expect("optional address"),
+            ],
+            port,
+        )
+        .await
+        .expect("local listener");
+        assert_eq!(listeners.len(), 1);
+        assert_eq!(
+            listeners[0].1.local_addr().expect("local address").ip(),
+            "127.0.0.1".parse::<std::net::IpAddr>().expect("address")
+        );
     }
 
     #[tokio::test]
