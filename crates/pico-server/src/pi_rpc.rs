@@ -180,6 +180,30 @@ impl PiRpcClient {
         self.request_with_timeout(command, None).await
     }
 
+    pub async fn notify(&self, command: Value) -> Result<(), PiRpcError> {
+        if !self.is_running() {
+            return Err(PiRpcError::ProcessExited);
+        }
+        let command = match command {
+            Value::Object(command) if command.contains_key("type") => command,
+            Value::Object(_) => {
+                return Err(PiRpcError::InvalidCommand(
+                    "Pi RPC command must contain a type",
+                ))
+            }
+            _ => {
+                return Err(PiRpcError::InvalidCommand(
+                    "Pi RPC command must be an object",
+                ))
+            }
+        };
+        let encoded = encode_command(command)?;
+        let mut stdin = self.stdin.lock().await;
+        stdin.write_all(&encoded).await?;
+        stdin.flush().await?;
+        Ok(())
+    }
+
     pub async fn request_with_timeout(
         &self,
         command: Value,
@@ -472,6 +496,20 @@ done
             .expect("event timeout")
             .expect("event");
         assert_eq!(event["type"], "agent_settled");
+        client
+            .notify(serde_json::json!({
+                "type": "extension_ui_response",
+                "id": "ui-request",
+                "confirmed": true
+            }))
+            .await
+            .expect("send notification");
+        let notification_response = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("notification timeout")
+            .expect("notification response");
+        assert_eq!(notification_response["id"], "ui-request");
+        assert_eq!(notification_response["command"], "extension_ui_response");
         client.shutdown().await.expect("shutdown");
         assert!(!client.is_running());
         std::fs::remove_dir_all(directory).expect("remove fake Pi directory");

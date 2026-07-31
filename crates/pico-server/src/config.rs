@@ -7,6 +7,7 @@ pub struct ServerConfig {
     pub host: IpAddr,
     pub port: u16,
     pub pi_binary: PathBuf,
+    pub pi_bridge_binary: Option<PathBuf>,
     pub agent_dir: PathBuf,
     pub paths: ServerPaths,
     pub allowed_origins: Vec<String>,
@@ -26,6 +27,7 @@ impl ServerConfig {
         host: IpAddr,
         port: u16,
         pi_binary: PathBuf,
+        pi_bridge_binary: Option<PathBuf>,
         data_dir: Option<PathBuf>,
         agent_dir: Option<PathBuf>,
         allowed_origins: Vec<String>,
@@ -35,6 +37,7 @@ impl ServerConfig {
             host,
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            pi_bridge_binary: resolve_pi_bridge_binary(pi_bridge_binary),
             agent_dir: agent_dir.unwrap_or(default_agent_dir()?),
             paths,
             allowed_origins,
@@ -47,12 +50,22 @@ impl ServerConfig {
             host: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            pi_bridge_binary: None,
             agent_dir: PathBuf::from(".pi/agent"),
             paths: ServerPaths::new(data_dir),
             allowed_origins: Vec::new(),
             max_request_bytes: 64 * 1024 * 1024,
         }
     }
+}
+
+fn resolve_pi_bridge_binary(explicit: Option<PathBuf>) -> Option<PathBuf> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    let executable = std::env::current_exe().ok()?;
+    let adjacent = executable.parent()?.join("pico-pi-bridge");
+    adjacent.is_file().then_some(adjacent)
 }
 
 impl ServerPaths {

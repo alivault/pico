@@ -36,13 +36,22 @@ processes and translates their commands/events into Pico's HTTP/SSE contracts.
 This keeps Pi as the compatibility authority while making the persistent Pico
 server a native binary.
 
+Pi's public RPC protocol covers session and agent behavior but does not expose
+credential listing/mutation, OAuth callbacks, model-registry refresh, or
+provider quota lookup. Pico keeps those SDK-only operations in
+`native/pi-bridge.ts`, compiled by Bun into a separate native executable. The
+bridge uses Pi's existing `AuthStorage` and `ModelRegistry`; it does not create a
+second credential store. Rust communicates with it over bounded JSONL, forwards
+OAuth/device-code UI over Pico's existing SSE contract, and owns its lifecycle.
+
 ## Current preview
 
 ```bash
 cargo test --workspace
 pnpm fetch:pi-standalone
 cargo run -p pico-server -- pi-smoke --cwd .
-cargo run -p pico-server -- serve --port 3142
+pnpm build:pi-bridge
+cargo run -p pico-server -- serve --port 3142 --pi-bridge-bin target/pico-pi-bridge
 cargo run -p pico-server -- status
 cargo run -p pico-server -- stop
 ```
@@ -87,14 +96,22 @@ Implemented:
   response cache
 - shared browser/Rust/Swift highlight fixtures that reject arbitrary HTML while
   preserving highlighted text and token colors
+- standalone Bun-compiled Pi bridge for provider lists, API-key mutation,
+  logout, OAuth/device-code flows, model refresh, and Anthropic/Codex usage
+- bounded correlated bridge JSONL, server-owned bridge lifecycle, and existing
+  `~/.pi/agent/auth.json` compatibility without parallel credential storage
+- extension UI request routing over scoped SSE with timeout, cancellation,
+  select/input/confirm/auth responses, and fire-and-forget notifications
+- direct public Pi RPC extension UI response forwarding for session extensions
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
 - daily structured logs and atomically persisted lifecycle state
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
-session indexes, the primary `/events` stream, and core prompt/session mutations,
-but it does not claim auth or static-app parity yet.
+session indexes, the primary `/events` stream, core prompt/session mutations,
+and provider auth/usage/extension UI parity, but it does not claim static-app
+parity yet.
 
 ## Migration order
 

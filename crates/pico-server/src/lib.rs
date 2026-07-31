@@ -1,5 +1,6 @@
 pub mod api;
 pub mod app_state;
+pub mod auth_bridge;
 pub mod config;
 pub mod control;
 pub mod event_hub;

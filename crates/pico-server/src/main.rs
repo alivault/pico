@@ -22,6 +22,8 @@ enum Command {
         port: u16,
         #[arg(long, env = "PICO_PI_BIN", default_value = "pi")]
         pi_bin: PathBuf,
+        #[arg(long, env = "PICO_PI_BRIDGE_BIN")]
+        pi_bridge_bin: Option<PathBuf>,
         #[arg(long, env = "PICO_DATA_DIR")]
         data_dir: Option<PathBuf>,
         #[arg(long, env = "PI_CODING_AGENT_DIR")]
@@ -60,6 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         host: IpAddr::V4(Ipv4Addr::LOCALHOST),
         port: 3141,
         pi_bin: PathBuf::from("pi"),
+        pi_bridge_bin: None,
         data_dir: None,
         agent_dir: None,
         allowed_origins: Vec::new(),
@@ -70,12 +73,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             host,
             port,
             pi_bin,
+            pi_bridge_bin,
             data_dir,
             agent_dir,
             allowed_origins,
         } => {
-            let config =
-                ServerConfig::new(host, port, pi_bin, data_dir, agent_dir, allowed_origins)?;
+            let config = ServerConfig::new(
+                host,
+                port,
+                pi_bin,
+                pi_bridge_bin,
+                data_dir,
+                agent_dir,
+                allowed_origins,
+            )?;
             config.paths.create()?;
             let _log_guard = logging::init(Some(&config.paths.log_dir))?;
             api::serve(config).await?;

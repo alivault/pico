@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, RawQuery, State};
@@ -25,6 +25,7 @@ use tokio_stream::StreamExt;
 use tracing::info;
 
 use crate::app_state::AppState;
+use crate::auth_bridge::{AuthBridge, AuthBridgeError};
 use crate::config::ServerConfig;
 #[cfg(unix)]
 use crate::control::ControlServer;
@@ -67,6 +68,14 @@ struct ServerContext {
     git_runtime: Arc<GitRuntime>,
     terminals: TerminalManager,
     highlighter: Arc<HighlightRuntime>,
+    auth_bridge: Option<Arc<AuthBridge>>,
+    pending_ui_requests: Arc<RwLock<HashMap<String, UiRequestTarget>>>,
+}
+
+#[derive(Clone)]
+enum UiRequestTarget {
+    Pi(Arc<PiRpcClient>),
+    Auth(Arc<AuthBridge>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -371,6 +380,19 @@ struct HighlightRequest {
     language: Value,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct AuthMutationRequest {
+    provider: String,
+    key: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ProviderUsageQuery {
+    provider: Option<String>,
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -400,6 +422,15 @@ impl ApiError {
     }
 }
 
+impl From<AuthBridgeError> for ApiError {
+    fn from(error: AuthBridgeError) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<PiRpcError> for ApiError {
     fn from(error: PiRpcError) -> Self {
         Self {
@@ -424,6 +455,22 @@ impl IntoResponse for ApiError {
 
 pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
     config.paths.create()?;
+    let auth_bridge = match &config.pi_bridge_binary {
+        Some(binary) => Some(
+            AuthBridge::spawn(
+                binary.clone(),
+                config.agent_dir.clone(),
+                std::env::current_dir()?,
+            )
+            .await?,
+        ),
+        None => {
+            tracing::warn!(
+                "standalone Pi auth bridge unavailable; provider auth routes are disabled"
+            );
+            None
+        }
+    };
     #[cfg(unix)]
     let control = ControlServer::bind(&config.paths.control_socket).await?;
     let previous_snapshot = persistence::load(&config.paths.state_file)?;
@@ -463,7 +510,10 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         git_runtime: Arc::new(GitRuntime::default()),
         terminals: TerminalManager::default(),
         highlighter: Arc::new(HighlightRuntime::default()),
+        auth_bridge,
+        pending_ui_requests: Arc::new(RwLock::new(HashMap::new())),
     };
+    attach_auth_bridge_events(&context);
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
     let policy = Arc::new(RequestPolicy::new(
@@ -518,6 +568,11 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     context.control_status.write().await.phase = "stopping".into();
     let _ = shutdown_tx.send(true);
     context.runtimes.shutdown().await;
+    if let Some(auth_bridge) = &context.auth_bridge {
+        if let Err(error) = auth_bridge.shutdown().await {
+            tracing::warn!(%error, "failed to stop Pi auth bridge");
+        }
+    }
     context.terminals.shutdown();
     if let Some(control_task) = control_task {
         let _ = control_task.await;
@@ -547,6 +602,116 @@ async fn restore_session_processes(context: &ServerContext) {
                 );
             }
         }
+    }
+}
+
+fn attach_auth_bridge_events(context: &ServerContext) {
+    let Some(bridge) = context.auth_bridge.clone() else {
+        return;
+    };
+    let context = context.clone();
+    tokio::spawn(async move {
+        let mut events = bridge.subscribe();
+        loop {
+            let mut event = match events.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!(skipped, "Pi auth bridge event consumer lagged");
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+            match event.get("type").and_then(Value::as_str) {
+                Some("extension_ui_request") => {
+                    let context_id = event
+                        .get("picoContextId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let session_id = event
+                        .get("picoSessionId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    if let Some(object) = event.as_object_mut() {
+                        object.remove("picoContextId");
+                        object.remove("picoSessionId");
+                    }
+                    if let Some(id) = event.get("id").and_then(Value::as_str) {
+                        if ui_method_expects_response(event.get("method").and_then(Value::as_str)) {
+                            register_ui_request(
+                                &context,
+                                id.to_string(),
+                                UiRequestTarget::Auth(bridge.clone()),
+                                ui_request_timeout(&event),
+                            )
+                            .await;
+                        }
+                    }
+                    context.event_hub.push(context_id, session_id, event);
+                }
+                Some("extension_ui_expired") => {
+                    if let Some(id) = event.get("id").and_then(Value::as_str) {
+                        context.pending_ui_requests.write().await.remove(id);
+                    }
+                }
+                Some("pico_pi_bridge_exited") => {
+                    context
+                        .pending_ui_requests
+                        .write()
+                        .await
+                        .retain(|_, target| matches!(target, UiRequestTarget::Pi(_)));
+                    context.event_hub.push(
+                        None,
+                        None,
+                        json!({
+                          "type": "request_error",
+                          "scope": "provider_auth",
+                          "message": "Pi auth bridge exited"
+                        }),
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+fn ui_request_timeout(event: &Value) -> Option<Duration> {
+    event
+        .get("timeout")
+        .and_then(Value::as_u64)
+        .filter(|timeout| *timeout > 0)
+        .map(Duration::from_millis)
+}
+
+fn ui_method_expects_response(method: Option<&str>) -> bool {
+    matches!(
+        method,
+        Some("select" | "confirm" | "input" | "editor" | "auth" | "auth_input" | "auth_select")
+    )
+}
+
+async fn register_ui_request(
+    context: &ServerContext,
+    id: String,
+    target: UiRequestTarget,
+    request_timeout: Option<Duration>,
+) {
+    const MAX_PENDING_UI_REQUESTS: usize = 512;
+    let mut pending = context.pending_ui_requests.write().await;
+    if pending.len() >= MAX_PENDING_UI_REQUESTS {
+        if let Some(oldest) = pending.keys().next().cloned() {
+            pending.remove(&oldest);
+        }
+    }
+    pending.insert(id.clone(), target);
+    drop(pending);
+    if let Some(request_timeout) = request_timeout {
+        let pending = context.pending_ui_requests.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(request_timeout).await;
+            pending.write().await.remove(&id);
+        });
     }
 }
 
@@ -660,6 +825,21 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     );
                 }
                 Some("extension_ui_request") | Some("extension_error") => {
+                    if event.get("type").and_then(Value::as_str) == Some("extension_ui_request") {
+                        if let Some(id) = event.get("id").and_then(Value::as_str) {
+                            if ui_method_expects_response(
+                                event.get("method").and_then(Value::as_str),
+                            ) {
+                                register_ui_request(
+                                    &context,
+                                    id.to_string(),
+                                    UiRequestTarget::Pi(runtime.clone()),
+                                    ui_request_timeout(&event),
+                                )
+                                .await;
+                            }
+                        }
+                    }
                     context
                         .event_hub
                         .push(None, Some(public_session_id.clone()), event);
@@ -1032,6 +1212,12 @@ fn router(context: ServerContext) -> Router {
         .route("/api/terminal/:id/ws", get(terminal_websocket))
         .route("/api/terminal/:id/close", post(close_terminal))
         .route("/api/highlight", post(highlight_code))
+        .route("/api/auth/providers", get(auth_providers))
+        .route("/api/auth/api-key", post(save_provider_api_key))
+        .route("/api/auth/oauth", post(login_provider_oauth))
+        .route("/api/auth/logout", post(logout_provider))
+        .route("/api/provider-usage", get(provider_usage))
+        .route("/api/ui/:id", post(resolve_ui_request))
         .route("/api/session/history", get(session_history))
         .route("/api/session/rename", post(rename_session))
         .route("/api/session/name", post(generate_session_name))
@@ -1807,6 +1993,12 @@ async fn client_manifest() -> Json<Value> {
           "/api/terminal/:id/ws",
           "/api/terminal/:id/close",
           "/api/highlight",
+          "/api/auth/providers",
+          "/api/auth/api-key",
+          "/api/auth/oauth",
+          "/api/auth/logout",
+          "/api/provider-usage",
+          "/api/ui/:id",
           "/api/rust/sessions",
           "/api/rust/sessions/:id/commands",
           "/api/rust/sessions/:id/events"
@@ -1835,7 +2027,10 @@ async fn client_manifest() -> Json<Value> {
           "git-watch",
           "native-pty",
           "terminal-replay",
-          "native-highlighting"
+          "native-highlighting",
+          "provider-auth",
+          "provider-usage",
+          "extension-ui-bridge"
         ]
       }
     }))
@@ -1857,6 +2052,12 @@ async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
         "available": context.pi_version.is_some(),
         "version": context.pi_version,
         "error": context.pi_error,
+      },
+      "piBridge": {
+        "available": context
+          .auth_bridge
+          .as_ref()
+          .is_some_and(|bridge| bridge.is_running()),
       }
     }))
 }
@@ -2958,6 +3159,189 @@ fn git_mutated(context: &ServerContext, cwd: &Path) {
           "scopes": ["status", "files", "refs"]
         }),
     );
+}
+
+fn require_auth_bridge(context: &ServerContext) -> Result<Arc<AuthBridge>, ApiError> {
+    context
+        .auth_bridge
+        .clone()
+        .filter(|bridge| bridge.is_running())
+        .ok_or_else(|| ApiError {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            message: "Pi provider bridge is unavailable".into(),
+        })
+}
+
+async fn auth_providers(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<Value>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    let data = bridge
+        .request(
+            json!({ "type": "get_auth_providers", "cwd": cwd }),
+            Some(Duration::from_secs(30)),
+        )
+        .await?;
+    Ok(Json(data))
+}
+
+async fn save_provider_api_key(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(body): Json<AuthMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let provider = body.provider.trim().to_string();
+    let key = body.key.trim().to_string();
+    if provider.is_empty() || key.is_empty() {
+        return Err(ApiError::bad_request("Provider and API key are required"));
+    }
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    let data = bridge
+        .request(
+            json!({
+              "type": "set_api_key",
+              "provider": provider,
+              "key": key,
+              "cwd": cwd
+            }),
+            Some(Duration::from_secs(30)),
+        )
+        .await?;
+    refresh_pi_runtimes_after_auth(&context, &target).await;
+    Ok(Json(data))
+}
+
+async fn login_provider_oauth(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(body): Json<AuthMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let provider = body.provider.trim().to_string();
+    if provider.is_empty() {
+        return Err(ApiError::bad_request("Provider is required"));
+    }
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    let data = bridge
+        .request(
+            json!({
+              "type": "login",
+              "provider": provider,
+              "cwd": cwd,
+              "contextId": target.context_id.clone(),
+              "sessionId": target.session.clone(),
+            }),
+            None,
+        )
+        .await?;
+    refresh_pi_runtimes_after_auth(&context, &target).await;
+    Ok(Json(data))
+}
+
+async fn logout_provider(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(body): Json<AuthMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let provider = body.provider.trim().to_string();
+    if provider.is_empty() {
+        return Err(ApiError::bad_request("Provider is required"));
+    }
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    let data = bridge
+        .request(
+            json!({ "type": "logout", "provider": provider, "cwd": cwd }),
+            Some(Duration::from_secs(30)),
+        )
+        .await?;
+    refresh_pi_runtimes_after_auth(&context, &target).await;
+    Ok(Json(data))
+}
+
+async fn provider_usage(
+    State(context): State<ServerContext>,
+    Query(query): Query<ProviderUsageQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let bridge = require_auth_bridge(&context)?;
+    let data = bridge
+        .request(
+            json!({ "type": "get_provider_usage", "provider": query.provider }),
+            Some(Duration::from_secs(15)),
+        )
+        .await?;
+    Ok(Json(data))
+}
+
+async fn resolve_ui_request(
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    let target = context
+        .pending_ui_requests
+        .write()
+        .await
+        .remove(&id)
+        .ok_or_else(|| ApiError::not_found(format!("Unknown UI request id: {id}")))?;
+    let body = body.as_object().cloned().unwrap_or_default();
+    let response = json!({
+      "type": "extension_ui_response",
+      "id": id,
+      "value": body.get("value").cloned(),
+      "confirmed": body.get("confirmed").and_then(Value::as_bool),
+      "cancelled": body
+        .get("cancelled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false),
+    });
+    match target {
+        UiRequestTarget::Pi(runtime) => runtime.notify(response).await?,
+        UiRequestTarget::Auth(bridge) => bridge.send_ui_response(response).await?,
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn refresh_pi_runtimes_after_auth(context: &ServerContext, target: &RequestTarget) {
+    let Ok(resolved) = resolve_runtime(context, target, true).await else {
+        return;
+    };
+    let runtime_id = resolved.record.id.clone();
+    let is_streaming = resolved
+        .client
+        .request_with_timeout(json!({ "type": "get_state" }), Some(Duration::from_secs(2)))
+        .await
+        .ok()
+        .and_then(|response| response.get("data").cloned())
+        .and_then(|data| data.get("isStreaming").and_then(Value::as_bool))
+        .unwrap_or(true);
+    if is_streaming {
+        return;
+    }
+    if let Err(error) = context.runtimes.remove(&runtime_id).await {
+        tracing::warn!(
+            %error,
+            %runtime_id,
+            "failed to refresh Pi runtime after auth mutation"
+        );
+        return;
+    }
+    context
+        .runtime_projections
+        .write()
+        .await
+        .remove(&runtime_id);
+    if let Ok(restarted) = resolve_runtime(context, target, true).await {
+        refresh_runtime_projection(context, &runtime_id, &restarted.client).await;
+        emit_session_state(context, &runtime_id, false, None).await;
+    }
 }
 
 async fn highlight_code(
@@ -4525,6 +4909,8 @@ mod tests {
             git_runtime: Arc::new(GitRuntime::default()),
             terminals: TerminalManager::default(),
             highlighter: Arc::new(HighlightRuntime::default()),
+            auth_bridge: None,
+            pending_ui_requests: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -4555,6 +4941,11 @@ mod tests {
             .expect("features")
             .iter()
             .any(|feature| feature == "conversation"));
+        assert!(manifest["capabilities"]["features"]
+            .as_array()
+            .expect("features")
+            .iter()
+            .any(|feature| feature == "provider-auth"));
         assert!(manifest["capabilities"]["endpoints"]
             .as_array()
             .expect("endpoints")
@@ -4593,6 +4984,118 @@ mod tests {
             expected["itemsPatch"]["items"][0].clone()
         ]);
         assert_eq!(patch_state_sync(&mut previous, &next), expected);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn provider_bridge_routes_and_ui_responses_preserve_client_contracts() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "pico-api-auth-bridge-{}-{}",
+            std::process::id(),
+            time::OffsetDateTime::now_utc().unix_timestamp_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("create auth bridge test root");
+        let script = root.join("bridge.py");
+        std::fs::write(
+            &script,
+            r#"#!/usr/bin/env python3
+import json, sys
+pending = None
+for line in sys.stdin:
+    command = json.loads(line)
+    kind = command.get("type")
+    if kind == "get_auth_providers":
+        data = {"ok":True,"oauthProviders":[{"id":"demo","name":"Demo","authType":"oauth","configured":False}],"apiKeyProviders":[],"loggedInProviders":[],"availableModels":[]}
+        print(json.dumps({"type":"response","id":command["id"],"success":True,"data":data}), flush=True)
+    elif kind == "get_provider_usage":
+        print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"windows":[]}}), flush=True)
+    elif kind == "start_ui":
+        pending = command["id"]
+        print(json.dumps({"type":"extension_ui_request","id":"ui-demo","method":"confirm","title":"Continue?","picoContextId":"viewer-demo","picoSessionId":"session-demo"}), flush=True)
+    elif kind == "extension_ui_response" and command.get("id") == "ui-demo":
+        print(json.dumps({"type":"response","id":pending,"success":True,"data":{"confirmed":command.get("confirmed")}}), flush=True)
+"#,
+        )
+        .expect("write auth bridge script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700))
+            .expect("make auth bridge executable");
+        let bridge = AuthBridge::spawn(script, root.clone(), root.clone())
+            .await
+            .expect("spawn auth bridge");
+        let mut context = test_context_with_agent(&root);
+        context.auth_bridge = Some(bridge.clone());
+        attach_auth_bridge_events(&context);
+
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/auth/providers?context=viewer-demo")
+                    .body(Body::empty())
+                    .expect("provider request"),
+            )
+            .await
+            .expect("provider response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("provider body");
+        let providers: Value = serde_json::from_slice(&body).expect("provider JSON");
+        assert_eq!(providers["ok"], true);
+        assert_eq!(providers["oauthProviders"][0]["id"], "demo");
+
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/provider-usage?provider=demo")
+                    .body(Body::empty())
+                    .expect("usage request"),
+            )
+            .await
+            .expect("usage response");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("usage body");
+        let usage: Value = serde_json::from_slice(&body).expect("usage JSON");
+        assert_eq!(usage["windows"], json!([]));
+
+        let mut events = context.event_hub.subscribe();
+        let request_bridge = bridge.clone();
+        let pending = tokio::spawn(async move {
+            request_bridge
+                .request(json!({ "type": "start_ui" }), Some(Duration::from_secs(2)))
+                .await
+        });
+        let event = tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("UI event timeout")
+            .expect("UI event");
+        assert_eq!(event.context_id.as_deref(), Some("viewer-demo"));
+        assert_eq!(event.session_id.as_deref(), Some("session-demo"));
+        assert_eq!(event.payload["id"], "ui-demo");
+        assert!(event.payload.get("picoContextId").is_none());
+
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/ui/ui-demo?context=viewer-demo")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "confirmed": true }).to_string()))
+                    .expect("UI response request"),
+            )
+            .await
+            .expect("UI response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let completed = pending
+            .await
+            .expect("join bridge request")
+            .expect("bridge UI result");
+        assert_eq!(completed["confirmed"], true);
+
+        bridge.shutdown().await.expect("shutdown auth bridge");
+        std::fs::remove_dir_all(root).expect("remove auth bridge test root");
     }
 
     #[tokio::test]
@@ -5085,5 +5588,6 @@ for line in sys.stdin:
         let health: Value = serde_json::from_slice(&body).expect("health JSON");
         assert_eq!(health["runtime"], "rust");
         assert_eq!(health["pi"]["available"], true);
+        assert_eq!(health["piBridge"]["available"], false);
     }
 }

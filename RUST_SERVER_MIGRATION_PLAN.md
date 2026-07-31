@@ -119,14 +119,14 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 10. Provider auth, usage, extension UI, and Pi SDK gaps
 
-- [ ] Map all current Pi SDK-only operations missing from public Pi RPC.
-- [ ] Prefer upstream Pi RPC additions; otherwise build a minimal Pico Pi bridge
+- [x] Map all current Pi SDK-only operations missing from public Pi RPC.
+- [x] Prefer upstream Pi RPC additions; otherwise build a minimal Pico Pi bridge
       as a standalone native Bun executable rather than bundling Node.
-- [ ] Port provider lists, API-key storage, logout, OAuth/device-code flows, and
+- [x] Port provider lists, API-key storage, logout, OAuth/device-code flows, and
       model refresh without parallel credential storage.
-- [ ] Port extension UI request/response timeouts and fire-and-forget methods.
-- [ ] Port provider usage lookups and context-limit projection.
-- [ ] Verify auth/settings/session compatibility against existing `~/.pi` data.
+- [x] Port extension UI request/response timeouts and fire-and-forget methods.
+- [x] Port provider usage lookups and context-limit projection.
+- [x] Verify auth/settings/session compatibility against existing `~/.pi` data.
 
 ## 11. Static browser application
 
