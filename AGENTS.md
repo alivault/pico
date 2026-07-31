@@ -244,8 +244,10 @@ There are intentionally no TypeScript server routes. Browser API calls use same-
   - bounded compiled bridge for Pi `AuthStorage`, `ModelRegistry`, OAuth, and usage operations
 - `crates/pico-server/src/control.rs`, `active_work.rs`, `persistence.rs`, and `runtime.rs`
   - owner-only control socket, protocol compatibility, drain-safe updates, atomic lifecycle persistence, and server-owned runtime handles
+- `crates/pico-server/src/network_config.rs`
+  - private persistent configuration for one optional exact-address remote listener while preserving loopback access
 - `crates/pico-server/src/static_assets.rs` and `security.rs`
-  - safe static SPA serving, cache/ETag/HEAD behavior, Host/Origin policy, and loopback defaults
+  - safe static SPA serving, cache/ETag/HEAD behavior, per-listener Host/Origin policy, and loopback defaults
 - `bin/pico.mjs` and `bin/native-runtime.mjs`
   - npm launcher, architecture-specific checksum-verified native download, compatible attachment, and safe updates
 
@@ -278,9 +280,9 @@ There are intentionally no TypeScript server routes. Browser API calls use same-
 - `apps/apple/Pico/Pico/Core/Models/*`
   - Swift mirrors of shared API/SSE contracts, patchable session state, conversation items, auth, Git, files, and UI request models
 - `apps/apple/Pico/Pico/Core/Persistence/*`
-  - `ConnectionStore` (`pico.ios.*` UserDefaults keys), `DraftStore`, and placeholder `CredentialStore` for future pairing/bearer tokens
+  - `ConnectionStore` (`pico.ios.*` UserDefaults keys), `DraftStore`, and placeholder `CredentialStore` reserved for a future authenticated transport
 - `apps/apple/Pico/Pico/Features/Connections/*`
-  - server URL entry and connection hero/form UI
+  - server host entry, URL normalization, and connection hero/form UI
 - `apps/apple/Pico/Pico/Features/Sessions/*`
   - directory-organized session sidebar, session rows, new-session flow, directory search/browse/manage/purge UI
 - `apps/apple/Pico/Pico/Features/Conversation/*`
@@ -294,7 +296,9 @@ There are intentionally no TypeScript server routes. Browser API calls use same-
 - `apps/apple/Pico/Pico/Resources/Info.plist`
   - app metadata, `pico://` URL scheme, quick action, local-network/photos/camera/notification usage strings, and local-network ATS allowance
 - `apps/apple/Pico/PicoTests/*` and `apps/apple/Fixtures/*`
-  - Swift Testing coverage for SSE parsing, event decoding, session-state merge/patch behavior, Git formatting/tree/highlight helpers, and shared JSON fixtures
+  - Swift Testing coverage for SSE parsing, event decoding, session-state merge/patch behavior, Git formatting/tree/highlight helpers, host normalization, and shared JSON fixtures
+- `apps/apple/PicoMenu/*`
+  - independently launched Pico Server menu-bar UI for health, exact-address remote listener configuration, restart/log controls, and complete quit
 
 ## Core architecture
 
@@ -676,7 +680,7 @@ Theme family/color-mode state flows through `src/features/pico/use-pico-theme.ts
 
 - Prefer SwiftUI and first-party frameworks. UIKit bridges are acceptable only for capabilities SwiftUI does not cover well in this app (delegate hooks, keyboard notifications, pasteboard, camera picker, system colors).
 - Preserve accessibility labels/hints for icon-only buttons, Dynamic Type-friendly text, native `List`/`Form`/`Navigation*` patterns, and confirmation dialogs for destructive Git/session actions.
-- The app currently allows local HTTP/local networking for trusted development. Do not document or encourage exposing Pico over an unauthenticated public network; add pairing/token auth before LAN/remote guidance expands.
+- The app allows unauthenticated HTTP on loopback and on one explicitly configured private or VPN interface address. Never bind remote access to a wildcard address or expose it to an untrusted network/public internet; add pairing/token auth before broad network exposure.
 - Keep `Info.plist` privacy strings, URL scheme, quick actions, and ATS/local-network settings aligned with any feature that uses photos, camera, notifications, deep links, or network discovery.
 
 ## Server/runtime conventions
@@ -970,7 +974,7 @@ Be especially careful around these:
 - replacing named TanStack Pacer controls with ad hoc debounce/throttle/queue timers in high-churn paths
 - adding ad hoc Node/server state or serializing live Rust process handles instead of using the native runtime registries
 - attempting to run Pi SDK/git/filesystem runtime behavior on iOS instead of calling the Pico server
-- exposing an unauthenticated Pico server over LAN/remote networks without adding pairing/token auth first
+- exposing the unauthenticated Pico server through a wildcard, untrusted LAN, or public address instead of one explicitly configured trusted private/VPN interface
 - altering session tree/fork/clone behavior without testing the browser dialogs and native edit/branch flows
 - fetching detailed Git data outside the active Git/right-sidebar or native Git/files workspace without a deliberate UX reason
 - adding third-party Swift packages, WebView wrappers, React Native, or Expo without explicit approval

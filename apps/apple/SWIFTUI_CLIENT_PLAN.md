@@ -50,7 +50,7 @@ SwiftUI iOS app  <-- HTTP JSON + SSE -->  Pico server  <-- Pi SDK / git / filesy
 
 - Rich git review, changed-file diffs, commit history, stage/discard/commit/push/pull.
 - Bonjour/local-network discovery of Pico servers.
-- Secure remote access/tunnel story.
+- Authenticated public-network access beyond explicitly trusted private/VPN interfaces.
 - Push notifications, if Pico later gains a trusted push relay or APNs integration.
 - Native syntax highlighting or richer Markdown rendering, after evaluating whether first-party APIs are sufficient.
 
@@ -103,26 +103,23 @@ Add a small endpoint, for example `GET /api/client/manifest`, returning:
 
 This lets the iOS app show useful connection errors instead of failing on the first SSE/API call.
 
-### 6.2 Add client authentication before LAN/remote use
+### 6.2 Support an explicitly trusted private-network listener
 
-The existing Pico app is designed as a local browser workspace. Before encouraging `--host 0.0.0.0` or remote access, add a lightweight pairing layer:
+The production macOS app keeps Pico on loopback by default. The Pico Server
+menu-bar app can optionally configure one additional private or VPN interface IP
+address:
 
-1. User starts Pico locally.
-2. Desktop Pico shows a pairing code or QR code.
-3. iOS app submits the code to a pairing endpoint.
-4. Server returns a scoped client token.
-5. iOS stores the token in Keychain.
-6. API/SSE requests send `Authorization: Bearer <token>`.
-7. Server exposes a way to revoke paired clients.
+1. The server always listens on `127.0.0.1:3141`.
+2. The user explicitly enters the additional bind address.
+3. Wildcard, loopback, multicast, and broadcast remote addresses are rejected.
+4. Rust applies the normal Host/Origin policy independently to each listener.
+5. If the remote interface is unavailable, Pico remains available on loopback.
+6. The menu app applies changes through the bundled Rust CLI and performs a
+   drain-safe `launchd` restart.
 
-Suggested endpoints:
-
-- `POST /api/client/pairing/start`
-- `POST /api/client/pairing/complete`
-- `GET /api/client/devices`
-- `DELETE /api/client/devices/:id`
-
-Keep token validation centralized in server route helpers/runtime request resolution so existing endpoints do not each grow one-off auth logic.
+This trusted-network mode intentionally does not add Pico pairing or bearer
+tokens. It must not be exposed to an untrusted LAN or the public internet. A
+future broad/public remote-access mode still requires authentication.
 
 ### 6.3 Document and fixture the shared contract
 
@@ -298,7 +295,7 @@ Implement SSE using `URLSession` streaming bytes:
 
 - For local HTTP development, configure the minimum necessary App Transport Security exception.
 - For LAN discovery/access, add `NSLocalNetworkUsageDescription` and Bonjour service declarations if discovery is implemented.
-- For remote access, prefer HTTPS or a trusted tunnel. Do not ask users to expose an unauthenticated HTTP server.
+- Trusted private/VPN access may use one explicitly configured interface IP over HTTP because the private network is the security boundary. Never use a wildcard or public bind without adding authentication and HTTPS.
 
 ## 10. Data model translation notes
 
@@ -319,9 +316,9 @@ Port the browser's `updateStateFromSync()` behavior to Swift tests before buildi
 
 ### Phase 0: Contract and security design
 
-- Decide whether MVP is local-only, LAN, or remote-capable.
+- Support loopback plus one optional explicitly trusted private/VPN address.
 - Add/define `/api/client/manifest`.
-- Design pairing/token auth if LAN/remote is in scope.
+- Reserve pairing/token auth for future untrusted or public-network access.
 - Add JSON fixtures for event/response contracts.
 - Write a short API compatibility policy for native clients.
 
@@ -420,20 +417,20 @@ Exit criteria:
 
 ## 12. Key risks and mitigations
 
-| Risk                                                             | Mitigation                                                            |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Current Pico server is local-first and may not be safe to expose | Add pairing/token auth before LAN/remote instructions                 |
-| SSE streaming and patch sync drift from web behavior             | Port `updateStateFromSync()` semantics and cover with fixtures/tests  |
-| iOS backgrounding kills long-lived streams                       | Reconnect on foreground; consider notifications later                 |
-| Large sessions may be heavy on mobile                            | Start with current sync, then add mobile history pagination if needed |
-| Markdown/code rendering quality                                  | Use first-party rendering first; evaluate dependencies separately     |
-| Provider OAuth UX differs from desktop                           | Use system browser and server-driven UI request handling              |
-| Git workflows are complex on small screens                       | Ship read-only status/diff first, then add mutations deliberately     |
+| Risk                                                          | Mitigation                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Unauthenticated remote access is unsafe on untrusted networks | Permit one exact trusted private/VPN address; reject wildcards and require auth before public exposure |
+| SSE streaming and patch sync drift from web behavior          | Port `updateStateFromSync()` semantics and cover with fixtures/tests                                   |
+| iOS backgrounding kills long-lived streams                    | Reconnect on foreground; consider notifications later                                                  |
+| Large sessions may be heavy on mobile                         | Start with current sync, then add mobile history pagination if needed                                  |
+| Markdown/code rendering quality                               | Use first-party rendering first; evaluate dependencies separately                                      |
+| Provider OAuth UX differs from desktop                        | Use system browser and server-driven UI request handling                                               |
+| Git workflows are complex on small screens                    | Ship read-only status/diff first, then add mutations deliberately                                      |
 
 ## 13. Open questions
 
-1. Should the first build support only `localhost` via simulator/Mac, LAN devices, or remote hosts?
-2. Should pairing/auth be mandatory even for LAN development?
+1. Should future discovery surface explicitly configured private-network servers automatically?
+2. When should Pico add authentication for networks beyond a trusted private/VPN interface?
 3. What minimum iOS version should we target for distribution if iOS 26 is too new for users?
 4. Should the iOS app be distributed publicly, through TestFlight only, or kept as a developer companion?
 5. Which desktop settings should sync to the iOS app versus remain device-local?

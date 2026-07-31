@@ -57,6 +57,9 @@ cargo run -p pico-server -- serve --port 3142 \
   --pi-bridge-bin target/pico-pi-bridge \
   --web-dir .output/public
 cargo run -p pico-server -- status
+cargo run -p pico-server -- network status
+cargo run -p pico-server -- network set 100.64.0.10
+cargo run -p pico-server -- network disable
 cargo run -p pico-server -- stop --wait
 ```
 
@@ -117,8 +120,9 @@ Implemented:
 - headless browser validation against Rust with Node absent from `PATH`
 - universal arm64/x86_64 macOS packaging with the Rust server, standalone Pi,
   Pi bridge, static web assets, and an app-bundled `SMAppService` LaunchAgent
-- an independent SwiftUI `MenuBarExtra` login item with server health, open/new
-  chat, restart, logs, Login Items settings, and complete-quit controls
+- an independent SwiftUI `MenuBarExtra` login item named Pico Server with
+  server health, exact-address remote listener settings, open/new chat, restart,
+  logs, Login Items settings, and complete-quit controls
 - nested-code Hardened Runtime signing, Developer ID notarization/stapling, and
   drag-to-Applications DMG automation in `pnpm package:macos`
 - checksum-verified macOS/Linux native CLI bundles selected by `pico-app`, plus
@@ -127,7 +131,10 @@ Implemented:
   new prompts while allowing active Pi runs and queued follow-ups to settle
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
-- loopback defaults, Host/Origin validation, and request size bounds
+- loopback defaults, exact-address optional remote listeners, Host/Origin
+  validation, and request size bounds
+- private persistent network configuration with CLI and Pico Server menu-bar
+  controls
 - daily structured logs and atomically persisted lifecycle state
 
 Process-control routes remain under `/api/rust/*`. The npm `pico-app` launcher
@@ -137,8 +144,10 @@ starting a duplicate.
 
 ## Runtime boundaries
 
-- Pico's unauthenticated API defaults to loopback. Do not expose it to an
-  untrusted network without a future pairing/token layer.
+- Pico's unauthenticated API defaults to loopback. An optional second listener
+  must use one explicit private or VPN interface address; wildcard and loopback
+  remote settings are rejected. Do not expose it to an untrusted network or the
+  public internet without a future authentication layer.
 - Pi session files remain Pi's compatibility format and source of durable
   conversation history.
 - Runtime process handles are never serialized as if they could survive a

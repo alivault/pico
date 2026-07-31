@@ -144,7 +144,28 @@ xcodebuild \
 open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
 ```
 
-The macOS client defaults to `http://localhost:3141`. Keep Pico on a trusted local machine or network; the server does not currently provide remote pairing or token authentication.
+The macOS client defaults to `localhost`, which resolves to
+`http://localhost:3141`.
+
+### Connecting over a trusted private network
+
+The macOS distribution includes the **Pico Server** menu-bar app. To let another
+Pico client connect without SSH or CLI setup:
+
+1. Open Pico Server from the menu bar.
+2. Enable **Allow remote connections**.
+3. Enter one specific private or VPN interface IP address.
+4. Apply the setting and allow the server to drain and restart.
+5. Enter that IP address as the host in Pico on the other Mac, iPhone, or iPad.
+
+Pico continues listening on `127.0.0.1:3141` and adds the configured address on
+port `3141`. Browser clients can open `http://<address>:3141` directly. If the
+configured interface is unavailable, local Pico access remains available and
+the menu app reports that the remote listener could not start.
+
+This mode intentionally has no Pico-level authentication. Use only an exact
+address protected by a private network you trust, such as a VPN interface.
+Never use `0.0.0.0` or expose port `3141` to the public internet.
 
 Run the shared native tests on macOS:
 
@@ -206,9 +227,10 @@ pnpm package:macos
 ```
 
 Developer ID-signed packaged builds expose Start at Login and approval state in
-Pico Settings. The separate menu-bar app keeps the server available when the main app quits and
-provides Open, New Chat, Restart Server, Show Logs, Start at Login settings,
-and Quit Completely actions.
+Pico Settings. The separate **Pico Server** menu-bar app keeps the server
+available when the main app quits and provides trusted-network listener
+configuration, Open, New Chat, Restart Server, Show Logs, Start at Login
+settings, and Quit Completely actions.
 
 ## Development commands
 
