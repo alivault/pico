@@ -13,7 +13,7 @@ struct PicoMenuApp: App {
           ? "bubble.left.and.bubble.right.fill"
           : "exclamationmark.bubble"
       )
-      .accessibilityLabel("Pico")
+      .accessibilityLabel("Pico Server")
     }
     .menuBarExtraStyle(.window)
   }

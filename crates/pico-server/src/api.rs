@@ -2180,7 +2180,7 @@ async fn client_manifest() -> Json<Value> {
 }
 
 async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
-    let phase = context.control_status.read().await.phase.clone();
+    let status = context.control_status.read().await.clone();
     let active_run_count = context.active_work.count().await;
     Json(json!({
       "ok": true,
@@ -2189,7 +2189,9 @@ async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
       "serverProtocolVersion": SERVER_PROTOCOL_VERSION,
       "apiContractVersion": API_CONTRACT_VERSION,
       "persistenceVersion": PERSISTENCE_VERSION,
-      "phase": phase,
+      "phase": status.phase,
+      "listenHosts": status.listen_hosts,
+      "port": status.port,
       "activeRunCount": active_run_count,
       "previousCleanShutdown": context.previous_clean_shutdown,
       "uptimeSeconds": context.started_at.elapsed().as_secs(),
@@ -5871,6 +5873,8 @@ for line in sys.stdin:
         assert_eq!(health["serverProtocolVersion"], SERVER_PROTOCOL_VERSION);
         assert_eq!(health["apiContractVersion"], API_CONTRACT_VERSION);
         assert_eq!(health["activeRunCount"], 0);
+        assert_eq!(health["listenHosts"], json!(["127.0.0.1"]));
+        assert_eq!(health["port"], 3141);
         assert_eq!(health["pi"]["available"], true);
         assert_eq!(health["piBridge"]["available"], false);
         assert_eq!(health["web"]["available"], false);
