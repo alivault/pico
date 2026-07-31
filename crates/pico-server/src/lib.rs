@@ -3,6 +3,7 @@ pub mod app_state;
 pub mod config;
 pub mod control;
 pub mod event_hub;
+pub mod git_native;
 pub mod logging;
 pub mod persistence;
 pub mod pi_installation;

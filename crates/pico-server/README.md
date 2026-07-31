@@ -72,6 +72,10 @@ Implemented:
 - safe native directory discovery, path and `@file` completions, project file
   trees/reads, cleanup, and Pi command/skill projection
 - traversal, symlink-escape, binary, large-file, and Unicode path tests
+- native Git status/files/branches/history/diff/review/remote URL queries with
+  short-lived caches, disposable-repository mutation tests, AI/heuristic commit
+  messages, safe argument validation, and polling `git_changed` events
+- stage/discard/checkout/commit/push/force-with-lease/pull and commit actions
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
@@ -79,8 +83,7 @@ Implemented:
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
 session indexes, the primary `/events` stream, and core prompt/session mutations,
-but it does not claim Git, auth, terminal, highlighting, or static-app parity
-yet.
+but it does not claim auth, terminal, highlighting, or static-app parity yet.
 
 ## Migration order
 

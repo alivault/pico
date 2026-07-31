@@ -15,6 +15,7 @@ pub enum PiCommand {
     GetAvailableModels,
     GetAvailableThinkingLevels,
     GetSessionStats,
+    GetLastAssistantText,
     Prompt {
         message: String,
         #[serde(skip_serializing_if = "Vec::is_empty")]

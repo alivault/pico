@@ -28,9 +28,10 @@ use crate::config::ServerConfig;
 use crate::control::ControlServer;
 use crate::control::{initial_status, ControlStatus};
 use crate::event_hub::{EventHub, ServerEvent};
+use crate::git_native::{self, GitRuntime};
 use crate::persistence::{self, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
-use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError};
+use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError, PiSpawnOptions};
 use crate::project_files;
 use crate::protocol::{
     ConversationItem, API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION,
@@ -59,6 +60,7 @@ struct ServerContext {
     pending_queues: Arc<RwLock<HashMap<String, Vec<PendingPrompt>>>>,
     streaming_items: Arc<RwLock<HashMap<String, ConversationItem>>>,
     hide_thinking: Arc<AtomicBool>,
+    git_runtime: Arc<GitRuntime>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -101,6 +103,7 @@ struct CreateSessionRequest {
 
 #[derive(Debug, Deserialize)]
 struct DirectoryQuery {
+    #[serde(default)]
     directory: String,
     offset: Option<usize>,
     limit: Option<usize>,
@@ -264,6 +267,7 @@ struct FileCompletionRequest {
 
 #[derive(Debug, Deserialize)]
 struct ProjectFileQuery {
+    #[serde(default)]
     cwd: String,
     path: Option<String>,
 }
@@ -276,6 +280,49 @@ struct CleanupSessionsRequest {
     dry_run: Option<bool>,
     #[serde(default)]
     include_active_session: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitQuery {
+    #[serde(default)]
+    cwd: String,
+    path: Option<String>,
+    previous_path: Option<String>,
+    commit: Option<String>,
+    mode: Option<String>,
+    git_scope: Option<String>,
+    scope: Option<String>,
+    commits_limit: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct GitMutationRequest {
+    cwd: String,
+    action: Option<String>,
+    path: Option<String>,
+    previous_path: Option<String>,
+    status: Option<String>,
+    #[serde(default)]
+    all: bool,
+    branch: Option<String>,
+    #[serde(default)]
+    create: bool,
+    start_point: Option<String>,
+    #[serde(default)]
+    track: bool,
+    message: Option<String>,
+    #[serde(default)]
+    push: bool,
+    #[serde(default)]
+    force: bool,
+    #[serde(default)]
+    force_push: bool,
+    include_unstaged: Option<bool>,
+    commit: Option<String>,
+    tag_name: Option<String>,
+    reset_mode: Option<String>,
 }
 
 #[derive(Debug)]
@@ -367,7 +414,9 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         pending_queues: Arc::new(RwLock::new(HashMap::new())),
         streaming_items: Arc::new(RwLock::new(HashMap::new())),
         hide_thinking: Arc::new(AtomicBool::new(false)),
+        git_runtime: Arc::new(GitRuntime::default()),
     };
+    GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
     let policy = Arc::new(RequestPolicy::new(
         config.host,
@@ -912,6 +961,21 @@ fn router(context: ServerContext) -> Router {
             "/api/directory-sessions/cleanup",
             post(cleanup_directory_sessions),
         )
+        .route("/api/git-status", get(git_status))
+        .route("/api/git-changes", get(git_changes))
+        .route("/api/git-diff", get(git_diff))
+        .route("/api/git-review", get(git_review))
+        .route("/api/git-commit-files", get(git_commit_files))
+        .route("/api/git-commit-diff", get(git_commit_diff))
+        .route("/api/git-commit-remote-url", get(git_commit_remote_url))
+        .route("/api/git-stage", post(git_stage))
+        .route("/api/git-discard", post(git_discard))
+        .route("/api/git-checkout", post(git_checkout))
+        .route("/api/git-commit", post(git_commit))
+        .route("/api/git-commit-message", post(git_commit_message))
+        .route("/api/git-push", post(git_push))
+        .route("/api/git-pull", post(git_pull))
+        .route("/api/git-commit-action", post(git_commit_action))
         .route("/api/session/history", get(session_history))
         .route("/api/session/rename", post(rename_session))
         .route("/api/session/name", post(generate_session_name))
@@ -1665,6 +1729,21 @@ async fn client_manifest() -> Json<Value> {
           "/api/file-completions",
           "/api/files/tree",
           "/api/files/read",
+          "/api/git-status",
+          "/api/git-changes",
+          "/api/git-diff",
+          "/api/git-review",
+          "/api/git-commit-files",
+          "/api/git-commit-diff",
+          "/api/git-commit-remote-url",
+          "/api/git-stage",
+          "/api/git-discard",
+          "/api/git-checkout",
+          "/api/git-commit",
+          "/api/git-commit-message",
+          "/api/git-push",
+          "/api/git-pull",
+          "/api/git-commit-action",
           "/api/rust/sessions",
           "/api/rust/sessions/:id/commands",
           "/api/rust/sessions/:id/events"
@@ -1686,7 +1765,11 @@ async fn client_manifest() -> Json<Value> {
           "directory-discovery",
           "path-completions",
           "project-files",
-          "pi-commands"
+          "pi-commands",
+          "git-status",
+          "git-history",
+          "git-mutations",
+          "git-watch"
         ]
       }
     }))
@@ -2372,6 +2455,443 @@ async fn cleanup_directory_sessions(
       "deletedSessionIds": deleted_session_ids,
       "matchingSessions": matching_sessions
     })))
+}
+
+async fn git_status(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let status = git_native::status(&cwd)
+        .await
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(json!({ "ok": true, "cwd": cwd, "gitStatus": status })))
+}
+
+async fn git_changes(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let scope = query
+        .git_scope
+        .as_deref()
+        .or(query.scope.as_deref())
+        .filter(|scope| matches!(*scope, "all" | "files" | "branches" | "commits"))
+        .unwrap_or("all");
+    let changes = git_native::changes(&cwd, scope, query.commits_limit)
+        .await
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let changes = changes.unwrap_or_else(|| {
+        json!({
+          "files": null,
+          "localBranches": null,
+          "remoteBranches": null,
+          "commits": null,
+          "commitsHasMore": false,
+          "commitsLimit": 0,
+          "unpushedCommitHashes": null
+        })
+    });
+    let mut response = json!({ "ok": true, "cwd": cwd });
+    if let (Some(response), Some(changes)) = (response.as_object_mut(), changes.as_object()) {
+        response.extend(changes.clone());
+    }
+    Ok(Json(response))
+}
+
+async fn git_diff(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let path = required_query_value(query.path, "path")?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let patch = git_native::file_diff(&cwd, &path)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(
+        json!({ "ok": true, "cwd": cwd, "path": path, "patch": patch }),
+    ))
+}
+
+async fn git_review(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let path = required_query_value(query.path, "path")?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let (path, previous_path, old_content, new_content) =
+        git_native::file_review(&cwd, &path, query.previous_path.as_deref())
+            .await
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true, "cwd": cwd, "path": path, "previousPath": previous_path,
+      "oldContent": old_content, "newContent": new_content
+    })))
+}
+
+async fn git_commit_files(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let commit = required_query_value(query.commit, "commit")?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let files = git_native::commit_files(&cwd, &commit)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(
+        json!({ "ok": true, "cwd": cwd, "commit": commit, "files": files }),
+    ))
+}
+
+async fn git_commit_diff(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let commit = required_query_value(query.commit, "commit")?;
+    let mode = query
+        .mode
+        .as_deref()
+        .filter(|mode| matches!(*mode, "head" | "previous"))
+        .unwrap_or("commit")
+        .to_string();
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let (title, patch, path, previous_path) = git_native::commit_diff(
+        &cwd,
+        &commit,
+        &mode,
+        query.path.as_deref(),
+        query.previous_path.as_deref(),
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true, "cwd": cwd, "commit": commit, "mode": mode,
+      "title": title, "path": path, "previousPath": previous_path, "patch": patch
+    })))
+}
+
+async fn git_commit_remote_url(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<GitQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let commit = required_query_value(query.commit, "commit")?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &query.cwd).await?;
+    let remote_url = git_native::commit_remote_url(&cwd, &commit)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true, "cwd": cwd, "commit": commit, "remoteUrl": remote_url
+    })))
+}
+
+async fn git_stage(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let action = request.action.as_deref().unwrap_or("stage");
+    let output = git_native::stage(
+        &cwd,
+        action,
+        request.all,
+        request.path.as_deref(),
+        request.previous_path.as_deref(),
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_discard(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let action = request.action.as_deref().unwrap_or("discard");
+    let output = git_native::discard(
+        &cwd,
+        action,
+        request.all,
+        request.path.as_deref(),
+        request.previous_path.as_deref(),
+        request.status.as_deref(),
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_checkout(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let branch = request
+        .branch
+        .as_deref()
+        .filter(|branch| !branch.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("branch is required"))?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let output = git_native::checkout(
+        &cwd,
+        branch,
+        request.create,
+        request.start_point.as_deref(),
+        request.track,
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_commit(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let message = request
+        .message
+        .as_deref()
+        .filter(|message| !message.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("commit message is required"))?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let output = git_native::commit(
+        &cwd,
+        message,
+        request.include_unstaged != Some(false),
+        request.push,
+        request.force_push,
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_commit_message(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    match generate_ai_commit_message(&context, &cwd).await {
+        Ok(message) if !message.is_empty() => Ok(Json(json!({
+          "ok": true, "cwd": cwd, "message": message, "source": "ai"
+        }))),
+        result => {
+            let reason = result
+                .err()
+                .map(|error| error.message)
+                .unwrap_or_else(|| "AI returned an empty message".into());
+            let message = git_native::heuristic_commit_message(&cwd)
+                .await
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            Ok(Json(json!({
+              "ok": true, "cwd": cwd, "message": message, "source": "heuristic",
+              "reason": reason
+            })))
+        }
+    }
+}
+
+async fn generate_ai_commit_message(
+    context: &ServerContext,
+    cwd: &Path,
+) -> Result<String, ApiError> {
+    let diff = git_native::commit_message_context(cwd)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    if diff.trim().is_empty() {
+        return Err(ApiError::bad_request("No changes to commit"));
+    }
+    let client = PiRpcClient::spawn(PiSpawnOptions::new(
+        context.runtimes.pi_binary().clone(),
+        cwd.to_path_buf(),
+    ))
+    .await?;
+    let state = match client.request_typed(&PiCommand::GetState).await {
+        Ok(response) => match pi_response_data(response) {
+            Ok(state) => state,
+            Err(error) => {
+                let _ = client.shutdown().await;
+                return Err(error);
+            }
+        },
+        Err(error) => {
+            let _ = client.shutdown().await;
+            return Err(error.into());
+        }
+    };
+    let temporary_session = state
+        .get("sessionFile")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    let mut events = client.subscribe();
+    let prompt = format!(
+        "Write one concise imperative git commit subject, at most 72 characters. Return only the subject with no quotes or markdown.\n\n{diff}"
+    );
+    let result = async {
+        pi_response_data(
+            client
+                .request_typed(&PiCommand::Prompt {
+                    message: prompt,
+                    images: Vec::new(),
+                    streaming_behavior: None,
+                })
+                .await?,
+        )?;
+        tokio::time::timeout(std::time::Duration::from_secs(90), async {
+            loop {
+                match events.recv().await {
+                    Ok(event)
+                        if event.get("type").and_then(Value::as_str) == Some("agent_settled") =>
+                    {
+                        break Ok::<(), ApiError>(());
+                    }
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        break Err(ApiError::internal("temporary Pi process exited"));
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| ApiError::internal("commit message generation timed out"))??;
+        let data = pi_response_data(
+            client
+                .request_typed(&PiCommand::GetLastAssistantText)
+                .await?,
+        )?;
+        let text = data
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .trim_matches(['`', '"', '\''])
+            .chars()
+            .take(72)
+            .collect::<String>();
+        Ok(text)
+    }
+    .await;
+    let _ = client.shutdown().await;
+    if let Some(path) = temporary_session {
+        let _ = std::fs::remove_file(path);
+    }
+    result
+}
+
+async fn git_push(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let output = git_native::push_changes(&cwd, request.force || request.force_push)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_pull(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let output = git_native::pull_changes(&cwd)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_commit_action(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<GitMutationRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let action = request
+        .action
+        .as_deref()
+        .filter(|action| !action.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("action is required"))?;
+    let commit = request
+        .commit
+        .as_deref()
+        .filter(|commit| !commit.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("commit is required"))?;
+    let cwd = git_cwd(&context, raw_query.as_deref(), &request.cwd).await?;
+    let output = git_native::commit_action(
+        &cwd,
+        action,
+        commit,
+        request.tag_name.as_deref(),
+        request.reset_mode.as_deref(),
+        request.message.as_deref(),
+    )
+    .await
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    git_mutated(&context, &cwd);
+    Ok(git_action_response(cwd, output))
+}
+
+async fn git_cwd(
+    context: &ServerContext,
+    raw_query: Option<&str>,
+    requested_cwd: &str,
+) -> Result<PathBuf, ApiError> {
+    if requested_cwd.trim().is_empty() {
+        return Err(ApiError::bad_request("cwd is required"));
+    }
+    let base_cwd = request_base_cwd(context, &parse_request_target(raw_query)).await?;
+    let cwd = project_files::resolve_directory(requested_cwd, &base_cwd)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    context.git_runtime.watch(cwd.clone()).await;
+    Ok(cwd)
+}
+
+fn required_query_value(value: Option<String>, name: &str) -> Result<String, ApiError> {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request(format!("{name} is required")))
+}
+
+fn git_action_response(cwd: PathBuf, output: git_native::GitCommandOutput) -> Json<Value> {
+    Json(json!({
+      "ok": true, "cwd": cwd, "stdout": output.stdout, "stderr": output.stderr
+    }))
+}
+
+fn git_mutated(context: &ServerContext, cwd: &Path) {
+    context.event_hub.push(
+        None,
+        None,
+        json!({
+          "type": "git_changed",
+          "cwd": cwd,
+          "repositoryRoot": cwd,
+          "changedAt": time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000,
+          "scopes": ["status", "files", "refs"]
+        }),
+    );
 }
 
 async fn request_base_cwd(
@@ -3547,6 +4067,7 @@ mod tests {
             pending_queues: Arc::new(RwLock::new(HashMap::new())),
             streaming_items: Arc::new(RwLock::new(HashMap::new())),
             hide_thinking: Arc::new(AtomicBool::new(false)),
+            git_runtime: Arc::new(GitRuntime::default()),
         }
     }
 

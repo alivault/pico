@@ -91,13 +91,13 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 7. Native Git runtime
 
-- [ ] Port repository discovery and all short-lived cache keys/expiry policy.
-- [ ] Port status, changes, branches, history graph inputs, unpushed commits,
+- [x] Port repository discovery and all short-lived cache keys/expiry policy.
+- [x] Port status, changes, branches, history graph inputs, unpushed commits,
       working diffs, reviews, commit files/diffs, and remote URLs.
-- [ ] Port stage, discard, checkout, commit, push, force-push-with-lease, and pull.
-- [ ] Port heuristic and AI commit-message generation.
-- [ ] Port Git filesystem watching and debounced scoped `git_changed` events.
-- [ ] Run mutation tests only against disposable repositories.
+- [x] Port stage, discard, checkout, commit, push, force-push-with-lease, and pull.
+- [x] Port heuristic and AI commit-message generation.
+- [x] Port Git filesystem watching and debounced scoped `git_changed` events.
+- [x] Run mutation tests only against disposable repositories.
 
 ## 8. Native PTY terminal runtime
 
