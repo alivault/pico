@@ -69,6 +69,9 @@ Implemented:
 - server-owned reorderable pending prompts drained at Pi turn/settled boundaries
 - model/thinking/context-usage projection from typed Pi RPC state
 - deterministic fake-Pi end-to-end route coverage
+- safe native directory discovery, path and `@file` completions, project file
+  trees/reads, cleanup, and Pi command/skill projection
+- traversal, symlink-escape, binary, large-file, and Unicode path tests
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
@@ -76,8 +79,8 @@ Implemented:
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
 session indexes, the primary `/events` stream, and core prompt/session mutations,
-but it does not claim Git, files, auth, terminal, highlighting, or static-app
-parity yet.
+but it does not claim Git, auth, terminal, highlighting, or static-app parity
+yet.
 
 ## Migration order
 

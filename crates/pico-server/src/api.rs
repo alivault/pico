@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
 use std::io::{Read, Seek, Write};
 use std::net::SocketAddr;
@@ -31,6 +31,7 @@ use crate::event_hub::{EventHub, ServerEvent};
 use crate::persistence::{self, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError};
+use crate::project_files;
 use crate::protocol::{
     ConversationItem, API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION,
 };
@@ -66,6 +67,7 @@ struct RuntimeProjection {
     thinking_level: Option<String>,
     available_models: Vec<Value>,
     available_thinking_levels: Vec<String>,
+    available_skills: Vec<Value>,
     context_usage: Option<Value>,
     compacting: bool,
 }
@@ -232,6 +234,48 @@ struct RemovePendingRequest {
 struct HideThinkingRequest {
     #[serde(default)]
     hide: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct DirectoryResolveRequest {
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DirectorySearchRequest {
+    #[serde(default)]
+    query: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PathCompletionRequest {
+    #[serde(default)]
+    prefix: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileCompletionRequest {
+    #[serde(default)]
+    query: String,
+    #[serde(default)]
+    is_quoted_prefix: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProjectFileQuery {
+    cwd: String,
+    path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CleanupSessionsRequest {
+    directory: PathBuf,
+    older_than_ms: u64,
+    dry_run: Option<bool>,
+    #[serde(default)]
+    include_active_session: bool,
 }
 
 #[derive(Debug)]
@@ -858,6 +902,16 @@ fn router(context: ServerContext) -> Router {
         .route("/api/thinking", post(set_thinking))
         .route("/api/settings/hide-thinking", post(set_hide_thinking))
         .route("/api/slash-command", post(run_slash_command))
+        .route("/api/directory/resolve", post(resolve_directory))
+        .route("/api/directory-search", post(search_directories))
+        .route("/api/path-completions", post(path_completions))
+        .route("/api/file-completions", post(file_completions))
+        .route("/api/files/tree", get(project_file_tree))
+        .route("/api/files/read", get(read_project_file))
+        .route(
+            "/api/directory-sessions/cleanup",
+            post(cleanup_directory_sessions),
+        )
         .route("/api/session/history", get(session_history))
         .route("/api/session/rename", post(rename_session))
         .route("/api/session/name", post(generate_session_name))
@@ -1219,6 +1273,10 @@ fn build_state_sync(document: Option<&SessionDocument>, options: StateSyncOption
                 "availableThinkingLevels".into(),
                 serde_json::to_value(&projection.available_thinking_levels)
                     .unwrap_or(Value::Array(Vec::new())),
+            );
+            object.insert(
+                "availableSkills".into(),
+                Value::Array(projection.available_skills.clone()),
             );
             if let Some(model) = &projection.model {
                 object.insert("model".into(), model.clone());
@@ -1600,6 +1658,13 @@ async fn client_manifest() -> Json<Value> {
           "/api/thinking",
           "/api/settings/hide-thinking",
           "/api/slash-command",
+          "/api/directory/resolve",
+          "/api/directory-search",
+          "/api/directory-sessions/cleanup",
+          "/api/path-completions",
+          "/api/file-completions",
+          "/api/files/tree",
+          "/api/files/read",
           "/api/rust/sessions",
           "/api/rust/sessions/:id/commands",
           "/api/rust/sessions/:id/events"
@@ -1617,7 +1682,11 @@ async fn client_manifest() -> Json<Value> {
           "session-tree",
           "model-selection",
           "thinking-selection",
-          "compaction"
+          "compaction",
+          "directory-discovery",
+          "path-completions",
+          "project-files",
+          "pi-commands"
         ]
       }
     }))
@@ -2070,6 +2139,252 @@ async fn run_slash_command(
         )?;
     }
     Ok(Json(json!({ "ok": true })))
+}
+
+async fn resolve_directory(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<DirectoryResolveRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let path = tokio::task::spawn_blocking(move || {
+        project_files::resolve_directory(&request.path, &base_cwd)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({ "ok": true, "path": path })))
+}
+
+async fn search_directories(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<DirectorySearchRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let query = request.query;
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let search_query = query.clone();
+    let items = tokio::task::spawn_blocking(move || {
+        project_files::search_directories(&search_query, &base_cwd)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true,
+      "query": query,
+      "totalCount": items.len(),
+      "items": items
+    })))
+}
+
+async fn path_completions(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<PathCompletionRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let prefix = request.prefix;
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let completion_prefix = prefix.clone();
+    let items = tokio::task::spawn_blocking(move || {
+        project_files::path_completions(&completion_prefix, &base_cwd)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true,
+      "prefix": prefix,
+      "totalCount": items.len(),
+      "items": items
+    })))
+}
+
+async fn file_completions(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<FileCompletionRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let query = request.query;
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let search_query = query.clone();
+    let items = tokio::task::spawn_blocking(move || {
+        project_files::file_completions(&search_query, &base_cwd, request.is_quoted_prefix)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true,
+      "query": query,
+      "totalCount": items.len(),
+      "items": items
+    })))
+}
+
+async fn project_file_tree(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<ProjectFileQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let requested_cwd = query.cwd;
+    if requested_cwd.trim().is_empty() {
+        return Err(ApiError::bad_request("cwd is required"));
+    }
+    let cwd = tokio::task::spawn_blocking(move || {
+        project_files::resolve_directory(&requested_cwd, &base_cwd)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let tree_cwd = cwd.clone();
+    let paths = tokio::task::spawn_blocking(move || project_files::project_tree(&tree_cwd))
+        .await
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true,
+      "cwd": cwd,
+      "totalCount": paths.len(),
+      "paths": paths
+    })))
+}
+
+async fn read_project_file(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Query(query): Query<ProjectFileQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let requested_path = query
+        .path
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| ApiError::bad_request("path is required"))?;
+    if query.cwd.trim().is_empty() {
+        return Err(ApiError::bad_request("cwd is required"));
+    }
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let cwd = tokio::task::spawn_blocking(move || {
+        project_files::resolve_directory(&query.cwd, &base_cwd)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let read_cwd = cwd.clone();
+    let (path, content) = tokio::task::spawn_blocking(move || {
+        project_files::read_project_file(&read_cwd, &requested_path)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({
+      "ok": true,
+      "cwd": cwd,
+      "path": path,
+      "content": content
+    })))
+}
+
+async fn cleanup_directory_sessions(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<CleanupSessionsRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if request.older_than_ms == 0 {
+        return Err(ApiError::bad_request(
+            "olderThanMs must be greater than zero",
+        ));
+    }
+    let base_cwd = request_base_cwd(&context, &parse_request_target(raw_query.as_deref())).await?;
+    let directory =
+        project_files::resolve_directory(request.directory.to_string_lossy().as_ref(), &base_cwd)
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let documents = context
+        .session_store
+        .list_directory(&directory)
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let cutoff = time::OffsetDateTime::now_utc()
+        - time::Duration::milliseconds(i64::try_from(request.older_than_ms).unwrap_or(i64::MAX));
+    let active_paths = context
+        .app
+        .read()
+        .await
+        .sessions()
+        .into_iter()
+        .filter(|record| request.include_active_session || !record.draft)
+        .filter_map(|record| record.session_path)
+        .collect::<HashSet<_>>();
+    let matching = documents
+        .into_iter()
+        .filter_map(|document| {
+            if !request.include_active_session && active_paths.contains(&document.path) {
+                return None;
+            }
+            let activity = document.modified.as_deref().and_then(|modified| {
+                time::OffsetDateTime::parse(
+                    modified,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .ok()
+            })?;
+            (activity < cutoff).then(|| {
+                let mut summary = document.summary();
+                summary.unread = Some(false);
+                (document.path, activity, summary)
+            })
+        })
+        .collect::<Vec<_>>();
+    let dry_run = request.dry_run != Some(false);
+    let matching_sessions = matching
+        .iter()
+        .map(|(_, activity, summary)| {
+            let mut value = serde_json::to_value(summary).unwrap_or(Value::Null);
+            if let Some(object) = value.as_object_mut() {
+                object.insert(
+                    "activityAt".into(),
+                    Value::String(
+                        activity
+                            .format(&time::format_description::well_known::Rfc3339)
+                            .unwrap_or_default(),
+                    ),
+                );
+            }
+            value
+        })
+        .collect::<Vec<_>>();
+    let deleted_session_ids = if dry_run {
+        Vec::new()
+    } else {
+        let mut deleted = Vec::new();
+        for (path, _, summary) in &matching {
+            delete_one_session(&context, path).await?;
+            if let Some(id) = &summary.id {
+                deleted.push(id.clone());
+            }
+        }
+        broadcast_sessions_changed(&context)?;
+        deleted
+    };
+    Ok(Json(json!({
+      "ok": true,
+      "directory": directory,
+      "cutoff": cutoff.format(&time::format_description::well_known::Rfc3339).unwrap_or_default(),
+      "dryRun": dry_run,
+      "deletedSessionIds": deleted_session_ids,
+      "matchingSessions": matching_sessions
+    })))
+}
+
+async fn request_base_cwd(
+    context: &ServerContext,
+    target: &RequestTarget,
+) -> Result<PathBuf, ApiError> {
+    if target.session.is_some() || target.session_path.is_some() {
+        return Ok(resolve_session_document(context, target).await?.header.cwd);
+    }
+    if let Some(cwd) = context.app.read().await.base_cwd(&target.context_id) {
+        return Ok(cwd);
+    }
+    std::env::current_dir().map_err(|error| ApiError::internal(error.to_string()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -2940,11 +3255,12 @@ async fn refresh_runtime_projection(
     runtime_id: &str,
     client: &PiRpcClient,
 ) {
-    let (state, models, levels, stats) = tokio::join!(
+    let (state, models, levels, stats, commands) = tokio::join!(
         client.request_typed(&PiCommand::GetState),
         client.request_typed(&PiCommand::GetAvailableModels),
         client.request_typed(&PiCommand::GetAvailableThinkingLevels),
         client.request_typed(&PiCommand::GetSessionStats),
+        client.request_typed(&PiCommand::GetCommands),
     );
     let data = |response: Result<Value, PiRpcError>| {
         response
@@ -2955,6 +3271,7 @@ async fn refresh_runtime_projection(
     let models = data(models);
     let levels = data(levels);
     let stats = data(stats);
+    let commands = data(commands);
     let projection = RuntimeProjection {
         model: state.as_ref().and_then(|state| state.get("model")).cloned(),
         thinking_level: state
@@ -2989,6 +3306,23 @@ async fn refresh_runtime_projection(
                     "xhigh".into(),
                 ]
             }),
+        available_skills: commands
+            .as_ref()
+            .and_then(|commands| commands.get("commands"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|command| command.get("source").and_then(Value::as_str) == Some("skill"))
+            .filter_map(|command| {
+                let raw_name = command.get("name")?.as_str()?;
+                Some(json!({
+                  "name": raw_name.strip_prefix("skill:").unwrap_or(raw_name),
+                  "description": command.get("description").and_then(Value::as_str),
+                  "scope": command.get("location").and_then(Value::as_str),
+                  "source": command.get("path").and_then(Value::as_str)
+                }))
+            })
+            .collect(),
         context_usage: stats
             .as_ref()
             .and_then(|stats| stats.get("contextUsage"))

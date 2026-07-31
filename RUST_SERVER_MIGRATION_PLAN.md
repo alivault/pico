@@ -82,12 +82,12 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 6. Resource discovery, project files, and completions
 
-- [ ] Port safe project path resolution with symlink escape protection.
-- [ ] Port directory resolve/search and directory-session cleanup routes.
-- [ ] Port path and `@file` completions with ordering and result limits.
-- [ ] Port project file tree/read endpoints and binary/size rejection.
-- [ ] Surface Pi RPC `get_commands` as slash commands/skills/templates.
-- [ ] Add adversarial traversal, symlink, Unicode, and large-tree tests.
+- [x] Port safe project path resolution with symlink escape protection.
+- [x] Port directory resolve/search and directory-session cleanup routes.
+- [x] Port path and `@file` completions with ordering and result limits.
+- [x] Port project file tree/read endpoints and binary/size rejection.
+- [x] Surface Pi RPC `get_commands` as slash commands/skills/templates.
+- [x] Add adversarial traversal, symlink, Unicode, and large-tree tests.
 
 ## 7. Native Git runtime
 
