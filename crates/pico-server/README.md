@@ -42,12 +42,17 @@ server a native binary.
 cargo test --workspace
 cargo run -p pico-server -- pi-smoke --cwd .
 cargo run -p pico-server -- serve --port 3142
+cargo run -p pico-server -- status
+cargo run -p pico-server -- stop
 ```
 
 Implemented:
 
 - native Axum HTTP process
-- graceful SIGINT/SIGTERM shutdown
+- production macOS/XDG data paths and owner-only files
+- owner-only local control socket with status and graceful stop commands
+- stale-instance and duplicate-server protection
+- graceful SIGINT/SIGTERM/control-socket shutdown
 - server state/process-runtime separation
 - Pi executable discovery and version reporting
 - strict LF-delimited Pi RPC transport
@@ -55,6 +60,8 @@ Implemented:
 - Pi event broadcast
 - experimental session creation, command, event, and deletion routes
 - manifest and health endpoints
+- loopback defaults, Host/Origin validation, and request size bounds
+- daily structured logs and atomically persisted lifecycle state
 
 The experimental routes are under `/api/rust/*`. The manifest deliberately does
 not claim full conversation/session compatibility yet.

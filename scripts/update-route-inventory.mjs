@@ -42,7 +42,8 @@ export async function currentRouteInventory() {
   }
   return routes.sort(
     (left, right) =>
-      left.path.localeCompare(right.path) || left.method.localeCompare(right.method)
+      left.path.localeCompare(right.path) ||
+      left.method.localeCompare(right.method)
   )
 }
 

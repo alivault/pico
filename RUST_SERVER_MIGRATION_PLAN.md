@@ -33,14 +33,14 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 2. Native server lifecycle, configuration, and security
 
-- [ ] Replace preview CLI defaults with production configuration and data paths.
-- [ ] Enforce one server instance with an owner-only local control socket/lock.
-- [ ] Detect stale ownership records and live port conflicts safely.
-- [ ] Bind loopback by default; require explicit configuration for LAN binding.
-- [ ] Validate Host/Origin for browser requests and bound request body sizes.
-- [ ] Add structured rotating logs and a machine-readable status snapshot.
-- [ ] Implement graceful drain/shutdown/restart state and signal handling.
-- [ ] Persist versioned server facts atomically with migration tests.
+- [x] Replace preview CLI defaults with production configuration and data paths.
+- [x] Enforce one server instance with an owner-only local control socket/lock.
+- [x] Detect stale ownership records and live port conflicts safely.
+- [x] Bind loopback by default; require explicit configuration for LAN binding.
+- [x] Validate Host/Origin for browser requests and bound request body sizes.
+- [x] Add structured rotating logs and a machine-readable status snapshot.
+- [x] Implement graceful drain/shutdown/restart state and signal handling.
+- [x] Persist versioned server facts atomically with migration tests.
 
 ## 3. Production Pi process runtime
 

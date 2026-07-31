@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{Path, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
+use axum::middleware;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -13,15 +14,21 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing::info;
 
 use crate::app_state::AppState;
+use crate::config::ServerConfig;
+#[cfg(unix)]
+use crate::control::ControlServer;
+use crate::control::{initial_status, ControlStatus};
+use crate::persistence::{self, ServerSnapshot};
 use crate::pi_rpc::{detect_pi_version, PiRpcError};
 use crate::protocol::{API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION};
 use crate::runtime::RuntimeRegistry;
+use crate::security::{self, RequestPolicy};
 
 #[derive(Clone)]
 struct ServerContext {
@@ -30,6 +37,8 @@ struct ServerContext {
     started_at: Instant,
     pi_version: Option<String>,
     pi_error: Option<String>,
+    control_status: Arc<RwLock<ControlStatus>>,
+    previous_clean_shutdown: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,29 +92,89 @@ impl IntoResponse for ApiError {
     }
 }
 
-pub async fn serve(
-    address: SocketAddr,
-    pi_binary: PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let (pi_version, pi_error) = match detect_pi_version(&pi_binary).await {
+pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+    config.paths.create()?;
+    #[cfg(unix)]
+    let control = ControlServer::bind(&config.paths.control_socket).await?;
+    let previous_snapshot = persistence::load(&config.paths.state_file)?;
+    persistence::store(
+        &config.paths.state_file,
+        &ServerSnapshot::started(config.port),
+    )?;
+
+    let (pi_version, pi_error) = match detect_pi_version(&config.pi_binary).await {
         Ok(version) => (Some(version), None),
         Err(error) => (None, Some(error.to_string())),
     };
+    let control_status = Arc::new(RwLock::new(initial_status(
+        config.host.to_string(),
+        config.port,
+    )));
     let context = ServerContext {
         app: Arc::new(RwLock::new(AppState::default())),
-        runtimes: Arc::new(RuntimeRegistry::new(pi_binary)),
+        runtimes: Arc::new(RuntimeRegistry::new(config.pi_binary.clone())),
         started_at: Instant::now(),
         pi_version,
         pi_error,
+        control_status: control_status.clone(),
+        previous_clean_shutdown: previous_snapshot.map(|snapshot| snapshot.clean_shutdown),
     };
-    let app = router(context.clone());
-    let listener = TcpListener::bind(address).await?;
+    let policy = Arc::new(RequestPolicy::new(
+        config.host,
+        config.port,
+        config.allowed_origins.clone(),
+    ));
+    let app = router(context.clone())
+        .layer(DefaultBodyLimit::max(config.max_request_bytes))
+        .layer(middleware::from_fn_with_state(
+            policy,
+            security::validate_request,
+        ));
+    let address = SocketAddr::new(config.host, config.port);
+
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    #[cfg(unix)]
+    let control_task = {
+        let stop = shutdown_rx.clone();
+        let shutdown = shutdown_tx.clone();
+        Some(tokio::spawn(async move {
+            control.run(control_status.clone(), shutdown, stop).await;
+        }))
+    };
+    #[cfg(not(unix))]
+    let control_task: Option<tokio::task::JoinHandle<()>> = None;
+
+    let listener = match TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            let _ = shutdown_tx.send(true);
+            if let Some(control_task) = control_task {
+                let _ = control_task.await;
+            }
+            persistence::mark_clean_shutdown(&config.paths.state_file)?;
+            return Err(error.into());
+        }
+    };
+    context.control_status.write().await.phase = "running".into();
+    if !config.host.is_loopback() {
+        tracing::warn!(%address, "Pico is listening beyond loopback; configure authentication before using an untrusted network");
+    }
     info!(%address, "native Pico server listening");
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(
+            shutdown_rx,
+            shutdown_tx.clone(),
+            context.control_status.clone(),
+        ))
         .await?;
+    context.control_status.write().await.phase = "stopping".into();
+    let _ = shutdown_tx.send(true);
     context.runtimes.shutdown().await;
+    if let Some(control_task) = control_task {
+        let _ = control_task.await;
+    }
+    persistence::mark_clean_shutdown(&config.paths.state_file)?;
     Ok(())
 }
 
@@ -155,12 +224,15 @@ async fn client_manifest() -> Json<Value> {
 }
 
 async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
+    let phase = context.control_status.read().await.phase.clone();
     Json(json!({
       "ok": true,
       "runtime": "rust",
       "version": env!("CARGO_PKG_VERSION"),
       "serverProtocolVersion": SERVER_PROTOCOL_VERSION,
       "persistenceVersion": PERSISTENCE_VERSION,
+      "phase": phase,
+      "previousCleanShutdown": context.previous_clean_shutdown,
       "uptimeSeconds": context.started_at.elapsed().as_secs(),
       "pi": {
         "binary": context.runtimes.pi_binary(),
@@ -247,20 +319,40 @@ async fn session_events(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(
+    mut shutdown: watch::Receiver<bool>,
+    shutdown_tx: watch::Sender<bool>,
+    status: Arc<RwLock<ControlStatus>>,
+) {
+    if !*shutdown.borrow() {
+        tokio::select! {
+            changed = shutdown.changed() => {
+                if changed.is_err() {
+                    tracing::warn!("shutdown control channel closed");
+                }
+            }
+            _ = os_shutdown_signal() => {
+                let _ = shutdown_tx.send(true);
+            }
+        }
+    }
+    status.write().await.phase = "draining".into();
+    info!("native Pico server shutting down");
+}
+
+async fn os_shutdown_signal() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
-        let terminate = signal(SignalKind::terminate());
-        match terminate {
+        match signal(SignalKind::terminate()) {
             Ok(mut terminate) => {
                 tokio::select! {
-                  result = tokio::signal::ctrl_c() => {
-                    if let Err(error) = result {
-                      tracing::warn!(%error, "failed to install Ctrl-C handler");
+                    result = tokio::signal::ctrl_c() => {
+                        if let Err(error) = result {
+                            tracing::warn!(%error, "failed to install Ctrl-C handler");
+                        }
                     }
-                  }
-                  _ = terminate.recv() => {}
+                    _ = terminate.recv() => {}
                 }
             }
             Err(error) => {
@@ -274,8 +366,6 @@ async fn shutdown_signal() {
     {
         let _ = tokio::signal::ctrl_c().await;
     }
-
-    info!("native Pico server shutting down");
 }
 
 #[cfg(test)]
@@ -292,6 +382,8 @@ mod tests {
             started_at: Instant::now(),
             pi_version: Some("test".into()),
             pi_error: None,
+            control_status: Arc::new(RwLock::new(initial_status("127.0.0.1".into(), 3141))),
+            previous_clean_shutdown: Some(true),
         }
     }
 

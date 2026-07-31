@@ -14,7 +14,8 @@ async function fixture(name) {
 }
 
 function invariant(condition, message) {
-  if (!condition) throw new Error(`Contract fixture invariant failed: ${message}`)
+  if (!condition)
+    throw new Error(`Contract fixture invariant failed: ${message}`)
 }
 
 const [
@@ -30,18 +31,18 @@ const [
   expectedRoutes,
   actualRoutes,
 ] = await Promise.all([
-    fixture("client_manifest"),
-    fixture("state_sync_initial"),
-    fixture("state_sync_patch"),
-    fixture("sessions_event"),
-    fixture("pi_rpc_events"),
-    fixture("terminal_events"),
-    fixture("git_status_response"),
-    fixture("pico_events"),
-    fixture("api_responses"),
-    fixture("route_inventory"),
-    currentRouteInventory(),
-  ])
+  fixture("client_manifest"),
+  fixture("state_sync_initial"),
+  fixture("state_sync_patch"),
+  fixture("sessions_event"),
+  fixture("pi_rpc_events"),
+  fixture("terminal_events"),
+  fixture("git_status_response"),
+  fixture("pico_events"),
+  fixture("api_responses"),
+  fixture("route_inventory"),
+  currentRouteInventory(),
+])
 
 invariant(
   JSON.stringify(actualRoutes) === JSON.stringify(expectedRoutes),
@@ -91,8 +92,7 @@ invariant(
   "Pi fixtures must include extension UI"
 )
 invariant(
-  terminalEvents[0]?.type === "ready" &&
-    terminalEvents.at(-1)?.type === "exit",
+  terminalEvents[0]?.type === "ready" && terminalEvents.at(-1)?.type === "exit",
   "terminal fixture must cover ready through exit"
 )
 invariant(

@@ -1,5 +1,10 @@
 pub mod api;
 pub mod app_state;
+pub mod config;
+pub mod control;
+pub mod logging;
+pub mod persistence;
 pub mod pi_rpc;
 pub mod protocol;
 pub mod runtime;
+pub mod security;
