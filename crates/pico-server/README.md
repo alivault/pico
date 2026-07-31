@@ -76,6 +76,11 @@ Implemented:
   short-lived caches, disposable-repository mutation tests, AI/heuristic commit
   messages, safe argument validation, and polling `git_changed` events
 - stage/discard/checkout/commit/push/force-with-lease/pull and commit actions
+- server-owned native PTYs with scoped reuse, cleaned shell environments,
+  dimensions, bounded replay, monotonic output/input sequencing, SSE and browser
+  WebSocket transports, reconnect reset signaling, and exit cleanup
+- terminal create/input/resize/events/WebSocket/close route parity without
+  `node-pty`
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
@@ -83,7 +88,7 @@ Implemented:
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
 session indexes, the primary `/events` stream, and core prompt/session mutations,
-but it does not claim auth, terminal, highlighting, or static-app parity yet.
+but it does not claim auth, highlighting, or static-app parity yet.
 
 ## Migration order
 
@@ -91,8 +96,9 @@ but it does not claim auth, terminal, highlighting, or static-app parity yet.
 2. Port session indexing and read-only project/Git endpoints.
 3. Translate Pi RPC events into Pico `state_sync` and conversation item patches.
 4. Port prompt, queue, abort, model, thinking, compaction, and tree flows.
-5. Port provider authentication and extension UI request bridging.
-6. Replace `node-pty` with a Rust PTY runtime.
+5. Replace `node-pty` with a Rust PTY runtime.
+6. Port native highlighting, provider authentication, and extension UI request
+   bridging.
 7. Build the browser client as static assets served by Rust.
 8. Bundle the Rust server and architecture-matched standalone Pi binary in the
    signed macOS app.

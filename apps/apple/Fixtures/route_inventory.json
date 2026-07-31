@@ -240,6 +240,10 @@
     "path": "/api/terminal/$id/resize"
   },
   {
+    "method": "GET",
+    "path": "/api/terminal/$id/ws"
+  },
+  {
     "method": "POST",
     "path": "/api/thinking"
   },

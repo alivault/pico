@@ -7,9 +7,12 @@ license = "AGPL-3.0-only"
 publish = false
 
 [dependencies]
-axum = "0.7.9"
+anyhow = "1.0.95"
+axum = { version = "0.7.9", features = ["ws"] }
 clap = { version = "4.5.23", features = ["derive", "env"] }
+futures-util = "0.3.31"
 libc = "0.2.169"
+portable-pty = "0.9.0"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.133"
 tokio = { version = "1.42.0", features = [
@@ -28,6 +31,8 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 url = "2.5.4"
+uuid = { version = "1.11.0", features = ["v4"] }
 
 [dev-dependencies]
+tokio-tungstenite = "0.24.0"
 tower = { version = "0.5.2", features = ["util"] }

@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+use axum::extract::ws::{Message as WebSocketMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, RawQuery, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware;
@@ -14,6 +15,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use futures_util::stream;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -42,6 +44,7 @@ use crate::session_store::{
     streaming_assistant_item, update_streaming_tool, IndexedSessionFile, SessionDocument,
     SessionStore,
 };
+use crate::terminal::{TerminalEvent, TerminalManager};
 
 #[derive(Clone)]
 struct ServerContext {
@@ -61,6 +64,7 @@ struct ServerContext {
     streaming_items: Arc<RwLock<HashMap<String, ConversationItem>>>,
     hide_thinking: Arc<AtomicBool>,
     git_runtime: Arc<GitRuntime>,
+    terminals: TerminalManager,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -325,6 +329,39 @@ struct GitMutationRequest {
     reset_mode: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct CreateTerminalRequest {
+    client_key: Option<String>,
+    cols: Option<Value>,
+    rows: Option<Value>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct TerminalInputRequest {
+    data: Option<Value>,
+    input_seq: Option<Value>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct TerminalResizeRequest {
+    cols: Option<Value>,
+    rows: Option<Value>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct TerminalSocketRequest {
+    #[serde(rename = "type")]
+    kind: String,
+    data: Option<Value>,
+    input_seq: Option<Value>,
+    cols: Option<Value>,
+    rows: Option<Value>,
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -415,6 +452,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         streaming_items: Arc::new(RwLock::new(HashMap::new())),
         hide_thinking: Arc::new(AtomicBool::new(false)),
         git_runtime: Arc::new(GitRuntime::default()),
+        terminals: TerminalManager::default(),
     };
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
@@ -470,6 +508,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     context.control_status.write().await.phase = "stopping".into();
     let _ = shutdown_tx.send(true);
     context.runtimes.shutdown().await;
+    context.terminals.shutdown();
     if let Some(control_task) = control_task {
         let _ = control_task.await;
     }
@@ -976,6 +1015,12 @@ fn router(context: ServerContext) -> Router {
         .route("/api/git-push", post(git_push))
         .route("/api/git-pull", post(git_pull))
         .route("/api/git-commit-action", post(git_commit_action))
+        .route("/api/terminal", post(create_terminal))
+        .route("/api/terminal/:id/input", post(terminal_input))
+        .route("/api/terminal/:id/resize", post(terminal_resize))
+        .route("/api/terminal/:id/events", get(terminal_events))
+        .route("/api/terminal/:id/ws", get(terminal_websocket))
+        .route("/api/terminal/:id/close", post(close_terminal))
         .route("/api/session/history", get(session_history))
         .route("/api/session/rename", post(rename_session))
         .route("/api/session/name", post(generate_session_name))
@@ -1744,6 +1789,12 @@ async fn client_manifest() -> Json<Value> {
           "/api/git-push",
           "/api/git-pull",
           "/api/git-commit-action",
+          "/api/terminal",
+          "/api/terminal/:id/input",
+          "/api/terminal/:id/resize",
+          "/api/terminal/:id/events",
+          "/api/terminal/:id/ws",
+          "/api/terminal/:id/close",
           "/api/rust/sessions",
           "/api/rust/sessions/:id/commands",
           "/api/rust/sessions/:id/events"
@@ -1769,7 +1820,9 @@ async fn client_manifest() -> Json<Value> {
           "git-status",
           "git-history",
           "git-mutations",
-          "git-watch"
+          "git-watch",
+          "native-pty",
+          "terminal-replay"
         ]
       }
     }))
@@ -2892,6 +2945,377 @@ fn git_mutated(context: &ServerContext, cwd: &Path) {
           "scopes": ["status", "files", "refs"]
         }),
     );
+}
+
+async fn create_terminal(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<CreateTerminalRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, cwd) = terminal_scope(&context, &target).await?;
+    let terminal = context
+        .terminals
+        .create(
+            scope_key,
+            cwd,
+            request.client_key.as_deref(),
+            terminal_dimension(request.cols.as_ref()),
+            terminal_dimension(request.rows.as_ref()),
+        )
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut response =
+        serde_json::to_value(terminal).map_err(|error| ApiError::internal(error.to_string()))?;
+    if let Some(object) = response.as_object_mut() {
+        object.insert("ok".into(), Value::Bool(true));
+    }
+    Ok(Json(response))
+}
+
+async fn terminal_input(
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<TerminalInputRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let data = request
+        .data
+        .as_ref()
+        .and_then(Value::as_str)
+        .ok_or_else(|| ApiError::bad_request("Terminal input data is required."))?;
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, _) = terminal_scope(&context, &target).await?;
+    context
+        .terminals
+        .write_input(
+            &scope_key,
+            &id,
+            data,
+            terminal_input_sequence(request.input_seq.as_ref()),
+        )
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn terminal_resize(
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<TerminalResizeRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, _) = terminal_scope(&context, &target).await?;
+    context
+        .terminals
+        .resize(
+            &scope_key,
+            &id,
+            terminal_dimension(request.cols.as_ref()),
+            terminal_dimension(request.rows.as_ref()),
+        )
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn close_terminal(
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<Value>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, _) = terminal_scope(&context, &target).await?;
+    context
+        .terminals
+        .close(&scope_key, &id)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn terminal_events(
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    RawQuery(raw_query): RawQuery,
+    headers: HeaderMap,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, _) = terminal_scope(&context, &target).await?;
+    let last_sequence = headers
+        .get("last-event-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .or_else(|| {
+            query_values(raw_query.as_deref(), "lastSeq")
+                .into_iter()
+                .next()
+                .and_then(|value| value.parse().ok())
+        });
+    let subscription = context
+        .terminals
+        .subscribe(&scope_key, &id, last_sequence)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let mut bootstrap = vec![Ok(terminal_sse_event(&subscription.ready))];
+    bootstrap.extend(
+        subscription
+            .initial
+            .iter()
+            .map(|event| Ok(terminal_sse_event(event))),
+    );
+    let latest_sequence = subscription.last_initial_sequence;
+    let live = stream::unfold(
+        (subscription.receiver, latest_sequence, false),
+        |(mut receiver, mut latest_sequence, terminated)| async move {
+            if terminated {
+                return None;
+            }
+            loop {
+                match receiver.recv().await {
+                    Ok(event) => {
+                        if let Some(sequence) = event.output_sequence() {
+                            if sequence <= latest_sequence {
+                                continue;
+                            }
+                            latest_sequence = sequence;
+                        }
+                        return Some((
+                            Ok(terminal_sse_event(&event)),
+                            (receiver, latest_sequence, false),
+                        ));
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        let event = Event::default().data(
+                            json!({
+                              "type": "error",
+                              "error": format!(
+                                "Terminal event gap ({skipped} skipped); reconnecting to replay backlog"
+                              )
+                            })
+                            .to_string(),
+                        );
+                        return Some((Ok(event), (receiver, latest_sequence, true)));
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                }
+            }
+        },
+    );
+    Ok(
+        Sse::new(tokio_stream::iter(bootstrap).chain(live)).keep_alive(
+            KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .text("keepalive"),
+        ),
+    )
+}
+
+async fn terminal_websocket(
+    websocket: WebSocketUpgrade,
+    State(context): State<ServerContext>,
+    AxumPath(id): AxumPath<String>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Response, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let (scope_key, _) = terminal_scope(&context, &target).await?;
+    let last_sequence = query_values(raw_query.as_deref(), "lastSeq")
+        .into_iter()
+        .next()
+        .and_then(|value| value.parse().ok());
+    let subscription = context
+        .terminals
+        .subscribe(&scope_key, &id, last_sequence)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(websocket
+        .on_upgrade(move |socket| {
+            run_terminal_websocket(socket, context.terminals, scope_key, id, subscription)
+        })
+        .into_response())
+}
+
+async fn run_terminal_websocket(
+    mut socket: WebSocket,
+    terminals: TerminalManager,
+    scope_key: String,
+    id: String,
+    mut subscription: crate::terminal::TerminalSubscription,
+) {
+    if send_terminal_socket_event(&mut socket, &subscription.ready)
+        .await
+        .is_err()
+    {
+        return;
+    }
+    for event in &subscription.initial {
+        if send_terminal_socket_event(&mut socket, event)
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
+    let mut latest_sequence = subscription.last_initial_sequence;
+    loop {
+        tokio::select! {
+            message = socket.recv() => {
+                let Some(Ok(message)) = message else {
+                    break;
+                };
+                let WebSocketMessage::Text(text) = message else {
+                    if matches!(message, WebSocketMessage::Close(_)) {
+                        break;
+                    }
+                    continue;
+                };
+                let request = match serde_json::from_str::<TerminalSocketRequest>(&text) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        let event = TerminalEvent::Error { error: error.to_string() };
+                        if send_terminal_socket_event(&mut socket, &event).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+                let response = match request.kind.as_str() {
+                    "input" => match request.data.as_ref().and_then(Value::as_str) {
+                        Some(data) => terminals
+                            .write_input(
+                                &scope_key,
+                                &id,
+                                data,
+                                terminal_input_sequence(request.input_seq.as_ref()),
+                            )
+                            .map(|sequence| sequence.map(|input_seq| TerminalEvent::InputAck { input_seq })),
+                        None => Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "Terminal input data is required.",
+                        )),
+                    },
+                    "resize" => terminals
+                        .resize(
+                            &scope_key,
+                            &id,
+                            terminal_dimension(request.cols.as_ref()),
+                            terminal_dimension(request.rows.as_ref()),
+                        )
+                        .map(|()| None),
+                    "ping" => Ok(Some(TerminalEvent::Pong)),
+                    _ => Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Unknown terminal message type.",
+                    )),
+                };
+                match response {
+                    Ok(Some(event)) => {
+                        if send_terminal_socket_event(&mut socket, &event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        let event = TerminalEvent::Error { error: error.to_string() };
+                        if send_terminal_socket_event(&mut socket, &event).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            event = subscription.receiver.recv() => {
+                match event {
+                    Ok(event) => {
+                        if let Some(sequence) = event.output_sequence() {
+                            if sequence <= latest_sequence {
+                                continue;
+                            }
+                            latest_sequence = sequence;
+                        }
+                        if send_terminal_socket_event(&mut socket, &event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let event = TerminalEvent::Error {
+                            error: format!("Terminal event gap: {error}; reconnecting to replay backlog"),
+                        };
+                        let _ = send_terminal_socket_event(&mut socket, &event).await;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn send_terminal_socket_event(
+    socket: &mut WebSocket,
+    event: &TerminalEvent,
+) -> Result<(), axum::Error> {
+    let payload = serde_json::to_string(event).unwrap_or_else(|_| {
+        json!({"type":"error","error":"Failed to encode terminal event"}).to_string()
+    });
+    socket.send(WebSocketMessage::Text(payload)).await
+}
+
+async fn terminal_scope(
+    context: &ServerContext,
+    target: &RequestTarget,
+) -> Result<(String, PathBuf), ApiError> {
+    let cwd = request_base_cwd(context, target).await?;
+    let context_target = {
+        let app = context.app.read().await;
+        let viewer = app.context(&target.context_id);
+        target
+            .session_key
+            .clone()
+            .or_else(|| target.session.clone())
+            .or_else(|| {
+                viewer
+                    .and_then(|viewer| viewer.active_draft.as_ref())
+                    .map(|draft| draft.session_key.clone())
+            })
+            .or_else(|| viewer.and_then(|viewer| viewer.selected_session.clone()))
+            .unwrap_or_else(|| "default".into())
+    };
+    Ok((
+        format!(
+            "{}:{}:{}",
+            target.context_id,
+            context_target,
+            cwd.to_string_lossy()
+        ),
+        cwd,
+    ))
+}
+
+fn terminal_dimension(value: Option<&Value>) -> Option<u16> {
+    terminal_number(value).map(|number| number.round().clamp(0.0, f64::from(u16::MAX)) as u16)
+}
+
+fn terminal_input_sequence(value: Option<&Value>) -> Option<u64> {
+    terminal_number(value)
+        .map(|number| number.round().clamp(0.0, 9_007_199_254_740_991.0) as u64)
+        .filter(|sequence| *sequence > 0)
+}
+
+fn terminal_number(value: Option<&Value>) -> Option<f64> {
+    let number = match value? {
+        Value::Number(number) => number.as_f64()?,
+        Value::String(value) => value.trim().parse().ok()?,
+        Value::Bool(value) => u8::from(*value).into(),
+        Value::Null => 0.0,
+        Value::Array(_) | Value::Object(_) => return None,
+    };
+    number.is_finite().then_some(number)
+}
+
+fn terminal_sse_event(event: &TerminalEvent) -> Event {
+    let value = serde_json::to_string(event).unwrap_or_else(|_| {
+        json!({"type":"error","error":"Failed to encode terminal event"}).to_string()
+    });
+    let event_frame = Event::default().data(value);
+    if let Some(sequence) = event.output_sequence() {
+        event_frame.id(sequence.to_string())
+    } else {
+        event_frame
+    }
 }
 
 async fn request_base_cwd(
@@ -4068,6 +4492,7 @@ mod tests {
             streaming_items: Arc::new(RwLock::new(HashMap::new())),
             hide_thinking: Arc::new(AtomicBool::new(false)),
             git_runtime: Arc::new(GitRuntime::default()),
+            terminals: TerminalManager::default(),
         }
     }
 
@@ -4103,6 +4528,15 @@ mod tests {
             .expect("endpoints")
             .iter()
             .any(|endpoint| endpoint == "/events"));
+    }
+
+    #[test]
+    fn terminal_numeric_inputs_match_forgiving_client_contract() {
+        assert_eq!(terminal_dimension(Some(&json!("119.6"))), Some(120));
+        assert_eq!(terminal_dimension(Some(&json!(null))), Some(0));
+        assert_eq!(terminal_dimension(Some(&json!({"invalid": true}))), None);
+        assert_eq!(terminal_input_sequence(Some(&json!("7"))), Some(7));
+        assert_eq!(terminal_input_sequence(Some(&json!(0))), None);
     }
 
     #[test]
@@ -4324,6 +4758,226 @@ for line in sys.stdin:
 
         context.runtimes.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fake Pi fixture");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn terminal_routes_reuse_scope_stream_output_and_enforce_scope() {
+        let context = test_context();
+        let app = router(context.clone());
+        let create = || {
+            Request::builder()
+                .method("POST")
+                .uri("/api/terminal?context=terminal-test")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"clientKey":"main","cols":80,"rows":24}).to_string(),
+                ))
+                .expect("create request")
+        };
+        let response = app
+            .clone()
+            .oneshot(create())
+            .await
+            .expect("create response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("create body");
+        let created: Value = serde_json::from_slice(&body).expect("create JSON");
+        let id = created["id"].as_str().expect("terminal id").to_string();
+        assert_eq!(created["backend"], "shell");
+        assert_eq!(created["reused"], false);
+
+        let response = app.clone().oneshot(create()).await.expect("reuse response");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("reuse body");
+        let reused: Value = serde_json::from_slice(&body).expect("reuse JSON");
+        assert_eq!(reused["id"], id);
+        assert_eq!(reused["reused"], true);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/terminal/{id}/events?context=terminal-test"))
+                    .body(Body::empty())
+                    .expect("events request"),
+            )
+            .await
+            .expect("events response");
+        let mut stream = response.into_body().into_data_stream();
+        let ready = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+            .await
+            .expect("ready timeout")
+            .expect("ready frame")
+            .expect("ready body");
+        assert!(String::from_utf8_lossy(&ready).contains("\"type\":\"ready\""));
+
+        let input = Request::builder()
+            .method("POST")
+            .uri(format!("/api/terminal/{id}/input?context=terminal-test"))
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"data":"printf 'pico-terminal-ok\\n'\r","inputSeq":7}).to_string(),
+            ))
+            .expect("input request");
+        let response = app.clone().oneshot(input).await.expect("input response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let mut streamed = String::new();
+        for _ in 0..12 {
+            let frame = tokio::time::timeout(std::time::Duration::from_secs(2), stream.next())
+                .await
+                .expect("output timeout")
+                .expect("output frame")
+                .expect("output body");
+            streamed.push_str(&String::from_utf8_lossy(&frame));
+            if streamed.contains("pico-terminal-ok") {
+                break;
+            }
+        }
+        assert!(streamed.contains("pico-terminal-ok"));
+
+        let resize = Request::builder()
+            .method("POST")
+            .uri(format!("/api/terminal/{id}/resize?context=terminal-test"))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"cols":120,"rows":40}).to_string()))
+            .expect("resize request");
+        assert_eq!(
+            app.clone()
+                .oneshot(resize)
+                .await
+                .expect("resize response")
+                .status(),
+            StatusCode::OK
+        );
+
+        let wrong_scope = Request::builder()
+            .method("POST")
+            .uri(format!("/api/terminal/{id}/input?context=other"))
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"data":"ignored"}).to_string()))
+            .expect("wrong-scope request");
+        assert_eq!(
+            app.clone()
+                .oneshot(wrong_scope)
+                .await
+                .expect("wrong-scope response")
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+
+        let close = Request::builder()
+            .method("POST")
+            .uri(format!("/api/terminal/{id}/close?context=terminal-test"))
+            .body(Body::empty())
+            .expect("close request");
+        assert_eq!(
+            app.oneshot(close).await.expect("close response").status(),
+            StatusCode::OK
+        );
+        context.terminals.shutdown();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn terminal_websocket_supports_browser_transport_and_disconnect_ownership() {
+        use futures_util::{SinkExt, StreamExt as FuturesStreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let context = test_context();
+        let target = RequestTarget {
+            context_id: "socket-test".into(),
+            ..RequestTarget::default()
+        };
+        let (scope_key, cwd) = terminal_scope(&context, &target).await.expect("scope");
+        let created = context
+            .terminals
+            .create(scope_key.clone(), cwd, Some("browser"), None, None)
+            .expect("create terminal");
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test listener");
+        let address = listener.local_addr().expect("listener address");
+        let server_context = context.clone();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router(server_context))
+                .await
+                .expect("test server");
+        });
+
+        let url = format!(
+            "ws://{address}/api/terminal/{}/ws?context=socket-test",
+            created.id
+        );
+        let (mut socket, _) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("websocket connection");
+        let ready = FuturesStreamExt::next(&mut socket)
+            .await
+            .expect("ready frame")
+            .expect("ready message")
+            .into_text()
+            .expect("ready text");
+        assert!(ready.contains("\"type\":\"ready\""));
+
+        socket
+            .send(Message::Text(
+                json!({"type":"input","data":"echo socket\\r","inputSeq":11}).to_string(),
+            ))
+            .await
+            .expect("input message");
+        let mut acknowledged = false;
+        for _ in 0..8 {
+            let message = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                FuturesStreamExt::next(&mut socket),
+            )
+            .await
+            .expect("socket timeout")
+            .expect("socket frame")
+            .expect("socket message")
+            .into_text()
+            .expect("socket text");
+            if message.contains("\"type\":\"input_ack\"") && message.contains("\"inputSeq\":11") {
+                acknowledged = true;
+                break;
+            }
+        }
+        assert!(acknowledged);
+        socket
+            .send(Message::Text(json!({"type":"ping"}).to_string()))
+            .await
+            .expect("ping message");
+        let mut pong = false;
+        for _ in 0..8 {
+            let message = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                FuturesStreamExt::next(&mut socket),
+            )
+            .await
+            .expect("pong timeout")
+            .expect("pong frame")
+            .expect("pong message")
+            .into_text()
+            .expect("pong text");
+            if message.contains("\"type\":\"pong\"") {
+                pong = true;
+                break;
+            }
+        }
+        assert!(pong);
+        socket.close(None).await.expect("close socket");
+
+        assert!(context
+            .terminals
+            .subscribe(&scope_key, &created.id, None)
+            .is_ok());
+        context.terminals.shutdown();
+        server.abort();
     }
 
     #[tokio::test]

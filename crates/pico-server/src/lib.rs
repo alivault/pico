@@ -14,3 +14,4 @@ pub mod protocol;
 pub mod runtime;
 pub mod security;
 pub mod session_store;
+pub mod terminal;

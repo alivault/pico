@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { readdir, readFile, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { dirname, join, relative, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const routesDir = join(root, "src", "routes")
+const nitroRoutesDir = join(root, "src", "nitro", "routes")
 const outputPath = join(
   root,
   "apps",
@@ -39,6 +40,17 @@ export async function currentRouteInventory() {
     for (const method of new Set(methods)) {
       routes.push({ method, path: route })
     }
+  }
+  for (const path of await filesBelow(nitroRoutesDir)) {
+    const source = await readFile(path, "utf8")
+    if (!source.includes("defineWebSocketHandler")) continue
+    const route = relative(nitroRoutesDir, path)
+      .split(sep)
+      .map((segment) => segment.replace(/^\[([^\]]+)\]$/, "$$$1"))
+      .join("/")
+      .replace(/\.[jt]sx?$/, "")
+      .replace(/\/index$/, "")
+    routes.push({ method: "GET", path: `/${route}` })
   }
   return routes.sort(
     (left, right) =>

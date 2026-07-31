@@ -101,12 +101,12 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 8. Native PTY terminal runtime
 
-- [ ] Replace `node-pty` with a Rust PTY runtime (`portable-pty` or equivalent).
-- [ ] Preserve shell environment cleanup, cwd, dimensions, backlog limits,
+- [x] Replace `node-pty` with a Rust PTY runtime (`portable-pty` or equivalent).
+- [x] Preserve shell environment cleanup, cwd, dimensions, backlog limits,
       monotonic output/input sequence IDs, and replay-gap reset behavior.
-- [ ] Port create/input/resize/events/close endpoints.
-- [ ] Ensure terminals remain server-owned when all UI clients disconnect.
-- [ ] Add process-exit, backpressure, UTF-8 boundary, and reconnect tests.
+- [x] Port create/input/resize/events/close endpoints.
+- [x] Ensure terminals remain server-owned when all UI clients disconnect.
+- [x] Add process-exit, backpressure, UTF-8 boundary, and reconnect tests.
 
 ## 9. Syntax highlighting
 
