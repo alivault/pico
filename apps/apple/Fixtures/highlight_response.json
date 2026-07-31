@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "language": "typescript",
+  "html": "<span class=\"line\"><span style=\"color:var(--sh-token-keyword)\">const</span> answer = <span style=\"color:var(--sh-token-string)\">&quot;&lt;&amp;&quot;</span>;</span>\n<span class=\"line\"><span style=\"color:var(--sh-token-function)\">print</span>(answer)</span>"
+}

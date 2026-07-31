@@ -131,6 +131,23 @@ struct GitFeatureTests {
     #expect(lines[2].first?.cssVariable == "--sh-token-function")
   }
 
+  @Test func parsesSharedConstrainedHighlightFixture() throws {
+    let data = try FixtureLoader.data(named: "highlight_response")
+    let response = try JSONDecoder().decode(HighlightResponse.self, from: data)
+    let html = try #require(response.html)
+    let lines = ShikiHighlightedHTMLParser.parseLines(html)
+
+    #expect(response.ok)
+    #expect(response.language == "typescript")
+    #expect(lines.count == 2)
+    #expect(lines[0].first?.cssVariable == "--sh-token-keyword")
+    #expect(lines[1].first?.cssVariable == "--sh-token-function")
+    #expect(
+      ShikiHighlightedHTMLParser.plainText(from: html)
+        == "const answer = \"<&\";\nprint(answer)"
+    )
+  }
+
   private func commit(
     fullHash: String,
     parents: [String]

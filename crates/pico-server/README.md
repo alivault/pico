@@ -81,6 +81,12 @@ Implemented:
   WebSocket transports, reconnect reset signaling, and exit cleanup
 - terminal create/input/resize/events/WebSocket/close route parity without
   `node-pty`
+- native Tree-sitter highlighting through Inkjet with Shiki-compatible Pico CSS
+  variables, constrained line/span HTML, language aliases, Markdown/ANSI
+  handling, strict input bounds, blocking-worker isolation, and a bounded LRU
+  response cache
+- shared browser/Rust/Swift highlight fixtures that reject arbitrary HTML while
+  preserving highlighted text and token colors
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
@@ -88,7 +94,7 @@ Implemented:
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
 session indexes, the primary `/events` stream, and core prompt/session mutations,
-but it does not claim auth, highlighting, or static-app parity yet.
+but it does not claim auth or static-app parity yet.
 
 ## Migration order
 
@@ -98,7 +104,9 @@ but it does not claim auth, highlighting, or static-app parity yet.
 4. Port prompt, queue, abort, model, thinking, compaction, and tree flows.
 5. Replace `node-pty` with a Rust PTY runtime.
 6. Port native highlighting, provider authentication, and extension UI request
-   bridging.
+   bridging. The native highlighter uses Inkjet's vendored Tree-sitter grammars;
+   its renderer emits only escaped text plus `span.line` and safe
+   `color:var(--sh-*)` token spans, never arbitrary grammar-provided HTML.
 7. Build the browser client as static assets served by Rust.
 8. Bundle the Rust server and architecture-matched standalone Pi binary in the
    signed macOS app.

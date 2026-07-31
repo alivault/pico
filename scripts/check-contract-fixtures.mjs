@@ -25,6 +25,7 @@ const [
   sessions,
   piEvents,
   terminalEvents,
+  highlightResponse,
   gitStatus,
   picoEvents,
   apiResponses,
@@ -37,6 +38,7 @@ const [
   fixture("sessions_event"),
   fixture("pi_rpc_events"),
   fixture("terminal_events"),
+  fixture("highlight_response"),
   fixture("git_status_response"),
   fixture("pico_events"),
   fixture("api_responses"),
@@ -94,6 +96,21 @@ invariant(
 invariant(
   terminalEvents[0]?.type === "ready" && terminalEvents.at(-1)?.type === "exit",
   "terminal fixture must cover ready through exit"
+)
+invariant(
+  highlightResponse.ok === true &&
+    typeof highlightResponse.html === "string" &&
+    [...highlightResponse.html.matchAll(/<[^>]*>/g)].every(({ 0: tag }) =>
+      /^<\/?span(?: class="line"| style="color:var\(--[A-Za-z0-9-]+\)")?>$/.test(
+        tag
+      )
+    ),
+  "highlight fixture must contain only constrained span output"
+)
+invariant(
+  !highlightResponse.html.includes("<script") &&
+    highlightResponse.html.includes("color:var(--sh-token-keyword)"),
+  "highlight fixture must exercise safe CSS-variable token colors"
 )
 invariant(
   gitStatus.ok === true && typeof gitStatus.gitStatus?.dirty === "boolean",

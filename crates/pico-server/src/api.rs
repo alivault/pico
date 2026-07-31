@@ -31,6 +31,7 @@ use crate::control::ControlServer;
 use crate::control::{initial_status, ControlStatus};
 use crate::event_hub::{EventHub, ServerEvent};
 use crate::git_native::{self, GitRuntime};
+use crate::highlight::HighlightRuntime;
 use crate::persistence::{self, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError, PiSpawnOptions};
@@ -65,6 +66,7 @@ struct ServerContext {
     hide_thinking: Arc<AtomicBool>,
     git_runtime: Arc<GitRuntime>,
     terminals: TerminalManager,
+    highlighter: Arc<HighlightRuntime>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -362,6 +364,13 @@ struct TerminalSocketRequest {
     rows: Option<Value>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct HighlightRequest {
+    code: Value,
+    language: Value,
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -453,6 +462,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         hide_thinking: Arc::new(AtomicBool::new(false)),
         git_runtime: Arc::new(GitRuntime::default()),
         terminals: TerminalManager::default(),
+        highlighter: Arc::new(HighlightRuntime::default()),
     };
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
@@ -1021,6 +1031,7 @@ fn router(context: ServerContext) -> Router {
         .route("/api/terminal/:id/events", get(terminal_events))
         .route("/api/terminal/:id/ws", get(terminal_websocket))
         .route("/api/terminal/:id/close", post(close_terminal))
+        .route("/api/highlight", post(highlight_code))
         .route("/api/session/history", get(session_history))
         .route("/api/session/rename", post(rename_session))
         .route("/api/session/name", post(generate_session_name))
@@ -1795,6 +1806,7 @@ async fn client_manifest() -> Json<Value> {
           "/api/terminal/:id/events",
           "/api/terminal/:id/ws",
           "/api/terminal/:id/close",
+          "/api/highlight",
           "/api/rust/sessions",
           "/api/rust/sessions/:id/commands",
           "/api/rust/sessions/:id/events"
@@ -1822,7 +1834,8 @@ async fn client_manifest() -> Json<Value> {
           "git-mutations",
           "git-watch",
           "native-pty",
-          "terminal-replay"
+          "terminal-replay",
+          "native-highlighting"
         ]
       }
     }))
@@ -2945,6 +2958,24 @@ fn git_mutated(context: &ServerContext, cwd: &Path) {
           "scopes": ["status", "files", "refs"]
         }),
     );
+}
+
+async fn highlight_code(
+    State(context): State<ServerContext>,
+    Json(request): Json<HighlightRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let highlighter = context.highlighter.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        highlighter.highlight(&request.code, &request.language)
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut response =
+        serde_json::to_value(outcome).map_err(|error| ApiError::internal(error.to_string()))?;
+    if let Some(object) = response.as_object_mut() {
+        object.insert("ok".into(), Value::Bool(true));
+    }
+    Ok(Json(response))
 }
 
 async fn create_terminal(
@@ -4493,6 +4524,7 @@ mod tests {
             hide_thinking: Arc::new(AtomicBool::new(false)),
             git_runtime: Arc::new(GitRuntime::default()),
             terminals: TerminalManager::default(),
+            highlighter: Arc::new(HighlightRuntime::default()),
         }
     }
 
@@ -4758,6 +4790,62 @@ for line in sys.stdin:
 
         context.runtimes.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fake Pi fixture");
+    }
+
+    #[tokio::test]
+    async fn highlight_route_returns_constrained_native_spans_and_fallbacks() {
+        let app = router(test_context());
+        let highlighted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/highlight")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"language":"ts","code":"const answer: number = 42;"}).to_string(),
+                    ))
+                    .expect("highlight request"),
+            )
+            .await
+            .expect("highlight response");
+        assert_eq!(highlighted.status(), StatusCode::OK);
+        let body = to_bytes(highlighted.into_body(), usize::MAX)
+            .await
+            .expect("highlight body");
+        let response: Value = serde_json::from_slice(&body).expect("highlight JSON");
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["language"], "ts");
+        let html = response["html"]
+            .as_str()
+            .unwrap_or_else(|| panic!("missing highlighted HTML: {response}"));
+        assert!(html.contains("color:var(--sh-token-"), "{html}");
+
+        let unsupported = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/highlight")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"language":"pico-unknown","code":"value"}).to_string(),
+                    ))
+                    .expect("unsupported request"),
+            )
+            .await
+            .expect("unsupported response");
+        let body = to_bytes(unsupported.into_body(), usize::MAX)
+            .await
+            .expect("unsupported body");
+        let response: Value = serde_json::from_slice(&body).expect("unsupported JSON");
+        assert_eq!(
+            response,
+            json!({
+                "ok": true,
+                "unsupported": true,
+                "language": "pico-unknown"
+            })
+        );
     }
 
     #[cfg(unix)]

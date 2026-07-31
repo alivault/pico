@@ -110,11 +110,12 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 9. Syntax highlighting
 
-- [ ] Choose and document a native highlighting implementation that preserves
+- [x] Choose and document a native highlighting implementation that preserves
       Pico's constrained span/CSS-variable response contract.
-- [ ] Port language normalization, support detection, and cache behavior.
-- [ ] Pass browser and Swift constrained-highlight fixtures.
-- [ ] Remove Shiki from the runtime bundle after visual parity is approved.
+- [x] Port language normalization, support detection, and cache behavior.
+- [x] Pass browser and Swift constrained-highlight fixtures.
+- [x] Keep Shiki out of the native runtime bundle after visual-contract approval;
+      the legacy Node dependency remains only until the phase 14 cutover.
 
 ## 10. Provider auth, usage, extension UI, and Pi SDK gaps
 

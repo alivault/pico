@@ -11,10 +11,14 @@ anyhow = "1.0.95"
 axum = { version = "0.7.9", features = ["ws"] }
 clap = { version = "4.5.23", features = ["derive", "env"] }
 futures-util = "0.3.31"
+inkjet = { version = "0.11.1", default-features = false, features = [
+  "all_languages",
+] }
 libc = "0.2.169"
 portable-pty = "0.9.0"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.133"
+sha1 = "0.10.6"
 tokio = { version = "1.42.0", features = [
   "io-util",
   "macros",

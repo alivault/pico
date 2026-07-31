@@ -163,6 +163,7 @@
 		D50000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000005 /* Features/Git/ShikiHighlightedHTMLParser.swift */; };
 		D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */; };
 		D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */; };
+		D60000000000000000000001 /* highlight_response.json in Resources */ = {isa = PBXBuildFile; fileRef = D60000000000000000000002 /* highlight_response.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -312,6 +313,7 @@
 		FB21F912F8DF9DA36E5237AB /* Core/Models/GitChangedEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitChangedEvent.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitStatusResponse.swift; sourceTree = "<group>"; };
 		D40000000000000000000001 /* Core/Models/HighlightResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/HighlightResponse.swift; sourceTree = "<group>"; };
+		D60000000000000000000002 /* highlight_response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = highlight_response.json; sourceTree = "<group>"; };
 		FFEB0A8714341A1CDD708DD4 /* Features/Conversation/AssistantBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AssistantBlockView.swift; sourceTree = "<group>"; };
 		C40000000000000000000001 /* App/AppModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/AppModel+Git.swift"; sourceTree = "<group>"; };
 		C40000000000000000000002 /* Features/Git/GitFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitFormatting.swift; sourceTree = "<group>"; };
@@ -534,6 +536,7 @@
 			isa = PBXGroup;
 			children = (
 				7409BE932B5774B607FBCC1D /* sessions_event.json */,
+				D60000000000000000000002 /* highlight_response.json */,
 				4235466D4537838F00690942 /* state_sync_initial.json */,
 				07E8B7F815FE4A06E1C73866 /* state_sync_patch.json */,
 			);
@@ -649,6 +652,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				77B627E03876940A25F538F5 /* sessions_event.json in Resources */,
+				D60000000000000000000001 /* highlight_response.json in Resources */,
 				3E44A66F62D4FD305DADFD45 /* state_sync_initial.json in Resources */,
 				61A513C2CE563B35B548AD26 /* state_sync_patch.json in Resources */,
 			);
