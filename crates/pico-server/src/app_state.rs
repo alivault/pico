@@ -20,6 +20,8 @@ pub struct SessionRecord {
     pub session_path: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pi_session_id: Option<String>,
+    #[serde(default)]
+    pub draft: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -34,6 +36,7 @@ pub struct ViewerContext {
 pub struct DraftSelection {
     pub session_key: String,
     pub cwd: PathBuf,
+    pub runtime_id: Option<String>,
 }
 
 impl AppState {
@@ -63,6 +66,7 @@ impl AppState {
             cwd,
             session_path,
             pi_session_id: None,
+            draft: false,
         }
     }
 
@@ -104,10 +108,27 @@ impl AppState {
         self.contexts.get(id)
     }
 
-    pub fn select_draft(&mut self, context_id: &str, session_key: String, cwd: PathBuf) {
+    pub fn select_session(&mut self, context_id: &str, session_id: String) {
+        let context = self.contexts.entry(context_id.to_string()).or_default();
+        context.unread_session_ids.remove(&session_id);
+        context.selected_session = Some(session_id);
+        context.active_draft = None;
+    }
+
+    pub fn select_draft(
+        &mut self,
+        context_id: &str,
+        session_key: String,
+        cwd: PathBuf,
+        runtime_id: Option<String>,
+    ) {
         let context = self.contexts.entry(context_id.to_string()).or_default();
         context.selected_session = None;
-        context.active_draft = Some(DraftSelection { session_key, cwd });
+        context.active_draft = Some(DraftSelection {
+            session_key,
+            cwd,
+            runtime_id,
+        });
     }
 
     pub fn base_cwd(&self, context_id: &str) -> Option<PathBuf> {
@@ -177,6 +198,7 @@ mod tests {
             cwd: PathBuf::from("/tmp/restored"),
             session_path: Some(PathBuf::from("/tmp/session.jsonl")),
             pi_session_id: Some("pi-restored".into()),
+            draft: false,
         };
         let mut state = AppState::from_sessions(vec![restored]);
         assert_eq!(
@@ -211,7 +233,7 @@ mod tests {
         state.set_session_read("two", "active", true);
         assert!(!state.session_is_unread("two", "active"));
 
-        state.select_draft("one", "draft:one".into(), PathBuf::from("/tmp/draft"));
+        state.select_draft("one", "draft:one".into(), PathBuf::from("/tmp/draft"), None);
         assert_eq!(state.base_cwd("one"), Some(PathBuf::from("/tmp/draft")));
     }
 

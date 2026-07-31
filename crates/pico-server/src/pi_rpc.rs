@@ -245,6 +245,7 @@ impl PiRpcClient {
     }
 
     pub async fn shutdown(&self) -> Result<(), PiRpcError> {
+        self.running.store(false, Ordering::Release);
         let mut child = self.child.lock().await;
         let result = match child.try_wait()? {
             Some(status) => status,
@@ -253,7 +254,6 @@ impl PiRpcClient {
                 child.wait().await?
             }
         };
-        self.running.store(false, Ordering::Release);
         debug!(status = %result, "Pi RPC process stopped");
         Ok(())
     }

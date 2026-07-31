@@ -302,6 +302,29 @@ impl SessionDocument {
         }
     }
 
+    pub fn messages(&self) -> Vec<Value> {
+        self.active_entries
+            .iter()
+            .filter_map(|entry| match entry_type(entry) {
+                Some("message") => entry.get("message").map(sanitize_message),
+                Some("compaction") => Some(json_compaction_message(entry)),
+                Some("branch_summary") => Some(serde_json::json!({
+                  "role": "branchSummary",
+                  "summary": entry.get("summary").and_then(Value::as_str).unwrap_or_default(),
+                  "timestamp": entry.get("timestamp")
+                })),
+                Some("custom_message") => Some(serde_json::json!({
+                  "role": "custom",
+                  "customType": entry.get("customType"),
+                  "content": entry.get("content"),
+                  "display": entry.get("display"),
+                  "details": entry.get("details")
+                })),
+                _ => None,
+            })
+            .collect()
+    }
+
     pub fn conversation_items(&self) -> Vec<ConversationItem> {
         let mut items = Vec::new();
         let mut tools = HashMap::<String, (usize, usize)>::new();
@@ -444,6 +467,16 @@ fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
     })
 }
 
+fn json_compaction_message(entry: &Value) -> Value {
+    serde_json::json!({
+      "role": "compactionSummary",
+      "summary": entry.get("summary").and_then(Value::as_str).unwrap_or_default(),
+      "tokensBefore": entry.get("tokensBefore").and_then(Value::as_u64).unwrap_or_default(),
+      "estimatedTokensAfter": entry.get("estimatedTokensAfter"),
+      "timestamp": entry.get("timestamp")
+    })
+}
+
 fn collect_session_files(directory: &Path, output: &mut Vec<PathBuf>) -> io::Result<()> {
     let entries = match std::fs::read_dir(directory) {
         Ok(entries) => entries,
@@ -504,6 +537,107 @@ fn message_with_role<'a>(entry: &'a Value, role: &str) -> Option<&'a Value> {
         .then(|| entry.get("message"))
         .flatten()
         .filter(|message| message.get("role").and_then(Value::as_str) == Some(role))
+}
+
+fn sanitize_message(message: &Value) -> Value {
+    let mut sanitized = serde_json::Map::new();
+    for key in ["role", "stopReason", "errorMessage", "provider", "model"] {
+        if let Some(value) = message.get(key).and_then(Value::as_str) {
+            sanitized.insert(key.into(), Value::String(value.into()));
+        }
+    }
+    if let Some(content) = message.get("content") {
+        let content = match content {
+            Value::String(text) => Some(Value::String(text.clone())),
+            Value::Array(parts) => Some(Value::Array(
+                parts.iter().filter_map(sanitize_content_part).collect(),
+            )),
+            _ => None,
+        };
+        if let Some(content) = content {
+            sanitized.insert("content".into(), content);
+        }
+    }
+    for key in ["summary", "toolCallId"] {
+        if let Some(value) = message.get(key).and_then(Value::as_str) {
+            sanitized.insert(key.into(), Value::String(value.into()));
+        }
+    }
+    for key in ["tokensBefore", "estimatedTokensAfter"] {
+        if let Some(value) = message.get(key).and_then(Value::as_u64) {
+            sanitized.insert(key.into(), Value::Number(value.into()));
+        }
+    }
+    if let Some(details) = message.get("details") {
+        sanitized.insert("details".into(), details.clone());
+    }
+    if message.get("isError").and_then(Value::as_bool) == Some(true) {
+        sanitized.insert("isError".into(), Value::Bool(true));
+    }
+    if message.get("queued").and_then(Value::as_bool) == Some(true) {
+        sanitized.insert("queued".into(), Value::Bool(true));
+    }
+    if let Some(behavior) = message
+        .get("streamingBehavior")
+        .or_else(|| message.get("deliverAs"))
+        .and_then(Value::as_str)
+        .filter(|behavior| matches!(*behavior, "steer" | "followUp"))
+    {
+        sanitized.insert("streamingBehavior".into(), Value::String(behavior.into()));
+    }
+    Value::Object(sanitized)
+}
+
+fn sanitize_content_part(part: &Value) -> Option<Value> {
+    let kind = part.get("type").and_then(Value::as_str)?;
+    let mut sanitized = serde_json::Map::new();
+    sanitized.insert("type".into(), Value::String(kind.into()));
+    match kind {
+        "text" => {
+            sanitized.insert(
+                "text".into(),
+                Value::String(
+                    part.get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                ),
+            );
+        }
+        "thinking" => {
+            sanitized.insert(
+                "thinking".into(),
+                Value::String(
+                    part.get("thinking")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .into(),
+                ),
+            );
+            if let Some(label) = part.get("summaryLabel").and_then(Value::as_str) {
+                sanitized.insert("summaryLabel".into(), Value::String(label.into()));
+            }
+        }
+        "toolCall" => {
+            for key in ["id", "name"] {
+                if let Some(value) = part.get(key).and_then(Value::as_str) {
+                    sanitized.insert(key.into(), Value::String(value.into()));
+                }
+            }
+            if let Some(arguments) = part.get("arguments") {
+                sanitized.insert("arguments".into(), arguments.clone());
+            }
+        }
+        "image" => {
+            for key in ["mimeType", "data"] {
+                if let Some(value) = part.get(key).and_then(Value::as_str) {
+                    sanitized.insert(key.into(), Value::String(value.into()));
+                }
+            }
+        }
+        _ => return None,
+    }
+    Some(Value::Object(sanitized))
 }
 
 fn message_text(message: &Value) -> String {

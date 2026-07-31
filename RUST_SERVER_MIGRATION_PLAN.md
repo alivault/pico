@@ -70,15 +70,15 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 5. Prompt and session mutation parity
 
-- [ ] Port new/select/delete/bulk-delete/move/rename/read-state session routes.
-- [ ] Port prompt submission, optimistic acceptance, images, steer/follow-up,
+- [x] Port new/select/delete/bulk-delete/move/rename/read-state session routes.
+- [x] Port prompt submission, optimistic acceptance, images, steer/follow-up,
       queue reorder/remove/start, abort, and settled completion.
-- [ ] Port model and thinking selection with available-level projection.
-- [ ] Port compaction slash command and working/hidden-thinking state.
-- [ ] Port history pagination.
-- [ ] Port tree read/navigation/labels, fork, and clone through Pi RPC.
-- [ ] Port automatic naming with heuristic fallback and error events.
-- [ ] Add end-to-end tests using a deterministic fake Pi RPC child.
+- [x] Port model and thinking selection with available-level projection.
+- [x] Port compaction slash command and working/hidden-thinking state.
+- [x] Port history pagination.
+- [x] Port tree read/navigation/labels, fork, and clone through Pi RPC.
+- [x] Port automatic naming with heuristic fallback and error events.
+- [x] Add end-to-end tests using a deterministic fake Pi RPC child.
 
 ## 6. Resource discovery, project files, and completions
 

@@ -86,6 +86,7 @@ pub struct PiImage {
     #[serde(rename = "type")]
     pub kind: String,
     pub data: String,
+    #[serde(rename = "mimeType")]
     pub mime_type: String,
 }
 

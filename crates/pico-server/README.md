@@ -64,14 +64,20 @@ Implemented:
 - directory session indexes, deterministic revisions, viewer selection, and unread overlays
 - `/events` bootstrap snapshots, patch-friendly item updates, bounded replay IDs,
   reconnect resynchronization, keepalive, and translated Pi status/error events
-- experimental session creation, command, event, and deletion routes
+- native prompt, image, steer/follow-up queue, abort, model, thinking, compaction,
+  history, session mutation, tree, fork, clone, and heuristic naming routes
+- server-owned reorderable pending prompts drained at Pi turn/settled boundaries
+- model/thinking/context-usage projection from typed Pi RPC state
+- deterministic fake-Pi end-to-end route coverage
+- experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
 - daily structured logs and atomically persisted lifecycle state
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
-read-only session indexes and the primary `/events` state/session stream, but it
-does not claim full mutation, Git, files, auth, terminal, or static-app parity yet.
+session indexes, the primary `/events` stream, and core prompt/session mutations,
+but it does not claim Git, files, auth, terminal, highlighting, or static-app
+parity yet.
 
 ## Migration order
 
