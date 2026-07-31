@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "cwd": "/Users/alice/project",
+  "gitStatus": {
+    "branch": "main",
+    "detached": false,
+    "revision": "abc1234",
+    "dirty": true,
+    "changedFileCount": 2,
+    "ahead": 1,
+    "behind": 0,
+    "inline": "main · 2 changes · ↑1",
+    "label": "main",
+    "title": "main, 2 changed files, 1 commit ahead"
+  }
+}

@@ -20,6 +20,7 @@ use tracing::info;
 
 use crate::app_state::AppState;
 use crate::pi_rpc::{detect_pi_version, PiRpcError};
+use crate::protocol::{API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION};
 use crate::runtime::RuntimeRegistry;
 
 #[derive(Clone)]
@@ -128,7 +129,7 @@ async fn client_manifest() -> Json<Value> {
       "name": "@alivault/pico",
       "version": env!("CARGO_PKG_VERSION"),
       "displayName": "Pico Rust Preview",
-      "apiContractVersion": 1,
+      "apiContractVersion": API_CONTRACT_VERSION,
       "pairingRequired": false,
       "authentication": { "type": "none" },
       "transport": {
@@ -158,6 +159,8 @@ async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
       "ok": true,
       "runtime": "rust",
       "version": env!("CARGO_PKG_VERSION"),
+      "serverProtocolVersion": SERVER_PROTOCOL_VERSION,
+      "persistenceVersion": PERSISTENCE_VERSION,
       "uptimeSeconds": context.started_at.elapsed().as_secs(),
       "pi": {
         "binary": context.runtimes.pi_binary(),

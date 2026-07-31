@@ -1,0 +1,59 @@
+[
+  {
+    "type": "session_status",
+    "sessionKey": "session:demo",
+    "sessionId": "demo",
+    "streaming": true,
+    "unread": false
+  },
+  {
+    "type": "session_done",
+    "id": "done-1",
+    "sessionKey": "session:demo",
+    "sessionId": "demo",
+    "cwd": "/Users/alice/project",
+    "title": "Demo session",
+    "reason": "agent",
+    "outcome": "success",
+    "completedAt": "2026-07-31T05:00:00.000Z"
+  },
+  {
+    "type": "request_error",
+    "scope": "prompt",
+    "message": "Request failed"
+  },
+  {
+    "type": "extension_error",
+    "error": "Extension failed"
+  },
+  {
+    "type": "extension_ui_request",
+    "id": "ui-1",
+    "method": "confirm",
+    "title": "Continue?",
+    "message": "Allow this action?",
+    "timeout": 10000
+  },
+  {
+    "type": "user_message",
+    "message": "Queued message",
+    "images": [],
+    "queued": true
+  },
+  {
+    "type": "auto_session_naming_error",
+    "sessionId": "demo",
+    "cwd": "/Users/alice/project",
+    "promptPreview": "Build a SwiftUI app",
+    "imageCount": 0,
+    "heuristicReason": "empty response",
+    "refinementReason": "provider unavailable"
+  },
+  {
+    "type": "git_changed",
+    "cwd": "/Users/alice/project",
+    "repositoryRoot": "/Users/alice/project",
+    "changedAt": 1785474000000,
+    "scopes": ["status", "files", "refs"]
+  }
+]

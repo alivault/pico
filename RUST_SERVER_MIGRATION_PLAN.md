@@ -22,14 +22,14 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 1. Compatibility fixtures and protocol types
 
-- [ ] Inventory every HTTP route, SSE event, payload, and error status.
-- [ ] Add checked-in JSON fixtures for the client manifest, initial state sync,
+- [x] Inventory every HTTP route, SSE event, payload, and error status.
+- [x] Add checked-in JSON fixtures for the client manifest, initial state sync,
       patch state sync, sessions, conversation items, Pi RPC events, Git, files,
       terminal events, auth, and extension UI requests.
-- [ ] Add Rust serde protocol models that decode and re-encode those fixtures.
-- [ ] Add TypeScript fixture tests so both implementations share the same
+- [x] Add Rust serde protocol models that decode and re-encode those fixtures.
+- [x] Add a JavaScript contract check so both implementations share the same
       compatibility corpus.
-- [ ] Add explicit Rust server/API/persistence protocol version constants.
+- [x] Add explicit Rust server/API/persistence protocol version constants.
 
 ## 2. Native server lifecycle, configuration, and security
 

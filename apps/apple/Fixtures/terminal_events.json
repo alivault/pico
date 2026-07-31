@@ -1,0 +1,29 @@
+[
+  {
+    "type": "ready",
+    "backend": "shell",
+    "id": "terminal-1",
+    "cwd": "/Users/alice/project",
+    "shell": "/bin/zsh",
+    "nextInputSeq": 1
+  },
+  {
+    "type": "output",
+    "data": "hello\r\n",
+    "seq": 1
+  },
+  {
+    "type": "input_ack",
+    "inputSeq": 1
+  },
+  {
+    "type": "reset",
+    "reason": "backlog_gap",
+    "firstSeq": 2,
+    "nextSeq": 4
+  },
+  {
+    "type": "exit",
+    "exitCode": 0
+  }
+]

@@ -1,0 +1,254 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/abort"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/api-key"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/logout"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/oauth"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/providers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/client/manifest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/directory-search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/directory-sessions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/directory-sessions-index"
+  },
+  {
+    "method": "GET",
+    "path": "/api/directory-sessions-indexes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/directory-sessions/cleanup"
+  },
+  {
+    "method": "POST",
+    "path": "/api/directory/resolve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/file-completions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/read"
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/tree"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-changes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-checkout"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-commit"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-commit-action"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-commit-diff"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-commit-files"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-commit-message"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-commit-remote-url"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-diff"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-discard"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-pull"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-push"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/git-stage"
+  },
+  {
+    "method": "GET",
+    "path": "/api/git-status"
+  },
+  {
+    "method": "POST",
+    "path": "/api/highlight"
+  },
+  {
+    "method": "POST",
+    "path": "/api/model"
+  },
+  {
+    "method": "POST",
+    "path": "/api/path-completions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/pending-message/remove"
+  },
+  {
+    "method": "POST",
+    "path": "/api/pending-messages/reorder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/pending-messages/start"
+  },
+  {
+    "method": "POST",
+    "path": "/api/prompt"
+  },
+  {
+    "method": "GET",
+    "path": "/api/provider-usage"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/clone"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/delete"
+  },
+  {
+    "method": "GET",
+    "path": "/api/session/fork"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/fork"
+  },
+  {
+    "method": "GET",
+    "path": "/api/session/history"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/move"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/name"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/new"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/read-state"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/rename"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/select"
+  },
+  {
+    "method": "GET",
+    "path": "/api/session/tree"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/tree"
+  },
+  {
+    "method": "POST",
+    "path": "/api/session/tree/label"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions/delete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/settings/hide-thinking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/slash-command"
+  },
+  {
+    "method": "POST",
+    "path": "/api/terminal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/terminal/$id/close"
+  },
+  {
+    "method": "GET",
+    "path": "/api/terminal/$id/events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/terminal/$id/input"
+  },
+  {
+    "method": "POST",
+    "path": "/api/terminal/$id/resize"
+  },
+  {
+    "method": "POST",
+    "path": "/api/thinking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/ui/$id"
+  },
+  {
+    "method": "GET",
+    "path": "/events"
+  }
+]

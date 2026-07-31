@@ -41,8 +41,9 @@
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt",
-    "check": "vp check",
-    "check:fix": "vp check --fix",
+    "check:contracts": "node ./scripts/check-contract-fixtures.mjs",
+    "check": "vp check && pnpm check:contracts && cargo test --workspace",
+    "check:fix": "vp check --fix && pnpm check:contracts && cargo test --workspace",
     "release": "node ./scripts/release.mjs",
     "update:pi": "pnpm update @earendil-works/pi-coding-agent --latest"
   },

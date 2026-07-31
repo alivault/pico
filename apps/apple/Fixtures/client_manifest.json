@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "name": "@alivault/pico",
+  "version": "0.14.1",
+  "displayName": "Pico",
+  "apiContractVersion": 1,
+  "pairingRequired": false,
+  "authentication": {
+    "type": "none"
+  },
+  "transport": {
+    "sse": true,
+    "httpsRequired": false,
+    "localHttpAllowed": true
+  },
+  "capabilities": {
+    "events": [
+      "state_sync",
+      "sessions",
+      "session_status",
+      "session_done",
+      "request_error",
+      "extension_error",
+      "extension_ui_request",
+      "user_message",
+      "auto_session_naming_error",
+      "git_changed"
+    ],
+    "endpoints": [
+      "/events",
+      "/api/prompt",
+      "/api/abort",
+      "/api/session/new",
+      "/api/session/select",
+      "/api/session/fork",
+      "/api/session/name",
+      "/api/session/rename",
+      "/api/session/delete",
+      "/api/session/read-state",
+      "/api/directory-sessions-indexes",
+      "/api/directory/resolve",
+      "/api/directory-search",
+      "/api/path-completions",
+      "/api/model",
+      "/api/thinking",
+      "/api/auth/providers",
+      "/api/auth/api-key",
+      "/api/auth/oauth",
+      "/api/auth/logout",
+      "/api/ui/$id",
+      "/api/settings/hide-thinking",
+      "/api/pending-message/remove",
+      "/api/pending-messages/reorder",
+      "/api/pending-messages/start"
+    ],
+    "features": [
+      "sse",
+      "session-browser",
+      "conversation",
+      "prompt-composer",
+      "queue-and-steer",
+      "model-selection",
+      "thinking-selection",
+      "provider-authentication",
+      "native-directory-browser",
+      "post-compaction-token-estimates",
+      "edit-user-message-fork",
+      "assistant-message-actions"
+    ]
+  }
+}

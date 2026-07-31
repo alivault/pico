@@ -1,0 +1,137 @@
+{
+  "error": {
+    "ok": false,
+    "error": "Something failed"
+  },
+  "prompt": {
+    "ok": true,
+    "queued": true,
+    "pendingId": "pending-1"
+  },
+  "model": {
+    "ok": true,
+    "model": {
+      "id": "gpt-5.6-sol",
+      "provider": "openai-codex",
+      "reasoning": true
+    },
+    "thinkingLevel": "high",
+    "availableThinkingLevels": ["off", "low", "medium", "high", "xhigh", "max"],
+    "availableModels": [
+      {
+        "id": "gpt-5.6-sol",
+        "provider": "openai-codex",
+        "reasoning": true
+      }
+    ]
+  },
+  "sessionNew": {
+    "ok": true,
+    "draft": true,
+    "sessionKey": "draft:1",
+    "cwd": "/Users/alice/project"
+  },
+  "pendingMessages": {
+    "ok": true,
+    "pendingMessages": [
+      {
+        "pendingId": "pending-1",
+        "text": "Run tests",
+        "images": [],
+        "streamingBehavior": "followUp"
+      }
+    ]
+  },
+  "thinking": {
+    "ok": true,
+    "thinkingLevel": "high",
+    "availableThinkingLevels": ["off", "low", "medium", "high"]
+  },
+  "directorySearch": {
+    "ok": true,
+    "query": "pico",
+    "totalCount": 1,
+    "items": [
+      {
+        "value": "/Users/alice/project/pico",
+        "label": "pico",
+        "isDirectory": true
+      }
+    ]
+  },
+  "fileTree": {
+    "ok": true,
+    "cwd": "/Users/alice/project",
+    "totalCount": 2,
+    "paths": ["README.md", "src/main.rs"]
+  },
+  "fileRead": {
+    "ok": true,
+    "cwd": "/Users/alice/project",
+    "path": "README.md",
+    "content": "# Project\n"
+  },
+  "highlight": {
+    "ok": true,
+    "language": "rust",
+    "html": "<span class=\"line\"><span style=\"color:var(--shiki-token-keyword)\">fn</span></span>"
+  },
+  "terminalCreate": {
+    "ok": true,
+    "backend": "shell",
+    "id": "terminal-1",
+    "cwd": "/Users/alice/project",
+    "shell": "/bin/zsh",
+    "reused": false
+  },
+  "tree": {
+    "ok": true,
+    "leafId": "entry-1",
+    "streamingEntryId": null,
+    "tree": [
+      {
+        "entry": {
+          "id": "entry-1",
+          "parentId": null,
+          "timestamp": "2026-07-31T05:00:00.000Z",
+          "type": "message",
+          "message": {
+            "role": "user",
+            "text": "Build it"
+          }
+        },
+        "children": []
+      }
+    ]
+  },
+  "authProviders": {
+    "ok": true,
+    "oauthProviders": [
+      {
+        "id": "openai-codex",
+        "name": "OpenAI Codex",
+        "authType": "oauth",
+        "configured": true
+      }
+    ],
+    "apiKeyProviders": [
+      {
+        "id": "anthropic",
+        "name": "Anthropic",
+        "authType": "api_key",
+        "configured": false
+      }
+    ],
+    "loggedInProviders": [],
+    "availableModels": []
+  },
+  "uiRequest": {
+    "ok": true
+  },
+  "gitAction": {
+    "ok": true,
+    "cwd": "/Users/alice/project",
+    "stdout": "",
+    "stderr": ""
+  }
+}
