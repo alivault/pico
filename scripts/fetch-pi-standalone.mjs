@@ -20,11 +20,21 @@ if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
   throw new Error("Set PI_STANDALONE_VERSION to a released Pi version")
 }
 
-const platform = { darwin: "darwin", linux: "linux" }[process.platform]
-const architecture = { arm64: "arm64", x64: "x64" }[process.arch]
-if (!platform || !architecture) {
+const requestedTarget = process.env.PI_STANDALONE_TARGET
+const [requestedPlatform, requestedArchitecture] = requestedTarget?.split(
+  "-",
+  2
+) ?? [undefined, undefined]
+const platform =
+  requestedPlatform ?? { darwin: "darwin", linux: "linux" }[process.platform]
+const architecture =
+  requestedArchitecture ?? { arm64: "arm64", x64: "x64" }[process.arch]
+if (
+  !["darwin", "linux"].includes(platform ?? "") ||
+  !["arm64", "x64"].includes(architecture ?? "")
+) {
   throw new Error(
-    `Unsupported standalone Pi target: ${process.platform}/${process.arch}`
+    `Unsupported standalone Pi target: ${requestedTarget ?? `${process.platform}/${process.arch}`}`
   )
 }
 

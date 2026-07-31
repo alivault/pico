@@ -2,6 +2,17 @@ import SwiftUI
 
 struct SettingsView: View {
   @Bindable var model: AppModel
+  #if os(macOS)
+    @Bindable var serverService: PicoServerServiceController
+
+    init(
+      model: AppModel,
+      serverService: PicoServerServiceController = PicoServerServiceController()
+    ) {
+      self.model = model
+      self.serverService = serverService
+    }
+  #endif
   @Environment(\.dismiss) private var dismiss
   @State private var apiKeyProvider: AuthProviderOption?
   @State private var presentedUiRequest: UiRequest?
@@ -24,7 +35,10 @@ struct SettingsView: View {
         } detail: {
           switch selectedMacSection {
           case .server:
-            MacServerSettingsTab(model: model)
+            MacServerSettingsTab(
+              model: model,
+              serverService: serverService
+            )
           case .providers:
             MacProviderSettingsTab(
               model: model,
@@ -90,6 +104,7 @@ struct SettingsView: View {
 
   private struct MacServerSettingsTab: View {
     @Bindable var model: AppModel
+    @Bindable var serverService: PicoServerServiceController
 
     var body: some View {
       ScrollView {
@@ -100,6 +115,34 @@ struct SettingsView: View {
 
             Button("Disconnect", role: .destructive) {
               model.disconnect()
+            }
+          }
+
+          Section("Background Service") {
+            Toggle(
+              "Start Pico at login",
+              isOn: $serverService.startAtLogin
+            )
+            .disabled(!serverService.isAvailable)
+
+            LabeledContent("Server agent", value: serverService.serverStatus)
+            LabeledContent("Menu bar app", value: serverService.menuStatus)
+
+            if !serverService.isAvailable {
+              Text("Background services require a signed distribution build.")
+                .foregroundStyle(.secondary)
+            }
+
+            if serverService.requiresApproval {
+              Button(
+                "Open Login Item Settings",
+                action: serverService.openLoginItemSettings
+              )
+            }
+
+            if let errorMessage = serverService.errorMessage {
+              Text(errorMessage)
+                .foregroundStyle(.red)
             }
           }
 
@@ -120,6 +163,9 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .top)
       }
       .scrollContentBackground(.visible)
+      .task {
+        serverService.refreshStatus()
+      }
     }
   }
 
@@ -176,8 +222,17 @@ private struct SettingsFormContent: View {
   }
 }
 
-#Preview {
-  NavigationStack {
-    SettingsView(model: AppModel())
+#if os(macOS)
+  #Preview {
+    SettingsView(
+      model: AppModel(),
+      serverService: PicoServerServiceController()
+    )
   }
-}
+#else
+  #Preview {
+    NavigationStack {
+      SettingsView(model: AppModel())
+    }
+  }
+#endif

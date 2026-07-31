@@ -110,7 +110,7 @@ http://localhost:3141
 
 ## Developing the native macOS and iOS app
 
-The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. It connects to an already-running Pico server over HTTP JSON and SSE; it does not embed the Pi runtime. The native clients are currently built from source and are not distributed through the npm package.
+The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. During development it connects to an already-running Pico server over HTTP JSON and SSE. The macOS distribution pipeline can bundle the native Rust server and standalone Pi executables; iOS remains a remote companion client.
 
 Open the shared project in Xcode:
 
@@ -154,6 +154,34 @@ xcodebuild \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
   test
 ```
+
+### Packaging the macOS app
+
+The native packaging command builds universal arm64/x86_64 copies of Pico,
+`pico-server`, Pi, the standalone Pi bridge, and the independent `PicoMenu.app`
+menu-bar login item. It assembles the bundled `SMAppService` LaunchAgent, signs
+nested code in order, verifies the app, and creates a drag-to-Applications DMG.
+Without a signing identity it produces an ad-hoc-signed build for inspecting the
+app and DMG; macOS background-service registration remains disabled in that
+artifact:
+
+```bash
+pnpm package:macos
+```
+
+For distribution, configure a Developer ID identity and a `notarytool` keychain
+profile. The command then notarizes and staples both the app and DMG:
+
+```bash
+MACOS_SIGN_IDENTITY='Developer ID Application: Example (TEAMID)' \
+MACOS_NOTARY_PROFILE='Pico Notary' \
+pnpm package:macos
+```
+
+Developer ID-signed packaged builds expose Start at Login and approval state in
+Pico Settings. The separate menu-bar app keeps the server available when the main app quits and
+provides Open, New Chat, Restart Server, Show Logs, Start at Login settings,
+and Quit Completely actions.
 
 ## Development commands
 

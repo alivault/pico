@@ -15,7 +15,17 @@ extension Notification.Name {
 
 @main
 struct PicoApp: App {
+  #if os(macOS)
+    private let serverService: PicoServerServiceController
+  #endif
+
   init() {
+    #if os(macOS)
+      let serverService = PicoServerServiceController()
+      self.serverService = serverService
+      serverService.start()
+    #endif
+
     #if DEBUG
       #if os(iOS)
         _ = Bundle(
@@ -60,8 +70,11 @@ struct PicoApp: App {
       }
 
       Settings {
-        SettingsView(model: model)
-          .frame(minWidth: 520, minHeight: 420)
+        SettingsView(
+          model: model,
+          serverService: serverService
+        )
+        .frame(minWidth: 520, minHeight: 420)
       }
     #else
       WindowGroup {

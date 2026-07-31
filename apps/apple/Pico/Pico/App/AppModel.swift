@@ -456,6 +456,13 @@ public final class AppModel {
   }
 
   public func handleDeepLink(_ url: URL) {
+    if url.scheme?.lowercased() == PicoSessionDeepLink.scheme,
+      url.host?.lowercased() == "new"
+    {
+      beginNewChat()
+      return
+    }
+
     guard let deepLink = PicoSessionDeepLink(url: url) else { return }
 
     Task {

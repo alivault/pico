@@ -139,14 +139,14 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 12. macOS service and menu-bar distribution
 
-- [ ] Add a separately signed server launcher/helper to `Pico.app`.
-- [ ] Add an app-bundled LaunchAgent plist using `BundleProgram`.
-- [ ] Register/control it with `SMAppService` and handle approval states.
-- [ ] Add an independent `MenuBarExtra` login-item app that observes the server.
-- [ ] Add Open, New Chat, Restart, Logs, Start at Login, and Quit Completely.
-- [ ] Make normal `Pico.app` quit leave the menu item and server running.
-- [ ] Bundle arm64/x64 Rust and standalone Pi executables.
-- [ ] Sign nested code in order, enable Hardened Runtime, notarize, staple, and
+- [x] Add a separately signed server launcher/helper to `Pico.app`.
+- [x] Add an app-bundled LaunchAgent plist using `BundleProgram`.
+- [x] Register/control it with `SMAppService` and handle approval states.
+- [x] Add an independent `MenuBarExtra` login-item app that observes the server.
+- [x] Add Open, New Chat, Restart, Logs, Start at Login, and Quit Completely.
+- [x] Make normal `Pico.app` quit leave the menu item and server running.
+- [x] Bundle arm64/x64 Rust and standalone Pi executables.
+- [x] Sign nested code in order, enable Hardened Runtime, notarize, staple, and
       produce drag-to-Applications DMGs.
 
 ## 13. Launcher, packaging, and update behavior

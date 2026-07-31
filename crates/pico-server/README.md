@@ -113,6 +113,12 @@ Implemented:
 - SPA navigation fallback that never rewrites `/api/*`, `/events`, terminal
   transports, or missing file-like asset paths
 - headless browser validation against Rust with Node absent from `PATH`
+- universal arm64/x86_64 macOS packaging with the Rust server, standalone Pi,
+  Pi bridge, static web assets, and an app-bundled `SMAppService` LaunchAgent
+- an independent SwiftUI `MenuBarExtra` login item with server health, open/new
+  chat, restart, logs, Login Items settings, and complete-quit controls
+- nested-code Hardened Runtime signing, Developer ID notarization/stapling, and
+  drag-to-Applications DMG automation in `pnpm package:macos`
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds

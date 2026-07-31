@@ -164,6 +164,8 @@
 		D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */; };
 		D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */; };
 		D60000000000000000000001 /* highlight_response.json in Resources */ = {isa = PBXBuildFile; fileRef = D60000000000000000000002 /* highlight_response.json */; };
+		D70000000000000000000001 /* App/PicoServerServiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D70000000000000000000002 /* App/PicoServerServiceController.swift */; };
+		D71000000000000000000001 /* PicoServerServiceControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71000000000000000000002 /* PicoServerServiceControllerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -314,6 +316,8 @@
 		B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitStatusResponse.swift; sourceTree = "<group>"; };
 		D40000000000000000000001 /* Core/Models/HighlightResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/HighlightResponse.swift; sourceTree = "<group>"; };
 		D60000000000000000000002 /* highlight_response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = highlight_response.json; sourceTree = "<group>"; };
+		D70000000000000000000002 /* App/PicoServerServiceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/PicoServerServiceController.swift; sourceTree = "<group>"; };
+		D71000000000000000000002 /* PicoServerServiceControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicoServerServiceControllerTests.swift; sourceTree = "<group>"; };
 		FFEB0A8714341A1CDD708DD4 /* Features/Conversation/AssistantBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AssistantBlockView.swift; sourceTree = "<group>"; };
 		C40000000000000000000001 /* App/AppModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/AppModel+Git.swift"; sourceTree = "<group>"; };
 		C40000000000000000000002 /* Features/Git/GitFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitFormatting.swift; sourceTree = "<group>"; };
@@ -365,6 +369,7 @@
 				B6A93FBCDF8E4B32FF6A8C75 /* App/AppModel.swift */,
 				C40000000000000000000001 /* App/AppModel+Git.swift */,
 				B1E447475068E9268F083D08 /* App/ConnectionStatus.swift */,
+				D70000000000000000000002 /* App/PicoServerServiceController.swift */,
 				11E8B4150A6FF58BBCED5F14 /* App/RootView.swift */,
 				8A99C79EE95E2FAFC35B9211 /* App/WorkspaceView.swift */,
 				E64000000000000000000002 /* App/IOSWorkspaceView.swift */,
@@ -519,6 +524,7 @@
 				289C7DE7F440C3014996C6DB /* SessionStateReducerTests.swift */,
 				F30000000000000000000004 /* ToolFormattingTests.swift */,
 				C4000000000000000000000C /* GitFeatureTests.swift */,
+				D71000000000000000000002 /* PicoServerServiceControllerTests.swift */,
 			);
 			path = PicoTests;
 			sourceTree = "<group>";
@@ -806,6 +812,7 @@
 				A20000000000000000000006 /* Features/Settings/AuthProviderRowView.swift in Sources */,
 				A20000000000000000000007 /* Features/Settings/ApiKeyAuthSheetView.swift in Sources */,
 				A20000000000000000000008 /* Features/Settings/AuthUiRequestSheetView.swift in Sources */,
+				D70000000000000000000001 /* App/PicoServerServiceController.swift in Sources */,
 				32DDC2B93600C8E6AFEABD17 /* PicoApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -821,6 +828,7 @@
 				4838CA16507E6CD34206D173 /* SessionStateReducerTests.swift in Sources */,
 				F30000000000000000000003 /* ToolFormattingTests.swift in Sources */,
 				C5000000000000000000000C /* GitFeatureTests.swift in Sources */,
+				D71000000000000000000001 /* PicoServerServiceControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -39,6 +39,7 @@
     "rust:pi-smoke": "cargo run -p pico-server -- pi-smoke",
     "fetch:pi-standalone": "node ./scripts/fetch-pi-standalone.mjs",
     "build:pi-bridge": "node ./scripts/build-pi-bridge.mjs",
+    "package:macos": "node ./scripts/package-macos.mjs",
     "prepack": "pnpm build",
     "preview": "vp preview",
     "lint": "vp lint",
