@@ -17,7 +17,7 @@ public final class ConnectionStore {
     self.defaults = defaults
     let savedServerURL = defaults.string(forKey: Self.storageKey("serverURL"))
     hasSavedServerURL = savedServerURL != nil
-    serverURLText = savedServerURL ?? "http://localhost:3141"
+    serverURLText = savedServerURL ?? "localhost"
     contextId = defaults.string(forKey: Self.storageKey("contextId")) ??
       Self.makeContextId()
     lastEventId = defaults.string(forKey: Self.storageKey("lastEventId"))

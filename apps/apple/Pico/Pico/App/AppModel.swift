@@ -416,8 +416,8 @@ public final class AppModel {
   public func connect() async {
     guard let url = Self.normalizedServerURL(from: serverURLText) else {
       alert = AppAlert(
-        title: "Invalid URL",
-        message: "Enter a Pico server URL such as http://localhost:3141."
+        title: "Invalid server host",
+        message: "Enter a host such as localhost or 100.64.0.10."
       )
       return
     }
@@ -3145,18 +3145,35 @@ public final class AppModel {
     return trimmedValue.isEmpty ? nil : trimmedValue
   }
 
-  private static func normalizedServerURL(from value: String) -> URL? {
+  static func normalizedServerURL(from value: String) -> URL? {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
 
-    let text = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
-    guard let url = URL(string: text), let scheme = url.scheme?.lowercased() else {
+    let hasExplicitScheme = trimmed.contains("://")
+    let hostText = if
+      !hasExplicitScheme,
+      !trimmed.hasPrefix("["),
+      trimmed.count(where: { $0 == ":" }) > 1
+    {
+      "[\(trimmed)]"
+    } else {
+      trimmed
+    }
+    let text = hasExplicitScheme ? trimmed : "http://\(hostText)"
+    guard
+      var components = URLComponents(string: text),
+      let scheme = components.scheme?.lowercased(),
+      scheme == "http" || scheme == "https",
+      components.host?.isEmpty == false,
+      components.user == nil,
+      components.password == nil
+    else {
       return nil
     }
-    guard scheme == "http" || scheme == "https" else {
-      return nil
+    if !hasExplicitScheme && components.port == nil {
+      components.port = 3141
     }
-    return url
+    return components.url
   }
 
   private static func autoSessionNamingErrorMessage(

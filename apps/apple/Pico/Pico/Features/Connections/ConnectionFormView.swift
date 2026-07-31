@@ -5,7 +5,7 @@ struct ConnectionFormView: View {
 
   var body: some View {
     VStack(spacing: 12) {
-      TextField("Pico server URL", text: $model.serverURLText)
+      TextField("Pico server host", text: $model.serverURLText)
         .picoTextInputAutocapitalization(.never)
         .picoURLInputTraits()
         .autocorrectionDisabled()

@@ -110,7 +110,7 @@ struct SettingsView: View {
       ScrollView {
         Form {
           Section("Server") {
-            LabeledContent("URL", value: model.serverURLText)
+            LabeledContent("Address", value: model.serverURLText)
             LabeledContent("Status", value: model.connectionStatus.label)
 
             Button("Disconnect", role: .destructive) {
@@ -203,7 +203,7 @@ private struct SettingsFormContent: View {
   var body: some View {
     Form {
       Section("Server") {
-        LabeledContent("URL", value: model.serverURLText)
+        LabeledContent("Address", value: model.serverURLText)
         LabeledContent("Status", value: model.connectionStatus.label)
 
         Button("Disconnect", role: .destructive) {

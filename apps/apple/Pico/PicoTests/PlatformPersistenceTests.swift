@@ -6,6 +6,32 @@ import Testing
 @MainActor
 struct PlatformPersistenceTests {
   @Test
+  func normalizesServerHostsAndPreservesExplicitURLs() {
+    #expect(
+      AppModel.normalizedServerURL(from: "localhost")?.absoluteString ==
+        "http://localhost:3141"
+    )
+    #expect(
+      AppModel.normalizedServerURL(from: "100.64.0.10")?.absoluteString ==
+        "http://100.64.0.10:3141"
+    )
+    #expect(
+      AppModel.normalizedServerURL(from: "server.internal:4000")?.absoluteString ==
+        "http://server.internal:4000"
+    )
+    #expect(
+      AppModel.normalizedServerURL(from: "fd7a:115c:a1e0::1")?.absoluteString ==
+        "http://[fd7a:115c:a1e0::1]:3141"
+    )
+    #expect(
+      AppModel.normalizedServerURL(from: "https://pico.example.test")?.absoluteString ==
+        "https://pico.example.test"
+    )
+    #expect(AppModel.normalizedServerURL(from: "ftp://pico.example.test") == nil)
+    #expect(AppModel.normalizedServerURL(from: "http://user@host") == nil)
+  }
+
+  @Test
   func storesConnectionAndDraftValuesUnderPlatformKeys() throws {
     let suiteName = "Pico.PlatformPersistenceTests.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
