@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
-import { readdir, readFile, writeFile } from "node:fs/promises"
-import { dirname, join, relative, sep } from "node:path"
+import { readFile, writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const routesDir = join(root, "src", "routes")
-const nitroRoutesDir = join(root, "src", "nitro", "routes")
+const apiPath = join(root, "crates", "pico-server", "src", "api.rs")
 const outputPath = join(
   root,
   "apps",
@@ -15,43 +14,29 @@ const outputPath = join(
   "route_inventory.json"
 )
 
-async function filesBelow(directory) {
-  const entries = await readdir(directory, { withFileTypes: true })
-  const files = []
-  for (const entry of entries) {
-    const path = join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...(await filesBelow(path)))
-    else if (/\.[jt]sx?$/.test(entry.name)) files.push(path)
-  }
-  return files
-}
-
 export async function currentRouteInventory() {
+  const source = await readFile(apiPath, "utf8")
+  const routerSource = source.match(
+    /fn router\(context: ServerContext\) -> Router \{([\s\S]*?)\.fallback\(spa_fallback\)/
+  )?.[1]
+  if (!routerSource) throw new Error("Could not find the Rust API router")
+
   const routes = []
-  for (const path of await filesBelow(routesDir)) {
-    const source = await readFile(path, "utf8")
-    if (!source.includes("server:")) continue
-    const route = source.match(/createFileRoute\("([^"]+)"\)/)?.[1]
-    if (!route) continue
-    const methods = Array.from(
-      source.matchAll(/^\s+(GET|POST|PUT|PATCH|DELETE):/gm),
-      (match) => match[1]
-    )
-    for (const method of new Set(methods)) {
-      routes.push({ method, path: route })
+  const matches = routerSource.matchAll(
+    /\.route\(\s*"([^"]+)"([\s\S]*?)(?=\n\s*\.route\(|\n\s*\.fallback\()/g
+  )
+  for (const match of matches) {
+    const path = match[1].replaceAll(/:([A-Za-z0-9_]+)/g, "$$$1")
+    if (path === "/api/system/health" || path.startsWith("/api/rust/")) {
+      continue
     }
+    const methods = Array.from(
+      match[2].matchAll(/\b(get|post|put|patch|delete)\s*\(/g),
+      (method) => method[1].toUpperCase()
+    )
+    for (const method of new Set(methods)) routes.push({ method, path })
   }
-  for (const path of await filesBelow(nitroRoutesDir)) {
-    const source = await readFile(path, "utf8")
-    if (!source.includes("defineWebSocketHandler")) continue
-    const route = relative(nitroRoutesDir, path)
-      .split(sep)
-      .map((segment) => segment.replace(/^\[([^\]]+)\]$/, "$$$1"))
-      .join("/")
-      .replace(/\.[jt]sx?$/, "")
-      .replace(/\/index$/, "")
-    routes.push({ method: "GET", path: `/${route}` })
-  }
+
   return routes.sort(
     (left, right) =>
       left.path.localeCompare(right.path) ||
@@ -62,5 +47,5 @@ export async function currentRouteInventory() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const inventory = await currentRouteInventory()
   await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`)
-  console.log(`Wrote ${inventory.length} routes to ${outputPath}`)
+  console.log(`Wrote ${inventory.length} Rust routes to ${outputPath}`)
 }

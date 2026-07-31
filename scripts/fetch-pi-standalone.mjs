@@ -14,7 +14,7 @@ const packageJson = JSON.parse(
 )
 const version =
   process.env.PI_STANDALONE_VERSION ||
-  packageJson.dependencies?.["@earendil-works/pi-coding-agent"]
+  packageJson.devDependencies?.["@earendil-works/pi-coding-agent"]
 
 if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
   throw new Error("Set PI_STANDALONE_VERSION to a released Pi version")

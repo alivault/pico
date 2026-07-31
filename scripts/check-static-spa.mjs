@@ -8,12 +8,13 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const publicDir = join(root, ".output", "public")
 const shellPath = join(publicDir, "_shell.html")
 if (!existsSync(shellPath)) {
-  throw new Error(
-    "TanStack SPA build did not produce .output/public/_shell.html"
-  )
+  throw new Error("Vite SPA build did not produce .output/public/_shell.html")
+}
+if (existsSync(join(root, ".output", "server"))) {
+  throw new Error("SPA build unexpectedly contains a Node server output")
 }
 const shell = readFileSync(shellPath, "utf8")
-if (!shell.startsWith("<!DOCTYPE html>")) {
+if (!shell.toLowerCase().startsWith("<!doctype html>")) {
   throw new Error("SPA shell is not a complete HTML document")
 }
 if (!shell.includes('type="module"')) {

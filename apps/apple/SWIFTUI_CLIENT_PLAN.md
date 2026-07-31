@@ -13,7 +13,7 @@ The iOS app should be a **native client for an existing Pico runtime**, not a re
 Why:
 
 - Pico currently owns the Pi SDK runtime, session state, project filesystem access, git tooling, provider auth, and SSE event stream on the server side.
-- iOS cannot safely or realistically run the current Node/Nitro/Pi SDK process, spawn local shell tools, or access arbitrary desktop project directories.
+- iOS does not run Pico's Rust/Pi server runtime, spawn local shell tools, or access arbitrary desktop project directories.
 - Keeping the runtime on the Mac/dev machine preserves Pico's current behavior and lets the iOS app focus on mobile UX.
 
 Initial topology:

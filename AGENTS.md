@@ -7,7 +7,7 @@ This file is the repo-specific guide for coding agents working in Pico.
 Pico is a local, keyboard-friendly workspace for Pi coding-agent sessions. The repo now contains two first-party clients that share the same Pico server/runtime contracts:
 
 - the browser app published as the public `@alivault/pico` package and runnable with `npx @alivault/pico`
-- the native SwiftUI companion app in `apps/apple/Pico`, which builds for iOS and macOS and connects to an already-running Pico server over HTTP JSON + SSE
+- the native SwiftUI app in `apps/apple/Pico`; macOS bundles and manages the persistent Rust server, while iOS connects as a companion over HTTP JSON + SSE
 
 The product provides a persistent session browser, live conversation shell, project-aware prompt helpers, provider authentication flows, git tooling, project file browsing, and settings around display, thinking/tools visibility, and completion notifications.
 
@@ -17,8 +17,12 @@ When behavior is ambiguous, prefer the behavior currently implemented in this re
 
 ### Browser/server stack
 
-- TanStack Start
-- TanStack Router
+- Native Rust server in `crates/pico-server`
+- Tokio + Axum for HTTP, SSE, WebSocket, lifecycle, and control sockets
+- `portable-pty` for server-owned terminals and Inkjet for native highlighting
+- Standalone Pi JSONL RPC executable for agent/session behavior
+- Bun-compiled `native/pi-bridge.ts` executable for Pi SDK-only authentication and provider usage
+- TanStack Router (client-only Vite SPA)
 - TanStack Query
 - TanStack Store / React Store
 - TanStack Hotkeys
@@ -26,13 +30,12 @@ When behavior is ambiguous, prefer the behavior currently implemented in this re
 - React 19
 - React Compiler enabled via `reactCompilerPreset()` in `vite.config.ts`
 - TypeScript (strict mode)
-- Vite+ + Nitro
+- Vite+ static builds; there is no production Node/Nitro server
 - Tailwind CSS v4
 - Base UI / shadcn-style component patterns
 - next-themes for persisted theme class management
-- Shiki-based code highlighting and theme variables
+- Shiki-compatible code/theme variables rendered from constrained Rust highlight output
 - @pierre/diffs / @pierre/trees plus @dnd-kit for git diffs and project file trees
-- Pi SDK loaded from the repo-local `@earendil-works/pi-coding-agent` dependency by default
 
 ### Native Apple stack
 
@@ -45,18 +48,11 @@ When behavior is ambiguous, prefer the behavior currently implemented in this re
 - Limited AppKit adapters for macOS pasteboard, URL opening, colors/images, and the native code text view
 - No React Native, Expo, WebView shell, or new third-party Swift packages unless explicitly approved
 
-## Pi SDK dependency
+## Pi runtime dependencies
 
-The browser/server runtime is intended to be self-contained and uses the repo-local `@earendil-works/pi-coding-agent` dependency by default. The native Apple app does not load the Pi SDK directly; it connects to this runtime.
+The production server does not load the Pi SDK or Node. It owns an architecture-matched standalone `pi --mode rpc` process. Provider credential listing/mutation, OAuth/device-code flows, model registry refresh, and provider quota lookup run in the separate compiled `pico-pi-bridge` executable. Both are bundled in native releases.
 
-Resolution happens in `src/server/pi-sdk-path.ts` and tries, in order:
-
-1. `PI_REMOTE_PI_SDK_DIR` for explicit SDK override/testing
-2. the bundled Pi SDK dependency from `node_modules`; the package is currently `@earendil-works/pi-coding-agent`, and resolution also accepts the legacy `@mariozechner/pi-coding-agent` package name when present
-
-Use `pnpm update:pi` to refresh the bundled SDK to the current npm `latest` release.
-
-If the app fails with a Pi SDK resolution error, check that dependencies are installed before checking the local/global Pi environment.
+The repo-local `@earendil-works/pi-coding-agent` package is a development-only dependency used to compile `native/pi-bridge.ts` and to determine the matching standalone Pi release. Use `pnpm update:pi` to update that pinned build dependency, then rebuild and validate both native artifacts. Provider credentials remain in Pi's `AuthStorage`; never add a second credential store.
 
 ## Quick commands
 
@@ -112,7 +108,7 @@ This builds, installs, and launches the app on the connected iPhone.
 
 Notes:
 
-- Dev server port is `3141` from `vite.config.ts`.
+- `pnpm dev` starts Rust on port `3142` and Vite on port `3141`; Vite proxies API/SSE/WebSocket traffic to Rust.
 - `pnpm check:fix` is the baseline browser/server validation command.
 - Do not build or run the native app to validate small, localized changes. Reserve platform builds/tests for native changes, and test both macOS and iOS after broad shared changes.
 - For simulator-to-Mac testing, the default iOS server URL is `http://localhost:3141`; physical devices need a trusted host-reachable Pico server URL.
@@ -219,58 +215,39 @@ Notes:
   - SSE event types
   - shared client/server payload contracts
 
-### Routes
+### Browser routes and entry
 
+- `index.html` and `src/main.tsx`
+  - static browser document and React/Query/Router bootstrap
 - `src/routes/__root.tsx`
-  - root document, CSS links, app providers, TanStack Devtools, and dev-only React Scan script loading
+  - app providers, not-found UI, and TanStack Devtools
 - `src/routes/index.tsx`
-  - main route
-  - session selection is linked to `?session=`
-- `src/routes/events.ts`
-  - SSE endpoint
-- `src/routes/api.*.ts` and `src/routes/api/**`
-  - thin server routes that delegate to the runtime or focused helpers
-  - includes native-client capability route `src/routes/api/client/manifest.ts`
+  - main client route; session selection is linked to `?session=`
+- `src/routeTree.gen.ts`
+  - generated by the TanStack Router Vite plugin
 
-### Server/runtime
+There are intentionally no TypeScript server routes. Browser API calls use same-origin `/api/*`, `/events`, and terminal WebSockets; Vite proxies them during development and Rust serves them in production.
 
-- `src/server/pico-runtime/index.ts`
-  - the core server-side runtime coordinator and bridge to the Pi SDK
-  - owns the main state machine while delegating focused logic to runtime helper modules
-- `src/server/pico-runtime/contexts.ts`
-  - SSE payload/client utilities and context/session activation helpers
-- `src/server/pico-runtime/session-list.ts`
-  - session list/index merging, sorting, serialization, and directory revision helpers
-- `src/server/pico-runtime/tree-fork.ts`
-  - session tree serialization and fork helper logic
-- `src/server/pico-runtime/ui-requests.ts`
-  - pending UI request bridge helpers
-- `src/server/pico-runtime/highlight.ts`
-  - Shiki-based syntax highlight payload helpers and language normalization
-- `src/server/pico-runtime/conversation-retainer.ts`
-  - render-optimized conversation item construction plus streaming conversation item helpers
-- `src/server/pi-sdk.ts`
-  - Pi SDK loading + worker-thread-safe runtime patching + settings manager adaptation
-  - provider auth uses the SDK's `AuthStorage` and `ModelRegistry` rather than browser-local credential storage
-- `src/server/pi-sdk-path.ts` and `src/server/pi-sdk-types.ts`
-  - SDK package resolution and local SDK adapter types
-- `src/server/session-naming.ts`
-  - heuristic/LLM-backed automatic session naming helpers
-- `src/server/provider-usage.ts`
-  - provider usage lookup for composer context/limit display
-- `src/server/git.ts`
-  - native git inspection, diff/review, and git action helpers with short-lived caching
-- `src/server/git-watch.ts`
-  - filesystem watcher that emits git refresh events for active directories
-  - debounces filesystem bursts with TanStack Pacer
-- `src/server/pi-edit-tool.ts`
-  - Pico-specific integration/patching for Pi edit-tool behavior
-- `src/server/project-paths.ts`
-  - safe project path resolution helpers for file/tree APIs
-- `src/server/http.ts`
-  - JSON/error response helpers
-- `src/server/route-helpers.ts`
-  - request JSON parsing and route error handling
+### Native Rust server/runtime
+
+- `crates/pico-server/src/api.rs`
+  - Axum router, browser/Apple HTTP and SSE contracts, session coordination, and static SPA fallback
+- `crates/pico-server/src/pi_rpc.rs`, `pi_protocol.rs`, and `session_store.rs`
+  - bounded strict-JSONL Pi process transport, typed commands/events, and Pi JSONL session indexing
+- `crates/pico-server/src/terminal.rs`
+  - server-owned PTYs, bounded replay, and reconnect behavior
+- `crates/pico-server/src/git_native.rs` and `project_files.rs`
+  - native Git, file tree/read, path validation, and completion logic
+- `crates/pico-server/src/highlight.rs`
+  - Inkjet/Tree-sitter highlighting with constrained Shiki-compatible span output
+- `crates/pico-server/src/auth_bridge.rs` and `native/pi-bridge.ts`
+  - bounded compiled bridge for Pi `AuthStorage`, `ModelRegistry`, OAuth, and usage operations
+- `crates/pico-server/src/control.rs`, `active_work.rs`, `persistence.rs`, and `runtime.rs`
+  - owner-only control socket, protocol compatibility, drain-safe updates, atomic lifecycle persistence, and server-owned runtime handles
+- `crates/pico-server/src/static_assets.rs` and `security.rs`
+  - safe static SPA serving, cache/ETag/HEAD behavior, Host/Origin policy, and loopback defaults
+- `bin/pico.mjs` and `bin/native-runtime.mjs`
+  - npm launcher, architecture-specific checksum-verified native download, compatible attachment, and safe updates
 
 ### UI primitives, providers, hooks, and styles
 
@@ -321,9 +298,9 @@ Notes:
 
 ## Core architecture
 
-### 1) Browser app: single shell route + API routes
+### 1) Static browser shell + native API runtime
 
-The browser-facing app is the `/` route. Most browser interaction happens inside the single app shell, backed by API endpoints and SSE.
+The browser-facing app is a client-only `/` route built into `.output/public` and served by Rust with SPA fallback. Browser interaction happens inside the single app shell, backed by Rust API endpoints, SSE, and terminal WebSockets.
 
 ### 2) Viewer context is required
 
@@ -370,11 +347,9 @@ Important current behavior:
 
 If you change sync payload semantics, update the shared sync helpers instead of assuming every SSE event contains a complete session snapshot.
 
-### 4) Runtime singleton owns server-side app behavior
+### 4) The Rust runtime owns server-side app behavior
 
-Most server routes are intentionally thin. They delegate to `getPicoRuntime()`.
-
-If you are adding session behavior, tree navigation, fork behavior, slash commands, UI request handling, or other app-level stateful flows, the change probably belongs in `src/server/pico-runtime/index.ts` or one of its focused helper modules.
+`crates/pico-server/src/api.rs` coordinates client contracts while focused Rust modules own Pi RPC, session indexing, terminals, Git/files, highlighting, auth bridging, persistence, and control behavior. Do not add TypeScript server routes or parallel Node state. Keep serializable server facts separate from live process/PTY handles.
 
 ### 5) Shared contracts are important
 
@@ -443,14 +418,16 @@ When changing shared live-session behavior, keep browser `updateStateFromSync()`
 
 ## Route and endpoint conventions
 
-When adding or editing a route:
+When adding or editing a server route:
 
-1. create/update the route in `src/routes/api.*.ts` or a nested `src/routes/api/**` file
-2. keep the route thin
-3. parse request JSON with `readRequestJson()` when needed
-4. return results with `jsonResponse()`
-5. handle failures with `routeErrorResponse()`
-6. delegate real logic to `getPicoRuntime()` or another server helper
+1. add it to the Axum router in `crates/pico-server/src/api.rs`
+2. keep protocol/request/response types explicit and bounded
+3. put focused filesystem, Git, PTY, auth bridge, or Pi RPC behavior in the matching Rust module
+4. preserve `context`, `session`, and `sessionKey` resolution semantics
+5. update `src/lib/pico/api.ts`, Swift models/endpoints, manifest capabilities, shared fixtures, and tests
+6. run `node scripts/update-route-inventory.mjs` when the public client route set changes
+
+Do not create `src/routes/api.*` files; `src/routes` is browser-only.
 
 Existing notable endpoints:
 
@@ -539,7 +516,7 @@ Provider auth is exposed through `/login` and `/logout`, command palette actions
 Important behavior:
 
 - Credentials are managed by the Pi SDK `AuthStorage` / `ModelRegistry`; do not add parallel browser credential storage.
-- Auth routes are thin and delegate to `getPicoRuntime()`:
+- Auth routes are implemented by Rust through the compiled Pi bridge:
   - `/api/auth/providers`
   - `/api/auth/api-key`
   - `/api/auth/oauth`
@@ -554,11 +531,11 @@ If you change auth contracts, update:
 
 - `src/lib/pico/api.ts`
 - `src/lib/pico/index.ts` for UI-request shape changes
-- `src/server/pi-sdk-types.ts` for local SDK adapter type changes
+- `crates/pico-server/src/auth_bridge.rs` and `native/pi-bridge.ts`
 - `src/features/pico/app-shell-auth-dialog.tsx`
 - `src/features/pico/app-shell-ui-request-dialog.tsx`
 - iOS auth/UI-request models and views in `apps/apple/Pico/Pico/Core/Models` and `apps/apple/Pico/Pico/Features/Settings`
-- the relevant `src/routes/api.auth.*.ts` route
+- the relevant Axum route/handler in `crates/pico-server/src/api.rs`
 
 ### Composer behavior
 
@@ -597,8 +574,8 @@ If you touch conversation/session sync behavior, inspect all of:
 - `src/features/pico/conversation-view.tsx`
 - `src/features/pico/markdown-renderer.tsx`
 - `src/lib/pico/sync.ts`
-- `src/server/pico-runtime/index.ts`
-- `src/routes/api.session.history.ts`
+- `crates/pico-server/src/api.rs`
+- `crates/pico-server/src/session_store.rs`
 - `apps/apple/Pico/Pico/Core/Models/SessionState.swift`
 - `apps/apple/Pico/Pico/Core/Models/StateSyncPayload.swift`
 - `apps/apple/Pico/Pico/Core/Models/ConversationItem.swift`
@@ -626,7 +603,7 @@ Rendering/performance details:
 
 ### Syntax highlighting
 
-Server-side code highlighting uses Shiki via `/api/highlight`, with the Pico CSS-variable theme built in `src/server/pico-runtime/highlight.ts`. Browser rendering should use `src/features/pico/highlighted-code.tsx` for highlighted spans instead of `dangerouslySetInnerHTML`. Native rendering should use `ShikiHighlightedHTMLParser`, `CodeAttributedStringBuilder`, and `CodeSyntaxPalette`. Both clients intentionally only preserve constrained Shiki `<span>` output, the `line` class, and safe CSS-variable `color` declarations.
+Server-side code highlighting uses Inkjet/Tree-sitter via `/api/highlight` in `crates/pico-server/src/highlight.rs` and emits Shiki-compatible Pico CSS variables. Browser rendering should use `src/features/pico/highlighted-code.tsx` for constrained highlighted spans instead of `dangerouslySetInnerHTML`. Native rendering should use `ShikiHighlightedHTMLParser`, `CodeAttributedStringBuilder`, and `CodeSyntaxPalette`. Both clients intentionally preserve only constrained `<span>` output, the `line` class, and safe CSS-variable `color` declarations.
 
 ### Draft persistence
 
@@ -655,7 +632,7 @@ Theme family/color-mode state flows through `src/features/pico/use-pico-theme.ts
 - Add route cases to `PicoEndpoint` so paths and query construction stay centralized.
 - Always pass `ConnectionStore.contextId`. Pass `sessionId` for normal selected sessions and `sessionKey` for draft/path-backed selections and new-session flows.
 - Decode `{ ok: false, error }` and non-2xx responses through `PicoAPIClient`'s central response handling; keep error messages user-readable through `PicoAPIError` and `AppAlert`.
-- `GET /api/client/manifest` is the native compatibility gate. Keep its TypeScript response type, server route, Swift model, and client validation in sync when changing contract version/capabilities.
+- `GET /api/client/manifest` is the native compatibility gate. Keep its TypeScript response type, Rust payload, Swift model, and client validation in sync when changing contract version/capabilities.
 
 ### SSE and session state
 
@@ -704,59 +681,21 @@ Theme family/color-mode state flows through `src/features/pico/use-pico-theme.ts
 
 ## Server/runtime conventions
 
-### Use the runtime, not one-off server state
+### Preserve server ownership and explicit lifecycle
 
-Do not create parallel global state for sessions in routes. The runtime already manages:
+The Rust server owns Pi RPC children, PTYs, auth bridge processes, replay buffers, Git watches, and persisted lifecycle state. Clients attach and detach without owning those processes. Never terminate active Pi work on client disconnect, ordinary app quit, or automatic update. Update/shutdown paths must begin draining, reject new prompt work, and wait for active session chains unless the user explicitly chooses a destructive recovery path.
 
-- active entries
-- draft entries
-- contexts
-- unread finished state
-- pending UI requests
-- session naming
-- session tree navigation
-- slash command execution
-- directory session cleanup / bulk deletion flows
-- git watch notifications for active directories
+Keep serializable state separate from `RuntimeRegistry`/process handles. Persist atomically through `persistence.rs`, bound all wire records and replay queues, and retain owner-only control socket/data permissions.
 
-### Resolve requests correctly
+### Resolve viewer/session scope consistently
 
-If a route needs the current app context/session or base cwd, use:
+Axum handlers use the shared request resolution in `api.rs` and context/session helpers. Do not manually reinterpret `context`, `session`, `sessionKey`, cwd, or draft ownership in one route. Pi session history remains Pi JSONL under `PI_CODING_AGENT_DIR` or `~/.pi/agent`.
 
-- `getPicoRuntime().resolveRequest(request)`
-- `getPicoRuntime().getBaseCwd(activeEntry, context)`
+### Session trees, slash commands, and UI requests
 
-Do not manually reconstruct this logic.
+Tree/fork/clone and slash-command flows are stateful. Review `api.rs`, `session_store.rs`, and typed Pi commands together. Built-in client commands remain in `app-shell.tsx`/`composer-utils.ts`; server-executed commands belong in Rust and typed Pi RPC.
 
-### Session tree and fork flows
-
-These are not simple stateless endpoints. They depend on the active session/runtime state.
-
-If changing tree or fork behavior, review:
-
-- `getSessionTreeForRequest`
-- `navigateSessionTree`
-- `getForkableMessages`
-- `forkSession`
-- helpers in `src/server/pico-runtime/tree-fork.ts`
-
-with `src/server/pico-runtime/index.ts` remaining the coordinator.
-
-### Slash commands
-
-Built-in slash commands are surfaced and pre-validated in the client. `/login` and `/logout` open auth dialogs; `/clone`, `/fork`, `/tree`, `/rename`, `/delete`, and display toggles are orchestrated through client dialog/action flows; `/compact` calls the runtime through `/api/slash-command`.
-
-If you add or change a slash command, update the relevant sides:
-
-- UI command descriptors and `runBuiltinSlashCommand()` in `app-shell.tsx`
-- composer matching behavior in `composer-utils.ts` and assist UI when needed
-- runtime handling in `runSlashCommand()` only when the command should execute server/runtime behavior
-
-### Generic UI requests
-
-Server-driven UI prompts are handled through `/api/ui/$id`, the runtime UI-request helpers in `src/server/pico-runtime/ui-requests.ts`, and the pending UI request dialog/controller in `src/features/pico/app-shell-ui-request-dialog.tsx`.
-
-If you touch extension/UI request flows, update both runtime and dialog handling.
+Server-driven prompts flow through `/api/ui/$id`, scoped SSE events, `auth_bridge.rs`, and `native/pi-bridge.ts`. Update the browser dialog, Swift UI request models/views, fixtures, and bounded bridge transport together.
 
 ## Styling and code style
 
@@ -806,13 +745,13 @@ Follow the style already used under `apps/apple/Pico`:
 - TanStack Hotkeys for app-wide shortcuts in `use-app-shell-shortcuts.ts`
 - TanStack Pacer for named debounce/throttle/batch behavior in high-churn flows
 - local state for view-specific UI state
-- minimal route handlers, richer runtime/service layer
+- browser-only file routes with all API/runtime behavior in Rust
 
 When adding new data flows, try to match existing patterns rather than introducing a second architectural style.
 
 ## Git feature notes
 
-Git data is read server-side in `src/server/git.ts`.
+Git data is read server-side in `crates/pico-server/src/git_native.rs`.
 
 Current behavior includes:
 
@@ -839,7 +778,7 @@ The iOS Git/files workspace (`apps/apple/Pico/Pico/Features/Git`) uses the same 
 
 If you extend git UI, update:
 
-- server helper types/logic in `src/server/git.ts`
+- server helper types/logic in `crates/pico-server/src/git_native.rs` and Axum handlers in `api.rs`
 - shared response types in `src/lib/pico/api.ts`
 - browser rendering in `src/features/pico/right-sidebar.tsx` and the focused right-sidebar Git modules
 - Swift response/request models in `apps/apple/Pico/Pico/Core/Models`
@@ -850,17 +789,17 @@ If you extend git UI, update:
 
 ### Add a new API-backed action
 
-1. add/update runtime logic in `src/server/pico-runtime/index.ts` or a focused server helper
-2. expose it through a route in `src/routes/api.*.ts` or nested `src/routes/api/**`
-3. add/update response types in `src/lib/pico/api.ts`
-4. call it from the browser client with `buildRequestUrl()` + `fetchJson()`
-5. invalidate/query-refresh as needed
-6. if native iOS needs the action, add it to `PicoEndpoint`, `PicoAPIClient`, Swift models, and `AppModel`/feature views
-7. run `pnpm check:fix` and, for iOS changes, `xcodebuild ... test`
+1. add/update focused Rust runtime logic and the Axum handler/router in `crates/pico-server/src`
+2. add/update response types in `src/lib/pico/api.ts`
+3. call it from the browser client with `buildRequestUrl()` + `fetchJson()`
+4. invalidate/query-refresh as needed
+5. if native iOS needs the action, add it to `PicoEndpoint`, `PicoAPIClient`, Swift models, and `AppModel`/feature views
+6. update the manifest, route inventory, fixtures, and Rust/Swift tests as applicable
+7. run `pnpm check:fix` and, for broad Apple changes, both macOS and iOS tests
 
 ### Change a shared API/SSE contract
 
-1. update the server/runtime payload or route response
+1. update the Rust server/runtime payload or route response
 2. update TypeScript contracts in `src/lib/pico/api.ts` and domain helpers in `src/lib/pico/*`
 3. update browser handlers/renderers that consume the contract
 4. update Swift models under `apps/apple/Pico/Pico/Core/Models`
@@ -904,19 +843,19 @@ If you extend git UI, update:
 2. update bundled theme metadata in `src/lib/pico/shiki-bundled-themes.ts` when adding/removing Shiki-backed themes
 3. update CSS variables/classes in `src/styles/themes/*`
 4. verify next-themes wiring in `src/components/app-providers.tsx` and `src/features/pico/use-pico-theme.ts`
-5. keep code/diff highlighting variables aligned through `src/server/pico-runtime/highlight.ts`, `src/features/pico/highlighted-code.tsx`, and `src/features/pico/pico-diff-theme.ts`
+5. keep code/diff highlighting variables aligned through `crates/pico-server/src/highlight.rs`, `src/features/pico/highlighted-code.tsx`, and `src/features/pico/pico-diff-theme.ts`
 
 ### Add a new slash command
 
 1. add the descriptor in `app-shell.tsx`
 2. update `runBuiltinSlashCommand()` in `app-shell.tsx` for client-handled commands
 3. update composer behavior/search in `composer-utils.ts` and assist UI if needed
-4. implement runtime handling in `runSlashCommand()` only for server-executed commands
+4. implement server-executed runtime handling with typed Pi commands in Rust
 5. validate both typed entry and UI suggestion flows
 
 ## Release workflow
 
-The public npm package is released through `.github/workflows/release.yml` on pushed `v*.*.*` tags. This workflow publishes the browser/server package; the native iOS/macOS app is not shipped through npm and needs separate TestFlight/App Store distribution flows.
+Releases run through `.github/workflows/release.yml` on pushed `v*.*.*` tags. The workflow publishes four architecture-specific native server bundles, checksums/manifests, generated Homebrew formula metadata, the lightweight npm launcher/static browser package, and—when signing secrets are enabled—a notarized macOS DMG plus cask. iOS distribution remains a separate TestFlight/App Store flow.
 
 Release setup:
 
@@ -954,9 +893,9 @@ Release process for agents:
 pnpm release patch # or minor/major
 ```
 
-The release script fetches `origin/main`, verifies local `main` is based on it (local commits ahead of origin are OK), checks that the target git tag and npm version do not already exist, runs `pnpm check` and `pnpm build`, bumps `package.json` via `pnpm version`, creates the matching `v*.*.*` tag, and pushes the branch plus tags.
+The release script fetches `origin/main`, verifies local `main` is based on it (local commits ahead of origin are OK), checks that the target git tag and npm version do not already exist, runs `pnpm check` and `pnpm build`, updates both `package.json` and `crates/pico-server/Cargo.toml` plus `Cargo.lock`, creates the matching `v*.*.*` commit/tag, and pushes the branch plus tags.
 
-Do not run `pnpm version` or push release tags manually unless the release script is unsuitable and the user explicitly asks. The pushed tag must match the `package.json` version. The workflow validates, builds, publishes to npm with provenance via the npm CLI's OIDC support, and creates a GitHub release with generated release notes. Do not hand-write a separate GitHub release body unless the user explicitly wants to override generated notes.
+Do not run `pnpm version` or push release tags manually unless the release script is unsuitable and the user explicitly asks. The pushed tag must match both npm and Rust versions. The workflow validates, builds, publishes checksum-verified native assets and npm with provenance/OIDC, and creates a GitHub release with generated notes. Do not hand-write a separate GitHub release body unless the user explicitly wants to override generated notes.
 
 ## Validation expectations
 
@@ -1006,8 +945,8 @@ Useful native iOS flows:
 
 React Doctor/Knip known intentional false positives:
 
-- `src/react-scan-dev.ts` is loaded by `src/routes/__root.tsx` through a dev-only module script URL when `VITE_REACT_SCAN=true`; do not replace it with a normal static import just to satisfy dead-code detection.
-- `vendor/node-domexception/index.js` is a package-resolution shim used through the `node-domexception` file dependency/override and included in package publishing; it is not imported by source files directly.
+- `src/react-scan-dev.ts` is dynamically imported by `src/main.tsx` only when `VITE_REACT_SCAN=true`; do not make it a production static import just to satisfy dead-code detection.
+- `vendor/node-domexception/index.js` is a development-time package-resolution shim used through the `node-domexception` override while compiling Pi artifacts; it is not imported by browser source or published in the npm launcher.
 - Unused `src/components/ui/*` exports may be intentionally retained as reusable shadcn-style primitives. Do not delete or unexport them solely because React Doctor/Knip reports them as unused.
 
 ## Things that are easy to break
@@ -1029,7 +968,7 @@ Be especially careful around these:
 - bypassing `HighlightedCode` or accepting broader highlight HTML than the constrained Shiki span shape
 - bypassing `ShikiHighlightedHTMLParser` constraints or rendering arbitrary highlighted HTML in SwiftUI
 - replacing named TanStack Pacer controls with ad hoc debounce/throttle/queue timers in high-churn paths
-- bypassing the runtime singleton with ad hoc server state
+- adding ad hoc Node/server state or serializing live Rust process handles instead of using the native runtime registries
 - attempting to run Pi SDK/git/filesystem runtime behavior on iOS instead of calling the Pico server
 - exposing an unauthenticated Pico server over LAN/remote networks without adding pairing/token auth first
 - altering session tree/fork/clone behavior without testing the browser dialogs and native edit/branch flows
@@ -1044,10 +983,10 @@ Keep public repo docs aligned with the implementation:
 - dev port is `3141`
 - public package name is `@alivault/pico`
 - CLI binary is `pico-app`
-- bundled Pi SDK updates are handled by `pnpm update:pi`
+- standalone Pi and compiled bridge build versions are pinned through the development Pi SDK dependency and updated with `pnpm update:pi`
 - native Apple app path is `apps/apple/Pico`
 - iOS bundle identifier is `com.alivault.pico.ios`; macOS bundle identifier is `com.alivault.pico.macos`
-- native client/server topology is SwiftUI app ↔ Pico HTTP JSON/SSE server ↔ Pi SDK/git/filesystem runtime
+- native client/server topology is SwiftUI/browser ↔ Rust Pico HTTP JSON/SSE/WebSocket server ↔ standalone Pi RPC/git/filesystem runtime
 - iOS currently targets Swift 6.2 and iOS 26, with a local-network HTTP development allowance
 
 If README, `apps/apple/SWIFTUI_CLIENT_PLAN.md`, or future docs drift from the code, update them as part of the same change or explicitly note that a plan document is historical.

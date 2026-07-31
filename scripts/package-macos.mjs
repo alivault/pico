@@ -197,11 +197,11 @@ universal(
   join(serverRoot, "pi"),
   join(
     root,
-    `artifacts/pi/${packageJson.dependencies["@earendil-works/pi-coding-agent"]}/darwin-arm64/pi/pi`
+    `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-arm64/pi/pi`
   ),
   join(
     root,
-    `artifacts/pi/${packageJson.dependencies["@earendil-works/pi-coding-agent"]}/darwin-x64/pi/pi`
+    `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-x64/pi/pi`
   )
 )
 cpSync(join(root, ".output/public"), join(serverRoot, "web"), {

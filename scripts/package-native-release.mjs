@@ -108,7 +108,7 @@ run("node", ["scripts/fetch-pi-standalone.mjs"], {
   env: { PI_STANDALONE_TARGET: target },
 })
 
-const piVersion = packageJson.dependencies["@earendil-works/pi-coding-agent"]
+const piVersion = packageJson.devDependencies["@earendil-works/pi-coding-agent"]
 const serverPath = join(
   root,
   "target",

@@ -105,7 +105,9 @@ Install dependencies:
 pnpm install
 ```
 
-Start Pico in development mode:
+Start Pico in development mode. This builds and launches the Rust backend on
+port 3142, launches Vite on port 3141, and proxies API, SSE, and terminal
+WebSocket traffic to Rust:
 
 ```bash
 pnpm dev
@@ -119,7 +121,7 @@ http://localhost:3141
 
 ## Developing the native macOS and iOS app
 
-The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. During development it connects to an already-running Pico server over HTTP JSON and SSE. The macOS distribution pipeline can bundle the native Rust server and standalone Pi executables; iOS remains a remote companion client.
+The native SwiftUI client lives in `apps/apple/Pico` and builds for both macOS and iOS. During development it connects to an already-running Pico server over HTTP JSON and SSE. The macOS distribution bundles the native Rust server and standalone Pi executables; iOS remains a remote companion client.
 
 Open the shared project in Xcode:
 
@@ -211,9 +213,9 @@ and Quit Completely actions.
 ## Development commands
 
 ```bash
-pnpm dev        # start the dev server
-pnpm build      # build for production
-pnpm preview    # preview the production build
+pnpm dev        # start Rust plus the Vite browser client
+pnpm build      # build the static browser application
+pnpm preview    # preview the static browser build (Rust remains on 3142)
 pnpm check      # format/lint/typecheck
 pnpm check:fix  # format/lint/typecheck with fixes
 pnpm release patch # check, build, version, tag, and push a release
@@ -229,20 +231,24 @@ pnpm release minor
 pnpm release major
 ```
 
-The release script verifies a clean, up-to-date `main`, runs checks and build, bumps `package.json`, creates the matching `v*.*.*` tag, and pushes the branch plus tags. The GitHub release workflow publishes the npm package from the pushed tag.
+The release script verifies a clean, up-to-date `main`, runs checks and build,
+keeps the npm and Rust server versions aligned, creates the matching `v*.*.*`
+tag, and pushes the branch plus tags. The GitHub release workflow publishes the
+four native bundles, generated Homebrew metadata, and npm launcher from the
+pushed tag.
 
 ## Tech stack
 
 Pico is built with:
 
-- TanStack Start, Router, Query, Store, Hotkeys, and Pacer
+- Rust, Tokio, Axum, portable-pty, and Inkjet for the persistent server
+- Standalone Pi RPC and a compiled Pi SDK authentication bridge
+- TanStack Router, Query, Store, Hotkeys, and Pacer
 - Native SwiftUI for macOS and iOS
-- React 19
-- TypeScript
-- Vite+ and Nitro
+- React 19 and TypeScript
+- Vite+ static SPA builds
 - Tailwind CSS v4
 - Base UI / shadcn-style components
-- Pi SDK
 
 ## License
 

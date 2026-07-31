@@ -4,7 +4,6 @@ catalog:
   vite-plus: 0.1.19
 onlyBuiltDependencies:
   - bun
-  - node-pty
 overrides:
   vite: "catalog:"
   vitest: "catalog:"

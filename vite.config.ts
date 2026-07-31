@@ -1,29 +1,19 @@
+import { copyFileSync, existsSync } from "node:fs"
 import os from "node:os"
+import { join } from "node:path"
 
-import { defineConfig } from "vite-plus"
-import type { Plugin } from "vite"
 import { devtools } from "@tanstack/devtools-vite"
-import { tanstackStart } from "@tanstack/react-start/plugin/vite"
+import { tanstackRouter } from "@tanstack/router-plugin/vite"
+import tailwindcss from "@tailwindcss/vite"
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
-import tailwindcss from "@tailwindcss/vite"
-import { nitro } from "nitro/vite"
 import { searchForWorkspaceRoot } from "vite"
-
-import { tryResolvePiSdkDir } from "./src/server/pi-sdk-path.ts"
-
-const piSdkDir = tryResolvePiSdkDir()
-const fsAllow = [searchForWorkspaceRoot(process.cwd())]
-if (piSdkDir) {
-  fsAllow.push(piSdkDir)
-}
+import type { Plugin } from "vite"
 
 const localHostname = os.hostname()
 const localHostnameWithoutSuffix = localHostname.replace(/\.local$/i, "")
 const allowedHosts = Array.from(
   new Set([
-    // Tailscale MagicDNS names are outside Vite's default localhost/IP allowlist.
-    // Keep this scoped to Tailscale instead of disabling host checks entirely.
     ".ts.net",
     localHostname,
     localHostname.toLowerCase(),
@@ -33,58 +23,43 @@ const allowedHosts = Array.from(
     `${localHostnameWithoutSuffix.toLowerCase()}.local`,
   ])
 )
+const backendUrl = process.env.PICO_DEV_BACKEND_URL ?? "http://127.0.0.1:3142"
+const backendProxy = {
+  target: backendUrl,
+  changeOrigin: true,
+  ws: true,
+}
 
-function devAssetFetchMetadataFallback(): Plugin {
+function staticSpaShell(): Plugin {
   return {
-    name: "pico-dev-asset-fetch-metadata-fallback",
-    apply: "serve",
-    enforce: "pre",
-    configureServer(server) {
-      server.middlewares.use(async (request, response, next) => {
-        const acceptValues = request.headers.accept
-          ?.split(",")
-          .map((value) => value.trim())
-        const url = new URL(request.url ?? "/", "http://pico.local")
-        const path = url.pathname
-        const hasFetchDest = Boolean(request.headers["sec-fetch-dest"])
-        const acceptsCss = acceptValues?.some((value) =>
-          value.startsWith("text/css")
-        )
-        const isCssModuleRequest =
-          path.endsWith(".css") &&
-          (url.searchParams.has("url") ||
-            url.searchParams.has("raw") ||
-            url.searchParams.has("inline"))
-
-        if (path.endsWith(".css") && acceptsCss && !isCssModuleRequest) {
-          // Some browsers/clients do not send Fetch Metadata headers over
-          // non-local HTTP origins. TanStack Start's dev asset handling relies
-          // on this header to avoid routing dev assets as app pages.
-          request.headers["sec-fetch-dest"] ??= "style"
-
-          if (path.startsWith("/src/") && !hasFetchDest) {
-            const result = await server.transformRequest(`${path}?direct`)
-            if (result) {
-              response.setHeader("Content-Type", "text/css")
-              response.setHeader("Cache-Control", "no-cache")
-              response.end(result.code)
-              return
-            }
-          }
-        } else if (path && !hasFetchDest) {
-          if (isCssModuleRequest || /\.(?:js|mjs|ts|tsx|jsx)$/.test(path)) {
-            request.headers["sec-fetch-dest"] = "script"
-          } else if (/\.(?:woff2?|ttf|otf|eot)$/.test(path)) {
-            request.headers["sec-fetch-dest"] = "font"
-          }
-        }
-        next()
-      })
+    name: "pico-static-spa-shell",
+    apply: "build",
+    closeBundle() {
+      const publicDirectory = join(process.cwd(), ".output", "public")
+      const indexPath = join(publicDirectory, "index.html")
+      if (!existsSync(indexPath)) {
+        throw new Error("Vite did not produce the Pico SPA entry document")
+      }
+      copyFileSync(indexPath, join(publicDirectory, "_shell.html"))
     },
   }
 }
 
-const config = defineConfig({
+const plugins = [
+  devtools(),
+  tailwindcss(),
+  tanstackRouter({
+    target: "react",
+    autoCodeSplitting: true,
+  }),
+  viteReact(),
+  babel({
+    presets: [reactCompilerPreset()],
+  }),
+  staticSpaShell(),
+] as unknown as Plugin[]
+
+const config = {
   lint: {
     ignorePatterns: ["src/routeTree.gen.ts"],
     options: { typeAware: true, typeCheck: true },
@@ -111,34 +86,35 @@ const config = defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  build: {
+    outDir: ".output/public",
+    emptyOutDir: true,
+  },
+  optimizeDeps: {
+    entries: ["index.html"],
+  },
   server: {
+    host: "127.0.0.1",
     port: 3141,
+    strictPort: true,
     allowedHosts,
     fs: {
-      allow: fsAllow,
+      allow: [searchForWorkspaceRoot(process.cwd())],
+    },
+    proxy: {
+      "/api": backendProxy,
+      "/events": backendProxy,
     },
   },
   preview: {
     port: 3141,
     allowedHosts,
+    proxy: {
+      "/api": backendProxy,
+      "/events": backendProxy,
+    },
   },
-  plugins: [
-    devtools(),
-    nitro({
-      features: { websocket: true },
-      scanDirs: ["src/nitro"],
-      traceDeps: ["node-pty*"],
-    }),
-    tailwindcss(),
-    devAssetFetchMetadataFallback(),
-    tanstackStart({
-      spa: { enabled: true },
-    }),
-    viteReact(),
-    babel({
-      presets: [reactCompilerPreset()],
-    }),
-  ],
-})
+  plugins,
+}
 
 export default config

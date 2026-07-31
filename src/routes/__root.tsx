@@ -1,11 +1,9 @@
 import * as React from "react"
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
+import { Outlet, createRootRoute } from "@tanstack/react-router"
+import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 
 import { AppProviders } from "@/components/app-providers"
-
-import appCss from "../styles.css?url"
 
 const TANSTACK_DEVTOOLS_SETTINGS_KEY = "tanstack_devtools_settings"
 const TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY =
@@ -17,45 +15,7 @@ const TANSTACK_DEVTOOLS_CONFIG = {
 } satisfies NonNullable<React.ComponentProps<typeof TanStackDevtools>["config"]>
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "Pico",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      {
-        rel: "icon",
-        type: "image/svg+xml",
-        href: "/favicon.svg",
-      },
-      {
-        rel: "alternate icon",
-        type: "image/png",
-        href: "/favicon.png",
-      },
-      {
-        rel: "apple-touch-icon",
-        href: "/apple-touch-icon.png",
-      },
-      {
-        rel: "manifest",
-        href: "/manifest.json",
-      },
-    ],
-  }),
-  shellComponent: RootDocument,
+  component: RootComponent,
   notFoundComponent: RootNotFound,
 })
 
@@ -72,28 +32,12 @@ function RootNotFound() {
   )
 }
 
-function RootDocument({ children }: { children: React.ReactNode }) {
-  const reactScanScriptSrc =
-    import.meta.env.DEV && import.meta.env.VITE_REACT_SCAN === "true"
-      ? "/src/react-scan-dev.ts"
-      : undefined
-
+function RootComponent() {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <HeadContent />
-        {reactScanScriptSrc ? (
-          <script type="module" src={reactScanScriptSrc} defer />
-        ) : null}
-      </head>
-      <body className="h-svh overflow-hidden bg-background text-foreground antialiased">
-        <AppProviders>
-          {children}
-          <AppTanStackDevtools />
-        </AppProviders>
-        <Scripts />
-      </body>
-    </html>
+    <AppProviders>
+      <Outlet />
+      <AppTanStackDevtools />
+    </AppProviders>
   )
 }
 

@@ -1,8 +1,8 @@
-# Pico native server migration
+# Pico native server
 
-This crate is Pico's native persistent server. It implements the browser and
-Apple HTTP/SSE contracts while the repository keeps the former Nitro runtime
-only as a temporary cutover reference.
+This crate is Pico's production persistent server. It implements the shared
+browser, macOS, and iOS HTTP/SSE/WebSocket contracts, owns long-lived Pi and PTY
+processes, and serves the static browser application without a Node runtime.
 
 ## Why this architecture
 
@@ -24,10 +24,12 @@ manifest, and the Pi RPC bridge.
 Pico cannot replace the Pi SDK with Rust without also reimplementing providers,
 authentication, tools, extensions, compaction, session trees, and model
 behavior. Pi already exposes a language-neutral strict-JSONL RPC mode and ships
-standalone Bun-compiled macOS binaries:
+standalone Bun-compiled macOS and Linux binaries:
 
 - `pi-darwin-arm64.tar.gz`
 - `pi-darwin-x64.tar.gz`
+- `pi-linux-arm64.tar.gz`
+- `pi-linux-x64.tar.gz`
 
 The production DMG can therefore bundle a standalone Pi executable rather than
 Node and `node_modules`. The Rust server owns one or more `pi --mode rpc`
@@ -44,7 +46,7 @@ bridge uses Pi's existing `AuthStorage` and `ModelRegistry`; it does not create 
 second credential store. Rust communicates with it over bounded JSONL, forwards
 OAuth/device-code UI over Pico's existing SSE contract, and owns its lifecycle.
 
-## Current preview
+## Development commands
 
 ```bash
 cargo test --workspace
@@ -91,7 +93,7 @@ Implemented:
   dimensions, bounded replay, monotonic output/input sequencing, SSE and browser
   WebSocket transports, reconnect reset signaling, and exit cleanup
 - terminal create/input/resize/events/WebSocket/close route parity without
-  `node-pty`
+  Node addons
 - native Tree-sitter highlighting through Inkjet with Shiki-compatible Pico CSS
   variables, constrained line/span HTML, language aliases, Markdown/ANSI
   handling, strict input bounds, blocking-worker isolation, and a bounded LRU
@@ -105,8 +107,8 @@ Implemented:
 - extension UI request routing over scoped SSE with timeout, cancellation,
   select/input/confirm/auth responses, and fire-and-forget notifications
 - direct public Pi RPC extension UI response forwarding for session extensions
-- TanStack Start SPA-mode builds with a validated `/_shell.html` and no browser
-  route loader/root dependency on the Node server runtime
+- TanStack Router/Vite SPA builds with a validated `/_shell.html` and no
+  production Node server output
 - bounded in-memory static asset loading from an adjacent `web` directory or
   `PICO_WEB_DIR`, immutable caching for hashed assets, ETags/HEAD, and safe MIME
   handling
@@ -128,35 +130,20 @@ Implemented:
 - loopback defaults, Host/Origin validation, and request size bounds
 - daily structured logs and atomically persisted lifecycle state
 
-Process-control routes remain under `/api/rust/*`. `pico-app` now selects this
-native server, downloads architecture-matched release bundles when necessary,
-and attaches to a compatible persistent instance instead of starting a
-duplicate. Nitro removal still waits for the final parity gate.
+Process-control routes remain under `/api/rust/*`. The npm `pico-app` launcher
+selects this server, downloads an architecture-matched checksum-verified bundle
+when necessary, and attaches to a compatible persistent instance instead of
+starting a duplicate.
 
-## Migration order
+## Runtime boundaries
 
-1. Characterize the existing TypeScript API/SSE contract with shared fixtures.
-2. Port session indexing and read-only project/Git endpoints.
-3. Translate Pi RPC events into Pico `state_sync` and conversation item patches.
-4. Port prompt, queue, abort, model, thinking, compaction, and tree flows.
-5. Replace `node-pty` with a Rust PTY runtime.
-6. Port native highlighting, provider authentication, and extension UI request
-   bridging. The native highlighter uses Inkjet's vendored Tree-sitter grammars;
-   its renderer emits only escaped text plus `span.line` and safe
-   `color:var(--sh-*)` token spans, never arbitrary grammar-provided HTML.
-7. Build the browser client as static assets served by Rust.
-8. Bundle the Rust server and architecture-matched standalone Pi binary in the
-   signed macOS app.
-9. Register the binary as a per-user `SMAppService` LaunchAgent and add the
-   separate menu-bar client.
-10. Remove the Nitro runtime only after browser, native Apple, and contract
-    fixture parity passes.
-
-## Remaining cutover boundaries
-
-- The old Nitro implementation remains in the tree until final cross-client
-  parity and persistence tests pass.
-- Pico does not expose its unauthenticated API beyond the existing loopback
-  development assumptions.
-- Restarting a Pi RPC child does not preserve in-flight work; update draining
-  therefore waits for active Pi work before replacing the server.
+- Pico's unauthenticated API defaults to loopback. Do not expose it to an
+  untrusted network without a future pairing/token layer.
+- Pi session files remain Pi's compatibility format and source of durable
+  conversation history.
+- Runtime process handles are never serialized as if they could survive a
+  reboot. Restored sessions are reattached to newly launched Pi RPC children.
+- Restarting a Pi RPC child cannot preserve in-flight work. Update draining
+  rejects new prompts and waits for active Pi work before server replacement.
+- The native highlighter emits only escaped text plus `span.line` and safe
+  `color:var(--sh-*)` token spans; it never accepts grammar-provided HTML.

@@ -2,7 +2,7 @@
 name = "pico-server"
 version = "0.14.1"
 edition = "2021"
-description = "Experimental native Pico server runtime"
+description = "Native persistent server runtime for Pico"
 license = "AGPL-3.0-only"
 publish = false
 
