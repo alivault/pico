@@ -131,7 +131,9 @@ const config = defineConfig({
     }),
     tailwindcss(),
     devAssetFetchMetadataFallback(),
-    tanstackStart(),
+    tanstackStart({
+      spa: { enabled: true },
+    }),
     viteReact(),
     babel({
       presets: [reactCompilerPreset()],

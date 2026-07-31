@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message as WebSocketMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, RawQuery, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use axum::middleware;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -46,6 +46,7 @@ use crate::session_store::{
     streaming_assistant_item, update_streaming_tool, IndexedSessionFile, SessionDocument,
     SessionStore,
 };
+use crate::static_assets::StaticAssets;
 use crate::terminal::{TerminalEvent, TerminalManager};
 
 #[derive(Clone)]
@@ -70,6 +71,7 @@ struct ServerContext {
     highlighter: Arc<HighlightRuntime>,
     auth_bridge: Option<Arc<AuthBridge>>,
     pending_ui_requests: Arc<RwLock<HashMap<String, UiRequestTarget>>>,
+    static_assets: Option<Arc<StaticAssets>>,
 }
 
 #[derive(Clone)]
@@ -455,6 +457,15 @@ impl IntoResponse for ApiError {
 
 pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
     config.paths.create()?;
+    let static_assets = config
+        .web_dir
+        .as_deref()
+        .map(StaticAssets::load)
+        .transpose()?
+        .map(Arc::new);
+    if let Some(static_assets) = &static_assets {
+        info!(web_root = %static_assets.root().display(), "loaded static browser application");
+    }
     let auth_bridge = match &config.pi_bridge_binary {
         Some(binary) => Some(
             AuthBridge::spawn(
@@ -512,6 +523,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         highlighter: Arc::new(HighlightRuntime::default()),
         auth_bridge,
         pending_ui_requests: Arc::new(RwLock::new(HashMap::new())),
+        static_assets,
     };
     attach_auth_bridge_events(&context);
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
@@ -1239,7 +1251,28 @@ fn router(context: ServerContext) -> Router {
         .route("/api/rust/sessions/:id", delete(delete_session))
         .route("/api/rust/sessions/:id/commands", post(send_command))
         .route("/api/rust/sessions/:id/events", get(session_events))
+        .fallback(spa_fallback)
         .with_state(context)
+}
+
+async fn spa_fallback(
+    State(context): State<ServerContext>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response {
+    let path = uri.path();
+    if path == "/api"
+        || path.starts_with("/api/")
+        || path == "/events"
+        || path.starts_with("/events/")
+    {
+        return ApiError::not_found("Not found").into_response();
+    }
+    match &context.static_assets {
+        Some(static_assets) => static_assets.response(&method, path, &headers),
+        None => ApiError::not_found("Not found").into_response(),
+    }
 }
 
 async fn pico_events(
@@ -2030,7 +2063,8 @@ async fn client_manifest() -> Json<Value> {
           "native-highlighting",
           "provider-auth",
           "provider-usage",
-          "extension-ui-bridge"
+          "extension-ui-bridge",
+          "static-spa"
         ]
       }
     }))
@@ -2058,6 +2092,13 @@ async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
           .auth_bridge
           .as_ref()
           .is_some_and(|bridge| bridge.is_running()),
+      },
+      "web": {
+        "available": context.static_assets.is_some(),
+        "root": context
+          .static_assets
+          .as_ref()
+          .map(|assets| assets.root()),
       }
     }))
 }
@@ -4911,6 +4952,7 @@ mod tests {
             highlighter: Arc::new(HighlightRuntime::default()),
             auth_bridge: None,
             pending_ui_requests: Arc::new(RwLock::new(HashMap::new())),
+            static_assets: None,
         }
     }
 
@@ -4946,11 +4988,83 @@ mod tests {
             .expect("features")
             .iter()
             .any(|feature| feature == "provider-auth"));
+        assert!(manifest["capabilities"]["features"]
+            .as_array()
+            .expect("features")
+            .iter()
+            .any(|feature| feature == "static-spa"));
         assert!(manifest["capabilities"]["endpoints"]
             .as_array()
             .expect("endpoints")
             .iter()
             .any(|endpoint| endpoint == "/events"));
+    }
+
+    #[tokio::test]
+    async fn static_spa_fallback_never_rewrites_api_or_event_routes() {
+        let root = std::env::temp_dir().join(format!(
+            "pico-api-static-test-{}-{}",
+            std::process::id(),
+            time::OffsetDateTime::now_utc().unix_timestamp_nanos()
+        ));
+        std::fs::create_dir_all(root.join("assets")).expect("asset directory");
+        std::fs::write(root.join("_shell.html"), "<!doctype html><p>Pico shell</p>")
+            .expect("shell");
+        std::fs::write(root.join("assets/app-abc.js"), "console.log('pico')").expect("asset");
+        let mut context = test_context();
+        context.static_assets = Some(Arc::new(StaticAssets::load(&root).expect("static assets")));
+
+        for path in ["/", "/sessions/demo"] {
+            let response = router(context.clone())
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .header("accept", "text/html")
+                        .body(Body::empty())
+                        .expect("SPA request"),
+                )
+                .await
+                .expect("SPA response");
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("SPA body");
+            assert!(String::from_utf8_lossy(&body).contains("Pico shell"));
+        }
+
+        let asset = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/app-abc.js")
+                    .body(Body::empty())
+                    .expect("asset request"),
+            )
+            .await
+            .expect("asset response");
+        assert_eq!(asset.status(), StatusCode::OK);
+        assert_eq!(
+            asset.headers()["cache-control"],
+            "public, max-age=31536000, immutable"
+        );
+
+        for path in ["/api/unknown", "/events/unknown"] {
+            let response = router(context.clone())
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .header("accept", "text/html")
+                        .body(Body::empty())
+                        .expect("reserved request"),
+                )
+                .await
+                .expect("reserved response");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("reserved body");
+            assert!(!String::from_utf8_lossy(&body).contains("Pico shell"));
+        }
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]
@@ -5589,5 +5703,6 @@ for line in sys.stdin:
         assert_eq!(health["runtime"], "rust");
         assert_eq!(health["pi"]["available"], true);
         assert_eq!(health["piBridge"]["available"], false);
+        assert_eq!(health["web"]["available"], false);
     }
 }

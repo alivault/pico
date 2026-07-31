@@ -8,10 +8,20 @@ pub struct ServerConfig {
     pub port: u16,
     pub pi_binary: PathBuf,
     pub pi_bridge_binary: Option<PathBuf>,
+    pub web_dir: Option<PathBuf>,
     pub agent_dir: PathBuf,
     pub paths: ServerPaths,
     pub allowed_origins: Vec<String>,
     pub max_request_bytes: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct ServerOptions {
+    pub pi_bridge_binary: Option<PathBuf>,
+    pub web_dir: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
+    pub agent_dir: Option<PathBuf>,
+    pub allowed_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,20 +37,18 @@ impl ServerConfig {
         host: IpAddr,
         port: u16,
         pi_binary: PathBuf,
-        pi_bridge_binary: Option<PathBuf>,
-        data_dir: Option<PathBuf>,
-        agent_dir: Option<PathBuf>,
-        allowed_origins: Vec<String>,
+        options: ServerOptions,
     ) -> io::Result<Self> {
-        let paths = ServerPaths::new(data_dir.unwrap_or(default_data_dir()?));
+        let paths = ServerPaths::new(options.data_dir.unwrap_or(default_data_dir()?));
         Ok(Self {
             host,
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
-            pi_bridge_binary: resolve_pi_bridge_binary(pi_bridge_binary),
-            agent_dir: agent_dir.unwrap_or(default_agent_dir()?),
+            pi_bridge_binary: resolve_pi_bridge_binary(options.pi_bridge_binary),
+            web_dir: resolve_web_dir(options.web_dir),
+            agent_dir: options.agent_dir.unwrap_or(default_agent_dir()?),
             paths,
-            allowed_origins,
+            allowed_origins: options.allowed_origins,
             max_request_bytes: 64 * 1024 * 1024,
         })
     }
@@ -51,12 +59,32 @@ impl ServerConfig {
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             pi_bridge_binary: None,
+            web_dir: None,
             agent_dir: PathBuf::from(".pi/agent"),
             paths: ServerPaths::new(data_dir),
             allowed_origins: Vec::new(),
             max_request_bytes: 64 * 1024 * 1024,
         }
     }
+}
+
+fn resolve_web_dir(explicit: Option<PathBuf>) -> Option<PathBuf> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            let adjacent = parent.join("web");
+            if adjacent.join("_shell.html").is_file() {
+                return Some(adjacent);
+            }
+        }
+    }
+    let development = PathBuf::from(".output/public");
+    development
+        .join("_shell.html")
+        .is_file()
+        .then_some(development)
 }
 
 fn resolve_pi_bridge_binary(explicit: Option<PathBuf>) -> Option<PathBuf> {

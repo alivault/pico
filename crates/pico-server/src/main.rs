@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use pico_server::config::{default_data_dir, ServerConfig, ServerPaths};
+use pico_server::config::{default_data_dir, ServerConfig, ServerOptions, ServerPaths};
 use pico_server::{api, control, logging, pi_rpc};
 
 #[derive(Debug, Parser)]
@@ -24,6 +24,8 @@ enum Command {
         pi_bin: PathBuf,
         #[arg(long, env = "PICO_PI_BRIDGE_BIN")]
         pi_bridge_bin: Option<PathBuf>,
+        #[arg(long, env = "PICO_WEB_DIR")]
+        web_dir: Option<PathBuf>,
         #[arg(long, env = "PICO_DATA_DIR")]
         data_dir: Option<PathBuf>,
         #[arg(long, env = "PI_CODING_AGENT_DIR")]
@@ -63,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         port: 3141,
         pi_bin: PathBuf::from("pi"),
         pi_bridge_bin: None,
+        web_dir: None,
         data_dir: None,
         agent_dir: None,
         allowed_origins: Vec::new(),
@@ -74,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             port,
             pi_bin,
             pi_bridge_bin,
+            web_dir,
             data_dir,
             agent_dir,
             allowed_origins,
@@ -82,10 +86,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 host,
                 port,
                 pi_bin,
-                pi_bridge_bin,
-                data_dir,
-                agent_dir,
-                allowed_origins,
+                ServerOptions {
+                    pi_bridge_binary: pi_bridge_bin,
+                    web_dir,
+                    data_dir,
+                    agent_dir,
+                    allowed_origins,
+                },
             )?;
             config.paths.create()?;
             let _log_guard = logging::init(Some(&config.paths.log_dir))?;

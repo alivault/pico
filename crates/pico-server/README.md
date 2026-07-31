@@ -51,7 +51,9 @@ cargo test --workspace
 pnpm fetch:pi-standalone
 cargo run -p pico-server -- pi-smoke --cwd .
 pnpm build:pi-bridge
-cargo run -p pico-server -- serve --port 3142 --pi-bridge-bin target/pico-pi-bridge
+cargo run -p pico-server -- serve --port 3142 \
+  --pi-bridge-bin target/pico-pi-bridge \
+  --web-dir .output/public
 cargo run -p pico-server -- status
 cargo run -p pico-server -- stop
 ```
@@ -103,6 +105,14 @@ Implemented:
 - extension UI request routing over scoped SSE with timeout, cancellation,
   select/input/confirm/auth responses, and fire-and-forget notifications
 - direct public Pi RPC extension UI response forwarding for session extensions
+- TanStack Start SPA-mode builds with a validated `/_shell.html` and no browser
+  route loader/root dependency on the Node server runtime
+- bounded in-memory static asset loading from an adjacent `web` directory or
+  `PICO_WEB_DIR`, immutable caching for hashed assets, ETags/HEAD, and safe MIME
+  handling
+- SPA navigation fallback that never rewrites `/api/*`, `/events`, terminal
+  transports, or missing file-like asset paths
+- headless browser validation against Rust with Node absent from `PATH`
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
@@ -110,8 +120,9 @@ Implemented:
 
 Process-control routes remain under `/api/rust/*`. The native server now exposes
 session indexes, the primary `/events` stream, core prompt/session mutations,
-and provider auth/usage/extension UI parity, but it does not claim static-app
-parity yet.
+provider auth/usage/extension UI parity, and the production browser SPA. It is
+still opt-in and is not selected by `pico-app` until packaging and final parity
+work is complete.
 
 ## Migration order
 

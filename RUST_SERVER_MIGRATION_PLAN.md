@@ -130,12 +130,12 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 11. Static browser application
 
-- [ ] Enable TanStack Start SPA mode and generate `/_shell.html` plus assets.
-- [ ] Ensure no browser route loader or root component requires runtime SSR.
-- [ ] Make Rust serve immutable assets and rewrite non-API 404s to the shell.
-- [ ] Keep `/api/*`, `/events`, and terminal SSE routes outside SPA rewriting.
-- [ ] Embed release assets in or beside the Rust binary with cache headers.
-- [ ] Prove the production browser app works with Node absent from `PATH`.
+- [x] Enable TanStack Start SPA mode and generate `/_shell.html` plus assets.
+- [x] Ensure no browser route loader or root component requires runtime SSR.
+- [x] Make Rust serve immutable assets and rewrite non-API 404s to the shell.
+- [x] Keep `/api/*`, `/events`, and terminal SSE routes outside SPA rewriting.
+- [x] Embed release assets in or beside the Rust binary with cache headers.
+- [x] Prove the production browser app works with Node absent from `PATH`.
 
 ## 12. macOS service and menu-bar distribution
 
