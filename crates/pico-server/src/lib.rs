@@ -8,6 +8,7 @@ pub mod event_hub;
 pub mod git_native;
 pub mod highlight;
 pub mod logging;
+pub mod network_config;
 pub mod persistence;
 pub mod pi_installation;
 pub mod pi_protocol;

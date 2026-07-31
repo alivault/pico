@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
 use pico_server::config::{default_data_dir, ServerConfig, ServerOptions, ServerPaths};
+use pico_server::network_config::{self, NetworkConfig};
 use pico_server::{api, control, logging, pi_rpc};
 
 #[derive(Debug, Parser)]
@@ -54,6 +55,11 @@ enum Command {
         #[arg(long, default_value_t = 0)]
         timeout: u64,
     },
+    /// Read or change persistent network listener settings.
+    Network {
+        #[command(subcommand)]
+        command: NetworkCommand,
+    },
     /// Start Pi in RPC mode and verify the language-neutral protocol.
     PiSmoke {
         #[arg(long, env = "PICO_PI_BIN", default_value = "pi")]
@@ -62,6 +68,26 @@ enum Command {
         cwd: PathBuf,
         #[arg(long)]
         session: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum NetworkCommand {
+    /// Print persistent network listener settings.
+    Status {
+        #[arg(long, env = "PICO_DATA_DIR")]
+        data_dir: Option<PathBuf>,
+    },
+    /// Enable remote access on one explicit IP address.
+    Set {
+        address: IpAddr,
+        #[arg(long, env = "PICO_DATA_DIR")]
+        data_dir: Option<PathBuf>,
+    },
+    /// Disable the configured remote listener.
+    Disable {
+        #[arg(long, env = "PICO_DATA_DIR")]
+        data_dir: Option<PathBuf>,
     },
 }
 
@@ -128,6 +154,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 wait_for_shutdown(data_dir, timeout).await?;
             }
         }
+        Command::Network { command } => {
+            let _log_guard = logging::init(None)?;
+            run_network_command(command)?;
+        }
         Command::PiSmoke {
             pi_bin,
             cwd,
@@ -147,6 +177,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn run_network_command(command: NetworkCommand) -> Result<(), Box<dyn std::error::Error>> {
+    let (data_dir, mutation) = match command {
+        NetworkCommand::Status { data_dir } => (data_dir, None),
+        NetworkCommand::Set { address, data_dir } => {
+            (data_dir, Some(NetworkConfig::with_remote_address(address)?))
+        }
+        NetworkCommand::Disable { data_dir } => {
+            let paths = network_paths(data_dir.clone())?;
+            let current = network_config::load(&paths.network_config_file)?;
+            (
+                data_dir,
+                Some(NetworkConfig::disabled(current.remote_bind_address)),
+            )
+        }
+    };
+    let paths = network_paths(data_dir)?;
+    if let Some(config) = mutation {
+        network_config::store(&paths.network_config_file, &config)?;
+    }
+    let config = network_config::load(&paths.network_config_file)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "ok": true,
+            "remoteAccessEnabled": config.remote_access_enabled,
+            "remoteBindAddress": config.remote_bind_address,
+        }))?
+    );
+    Ok(())
+}
+
+fn network_paths(data_dir: Option<PathBuf>) -> Result<ServerPaths, Box<dyn std::error::Error>> {
+    Ok(ServerPaths::new(match data_dir {
+        Some(path) => path,
+        None => default_data_dir()?,
+    }))
 }
 
 async fn print_control_response(
@@ -198,9 +266,7 @@ async fn wait_for_shutdown(
             }
             Err(error) => return Err(error.into()),
         }
-        if timeout_seconds > 0
-            && started_at.elapsed() >= Duration::from_secs(timeout_seconds)
-        {
+        if timeout_seconds > 0 && started_at.elapsed() >= Duration::from_secs(timeout_seconds) {
             return Err(format!(
                 "timed out waiting {timeout_seconds} seconds for active Pico work to drain"
             )

@@ -86,14 +86,8 @@ mod tests {
     #[tokio::test]
     async fn waiters_resume_only_after_all_work_finishes() {
         let tracker = Arc::new(ActiveWorkTracker::default());
-        assert_eq!(
-            tracker.try_mark_active("one").await,
-            WorkAdmission::Started
-        );
-        assert_eq!(
-            tracker.try_mark_active("two").await,
-            WorkAdmission::Started
-        );
+        assert_eq!(tracker.try_mark_active("one").await, WorkAdmission::Started);
+        assert_eq!(tracker.try_mark_active("two").await, WorkAdmission::Started);
 
         let waiting = {
             let tracker = tracker.clone();
@@ -113,10 +107,7 @@ mod tests {
     #[tokio::test]
     async fn draining_rejects_new_work_but_allows_existing_session_chains() {
         let tracker = ActiveWorkTracker::default();
-        assert_eq!(
-            tracker.try_mark_active("one").await,
-            WorkAdmission::Started
-        );
+        assert_eq!(tracker.try_mark_active("one").await, WorkAdmission::Started);
         tracker.begin_draining().await;
         assert_eq!(
             tracker.try_mark_active("one").await,

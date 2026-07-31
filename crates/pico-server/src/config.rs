@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
-    pub host: IpAddr,
+    pub listen_hosts: Vec<IpAddr>,
     pub port: u16,
     pub pi_binary: PathBuf,
     pub pi_bridge_binary: Option<PathBuf>,
@@ -30,6 +30,7 @@ pub struct ServerPaths {
     pub log_dir: PathBuf,
     pub control_socket: PathBuf,
     pub state_file: PathBuf,
+    pub network_config_file: PathBuf,
 }
 
 impl ServerConfig {
@@ -40,8 +41,9 @@ impl ServerConfig {
         options: ServerOptions,
     ) -> io::Result<Self> {
         let paths = ServerPaths::new(options.data_dir.unwrap_or(default_data_dir()?));
+        let network_config = crate::network_config::load(&paths.network_config_file)?;
         Ok(Self {
-            host,
+            listen_hosts: listen_hosts(host, network_config.active_remote_address()),
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             pi_bridge_binary: resolve_pi_bridge_binary(options.pi_bridge_binary),
@@ -55,7 +57,7 @@ impl ServerConfig {
 
     pub fn loopback(port: u16, pi_binary: PathBuf, data_dir: PathBuf) -> Self {
         Self {
-            host: IpAddr::V4(Ipv4Addr::LOCALHOST),
+            listen_hosts: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             pi_bridge_binary: None,
@@ -102,6 +104,7 @@ impl ServerPaths {
             log_dir: data_dir.join("logs"),
             control_socket: data_dir.join("pico.sock"),
             state_file: data_dir.join("server-state.json"),
+            network_config_file: data_dir.join("server-config.json"),
             data_dir,
         }
     }
@@ -143,6 +146,21 @@ pub fn default_data_dir() -> io::Result<PathBuf> {
     }
 }
 
+fn listen_hosts(primary: IpAddr, remote: Option<IpAddr>) -> Vec<IpAddr> {
+    if primary.is_unspecified() {
+        return vec![primary];
+    }
+
+    let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    let mut hosts = vec![loopback];
+    for host in [Some(primary), remote].into_iter().flatten() {
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+    hosts
+}
+
 fn create_private_directory(path: &Path) -> io::Result<()> {
     std::fs::create_dir_all(path)?;
     restrict_directory(path)
@@ -168,6 +186,10 @@ mod tests {
         let paths = ServerPaths::new(PathBuf::from("/tmp/pico-test"));
         assert_eq!(paths.control_socket, paths.data_dir.join("pico.sock"));
         assert_eq!(paths.state_file, paths.data_dir.join("server-state.json"));
+        assert_eq!(
+            paths.network_config_file,
+            paths.data_dir.join("server-config.json")
+        );
         assert_eq!(paths.log_dir, paths.data_dir.join("logs"));
     }
 
@@ -175,7 +197,31 @@ mod tests {
     fn loopback_is_the_only_implicit_bind_address() {
         let config =
             ServerConfig::loopback(3141, PathBuf::from("pi"), PathBuf::from("/tmp/pico-test"));
-        assert!(config.host.is_loopback());
+        assert_eq!(config.listen_hosts, vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]);
         assert!(config.allowed_origins.is_empty());
+    }
+
+    #[test]
+    fn remote_listener_keeps_loopback_available() {
+        let hosts = listen_hosts(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            Some("100.64.0.10".parse().expect("address")),
+        );
+        assert_eq!(
+            hosts,
+            vec![
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                "100.64.0.10".parse().expect("address"),
+            ]
+        );
+    }
+
+    #[test]
+    fn wildcard_listener_is_not_combined_with_specific_addresses() {
+        let hosts = listen_hosts(
+            "0.0.0.0".parse().expect("wildcard"),
+            Some("100.64.0.10".parse().expect("address")),
+        );
+        assert_eq!(hosts, vec!["0.0.0.0".parse::<IpAddr>().expect("wildcard")]);
     }
 }

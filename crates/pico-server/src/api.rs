@@ -20,6 +20,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use tokio::sync::{watch, RwLock};
+use tokio::task::JoinSet;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing::info;
@@ -466,6 +467,7 @@ impl IntoResponse for ApiError {
 
 pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
     config.paths.create()?;
+    let listeners = bind_listeners(&config.listen_hosts, config.port).await?;
     let static_assets = config
         .web_dir
         .as_deref()
@@ -508,7 +510,11 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         Err(error) => (None, Some(error.to_string())),
     };
     let control_status = Arc::new(RwLock::new(initial_status(
-        config.host.to_string(),
+        config
+            .listen_hosts
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         config.port,
     )));
     let context = ServerContext {
@@ -538,20 +544,9 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     attach_auth_bridge_events(&context);
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
-    let policy = Arc::new(RequestPolicy::new(
-        config.host,
-        config.port,
-        config.allowed_origins.clone(),
-    ));
-    let app = router(context.clone())
-        .layer(DefaultBodyLimit::max(config.max_request_bytes))
-        .layer(middleware::from_fn_with_state(
-            policy,
-            security::validate_request,
-        ));
-    let address = SocketAddr::new(config.host, config.port);
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (serve_shutdown_tx, _) = watch::channel(false);
     let (control_stop_tx, control_stop_rx) = watch::channel(false);
     #[cfg(unix)]
     let control_task = {
@@ -567,32 +562,65 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     #[cfg(not(unix))]
     let control_task: Option<tokio::task::JoinHandle<()>> = None;
 
-    let listener = match TcpListener::bind(address).await {
-        Ok(listener) => listener,
-        Err(error) => {
-            let _ = shutdown_tx.send(true);
-            let _ = control_stop_tx.send(true);
-            if let Some(control_task) = control_task {
-                let _ = control_task.await;
-            }
-            persistence::mark_clean_shutdown(&config.paths.state_file)?;
-            return Err(error.into());
+    let mut server_tasks = JoinSet::new();
+    for (host, listener) in listeners {
+        let address = listener.local_addr()?;
+        let policy = Arc::new(RequestPolicy::new(
+            host,
+            config.port,
+            config.allowed_origins.clone(),
+        ));
+        let app = router(context.clone())
+            .layer(DefaultBodyLimit::max(config.max_request_bytes))
+            .layer(middleware::from_fn_with_state(
+                policy,
+                security::validate_request,
+            ));
+        let stop = serve_shutdown_tx.subscribe();
+        server_tasks.spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(wait_for_server_shutdown(stop))
+                .await
+        });
+        if !host.is_loopback() {
+            tracing::warn!(%address, "Pico is listening beyond loopback; only use an address protected by a trusted private network");
         }
-    };
-    context.control_status.write().await.phase = "running".into();
-    if !config.host.is_loopback() {
-        tracing::warn!(%address, "Pico is listening beyond loopback; configure authentication before using an untrusted network");
+        info!(%address, "native Pico server listening");
     }
-    info!(%address, "native Pico server listening");
+    context.control_status.write().await.phase = "running".into();
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(
-            shutdown_rx,
-            shutdown_tx.clone(),
-            context.control_status.clone(),
-            context.active_work.clone(),
-        ))
-        .await?;
+    let serve_shutdown = serve_shutdown_tx.clone();
+    let mut lifecycle_task = tokio::spawn(shutdown_signal(
+        shutdown_rx,
+        shutdown_tx.clone(),
+        context.control_status.clone(),
+        context.active_work.clone(),
+        serve_shutdown,
+    ));
+    let early_server_result = tokio::select! {
+        result = &mut lifecycle_task => {
+            result.map_err(std::io::Error::other)?;
+            None
+        }
+        result = server_tasks.join_next() => result,
+    };
+    let mut server_error = None;
+    if let Some(result) = early_server_result {
+        server_error = Some(server_task_error(result));
+        let _ = shutdown_tx.send(true);
+        lifecycle_task.await.map_err(std::io::Error::other)?;
+    }
+    while let Some(result) = server_tasks.join_next().await {
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                server_error.get_or_insert_with(|| format!("Pico listener failed: {error}"));
+            }
+            Err(error) => {
+                server_error.get_or_insert_with(|| format!("Pico listener task failed: {error}"));
+            }
+        }
+    }
     context.control_status.write().await.phase = "stopping".into();
     context.runtimes.shutdown().await;
     if let Some(auth_bridge) = &context.auth_bridge {
@@ -606,7 +634,44 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         let _ = control_task.await;
     }
     persistence::mark_clean_shutdown(&config.paths.state_file)?;
+    if let Some(error) = server_error {
+        return Err(std::io::Error::other(error).into());
+    }
     Ok(())
+}
+
+async fn bind_listeners(
+    hosts: &[std::net::IpAddr],
+    port: u16,
+) -> Result<Vec<(std::net::IpAddr, TcpListener)>, std::io::Error> {
+    let mut listeners = Vec::with_capacity(hosts.len());
+    for host in hosts {
+        let address = SocketAddr::new(*host, port);
+        let listener = TcpListener::bind(address).await.map_err(|error| {
+            std::io::Error::new(
+                error.kind(),
+                format!("could not listen on {address}: {error}"),
+            )
+        })?;
+        listeners.push((*host, listener));
+    }
+    Ok(listeners)
+}
+
+async fn wait_for_server_shutdown(mut shutdown: watch::Receiver<bool>) {
+    while !*shutdown.borrow() {
+        if shutdown.changed().await.is_err() {
+            break;
+        }
+    }
+}
+
+fn server_task_error(result: Result<Result<(), std::io::Error>, tokio::task::JoinError>) -> String {
+    match result {
+        Ok(Ok(())) => "Pico listener stopped unexpectedly".into(),
+        Ok(Err(error)) => format!("Pico listener failed: {error}"),
+        Err(error) => format!("Pico listener task failed: {error}"),
+    }
 }
 
 async fn restore_session_processes(context: &ServerContext) {
@@ -4954,6 +5019,7 @@ async fn shutdown_signal(
     shutdown_tx: watch::Sender<bool>,
     status: Arc<RwLock<ControlStatus>>,
     active_work: Arc<ActiveWorkTracker>,
+    serve_shutdown: watch::Sender<bool>,
 ) {
     if !*shutdown.borrow() {
         tokio::select! {
@@ -4971,9 +5037,13 @@ async fn shutdown_signal(
     status.write().await.phase = "draining".into();
     let active_run_count = active_work.count().await;
     if active_run_count > 0 {
-        info!(active_run_count, "waiting for active Pi work before shutdown");
+        info!(
+            active_run_count,
+            "waiting for active Pi work before shutdown"
+        );
         active_work.wait_until_idle().await;
     }
+    let _ = serve_shutdown.send(true);
     info!("native Pico server shutting down");
 }
 
@@ -5027,7 +5097,7 @@ mod tests {
             started_at: Instant::now(),
             pi_version: Some("test".into()),
             pi_error: None,
-            control_status: Arc::new(RwLock::new(initial_status("127.0.0.1".into(), 3141))),
+            control_status: Arc::new(RwLock::new(initial_status(vec!["127.0.0.1".into()], 3141))),
             active_work: Arc::new(ActiveWorkTracker::default()),
             previous_clean_shutdown: Some(true),
             state_file: PathBuf::from("/tmp/pico-server-api-test-state.json"),
@@ -5064,10 +5134,7 @@ mod tests {
             .expect("response body");
         let manifest: Value = serde_json::from_slice(&body).expect("manifest JSON");
         assert_eq!(manifest["displayName"], "Pico");
-        assert_eq!(
-            manifest["serverProtocolVersion"],
-            SERVER_PROTOCOL_VERSION
-        );
+        assert_eq!(manifest["serverProtocolVersion"], SERVER_PROTOCOL_VERSION);
         assert!(manifest["capabilities"]["features"]
             .as_array()
             .expect("features")
@@ -5809,11 +5876,13 @@ for line in sys.stdin:
         let context = test_context();
         context.active_work.mark_active("session").await;
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let (serve_shutdown_tx, serve_shutdown_rx) = watch::channel(false);
         let shutdown = tokio::spawn(shutdown_signal(
             shutdown_rx,
             shutdown_tx.clone(),
             context.control_status.clone(),
             context.active_work.clone(),
+            serve_shutdown_tx,
         ));
         shutdown_tx.send(true).expect("request shutdown");
 
@@ -5834,6 +5903,7 @@ for line in sys.stdin:
             .await
             .expect("shutdown did not finish after work settled")
             .expect("shutdown task failed");
+        assert!(*serve_shutdown_rx.borrow());
     }
 
     #[tokio::test]

@@ -44,6 +44,8 @@ pub struct ControlStatus {
     #[serde(default)]
     pub api_contract_version: u32,
     pub host: String,
+    #[serde(default)]
+    pub listen_hosts: Vec<String>,
     pub port: u16,
     pub phase: String,
     pub pid: u32,
@@ -293,12 +295,17 @@ fn trim_delimiter(mut record: &[u8]) -> &[u8] {
     record
 }
 
-pub fn initial_status(host: String, port: u16) -> ControlStatus {
+pub fn initial_status(listen_hosts: Vec<String>, port: u16) -> ControlStatus {
+    let host = listen_hosts
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1".into());
     ControlStatus {
         version: env!("CARGO_PKG_VERSION").into(),
         protocol_version: SERVER_PROTOCOL_VERSION,
         api_contract_version: API_CONTRACT_VERSION,
         host,
+        listen_hosts,
         port,
         phase: "starting".into(),
         pid: std::process::id(),
@@ -349,7 +356,7 @@ mod tests {
             id: "one".into(),
             ok: true,
             error: None,
-            status: Some(initial_status("127.0.0.1".into(), 3141)),
+            status: Some(initial_status(vec!["127.0.0.1".into()], 3141)),
         };
         let encoded = serde_json::to_vec(&response).expect("encode");
         let decoded: ControlResponse = serde_json::from_slice(&encoded).expect("decode");
@@ -358,9 +365,11 @@ mod tests {
 
     #[test]
     fn initial_status_exposes_protocol_and_pid() {
-        let status = initial_status("127.0.0.1".into(), 3141);
+        let status = initial_status(vec!["127.0.0.1".into(), "100.64.0.10".into()], 3141);
         assert_eq!(status.protocol_version, SERVER_PROTOCOL_VERSION);
         assert_eq!(status.api_contract_version, API_CONTRACT_VERSION);
+        assert_eq!(status.host, "127.0.0.1");
+        assert_eq!(status.listen_hosts, ["127.0.0.1", "100.64.0.10"]);
         assert_eq!(status.port, 3141);
         assert!(status.pid > 0);
     }
