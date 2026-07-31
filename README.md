@@ -41,15 +41,14 @@ Pico also includes a shared SwiftUI client with platform-native layouts for macO
 
 ## Built on Pi
 
-Pico runs Pi locally through the bundled `@earendil-works/pi-coding-agent` SDK dependency, pinned to `0.80.6` for reproducible installs. You do not need a separate global Pi install for normal use.
+The native Pico server runs the standalone Pi RPC executable and keeps Pi
+sessions alive independently of browser and desktop clients. Native release
+bundles include Pi `0.80.6` and the compiled Pi authentication bridge, so normal
+use does not require a global Pi installation or a Node server runtime.
 
-If you intentionally want to test Pico against a different Pi SDK checkout or install, set:
-
-```bash
-PI_REMOTE_PI_SDK_DIR=/path/to/pi-coding-agent
-```
-
-To update the bundled Pi SDK dependency:
+The repository still pins `@earendil-works/pi-coding-agent` to the same version
+for building Pi release artifacts and the authentication bridge. Refresh it
+with:
 
 ```bash
 pnpm update:pi
@@ -70,6 +69,11 @@ npm install -g @alivault/pico
 pico-app
 ```
 
+On first launch, the npm command downloads the matching release bundle for
+macOS or Linux, verifies its SHA-256 checksum, and starts the native Rust
+server. If a compatible persistent server is already running, `pico-app`
+attaches to it instead of starting a duplicate.
+
 Pico starts locally and opens:
 
 ```text
@@ -87,6 +91,11 @@ Update a global install with:
 ```bash
 pico-app update
 ```
+
+Updates verify the server/API protocol first, stop accepting new prompt work,
+wait for active Pi runs and queued follow-ups to finish, replace the package,
+and restart the server so SSE clients reconnect. A protocol-changing release is
+never installed automatically.
 
 ## Developing from source
 
@@ -154,6 +163,22 @@ xcodebuild \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
   test
 ```
+
+### Packaging native CLI releases
+
+Build one downloadable CLI bundle with the Rust server, standalone Pi, compiled
+Pi bridge, and browser assets:
+
+```bash
+pnpm package:native -- --target darwin-arm64
+# darwin-x64, linux-arm64, and linux-x64 are also supported
+```
+
+Tagged releases publish all four checksum-protected bundles plus generated
+Homebrew formula metadata. The formula includes a headless `brew services`
+configuration. When macOS signing/notarization is enabled for the repository,
+the release also publishes the native DMG and generated Homebrew cask. Formula
+and cask templates live under `packaging/homebrew`.
 
 ### Packaging the macOS app
 

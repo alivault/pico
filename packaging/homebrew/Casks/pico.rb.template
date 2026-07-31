@@ -1,0 +1,28 @@
+cask "pico" do
+  version "{{VERSION}}"
+  sha256 "{{DMG_SHA256}}"
+
+  url "https://github.com/alivault/pico/releases/download/v#{version}/Pico-#{version}-universal.dmg"
+  name "Pico"
+  desc "Native workspace for Pi coding-agent sessions"
+  homepage "https://github.com/alivault/pico"
+
+  preflight do
+    server = "#{appdir}/Pico.app/Contents/Resources/PicoServer/pico-server"
+    if File.executable?(server)
+      system_command server, args: ["stop", "--wait"], must_succeed: false
+    end
+  end
+
+  app "Pico.app"
+
+  postflight do
+    system_command "/usr/bin/open", args: ["-a", "#{appdir}/Pico.app"]
+  end
+
+  zap trash: [
+    "~/Library/Application Support/Pico",
+    "~/Library/Caches/Pico",
+    "~/Library/Preferences/com.alivault.pico.macos.plist",
+  ]
+end

@@ -1,8 +1,8 @@
 # Pico native server migration
 
-This crate is the first executable slice of Pico's Node-to-Rust server
-migration. It is intentionally a preview and does not yet implement the full
-Pico HTTP/SSE contract.
+This crate is Pico's native persistent server. It implements the browser and
+Apple HTTP/SSE contracts while the repository keeps the former Nitro runtime
+only as a temporary cutover reference.
 
 ## Why this architecture
 
@@ -55,7 +55,7 @@ cargo run -p pico-server -- serve --port 3142 \
   --pi-bridge-bin target/pico-pi-bridge \
   --web-dir .output/public
 cargo run -p pico-server -- status
-cargo run -p pico-server -- stop
+cargo run -p pico-server -- stop --wait
 ```
 
 Implemented:
@@ -119,16 +119,19 @@ Implemented:
   chat, restart, logs, Login Items settings, and complete-quit controls
 - nested-code Hardened Runtime signing, Developer ID notarization/stapling, and
   drag-to-Applications DMG automation in `pnpm package:macos`
+- checksum-verified macOS/Linux native CLI bundles selected by `pico-app`, plus
+  generated Homebrew formula/service and signed-app cask metadata
+- versioned control/API compatibility checks and update draining that rejects
+  new prompts while allowing active Pi runs and queued follow-ups to settle
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
 - daily structured logs and atomically persisted lifecycle state
 
-Process-control routes remain under `/api/rust/*`. The native server now exposes
-session indexes, the primary `/events` stream, core prompt/session mutations,
-provider auth/usage/extension UI parity, and the production browser SPA. It is
-still opt-in and is not selected by `pico-app` until packaging and final parity
-work is complete.
+Process-control routes remain under `/api/rust/*`. `pico-app` now selects this
+native server, downloads architecture-matched release bundles when necessary,
+and attaches to a compatible persistent instance instead of starting a
+duplicate. Nitro removal still waits for the final parity gate.
 
 ## Migration order
 
@@ -149,10 +152,11 @@ work is complete.
 10. Remove the Nitro runtime only after browser, native Apple, and contract
     fixture parity passes.
 
-## Non-goals of the preview
+## Remaining cutover boundaries
 
-- It is not selected by `pico-app`.
-- It does not replace the current production server.
-- It does not expose Pico's unauthenticated API beyond the existing loopback
+- The old Nitro implementation remains in the tree until final cross-client
+  parity and persistence tests pass.
+- Pico does not expose its unauthenticated API beyond the existing loopback
   development assumptions.
-- It does not claim that restarting a Pi RPC child preserves in-flight work.
+- Restarting a Pi RPC child does not preserve in-flight work; update draining
+  therefore waits for active Pi work before replacing the server.

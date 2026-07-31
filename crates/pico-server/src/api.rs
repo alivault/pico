@@ -24,6 +24,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing::info;
 
+use crate::active_work::{ActiveWorkTracker, WorkAdmission};
 use crate::app_state::AppState;
 use crate::auth_bridge::{AuthBridge, AuthBridgeError};
 use crate::config::ServerConfig;
@@ -57,6 +58,7 @@ struct ServerContext {
     pi_version: Option<String>,
     pi_error: Option<String>,
     control_status: Arc<RwLock<ControlStatus>>,
+    active_work: Arc<ActiveWorkTracker>,
     previous_clean_shutdown: Option<bool>,
     state_file: PathBuf,
     port: u16,
@@ -422,6 +424,13 @@ impl ApiError {
             message: message.into(),
         }
     }
+
+    fn service_unavailable(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            message: message.into(),
+        }
+    }
 }
 
 impl From<AuthBridgeError> for ApiError {
@@ -509,6 +518,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         pi_version,
         pi_error,
         control_status: control_status.clone(),
+        active_work: Arc::new(ActiveWorkTracker::default()),
         previous_clean_shutdown: previous_snapshot.map(|snapshot| snapshot.clean_shutdown),
         state_file: config.paths.state_file.clone(),
         port: config.port,
@@ -542,12 +552,16 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     let address = SocketAddr::new(config.host, config.port);
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (control_stop_tx, control_stop_rx) = watch::channel(false);
     #[cfg(unix)]
     let control_task = {
-        let stop = shutdown_rx.clone();
+        let stop = control_stop_rx;
+        let active_work = context.active_work.clone();
         let shutdown = shutdown_tx.clone();
         Some(tokio::spawn(async move {
-            control.run(control_status.clone(), shutdown, stop).await;
+            control
+                .run(control_status.clone(), active_work, shutdown, stop)
+                .await;
         }))
     };
     #[cfg(not(unix))]
@@ -557,6 +571,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         Ok(listener) => listener,
         Err(error) => {
             let _ = shutdown_tx.send(true);
+            let _ = control_stop_tx.send(true);
             if let Some(control_task) = control_task {
                 let _ = control_task.await;
             }
@@ -575,10 +590,10 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
             shutdown_rx,
             shutdown_tx.clone(),
             context.control_status.clone(),
+            context.active_work.clone(),
         ))
         .await?;
     context.control_status.write().await.phase = "stopping".into();
-    let _ = shutdown_tx.send(true);
     context.runtimes.shutdown().await;
     if let Some(auth_bridge) = &context.auth_bridge {
         if let Err(error) = auth_bridge.shutdown().await {
@@ -586,6 +601,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         }
     }
     context.terminals.shutdown();
+    let _ = control_stop_tx.send(true);
     if let Some(control_task) = control_task {
         let _ = control_task.await;
     }
@@ -758,6 +774,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
             };
             match event.get("type").and_then(Value::as_str) {
                 Some("agent_start") | Some("compaction_start") => {
+                    context.active_work.mark_active(session_id.clone()).await;
                     emit_session_state(&context, &session_id, true, None).await;
                 }
                 Some("message_update") => {
@@ -805,6 +822,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     {
                         continue;
                     }
+                    context.active_work.mark_inactive(&session_id).await;
                     emit_session_state(&context, &session_id, false, None).await;
                     context
                         .app
@@ -857,6 +875,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                         .push(None, Some(public_session_id.clone()), event);
                 }
                 Some("pico_pi_process_exited") => {
+                    context.active_work.mark_inactive(&session_id).await;
                     emit_session_state(&context, &session_id, false, None).await;
                     context.event_hub.push(
                         None,
@@ -872,6 +891,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                 _ => {}
             }
         }
+        context.active_work.mark_inactive(&session_id).await;
     });
 }
 
@@ -895,6 +915,20 @@ async fn dispatch_pending_prompt(
         };
         queue.remove(index)
     };
+    let admission = context
+        .active_work
+        .try_mark_active(runtime_id.to_string())
+        .await;
+    if admission == WorkAdmission::Rejected {
+        context
+            .pending_queues
+            .write()
+            .await
+            .entry(runtime_id.to_string())
+            .or_default()
+            .insert(0, pending);
+        return false;
+    }
     let images = pending
         .images
         .iter()
@@ -923,6 +957,9 @@ async fn dispatch_pending_prompt(
         .and_then(pi_response_data)
         .is_ok();
     if !dispatched {
+        if admission == WorkAdmission::Started {
+            context.active_work.mark_inactive(runtime_id).await;
+        }
         context
             .pending_queues
             .write()
@@ -1948,7 +1985,8 @@ async fn client_manifest() -> Json<Value> {
       "ok": true,
       "name": "@alivault/pico",
       "version": env!("CARGO_PKG_VERSION"),
-      "displayName": "Pico Rust Preview",
+      "displayName": "Pico",
+      "serverProtocolVersion": SERVER_PROTOCOL_VERSION,
       "apiContractVersion": API_CONTRACT_VERSION,
       "pairingRequired": false,
       "authentication": { "type": "none" },
@@ -2064,7 +2102,8 @@ async fn client_manifest() -> Json<Value> {
           "provider-auth",
           "provider-usage",
           "extension-ui-bridge",
-          "static-spa"
+          "static-spa",
+          "drain-safe-updates"
         ]
       }
     }))
@@ -2072,13 +2111,16 @@ async fn client_manifest() -> Json<Value> {
 
 async fn system_health(State(context): State<ServerContext>) -> Json<Value> {
     let phase = context.control_status.read().await.phase.clone();
+    let active_run_count = context.active_work.count().await;
     Json(json!({
       "ok": true,
       "runtime": "rust",
       "version": env!("CARGO_PKG_VERSION"),
       "serverProtocolVersion": SERVER_PROTOCOL_VERSION,
+      "apiContractVersion": API_CONTRACT_VERSION,
       "persistenceVersion": PERSISTENCE_VERSION,
       "phase": phase,
+      "activeRunCount": active_run_count,
       "previousCleanShutdown": context.previous_clean_shutdown,
       "uptimeSeconds": context.started_at.elapsed().as_secs(),
       "pi": {
@@ -2170,6 +2212,7 @@ async fn prompt(
     if request.message.trim().is_empty() && request.images.is_empty() {
         return Err(ApiError::bad_request("message or image is required"));
     }
+    ensure_accepting_work(&context).await?;
     let mut target = parse_request_target(raw_query.as_deref());
     if target.session_key.is_none() {
         target.session_key = request.draft_owner_key.clone();
@@ -2233,16 +2276,29 @@ async fn prompt(
             });
         emit_session_state(&context, &resolved.record.id, true, None).await;
     } else {
-        pi_response_data(
-            resolved
-                .client
-                .request_typed(&PiCommand::Prompt {
-                    message: request.message.clone(),
-                    images: pi_images,
-                    streaming_behavior: None,
-                })
-                .await?,
-        )?;
+        let admission = context
+            .active_work
+            .try_mark_active(resolved.record.id.clone())
+            .await;
+        if admission == WorkAdmission::Rejected {
+            return Err(draining_error());
+        }
+        let result = resolved
+            .client
+            .request_typed(&PiCommand::Prompt {
+                message: request.message.clone(),
+                images: pi_images,
+                streaming_behavior: None,
+            })
+            .await
+            .map_err(ApiError::from)
+            .and_then(pi_response_data);
+        if let Err(error) = result {
+            if admission == WorkAdmission::Started {
+                context.active_work.mark_inactive(&resolved.record.id).await;
+            }
+            return Err(error);
+        }
     }
     if resolved.record.draft && !streaming {
         let mut promoted = resolved.record.clone();
@@ -2375,6 +2431,7 @@ async fn start_pending_queue(
     State(context): State<ServerContext>,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<Value>, ApiError> {
+    ensure_accepting_work(&context).await?;
     let resolved =
         resolve_runtime(&context, &parse_request_target(raw_query.as_deref()), false).await?;
     if runtime_streaming(&resolved.client).await? {
@@ -2499,35 +2556,47 @@ async fn run_slash_command(
     if name.is_empty() {
         return Err(ApiError::bad_request("name is required"));
     }
+    ensure_accepting_work(&context).await?;
     let resolved =
         resolve_runtime(&context, &parse_request_target(raw_query.as_deref()), true).await?;
-    if name == "compact" {
+    let admission = context
+        .active_work
+        .try_mark_active(resolved.record.id.clone())
+        .await;
+    if admission == WorkAdmission::Rejected {
+        return Err(draining_error());
+    }
+    let result = if name == "compact" {
         let custom_instructions =
             (!request.args.trim().is_empty()).then(|| request.args.trim().to_string());
-        pi_response_data(
-            resolved
-                .client
-                .request_typed(&PiCommand::Compact {
-                    custom_instructions,
-                })
-                .await?,
-        )?;
+        resolved
+            .client
+            .request_typed(&PiCommand::Compact {
+                custom_instructions,
+            })
+            .await
     } else {
         let message = if request.args.trim().is_empty() {
             format!("/{name}")
         } else {
             format!("/{name} {}", request.args.trim())
         };
-        pi_response_data(
-            resolved
-                .client
-                .request_typed(&PiCommand::Prompt {
-                    message,
-                    images: Vec::new(),
-                    streaming_behavior: None,
-                })
-                .await?,
-        )?;
+        resolved
+            .client
+            .request_typed(&PiCommand::Prompt {
+                message,
+                images: Vec::new(),
+                streaming_behavior: None,
+            })
+            .await
+    }
+    .map_err(ApiError::from)
+    .and_then(pi_response_data);
+    if let Err(error) = result {
+        if admission == WorkAdmission::Started {
+            context.active_work.mark_inactive(&resolved.record.id).await;
+        }
+        return Err(error);
     }
     Ok(Json(json!({ "ok": true })))
 }
@@ -4740,6 +4809,20 @@ async fn refresh_runtime_projection(
         .insert(runtime_id.to_string(), projection);
 }
 
+fn draining_error() -> ApiError {
+    ApiError::service_unavailable(
+        "Pico is draining active work for an update; try again after it restarts.",
+    )
+}
+
+async fn ensure_accepting_work(context: &ServerContext) -> Result<(), ApiError> {
+    let phase = context.control_status.read().await.phase.clone();
+    if matches!(phase.as_str(), "draining" | "stopping") {
+        return Err(draining_error());
+    }
+    Ok(())
+}
+
 async fn runtime_streaming(client: &PiRpcClient) -> Result<bool, ApiError> {
     let data = pi_response_data(client.request_typed(&PiCommand::GetState).await?)?;
     Ok(data
@@ -4870,6 +4953,7 @@ async fn shutdown_signal(
     mut shutdown: watch::Receiver<bool>,
     shutdown_tx: watch::Sender<bool>,
     status: Arc<RwLock<ControlStatus>>,
+    active_work: Arc<ActiveWorkTracker>,
 ) {
     if !*shutdown.borrow() {
         tokio::select! {
@@ -4883,7 +4967,13 @@ async fn shutdown_signal(
             }
         }
     }
+    active_work.begin_draining().await;
     status.write().await.phase = "draining".into();
+    let active_run_count = active_work.count().await;
+    if active_run_count > 0 {
+        info!(active_run_count, "waiting for active Pi work before shutdown");
+        active_work.wait_until_idle().await;
+    }
     info!("native Pico server shutting down");
 }
 
@@ -4938,6 +5028,7 @@ mod tests {
             pi_version: Some("test".into()),
             pi_error: None,
             control_status: Arc::new(RwLock::new(initial_status("127.0.0.1".into(), 3141))),
+            active_work: Arc::new(ActiveWorkTracker::default()),
             previous_clean_shutdown: Some(true),
             state_file: PathBuf::from("/tmp/pico-server-api-test-state.json"),
             port: 3141,
@@ -4972,7 +5063,11 @@ mod tests {
             .await
             .expect("response body");
         let manifest: Value = serde_json::from_slice(&body).expect("manifest JSON");
-        assert_eq!(manifest["displayName"], "Pico Rust Preview");
+        assert_eq!(manifest["displayName"], "Pico");
+        assert_eq!(
+            manifest["serverProtocolVersion"],
+            SERVER_PROTOCOL_VERSION
+        );
         assert!(manifest["capabilities"]["features"]
             .as_array()
             .expect("features")
@@ -5701,8 +5796,53 @@ for line in sys.stdin:
             .expect("response body");
         let health: Value = serde_json::from_slice(&body).expect("health JSON");
         assert_eq!(health["runtime"], "rust");
+        assert_eq!(health["serverProtocolVersion"], SERVER_PROTOCOL_VERSION);
+        assert_eq!(health["apiContractVersion"], API_CONTRACT_VERSION);
+        assert_eq!(health["activeRunCount"], 0);
         assert_eq!(health["pi"]["available"], true);
         assert_eq!(health["piBridge"]["available"], false);
         assert_eq!(health["web"]["available"], false);
+    }
+
+    #[tokio::test]
+    async fn shutdown_waits_for_active_work_to_settle() {
+        let context = test_context();
+        context.active_work.mark_active("session").await;
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let shutdown = tokio::spawn(shutdown_signal(
+            shutdown_rx,
+            shutdown_tx.clone(),
+            context.control_status.clone(),
+            context.active_work.clone(),
+        ));
+        shutdown_tx.send(true).expect("request shutdown");
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if context.control_status.read().await.phase == "draining" {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("server did not enter draining state");
+        assert!(!shutdown.is_finished());
+
+        context.active_work.mark_inactive("session").await;
+        tokio::time::timeout(Duration::from_secs(1), shutdown)
+            .await
+            .expect("shutdown did not finish after work settled")
+            .expect("shutdown task failed");
+    }
+
+    #[tokio::test]
+    async fn draining_rejects_new_prompt_work() {
+        let context = test_context();
+        context.control_status.write().await.phase = "draining".into();
+        let error = ensure_accepting_work(&context)
+            .await
+            .expect_err("draining server accepted new work");
+        assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
     }
 }

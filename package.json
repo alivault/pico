@@ -27,6 +27,10 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "pico": {
+    "serverProtocolVersion": 2,
+    "apiContractVersion": 1
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -40,13 +44,16 @@
     "fetch:pi-standalone": "node ./scripts/fetch-pi-standalone.mjs",
     "build:pi-bridge": "node ./scripts/build-pi-bridge.mjs",
     "package:macos": "node ./scripts/package-macos.mjs",
+    "package:native": "node ./scripts/package-native-release.mjs",
     "prepack": "pnpm build",
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt",
     "check:contracts": "node ./scripts/check-contract-fixtures.mjs",
-    "check": "vp check && pnpm check:contracts && cargo test --workspace",
-    "check:fix": "vp check --fix && pnpm check:contracts && cargo test --workspace",
+    "check:native-launcher": "node ./scripts/check-native-launcher.mjs",
+    "check:native-packaging": "node ./scripts/check-native-packaging.mjs",
+    "check": "vp check && pnpm check:contracts && pnpm check:native-launcher && pnpm check:native-packaging && cargo test --workspace",
+    "check:fix": "vp check --fix && pnpm check:contracts && pnpm check:native-launcher && pnpm check:native-packaging && cargo test --workspace",
     "release": "node ./scripts/release.mjs",
     "update:pi": "pnpm update @earendil-works/pi-coding-agent --latest"
   },

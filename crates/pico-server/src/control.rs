@@ -8,15 +8,21 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{watch, RwLock};
 use tokio::time::timeout;
 
-use crate::protocol::SERVER_PROTOCOL_VERSION;
+use crate::active_work::ActiveWorkTracker;
+use crate::protocol::{API_CONTRACT_VERSION, SERVER_PROTOCOL_VERSION};
 
 const MAX_CONTROL_RECORD_BYTES: u64 = 64 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ControlRequest {
     pub id: String,
     pub method: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_server_protocol: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_api_contract: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,10 +41,14 @@ pub struct ControlResponse {
 pub struct ControlStatus {
     pub version: String,
     pub protocol_version: u32,
+    #[serde(default)]
+    pub api_contract_version: u32,
     pub host: String,
     pub port: u16,
     pub phase: String,
     pub pid: u32,
+    #[serde(default)]
+    pub active_run_count: usize,
 }
 
 #[cfg(unix)]
@@ -93,6 +103,7 @@ impl ControlServer {
     pub async fn run(
         self,
         status: Arc<RwLock<ControlStatus>>,
+        active_work: Arc<ActiveWorkTracker>,
         shutdown: watch::Sender<bool>,
         mut stop: watch::Receiver<bool>,
     ) {
@@ -107,9 +118,16 @@ impl ControlServer {
                     match accepted {
                         Ok((stream, _)) => {
                             let status = status.clone();
+                            let active_work = active_work.clone();
                             let shutdown = shutdown.clone();
                             tokio::spawn(async move {
-                                let _ = handle_connection(stream, status, shutdown).await;
+                                let _ = handle_connection(
+                                    stream,
+                                    status,
+                                    active_work,
+                                    shutdown,
+                                )
+                                .await;
                             });
                         }
                         Err(error) => tracing::warn!(%error, "control socket accept failed"),
@@ -131,6 +149,7 @@ impl ControlServer {
 async fn handle_connection(
     stream: tokio::net::UnixStream,
     status: Arc<RwLock<ControlStatus>>,
+    active_work: Arc<ActiveWorkTracker>,
     shutdown: watch::Sender<bool>,
 ) -> io::Result<()> {
     let (reader, mut writer) = stream.into_split();
@@ -146,28 +165,38 @@ async fn handle_connection(
         }
     } else {
         match serde_json::from_slice::<ControlRequest>(trim_delimiter(&record)) {
-            Ok(request) => match request.method.as_str() {
-                "ping" | "status" => ControlResponse {
+            Ok(request) => match compatibility_error(&request) {
+                Some(error) => ControlResponse {
                     id: request.id,
-                    ok: true,
-                    error: None,
-                    status: Some(status.read().await.clone()),
+                    ok: false,
+                    error: Some(error),
+                    status: Some(status_snapshot(&status, &active_work).await),
                 },
-                "stop" => {
-                    let response = ControlResponse {
+                None => match request.method.as_str() {
+                    "ping" | "status" => ControlResponse {
                         id: request.id,
                         ok: true,
                         error: None,
-                        status: Some(status.read().await.clone()),
-                    };
-                    let _ = shutdown.send(true);
-                    response
-                }
-                _ => ControlResponse {
-                    id: request.id,
-                    ok: false,
-                    error: Some(format!("unknown control method: {}", request.method)),
-                    status: None,
+                        status: Some(status_snapshot(&status, &active_work).await),
+                    },
+                    "stop" => {
+                        active_work.begin_draining().await;
+                        status.write().await.phase = "draining".into();
+                        let response = ControlResponse {
+                            id: request.id,
+                            ok: true,
+                            error: None,
+                            status: Some(status_snapshot(&status, &active_work).await),
+                        };
+                        let _ = shutdown.send(true);
+                        response
+                    }
+                    _ => ControlResponse {
+                        id: request.id,
+                        ok: false,
+                        error: Some(format!("unknown control method: {}", request.method)),
+                        status: None,
+                    },
                 },
             },
             Err(error) => ControlResponse {
@@ -193,6 +222,8 @@ pub async fn request(path: &Path, method: &str) -> io::Result<ControlResponse> {
     let request = ControlRequest {
         id: format!("cli:{}", std::process::id()),
         method: method.to_string(),
+        expected_server_protocol: Some(SERVER_PROTOCOL_VERSION),
+        expected_api_contract: Some(API_CONTRACT_VERSION),
     };
     let mut encoded = serde_json::to_vec(&request).map_err(io::Error::other)?;
     encoded.push(b'\n');
@@ -210,7 +241,28 @@ pub async fn request(path: &Path, method: &str) -> io::Result<ControlResponse> {
             "control response is too large",
         ));
     }
-    serde_json::from_slice(trim_delimiter(&record)).map_err(io::Error::other)
+    let mut response: ControlResponse =
+        serde_json::from_slice(trim_delimiter(&record)).map_err(io::Error::other)?;
+    if let Some(status) = &response.status {
+        let mismatch = if status.protocol_version != SERVER_PROTOCOL_VERSION {
+            Some(format!(
+                "server protocol mismatch: launcher {}, running {}",
+                SERVER_PROTOCOL_VERSION, status.protocol_version
+            ))
+        } else if status.api_contract_version != API_CONTRACT_VERSION {
+            Some(format!(
+                "API contract mismatch: launcher {}, running {}",
+                API_CONTRACT_VERSION, status.api_contract_version
+            ))
+        } else {
+            None
+        };
+        if let Some(error) = mismatch {
+            response.ok = false;
+            response.error = Some(error);
+        }
+    }
+    Ok(response)
 }
 
 #[cfg(not(unix))]
@@ -245,11 +297,46 @@ pub fn initial_status(host: String, port: u16) -> ControlStatus {
     ControlStatus {
         version: env!("CARGO_PKG_VERSION").into(),
         protocol_version: SERVER_PROTOCOL_VERSION,
+        api_contract_version: API_CONTRACT_VERSION,
         host,
         port,
         phase: "starting".into(),
         pid: std::process::id(),
+        active_run_count: 0,
     }
+}
+
+async fn status_snapshot(
+    status: &RwLock<ControlStatus>,
+    active_work: &ActiveWorkTracker,
+) -> ControlStatus {
+    let mut snapshot = status.read().await.clone();
+    snapshot.active_run_count = active_work.count().await;
+    snapshot
+}
+
+fn compatibility_error(request: &ControlRequest) -> Option<String> {
+    if request
+        .expected_server_protocol
+        .is_some_and(|version| version != SERVER_PROTOCOL_VERSION)
+    {
+        return Some(format!(
+            "server protocol mismatch: expected {}, running {}",
+            request.expected_server_protocol.unwrap_or_default(),
+            SERVER_PROTOCOL_VERSION
+        ));
+    }
+    if request
+        .expected_api_contract
+        .is_some_and(|version| version != API_CONTRACT_VERSION)
+    {
+        return Some(format!(
+            "API contract mismatch: expected {}, running {}",
+            request.expected_api_contract.unwrap_or_default(),
+            API_CONTRACT_VERSION
+        ));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -273,7 +360,21 @@ mod tests {
     fn initial_status_exposes_protocol_and_pid() {
         let status = initial_status("127.0.0.1".into(), 3141);
         assert_eq!(status.protocol_version, SERVER_PROTOCOL_VERSION);
+        assert_eq!(status.api_contract_version, API_CONTRACT_VERSION);
         assert_eq!(status.port, 3141);
         assert!(status.pid > 0);
+    }
+
+    #[test]
+    fn incompatible_control_clients_are_rejected_before_mutation() {
+        let request = ControlRequest {
+            id: "update".into(),
+            method: "stop".into(),
+            expected_server_protocol: Some(SERVER_PROTOCOL_VERSION + 1),
+            expected_api_contract: Some(API_CONTRACT_VERSION),
+        };
+        assert!(compatibility_error(&request)
+            .expect("mismatch should fail")
+            .contains("server protocol mismatch"));
     }
 }

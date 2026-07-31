@@ -15,6 +15,14 @@ import { spawnSync } from "node:child_process"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
+const cargoVersion = /^version = "([^"]+)"$/m.exec(
+  readFileSync(join(root, "crates/pico-server/Cargo.toml"), "utf8")
+)?.[1]
+if (cargoVersion !== packageJson.version) {
+  throw new Error(
+    `Pico package version ${packageJson.version} does not match Rust server ${cargoVersion ?? "unknown"}`
+  )
+}
 const version = packageJson.version
 const buildNumber =
   process.env.MACOS_BUILD_NUMBER ?? version.match(/^\d+(?:\.\d+){0,2}/)?.[0]

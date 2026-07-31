@@ -151,12 +151,12 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 13. Launcher, packaging, and update behavior
 
-- [ ] Make `pico-app` select the native server binary instead of Nitro.
-- [ ] Add npm platform packages or downloaded release binaries for CLI users.
-- [ ] Add Homebrew formula/headless service and a cask for `Pico.app`.
-- [ ] Add server/client protocol compatibility checks before updates.
-- [ ] Drain active work before server replacement and reconnect clients after.
-- [ ] Ensure updates never silently terminate an active Pi run.
+- [x] Make `pico-app` select the native server binary instead of Nitro.
+- [x] Add npm platform packages or downloaded release binaries for CLI users.
+- [x] Add Homebrew formula/headless service and a cask for `Pico.app`.
+- [x] Add server/client protocol compatibility checks before updates.
+- [x] Drain active work before server replacement and reconnect clients after.
+- [x] Ensure updates never silently terminate an active Pi run.
 
 ## 14. Cutover and removal
 

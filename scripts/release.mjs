@@ -9,7 +9,7 @@ const releaseBranch = process.env.RELEASE_BRANCH ?? "main"
 function usage() {
   console.error(`Usage: pnpm release <patch|minor|major>
 
-Runs local release checks, bumps package.json with pnpm version, creates the git tag, and pushes the branch plus tags. The GitHub release workflow publishes npm from the pushed tag.
+Runs local release checks, keeps npm and Rust versions aligned, creates the git tag, and pushes the branch plus tags. The GitHub release workflow publishes native assets and npm from the pushed tag.
 
 Set RELEASE_BRANCH=<branch> to release from a branch other than main.`)
 }
@@ -47,6 +47,19 @@ function run(command, args, options = {}) {
 
 function readPackageJson() {
   return JSON.parse(fs.readFileSync("package.json", "utf8"))
+}
+
+function updateRustServerVersion(version) {
+  const path = "crates/pico-server/Cargo.toml"
+  const source = fs.readFileSync(path, "utf8")
+  const updated = source.replace(
+    /^(\[package\]\nname = "pico-server"\nversion = ")[^"]+("$)/m,
+    `$1${version}$2`
+  )
+  if (updated === source) {
+    throw new Error(`Could not update pico-server version in ${path}`)
+  }
+  fs.writeFileSync(path, updated)
 }
 
 function ensureCleanWorkingTree() {
@@ -161,11 +174,22 @@ try {
   run("pnpm", ["build"])
   ensureCleanWorkingTree()
 
-  run("pnpm", ["version", releaseType, "-m", "release v%s"])
+  run("pnpm", ["version", nextVersion, "--no-git-tag-version"])
+  updateRustServerVersion(nextVersion)
+  run("cargo", ["check", "-p", "pico-server"])
+  run("git", [
+    "add",
+    "package.json",
+    "crates/pico-server/Cargo.toml",
+    "Cargo.lock",
+  ])
+  run("git", ["diff", "--cached", "--check"])
+  run("git", ["commit", "-m", `release ${nextTag}`])
+  run("git", ["tag", nextTag])
   run("git", ["push", "origin", branch, "--follow-tags"])
 
   console.log(
-    `Released ${nextTag}. GitHub Actions will publish ${packageJson.name}@${nextVersion} to npm.`
+    `Released ${nextTag}. GitHub Actions will publish native assets and ${packageJson.name}@${nextVersion}.`
   )
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)

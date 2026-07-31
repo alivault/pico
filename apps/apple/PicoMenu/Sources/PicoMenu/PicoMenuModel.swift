@@ -65,7 +65,7 @@ final class PicoMenuModel {
       if let serverBinaryURL {
         _ = await commandRunner.run(
           executable: serverBinaryURL,
-          arguments: ["stop"]
+          arguments: ["stop", "--wait"]
         )
       }
       let target = "gui/\(getuid())/\(Self.serverAgentLabel)"
@@ -101,7 +101,7 @@ final class PicoMenuModel {
       if let serverBinaryURL {
         _ = await commandRunner.run(
           executable: serverBinaryURL,
-          arguments: ["stop"]
+          arguments: ["stop", "--wait"]
         )
       }
       NSApplication.shared.terminate(nil)

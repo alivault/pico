@@ -150,8 +150,12 @@ struct SettingsView: View {
             Section("Manifest") {
               LabeledContent("Version", value: manifest.version)
               LabeledContent(
-                "Contract",
+                "API contract",
                 value: String(manifest.apiContractVersion)
+              )
+              LabeledContent(
+                "Server protocol",
+                value: String(manifest.serverProtocolVersion)
               )
             }
           }
@@ -210,7 +214,14 @@ private struct SettingsFormContent: View {
       if let manifest = model.manifest {
         Section("Manifest") {
           LabeledContent("Version", value: manifest.version)
-          LabeledContent("Contract", value: String(manifest.apiContractVersion))
+          LabeledContent(
+            "API contract",
+            value: String(manifest.apiContractVersion)
+          )
+          LabeledContent(
+            "Server protocol",
+            value: String(manifest.serverProtocolVersion)
+          )
         }
       }
 

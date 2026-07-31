@@ -21,6 +21,7 @@ export type ClientManifestResponse =
       name: string
       version: string
       displayName: string
+      serverProtocolVersion: number
       apiContractVersion: number
       pairingRequired: boolean
       authentication: {

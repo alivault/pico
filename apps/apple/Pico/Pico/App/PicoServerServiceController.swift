@@ -4,6 +4,51 @@
   import ServiceManagement
   import SwiftUI
 
+  private actor PicoServerCommandRunner {
+    struct RunningStatus: Decodable {
+      var version: String
+      var protocolVersion: Int
+      var apiContractVersion: Int?
+    }
+
+    private struct StatusResponse: Decodable {
+      var status: RunningStatus?
+    }
+
+    func status(executable: URL) -> RunningStatus? {
+      let output = Pipe()
+      let process = Process()
+      process.executableURL = executable
+      process.arguments = ["status"]
+      process.standardOutput = output
+      process.standardError = FileHandle.nullDevice
+      do {
+        try process.run()
+        process.waitUntilExit()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let response = try JSONDecoder().decode(StatusResponse.self, from: data)
+        return response.status
+      } catch {
+        return nil
+      }
+    }
+
+    func run(executable: URL, arguments: [String]) -> Int32 {
+      let process = Process()
+      process.executableURL = executable
+      process.arguments = arguments
+      process.standardOutput = FileHandle.nullDevice
+      process.standardError = FileHandle.nullDevice
+      do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+      } catch {
+        return -1
+      }
+    }
+  }
+
   @MainActor
   @Observable
   final class PicoServerServiceController {
@@ -13,11 +58,15 @@
 
     private static let preferenceKey = "pico.macos.startAtLogin"
     private static let availabilityInfoKey = "PicoBackgroundServicesAvailable"
+    private static let serverProtocolVersion = 2
+    private static let apiContractVersion = 1
 
     private let defaults: UserDefaults
     private let serverService: SMAppService
     private let menuService: SMAppService
+    private let commandRunner = PicoServerCommandRunner()
     private var hasStarted = false
+    private var versionReconciliationTask: Task<Void, Never>?
 
     var startAtLogin: Bool {
       didSet {
@@ -51,6 +100,7 @@
         bundledServerBinaryExists && bundledMenuAppExists
       refreshStatus()
       applyPreference()
+      reconcileServerVersionIfNeeded()
     }
 
     func refreshStatus() {
@@ -88,6 +138,10 @@
       Bundle.main.bundleURL
         .appending(path: "Contents/Library/LaunchAgents")
         .appending(path: Self.serverAgentPlistName)
+    }
+
+    private var packagedVersion: String? {
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     }
 
     private var serverBinaryURL: URL {
@@ -141,6 +195,61 @@
       } catch {
         refreshStatus()
         errorMessage = error.localizedDescription
+      }
+    }
+
+    private func reconcileServerVersionIfNeeded() {
+      guard
+        isAvailable,
+        startAtLogin,
+        serverService.status == .enabled,
+        versionReconciliationTask == nil,
+        let packagedVersion
+      else { return }
+
+      let commandRunner = commandRunner
+      let serverBinaryURL = serverBinaryURL
+      versionReconciliationTask = Task { [weak self] in
+        guard let running = await commandRunner.status(executable: serverBinaryURL) else {
+          self?.versionReconciliationTask = nil
+          return
+        }
+        guard running.version != packagedVersion else {
+          self?.versionReconciliationTask = nil
+          return
+        }
+        guard
+          running.protocolVersion == Self.serverProtocolVersion,
+          running.apiContractVersion == Self.apiContractVersion
+        else {
+          self?.errorMessage =
+            "The running Pico server uses an incompatible protocol. Finish active work and restart it manually."
+          self?.versionReconciliationTask = nil
+          return
+        }
+
+        let stopStatus = await commandRunner.run(
+          executable: serverBinaryURL,
+          arguments: ["stop", "--wait"]
+        )
+        guard stopStatus == 0 else {
+          self?.errorMessage = "The previous Pico server could not drain for update."
+          self?.versionReconciliationTask = nil
+          return
+        }
+        let restartStatus = await commandRunner.run(
+          executable: URL(filePath: "/bin/launchctl"),
+          arguments: [
+            "kickstart",
+            "-k",
+            "gui/\(getuid())/\(Self.serverAgentLabel)",
+          ]
+        )
+        if restartStatus != 0 {
+          self?.errorMessage = "The updated Pico server could not be started."
+        }
+        self?.refreshStatus()
+        self?.versionReconciliationTask = nil
       }
     }
 

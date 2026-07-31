@@ -10,8 +10,62 @@ permissions:
   id-token: write
 
 jobs:
+  native:
+    name: Native ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            os: macos-15
+          - target: darwin-x64
+            os: macos-15
+          - target: linux-arm64
+            os: ubuntu-latest
+          - target: linux-x64
+            os: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Linux ARM64 linker
+        if: matrix.target == 'linux-arm64'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native release bundle
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: pnpm package:native -- --target "${{ matrix.target }}"
+
+      - name: Upload native release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pico-native-${{ matrix.target }}
+          path: |
+            dist/native/*.tar.gz
+            dist/native/*.sha256
+            dist/native/*.json
+          if-no-files-found: error
+
   release:
     name: Publish npm package and GitHub release
+    needs: native
     runs-on: ubuntu-latest
     environment: npm
 
@@ -33,14 +87,15 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - name: Show tool versions
-        run: |
-          node --version
-          npm --version
-          pnpm --version
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Download native release bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pico-native-*
+          path: dist/native
+          merge-multiple: true
 
       - name: Read package metadata
         id: package
@@ -49,7 +104,7 @@ jobs:
           echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Verify tag matches package version
+      - name: Verify release versions
         shell: bash
         run: |
           expected_tag="v${{ steps.package.outputs.version }}"
@@ -58,12 +113,34 @@ jobs:
             echo "Expected tag: $expected_tag"
             exit 1
           fi
+          rust_version="$(awk -F '"' '/^version = / { print $2; exit }' crates/pico-server/Cargo.toml)"
+          if [ "$rust_version" != "${{ steps.package.outputs.version }}" ]; then
+            echo "Rust server version $rust_version does not match package version ${{ steps.package.outputs.version }}."
+            exit 1
+          fi
 
       - name: Check package
         run: pnpm check
 
       - name: Build package
         run: pnpm build
+
+      - name: Generate release and Homebrew metadata
+        run: |
+          node scripts/generate-native-release-manifest.mjs dist/native
+          node scripts/generate-homebrew-artifacts.mjs dist/native
+
+      - name: Create GitHub release with native assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/native/*.tar.gz
+            dist/native/*.sha256
+            dist/native/*.json
+            dist/homebrew/Formula/pico.rb
 
       - name: Check npm publish status
         id: npm_status
@@ -91,9 +168,85 @@ jobs:
         if: steps.npm_status.outputs.published != 'true'
         run: npx --yes npm@latest publish --access public --provenance --tag "${{ steps.dist_tag.outputs.tag }}"
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+  macos-app:
+    name: Signed macOS app and cask
+    if: vars.PICO_MACOS_RELEASE_ENABLED == 'true'
+    needs: [native, release]
+    runs-on: macos-15
+    environment: macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          generate_release_notes: true
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          certificate="$RUNNER_TEMP/pico-certificate.p12"
+          keychain="$RUNNER_TEMP/pico-signing.keychain-db"
+          echo "$MACOS_CERTIFICATE_P12" | base64 -D > "$certificate"
+          security create-keychain -p runner "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p runner "$keychain"
+          security import "$certificate" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k runner "$keychain"
+
+      - name: Configure notarization credentials
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$MACOS_NOTARY_KEY" > "$key"
+          xcrun notarytool store-credentials Pico-Notary \
+            --key "$key" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER"
+
+      - name: Build, sign, notarize, and staple Pico
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_PROFILE: Pico-Notary
+        run: pnpm package:macos
+
+      - name: Download native release metadata
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pico-native-*
+          path: dist/native
+          merge-multiple: true
+
+      - name: Generate Homebrew cask
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          export PICO_MACOS_DMG="dist/macos/Pico-${version}-universal.dmg"
+          node scripts/generate-native-release-manifest.mjs dist/native
+          node scripts/generate-homebrew-artifacts.mjs dist/native
+
+      - name: Upload macOS app and cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/macos/Pico-${version}-universal.dmg" \
+            "dist/homebrew/Casks/pico.rb" \
+            --clobber

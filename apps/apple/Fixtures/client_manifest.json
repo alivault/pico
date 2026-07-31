@@ -3,6 +3,7 @@
   "name": "@alivault/pico",
   "version": "0.14.1",
   "displayName": "Pico",
+  "serverProtocolVersion": 2,
   "apiContractVersion": 1,
   "pairingRequired": false,
   "authentication": {

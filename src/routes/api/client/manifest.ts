@@ -9,6 +9,7 @@ import type { ClientManifestResponse } from "@/lib/pico/api"
 import { jsonResponse } from "@/server/http"
 import { routeErrorResponse } from "@/server/route-helpers"
 
+const SERVER_PROTOCOL_VERSION = 2
 const API_CONTRACT_VERSION = 1
 
 function readPicoPackageVersion() {
@@ -47,6 +48,7 @@ function buildClientManifest(): ClientManifestResponse {
     name: "@alivault/pico",
     version: readPicoPackageVersion(),
     displayName: "Pico",
+    serverProtocolVersion: SERVER_PROTOCOL_VERSION,
     apiContractVersion: API_CONTRACT_VERSION,
     pairingRequired: false,
     authentication: {

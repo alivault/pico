@@ -5,6 +5,7 @@ public struct ClientManifest: Decodable, Hashable, Sendable {
   public var name: String
   public var version: String
   public var displayName: String
+  public var serverProtocolVersion: Int
   public var apiContractVersion: Int
   public var pairingRequired: Bool
   public var authentication: ClientManifestAuthentication

@@ -1,5 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
 use pico_server::config::{default_data_dir, ServerConfig, ServerOptions, ServerPaths};
@@ -46,6 +47,12 @@ enum Command {
     Stop {
         #[arg(long, env = "PICO_DATA_DIR")]
         data_dir: Option<PathBuf>,
+        /// Wait until all active Pi work finishes and the control socket closes.
+        #[arg(long)]
+        wait: bool,
+        /// Maximum seconds to wait; zero waits indefinitely.
+        #[arg(long, default_value_t = 0)]
+        timeout: u64,
     },
     /// Start Pi in RPC mode and verify the language-neutral protocol.
     PiSmoke {
@@ -102,9 +109,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _log_guard = logging::init(None)?;
             print_control_response(data_dir, "status").await?;
         }
-        Command::Stop { data_dir } => {
+        Command::Stop {
+            data_dir,
+            wait,
+            timeout,
+        } => {
             let _log_guard = logging::init(None)?;
-            print_control_response(data_dir, "stop").await?;
+            let response = print_control_response(data_dir.clone(), "stop").await?;
+            if wait {
+                if let Some(status) = response.status {
+                    if status.active_run_count > 0 {
+                        eprintln!(
+                            "Waiting for {} active Pi run(s) to finish before stopping...",
+                            status.active_run_count
+                        );
+                    }
+                }
+                wait_for_shutdown(data_dir, timeout).await?;
+            }
         }
         Command::PiSmoke {
             pi_bin,
@@ -130,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn print_control_response(
     data_dir: Option<PathBuf>,
     method: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<control::ControlResponse, Box<dyn std::error::Error>> {
     let paths = ServerPaths::new(match data_dir {
         Some(path) => path,
         None => default_data_dir()?,
@@ -140,8 +162,49 @@ async fn print_control_response(
     if !response.ok {
         return Err(response
             .error
+            .clone()
             .unwrap_or_else(|| "control request failed".into())
             .into());
     }
-    Ok(())
+    Ok(response)
+}
+
+async fn wait_for_shutdown(
+    data_dir: Option<PathBuf>,
+    timeout_seconds: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let paths = ServerPaths::new(match data_dir {
+        Some(path) => path,
+        None => default_data_dir()?,
+    });
+    let started_at = Instant::now();
+    loop {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        match control::request(&paths.control_socket, "status").await {
+            Ok(response) if !response.ok => {
+                return Err(response
+                    .error
+                    .unwrap_or_else(|| "control status request failed".into())
+                    .into());
+            }
+            Ok(_) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+                ) =>
+            {
+                return Ok(());
+            }
+            Err(error) => return Err(error.into()),
+        }
+        if timeout_seconds > 0
+            && started_at.elapsed() >= Duration::from_secs(timeout_seconds)
+        {
+            return Err(format!(
+                "timed out waiting {timeout_seconds} seconds for active Pico work to drain"
+            )
+            .into());
+        }
+    }
 }

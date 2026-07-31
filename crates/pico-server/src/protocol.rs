@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const API_CONTRACT_VERSION: u32 = 1;
-pub const SERVER_PROTOCOL_VERSION: u32 = 1;
+pub const SERVER_PROTOCOL_VERSION: u32 = 2;
 pub const PERSISTENCE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,6 +15,7 @@ pub struct ClientManifest {
     pub name: String,
     pub version: String,
     pub display_name: String,
+    pub server_protocol_version: u32,
     pub api_contract_version: u32,
     pub pairing_required: bool,
     pub authentication: AuthenticationManifest,

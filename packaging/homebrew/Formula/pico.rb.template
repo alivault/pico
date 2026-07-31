@@ -1,0 +1,57 @@
+class Pico < Formula
+  desc "Local browser workspace for Pi coding-agent sessions"
+  homepage "https://github.com/alivault/pico"
+  version "{{VERSION}}"
+  license "AGPL-3.0-only"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "{{DARWIN_ARM64_URL}}"
+      sha256 "{{DARWIN_ARM64_SHA256}}"
+    else
+      url "{{DARWIN_X64_URL}}"
+      sha256 "{{DARWIN_X64_SHA256}}"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "{{LINUX_ARM64_URL}}"
+      sha256 "{{LINUX_ARM64_SHA256}}"
+    else
+      url "{{LINUX_X64_URL}}"
+      sha256 "{{LINUX_X64_SHA256}}"
+    end
+  end
+
+  def install
+    bin.install "pico-server", "pi", "pico-pi-bridge"
+    (share/"pico").install "web"
+    (bin/"pico-app").write <<~SH
+      #!/bin/sh
+      exec "#{bin}/pico-server" serve \\
+        --pi-bin "#{bin}/pi" \\
+        --pi-bridge-bin "#{bin}/pico-pi-bridge" \\
+        --web-dir "#{share}/pico/web" "$@"
+    SH
+  end
+
+  service do
+    run [
+      opt_bin/"pico-server",
+      "serve",
+      "--pi-bin", opt_bin/"pi",
+      "--pi-bridge-bin", opt_bin/"pico-pi-bridge",
+      "--web-dir", opt_share/"pico/web",
+    ]
+    keep_alive crashed: true
+    working_dir var/"lib/pico"
+    log_path var/"log/pico.log"
+    error_log_path var/"log/pico.error.log"
+    environment_variables PICO_DATA_DIR: var/"lib/pico"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/pico-server --version")
+  end
+end
