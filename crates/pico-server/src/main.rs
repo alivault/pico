@@ -24,6 +24,8 @@ enum Command {
         pi_bin: PathBuf,
         #[arg(long, env = "PICO_DATA_DIR")]
         data_dir: Option<PathBuf>,
+        #[arg(long, env = "PI_CODING_AGENT_DIR")]
+        agent_dir: Option<PathBuf>,
         #[arg(
             long = "allow-origin",
             env = "PICO_ALLOWED_ORIGINS",
@@ -59,6 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         port: 3141,
         pi_bin: PathBuf::from("pi"),
         data_dir: None,
+        agent_dir: None,
         allowed_origins: Vec::new(),
     });
 
@@ -68,9 +71,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             port,
             pi_bin,
             data_dir,
+            agent_dir,
             allowed_origins,
         } => {
-            let config = ServerConfig::new(host, port, pi_bin, data_dir, allowed_origins)?;
+            let config =
+                ServerConfig::new(host, port, pi_bin, data_dir, agent_dir, allowed_origins)?;
             config.paths.create()?;
             let _log_guard = logging::init(Some(&config.paths.log_dir))?;
             api::serve(config).await?;

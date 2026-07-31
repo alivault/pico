@@ -56,17 +56,17 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 4. Session index, viewer contexts, and SSE
 
-- [ ] Port Pi JSONL session header/entry parsing and append-only tree traversal.
-- [ ] Port directory session listing, merging, sorting, previews, revisions, and
+- [x] Port Pi JSONL session header/entry parsing and append-only tree traversal.
+- [x] Port directory session listing, merging, sorting, previews, revisions, and
       unread overlays.
-- [ ] Port Pico viewer contexts, active/draft entries, request resolution, and
+- [x] Port Pico viewer contexts, active/draft entries, request resolution, and
       base-cwd semantics.
-- [ ] Port render-ready conversation item construction and stable item keys.
-- [ ] Port initial `state_sync`, patch-friendly follow-up sync, and `itemsPatch`.
-- [ ] Implement bounded SSE replay IDs, keepalive, reconnect snapshots, and event
+- [x] Port render-ready conversation item construction and stable item keys.
+- [x] Port initial `state_sync`, patch-friendly follow-up sync, and `itemsPatch`.
+- [x] Implement bounded SSE replay IDs, keepalive, reconnect snapshots, and event
       gap recovery.
-- [ ] Port sessions/status/done/user/error/extension/Git event envelopes.
-- [ ] Pass browser and Swift full/patch state fixtures unchanged.
+- [x] Port sessions/status/done/user/error/extension/Git event envelopes.
+- [x] Pass browser and Swift full/patch state fixtures unchanged.
 
 ## 5. Prompt and session mutation parity
 

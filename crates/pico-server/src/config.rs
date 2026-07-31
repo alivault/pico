@@ -7,6 +7,7 @@ pub struct ServerConfig {
     pub host: IpAddr,
     pub port: u16,
     pub pi_binary: PathBuf,
+    pub agent_dir: PathBuf,
     pub paths: ServerPaths,
     pub allowed_origins: Vec<String>,
     pub max_request_bytes: usize,
@@ -26,6 +27,7 @@ impl ServerConfig {
         port: u16,
         pi_binary: PathBuf,
         data_dir: Option<PathBuf>,
+        agent_dir: Option<PathBuf>,
         allowed_origins: Vec<String>,
     ) -> io::Result<Self> {
         let paths = ServerPaths::new(data_dir.unwrap_or(default_data_dir()?));
@@ -33,6 +35,7 @@ impl ServerConfig {
             host,
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            agent_dir: agent_dir.unwrap_or(default_agent_dir()?),
             paths,
             allowed_origins,
             max_request_bytes: 64 * 1024 * 1024,
@@ -44,6 +47,7 @@ impl ServerConfig {
             host: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            agent_dir: PathBuf::from(".pi/agent"),
             paths: ServerPaths::new(data_dir),
             allowed_origins: Vec::new(),
             max_request_bytes: 64 * 1024 * 1024,
@@ -65,6 +69,17 @@ impl ServerPaths {
         create_private_directory(&self.data_dir)?;
         create_private_directory(&self.log_dir)
     }
+}
+
+pub fn default_agent_dir() -> io::Result<PathBuf> {
+    if let Some(path) = std::env::var_os("PI_CODING_AGENT_DIR").filter(|path| !path.is_empty()) {
+        return Ok(PathBuf::from(path));
+    }
+    let home = std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
+    Ok(home.join(".pi/agent"))
 }
 
 pub fn default_data_dir() -> io::Result<PathBuf> {

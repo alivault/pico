@@ -60,13 +60,18 @@ Implemented:
 - correlated bounded concurrent RPC commands without unsafe global timeouts
 - Pi event broadcast and unexpected-exit reporting
 - persisted Pi session paths and process restoration after server restart
+- Pi JSONL indexing with active-branch traversal and render-ready conversation items
+- directory session indexes, deterministic revisions, viewer selection, and unread overlays
+- `/events` bootstrap snapshots, patch-friendly item updates, bounded replay IDs,
+  reconnect resynchronization, keepalive, and translated Pi status/error events
 - experimental session creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds
 - daily structured logs and atomically persisted lifecycle state
 
-The experimental routes are under `/api/rust/*`. The manifest deliberately does
-not claim full conversation/session compatibility yet.
+Process-control routes remain under `/api/rust/*`. The native server now exposes
+read-only session indexes and the primary `/events` state/session stream, but it
+does not claim full mutation, Git, files, auth, terminal, or static-app parity yet.
 
 ## Migration order
 
