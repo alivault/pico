@@ -37,6 +37,7 @@
     "rust:check": "cargo test --workspace",
     "rust:server": "cargo run -p pico-server -- serve",
     "rust:pi-smoke": "cargo run -p pico-server -- pi-smoke",
+    "fetch:pi-standalone": "node ./scripts/fetch-pi-standalone.mjs",
     "prepack": "pnpm build",
     "preview": "vp preview",
     "lint": "vp lint",

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Serializable server-owned facts. Process handles and async channels live in
 /// `RuntimeRegistry`, keeping state transitions testable without child processes.
@@ -11,7 +11,7 @@ pub struct AppState {
     sessions: BTreeMap<String, SessionRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRecord {
     pub id: String,
@@ -20,6 +20,21 @@ pub struct SessionRecord {
 }
 
 impl AppState {
+    pub fn from_sessions(sessions: Vec<SessionRecord>) -> Self {
+        let mut state = Self::default();
+        for session in sessions {
+            if let Some(number) = session
+                .id
+                .strip_prefix("rust-")
+                .and_then(|number| number.parse::<u64>().ok())
+            {
+                state.next_session_id = state.next_session_id.max(number);
+            }
+            state.sessions.insert(session.id.clone(), session);
+        }
+        state
+    }
+
     pub fn reserve_session(
         &mut self,
         cwd: PathBuf,
@@ -35,6 +50,12 @@ impl AppState {
 
     pub fn insert_session(&mut self, session: SessionRecord) {
         self.sessions.insert(session.id.clone(), session);
+    }
+
+    pub fn update_session_path(&mut self, id: &str, path: PathBuf) {
+        if let Some(session) = self.sessions.get_mut(id) {
+            session.session_path = Some(path);
+        }
     }
 
     pub fn remove_session(&mut self, id: &str) -> Option<SessionRecord> {
@@ -59,6 +80,20 @@ mod tests {
 
         let second = state.reserve_session(PathBuf::from("/tmp/two"), None);
         assert_eq!(second.id, "rust-2");
+    }
+
+    #[test]
+    fn restored_ids_advance_without_reuse() {
+        let restored = SessionRecord {
+            id: "rust-7".into(),
+            cwd: PathBuf::from("/tmp/restored"),
+            session_path: Some(PathBuf::from("/tmp/session.jsonl")),
+        };
+        let mut state = AppState::from_sessions(vec![restored]);
+        assert_eq!(
+            state.reserve_session(PathBuf::from("/tmp/new"), None).id,
+            "rust-8"
+        );
     }
 
     #[test]

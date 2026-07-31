@@ -32,7 +32,7 @@ impl ServerConfig {
         Ok(Self {
             host,
             port,
-            pi_binary,
+            pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             paths,
             allowed_origins,
             max_request_bytes: 64 * 1024 * 1024,
@@ -43,7 +43,7 @@ impl ServerConfig {
         Self {
             host: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port,
-            pi_binary,
+            pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             paths: ServerPaths::new(data_dir),
             allowed_origins: Vec::new(),
             max_request_bytes: 64 * 1024 * 1024,

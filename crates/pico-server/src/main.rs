@@ -89,11 +89,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             session,
         } => {
             let _log_guard = logging::init(None)?;
-            let client = pi_rpc::PiRpcClient::spawn(pi_rpc::PiSpawnOptions {
-                binary: pi_bin,
-                cwd,
-                session,
-            })
+            let client = pi_rpc::PiRpcClient::spawn(
+                pi_rpc::PiSpawnOptions::new(pi_bin, cwd).with_session(session),
+            )
             .await?;
             let state = client
                 .request(serde_json::json!({ "type": "get_state" }))

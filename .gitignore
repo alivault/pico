@@ -13,6 +13,7 @@ count.txt
 __unconfig*
 todos.json
 /target
+/artifacts
 
 # Xcode user-specific state
 *.xcuserstate

@@ -25,6 +25,7 @@ use crate::config::ServerConfig;
 use crate::control::ControlServer;
 use crate::control::{initial_status, ControlStatus};
 use crate::persistence::{self, ServerSnapshot};
+use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcError};
 use crate::protocol::{API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION};
 use crate::runtime::RuntimeRegistry;
@@ -39,6 +40,8 @@ struct ServerContext {
     pi_error: Option<String>,
     control_status: Arc<RwLock<ControlStatus>>,
     previous_clean_shutdown: Option<bool>,
+    state_file: PathBuf,
+    port: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +68,13 @@ impl ApiError {
     fn not_found(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
             message: message.into(),
         }
     }
@@ -97,9 +107,13 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     #[cfg(unix)]
     let control = ControlServer::bind(&config.paths.control_socket).await?;
     let previous_snapshot = persistence::load(&config.paths.state_file)?;
+    let restored_sessions = previous_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.sessions.clone())
+        .unwrap_or_default();
     persistence::store(
         &config.paths.state_file,
-        &ServerSnapshot::started(config.port),
+        &ServerSnapshot::started(config.port, restored_sessions.clone()),
     )?;
 
     let (pi_version, pi_error) = match detect_pi_version(&config.pi_binary).await {
@@ -111,14 +125,17 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         config.port,
     )));
     let context = ServerContext {
-        app: Arc::new(RwLock::new(AppState::default())),
+        app: Arc::new(RwLock::new(AppState::from_sessions(restored_sessions))),
         runtimes: Arc::new(RuntimeRegistry::new(config.pi_binary.clone())),
         started_at: Instant::now(),
         pi_version,
         pi_error,
         control_status: control_status.clone(),
         previous_clean_shutdown: previous_snapshot.map(|snapshot| snapshot.clean_shutdown),
+        state_file: config.paths.state_file.clone(),
+        port: config.port,
     };
+    restore_session_processes(&context).await;
     let policy = Arc::new(RequestPolicy::new(
         config.host,
         config.port,
@@ -176,6 +193,37 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     }
     persistence::mark_clean_shutdown(&config.paths.state_file)?;
     Ok(())
+}
+
+async fn restore_session_processes(context: &ServerContext) {
+    let sessions = context.app.read().await.sessions();
+    for session in sessions {
+        let Some(session_path) = session.session_path.clone() else {
+            continue;
+        };
+        if let Err(error) = context
+            .runtimes
+            .spawn(session.id.clone(), session.cwd.clone(), Some(session_path))
+            .await
+        {
+            tracing::warn!(
+                %error,
+                session_id = %session.id,
+                cwd = %session.cwd.display(),
+                "failed to restore Pi session process"
+            );
+        }
+    }
+}
+
+async fn persist_sessions(context: &ServerContext) -> Result<(), ApiError> {
+    let sessions = context.app.read().await.sessions();
+    let mut snapshot = persistence::load(&context.state_file)
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .unwrap_or_else(|| ServerSnapshot::started(context.port, Vec::new()));
+    snapshot.sessions = sessions;
+    persistence::store(&context.state_file, &snapshot)
+        .map_err(|error| ApiError::internal(error.to_string()))
 }
 
 fn router(context: ServerContext) -> Router {
@@ -258,16 +306,32 @@ async fn create_session(
     if !cwd.is_dir() {
         return Err(ApiError::bad_request("cwd must be a directory"));
     }
-    let record = context
+    let mut record = context
         .app
         .write()
         .await
         .reserve_session(cwd.clone(), request.session_path.clone());
-    context
+    let runtime = context
         .runtimes
         .spawn(record.id.clone(), cwd, request.session_path.clone())
         .await?;
+    match runtime.request_typed(&PiCommand::GetState).await {
+        Ok(state) => {
+            if let Some(session_file) = state
+                .get("data")
+                .and_then(|data| data.get("sessionFile"))
+                .and_then(Value::as_str)
+            {
+                record.session_path = Some(PathBuf::from(session_file));
+            }
+        }
+        Err(error) => {
+            let _ = context.runtimes.remove(&record.id).await;
+            return Err(error.into());
+        }
+    }
     context.app.write().await.insert_session(record.clone());
+    persist_sessions(&context).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -283,6 +347,7 @@ async fn delete_session(
         return Err(ApiError::not_found("session not found"));
     }
     context.app.write().await.remove_session(&id);
+    persist_sessions(&context).await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -384,6 +449,8 @@ mod tests {
             pi_error: None,
             control_status: Arc::new(RwLock::new(initial_status("127.0.0.1".into(), 3141))),
             previous_clean_shutdown: Some(true),
+            state_file: PathBuf::from("/tmp/pico-server-api-test-state.json"),
+            port: 3141,
         }
     }
 

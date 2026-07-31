@@ -14,15 +14,18 @@ pub struct ServerSnapshot {
     pub port: u16,
     pub started_at_ms: u64,
     pub clean_shutdown: bool,
+    #[serde(default)]
+    pub sessions: Vec<crate::app_state::SessionRecord>,
 }
 
 impl ServerSnapshot {
-    pub fn started(port: u16) -> Self {
+    pub fn started(port: u16, sessions: Vec<crate::app_state::SessionRecord>) -> Self {
         Self {
             version: PERSISTENCE_VERSION,
             port,
             started_at_ms: unix_time_ms(),
             clean_shutdown: false,
+            sessions,
         }
     }
 }
@@ -116,7 +119,7 @@ mod tests {
     fn snapshots_round_trip_and_mark_clean() {
         let directory = test_dir();
         let path = directory.join("state.json");
-        let snapshot = ServerSnapshot::started(3141);
+        let snapshot = ServerSnapshot::started(3141, Vec::new());
         store(&path, &snapshot).expect("store");
         assert_eq!(load(&path).expect("load"), Some(snapshot));
 
@@ -138,7 +141,7 @@ mod tests {
         std::fs::write(
             &path,
             format!(
-                "{{\"version\":{},\"port\":3141,\"startedAtMs\":0,\"cleanShutdown\":false}}",
+                "{{\"version\":{},\"port\":3141,\"startedAtMs\":0,\"cleanShutdown\":false,\"sessions\":[]}}",
                 PERSISTENCE_VERSION + 1
             ),
         )

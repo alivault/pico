@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,13 +14,33 @@ use tokio::time::timeout;
 use tracing::{debug, warn};
 
 const MAX_RPC_RECORD_BYTES: usize = 32 * 1024 * 1024;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_PENDING_REQUESTS: usize = 256;
+const CHILD_MONITOR_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone)]
 pub struct PiSpawnOptions {
     pub binary: PathBuf,
     pub cwd: PathBuf,
     pub session: Option<PathBuf>,
+    pub session_dir: Option<PathBuf>,
+    pub environment: BTreeMap<String, String>,
+}
+
+impl PiSpawnOptions {
+    pub fn new(binary: PathBuf, cwd: PathBuf) -> Self {
+        Self {
+            binary,
+            cwd,
+            session: None,
+            session_dir: None,
+            environment: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_session(mut self, session: Option<PathBuf>) -> Self {
+        self.session = session;
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -31,6 +51,7 @@ pub enum PiRpcError {
     ProcessExited,
     RequestFailed(String),
     RequestTimeout,
+    TooManyPendingRequests,
 }
 
 impl fmt::Display for PiRpcError {
@@ -42,6 +63,7 @@ impl fmt::Display for PiRpcError {
             Self::ProcessExited => formatter.write_str("Pi RPC process exited"),
             Self::RequestFailed(message) => write!(formatter, "Pi RPC request failed: {message}"),
             Self::RequestTimeout => formatter.write_str("Pi RPC request timed out"),
+            Self::TooManyPendingRequests => formatter.write_str("Pi RPC request queue is full"),
         }
     }
 }
@@ -72,6 +94,7 @@ pub struct PiRpcClient {
     pending: Arc<Mutex<HashMap<String, PendingRequest>>>,
     events: broadcast::Sender<Value>,
     next_request_id: AtomicU64,
+    running: AtomicBool,
 }
 
 impl PiRpcClient {
@@ -84,7 +107,12 @@ impl PiRpcClient {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .env("PI_CODING_AGENT", "true")
+            .envs(&options.environment)
             .kill_on_drop(true);
+        if let Some(session_dir) = &options.session_dir {
+            command.arg("--session-dir").arg(session_dir);
+        }
         if let Some(session) = &options.session {
             command.arg("--session").arg(session);
         }
@@ -102,9 +130,11 @@ impl PiRpcClient {
             pending: pending.clone(),
             events: events.clone(),
             next_request_id: AtomicU64::new(1),
+            running: AtomicBool::new(true),
         });
 
         tokio::spawn(read_stdout(stdout, pending, events));
+        tokio::spawn(monitor_child(Arc::downgrade(&client)));
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr);
             let mut record = Vec::new();
@@ -133,7 +163,31 @@ impl PiRpcClient {
         self.events.subscribe()
     }
 
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Acquire)
+    }
+
+    pub async fn request_typed(
+        &self,
+        command: &crate::pi_protocol::PiCommand,
+    ) -> Result<Value, PiRpcError> {
+        let command = serde_json::to_value(command)
+            .map_err(|error| PiRpcError::InvalidRecord(error.to_string()))?;
+        self.request(command).await
+    }
+
     pub async fn request(&self, command: Value) -> Result<Value, PiRpcError> {
+        self.request_with_timeout(command, None).await
+    }
+
+    pub async fn request_with_timeout(
+        &self,
+        command: Value,
+        request_timeout: Option<Duration>,
+    ) -> Result<Value, PiRpcError> {
+        if !self.is_running() {
+            return Err(PiRpcError::ProcessExited);
+        }
         let mut command = match command {
             Value::Object(command) => command,
             _ => {
@@ -153,7 +207,13 @@ impl PiRpcClient {
         command.insert("id".into(), Value::String(request_id.clone()));
         let encoded = encode_command(command)?;
         let (sender, receiver) = oneshot::channel();
-        self.pending.lock().await.insert(request_id.clone(), sender);
+        {
+            let mut pending = self.pending.lock().await;
+            if pending.len() >= MAX_PENDING_REQUESTS {
+                return Err(PiRpcError::TooManyPendingRequests);
+            }
+            pending.insert(request_id.clone(), sender);
+        }
 
         let write_result = async {
             let mut stdin = self.stdin.lock().await;
@@ -166,27 +226,70 @@ impl PiRpcClient {
             return Err(PiRpcError::Io(error));
         }
 
-        match timeout(REQUEST_TIMEOUT, receiver).await {
-            Ok(Ok(Ok(response))) => Ok(response),
-            Ok(Ok(Err(message))) => Err(PiRpcError::RequestFailed(message)),
-            Ok(Err(_)) => Err(PiRpcError::ProcessExited),
-            Err(_) => {
-                self.pending.lock().await.remove(&request_id);
-                Err(PiRpcError::RequestTimeout)
+        let response = if let Some(request_timeout) = request_timeout {
+            match timeout(request_timeout, receiver).await {
+                Ok(response) => response,
+                Err(_) => {
+                    self.pending.lock().await.remove(&request_id);
+                    return Err(PiRpcError::RequestTimeout);
+                }
             }
+        } else {
+            receiver.await
+        };
+        match response {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(message)) => Err(PiRpcError::RequestFailed(message)),
+            Err(_) => Err(PiRpcError::ProcessExited),
         }
     }
 
     pub async fn shutdown(&self) -> Result<(), PiRpcError> {
         let mut child = self.child.lock().await;
-        match child.try_wait()? {
-            Some(_) => Ok(()),
+        let result = match child.try_wait()? {
+            Some(status) => status,
             None => {
                 child.start_kill()?;
-                child.wait().await?;
-                Ok(())
+                child.wait().await?
             }
+        };
+        self.running.store(false, Ordering::Release);
+        debug!(status = %result, "Pi RPC process stopped");
+        Ok(())
+    }
+}
+
+async fn monitor_child(client: std::sync::Weak<PiRpcClient>) {
+    loop {
+        tokio::time::sleep(CHILD_MONITOR_INTERVAL).await;
+        let Some(client) = client.upgrade() else {
+            return;
+        };
+        if !client.is_running() {
+            return;
         }
+        let status = {
+            let mut child = client.child.lock().await;
+            match child.try_wait() {
+                Ok(status) => status,
+                Err(error) => {
+                    warn!(%error, "failed to inspect Pi RPC process");
+                    None
+                }
+            }
+        };
+        let Some(status) = status else {
+            continue;
+        };
+        if !client.running.swap(false, Ordering::AcqRel) {
+            return;
+        }
+        let _ = client.events.send(serde_json::json!({
+          "type": "pico_pi_process_exited",
+          "exitCode": status.code(),
+          "success": status.success()
+        }));
+        return;
     }
 }
 
@@ -225,9 +328,6 @@ async fn read_stdout(
     for sender in waiting {
         let _ = sender.send(Err("Pi RPC process exited".into()));
     }
-    let _ = events.send(serde_json::json!({
-      "type": "pico_pi_process_exited"
-    }));
 }
 
 async fn dispatch_record(
@@ -295,6 +395,40 @@ pub async fn detect_pi_version(binary: &PathBuf) -> Result<String, PiRpcError> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    fn fake_pi(exit_on_command: bool) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = std::env::temp_dir().join(format!(
+            "pico-fake-pi-{}-{}",
+            std::process::id(),
+            NEXT_TEST_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&directory).expect("create fake Pi directory");
+        let path = directory.join("pi");
+        let exit = if exit_on_command { "exit 7" } else { "" };
+        std::fs::write(
+            &path,
+            format!(
+                r#"#!/bin/sh
+while IFS= read -r line; do
+  {exit}
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+  kind=$(printf '%s' "$line" | sed -n 's/.*"type":"\([^"]*\)".*/\1/p')
+  printf '{{"id":"%s","type":"response","command":"%s","success":true,"data":{{"ok":true}}}}\n' "$id" "$kind"
+  printf '{{"type":"agent_settled"}}\n'
+done
+"#
+            ),
+        )
+        .expect("write fake Pi");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake Pi executable");
+        (directory, path)
+    }
+
+    #[cfg(unix)]
+    static NEXT_TEST_ID: AtomicU64 = AtomicU64::new(1);
+
     #[test]
     fn strict_jsonl_keeps_unicode_line_separators_inside_json() {
         let record = b"{\"type\":\"message\",\"text\":\"before\\u2028after\\u2029done\"}\n";
@@ -317,5 +451,60 @@ mod tests {
         let encoded = encode_command(command).expect("encode command");
         assert!(encoded.ends_with(b"\n"));
         assert_eq!(encoded.iter().filter(|byte| **byte == b'\n').count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn typed_commands_and_events_work_with_a_child_process() {
+        let (directory, binary) = fake_pi(false);
+        let client = PiRpcClient::spawn(PiSpawnOptions::new(binary, directory.clone()))
+            .await
+            .expect("spawn fake Pi");
+        let mut events = client.subscribe();
+        let response = client
+            .request_typed(&crate::pi_protocol::PiCommand::GetState)
+            .await
+            .expect("get state");
+        assert_eq!(response["success"], true);
+        assert_eq!(response["command"], "get_state");
+        let event = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("event timeout")
+            .expect("event");
+        assert_eq!(event["type"], "agent_settled");
+        client.shutdown().await.expect("shutdown");
+        assert!(!client.is_running());
+        std::fs::remove_dir_all(directory).expect("remove fake Pi directory");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unexpected_child_exit_fails_requests_and_emits_status() {
+        let (directory, binary) = fake_pi(true);
+        let client = PiRpcClient::spawn(PiSpawnOptions::new(binary, directory.clone()))
+            .await
+            .expect("spawn fake Pi");
+        let mut events = client.subscribe();
+        let error = client
+            .request_typed(&crate::pi_protocol::PiCommand::GetState)
+            .await
+            .expect_err("request should fail");
+        assert!(matches!(
+            error,
+            PiRpcError::ProcessExited | PiRpcError::RequestFailed(_)
+        ));
+        let event = timeout(Duration::from_secs(2), async {
+            loop {
+                let event = events.recv().await.expect("event");
+                if event["type"] == "pico_pi_process_exited" {
+                    return event;
+                }
+            }
+        })
+        .await
+        .expect("exit event timeout");
+        assert_eq!(event["exitCode"], 7);
+        assert_eq!(event["success"], false);
+        std::fs::remove_dir_all(directory).expect("remove fake Pi directory");
     }
 }

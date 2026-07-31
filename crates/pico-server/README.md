@@ -40,6 +40,7 @@ server a native binary.
 
 ```bash
 cargo test --workspace
+pnpm fetch:pi-standalone
 cargo run -p pico-server -- pi-smoke --cwd .
 cargo run -p pico-server -- serve --port 3142
 cargo run -p pico-server -- status
@@ -54,10 +55,11 @@ Implemented:
 - stale-instance and duplicate-server protection
 - graceful SIGINT/SIGTERM/control-socket shutdown
 - server state/process-runtime separation
-- Pi executable discovery and version reporting
-- strict LF-delimited Pi RPC transport
-- correlated concurrent RPC commands
-- Pi event broadcast
+- adjacent bundled-Pi discovery, version reporting, and checksum-verified downloads
+- strict LF-delimited typed Pi RPC transport
+- correlated bounded concurrent RPC commands without unsafe global timeouts
+- Pi event broadcast and unexpected-exit reporting
+- persisted Pi session paths and process restoration after server restart
 - experimental session creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, Host/Origin validation, and request size bounds

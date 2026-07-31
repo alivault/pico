@@ -32,11 +32,9 @@ impl RuntimeRegistry {
         cwd: PathBuf,
         session: Option<PathBuf>,
     ) -> Result<Arc<PiRpcClient>, PiRpcError> {
-        let client = PiRpcClient::spawn(PiSpawnOptions {
-            binary: self.pi_binary.clone(),
-            cwd,
-            session,
-        })
+        let client = PiRpcClient::spawn(
+            PiSpawnOptions::new(self.pi_binary.clone(), cwd).with_session(session),
+        )
         .await?;
         self.sessions.write().await.insert(id, client.clone());
         Ok(client)

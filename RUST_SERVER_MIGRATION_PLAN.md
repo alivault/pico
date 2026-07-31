@@ -44,15 +44,15 @@ A phase is complete only when its tests pass and the phase is committed.
 
 ## 3. Production Pi process runtime
 
-- [ ] Replace arbitrary experimental commands with typed Pi RPC commands/events.
-- [ ] Bundle/discover architecture-matched standalone Pi binaries with checksums.
-- [ ] Manage one Pi child per active/draft session with bounded queues.
-- [ ] Correlate commands without imposing short timeouts on long operations.
-- [ ] Translate process exit into session status and reconnect-safe errors.
-- [ ] Resume saved Pi session paths after Pico server restart.
-- [ ] Preserve Pi cwd, session directory, environment, extensions, skills,
+- [x] Replace arbitrary experimental commands with typed Pi RPC commands/events.
+- [x] Bundle/discover architecture-matched standalone Pi binaries with checksums.
+- [x] Manage one Pi child per active/draft session with bounded queues.
+- [x] Correlate commands without imposing short timeouts on long operations.
+- [x] Translate process exit into session status and reconnect-safe errors.
+- [x] Resume saved Pi session paths after Pico server restart.
+- [x] Preserve Pi cwd, session directory, environment, extensions, skills,
       prompts, settings, and provider credential paths.
-- [ ] Implement full child cleanup and no-orphan process tests.
+- [x] Implement full child cleanup and no-orphan process tests.
 
 ## 4. Session index, viewer contexts, and SSE
 
