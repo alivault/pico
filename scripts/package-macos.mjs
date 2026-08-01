@@ -240,7 +240,7 @@ if (existsSync(frameworksRoot)) {
 }
 sign(
   appPath,
-  join(root, "apps/apple/Pico/Pico/Resources/Pico-macOS.entitlements")
+  join(root, "apps/apple/Pico/Pico/Resources/Pico-macOS-Direct.entitlements")
 )
 run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath])
 
