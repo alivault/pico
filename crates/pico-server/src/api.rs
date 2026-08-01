@@ -562,7 +562,6 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     for (host, listener) in listeners {
         let address = listener.local_addr()?;
         let policy = Arc::new(RequestPolicy::new(
-            host,
             config.port,
             config.allowed_origins.clone(),
         ));

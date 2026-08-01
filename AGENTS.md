@@ -247,7 +247,7 @@ There are intentionally no TypeScript server routes. Browser API calls use same-
 - `crates/pico-server/src/network_config.rs`
   - private persistent configuration for one optional exact-address remote listener while preserving loopback access
 - `crates/pico-server/src/static_assets.rs` and `security.rs`
-  - safe static SPA serving, cache/ETag/HEAD behavior, per-listener Host/Origin policy, and loopback defaults
+  - safe static SPA serving, cache/ETag/HEAD behavior, permissive valid Host names with same-origin/explicit Origin checks, and loopback defaults
 - `bin/pico.mjs` and `bin/native-runtime.mjs`
   - npm launcher, architecture-specific checksum-verified native download, compatible attachment, and safe updates
 

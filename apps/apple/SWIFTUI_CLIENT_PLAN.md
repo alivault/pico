@@ -112,7 +112,7 @@ address:
 1. The server always listens on `127.0.0.1:3141`.
 2. The user explicitly enters the additional bind address.
 3. Wildcard, loopback, multicast, and broadcast remote addresses are rejected.
-4. Rust applies the normal Host/Origin policy independently to each listener.
+4. Rust accepts any syntactically valid hostname on each listener while retaining same-origin and explicit Origin checks.
 5. If the remote interface is unavailable, Pico remains available on loopback.
 6. The menu app applies changes through the bundled Rust CLI and performs a
    drain-safe `launchd` restart.

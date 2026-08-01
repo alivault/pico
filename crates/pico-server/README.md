@@ -131,8 +131,8 @@ Implemented:
   new prompts while allowing active Pi runs and queued follow-ups to settle
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
-- loopback defaults, exact-address optional remote listeners, Host/Origin
-  validation, and request size bounds
+- loopback defaults, exact-address optional remote listeners, valid hostname
+  authorities, same-origin/explicit Origin validation, and request size bounds
 - private persistent network configuration with CLI and Pico Server menu-bar
   controls
 - daily structured logs and atomically persisted lifecycle state

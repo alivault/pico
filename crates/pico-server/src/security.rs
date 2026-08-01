@@ -1,9 +1,9 @@
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::header::{HOST, ORIGIN};
+use axum::http::uri::Authority;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -13,15 +13,13 @@ use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct RequestPolicy {
-    bind_host: IpAddr,
     bind_port: u16,
     allowed_origins: Vec<String>,
 }
 
 impl RequestPolicy {
-    pub fn new(bind_host: IpAddr, bind_port: u16, allowed_origins: Vec<String>) -> Self {
+    pub fn new(bind_port: u16, allowed_origins: Vec<String>) -> Self {
         Self {
-            bind_host,
             bind_port,
             allowed_origins: allowed_origins
                 .into_iter()
@@ -31,17 +29,19 @@ impl RequestPolicy {
     }
 
     fn allows_host(&self, authority: &str) -> bool {
-        let host = authority_host(authority);
-        if self.bind_host.is_loopback() {
-            return matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1");
-        }
-        host == self.bind_host.to_string()
-            || self.allowed_origins.iter().any(|origin| {
-                Url::parse(origin)
-                    .ok()
-                    .and_then(|url| url.host_str().map(str::to_string))
-                    .is_some_and(|allowed| allowed == host)
-            })
+        let port_was_specified = if authority.starts_with('[') {
+            authority
+                .split_once(']')
+                .is_some_and(|(_, suffix)| suffix.starts_with(':'))
+        } else {
+            authority.contains(':')
+        };
+        let Ok(authority) = authority.parse::<Authority>() else {
+            return false;
+        };
+        !authority.host().is_empty()
+            && !authority.as_str().contains('@')
+            && (!port_was_specified || authority.port_u16().is_some())
     }
 
     fn allows_origin(&self, origin: &str, request_authority: &str) -> bool {
@@ -125,24 +125,35 @@ fn authority_port(authority: &str) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
-    fn loopback_policy_rejects_dns_rebinding_hosts() {
-        let policy = RequestPolicy::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3141, Vec::new());
-        assert!(policy.allows_host("localhost:3141"));
-        assert!(policy.allows_host("127.0.0.1:3141"));
-        assert!(policy.allows_host("[::1]:3141"));
-        assert!(!policy.allows_host("attacker.example"));
+    fn valid_hostname_authorities_are_allowed() {
+        let policy = RequestPolicy::new(3141, Vec::new());
+        for authority in [
+            "localhost:3141",
+            "127.0.0.1:3141",
+            "[::1]:3141",
+            "macbook-pro:3141",
+            "macbook-pro.example.ts.net:3141",
+            "attacker.example:3141",
+        ] {
+            assert!(policy.allows_host(authority), "rejected {authority}");
+        }
+        for authority in [
+            "",
+            "bad host",
+            "https://macbook-pro:3141",
+            "macbook-pro:invalid",
+            "user@macbook-pro:3141",
+            "macbook-pro:99999",
+        ] {
+            assert!(!policy.allows_host(authority), "allowed {authority}");
+        }
     }
 
     #[test]
     fn same_origin_and_explicit_origins_are_allowed() {
-        let policy = RequestPolicy::new(
-            IpAddr::V4(Ipv4Addr::LOCALHOST),
-            3141,
-            vec!["https://trusted.example".into()],
-        );
+        let policy = RequestPolicy::new(3141, vec!["https://trusted.example".into()]);
         assert!(policy.allows_origin("http://localhost:3141", "localhost:3141"));
         assert!(policy.allows_origin("https://trusted.example", "localhost:3141"));
         assert!(!policy.allows_origin("https://attacker.example", "localhost:3141"));

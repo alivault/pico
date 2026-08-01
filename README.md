@@ -156,16 +156,20 @@ Pico client connect without SSH or CLI setup:
 2. Enable **Allow remote connections**.
 3. Enter one specific private or VPN interface IP address.
 4. Apply the setting and allow the server to drain and restart.
-5. Enter that IP address as the host in Pico on the other Mac, iPhone, or iPad.
+5. Enter that IP address or a hostname that resolves to it in Pico on the other
+   Mac, iPhone, or iPad.
 
 Pico continues listening on `127.0.0.1:3141` and adds the configured address on
-port `3141`. Browser clients can open `http://<address>:3141` directly. If the
-configured interface is unavailable, local Pico access remains available and
-the menu app reports that the remote listener could not start.
+port `3141`. Browser clients can open `http://<address>:3141` or a resolvable
+hostname such as `http://macbook-pro:3141`. If the configured interface is
+unavailable, local Pico access remains available and the menu app reports that
+the remote listener could not start.
 
-This mode intentionally has no Pico-level authentication. Use only an exact
-address protected by a private network you trust, such as a VPN interface.
-Never use `0.0.0.0` or expose port `3141` to the public internet.
+This mode intentionally has no Pico-level authentication and accepts any valid
+HTTP hostname on its exact listeners. Use only an address protected by a private
+network you trust, such as a VPN interface, and treat every device and browser
+on that network as trusted. Never use `0.0.0.0` or expose port `3141` to the
+public internet.
 
 Run the shared native tests on macOS:
 
