@@ -193,17 +193,27 @@ universal(
   join(root, "target/x86_64-apple-darwin/release/pico-server")
 )
 universal(join(serverRoot, "pico-pi-bridge"), bridgeArm64, bridgeX64)
-universal(
-  join(serverRoot, "pi"),
+const piArm64 = join(workRoot, "pi-arm64")
+const piX64 = join(workRoot, "pi-x64")
+cpSync(
   join(
     root,
     `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-arm64/pi/pi`
   ),
+  piArm64
+)
+cpSync(
   join(
     root,
     `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-x64/pi/pi`
-  )
+  ),
+  piX64
 )
+// Pi's standalone archives contain modified Bun executables whose inherited
+// signatures do not verify. Normalize temporary copies before lipo reads them.
+sign(piArm64)
+sign(piX64)
+universal(join(serverRoot, "pi"), piArm64, piX64)
 cpSync(join(root, ".output/public"), join(serverRoot, "web"), {
   recursive: true,
 })
