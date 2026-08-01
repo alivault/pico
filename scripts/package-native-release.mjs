@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
@@ -68,6 +69,15 @@ function run(command, args, options = {}) {
   }
 }
 
+function copyPiRuntimeSupport(sourceRoot, destinationRoot) {
+  for (const entry of readdirSync(sourceRoot)) {
+    if (entry === "pi") continue
+    cpSync(join(sourceRoot, entry), join(destinationRoot, entry), {
+      recursive: true,
+    })
+  }
+}
+
 const target = readTarget()
 const targetInfo = targets[target]
 const version = packageJson.version
@@ -109,6 +119,7 @@ run("node", ["scripts/fetch-pi-standalone.mjs"], {
 })
 
 const piVersion = packageJson.devDependencies["@earendil-works/pi-coding-agent"]
+const piRuntimeRoot = join(root, "artifacts", "pi", piVersion, target, "pi")
 const serverPath = join(
   root,
   "target",
@@ -116,7 +127,7 @@ const serverPath = join(
   "release",
   "pico-server"
 )
-const piPath = join(root, "artifacts", "pi", piVersion, target, "pi", "pi")
+const piPath = join(piRuntimeRoot, "pi")
 for (const [source, destination] of [
   [serverPath, join(staging, "pico-server")],
   [bridgePath, join(staging, "pico-pi-bridge")],
@@ -125,6 +136,17 @@ for (const [source, destination] of [
   if (!existsSync(source)) throw new Error(`Missing native artifact: ${source}`)
   cpSync(source, destination)
   chmodSync(destination, 0o755)
+}
+copyPiRuntimeSupport(piRuntimeRoot, staging)
+for (const required of [
+  "package.json",
+  "photon_rs_bg.wasm",
+  "theme/dark.json",
+  "theme/light.json",
+]) {
+  if (!existsSync(join(staging, required))) {
+    throw new Error(`Packaged Pi runtime omitted ${required}`)
+  }
 }
 cpSync(join(root, ".output", "public"), join(staging, "web"), {
   recursive: true,

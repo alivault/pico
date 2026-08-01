@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
 } from "node:fs"
@@ -94,6 +95,15 @@ function universal(outputPath, arm64Path, x64Path) {
     throw new Error(
       `Universal binary is missing an architecture: ${outputPath}`
     )
+  }
+}
+
+function copyPiRuntimeSupport(sourceRoot, destinationRoot) {
+  for (const entry of readdirSync(sourceRoot)) {
+    if (entry === "pi") continue
+    cpSync(join(sourceRoot, entry), join(destinationRoot, entry), {
+      recursive: true,
+    })
   }
 }
 
@@ -193,27 +203,29 @@ universal(
   join(root, "target/x86_64-apple-darwin/release/pico-server")
 )
 universal(join(serverRoot, "pico-pi-bridge"), bridgeArm64, bridgeX64)
+const piVersion = packageJson.devDependencies["@earendil-works/pi-coding-agent"]
+const piRuntimeArm64 = join(root, `artifacts/pi/${piVersion}/darwin-arm64/pi`)
+const piRuntimeX64 = join(root, `artifacts/pi/${piVersion}/darwin-x64/pi`)
 const piArm64 = join(workRoot, "pi-arm64")
 const piX64 = join(workRoot, "pi-x64")
-cpSync(
-  join(
-    root,
-    `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-arm64/pi/pi`
-  ),
-  piArm64
-)
-cpSync(
-  join(
-    root,
-    `artifacts/pi/${packageJson.devDependencies["@earendil-works/pi-coding-agent"]}/darwin-x64/pi/pi`
-  ),
-  piX64
-)
+cpSync(join(piRuntimeArm64, "pi"), piArm64)
+cpSync(join(piRuntimeX64, "pi"), piX64)
 // Pi's standalone archives contain modified Bun executables whose inherited
 // signatures do not verify. Normalize temporary copies before lipo reads them.
 sign(piArm64)
 sign(piX64)
 universal(join(serverRoot, "pi"), piArm64, piX64)
+copyPiRuntimeSupport(piRuntimeArm64, serverRoot)
+for (const required of [
+  "package.json",
+  "photon_rs_bg.wasm",
+  "theme/dark.json",
+  "theme/light.json",
+]) {
+  if (!existsSync(join(serverRoot, required))) {
+    throw new Error(`Packaged Pi runtime omitted ${required}`)
+  }
+}
 cpSync(join(root, ".output/public"), join(serverRoot, "web"), {
   recursive: true,
 })
@@ -234,6 +246,12 @@ setBundleVersions(join(menuApp, "Contents/Info.plist"))
 
 for (const binary of ["pico-server", "pico-pi-bridge", "pi"]) {
   sign(join(serverRoot, binary))
+}
+const packagedPiVersion = output(join(serverRoot, "pi"), ["--version"])
+if (packagedPiVersion !== piVersion) {
+  throw new Error(
+    `Packaged Pi reported ${packagedPiVersion || "no version"}; expected ${piVersion}`
+  )
 }
 sign(menuApp)
 const frameworksRoot = join(appPath, "Contents/Frameworks")
