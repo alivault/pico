@@ -27,6 +27,10 @@ final class PicoMenuModel {
     isServerRunning ? "Server running" : "Server unavailable"
   }
 
+  var menuBarAccessibilityLabel: String {
+    "Pico \(statusText.lowercased())"
+  }
+
   var statusSymbol: String {
     isServerRunning ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
   }

@@ -84,9 +84,6 @@ struct PicoMenuContentView: View {
     }
     .padding()
     .frame(width: 360)
-    .task {
-      model.start()
-    }
   }
 }
 

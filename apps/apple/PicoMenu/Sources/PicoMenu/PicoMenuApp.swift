@@ -13,7 +13,10 @@ struct PicoMenuApp: App {
           ? "bubble.left.and.bubble.right.fill"
           : "exclamationmark.bubble"
       )
-      .accessibilityLabel("Pico Server")
+      .accessibilityLabel(Text(model.menuBarAccessibilityLabel))
+      .task {
+        model.start()
+      }
     }
     .menuBarExtraStyle(.window)
   }
