@@ -11,7 +11,7 @@ pub struct ServerEvent {
     pub sequence: u64,
     pub context_id: Option<String>,
     pub session_id: Option<String>,
-    pub payload: Value,
+    pub payload: Arc<Value>,
 }
 
 #[derive(Clone)]
@@ -49,6 +49,14 @@ impl EventHub {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             state.next_sequence = state.next_sequence.saturating_add(1);
+            let payload = Arc::new(payload);
+            if payload.get("type").and_then(Value::as_str) == Some("state_sync") {
+                state.events.retain(|event| {
+                    event.payload.get("type").and_then(Value::as_str) != Some("state_sync")
+                        || event.context_id != context_id
+                        || event.session_id != session_id
+                });
+            }
             let event = ServerEvent {
                 sequence: state.next_sequence,
                 context_id,
@@ -110,6 +118,32 @@ mod tests {
         assert_eq!(replay.len(), 1);
         assert_eq!(replay[0].sequence, 2);
         assert_eq!(replay[0].payload["type"], "two");
+    }
+
+    #[test]
+    fn state_sync_replay_keeps_only_the_latest_payload_per_session() {
+        let hub = EventHub::default();
+        let first = hub.push(
+            None,
+            Some("session-one".into()),
+            serde_json::json!({"type":"state_sync","revision":1}),
+        );
+        let second = hub.push(
+            None,
+            Some("session-one".into()),
+            serde_json::json!({"type":"state_sync","revision":2}),
+        );
+        hub.push(
+            None,
+            Some("session-two".into()),
+            serde_json::json!({"type":"state_sync","revision":1}),
+        );
+
+        let replay = hub.events_after(first.sequence).expect("replay");
+        assert_eq!(replay.len(), 2);
+        assert_eq!(replay[0].sequence, second.sequence);
+        assert_eq!(replay[0].payload["revision"], 2);
+        assert!(Arc::strong_count(&replay[0].payload) >= 2);
     }
 
     #[test]

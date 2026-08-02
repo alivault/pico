@@ -19,7 +19,7 @@ use futures_util::stream;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{watch, Mutex, RwLock};
 use tokio::task::JoinSet;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -55,6 +55,7 @@ use crate::terminal::{TerminalEvent, TerminalManager};
 struct ServerContext {
     app: Arc<RwLock<AppState>>,
     runtimes: Arc<RuntimeRegistry>,
+    runtime_start_lock: Arc<Mutex<()>>,
     started_at: Instant,
     pi_version: Option<String>,
     pi_error: Option<String>,
@@ -62,6 +63,7 @@ struct ServerContext {
     active_work: Arc<ActiveWorkTracker>,
     previous_clean_shutdown: Option<bool>,
     state_file: PathBuf,
+    persistence_lock: Arc<Mutex<()>>,
     port: u16,
     event_hub: EventHub,
     session_store: Arc<SessionStore>,
@@ -496,13 +498,16 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     #[cfg(unix)]
     let control = ControlServer::bind(&config.paths.control_socket).await?;
     let previous_snapshot = persistence::load(&config.paths.state_file)?;
-    let restored_sessions = previous_snapshot
-        .as_ref()
-        .map(|snapshot| snapshot.sessions.clone())
-        .unwrap_or_default();
+    let restored_state = AppState::from_sessions(
+        previous_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.sessions.clone())
+            .unwrap_or_default(),
+    );
+    let restored_sessions = restored_state.sessions();
     persistence::store(
         &config.paths.state_file,
-        &ServerSnapshot::started(config.port, restored_sessions.clone()),
+        &ServerSnapshot::started(config.port, restored_sessions),
     )?;
 
     let (pi_version, pi_error) = match detect_pi_version(&config.pi_binary).await {
@@ -514,8 +519,9 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         config.port,
     )));
     let context = ServerContext {
-        app: Arc::new(RwLock::new(AppState::from_sessions(restored_sessions))),
+        app: Arc::new(RwLock::new(restored_state)),
         runtimes: Arc::new(RuntimeRegistry::new(config.pi_binary.clone())),
+        runtime_start_lock: Arc::new(Mutex::new(())),
         started_at: Instant::now(),
         pi_version,
         pi_error,
@@ -523,6 +529,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         active_work: Arc::new(ActiveWorkTracker::default()),
         previous_clean_shutdown: previous_snapshot.map(|snapshot| snapshot.clean_shutdown),
         state_file: config.paths.state_file.clone(),
+        persistence_lock: Arc::new(Mutex::new(())),
         port: config.port,
         event_hub: EventHub::default(),
         session_store: Arc::new(SessionStore::new(&config.agent_dir)),
@@ -689,7 +696,16 @@ async fn restore_session_processes(context: &ServerContext) {
             .spawn(session.id.clone(), session.cwd.clone(), Some(session_path))
             .await
         {
-            Ok(runtime) => attach_pi_events((*context).clone(), session.id.clone(), runtime),
+            Ok(runtime) if runtime.spawned => {
+                attach_pi_events((*context).clone(), session.id.clone(), runtime.client);
+            }
+            Ok(runtime) => {
+                tracing::warn!(
+                    runtime_id = %session.id,
+                    owner_runtime_id = %runtime.owner_id,
+                    "skipped duplicate restored Pi session process"
+                );
+            }
             Err(error) => {
                 tracing::warn!(
                     %error,
@@ -1146,7 +1162,7 @@ fn content_text(value: &Value) -> String {
 async fn session_document_for_runtime(
     context: &ServerContext,
     runtime_id: &str,
-) -> Option<SessionDocument> {
+) -> Option<Arc<SessionDocument>> {
     let record = context
         .app
         .read()
@@ -1232,7 +1248,7 @@ async fn state_payload_for_runtime(
         None
     };
     let mut payload = build_state_sync(
-        document.as_ref(),
+        document.as_deref(),
         StateSyncOptions {
             fallback_session_id: Some(public_session_id),
             fallback_session_key: None,
@@ -1261,6 +1277,7 @@ async fn state_payload_for_runtime(
 }
 
 async fn persist_sessions(context: &ServerContext) -> Result<(), ApiError> {
+    let _persistence_guard = context.persistence_lock.lock().await;
     let sessions = context.app.read().await.sessions();
     let mut snapshot = persistence::load(&context.state_file)
         .map_err(|error| ApiError::internal(error.to_string()))?
@@ -1470,7 +1487,7 @@ async fn pico_events(
         None
     };
     let state_payload = build_state_sync(
-        document.as_ref(),
+        document.as_deref(),
         StateSyncOptions {
             fallback_session_id: selected_session_id.as_deref(),
             fallback_session_key: query.session_key.as_deref(),
@@ -1490,7 +1507,7 @@ async fn pico_events(
         .unwrap_or_default();
     let sessions_payload = build_sessions_payload(
         &context,
-        document.as_ref(),
+        document.as_deref(),
         &query.sidebar_directories,
         &unread_session_ids,
     )?;
@@ -1530,13 +1547,12 @@ async fn pico_events(
             if !event_matches(&event, &context_id, live_session_id.as_deref()) {
                 return None;
             }
-            let payload = if event.payload.get("type").and_then(Value::as_str) == Some("state_sync")
-            {
-                patch_state_sync(&mut previous_items, &event.payload)
+            if event.payload.get("type").and_then(Value::as_str) == Some("state_sync") {
+                let payload = patch_state_sync(&mut previous_items, &event.payload);
+                Some(Ok(sse_event(&payload, Some(event.sequence))))
             } else {
-                event.payload
-            };
-            Some(Ok(sse_event(&payload, Some(event.sequence))))
+                Some(Ok(sse_event(&event.payload, Some(event.sequence))))
+            }
         }
         Err(error) => Some(Ok(sse_event(
             &json!({
@@ -1560,23 +1576,21 @@ async fn directory_sessions(
     Query(query): Query<DirectoryQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let directory = normalized_directory(&query.directory)?;
-    let documents = context
-        .session_store
-        .list_directory(&directory)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let indexed = indexed_directory_sessions(&context.session_store, &directory)?;
     let unread_session_ids = viewer_unread_ids(&context, query.context.as_deref()).await;
-    let offset = query.offset.unwrap_or(0).min(documents.len());
+    let offset = query.offset.unwrap_or(0).min(indexed.len());
     let limit = query.limit.filter(|limit| *limit > 0).unwrap_or(5).min(100);
-    let sessions = documents
-        .iter()
-        .skip(offset)
-        .take(limit)
-        .map(|document| session_summary(document, &unread_session_ids))
+    let end = indexed.len().min(offset + limit);
+    let sessions = context
+        .session_store
+        .summaries(&indexed[offset..end])
+        .into_iter()
+        .map(|summary| session_summary(summary, &unread_session_ids))
         .collect::<Vec<_>>();
     Ok(Json(json!({
       "ok": true,
       "directory": directory,
-      "totalCount": documents.len(),
+      "totalCount": indexed.len(),
       "offset": offset,
       "limit": limit,
       "sessions": sessions
@@ -1588,17 +1602,20 @@ async fn directory_sessions_index(
     Query(query): Query<DirectoryQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let directory = normalized_directory(&query.directory)?;
-    let documents = context
-        .session_store
-        .list_directory(&directory)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let indexed = indexed_directory_sessions(&context.session_store, &directory)?;
     let unread_session_ids = viewer_unread_ids(&context, query.context.as_deref()).await;
+    let sessions = context
+        .session_store
+        .summaries(&indexed)
+        .into_iter()
+        .map(|summary| session_summary(summary, &unread_session_ids))
+        .collect::<Vec<_>>();
     Ok(Json(json!({
       "ok": true,
       "directory": directory,
-      "totalCount": documents.len(),
-      "revision": directory_revision(&directory, &documents, &unread_session_ids),
-      "sessions": documents.iter().map(|document| session_summary(document, &unread_session_ids)).collect::<Vec<_>>()
+      "totalCount": indexed.len(),
+      "revision": indexed_directory_revision(&directory, &indexed, &unread_session_ids),
+      "sessions": sessions
     })))
 }
 
@@ -1617,19 +1634,26 @@ async fn directory_sessions_indexes(
     if directories.is_empty() {
         return Err(ApiError::bad_request("at least one directory is required"));
     }
+    let indexed_sessions = context
+        .session_store
+        .list_index()
+        .map_err(|error| ApiError::internal(error.to_string()))?;
     let mut directory_indexes = serde_json::Map::new();
     for directory in &directories {
-        let documents = context
+        let indexed = indexed_for_directory(&indexed_sessions, directory);
+        let sessions = context
             .session_store
-            .list_directory(directory)
-            .map_err(|error| ApiError::internal(error.to_string()))?;
+            .summaries(&indexed)
+            .into_iter()
+            .map(|summary| session_summary(summary, &unread_session_ids))
+            .collect::<Vec<_>>();
         directory_indexes.insert(
             directory.to_string_lossy().into_owned(),
             json!({
               "directory": directory,
-              "totalCount": documents.len(),
-              "revision": directory_revision(directory, &documents, &unread_session_ids),
-              "sessions": documents.iter().map(|document| session_summary(document, &unread_session_ids)).collect::<Vec<_>>()
+              "totalCount": indexed.len(),
+              "revision": indexed_directory_revision(directory, &indexed, &unread_session_ids),
+              "sessions": sessions
             }),
         );
     }
@@ -1777,14 +1801,19 @@ fn build_sessions_payload(
     let mut directory_indexes = serde_json::Map::new();
     for directory in index_directories {
         let indexed_entries = indexed_for_directory(&indexed_sessions, &directory);
-        let entries = load_indexed_documents(&context.session_store, &indexed_entries);
+        let summaries = context
+            .session_store
+            .summaries(&indexed_entries)
+            .into_iter()
+            .map(|summary| session_summary(summary, unread_session_ids))
+            .collect::<Vec<_>>();
         directory_indexes.insert(
             directory.to_string_lossy().into_owned(),
             json!({
               "directory": directory,
               "totalCount": indexed_entries.len(),
               "revision": indexed_directory_revision(&directory, &indexed_entries, unread_session_ids),
-              "sessions": entries.iter().map(|document| session_summary(document, unread_session_ids)).collect::<Vec<_>>()
+              "sessions": summaries
             }),
         );
     }
@@ -1824,11 +1853,15 @@ async fn viewer_unread_ids(context: &ServerContext, context_id: Option<&str>) ->
 }
 
 fn session_summary(
-    document: &SessionDocument,
+    mut summary: crate::protocol::SessionListEntry,
     unread_session_ids: &BTreeSet<String>,
 ) -> crate::protocol::SessionListEntry {
-    let mut summary = document.summary();
-    summary.unread = Some(unread_session_ids.contains(&document.header.id));
+    summary.unread = Some(
+        summary
+            .id
+            .as_ref()
+            .is_some_and(|id| unread_session_ids.contains(id)),
+    );
     summary
 }
 
@@ -1942,24 +1975,14 @@ fn indexed_for_directory(
         .collect()
 }
 
-fn load_indexed_documents(
+fn indexed_directory_sessions(
     session_store: &SessionStore,
-    indexed_sessions: &[IndexedSessionFile],
-) -> Vec<SessionDocument> {
-    indexed_sessions
-        .iter()
-        .filter_map(|indexed| match session_store.load(&indexed.path) {
-            Ok(document) => Some(document),
-            Err(error) => {
-                tracing::warn!(
-                    %error,
-                    path = %indexed.path.display(),
-                    "skipping unreadable Pi session"
-                );
-                None
-            }
-        })
-        .collect()
+    directory: &Path,
+) -> Result<Vec<IndexedSessionFile>, ApiError> {
+    session_store
+        .list_index()
+        .map(|indexed| indexed_for_directory(&indexed, directory))
+        .map_err(|error| ApiError::internal(error.to_string()))
 }
 
 fn indexed_directory_revision(
@@ -1974,23 +1997,6 @@ fn indexed_directory_revision(
                 indexed.header.id.clone(),
                 indexed.revision.clone(),
                 unread_session_ids.contains(&indexed.header.id),
-            )
-        }),
-    )
-}
-
-fn directory_revision(
-    directory: &Path,
-    documents: &[SessionDocument],
-    unread_session_ids: &BTreeSet<String>,
-) -> String {
-    revision_for_sessions(
-        directory,
-        documents.iter().map(|document| {
-            (
-                document.header.id.clone(),
-                document.revision(),
-                unread_session_ids.contains(&document.header.id),
             )
         }),
     )
@@ -2260,18 +2266,35 @@ async fn select_session(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<Value>, ApiError> {
     let target = parse_request_target(raw_query.as_deref());
-    let resolved = resolve_runtime(&context, &target, false).await?;
-    let public_id = resolved
-        .record
+    let record = resolve_selected_record(&context, &target).await?;
+    let public_id = record
         .pi_session_id
         .clone()
-        .unwrap_or_else(|| resolved.record.id.clone());
+        .unwrap_or_else(|| record.id.clone());
     context
         .app
         .write()
         .await
         .select_session(&target.context_id, public_id);
-    emit_session_state(&context, &resolved.record.id, false, None).await;
+
+    if context.runtimes.get(&record.id).await.is_none() {
+        let background_context = context.clone();
+        let background_record = record.clone();
+        let background_runtime_id = record.id.clone();
+        tokio::spawn(async move {
+            match start_runtime_record(&background_context, background_record).await {
+                Ok(resolved) => {
+                    emit_session_state(&background_context, &resolved.record.id, false, None).await;
+                }
+                Err(error) => tracing::warn!(
+                    error = %error.message,
+                    runtime_id = %background_runtime_id,
+                    "failed to start selected Pi session runtime"
+                ),
+            }
+        });
+    }
+    emit_session_state(&context, &record.id, false, None).await;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -2829,10 +2852,7 @@ async fn cleanup_directory_sessions(
     let directory =
         project_files::resolve_directory(request.directory.to_string_lossy().as_ref(), &base_cwd)
             .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    let documents = context
-        .session_store
-        .list_directory(&directory)
-        .map_err(|error| ApiError::internal(error.to_string()))?;
+    let indexed = indexed_directory_sessions(&context.session_store, &directory)?;
     let cutoff = time::OffsetDateTime::now_utc()
         - time::Duration::milliseconds(i64::try_from(request.older_than_ms).unwrap_or(i64::MAX));
     let active_paths = context
@@ -2844,24 +2864,25 @@ async fn cleanup_directory_sessions(
         .filter(|record| request.include_active_session || !record.draft)
         .filter_map(|record| record.session_path)
         .collect::<HashSet<_>>();
-    let matching = documents
+    let matching = indexed
         .into_iter()
-        .filter_map(|document| {
-            if !request.include_active_session && active_paths.contains(&document.path) {
+        .filter_map(|indexed| {
+            if !request.include_active_session && active_paths.contains(&indexed.path) {
                 return None;
             }
-            let activity = document.modified.as_deref().and_then(|modified| {
+            let activity = indexed.modified.as_deref().and_then(|modified| {
                 time::OffsetDateTime::parse(
                     modified,
                     &time::format_description::well_known::Rfc3339,
                 )
                 .ok()
             })?;
-            (activity < cutoff).then(|| {
-                let mut summary = document.summary();
-                summary.unread = Some(false);
-                (document.path, activity, summary)
-            })
+            if activity >= cutoff {
+                return None;
+            }
+            let mut summary = context.session_store.summary(&indexed).ok()?;
+            summary.unread = Some(false);
+            Some((indexed.path, activity, summary))
         })
         .collect::<Vec<_>>();
     let dry_run = request.dry_run != Some(false);
@@ -3919,7 +3940,11 @@ async fn request_base_cwd(
     target: &RequestTarget,
 ) -> Result<PathBuf, ApiError> {
     if target.session.is_some() || target.session_path.is_some() {
-        return Ok(resolve_session_document(context, target).await?.header.cwd);
+        return Ok(resolve_session_document(context, target)
+            .await?
+            .header
+            .cwd
+            .clone());
     }
     if let Some(cwd) = context.app.read().await.base_cwd(&target.context_id) {
         return Ok(cwd);
@@ -3978,11 +4003,12 @@ async fn rename_session(
                     .await?,
             )?;
         } else {
+            let document = context
+                .session_store
+                .load(&path)
+                .map_err(|error| ApiError::internal(error.to_string()))?;
             append_session_entry(
-                &context
-                    .session_store
-                    .load(&path)
-                    .map_err(|error| ApiError::internal(error.to_string()))?,
+                &document,
                 json!({"type":"session_info", "name": truncate_chars(name, 48)}),
                 None,
             )?;
@@ -4102,6 +4128,7 @@ async fn move_session(
         }
     }
     let next_path = move_session_file(&previous_path, &next_cwd, context.session_store.root())?;
+    context.session_store.invalidate(&previous_path);
     if let Some(mut record) = loaded_record {
         record.cwd = next_cwd.clone();
         record.session_path = Some(next_path.clone());
@@ -4394,6 +4421,7 @@ async fn delete_one_session(context: &ServerContext, path: &Path) -> Result<(), 
         context.app.write().await.remove_session(&record.id);
         persist_sessions(context).await?;
     }
+    context.session_store.invalidate(&path);
     trash_or_delete_file(&path).map_err(|error| ApiError::internal(error.to_string()))
 }
 
@@ -4590,6 +4618,70 @@ async fn runtime_record(
         .find(|record| record.id == runtime_id)
 }
 
+async fn resolve_selected_record(
+    context: &ServerContext,
+    target: &RequestTarget,
+) -> Result<crate::app_state::SessionRecord, ApiError> {
+    let context_selection = context
+        .app
+        .read()
+        .await
+        .context(&target.context_id)
+        .and_then(|viewer| viewer.selected_session.clone());
+    let selection = target
+        .session_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned())
+        .or_else(|| target.session.clone())
+        .or(context_selection)
+        .ok_or_else(|| ApiError::bad_request("session is required"))?;
+    if let Some(record) = context
+        .app
+        .read()
+        .await
+        .sessions()
+        .into_iter()
+        .find(|record| session_record_matches(record, &selection))
+    {
+        return Ok(record);
+    }
+
+    let indexed = context
+        .session_store
+        .find_indexed(&selection)
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .ok_or_else(|| ApiError::not_found(format!("Unknown session: {selection}")))?;
+    let (record, inserted) = {
+        let mut app = context.app.write().await;
+        if let Some(record) = app
+            .sessions()
+            .into_iter()
+            .find(|record| session_record_matches(record, &selection))
+        {
+            (record, false)
+        } else {
+            let mut record =
+                app.reserve_session(indexed.header.cwd.clone(), Some(indexed.path.clone()));
+            record.pi_session_id = Some(indexed.header.id);
+            app.insert_session(record.clone());
+            (record, true)
+        }
+    };
+    if inserted {
+        persist_sessions(context).await?;
+    }
+    Ok(record)
+}
+
+fn session_record_matches(record: &crate::app_state::SessionRecord, selection: &str) -> bool {
+    record.id == selection
+        || record.pi_session_id.as_deref() == Some(selection)
+        || record
+            .session_path
+            .as_ref()
+            .is_some_and(|path| path.to_string_lossy().as_ref() == selection)
+}
+
 async fn resolve_runtime(
     context: &ServerContext,
     target: &RequestTarget,
@@ -4644,23 +4736,23 @@ async fn resolve_runtime(
     }
 
     if let Some(selection) = selection {
-        let document = context
+        let indexed = context
             .session_store
-            .find(&selection)
+            .find_indexed(&selection)
             .map_err(|error| ApiError::internal(error.to_string()))?
             .ok_or_else(|| ApiError::not_found(format!("Unknown session: {selection}")))?;
         let mut record = context
             .app
             .write()
             .await
-            .reserve_session(document.header.cwd.clone(), Some(document.path.clone()));
-        record.pi_session_id = Some(document.header.id.clone());
+            .reserve_session(indexed.header.cwd.clone(), Some(indexed.path));
+        record.pi_session_id = Some(indexed.header.id.clone());
         let resolved = start_runtime_record(context, record).await?;
         context
             .app
             .write()
             .await
-            .select_session(&target.context_id, document.header.id);
+            .select_session(&target.context_id, indexed.header.id);
         return Ok(resolved);
     }
 
@@ -4690,7 +4782,7 @@ async fn resolve_runtime(
 async fn resolve_session_document(
     context: &ServerContext,
     target: &RequestTarget,
-) -> Result<SessionDocument, ApiError> {
+) -> Result<Arc<SessionDocument>, ApiError> {
     let context_selection = context
         .app
         .read()
@@ -4726,7 +4818,18 @@ async fn start_runtime_record(
     context: &ServerContext,
     mut record: crate::app_state::SessionRecord,
 ) -> Result<ResolvedRuntime, ApiError> {
-    let client = context
+    let _start_guard = context.runtime_start_lock.lock().await;
+    if let Some(path) = record.session_path.as_deref() {
+        if let Some((owner_id, client)) = context.runtimes.get_by_session(path).await {
+            if let Some(owner) = runtime_record(context, &owner_id).await {
+                return Ok(ResolvedRuntime {
+                    record: owner,
+                    client,
+                });
+            }
+        }
+    }
+    let runtime = context
         .runtimes
         .spawn(
             record.id.clone(),
@@ -4734,6 +4837,16 @@ async fn start_runtime_record(
             record.session_path.clone(),
         )
         .await?;
+    if runtime.owner_id != record.id {
+        let owner = runtime_record(context, &runtime.owner_id)
+            .await
+            .ok_or_else(|| ApiError::internal("Pi runtime owner record is missing"))?;
+        return Ok(ResolvedRuntime {
+            record: owner,
+            client: runtime.client,
+        });
+    }
+    let client = runtime.client;
     let state = match client.request_typed(&PiCommand::GetState).await {
         Ok(response) => pi_response_data(response),
         Err(error) => Err(error.into()),
@@ -4746,6 +4859,23 @@ async fn start_runtime_record(
         }
     };
     apply_pi_state_to_record(&mut record, &data);
+    if let Some(path) = record.session_path.as_deref() {
+        if let Some(owner_id) = context.runtimes.set_session_path(&record.id, path).await {
+            let _ = context.runtimes.remove(&record.id).await;
+            let owner = runtime_record(context, &owner_id)
+                .await
+                .ok_or_else(|| ApiError::internal("Pi runtime owner record is missing"))?;
+            let owner_client = context
+                .runtimes
+                .get(&owner_id)
+                .await
+                .ok_or_else(|| ApiError::internal("Pi runtime owner process is missing"))?;
+            return Ok(ResolvedRuntime {
+                record: owner,
+                client: owner_client,
+            });
+        }
+    }
     context.app.write().await.insert_session(record.clone());
     refresh_runtime_projection(context, &record.id, &client).await;
     attach_pi_events(context.clone(), record.id.clone(), client.clone());
@@ -4763,6 +4893,14 @@ async fn refresh_runtime_record(
         .await
         .ok_or_else(|| ApiError::not_found("session not found"))?;
     apply_pi_state_to_record(&mut record, &data);
+    if let Some(path) = record.session_path.as_deref() {
+        if let Some(owner_id) = context.runtimes.set_session_path(runtime_id, path).await {
+            let _ = context.runtimes.remove(runtime_id).await;
+            return Err(ApiError::internal(format!(
+                "Pi session is already owned by runtime {owner_id}"
+            )));
+        }
+    }
     context.app.write().await.insert_session(record);
     persist_sessions(context).await
 }
@@ -4936,39 +5074,16 @@ async fn create_session(
     if !cwd.is_dir() {
         return Err(ApiError::bad_request("cwd must be a directory"));
     }
-    let mut record = context
+    let record = context
         .app
         .write()
         .await
-        .reserve_session(cwd.clone(), request.session_path.clone());
-    let runtime = context
-        .runtimes
-        .spawn(record.id.clone(), cwd, request.session_path.clone())
-        .await?;
-    match runtime.request_typed(&PiCommand::GetState).await {
-        Ok(state) => {
-            if let Some(data) = state.get("data") {
-                if let Some(session_file) = data.get("sessionFile").and_then(Value::as_str) {
-                    record.session_path = Some(PathBuf::from(session_file));
-                }
-                record.pi_session_id = data
-                    .get("sessionId")
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
-            }
-        }
-        Err(error) => {
-            let _ = context.runtimes.remove(&record.id).await;
-            return Err(error.into());
-        }
-    }
-    context.app.write().await.insert_session(record.clone());
-    attach_pi_events(context.clone(), record.id.clone(), runtime);
-    persist_sessions(&context).await?;
+        .reserve_session(cwd, request.session_path);
+    let resolved = start_runtime_record(&context, record).await?;
 
     Ok((
         StatusCode::CREATED,
-        Json(json!({ "ok": true, "session": record })),
+        Json(json!({ "ok": true, "session": resolved.record })),
     ))
 }
 
@@ -5100,6 +5215,7 @@ mod tests {
         ServerContext {
             app: Arc::new(RwLock::new(AppState::default())),
             runtimes: Arc::new(RuntimeRegistry::new(pi_binary)),
+            runtime_start_lock: Arc::new(Mutex::new(())),
             started_at: Instant::now(),
             pi_version: Some("test".into()),
             pi_error: None,
@@ -5107,6 +5223,7 @@ mod tests {
             active_work: Arc::new(ActiveWorkTracker::default()),
             previous_clean_shutdown: Some(true),
             state_file: PathBuf::from("/tmp/pico-server-api-test-state.json"),
+            persistence_lock: Arc::new(Mutex::new(())),
             port: 3141,
             event_hub: EventHub::default(),
             session_store: Arc::new(SessionStore::new(agent_dir)),
@@ -5851,6 +5968,38 @@ for line in sys.stdin:
             .is_ok());
         context.terminals.shutdown();
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn concurrent_session_persistence_is_serialized() {
+        let root = std::env::temp_dir().join(format!(
+            "pico-persistence-concurrency-{}-{}",
+            std::process::id(),
+            time::OffsetDateTime::now_utc().unix_timestamp_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("create fixture");
+        let mut context = test_context();
+        context.state_file = root.join("server-state.json");
+        let record = context
+            .app
+            .write()
+            .await
+            .reserve_session(root.clone(), Some(root.join("session.jsonl")));
+        context.app.write().await.insert_session(record);
+
+        let mut tasks = JoinSet::new();
+        for _ in 0..8 {
+            let context = context.clone();
+            tasks.spawn(async move { persist_sessions(&context).await });
+        }
+        while let Some(result) = tasks.join_next().await {
+            result.expect("persistence task").expect("persist sessions");
+        }
+        let snapshot = persistence::load(&context.state_file)
+            .expect("load snapshot")
+            .expect("snapshot");
+        assert_eq!(snapshot.sessions.len(), 1);
+        std::fs::remove_dir_all(root).expect("remove fixture");
     }
 
     #[tokio::test]

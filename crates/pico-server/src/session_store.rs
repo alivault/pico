@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use serde::{Deserialize, Serialize};
+use serde::de::{DeserializeOwned, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -15,6 +17,9 @@ use crate::protocol::{
 
 const MAX_SESSION_FILE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SESSION_COUNT: usize = 20_000;
+const MAX_CACHED_DOCUMENTS: usize = 4;
+const MAX_CACHED_DOCUMENT_SOURCE_BYTES: u64 = 96 * 1024 * 1024;
+const SUMMARY_TEXT_CHARS: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionHeader {
@@ -29,20 +34,74 @@ pub struct SessionHeader {
     pub parent_session: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SessionDocument {
     pub path: PathBuf,
     pub header: SessionHeader,
     pub entries: Vec<Value>,
-    pub active_entries: Vec<Value>,
+    active_entry_indices: Vec<usize>,
     pub leaf_id: Option<String>,
     pub modified: Option<String>,
+    revision: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct SessionStore {
     root: PathBuf,
+    cache: Arc<Mutex<SessionCache>>,
 }
+
+#[derive(Debug, Default)]
+struct SessionCache {
+    access_counter: u64,
+    document_source_bytes: u64,
+    documents: HashMap<PathBuf, CachedDocument>,
+    summaries: HashMap<PathBuf, CachedSummary>,
+}
+
+#[derive(Debug)]
+struct CachedDocument {
+    revision: String,
+    source_bytes: u64,
+    last_access: u64,
+    document: Arc<SessionDocument>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedSummary {
+    revision: String,
+    summary: SessionListEntry,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SummaryEntry {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    id: Option<String>,
+    parent_id: Option<String>,
+    timestamp: Option<String>,
+    name: Option<String>,
+    message: Option<SummaryMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SummaryMessage {
+    role: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_summary_content")]
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SummaryContentPart {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    #[serde(default)]
+    text: BoundedText,
+}
+
+#[derive(Debug, Default)]
+struct BoundedText(String);
 
 #[derive(Debug, Clone)]
 pub struct IndexedSessionFile {
@@ -56,6 +115,7 @@ impl SessionStore {
     pub fn new(agent_dir: &Path) -> Self {
         Self {
             root: agent_dir.join("sessions"),
+            cache: Arc::new(Mutex::new(SessionCache::default())),
         }
     }
 
@@ -63,22 +123,69 @@ impl SessionStore {
         &self.root
     }
 
-    pub fn load(&self, path: &Path) -> io::Result<SessionDocument> {
-        SessionDocument::load(path)
+    pub fn load(&self, path: &Path) -> io::Result<Arc<SessionDocument>> {
+        let metadata = supported_session_metadata(path)?;
+        let revision = file_revision(metadata.len(), metadata.modified().ok());
+        {
+            let mut cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            cache.access_counter = cache.access_counter.saturating_add(1);
+            let access = cache.access_counter;
+            if let Some(cached) = cache.documents.get_mut(path) {
+                if cached.revision == revision {
+                    cached.last_access = access;
+                    return Ok(cached.document.clone());
+                }
+            }
+        }
+
+        let document = Arc::new(SessionDocument::load_with_metadata(
+            path,
+            metadata,
+            revision.clone(),
+        )?);
+        let source_bytes = std::fs::metadata(path)?.len();
+        let mut cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        cache.access_counter = cache.access_counter.saturating_add(1);
+        let access = cache.access_counter;
+        if let Some(previous) = cache.documents.insert(
+            path.to_path_buf(),
+            CachedDocument {
+                revision,
+                source_bytes,
+                last_access: access,
+                document: document.clone(),
+            },
+        ) {
+            cache.document_source_bytes = cache
+                .document_source_bytes
+                .saturating_sub(previous.source_bytes);
+        }
+        cache.document_source_bytes = cache.document_source_bytes.saturating_add(source_bytes);
+        cache.evict_documents();
+        Ok(document)
     }
 
-    pub fn find(&self, selection: &str) -> io::Result<Option<SessionDocument>> {
+    pub fn find(&self, selection: &str) -> io::Result<Option<Arc<SessionDocument>>> {
+        let Some(indexed) = self.find_indexed(selection)? else {
+            return Ok(None);
+        };
+        self.load(&indexed.path).map(Some)
+    }
+
+    pub fn find_indexed(&self, selection: &str) -> io::Result<Option<IndexedSessionFile>> {
         let selection_path = Path::new(selection);
         if selection_path.is_absolute() && selection_path.is_file() {
-            return self.load(selection_path).map(Some);
+            return index_session_file(selection_path).map(Some);
         }
-        let index = self.list_index()?;
-        if let Some(indexed) = index.iter().find(|indexed| {
+        Ok(self.list_index()?.into_iter().find(|indexed| {
             indexed.header.id == selection || indexed.path.to_string_lossy() == selection
-        }) {
-            return self.load(&indexed.path).map(Some);
-        }
-        Ok(None)
+        }))
     }
 
     pub fn list_index(&self) -> io::Result<Vec<IndexedSessionFile>> {
@@ -101,97 +208,123 @@ impl SessionStore {
         Ok(index)
     }
 
-    pub fn list_all(&self) -> io::Result<Vec<SessionDocument>> {
-        self.load_indexed(self.list_index()?)
+    pub fn summaries(&self, indexed_files: &[IndexedSessionFile]) -> Vec<SessionListEntry> {
+        indexed_files
+            .iter()
+            .filter_map(|indexed| match self.summary(indexed) {
+                Ok(summary) => Some(summary),
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        path = %indexed.path.display(),
+                        "skipping unreadable Pi session summary"
+                    );
+                    None
+                }
+            })
+            .collect()
     }
 
-    pub fn list_directory(&self, cwd: &Path) -> io::Result<Vec<SessionDocument>> {
-        let index = self.list_index()?;
-        self.load_indexed(
-            index
-                .into_iter()
-                .filter(|indexed| indexed.header.cwd == cwd),
-        )
-    }
-
-    fn load_indexed(
-        &self,
-        indexed_files: impl IntoIterator<Item = IndexedSessionFile>,
-    ) -> io::Result<Vec<SessionDocument>> {
-        let mut documents = Vec::new();
-        for indexed in indexed_files {
-            match self.load(&indexed.path) {
-                Ok(document) => documents.push(document),
-                Err(error) => tracing::warn!(
-                    %error,
-                    path = %indexed.path.display(),
-                    "skipping unreadable Pi session"
-                ),
+    pub fn summary(&self, indexed: &IndexedSessionFile) -> io::Result<SessionListEntry> {
+        {
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(cached) = cache.summaries.get(&indexed.path) {
+                if cached.revision == indexed.revision {
+                    return Ok(cached.summary.clone());
+                }
             }
         }
-        documents.sort_by(|left, right| right.modified.cmp(&left.modified));
-        Ok(documents)
+        let summary = load_session_summary(indexed)?;
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .summaries
+            .insert(
+                indexed.path.clone(),
+                CachedSummary {
+                    revision: indexed.revision.clone(),
+                    summary: summary.clone(),
+                },
+            );
+        Ok(summary)
+    }
+
+    pub fn invalidate(&self, path: &Path) {
+        let mut cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(document) = cache.documents.remove(path) {
+            cache.document_source_bytes = cache
+                .document_source_bytes
+                .saturating_sub(document.source_bytes);
+        }
+        cache.summaries.remove(path);
+    }
+}
+
+impl SessionCache {
+    fn evict_documents(&mut self) {
+        while self.documents.len() > MAX_CACHED_DOCUMENTS
+            || (self.document_source_bytes > MAX_CACHED_DOCUMENT_SOURCE_BYTES
+                && self.documents.len() > 1)
+        {
+            let Some(path) = self
+                .documents
+                .iter()
+                .min_by_key(|(_, document)| document.last_access)
+                .map(|(path, _)| path.clone())
+            else {
+                break;
+            };
+            if let Some(document) = self.documents.remove(&path) {
+                self.document_source_bytes = self
+                    .document_source_bytes
+                    .saturating_sub(document.source_bytes);
+            }
+        }
     }
 }
 
 impl SessionDocument {
     pub fn load(path: &Path) -> io::Result<Self> {
-        let metadata = std::fs::metadata(path)?;
-        if !metadata.is_file() || metadata.len() > MAX_SESSION_FILE_BYTES {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "session file is not a supported regular file",
-            ));
-        }
-        let file = std::fs::File::open(path)?;
-        let mut lines = io::BufReader::new(file).lines();
-        let header_line = lines
-            .next()
-            .transpose()?
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "empty session file"))?;
-        let header: SessionHeader = serde_json::from_str(&header_line)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        if header.kind != "session" || header.id.trim().is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid Pi session header",
-            ));
-        }
+        let metadata = supported_session_metadata(path)?;
+        let revision = file_revision(metadata.len(), metadata.modified().ok());
+        Self::load_with_metadata(path, metadata, revision)
+    }
 
-        let entry_lines = lines.collect::<Result<Vec<_>, _>>()?;
-        let last_nonempty_index = entry_lines.iter().rposition(|line| !line.trim().is_empty());
-        let mut entries = Vec::new();
-        for (index, line) in entry_lines.into_iter().enumerate() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            match serde_json::from_str(&line) {
-                Ok(entry) => entries.push(entry),
-                Err(error) if Some(index) == last_nonempty_index => {
-                    tracing::debug!(
-                        %error,
-                        path = %path.display(),
-                        "ignoring an incomplete trailing Pi session entry"
-                    );
-                }
-                Err(error) => {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, error));
-                }
-            }
-        }
-        let (active_entries, leaf_id) = active_path(&entries);
+    fn load_with_metadata(
+        path: &Path,
+        metadata: std::fs::Metadata,
+        revision: String,
+    ) -> io::Result<Self> {
+        let file = std::fs::File::open(path)?;
+        let mut reader = io::BufReader::new(file);
+        let header = read_session_header(&mut reader)?;
+        let entries = read_jsonl_tail::<Value>(&mut reader, path)?;
+        let (active_entry_indices, leaf_id) = active_path(&entries);
         Ok(Self {
             path: path.to_path_buf(),
             header,
             entries,
-            active_entries,
+            active_entry_indices,
             leaf_id,
             modified: metadata.modified().ok().and_then(format_system_time),
+            revision,
         })
     }
 
+    fn active_entries(&self) -> impl DoubleEndedIterator<Item = &Value> {
+        self.active_entry_indices
+            .iter()
+            .filter_map(|index| self.entries.get(*index))
+    }
+
     pub fn session_name(&self) -> Option<String> {
-        self.active_entries.iter().rev().find_map(|entry| {
+        self.active_entries().rev().find_map(|entry| {
             (entry_type(entry) == Some("session_info"))
                 .then(|| entry.get("name").and_then(Value::as_str))
                 .flatten()
@@ -202,14 +335,13 @@ impl SessionDocument {
     }
 
     pub fn first_user_message(&self) -> String {
-        self.active_entries
-            .iter()
+        self.active_entries()
             .find_map(|entry| message_with_role(entry, "user").map(message_text))
             .unwrap_or_default()
     }
 
     pub fn last_message_preview(&self) -> Option<String> {
-        self.active_entries.iter().rev().find_map(|entry| {
+        self.active_entries().rev().find_map(|entry| {
             let message = entry.get("message")?;
             let role = message.get("role").and_then(Value::as_str)?;
             matches!(role, "user" | "assistant")
@@ -219,14 +351,13 @@ impl SessionDocument {
     }
 
     pub fn message_count(&self) -> usize {
-        self.active_entries
-            .iter()
+        self.active_entries()
             .filter(|entry| entry_type(entry) == Some("message"))
             .count()
     }
 
     pub fn model(&self) -> Option<ModelOption> {
-        for entry in self.active_entries.iter().rev() {
+        for entry in self.active_entries().rev() {
             if entry_type(entry) == Some("model_change") {
                 let id = entry.get("modelId").and_then(Value::as_str)?;
                 return Some(ModelOption {
@@ -257,7 +388,7 @@ impl SessionDocument {
     }
 
     pub fn thinking_level(&self) -> Option<String> {
-        self.active_entries.iter().rev().find_map(|entry| {
+        self.active_entries().rev().find_map(|entry| {
             (entry_type(entry) == Some("thinking_level_change"))
                 .then(|| entry.get("thinkingLevel").and_then(Value::as_str))
                 .flatten()
@@ -287,7 +418,7 @@ impl SessionDocument {
             title,
             modified: self.modified.clone(),
             last_user_message_at: None,
-            last_message_at: self.active_entries.iter().rev().find_map(|entry| {
+            last_message_at: self.active_entries().rev().find_map(|entry| {
                 entry
                     .get("timestamp")
                     .and_then(Value::as_str)
@@ -303,8 +434,7 @@ impl SessionDocument {
     }
 
     pub fn messages(&self) -> Vec<Value> {
-        self.active_entries
-            .iter()
+        self.active_entries()
             .filter_map(|entry| match entry_type(entry) {
                 Some("message") => entry.get("message").map(sanitize_message),
                 Some("compaction") => Some(json_compaction_message(entry)),
@@ -328,7 +458,7 @@ impl SessionDocument {
     pub fn conversation_items(&self) -> Vec<ConversationItem> {
         let mut items = Vec::new();
         let mut tools = HashMap::<String, (usize, usize)>::new();
-        for entry in &self.active_entries {
+        for entry in self.active_entries() {
             let entry_id = entry
                 .get("id")
                 .and_then(Value::as_str)
@@ -425,18 +555,24 @@ impl SessionDocument {
     }
 
     pub fn revision(&self) -> String {
-        let metadata = std::fs::metadata(&self.path).ok();
-        format!(
-            "{}:{}",
-            self.entries.len(),
-            metadata
-                .map(|metadata| file_revision(metadata.len(), metadata.modified().ok()))
-                .unwrap_or_default()
-        )
+        format!("{}:{}", self.entries.len(), self.revision)
     }
 }
 
 fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
+    let metadata = supported_session_metadata(path)?;
+    let file = std::fs::File::open(path)?;
+    let header = read_session_header(&mut io::BufReader::new(file))?;
+    let modified_time = metadata.modified().ok();
+    Ok(IndexedSessionFile {
+        path: path.to_path_buf(),
+        header,
+        modified: modified_time.and_then(format_system_time),
+        revision: file_revision(metadata.len(), modified_time),
+    })
+}
+
+fn supported_session_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
     let metadata = std::fs::metadata(path)?;
     if !metadata.is_file() || metadata.len() > MAX_SESSION_FILE_BYTES {
         return Err(io::Error::new(
@@ -444,12 +580,17 @@ fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
             "session file is not a supported regular file",
         ));
     }
-    let file = std::fs::File::open(path)?;
-    let header_line = io::BufReader::new(file)
-        .lines()
-        .next()
-        .transpose()?
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "empty session file"))?;
+    Ok(metadata)
+}
+
+fn read_session_header(reader: &mut impl BufRead) -> io::Result<SessionHeader> {
+    let mut header_line = String::new();
+    if reader.read_line(&mut header_line)? == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "empty session file",
+        ));
+    }
     let header: SessionHeader = serde_json::from_str(&header_line)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     if header.kind != "session" || header.id.trim().is_empty() {
@@ -458,13 +599,233 @@ fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
             "invalid Pi session header",
         ));
     }
-    let modified_time = metadata.modified().ok();
-    Ok(IndexedSessionFile {
-        path: path.to_path_buf(),
-        header,
-        modified: modified_time.and_then(format_system_time),
-        revision: file_revision(metadata.len(), modified_time),
+    Ok(header)
+}
+
+fn read_jsonl_tail<T: DeserializeOwned>(
+    reader: &mut impl BufRead,
+    path: &Path,
+) -> io::Result<Vec<T>> {
+    let mut values = Vec::new();
+    let mut line = String::new();
+    let mut trailing_error = None;
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Some(error) = trailing_error.take() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, error));
+        }
+        match serde_json::from_str(&line) {
+            Ok(value) => values.push(value),
+            Err(error) => trailing_error = Some(error),
+        }
+    }
+    if let Some(error) = trailing_error {
+        tracing::debug!(
+            %error,
+            path = %path.display(),
+            "ignoring an incomplete trailing Pi session entry"
+        );
+    }
+    Ok(values)
+}
+
+fn load_session_summary(indexed: &IndexedSessionFile) -> io::Result<SessionListEntry> {
+    let file = std::fs::File::open(&indexed.path)?;
+    let mut reader = io::BufReader::new(file);
+    let header = read_session_header(&mut reader)?;
+    let entries = read_jsonl_tail::<SummaryEntry>(&mut reader, &indexed.path)?;
+    let active = active_summary_path(&entries);
+    let name = active.iter().rev().find_map(|index| {
+        let entry = &entries[*index];
+        (entry.kind.as_deref() == Some("session_info"))
+            .then_some(entry.name.as_deref())
+            .flatten()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    });
+    let first_message = active
+        .iter()
+        .filter_map(|index| entries[*index].message.as_ref())
+        .find(|message| message.role.as_deref() == Some("user"))
+        .map(|message| message.content.clone())
+        .unwrap_or_default();
+    let title = name
+        .clone()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| {
+            let first = truncate_preview(&first_message, 80);
+            if first.is_empty() {
+                "New session".into()
+            } else {
+                first
+            }
+        });
+    let last_message_preview = active.iter().rev().find_map(|index| {
+        let message = entries[*index].message.as_ref()?;
+        matches!(message.role.as_deref(), Some("user" | "assistant"))
+            .then(|| truncate_preview(&message.content, 160))
+            .filter(|preview| !preview.is_empty())
+    });
+    Ok(SessionListEntry {
+        path: Some(indexed.path.clone()),
+        id: Some(header.id),
+        cwd: Some(header.cwd),
+        name,
+        title,
+        modified: indexed.modified.clone(),
+        last_user_message_at: None,
+        last_message_at: active
+            .iter()
+            .rev()
+            .find_map(|index| entries[*index].timestamp.clone()),
+        last_message_preview,
+        message_count: Some(
+            active
+                .iter()
+                .filter(|index| entries[**index].kind.as_deref() == Some("message"))
+                .count(),
+        ),
+        context_usage: None,
+        streaming: Some(false),
+        unread: Some(false),
+        optimistic: None,
     })
+}
+
+fn active_summary_path(entries: &[SummaryEntry]) -> Vec<usize> {
+    let by_id = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| Some((entry.id.as_deref()?, index)))
+        .collect::<HashMap<_, _>>();
+    let mut current = entries.iter().rev().find_map(|entry| entry.id.as_deref());
+    let mut seen = HashSet::new();
+    let mut reversed = Vec::new();
+    while let Some(id) = current {
+        if !seen.insert(id) {
+            break;
+        }
+        let Some(index) = by_id.get(id).copied() else {
+            break;
+        };
+        reversed.push(index);
+        current = entries[index].parent_id.as_deref();
+    }
+    reversed.reverse();
+    reversed
+}
+
+impl<'de> Deserialize<'de> for BoundedText {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BoundedTextVisitor;
+
+        impl Visitor<'_> for BoundedTextVisitor {
+            type Value = BoundedText;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(BoundedText(bounded_summary_text(value)))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+                Ok(BoundedText(bounded_summary_text(&value)))
+            }
+        }
+
+        deserializer.deserialize_string(BoundedTextVisitor)
+    }
+}
+
+fn deserialize_summary_content<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct SummaryContentVisitor;
+
+    impl<'de> Visitor<'de> for SummaryContentVisitor {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("message text or content parts")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+            Ok(bounded_summary_text(value))
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+            Ok(bounded_summary_text(&value))
+        }
+
+        fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut text = String::new();
+            while let Some(part) = sequence.next_element::<SummaryContentPart>()? {
+                if part.kind.as_deref() != Some("text") || part.text.0.is_empty() {
+                    continue;
+                }
+                if !text.is_empty() {
+                    text.push('\n');
+                }
+                text.push_str(&part.text.0);
+                text = bounded_summary_text(&text);
+            }
+            Ok(text)
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+            Ok(String::new())
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+
+        fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+
+        fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+
+        fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+
+        fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E> {
+            Ok(String::new())
+        }
+    }
+
+    deserializer.deserialize_any(SummaryContentVisitor)
+}
+
+fn bounded_summary_text(value: &str) -> String {
+    value.chars().take(SUMMARY_TEXT_CHARS).collect()
 }
 
 fn json_compaction_message(entry: &Value) -> Value {
@@ -499,30 +860,28 @@ fn collect_session_files(directory: &Path, output: &mut Vec<PathBuf>) -> io::Res
     Ok(())
 }
 
-fn active_path(entries: &[Value]) -> (Vec<Value>, Option<String>) {
+fn active_path(entries: &[Value]) -> (Vec<usize>, Option<String>) {
     let by_id = entries
         .iter()
-        .filter_map(|entry| Some((entry.get("id")?.as_str()?.to_string(), entry)))
+        .enumerate()
+        .filter_map(|(index, entry)| Some((entry.get("id")?.as_str()?, index)))
         .collect::<HashMap<_, _>>();
     let leaf_id = entries
         .iter()
         .rev()
         .find_map(|entry| entry.get("id").and_then(Value::as_str).map(str::to_string));
-    let mut current = leaf_id.clone();
+    let mut current = leaf_id.as_deref();
     let mut seen = HashSet::new();
     let mut reversed = Vec::new();
     while let Some(id) = current {
-        if !seen.insert(id.clone()) {
+        if !seen.insert(id) {
             break;
         }
-        let Some(entry) = by_id.get(&id) else {
+        let Some(index) = by_id.get(id).copied() else {
             break;
         };
-        reversed.push((*entry).clone());
-        current = entry
-            .get("parentId")
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        reversed.push(index);
+        current = entries[index].get("parentId").and_then(Value::as_str);
     }
     reversed.reverse();
     (reversed, leaf_id)
@@ -894,10 +1253,68 @@ mod tests {
         ]);
         let document = SessionDocument::load(&path).expect("load");
         assert_eq!(document.leaf_id.as_deref(), Some("u2"));
-        assert_eq!(document.active_entries.len(), 2);
+        assert_eq!(document.active_entry_indices.len(), 2);
         assert_eq!(document.first_user_message(), "first");
         assert_eq!(document.last_message_preview().as_deref(), Some("branch"));
         assert_eq!(document.conversation_items().len(), 2);
+        std::fs::remove_dir_all(directory).expect("remove fixture");
+    }
+
+    #[test]
+    fn lightweight_summaries_match_documents_and_invalidate_by_revision() {
+        let (directory, path) = fixture(&[
+            serde_json::json!({
+              "type": "message", "id": "u1", "parentId": null,
+              "timestamp": "2026-07-31T00:00:01.000Z",
+              "message": {"role": "user", "content": "summarize this session", "timestamp": 1}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "a1", "parentId": "u1",
+              "timestamp": "2026-07-31T00:00:02.000Z",
+              "message": {"role": "assistant", "content": [{"type":"text","text":"done"}], "provider":"test", "model":"one", "timestamp": 2}
+            }),
+        ]);
+        let store = SessionStore::new(&directory);
+        let indexed = index_session_file(&path).expect("index");
+        let lightweight = store.summary(&indexed).expect("lightweight summary");
+        let document = SessionDocument::load(&path).expect("document");
+        let complete = document.summary();
+        assert_eq!(lightweight.title, complete.title);
+        assert_eq!(
+            lightweight.last_message_preview,
+            complete.last_message_preview
+        );
+        assert_eq!(lightweight.message_count, complete.message_count);
+        {
+            let cache = store.cache.lock().expect("cache");
+            assert!(cache.documents.is_empty());
+            assert_eq!(cache.summaries.len(), 1);
+        }
+
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open fixture");
+        use std::io::Write as _;
+        writeln!(
+            file,
+            "\n{}",
+            serde_json::json!({
+              "type":"session_info", "id":"n1", "parentId":"a1",
+              "timestamp":"2026-07-31T00:00:03.000Z", "name":"Cached name"
+            })
+        )
+        .expect("append name");
+        let updated = index_session_file(&path).expect("reindex");
+        assert_ne!(updated.revision, indexed.revision);
+        assert_eq!(
+            store
+                .summary(&updated)
+                .expect("updated summary")
+                .name
+                .as_deref(),
+            Some("Cached name")
+        );
         std::fs::remove_dir_all(directory).expect("remove fixture");
     }
 

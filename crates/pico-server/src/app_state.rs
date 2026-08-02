@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,8 @@ pub struct DraftSelection {
 impl AppState {
     pub fn from_sessions(sessions: Vec<SessionRecord>) -> Self {
         let mut state = Self::default();
+        let mut path_owners = HashMap::<PathBuf, String>::new();
+        let mut pi_id_owners = HashMap::<String, String>::new();
         for session in sessions {
             if let Some(number) = session
                 .id
@@ -49,6 +51,37 @@ impl AppState {
                 .and_then(|number| number.parse::<u64>().ok())
             {
                 state.next_session_id = state.next_session_id.max(number);
+            }
+            let path_identity = session.session_path.as_deref().map(normalized_session_path);
+            let existing_id = path_identity
+                .as_ref()
+                .and_then(|path| path_owners.get(path))
+                .or_else(|| {
+                    session
+                        .pi_session_id
+                        .as_ref()
+                        .and_then(|id| pi_id_owners.get(id))
+                })
+                .cloned();
+            if let Some(existing_id) = existing_id {
+                if let Some(existing) = state.sessions.get_mut(&existing_id) {
+                    if existing.pi_session_id.is_none() {
+                        existing.pi_session_id = session.pi_session_id.clone();
+                    }
+                    existing.draft &= session.draft;
+                }
+                tracing::warn!(
+                    duplicate_runtime_id = %session.id,
+                    owner_runtime_id = %existing_id,
+                    "discarding duplicate persisted Pi session runtime"
+                );
+                continue;
+            }
+            if let Some(path) = path_identity {
+                path_owners.insert(path, session.id.clone());
+            }
+            if let Some(pi_session_id) = &session.pi_session_id {
+                pi_id_owners.insert(pi_session_id.clone(), session.id.clone());
             }
             state.sessions.insert(session.id.clone(), session);
         }
@@ -176,6 +209,10 @@ impl AppState {
     }
 }
 
+fn normalized_session_path(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +241,41 @@ mod tests {
         assert_eq!(
             state.reserve_session(PathBuf::from("/tmp/new"), None).id,
             "rust-8"
+        );
+    }
+
+    #[test]
+    fn restored_sessions_are_deduplicated_by_path_and_pi_id() {
+        let path = PathBuf::from("/tmp/shared-session.jsonl");
+        let first = SessionRecord {
+            id: "rust-2".into(),
+            cwd: PathBuf::from("/tmp/project"),
+            session_path: Some(path.clone()),
+            pi_session_id: Some("pi-shared".into()),
+            draft: true,
+        };
+        let duplicate_path = SessionRecord {
+            id: "rust-3".into(),
+            cwd: PathBuf::from("/tmp/project"),
+            session_path: Some(path),
+            pi_session_id: Some("pi-shared".into()),
+            draft: false,
+        };
+        let duplicate_id = SessionRecord {
+            id: "rust-4".into(),
+            cwd: PathBuf::from("/tmp/other"),
+            session_path: Some(PathBuf::from("/tmp/other-session.jsonl")),
+            pi_session_id: Some("pi-shared".into()),
+            draft: false,
+        };
+        let mut state = AppState::from_sessions(vec![first, duplicate_path, duplicate_id]);
+        let sessions = state.sessions();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "rust-2");
+        assert!(!sessions[0].draft);
+        assert_eq!(
+            state.reserve_session(PathBuf::from("/tmp/new"), None).id,
+            "rust-5"
         );
     }
 
