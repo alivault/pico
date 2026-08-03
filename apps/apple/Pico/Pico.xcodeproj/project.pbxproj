@@ -166,6 +166,7 @@
 		D60000000000000000000001 /* highlight_response.json in Resources */ = {isa = PBXBuildFile; fileRef = D60000000000000000000002 /* highlight_response.json */; };
 		D70000000000000000000001 /* App/PicoServerServiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D70000000000000000000002 /* App/PicoServerServiceController.swift */; };
 		D71000000000000000000001 /* PicoServerServiceControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71000000000000000000002 /* PicoServerServiceControllerTests.swift */; };
+		D80000000000000000000003 /* AppIconDev.icon in Resources */ = {isa = PBXBuildFile; fileRef = D80000000000000000000004 /* AppIconDev.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -310,6 +311,7 @@
 		F30000000000000000000008 /* Features/Conversation/ToolOutputViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ToolOutputViews.swift; sourceTree = "<group>"; };
 		F3000000000000000000000A /* Features/Conversation/PierrePatchDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/PierrePatchDiffView.swift; sourceTree = "<group>"; };
 		F3000000000000000000000E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = com.apple.iconcomposer.icon; path = Resources/AppIcon.icon; sourceTree = "<group>"; };
+		D80000000000000000000004 /* AppIconDev.icon */ = {isa = PBXFileReference; lastKnownFileType = com.apple.iconcomposer.icon; path = Resources/AppIconDev.icon; sourceTree = "<group>"; };
 		F431A05270D409C8F34759DF /* Core/Models/ToolBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ToolBlock.swift; sourceTree = "<group>"; };
 		F97C68B3538AC695A155E2FB /* Core/Models/StateSyncPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/StateSyncPayload.swift; sourceTree = "<group>"; };
 		FB21F912F8DF9DA36E5237AB /* Core/Models/GitChangedEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitChangedEvent.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 				AE83A36614257B098F0A2991 /* Resources/Info.plist */,
 				3AA418C32398BF54AB67A201 /* Resources/Assets.xcassets */,
 				F3000000000000000000000E /* AppIcon.icon */,
+				D80000000000000000000004 /* AppIconDev.icon */,
 			);
 			path = Pico;
 			sourceTree = "<group>";
@@ -650,6 +653,7 @@
 			files = (
 				1718BE091536A0BFDE545DD2 /* Resources/Assets.xcassets in Resources */,
 				F3000000000000000000000D /* AppIcon.icon in Resources */,
+				D80000000000000000000003 /* AppIconDev.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1054,6 +1058,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
+				PICO_DISPLAY_NAME = Pico;
+				PICO_URL_SCHEME = pico;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1085,6 +1091,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
+				PICO_DISPLAY_NAME = Pico;
+				PICO_URL_SCHEME = pico;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios;
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1097,6 +1105,101 @@
 			};
 			name = Release;
 		};
+		D80000000000000000000001 /* Dogfood */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				EMIT_FRONTEND_COMMAND_LINES = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG PICO_DOGFOOD";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Dogfood;
+		};
+		D80000000000000000000002 /* Dogfood */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS-Debug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZJDZ622NMU;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Pico/Resources/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = Pico/Resources/Info-macOS.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					-Xlinker,
+					-interposable,
+				);
+				PICO_DISPLAY_NAME = "Pico Dev";
+				PICO_URL_SCHEME = "pico-dev";
+				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios.dev;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos.dev;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.2;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Dogfood;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1104,6 +1207,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E21A8179DFCC4D42A9875761 /* Debug */,
+				D80000000000000000000002 /* Dogfood */,
 				E4C8160A0BBD20F63BC90070 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1122,6 +1226,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				687E6A61460ED98F7478F186 /* Debug */,
+				D80000000000000000000001 /* Dogfood */,
 				C3FEA3E2F47AC48AFBCFCFDB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;

@@ -4,10 +4,17 @@ import Observation
 @MainActor
 @Observable
 public final class ConnectionStore {
+  private struct ServerProfile: Codable {
+    var contextId: String
+    var lastEventId: String?
+    var sidebarDirectories: [String]
+  }
+
   private let defaults: UserDefaults
+  private var serverProfiles: [String: ServerProfile]
 
   public var serverURLText: String
-  public var contextId: String
+  public private(set) var contextId: String
   public var lastEventId: String?
   public var hasSavedServerURL: Bool
   public private(set) var sidebarDirectories: [String]
@@ -16,27 +23,64 @@ public final class ConnectionStore {
   public init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     let savedServerURL = defaults.string(forKey: Self.storageKey("serverURL"))
-    hasSavedServerURL = savedServerURL != nil
-    serverURLText = savedServerURL ?? "localhost"
-    contextId = defaults.string(forKey: Self.storageKey("contextId")) ??
+    let decodedProfiles = Self.decodeServerProfiles(
+      defaults.data(forKey: Self.storageKey("serverProfiles"))
+    )
+    let legacyContextId = defaults.string(forKey: Self.storageKey("contextId")) ??
       Self.makeContextId()
-    lastEventId = defaults.string(forKey: Self.storageKey("lastEventId"))
-    sidebarDirectories = Self.decodeStringArray(
+    let legacyLastEventId = defaults.string(forKey: Self.storageKey("lastEventId"))
+    let legacySidebarDirectories = Self.decodeStringArray(
       defaults.data(forKey: Self.storageKey("sidebarDirectories"))
     )
+    let savedProfile = savedServerURL.flatMap { decodedProfiles[$0] }
+    let initialProfile = savedProfile ?? ServerProfile(
+      contextId: legacyContextId,
+      lastEventId: legacyLastEventId,
+      sidebarDirectories: legacySidebarDirectories
+    )
+
+    serverProfiles = decodedProfiles
+    hasSavedServerURL = savedServerURL != nil
+    serverURLText = savedServerURL ?? "localhost"
+    contextId = initialProfile.contextId
+    lastEventId = initialProfile.lastEventId
+    sidebarDirectories = initialProfile.sidebarDirectories
     hideToolBlocks = defaults.bool(forKey: Self.storageKey("hideToolBlocks"))
-    defaults.set(contextId, forKey: Self.storageKey("contextId"))
+    if let savedServerURL, savedProfile == nil {
+      serverProfiles[savedServerURL] = currentProfile
+      saveServerProfiles()
+    }
+    saveLegacyCurrentProfile()
   }
 
   public func saveServerURL(_ url: URL) {
-    serverURLText = url.absoluteString
+    let newServerURL = url.absoluteString
+    guard !hasSavedServerURL || serverURLText != newServerURL else {
+      saveLegacyCurrentProfile()
+      return
+    }
+
+    let isFirstServer = !hasSavedServerURL
+    persistCurrentProfile()
+    serverURLText = newServerURL
     hasSavedServerURL = true
+    if !isFirstServer {
+      let profile = serverProfiles[newServerURL] ?? ServerProfile(
+        contextId: Self.makeContextId(),
+        lastEventId: nil,
+        sidebarDirectories: []
+      )
+      contextId = profile.contextId
+      lastEventId = profile.lastEventId
+      sidebarDirectories = profile.sidebarDirectories
+    }
+    persistCurrentProfile()
     defaults.set(serverURLText, forKey: Self.storageKey("serverURL"))
   }
 
   public func saveLastEventId(_ id: String?) {
     lastEventId = id
-    defaults.set(id, forKey: Self.storageKey("lastEventId"))
+    persistCurrentProfile()
   }
 
   public func setHideToolBlocks(_ hidden: Bool) {
@@ -110,8 +154,48 @@ public final class ConnectionStore {
   }
 
   private func saveSidebarDirectories() {
+    persistCurrentProfile()
+  }
+
+  private var currentProfile: ServerProfile {
+    ServerProfile(
+      contextId: contextId,
+      lastEventId: lastEventId,
+      sidebarDirectories: sidebarDirectories
+    )
+  }
+
+  private func persistCurrentProfile() {
+    guard hasSavedServerURL else {
+      saveLegacyCurrentProfile()
+      return
+    }
+    serverProfiles[serverURLText] = currentProfile
+    saveServerProfiles()
+    saveLegacyCurrentProfile()
+  }
+
+  private func saveServerProfiles() {
+    guard let data = try? JSONEncoder().encode(serverProfiles) else { return }
+    defaults.set(data, forKey: Self.storageKey("serverProfiles"))
+  }
+
+  private func saveLegacyCurrentProfile() {
+    defaults.set(contextId, forKey: Self.storageKey("contextId"))
+    defaults.set(lastEventId, forKey: Self.storageKey("lastEventId"))
     guard let data = try? JSONEncoder().encode(sidebarDirectories) else { return }
     defaults.set(data, forKey: Self.storageKey("sidebarDirectories"))
+  }
+
+  private static func decodeServerProfiles(_ data: Data?) -> [String: ServerProfile] {
+    guard let data,
+          let profiles = try? JSONDecoder().decode(
+            [String: ServerProfile].self,
+            from: data
+          ) else {
+      return [:]
+    }
+    return profiles
   }
 
   private static func decodeStringArray(_ data: Data?) -> [String] {

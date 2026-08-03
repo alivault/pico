@@ -10,6 +10,7 @@ pub struct ServerConfig {
     pub pi_bridge_binary: Option<PathBuf>,
     pub web_dir: Option<PathBuf>,
     pub agent_dir: PathBuf,
+    pub session_dir: PathBuf,
     pub paths: ServerPaths,
     pub allowed_origins: Vec<String>,
     pub max_request_bytes: usize,
@@ -21,6 +22,7 @@ pub struct ServerOptions {
     pub web_dir: Option<PathBuf>,
     pub data_dir: Option<PathBuf>,
     pub agent_dir: Option<PathBuf>,
+    pub session_dir: Option<PathBuf>,
     pub allowed_origins: Vec<String>,
 }
 
@@ -42,13 +44,18 @@ impl ServerConfig {
     ) -> io::Result<Self> {
         let paths = ServerPaths::new(options.data_dir.unwrap_or(default_data_dir()?));
         let network_config = crate::network_config::load(&paths.network_config_file)?;
+        let agent_dir = options.agent_dir.unwrap_or(default_agent_dir()?);
+        let session_dir = options
+            .session_dir
+            .unwrap_or_else(|| agent_dir.join("sessions"));
         Ok(Self {
             listen_hosts: listen_hosts(host, network_config.active_remote_address()),
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
             pi_bridge_binary: resolve_pi_bridge_binary(options.pi_bridge_binary),
             web_dir: resolve_web_dir(options.web_dir),
-            agent_dir: options.agent_dir.unwrap_or(default_agent_dir()?),
+            agent_dir,
+            session_dir,
             paths,
             allowed_origins: options.allowed_origins,
             max_request_bytes: 64 * 1024 * 1024,
@@ -63,10 +70,16 @@ impl ServerConfig {
             pi_bridge_binary: None,
             web_dir: None,
             agent_dir: PathBuf::from(".pi/agent"),
+            session_dir: PathBuf::from(".pi/agent/sessions"),
             paths: ServerPaths::new(data_dir),
             allowed_origins: Vec::new(),
             max_request_bytes: 64 * 1024 * 1024,
         }
+    }
+
+    pub fn create_directories(&self) -> io::Result<()> {
+        self.paths.create()?;
+        create_private_directory(&self.session_dir)
     }
 }
 
@@ -199,6 +212,29 @@ mod tests {
             ServerConfig::loopback(3141, PathBuf::from("pi"), PathBuf::from("/tmp/pico-test"));
         assert_eq!(config.listen_hosts, vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]);
         assert!(config.allowed_origins.is_empty());
+        assert_eq!(config.session_dir, PathBuf::from(".pi/agent/sessions"));
+    }
+
+    #[test]
+    fn explicit_session_directory_is_independent_from_auth_storage() {
+        let config = ServerConfig::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            4142,
+            PathBuf::from("pi"),
+            ServerOptions {
+                data_dir: Some(PathBuf::from("/tmp/pico-development")),
+                agent_dir: Some(PathBuf::from("/tmp/pi-agent")),
+                session_dir: Some(PathBuf::from("/tmp/pico-development/sessions")),
+                ..ServerOptions::default()
+            },
+        )
+        .expect("build config");
+
+        assert_eq!(config.agent_dir, PathBuf::from("/tmp/pi-agent"));
+        assert_eq!(
+            config.session_dir,
+            PathBuf::from("/tmp/pico-development/sessions")
+        );
     }
 
     #[test]

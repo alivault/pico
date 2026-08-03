@@ -67,6 +67,10 @@ pnpm lint
 pnpm format
 pnpm check
 pnpm check:fix
+pnpm dogfood:macos
+pnpm dogfood:server
+pnpm dogfood:server:status
+pnpm dogfood:server:stop
 ```
 
 Run native Apple checks from the repo root with Xcode installed:
@@ -83,6 +87,18 @@ Build and launch the native macOS app:
 xcodebuild -project apps/apple/Pico/Pico.xcodeproj -scheme Pico -destination 'platform=macOS' -derivedDataPath /tmp/pico-macos-build build
 open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
 ```
+
+For self-hosted Pico development, keep `/Applications/Pico.app` and its server
+on port `3141` as the known-good control environment. `pnpm dogfood:macos`
+builds the client-only `Pico Dogfood` scheme, replaces
+`~/Applications/Pico Dev.app`, and launches it with a separate bundle identity
+and preferences. `pnpm dogfood:server` safely drains, deploys, and starts the
+isolated target server on port `4142`; its data and Pi sessions live under
+`~/Library/Application Support/Pico Development`, while Pi configuration and
+provider credentials continue to come from the one canonical
+`PI_CODING_AGENT_DIR`. Never point both servers at the same session directory,
+and never install a candidate over `/Applications/Pico.app` while it owns the
+active development session.
 
 Use any available simulator from `xcrun simctl list devices available` if `iPhone 16 Pro` is not installed.
 

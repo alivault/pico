@@ -468,7 +468,7 @@ impl IntoResponse for ApiError {
 }
 
 pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
-    config.paths.create()?;
+    config.create_directories()?;
     let listeners = bind_listeners(&config.listen_hosts, config.port).await?;
     let static_assets = config
         .web_dir
@@ -520,7 +520,10 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     )));
     let context = ServerContext {
         app: Arc::new(RwLock::new(restored_state)),
-        runtimes: Arc::new(RuntimeRegistry::new(config.pi_binary.clone())),
+        runtimes: Arc::new(RuntimeRegistry::with_session_dir(
+            config.pi_binary.clone(),
+            Some(config.session_dir.clone()),
+        )),
         runtime_start_lock: Arc::new(Mutex::new(())),
         started_at: Instant::now(),
         pi_version,
@@ -532,7 +535,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         persistence_lock: Arc::new(Mutex::new(())),
         port: config.port,
         event_hub: EventHub::default(),
-        session_store: Arc::new(SessionStore::new(&config.agent_dir)),
+        session_store: Arc::new(SessionStore::from_root(config.session_dir.clone())),
         runtime_projections: Arc::new(RwLock::new(HashMap::new())),
         pending_queues: Arc::new(RwLock::new(HashMap::new())),
         streaming_items: Arc::new(RwLock::new(HashMap::new())),

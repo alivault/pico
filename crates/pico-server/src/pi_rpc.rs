@@ -41,6 +41,11 @@ impl PiSpawnOptions {
         self.session = session;
         self
     }
+
+    pub fn with_session_dir(mut self, session_dir: Option<PathBuf>) -> Self {
+        self.session_dir = session_dir;
+        self
+    }
 }
 
 #[derive(Debug)]

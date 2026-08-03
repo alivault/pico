@@ -62,6 +62,7 @@
     private static let apiContractVersion = 1
 
     private let defaults: UserDefaults
+    private let allowsBackgroundServices: Bool
     private let serverService: SMAppService
     private let menuService: SMAppService
     private let commandRunner = PicoServerCommandRunner()
@@ -81,8 +82,12 @@
     private(set) var isAvailable = false
     private(set) var errorMessage: String?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+      defaults: UserDefaults = .standard,
+      allowsBackgroundServices: Bool = true
+    ) {
       self.defaults = defaults
+      self.allowsBackgroundServices = allowsBackgroundServices
       serverService = .agent(plistName: Self.serverAgentPlistName)
       menuService = .loginItem(identifier: Self.menuBundleIdentifier)
       if defaults.object(forKey: Self.preferenceKey) == nil {
@@ -95,6 +100,12 @@
     func start() {
       guard !hasStarted else { return }
       hasStarted = true
+      guard allowsBackgroundServices else {
+        serverStatus = "Unavailable"
+        menuStatus = "Unavailable"
+        isAvailable = false
+        return
+      }
       isAvailable =
         backgroundServicesAllowed && bundledServerAgentExists &&
         bundledServerBinaryExists && bundledMenuAppExists
@@ -104,6 +115,12 @@
     }
 
     func refreshStatus() {
+      guard allowsBackgroundServices else {
+        serverStatus = "Unavailable"
+        menuStatus = "Unavailable"
+        requiresApproval = false
+        return
+      }
       serverStatus = label(for: serverService.status)
       menuStatus = label(for: menuService.status)
       requiresApproval =
@@ -116,6 +133,7 @@
     }
 
     private var backgroundServicesAllowed: Bool {
+      guard allowsBackgroundServices else { return false }
       let configuredValue = Bundle.main.object(
         forInfoDictionaryKey: Self.availabilityInfoKey
       ) as? Bool

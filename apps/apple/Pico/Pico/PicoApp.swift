@@ -21,7 +21,13 @@ struct PicoApp: App {
 
   init() {
     #if os(macOS)
-      let serverService = PicoServerServiceController()
+      #if PICO_DOGFOOD
+        let serverService = PicoServerServiceController(
+          allowsBackgroundServices: false
+        )
+      #else
+        let serverService = PicoServerServiceController()
+      #endif
       self.serverService = serverService
       serverService.start()
     #endif

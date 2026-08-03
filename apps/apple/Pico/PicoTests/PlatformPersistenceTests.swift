@@ -68,4 +68,68 @@ struct PlatformPersistenceTests {
       )
     #endif
   }
+
+  @Test
+  func isolatesViewerStateByServerURL() throws {
+    let suiteName = "Pico.ServerProfilePersistenceTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let store = ConnectionStore(defaults: defaults)
+    let stableURL = try #require(URL(string: "http://localhost:3141"))
+    let developmentURL = try #require(URL(string: "http://localhost:4142"))
+
+    store.saveServerURL(stableURL)
+    let stableContextId = store.contextId
+    let draftStore = DraftStore(defaults: defaults)
+    draftStore.saveDraft(
+      "stable draft",
+      contextId: stableContextId,
+      sessionKey: nil
+    )
+    store.saveLastEventId("stable-event")
+    store.rememberSidebarDirectory("/stable/project")
+
+    store.saveServerURL(developmentURL)
+    let developmentContextId = store.contextId
+    #expect(developmentContextId != stableContextId)
+    #expect(store.lastEventId == nil)
+    #expect(store.sidebarDirectories.isEmpty)
+    #expect(
+      draftStore.readDraft(
+        contextId: developmentContextId,
+        sessionKey: nil
+      ).isEmpty
+    )
+    draftStore.saveDraft(
+      "development draft",
+      contextId: developmentContextId,
+      sessionKey: nil
+    )
+    store.saveLastEventId("development-event")
+    store.rememberSidebarDirectory("/development/project")
+
+    store.saveServerURL(stableURL)
+    #expect(store.contextId == stableContextId)
+    #expect(store.lastEventId == "stable-event")
+    #expect(store.sidebarDirectories == ["/stable/project"])
+    #expect(
+      draftStore.readDraft(contextId: store.contextId, sessionKey: nil) ==
+        "stable draft"
+    )
+
+    store.saveServerURL(developmentURL)
+    #expect(store.contextId == developmentContextId)
+    #expect(store.lastEventId == "development-event")
+    #expect(store.sidebarDirectories == ["/development/project"])
+    #expect(
+      draftStore.readDraft(contextId: store.contextId, sessionKey: nil) ==
+        "development draft"
+    )
+
+    let restoredStore = ConnectionStore(defaults: defaults)
+    #expect(restoredStore.contextId == developmentContextId)
+    #expect(restoredStore.lastEventId == "development-event")
+    #expect(restoredStore.sidebarDirectories == ["/development/project"])
+  }
 }

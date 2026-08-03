@@ -19,6 +19,25 @@ import Testing
       #expect(!controller.isAvailable)
     }
 
+    @Test("Dogfood clients cannot manage production background services")
+    func dogfoodServiceState() {
+      let suiteName = "PicoServerServiceControllerTests.\(UUID().uuidString)"
+      let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+      defer { defaults.removePersistentDomain(forName: suiteName) }
+      let controller = PicoServerServiceController(
+        defaults: defaults,
+        allowsBackgroundServices: false
+      )
+
+      controller.start()
+      controller.refreshStatus()
+
+      #expect(!controller.isAvailable)
+      #expect(controller.serverStatus == "Unavailable")
+      #expect(controller.menuStatus == "Unavailable")
+      #expect(!controller.requiresApproval)
+    }
+
     @Test("New-chat deep links reset the composer")
     func newChatDeepLink() throws {
       let model = AppModel()

@@ -32,6 +32,8 @@ enum Command {
         data_dir: Option<PathBuf>,
         #[arg(long, env = "PI_CODING_AGENT_DIR")]
         agent_dir: Option<PathBuf>,
+        #[arg(long, env = "PI_CODING_AGENT_SESSION_DIR")]
+        session_dir: Option<PathBuf>,
         #[arg(
             long = "allow-origin",
             env = "PICO_ALLOWED_ORIGINS",
@@ -101,6 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         web_dir: None,
         data_dir: None,
         agent_dir: None,
+        session_dir: None,
         allowed_origins: Vec::new(),
     });
 
@@ -113,6 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             web_dir,
             data_dir,
             agent_dir,
+            session_dir,
             allowed_origins,
         } => {
             let config = ServerConfig::new(
@@ -124,10 +128,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     web_dir,
                     data_dir,
                     agent_dir,
+                    session_dir,
                     allowed_origins,
                 },
             )?;
-            config.paths.create()?;
+            config.create_directories()?;
             let _log_guard = logging::init(Some(&config.paths.log_dir))?;
             api::serve(config).await?;
         }

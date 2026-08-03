@@ -147,6 +147,58 @@ open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
 The macOS client defaults to `localhost`, which resolves to
 `http://localhost:3141`.
 
+### Dogfooding Pico safely
+
+Keep the signed app and persistent server in `/Applications/Pico.app` as the
+known-good control environment. Build and launch the separately identified,
+client-only **Pico Dev** app with:
+
+```bash
+pnpm dogfood:macos
+```
+
+The command verifies the client-only bundle, replaces
+`~/Applications/Pico Dev.app`, and relaunches it. Pico Dev uses bundle identifier
+`com.alivault.pico.macos.dev`, the purple development icon, a `pico-dev://` URL
+scheme, and separate preferences. It cannot register or update Pico's
+production server or menu-bar services. It can connect to the stable server on
+`localhost:3141`, so server-owned Pi work keeps running while Pico Dev is
+rebuilt or crashes.
+
+For full-stack server work, launch an isolated target server on port `4142`:
+
+```bash
+pnpm dogfood:server
+pnpm dogfood:server:status
+pnpm dogfood:server:stop
+```
+
+The target is managed as an on-demand `launchd` job. Restart builds the
+candidate first, lets the currently deployed development server drain active Pi
+work, atomically deploys the candidate, and then starts it. Its state, control
+socket, logs, and Pi sessions live under
+`~/Library/Application Support/Pico Development`. It uses Pi's existing
+`~/.pi/agent` configuration and `AuthStorage` while passing an independent
+session directory to Pi, preventing the stable and development servers from
+owning the same session process.
+
+Pico Dev offers Stable (`3141`) and Development (`4142`) connection buttons.
+Viewer context, SSE cursor, and sidebar directories are persisted per server
+URL, so switching does not replay one server's state against the other.
+
+To expose only the target server to a trusted private or VPN interface, set one
+exact address and restart it:
+
+```bash
+pnpm dogfood:server:network -- 100.64.0.10
+pnpm dogfood:server:restart
+```
+
+Never point the target at a wildcard listener or at the stable server's data or
+session directory. Package a release candidate only after the isolated client
+and server pass validation; do not replace `/Applications/Pico.app` while it is
+the control environment for active work.
+
 ### Connecting over a trusted private network
 
 The macOS distribution includes the **Pico Server** menu-bar app. To let another
@@ -240,6 +292,8 @@ settings, and Quit Completely actions.
 
 ```bash
 pnpm dev        # start Rust plus the Vite browser client
+pnpm dogfood:macos # build and launch the isolated Pico Dev client
+pnpm dogfood:server # safely rebuild/restart the isolated target server on 4142
 pnpm build      # build the static browser application
 pnpm preview    # preview the static browser build (Rust remains on 3142)
 pnpm check      # format/lint/typecheck

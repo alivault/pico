@@ -434,6 +434,7 @@ public final class AppModel {
       baseURL = url
       serverURLText = url.absoluteString
       connectionStore.saveServerURL(url)
+      sidebarDirectories = connectionStore.sidebarDirectories
       connectionStatus = .connected
       beginNewChat()
       await refreshAuthProviders()
@@ -3209,7 +3210,12 @@ public final class AppModel {
 }
 
 private struct PicoSessionDeepLink: Equatable, Sendable {
-  static let scheme = "pico"
+  static var scheme: String {
+    let configuredScheme = Bundle.main.object(
+      forInfoDictionaryKey: "PicoURLScheme"
+    ) as? String
+    return configuredScheme?.lowercased() ?? "pico"
+  }
   private static let sessionRoute = "session"
 
   var sessionId: String?

@@ -56,12 +56,22 @@ pnpm build:pi-bridge
 cargo run -p pico-server -- serve --port 3142 \
   --pi-bridge-bin target/pico-pi-bridge \
   --web-dir .output/public
+cargo run -p pico-server -- serve --port 4142 \
+  --data-dir "$HOME/Library/Application Support/Pico Development" \
+  --session-dir "$HOME/Library/Application Support/Pico Development/sessions" \
+  --pi-bridge-bin target/pico-pi-bridge
 cargo run -p pico-server -- status
 cargo run -p pico-server -- network status
 cargo run -p pico-server -- network set 100.64.0.10
 cargo run -p pico-server -- network disable
 cargo run -p pico-server -- stop --wait
 ```
+
+`--session-dir` (or `PI_CODING_AGENT_SESSION_DIR`) separates Pi JSONL session
+ownership from `PI_CODING_AGENT_DIR`. This lets an isolated development server
+reuse the canonical Pi configuration and `AuthStorage` without seeing or
+spawning the stable server's sessions. `pnpm dogfood:server` wraps this in an
+on-demand, drain-safe macOS `launchd` lifecycle.
 
 Implemented:
 

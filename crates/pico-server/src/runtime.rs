@@ -11,6 +11,7 @@ use crate::pi_rpc::{PiRpcClient, PiRpcError, PiSpawnOptions};
 #[derive(Default)]
 pub struct RuntimeRegistry {
     pi_binary: PathBuf,
+    session_dir: Option<PathBuf>,
     state: RwLock<RuntimeState>,
 }
 
@@ -33,8 +34,13 @@ pub struct RuntimeSpawn {
 
 impl RuntimeRegistry {
     pub fn new(pi_binary: PathBuf) -> Self {
+        Self::with_session_dir(pi_binary, None)
+    }
+
+    pub fn with_session_dir(pi_binary: PathBuf, session_dir: Option<PathBuf>) -> Self {
         Self {
             pi_binary,
+            session_dir,
             state: RwLock::new(RuntimeState::default()),
         }
     }
@@ -74,7 +80,9 @@ impl RuntimeRegistry {
         // Keep the registry write lock while spawning so concurrent requests for
         // the same session cannot create two standalone Pi processes.
         let client = PiRpcClient::spawn(
-            PiSpawnOptions::new(self.pi_binary.clone(), cwd).with_session(session),
+            PiSpawnOptions::new(self.pi_binary.clone(), cwd)
+                .with_session(session)
+                .with_session_dir(self.session_dir.clone()),
         )
         .await?;
         if let Some(identity) = &session_identity {
@@ -219,6 +227,49 @@ mod tests {
         assert!(registry.get("runtime-two").await.is_none());
 
         registry.shutdown().await;
+        std::fs::remove_dir_all(root).expect("remove fixture");
+    }
+
+    #[tokio::test]
+    async fn new_sessions_use_the_isolated_session_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "pico-runtime-session-dir-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        let session_dir = root.join("sessions");
+        std::fs::create_dir_all(&session_dir).expect("create session directory");
+        let arguments = root.join("arguments.txt");
+        let executable = root.join("fake-pi.sh");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nwhile IFS= read -r line; do :; done\n",
+                arguments.display()
+            ),
+        )
+        .expect("write fake Pi");
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake Pi executable");
+
+        let registry = RuntimeRegistry::with_session_dir(executable, Some(session_dir.clone()));
+        let runtime = registry
+            .spawn("new-session".into(), root.clone(), None)
+            .await
+            .expect("spawn new runtime");
+
+        for _ in 0..500 {
+            if arguments.is_file() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let recorded = std::fs::read_to_string(arguments).expect("read arguments");
+        assert!(recorded.contains("--mode\nrpc\n"));
+        assert!(recorded.contains("--session-dir\n"));
+        assert!(recorded.contains(&format!("{}\n", session_dir.display())));
+
+        runtime.client.shutdown().await.expect("stop fake Pi");
         std::fs::remove_dir_all(root).expect("remove fixture");
     }
 }

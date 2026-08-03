@@ -113,8 +113,12 @@ pub struct IndexedSessionFile {
 
 impl SessionStore {
     pub fn new(agent_dir: &Path) -> Self {
+        Self::from_root(agent_dir.join("sessions"))
+    }
+
+    pub fn from_root(root: PathBuf) -> Self {
         Self {
-            root: agent_dir.join("sessions"),
+            root,
             cache: Arc::new(Mutex::new(SessionCache::default())),
         }
     }
