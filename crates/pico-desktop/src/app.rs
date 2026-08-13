@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
@@ -16,6 +17,7 @@ use gpui_component::{
     text::TextView,
     v_flex,
 };
+use serde::{Deserialize, Serialize};
 use smol::channel::{Receiver, Sender};
 
 use crate::client::PicoClient;
@@ -48,6 +50,52 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-l", FocusComposer, None),
         KeyBinding::new("cmd-.", AbortSession, None),
     ]);
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopPreferences {
+    #[serde(default)]
+    directories: Vec<String>,
+    #[serde(default = "default_true")]
+    notifications_enabled: bool,
+    #[serde(default)]
+    hide_tools: bool,
+    #[serde(default = "default_true")]
+    left_sidebar_open: bool,
+    #[serde(default = "default_true")]
+    right_sidebar_open: bool,
+    #[serde(default)]
+    dark_theme: bool,
+    #[serde(default)]
+    drafts: HashMap<String, String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn preferences_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    #[cfg(target_os = "macos")]
+    let path =
+        PathBuf::from(home).join("Library/Application Support/Pico/desktop-preferences.json");
+    #[cfg(not(target_os = "macos"))]
+    let path = PathBuf::from(home).join(".config/pico/desktop-preferences.json");
+    Some(path)
+}
+
+fn load_preferences() -> DesktopPreferences {
+    preferences_path()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|data| serde_json::from_slice(&data).ok())
+        .unwrap_or_default()
+}
+
+pub fn apply_saved_theme(cx: &mut App) {
+    if load_preferences().dark_theme {
+        Theme::change(ThemeMode::Dark, None, cx);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -121,6 +169,7 @@ pub struct PicoDesktop {
     composer_images: Vec<(String, serde_json::Value)>,
     pending_submission: Option<PromptSubmission>,
     failed_submission: Option<PromptSubmission>,
+    preferences: DesktopPreferences,
     hide_tools: bool,
     settings_open: bool,
     auth_providers: Vec<AuthProvider>,
@@ -160,16 +209,26 @@ impl PicoDesktop {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let mut preferences = load_preferences();
+        if !preferences.directories.contains(&initial_directory) {
+            preferences.directories.push(initial_directory.clone());
+        }
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search sessions…"));
         let directory_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Add project directory…"));
         let session_name_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Rename selected session…"));
+        let initial_draft = preferences
+            .drafts
+            .get(&format!("directory:{initial_directory}"))
+            .cloned()
+            .unwrap_or_default();
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(2, 8)
                 .submit_on_enter(true)
                 .placeholder("Ask anything…")
+                .default_value(initial_draft)
         });
         let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
         let auth_value =
@@ -192,6 +251,8 @@ impl PicoDesktop {
             cx.subscribe_in(&composer, window, |this, _, event, window, cx| {
                 if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
                     this.submit_prompt(window, cx);
+                } else if matches!(event, InputEvent::Change) {
+                    this.persist_current_draft(cx);
                 }
             }),
         ];
@@ -201,7 +262,7 @@ impl PicoDesktop {
             tx,
             connected: false,
             server_label: "Connecting…".into(),
-            directories: vec![initial_directory.clone()],
+            directories: preferences.directories.clone(),
             selected_directory: initial_directory,
             selected_session_id: None,
             selected_session_path: None,
@@ -228,7 +289,8 @@ impl PicoDesktop {
             composer_images: Vec::new(),
             pending_submission: None,
             failed_submission: None,
-            hide_tools: false,
+            hide_tools: preferences.hide_tools,
+            preferences: preferences.clone(),
             settings_open: false,
             auth_providers: Vec::new(),
             selected_auth_provider: None,
@@ -242,11 +304,11 @@ impl PicoDesktop {
             pi_transport: "auto".into(),
             pi_cache_retention: "standard".into(),
             performance_restart_required: false,
-            notifications_enabled: true,
+            notifications_enabled: preferences.notifications_enabled,
             seen_completion_ids: HashSet::new(),
             status_message: None,
-            left_sidebar_open: true,
-            right_sidebar_open: true,
+            left_sidebar_open: preferences.left_sidebar_open,
+            right_sidebar_open: preferences.right_sidebar_open,
             search,
             directory_input,
             session_name_input,
@@ -274,6 +336,59 @@ impl PicoDesktop {
                 }
             }
         })
+    }
+
+    fn draft_key(&self) -> String {
+        if let Some(path) = self.selected_session_path.as_deref() {
+            format!("session:{path}")
+        } else if let Some(key) = self.session.session_key.as_deref() {
+            format!("draft:{key}")
+        } else {
+            format!("directory:{}", self.selected_directory)
+        }
+    }
+
+    fn persist_current_draft(&mut self, cx: &App) {
+        let key = self.draft_key();
+        let value = self.composer.read(cx).value().to_string();
+        if value.is_empty() {
+            self.preferences.drafts.remove(&key);
+        } else {
+            self.preferences.drafts.insert(key, value);
+        }
+        self.persist_preferences();
+    }
+
+    fn persist_preferences(&mut self) {
+        self.preferences.directories = self.directories.clone();
+        self.preferences.notifications_enabled = self.notifications_enabled;
+        self.preferences.hide_tools = self.hide_tools;
+        self.preferences.left_sidebar_open = self.left_sidebar_open;
+        self.preferences.right_sidebar_open = self.right_sidebar_open;
+        let Some(path) = preferences_path() else {
+            return;
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(data) = serde_json::to_vec_pretty(&self.preferences) {
+            let temporary = path.with_extension("json.tmp");
+            if std::fs::write(&temporary, data).is_ok() {
+                let _ = std::fs::rename(temporary, path);
+            }
+        }
+    }
+
+    fn restore_draft_for_current_scope(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let value = self
+            .preferences
+            .drafts
+            .get(&self.draft_key())
+            .cloned()
+            .unwrap_or_default();
+        self.composer.update(cx, |state, cx| {
+            state.set_value(value, window, cx);
+        });
     }
 
     fn apply_event(&mut self, event: DesktopEvent, cx: &mut Context<Self>) {
@@ -533,6 +648,7 @@ impl PicoDesktop {
                     self.directories.push(directory.clone());
                 }
                 self.selected_directory = directory;
+                self.persist_preferences();
                 self.status_message = None;
                 self.restart_events(
                     self.selected_session_id.clone(),
@@ -643,11 +759,14 @@ impl PicoDesktop {
             ThemeMode::Dark
         };
         Theme::change(mode, Some(window), cx);
+        self.preferences.dark_theme = mode.is_dark();
+        self.persist_preferences();
         cx.refresh_windows();
     }
 
     fn toggle_notifications(&mut self, cx: &mut Context<Self>) {
         self.notifications_enabled = !self.notifications_enabled;
+        self.persist_preferences();
         cx.notify();
     }
 
@@ -808,6 +927,7 @@ impl PicoDesktop {
         self.session_name_input.update(cx, |state, cx| {
             state.set_value(session.name.unwrap_or(session.title), window, cx);
         });
+        self.restore_draft_for_current_scope(window, cx);
         self.status_message = Some("Loading session…".into());
         self.client
             .select_session(session_id, session.path, self.tx.clone());
@@ -839,6 +959,7 @@ impl PicoDesktop {
             self.selected_session_id.clone(),
             self.session.session_key.clone(),
         );
+        self.persist_preferences();
         cx.notify();
     }
 
@@ -864,6 +985,7 @@ impl PicoDesktop {
                 self.selected_session_id.clone(),
                 self.session.session_key.clone(),
             );
+            self.persist_preferences();
             cx.notify();
         }
     }
@@ -1020,6 +1142,7 @@ impl PicoDesktop {
             }
             "hide-tools" | "show-tools" => {
                 self.hide_tools = name == "hide-tools";
+                self.persist_preferences();
                 self.status_message = None;
             }
             "fork" | "tree" | "login" | "logout" => {
@@ -1839,6 +1962,7 @@ impl PicoDesktop {
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.left_sidebar_open = !this.left_sidebar_open;
+                        this.persist_preferences();
                         cx.notify();
                     })),
             )
@@ -1873,6 +1997,7 @@ impl PicoDesktop {
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.right_sidebar_open = !this.right_sidebar_open;
+                        this.persist_preferences();
                         cx.notify();
                     })),
             )
@@ -3473,10 +3598,12 @@ impl Render for PicoDesktop {
             .on_action(cx.listener(|this, _: &NewSession, _, cx| this.create_session(cx)))
             .on_action(cx.listener(|this, _: &ToggleLeftSidebar, _, cx| {
                 this.left_sidebar_open = !this.left_sidebar_open;
+                this.persist_preferences();
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToggleRightSidebar, _, cx| {
                 this.right_sidebar_open = !this.right_sidebar_open;
+                this.persist_preferences();
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))

@@ -26,6 +26,7 @@ fn main() -> Result<()> {
     let application = gpui_platform::application().with_assets(Assets);
     application.run(move |cx| {
         gpui_component::init(cx);
+        app::apply_saved_theme(cx);
         app::bind_keys(cx);
         cx.activate(true);
 
