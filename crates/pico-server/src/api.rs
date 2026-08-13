@@ -53,6 +53,9 @@ use crate::session_store::{
 use crate::static_assets::StaticAssets;
 use crate::terminal::{TerminalEvent, TerminalManager};
 
+const RUNTIME_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const RUNTIME_EVICTION_INTERVAL: Duration = Duration::from_secs(60);
+
 #[derive(Clone)]
 struct ServerContext {
     app: Arc<RwLock<AppState>>,
@@ -564,6 +567,12 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let (serve_shutdown_tx, _) = watch::channel(false);
     let (control_stop_tx, control_stop_rx) = watch::channel(false);
+    let runtime_eviction_task = spawn_runtime_eviction(
+        context.clone(),
+        shutdown_tx.subscribe(),
+        RUNTIME_IDLE_TIMEOUT,
+        RUNTIME_EVICTION_INTERVAL,
+    );
     #[cfg(unix)]
     let control_task = {
         let stop = control_stop_rx;
@@ -637,6 +646,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         }
     }
     context.control_status.write().await.phase = "stopping".into();
+    let _ = runtime_eviction_task.await;
     context.runtimes.shutdown().await;
     if let Some(auth_bridge) = &context.auth_bridge {
         if let Err(error) = auth_bridge.shutdown().await {
@@ -727,6 +737,49 @@ async fn restore_session_processes(context: &ServerContext) {
                     "failed to restore Pi session process"
                 );
             }
+        }
+    }
+}
+
+fn spawn_runtime_eviction(
+    context: ServerContext,
+    mut shutdown: watch::Receiver<bool>,
+    idle_for: Duration,
+    interval: Duration,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut sweep = tokio::time::interval(interval);
+        sweep.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = sweep.tick() => evict_idle_runtimes(&context, idle_for).await,
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
+        }
+    })
+}
+
+async fn evict_idle_runtimes(context: &ServerContext, idle_for: Duration) {
+    for runtime_id in context.runtimes.idle_ids(idle_for).await {
+        if context.active_work.is_active(&runtime_id).await {
+            continue;
+        }
+        match context.runtimes.remove_if_idle(&runtime_id, idle_for).await {
+            Ok(true) => {
+                context
+                    .runtime_projections
+                    .write()
+                    .await
+                    .remove(&runtime_id);
+                context.streaming_items.write().await.remove(&runtime_id);
+                tracing::debug!(%runtime_id, "evicted idle Pi runtime");
+            }
+            Ok(false) => {}
+            Err(error) => tracing::warn!(%runtime_id, %error, "failed to evict idle Pi runtime"),
         }
     }
 }
@@ -1025,6 +1078,9 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                 Some("pico_pi_process_exited") => {
                     delta_batch.clear();
                     context.active_work.mark_inactive(&session_id).await;
+                    if !context.runtimes.contains(&session_id).await {
+                        break;
+                    }
                     emit_session_state(&context, &session_id, false, None).await;
                     context.event_hub.push(
                         None,

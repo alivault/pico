@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
 
@@ -24,6 +25,7 @@ struct RuntimeState {
 struct RuntimeEntry {
     client: Arc<PiRpcClient>,
     session_identity: Option<PathBuf>,
+    last_used: Instant,
 }
 
 pub struct RuntimeSpawn {
@@ -57,7 +59,8 @@ impl RuntimeRegistry {
     ) -> Result<RuntimeSpawn, PiRpcError> {
         let session_identity = session.as_deref().map(normalized_session_path);
         let mut state = self.state.write().await;
-        if let Some(entry) = state.sessions.get(&id) {
+        if let Some(entry) = state.sessions.get_mut(&id) {
+            entry.last_used = Instant::now();
             return Ok(RuntimeSpawn {
                 owner_id: id,
                 client: entry.client.clone(),
@@ -66,7 +69,8 @@ impl RuntimeRegistry {
         }
         if let Some(identity) = session_identity.as_ref() {
             if let Some(owner_id) = state.session_owners.get(identity).cloned() {
-                if let Some(entry) = state.sessions.get(&owner_id) {
+                if let Some(entry) = state.sessions.get_mut(&owner_id) {
+                    entry.last_used = Instant::now();
                     return Ok(RuntimeSpawn {
                         owner_id,
                         client: entry.client.clone(),
@@ -93,6 +97,7 @@ impl RuntimeRegistry {
             RuntimeEntry {
                 client: client.clone(),
                 session_identity,
+                last_used: Instant::now(),
             },
         );
         Ok(RuntimeSpawn {
@@ -103,19 +108,23 @@ impl RuntimeRegistry {
     }
 
     pub async fn get(&self, id: &str) -> Option<Arc<PiRpcClient>> {
-        self.state
-            .read()
-            .await
-            .sessions
-            .get(id)
-            .map(|entry| entry.client.clone())
+        let mut state = self.state.write().await;
+        let entry = state.sessions.get_mut(id)?;
+        entry.last_used = Instant::now();
+        Some(entry.client.clone())
+    }
+
+    pub async fn contains(&self, id: &str) -> bool {
+        self.state.read().await.sessions.contains_key(id)
     }
 
     pub async fn get_by_session(&self, path: &Path) -> Option<(String, Arc<PiRpcClient>)> {
         let identity = normalized_session_path(path);
-        let state = self.state.read().await;
+        let mut state = self.state.write().await;
         let owner_id = state.session_owners.get(&identity)?.clone();
-        let client = state.sessions.get(&owner_id)?.client.clone();
+        let entry = state.sessions.get_mut(&owner_id)?;
+        entry.last_used = Instant::now();
+        let client = entry.client.clone();
         Some((owner_id, client))
     }
 
@@ -138,6 +147,7 @@ impl RuntimeRegistry {
         }
         let entry = state.sessions.get_mut(id)?;
         entry.session_identity = Some(identity.clone());
+        entry.last_used = Instant::now();
         state.session_owners.insert(identity, id.to_string());
         None
     }
@@ -145,6 +155,44 @@ impl RuntimeRegistry {
     pub async fn remove(&self, id: &str) -> Result<bool, PiRpcError> {
         let entry = {
             let mut state = self.state.write().await;
+            let entry = state.sessions.remove(id);
+            if let Some(identity) = entry
+                .as_ref()
+                .and_then(|entry| entry.session_identity.as_ref())
+            {
+                state.session_owners.remove(identity);
+            }
+            entry
+        };
+        if let Some(entry) = entry {
+            entry.client.shutdown().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub async fn idle_ids(&self, idle_for: Duration) -> Vec<String> {
+        let now = Instant::now();
+        self.state
+            .read()
+            .await
+            .sessions
+            .iter()
+            .filter(|(_, entry)| now.duration_since(entry.last_used) >= idle_for)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    pub async fn remove_if_idle(&self, id: &str, idle_for: Duration) -> Result<bool, PiRpcError> {
+        let entry = {
+            let mut state = self.state.write().await;
+            let is_idle = state
+                .sessions
+                .get(id)
+                .is_some_and(|entry| entry.last_used.elapsed() >= idle_for);
+            if !is_idle {
+                return Ok(false);
+            }
             let entry = state.sessions.remove(id);
             if let Some(identity) = entry
                 .as_ref()
@@ -225,6 +273,16 @@ mod tests {
         assert_eq!(second.owner_id, "runtime-one");
         assert!(Arc::ptr_eq(&first.client, &second.client));
         assert!(registry.get("runtime-two").await.is_none());
+        assert_eq!(registry.idle_ids(Duration::ZERO).await, ["runtime-one"]);
+        assert!(!registry
+            .remove_if_idle("runtime-one", Duration::from_secs(60))
+            .await
+            .expect("keep recently used runtime"));
+        assert!(registry
+            .remove_if_idle("runtime-one", Duration::ZERO)
+            .await
+            .expect("evict idle runtime"));
+        assert!(!registry.contains("runtime-one").await);
 
         registry.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fixture");

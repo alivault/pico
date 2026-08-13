@@ -65,6 +65,10 @@ impl ActiveWorkTracker {
         self.state.read().await.sessions.len()
     }
 
+    pub async fn is_active(&self, id: &str) -> bool {
+        self.state.read().await.sessions.contains(id)
+    }
+
     pub async fn wait_until_idle(&self) {
         loop {
             let notified = self.idle.notified();
@@ -127,6 +131,8 @@ mod tests {
         tracker.mark_active("one").await;
         tracker.mark_active("one").await;
         assert_eq!(tracker.count().await, 1);
+        assert!(tracker.is_active("one").await);
+        assert!(!tracker.is_active("two").await);
         tracker.mark_inactive("one").await;
         assert_eq!(tracker.count().await, 0);
     }
