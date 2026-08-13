@@ -5,9 +5,10 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 import {
-  AuthStorage,
   createAgentSessionServices,
   getAgentDir,
+  ModelRuntime,
+  readStoredCredential,
   type AgentSessionServices,
 } from "@earendil-works/pi-coding-agent"
 
@@ -38,7 +39,8 @@ const API_KEY_PROVIDER_NAMES: Record<string, string> = {
   zai: "ZAI",
 }
 
-const authStorage = AuthStorage.create(join(getAgentDir(), "auth.json"))
+const authPath = join(getAgentDir(), "auth.json")
+const modelRuntimePromise = ModelRuntime.create({ authPath })
 const servicesByCwd = new Map<string, Promise<AgentSessionServices>>()
 const pendingUi = new Map<
   string,
@@ -109,7 +111,7 @@ async function services(cwd: string) {
     pending = createAgentSessionServices({
       cwd: resolvedCwd,
       agentDir: getAgentDir(),
-      authStorage,
+      modelRuntime: await modelRuntimePromise,
     })
     servicesByCwd.set(resolvedCwd, pending)
     pending.catch(() => servicesByCwd.delete(resolvedCwd))
@@ -121,8 +123,8 @@ function providerDisplayName(provider: string) {
   return API_KEY_PROVIDER_NAMES[provider] ?? provider
 }
 
-function availableModels(runtime: AgentSessionServices) {
-  return runtime.modelRegistry.getAvailable().map((model) => ({
+function availableModels(runtime: ModelRuntime) {
+  return runtime.getAvailableSnapshot().map((model) => ({
     id: model.id,
     provider: model.provider,
     name: model.name,
@@ -130,8 +132,8 @@ function availableModels(runtime: AgentSessionServices) {
   }))
 }
 
-function authStatus(runtime: AgentSessionServices, provider: string) {
-  const status = runtime.modelRegistry.getProviderAuthStatus(provider)
+function authStatus(runtime: ModelRuntime, provider: string) {
+  const status = runtime.getProviderAuthStatus(provider)
   return {
     configured: status.configured,
     ...(status.source ? { source: status.source } : {}),
@@ -140,32 +142,25 @@ function authStatus(runtime: AgentSessionServices, provider: string) {
 }
 
 async function authProviders(cwd: string) {
-  authStorage.reload()
-  const runtime = await services(cwd)
-  runtime.modelRegistry.refresh()
-  const oauthProviders = authStorage.getOAuthProviders()
-  const oauthIds = new Set(oauthProviders.map((provider) => provider.id))
-  const providerIds = new Set(
-    runtime.modelRegistry.getAll().map((model) => model.provider)
-  )
-  const oauthOptions = oauthProviders
+  const runtime = (await services(cwd)).modelRuntime
+  await runtime.refresh({ allowNetwork: false })
+  const providers = runtime.getProviders()
+  const oauthOptions = providers
+    .filter((provider) => provider.auth.oauth)
     .map((provider) => ({
       id: provider.id,
-      name: provider.name,
+      name: provider.auth.oauth?.name ?? provider.name,
       authType: "oauth" as const,
       ...authStatus(runtime, provider.id),
     }))
     .sort((left, right) => left.name.localeCompare(right.name))
-  const apiKeyOptions = [...providerIds]
-    .filter(
-      (provider) =>
-        provider in API_KEY_PROVIDER_NAMES || !oauthIds.has(provider)
-    )
+  const apiKeyOptions = providers
+    .filter((provider) => provider.auth.apiKey)
     .map((provider) => ({
-      id: provider,
-      name: providerDisplayName(provider),
+      id: provider.id,
+      name: provider.auth.apiKey?.name ?? providerDisplayName(provider.id),
       authType: "api_key" as const,
-      ...authStatus(runtime, provider),
+      ...authStatus(runtime, provider.id),
     }))
     .sort((left, right) => left.name.localeCompare(right.name))
   const names = new Map(
@@ -180,15 +175,14 @@ async function authProviders(cwd: string) {
       provider.authType,
     ])
   )
-  const loggedInProviders = authStorage
-    .list()
-    .map((provider) => {
-      const credential = authStorage.get(provider)
+  const loggedInProviders = (await runtime.listCredentials())
+    .map((credential) => {
+      const provider = credential.providerId
       return {
         id: provider,
         name: names.get(provider) ?? providerDisplayName(provider),
         authType:
-          credential?.type ?? authTypes.get(provider) ?? ("api_key" as const),
+          credential.type ?? authTypes.get(provider) ?? ("api_key" as const),
         ...authStatus(runtime, provider),
         configured: true,
       }
@@ -249,20 +243,20 @@ function cancelPendingUi() {
 }
 
 async function login(command: BridgeCommand) {
-  authStorage.reload()
   const provider = command.provider?.trim() ?? ""
   if (!provider) throw new Error("provider is required")
-  const runtime = await services(command.cwd ?? process.cwd())
-  const providerInfo = authStorage
-    .getOAuthProviders()
-    .find((candidate) => candidate.id === provider)
-  if (!providerInfo) throw new Error(`Unknown OAuth provider: ${provider}`)
+  const runtime = (await services(command.cwd ?? process.cwd())).modelRuntime
+  const providerInfo = runtime.getProvider(provider)
+  const oauth = providerInfo?.auth.oauth
+  if (!providerInfo || !oauth) {
+    throw new Error(`Unknown OAuth provider: ${provider}`)
+  }
 
   const existing = activeLogins.get(provider)
   if (existing) {
     existing.abort()
     throw new Error(
-      `Cancelled the existing ${providerInfo.name} login. Try login again.`
+      `Cancelled the existing ${oauth.name} login. Try login again.`
     )
   }
   const abortController = new AbortController()
@@ -274,76 +268,73 @@ async function login(command: BridgeCommand) {
   let manualInput: Promise<BridgeUiResponse> | undefined
 
   try {
-    await authStorage.login(provider, {
-      onAuth: (info) => {
-        manualInput = emitUiRequest(scope, {
-          method: "auth",
-          title: `Log in to ${providerInfo.name}`,
-          message:
-            info.instructions ??
-            "Open the login page in your browser to continue.",
-          authUrl: info.url,
-          authManualAllowed: Boolean(providerInfo.usesCallbackServer),
-        })
-      },
-      onDeviceCode: (info) => {
-        void emitUiRequest(scope, {
-          method: "auth",
-          title: `Log in to ${providerInfo.name}`,
-          message: `Enter code ${info.userCode} to continue.`,
-          authUrl: info.verificationUri,
-          authManualAllowed: false,
-        }).then((response) => {
-          if (response.cancelled) abortController.abort()
-        })
-      },
-      onPrompt: async (prompt) => {
-        const response = await emitUiRequest(scope, {
-          method: "auth_input",
-          title: `Log in to ${providerInfo.name}`,
-          message: prompt.message,
-          placeholder: prompt.placeholder,
-          allowEmpty: Boolean(prompt.allowEmpty),
-        })
-        if (response.cancelled) throw new Error("Login cancelled")
-        const value = typeof response.value === "string" ? response.value : ""
-        if (!value && !prompt.allowEmpty) throw new Error("Login cancelled")
-        return value
-      },
-      onProgress: (message) => {
-        void emitUiRequest(
-          scope,
-          { method: "notify", message, notifyType: "info" },
-          false
-        )
-      },
-      onManualCodeInput: async () => {
-        const response = await (manualInput ??
-          emitUiRequest(scope, {
-            method: "auth_input",
-            title: `Log in to ${providerInfo.name}`,
-            message: "Paste the authorization code or redirect URL.",
-          }))
+    await runtime.login(provider, "oauth", {
+      signal: abortController.signal,
+      prompt: async (prompt) => {
+        const request =
+          prompt.type === "manual_code" && manualInput
+            ? manualInput
+            : emitUiRequest(scope, {
+                method: prompt.type === "select" ? "auth_select" : "auth_input",
+                title: `Log in to ${oauth.name}`,
+                message: prompt.message,
+                ...(prompt.type === "select"
+                  ? {
+                      options: prompt.options.map((option) => ({
+                        value: option.id,
+                        label: option.label,
+                      })),
+                    }
+                  : { placeholder: prompt.placeholder }),
+              })
+        const response = await request
         if (response.cancelled || typeof response.value !== "string") {
           throw new Error("Login cancelled")
         }
         return response.value
       },
-      onSelect: async (prompt) => {
-        const response = await emitUiRequest(scope, {
-          method: "auth_select",
-          title: `Log in to ${providerInfo.name}`,
-          message: prompt.message,
-          options: prompt.options.map((option) => ({
-            value: option.id,
-            label: option.label,
-          })),
-        })
-        return response.cancelled ? undefined : response.value
+      notify: (event) => {
+        if (event.type === "auth_url") {
+          manualInput = emitUiRequest(scope, {
+            method: "auth",
+            title: `Log in to ${oauth.name}`,
+            message:
+              event.instructions ??
+              "Open the login page in your browser to continue.",
+            authUrl: event.url,
+            authManualAllowed: true,
+          })
+          void manualInput.then((response) => {
+            if (response.cancelled) abortController.abort()
+          })
+          return
+        }
+        if (event.type === "device_code") {
+          void emitUiRequest(scope, {
+            method: "auth",
+            title: `Log in to ${oauth.name}`,
+            message: `Enter code ${event.userCode} to continue.`,
+            authUrl: event.verificationUri,
+            authManualAllowed: false,
+          }).then((response) => {
+            if (response.cancelled) abortController.abort()
+          })
+          return
+        }
+        const message = event.message
+        const firstLink = event.type === "info" ? event.links?.[0] : undefined
+        void emitUiRequest(
+          scope,
+          {
+            method: "notify",
+            message,
+            notifyType: "info",
+            ...(firstLink ? { authUrl: firstLink.url } : {}),
+          },
+          false
+        )
       },
-      signal: abortController.signal,
     })
-    runtime.modelRegistry.refresh()
     return {
       ok: true,
       provider,
@@ -379,15 +370,13 @@ function formatResetTime(value: string | number) {
 }
 
 async function oauthCredential(provider: string) {
-  const credential = authStorage.get(provider)
+  const runtime = await modelRuntimePromise
+  const credential = readStoredCredential(provider, authPath)
   if (credential?.type !== "oauth") return undefined
-  const token =
-    (await authStorage
-      .getApiKey(provider, { includeFallback: false })
-      .catch(() => undefined)) ?? credential.access
-  const refreshed = authStorage.get(provider)
+  await runtime.getAuth(provider).catch(() => undefined)
+  const refreshed = readStoredCredential(provider, authPath)
   return {
-    token,
+    token: refreshed?.type === "oauth" ? refreshed.access : credential.access,
     credential: refreshed?.type === "oauth" ? refreshed : credential,
   }
 }
@@ -445,7 +434,6 @@ async function codexCredential() {
 }
 
 async function providerUsage(provider: string | undefined) {
-  authStorage.reload()
   const windows: ProviderUsageWindow[] = []
   if (provider === "anthropic") {
     const token = await claudeToken()
@@ -543,10 +531,20 @@ async function handleCommand(command: BridgeCommand) {
       const key = command.key?.trim() ?? ""
       if (!provider) throw new Error("provider is required")
       if (!key) throw new Error("API key is required")
-      authStorage.reload()
-      authStorage.set(provider, { type: "api_key", key })
-      const runtime = await services(cwd)
-      runtime.modelRegistry.refresh()
+      const runtime = (await services(cwd)).modelRuntime
+      await runtime.login(provider, "api_key", {
+        prompt: async (prompt) => {
+          if (prompt.type !== "select") return key
+          return (
+            prompt.options.find((option) =>
+              /api.?key|bearer.?token/i.test(option.id)
+            )?.id ??
+            prompt.options[0]?.id ??
+            key
+          )
+        },
+        notify: () => {},
+      })
       success(command, {
         ok: true,
         provider,
@@ -557,10 +555,8 @@ async function handleCommand(command: BridgeCommand) {
     case "logout": {
       const provider = command.provider?.trim() ?? ""
       if (!provider) throw new Error("provider is required")
-      authStorage.reload()
-      authStorage.logout(provider)
-      const runtime = await services(cwd)
-      runtime.modelRegistry.refresh()
+      const runtime = (await services(cwd)).modelRuntime
+      await runtime.logout(provider)
       success(command, {
         ok: true,
         provider,

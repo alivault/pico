@@ -42,7 +42,7 @@ Pi's public RPC protocol covers session and agent behavior but does not expose
 credential listing/mutation, OAuth callbacks, model-registry refresh, or
 provider quota lookup. Pico keeps those SDK-only operations in
 `native/pi-bridge.ts`, compiled by Bun into a separate native executable. The
-bridge uses Pi's existing `AuthStorage` and `ModelRegistry`; it does not create a
+bridge uses Pi's canonical `ModelRuntime` and `auth.json`; it does not create a
 second credential store. Rust communicates with it over bounded JSONL, forwards
 OAuth/device-code UI over Pico's existing SSE contract, and owns its lifecycle.
 
@@ -69,7 +69,7 @@ cargo run -p pico-server -- stop --wait
 
 `--session-dir` (or `PI_CODING_AGENT_SESSION_DIR`) separates Pi JSONL session
 ownership from `PI_CODING_AGENT_DIR`. This lets an isolated development server
-reuse the canonical Pi configuration and `AuthStorage` without seeing or
+reuse the canonical Pi configuration and credential store without seeing or
 spawning the stable server's sessions. `pnpm dogfood:server` wraps this in an
 on-demand, drain-safe macOS `launchd` lifecycle.
 

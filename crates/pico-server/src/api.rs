@@ -38,6 +38,7 @@ use crate::highlight::HighlightRuntime;
 use crate::persistence::{self, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError, PiSpawnOptions};
+use crate::pi_stream::PiStreamingMessage;
 use crate::project_files;
 use crate::protocol::{
     ConversationItem, API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION,
@@ -848,7 +849,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
             .or(persisted_pi_session_id)
             .unwrap_or_else(|| session_id.clone());
         let mut events = runtime.subscribe();
-        let mut latest_streaming_message = None;
+        let mut streaming_message = PiStreamingMessage::default();
         let mut tool_updates = HashMap::<String, Value>::new();
         loop {
             let event = match events.recv().await {
@@ -865,10 +866,24 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     context.active_work.mark_active(session_id.clone()).await;
                     emit_session_state(&context, &session_id, true, None).await;
                 }
+                Some("message_start") => {
+                    streaming_message.start(&event);
+                }
                 Some("message_update") => {
-                    latest_streaming_message = event.get("message").cloned();
-                    let item =
-                        build_streaming_item(latest_streaming_message.as_ref(), &tool_updates);
+                    streaming_message.update(&event);
+                    let item = build_streaming_item(streaming_message.message(), &tool_updates);
+                    if let Some(item) = &item {
+                        context
+                            .streaming_items
+                            .write()
+                            .await
+                            .insert(session_id.clone(), item.clone());
+                    }
+                    emit_session_state(&context, &session_id, true, item).await;
+                }
+                Some("message_end") => {
+                    streaming_message.finish(&event);
+                    let item = build_streaming_item(streaming_message.message(), &tool_updates);
                     if let Some(item) = &item {
                         context
                             .streaming_items
@@ -884,8 +899,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     if let Some(call_id) = event.get("toolCallId").and_then(Value::as_str) {
                         tool_updates.insert(call_id.to_string(), event.clone());
                     }
-                    let item =
-                        build_streaming_item(latest_streaming_message.as_ref(), &tool_updates);
+                    let item = build_streaming_item(streaming_message.message(), &tool_updates);
                     if let Some(item) = &item {
                         context
                             .streaming_items
@@ -900,7 +914,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                         .await;
                 }
                 Some("agent_settled") | Some("compaction_end") => {
-                    latest_streaming_message = None;
+                    streaming_message.clear();
                     tool_updates.clear();
                     context.streaming_items.write().await.remove(&session_id);
                     maybe_auto_name_session(&context, &session_id, &runtime).await;

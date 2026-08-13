@@ -13,6 +13,7 @@ pub mod persistence;
 pub mod pi_installation;
 pub mod pi_protocol;
 pub mod pi_rpc;
+pub mod pi_stream;
 pub mod project_files;
 pub mod protocol;
 pub mod runtime;
