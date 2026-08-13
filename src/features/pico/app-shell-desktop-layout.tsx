@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLatestRef, sameStringArray } from "@/features/pico/app-shell-common"
 import {
@@ -10,8 +11,6 @@ import {
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { AppShellUiState } from "@/features/pico/app-shell-types"
 import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
-import { RightSidebar } from "@/features/pico/right-sidebar"
-import { TerminalPanel } from "@/features/pico/terminal-panel"
 import {
   selectRightSidebarHasVisibleFiles,
   selectRightSidebarVisibleFileTabs,
@@ -40,6 +39,25 @@ import {
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type { SessionState } from "@/lib/pico"
+
+const RightSidebar = React.lazy(async () => {
+  const module = await import("@/features/pico/right-sidebar")
+  return { default: module.RightSidebar }
+})
+
+const TerminalPanel = React.lazy(async () => {
+  const module = await import("@/features/pico/terminal-panel")
+  return { default: module.TerminalPanel }
+})
+
+function PanelLoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full min-h-24 w-full items-center justify-center gap-2 text-sm text-muted-foreground">
+      <Spinner />
+      <span>{label}</span>
+    </div>
+  )
+}
 
 function shallowTerminalSession(
   left: { cwd?: string; sessionId?: string },
@@ -132,33 +150,37 @@ const AppShellGitPanelController = React.memo(
     )
 
     return (
-      <RightSidebar
-        viewerContextId={viewerContextId}
-        cwd={cwd}
-        active={active}
-        activeFilePath={activeFilePath}
-        activeTab={activeTab}
-        diffLineComments={composerDiffLineComments}
-        filePreviewPath={filePreviewPath}
-        fileTabs={fileTabs}
-        fileTreeCollapsed={fileTreeCollapsed}
-        onActiveFileChange={(path) => {
-          setStoreField(rightSidebarStore, "fileActivePath", path)
-        }}
-        onActiveTabChange={(tab) => {
-          setRightSidebarActiveTab(rightSidebarStore, tab)
-        }}
-        onAddDiffLineComment={onAddDiffLineComment}
-        onCloseAllFiles={onCloseAllFiles}
-        onCloseFile={onCloseFile}
-        onCloseFilesToRight={onCloseFilesToRight}
-        onCloseOtherFiles={onCloseOtherFiles}
-        onFileTreeCollapsedChange={(collapsed) => {
-          setStoreField(rightSidebarStore, "fileTreeCollapsed", collapsed)
-        }}
-        onOpenFile={onOpenFile}
-        onReorderFiles={onReorderFiles}
-      />
+      <React.Suspense
+        fallback={<PanelLoadingFallback label="Loading files…" />}
+      >
+        <RightSidebar
+          viewerContextId={viewerContextId}
+          cwd={cwd}
+          active={active}
+          activeFilePath={activeFilePath}
+          activeTab={activeTab}
+          diffLineComments={composerDiffLineComments}
+          filePreviewPath={filePreviewPath}
+          fileTabs={fileTabs}
+          fileTreeCollapsed={fileTreeCollapsed}
+          onActiveFileChange={(path) => {
+            setStoreField(rightSidebarStore, "fileActivePath", path)
+          }}
+          onActiveTabChange={(tab) => {
+            setRightSidebarActiveTab(rightSidebarStore, tab)
+          }}
+          onAddDiffLineComment={onAddDiffLineComment}
+          onCloseAllFiles={onCloseAllFiles}
+          onCloseFile={onCloseFile}
+          onCloseFilesToRight={onCloseFilesToRight}
+          onCloseOtherFiles={onCloseOtherFiles}
+          onFileTreeCollapsedChange={(collapsed) => {
+            setStoreField(rightSidebarStore, "fileTreeCollapsed", collapsed)
+          }}
+          onOpenFile={onOpenFile}
+          onReorderFiles={onReorderFiles}
+        />
+      </React.Suspense>
     )
   }
 )
@@ -219,34 +241,38 @@ function AppShellDesktopGitPanel({
       data-state={active ? "open" : "closed"}
       className="flex h-full min-h-0 w-full min-w-0 flex-col border-l border-border/70 bg-background data-[state=closed]:pointer-events-none data-[state=closed]:border-transparent"
     >
-      <RightSidebar
-        viewerContextId={viewerContextId}
-        cwd={cwd}
-        active={active}
-        activeFilePath={activeFilePath}
-        activeTab={activeTab}
-        diffLineComments={composerDiffLineComments}
-        filePreviewPath={filePreviewPath}
-        fileTabs={fileTabs}
-        fileTreeCollapsed={fileTreeCollapsed}
-        onActiveFileChange={(path) => {
-          setStoreField(rightSidebarStore, "fileActivePath", path)
-        }}
-        onActiveTabChange={(tab) => {
-          setRightSidebarActiveTab(rightSidebarStore, tab)
-        }}
-        onAddDiffLineComment={onAddDiffLineComment}
-        onCloseAllFiles={onCloseAllFiles}
-        onCloseFile={onCloseFile}
-        onCloseFilesToRight={onCloseFilesToRight}
-        onCloseOtherFiles={onCloseOtherFiles}
-        onFileTreeCollapsedChange={(collapsed) => {
-          setStoreField(rightSidebarStore, "fileTreeCollapsed", collapsed)
-        }}
-        onOpenFile={onOpenFile}
-        onReorderFiles={onReorderFiles}
-        showToolbar={false}
-      />
+      <React.Suspense
+        fallback={<PanelLoadingFallback label="Loading files…" />}
+      >
+        <RightSidebar
+          viewerContextId={viewerContextId}
+          cwd={cwd}
+          active={active}
+          activeFilePath={activeFilePath}
+          activeTab={activeTab}
+          diffLineComments={composerDiffLineComments}
+          filePreviewPath={filePreviewPath}
+          fileTabs={fileTabs}
+          fileTreeCollapsed={fileTreeCollapsed}
+          onActiveFileChange={(path) => {
+            setStoreField(rightSidebarStore, "fileActivePath", path)
+          }}
+          onActiveTabChange={(tab) => {
+            setRightSidebarActiveTab(rightSidebarStore, tab)
+          }}
+          onAddDiffLineComment={onAddDiffLineComment}
+          onCloseAllFiles={onCloseAllFiles}
+          onCloseFile={onCloseFile}
+          onCloseFilesToRight={onCloseFilesToRight}
+          onCloseOtherFiles={onCloseOtherFiles}
+          onFileTreeCollapsedChange={(collapsed) => {
+            setStoreField(rightSidebarStore, "fileTreeCollapsed", collapsed)
+          }}
+          onOpenFile={onOpenFile}
+          onReorderFiles={onReorderFiles}
+          showToolbar={false}
+        />
+      </React.Suspense>
     </aside>
   )
 }
@@ -723,6 +749,16 @@ function useAppShellTabsControllerView({
   workingStateStore,
 }: AppShellTabsControllerProps) {
   const currentTab = useSelector(appUiStore, (state) => state.currentTab)
+  const [mobileGitMounted, setMobileGitMounted] = React.useState(
+    currentTab === "git"
+  )
+  const [mobileTerminalMounted, setMobileTerminalMounted] = React.useState(
+    currentTab === "terminal"
+  )
+  React.useEffect(() => {
+    if (currentTab === "git") setMobileGitMounted(true)
+    if (currentTab === "terminal") setMobileTerminalMounted(true)
+  }, [currentTab])
   const isDraftSession = useSelector(
     sessionStore,
     (sessionState) => sessionState.draft
@@ -874,32 +910,40 @@ function useAppShellTabsControllerView({
 
       {isMobile ? (
         <>
-          <div className={mobileGitClassName}>
-            <AppShellGitPanelController
-              viewerContextId={viewerContextId}
-              sessionStore={sessionStore}
-              active={currentTab === "git"}
-              composerDiffLineComments={composerDiffLineComments}
-              rightSidebarStore={rightSidebarStore}
-              onAddDiffLineComment={onAddDiffLineComment}
-              onCloseAllFiles={onCloseAllFileViewTabs}
-              onCloseFile={onCloseFileViewTab}
-              onCloseFilesToRight={onCloseFileViewTabsToRight}
-              onCloseOtherFiles={onCloseOtherFileViewTabs}
-              onOpenFile={onOpenFileViewTab}
-              onReorderFiles={onReorderFileViewTabs}
-            />
-          </div>
-          <div className={mobileTerminalClassName}>
-            <TerminalPanel
-              active={currentTab === "terminal"}
-              cwd={terminalSession.cwd}
-              onClose={onCloseTerminalPanel}
-              sessionId={terminalSession.sessionId}
-              showCloseButton={false}
-              viewerContextId={viewerContextId}
-            />
-          </div>
+          {mobileGitMounted ? (
+            <div className={mobileGitClassName}>
+              <AppShellGitPanelController
+                viewerContextId={viewerContextId}
+                sessionStore={sessionStore}
+                active={currentTab === "git"}
+                composerDiffLineComments={composerDiffLineComments}
+                rightSidebarStore={rightSidebarStore}
+                onAddDiffLineComment={onAddDiffLineComment}
+                onCloseAllFiles={onCloseAllFileViewTabs}
+                onCloseFile={onCloseFileViewTab}
+                onCloseFilesToRight={onCloseFileViewTabsToRight}
+                onCloseOtherFiles={onCloseOtherFileViewTabs}
+                onOpenFile={onOpenFileViewTab}
+                onReorderFiles={onReorderFileViewTabs}
+              />
+            </div>
+          ) : null}
+          {mobileTerminalMounted ? (
+            <div className={mobileTerminalClassName}>
+              <React.Suspense
+                fallback={<PanelLoadingFallback label="Loading terminal…" />}
+              >
+                <TerminalPanel
+                  active={currentTab === "terminal"}
+                  cwd={terminalSession.cwd}
+                  onClose={onCloseTerminalPanel}
+                  sessionId={terminalSession.sessionId}
+                  showCloseButton={false}
+                  viewerContextId={viewerContextId}
+                />
+              </React.Suspense>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
@@ -1137,13 +1181,17 @@ function useAppShellTabsControllerView({
                 />
               ) : null}
               <div className="h-full min-h-0 w-full min-w-0 overflow-hidden">
-                <TerminalPanel
-                  active={desktopTerminalOpen}
-                  cwd={terminalSession.cwd}
-                  onClose={onCloseTerminalPanel}
-                  sessionId={terminalSession.sessionId}
-                  viewerContextId={viewerContextId}
-                />
+                <React.Suspense
+                  fallback={<PanelLoadingFallback label="Loading terminal…" />}
+                >
+                  <TerminalPanel
+                    active={desktopTerminalOpen}
+                    cwd={terminalSession.cwd}
+                    onClose={onCloseTerminalPanel}
+                    sessionId={terminalSession.sessionId}
+                    viewerContextId={viewerContextId}
+                  />
+                </React.Suspense>
               </div>
             </aside>
           ) : null}
