@@ -14,9 +14,9 @@ use url::Url;
 
 use crate::models::{
     AuthProvidersResponse, ClientManifest, DesktopEvent, ForkableMessagesResponse,
-    GitActionResponse, GitChangesResponse, GitFileDiffResponse, GitStatusResponse, PendingMessage,
-    PerformanceSettings, ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest,
-    SessionTreeResponse, TerminalCreateResponse,
+    GitActionResponse, GitChangesResponse, GitCommitDiffResponse, GitFileDiffResponse,
+    GitStatusResponse, PendingMessage, PerformanceSettings, ProjectFileReadResponse,
+    ProjectFileTreeResponse, PromptRequest, SessionTreeResponse, TerminalCreateResponse,
 };
 
 #[derive(Clone)]
@@ -854,6 +854,34 @@ impl PicoClient {
                 .map(DesktopEvent::GitDiff);
             Self::send_result(tx, result);
         });
+    }
+
+    pub fn load_commit_diff(&self, cwd: String, commit: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<GitCommitDiffResponse>(
+                    "/api/git-commit-diff",
+                    &[("cwd", &cwd), ("commit", &commit), ("mode", "commit")],
+                )
+                .map(DesktopEvent::GitCommitDiff);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn commit_action(
+        &self,
+        cwd: String,
+        commit: String,
+        action: String,
+        tx: Sender<DesktopEvent>,
+    ) {
+        self.git_mutation(
+            "/api/git-commit-action",
+            json!({ "cwd": cwd, "commit": commit, "action": action }),
+            "Applied commit action",
+            tx,
+        );
     }
 
     pub fn stage_git_file(

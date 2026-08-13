@@ -570,6 +570,13 @@ pub struct GitFileDiffResponse {
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
+pub struct GitCommitDiffResponse {
+    pub commit: String,
+    pub title: String,
+    pub patch: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitActionResponse {
     pub stdout: String,
@@ -753,6 +760,7 @@ pub enum DesktopEvent {
     GitStatus(Option<GitStatusSummary>),
     GitChanges(GitChangesResponse),
     GitDiff(GitFileDiffResponse),
+    GitCommitDiff(GitCommitDiffResponse),
     GitMutation(String),
     GitRefresh(String),
     PendingMessages(Vec<PendingMessage>),

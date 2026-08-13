@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
-    App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
+    App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement as _, PathPromptOptions, Render, ScrollHandle, StatefulInteractiveElement as _,
     Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
@@ -24,6 +24,31 @@ use crate::models::{
     FlatTreeNode, ForkableMessage, GitChangeFile, GitLocalBranch, GitStatusSummary,
     SessionListEntry, SessionState, UiRequest, UserConversationItem,
 };
+
+gpui::actions!(
+    pico_desktop,
+    [
+        NewSession,
+        ToggleLeftSidebar,
+        ToggleRightSidebar,
+        OpenSettings,
+        FocusSessionSearch,
+        FocusComposer,
+        AbortSession,
+    ]
+);
+
+pub fn bind_keys(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("cmd-n", NewSession, None),
+        KeyBinding::new("cmd-b", ToggleLeftSidebar, None),
+        KeyBinding::new("cmd-shift-b", ToggleRightSidebar, None),
+        KeyBinding::new("cmd-,", OpenSettings, None),
+        KeyBinding::new("cmd-k", FocusSessionSearch, None),
+        KeyBinding::new("cmd-l", FocusComposer, None),
+        KeyBinding::new("cmd-.", AbortSession, None),
+    ]);
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum RightWorkspaceTab {
@@ -81,6 +106,8 @@ pub struct PicoDesktop {
     git_commits: Vec<String>,
     selected_git_path: Option<String>,
     selected_git_diff: Option<String>,
+    selected_commit_hash: Option<String>,
+    pending_commit_action: Option<String>,
     pending_discard_path: Option<String>,
     pending_discard_all: bool,
     streaming_behavior: ComposerStreamingBehavior,
@@ -109,6 +136,7 @@ pub struct PicoDesktop {
     commit_message: Entity<InputState>,
     auth_value: Entity<InputState>,
     terminal_input: Entity<InputState>,
+    git_comment_input: Entity<InputState>,
     conversation_scroll: ScrollHandle,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
@@ -136,6 +164,8 @@ impl PicoDesktop {
         let auth_value =
             cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
         let terminal_input = cx.new(|cx| InputState::new(window, cx).placeholder("Enter command…"));
+        let git_comment_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Comment on this diff…"));
         let (tx, rx) = smol::channel::unbounded();
 
         client.connect(tx.clone());
@@ -179,6 +209,8 @@ impl PicoDesktop {
             git_commits: Vec::new(),
             selected_git_path: None,
             selected_git_diff: None,
+            selected_commit_hash: None,
+            pending_commit_action: None,
             pending_discard_path: None,
             pending_discard_all: false,
             streaming_behavior: ComposerStreamingBehavior::FollowUp,
@@ -207,6 +239,7 @@ impl PicoDesktop {
             commit_message,
             auth_value,
             terminal_input,
+            git_comment_input,
             conversation_scroll: ScrollHandle::new(),
             _event_task,
             _subscriptions,
@@ -288,12 +321,20 @@ impl PicoDesktop {
             DesktopEvent::GitDiff(response) => {
                 self.selected_git_path = Some(response.path);
                 self.selected_git_diff = Some(response.patch);
+                self.selected_commit_hash = None;
+                self.status_message = None;
+            }
+            DesktopEvent::GitCommitDiff(response) => {
+                self.selected_git_path = Some(response.title);
+                self.selected_git_diff = Some(response.patch);
+                self.selected_commit_hash = Some(response.commit);
                 self.status_message = None;
             }
             DesktopEvent::GitMutation(message) => {
                 self.status_message = Some(message);
                 self.pending_discard_path = None;
                 self.pending_discard_all = false;
+                self.pending_commit_action = None;
                 if let Some(cwd) = self.files_cwd.clone() {
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
@@ -1078,12 +1119,80 @@ impl PicoDesktop {
         cx.notify();
     }
 
+    fn reference_project_file(
+        &mut self,
+        path: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let current = self.composer.read(cx).value().to_string();
+        let spacer =
+            if current.is_empty() || current.chars().last().is_some_and(char::is_whitespace) {
+                ""
+            } else {
+                " "
+            };
+        self.composer.update(cx, |state, cx| {
+            state.set_value(format!("{current}{spacer}@{path} "), window, cx);
+            state.focus(window, cx);
+        });
+        cx.notify();
+    }
+
     fn open_git_diff(&mut self, path: String, cx: &mut Context<Self>) {
         let Some(cwd) = self.files_cwd.clone() else {
             return;
         };
         self.status_message = Some(format!("Loading diff for {path}…"));
         self.client.load_git_diff(cwd, path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn open_commit_diff(&mut self, commit: String, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.load_commit_diff(cwd, commit, self.tx.clone());
+        self.status_message = Some("Loading commit diff…".into());
+        cx.notify();
+    }
+
+    fn apply_commit_action(&mut self, action: String, cx: &mut Context<Self>) {
+        let (Some(cwd), Some(commit)) = (self.files_cwd.clone(), self.selected_commit_hash.clone())
+        else {
+            return;
+        };
+        if self.pending_commit_action.as_deref() != Some(action.as_str()) {
+            self.pending_commit_action = Some(action);
+            self.status_message = Some("Click the commit action again to confirm.".into());
+            cx.notify();
+            return;
+        }
+        self.client
+            .commit_action(cwd, commit, action, self.tx.clone());
+        self.status_message = Some("Applying commit action…".into());
+        cx.notify();
+    }
+
+    fn attach_git_comment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let comment = self.git_comment_input.read(cx).value().trim().to_string();
+        let Some(path) = self.selected_git_path.clone() else {
+            return;
+        };
+        if comment.is_empty() {
+            self.status_message = Some("Enter a diff comment first.".into());
+            cx.notify();
+            return;
+        }
+        let current = self.composer.read(cx).value().to_string();
+        let attachment = format!("\n\nDiff comments:\n- {path}: {comment}");
+        self.composer.update(cx, |state, cx| {
+            state.set_value(format!("{}{attachment}", current.trim_end()), window, cx);
+        });
+        self.git_comment_input.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+        self.status_message = Some("Attached diff comment to the prompt.".into());
         cx.notify();
     }
 
@@ -2125,6 +2234,18 @@ impl PicoDesktop {
                                 .text_sm()
                                 .font_semibold()
                                 .child(path.clone()),
+                        )
+                        .child(
+                            Button::new("reference-file")
+                                .secondary()
+                                .small()
+                                .label("Reference")
+                                .on_click({
+                                    let path = path.clone();
+                                    cx.listener(move |this, _, window, cx| {
+                                        this.reference_project_file(path.clone(), window, cx)
+                                    })
+                                }),
                         ),
                 )
                 .child(
@@ -2242,6 +2363,8 @@ impl PicoDesktop {
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.selected_git_path = None;
                                             this.selected_git_diff = None;
+                                            this.selected_commit_hash = None;
+                                            this.pending_commit_action = None;
                                             cx.notify();
                                         })),
                                 )
@@ -2256,6 +2379,46 @@ impl PicoDesktop {
                                         .child(path.clone()),
                                 ),
                         )
+                        .when_some(self.selected_commit_hash.clone(), |this, _| {
+                            this.child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("revert-commit")
+                                            .danger()
+                                            .small()
+                                            .label(
+                                                if self.pending_commit_action.as_deref()
+                                                    == Some("revert")
+                                                {
+                                                    "Confirm revert"
+                                                } else {
+                                                    "Revert"
+                                                },
+                                            )
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.apply_commit_action("revert".into(), cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("cherry-pick-commit")
+                                            .secondary()
+                                            .small()
+                                            .label(
+                                                if self.pending_commit_action.as_deref()
+                                                    == Some("cherry-pick")
+                                                {
+                                                    "Confirm cherry-pick"
+                                                } else {
+                                                    "Cherry-pick"
+                                                },
+                                            )
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.apply_commit_action("cherry-pick".into(), cx)
+                                            })),
+                                    ),
+                            )
+                        })
                         .when_some(selected_file, |this, file| {
                             let stage_file = file.clone();
                             let discard_file = file.clone();
@@ -2293,7 +2456,21 @@ impl PicoDesktop {
                                             })),
                                     ),
                             )
-                        }),
+                        })
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .child(Input::new(&self.git_comment_input).cleanable(true))
+                                .child(
+                                    Button::new("attach-git-comment")
+                                        .secondary()
+                                        .small()
+                                        .label("Attach")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.attach_git_comment(window, cx)
+                                        })),
+                                ),
+                        ),
                 )
                 .child(
                     v_flex()
@@ -2560,14 +2737,33 @@ impl PicoDesktop {
                                 .text_color(muted)
                                 .child("RECENT COMMITS"),
                         )
-                        .children(self.git_commits.iter().take(20).map(|commit| {
-                            div()
-                                .px_2()
-                                .py_1p5()
-                                .font_family("Menlo")
-                                .text_xs()
-                                .child(commit.clone())
-                        }))
+                        .children(
+                            self.git_commits
+                                .iter()
+                                .take(20)
+                                .enumerate()
+                                .map(|(index, commit)| {
+                                    let hash = commit
+                                        .split(['\t', '\u{1f}'])
+                                        .next()
+                                        .unwrap_or(commit)
+                                        .to_string();
+                                    let label = commit
+                                        .split('\u{1f}')
+                                        .next_back()
+                                        .unwrap_or(commit)
+                                        .to_string();
+                                    Button::new(("commit-row", index))
+                                        .ghost()
+                                        .small()
+                                        .w_full()
+                                        .justify_start()
+                                        .label(label)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.open_commit_diff(hash.clone(), cx)
+                                        }))
+                                }),
+                        )
                     }),
             )
             .into_any_element()
@@ -3100,6 +3296,27 @@ impl Render for PicoDesktop {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.status_message.clone();
         h_flex()
+            .id("pico-desktop")
+            .on_action(cx.listener(|this, _: &NewSession, _, cx| this.create_session(cx)))
+            .on_action(cx.listener(|this, _: &ToggleLeftSidebar, _, cx| {
+                this.left_sidebar_open = !this.left_sidebar_open;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleRightSidebar, _, cx| {
+                this.right_sidebar_open = !this.right_sidebar_open;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
+            .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
+                this.left_sidebar_open = true;
+                this.search.update(cx, |state, cx| state.focus(window, cx));
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &FocusComposer, window, cx| {
+                this.composer
+                    .update(cx, |state, cx| state.focus(window, cx));
+            }))
+            .on_action(cx.listener(|this, _: &AbortSession, _, cx| this.abort(cx)))
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
