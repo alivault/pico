@@ -436,6 +436,102 @@ pub struct ProjectFileTreeResponse {
     pub paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileReadResponse {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusResponse {
+    pub git_status: Option<GitStatusSummary>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusSummary {
+    pub branch: Option<String>,
+    pub detached: bool,
+    pub revision: Option<String>,
+    pub dirty: bool,
+    pub changed_file_count: usize,
+    pub ahead: usize,
+    pub behind: usize,
+    pub inline: String,
+    pub label: String,
+    pub title: String,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangesResponse {
+    #[serde(default)]
+    pub files: Option<Vec<GitChangeFile>>,
+    #[serde(default)]
+    pub local_branches: Option<Vec<GitLocalBranch>>,
+    #[serde(default)]
+    pub remote_branches: Option<Vec<GitRemoteBranch>>,
+    #[serde(default)]
+    pub commits: Option<Vec<String>>,
+    #[serde(default)]
+    pub unpushed_commit_hashes: Option<Vec<String>>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangeFile {
+    pub status: String,
+    pub path: String,
+    pub previous_path: Option<String>,
+    pub lines_added: Option<usize>,
+    pub lines_deleted: Option<usize>,
+    pub size_bytes: Option<u64>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitLocalBranch {
+    pub name: String,
+    pub current: bool,
+    pub upstream: Option<String>,
+    pub ahead: usize,
+    pub behind: usize,
+    pub upstream_gone: bool,
+    pub hash: Option<String>,
+    pub subject: Option<String>,
+    pub relative_date: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRemoteBranch {
+    pub name: String,
+    pub hash: Option<String>,
+    pub subject: Option<String>,
+    pub relative_date: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDiffResponse {
+    pub path: String,
+    pub patch: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitActionResponse {
+    pub stdout: String,
+    pub stderr: String,
+}
+
 #[derive(Clone, Debug)]
 pub enum DesktopEvent {
     Connected(ClientManifest),
@@ -443,6 +539,12 @@ pub enum DesktopEvent {
     Sessions(SessionsEvent),
     Delta(ConversationDeltaEvent),
     Files(Vec<String>),
+    FileRead(ProjectFileReadResponse),
+    GitStatus(Option<GitStatusSummary>),
+    GitChanges(GitChangesResponse),
+    GitDiff(GitFileDiffResponse),
+    GitMutation(String),
+    GitRefresh(String),
     PromptSent,
     SessionCreated { session_key: String, cwd: String },
     SessionSelected(String),

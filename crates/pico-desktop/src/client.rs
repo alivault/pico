@@ -12,7 +12,10 @@ use serde_json::{Value, json};
 use smol::channel::Sender;
 use url::Url;
 
-use crate::models::{ClientManifest, DesktopEvent, ProjectFileTreeResponse, PromptRequest};
+use crate::models::{
+    ClientManifest, DesktopEvent, GitActionResponse, GitChangesResponse, GitFileDiffResponse,
+    GitStatusResponse, ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest,
+};
 
 #[derive(Clone)]
 pub struct PicoClient {
@@ -137,6 +140,10 @@ impl PicoClient {
                 Some("conversation_delta") => {
                     Some(DesktopEvent::Delta(serde_json::from_value(value)?))
                 }
+                Some("git_changed") => value
+                    .get("cwd")
+                    .and_then(Value::as_str)
+                    .map(|cwd| DesktopEvent::GitRefresh(cwd.to_string())),
                 Some("request_error" | "extension_error") => Some(DesktopEvent::Error(
                     value
                         .get("error")
@@ -252,6 +259,185 @@ impl PicoClient {
             let result = client
                 .get_json::<ProjectFileTreeResponse>("/api/files/tree", &[("cwd", &cwd)])
                 .map(|response| DesktopEvent::Files(response.paths));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_file(&self, cwd: String, path: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<ProjectFileReadResponse>(
+                    "/api/files/read",
+                    &[("cwd", &cwd), ("path", &path)],
+                )
+                .map(DesktopEvent::FileRead);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_git(&self, cwd: String, tx: Sender<DesktopEvent>) {
+        let status_client = self.clone();
+        let status_tx = tx.clone();
+        let status_cwd = cwd.clone();
+        std::thread::spawn(move || {
+            let result = status_client
+                .get_json::<GitStatusResponse>("/api/git-status", &[("cwd", &status_cwd)])
+                .map(|response| DesktopEvent::GitStatus(response.git_status));
+            Self::send_result(status_tx, result);
+        });
+
+        let changes_client = self.clone();
+        std::thread::spawn(move || {
+            let result = changes_client
+                .get_json::<GitChangesResponse>(
+                    "/api/git-changes",
+                    &[("cwd", &cwd), ("gitScope", "all")],
+                )
+                .map(DesktopEvent::GitChanges);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_git_diff(&self, cwd: String, path: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<GitFileDiffResponse>("/api/git-diff", &[("cwd", &cwd), ("path", &path)])
+                .map(DesktopEvent::GitDiff);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn stage_git_file(
+        &self,
+        cwd: String,
+        path: String,
+        previous_path: Option<String>,
+        unstage: bool,
+        tx: Sender<DesktopEvent>,
+    ) {
+        self.git_mutation(
+            "/api/git-stage",
+            json!({
+                "action": if unstage { "unstage" } else { "stage" },
+                "cwd": cwd,
+                "path": path,
+                "previousPath": previous_path,
+            }),
+            if unstage {
+                "Unstaged file"
+            } else {
+                "Staged file"
+            },
+            tx,
+        );
+    }
+
+    pub fn stage_git_all(&self, cwd: String, unstage: bool, tx: Sender<DesktopEvent>) {
+        self.git_mutation(
+            "/api/git-stage",
+            json!({
+                "action": if unstage { "unstage-all" } else { "stage-all" },
+                "all": true,
+                "cwd": cwd,
+            }),
+            if unstage {
+                "Unstaged all changes"
+            } else {
+                "Staged all changes"
+            },
+            tx,
+        );
+    }
+
+    pub fn discard_git_file(
+        &self,
+        cwd: String,
+        path: String,
+        previous_path: Option<String>,
+        status: String,
+        tx: Sender<DesktopEvent>,
+    ) {
+        self.git_mutation(
+            "/api/git-discard",
+            json!({
+                "cwd": cwd,
+                "path": path,
+                "previousPath": previous_path,
+                "status": status,
+            }),
+            "Discarded file changes",
+            tx,
+        );
+    }
+
+    pub fn commit_git(&self, cwd: String, message: String, push: bool, tx: Sender<DesktopEvent>) {
+        self.git_mutation(
+            "/api/git-commit",
+            json!({
+                "cwd": cwd,
+                "message": message,
+                "push": push,
+                "forcePush": false,
+                "includeUnstaged": true,
+            }),
+            if push {
+                "Committed and pushed changes"
+            } else {
+                "Committed changes"
+            },
+            tx,
+        );
+    }
+
+    pub fn push_git(&self, cwd: String, force: bool, tx: Sender<DesktopEvent>) {
+        self.git_mutation(
+            "/api/git-push",
+            json!({ "cwd": cwd, "force": force }),
+            if force {
+                "Force pushed"
+            } else {
+                "Pushed changes"
+            },
+            tx,
+        );
+    }
+
+    pub fn pull_git(&self, cwd: String, tx: Sender<DesktopEvent>) {
+        self.git_mutation("/api/git-pull", json!({ "cwd": cwd }), "Pulled changes", tx);
+    }
+
+    pub fn checkout_branch(&self, cwd: String, branch: String, tx: Sender<DesktopEvent>) {
+        self.git_mutation(
+            "/api/git-checkout",
+            json!({ "cwd": cwd, "branch": branch }),
+            "Checked out branch",
+            tx,
+        );
+    }
+
+    fn git_mutation(
+        &self,
+        path: &'static str,
+        body: Value,
+        success_message: &'static str,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<GitActionResponse, _>(path, &[], &body)
+                .map(|response| {
+                    let detail = if !response.stdout.trim().is_empty() {
+                        format!("{success_message}: {}", response.stdout.trim())
+                    } else if !response.stderr.trim().is_empty() {
+                        format!("{success_message}: {}", response.stderr.trim())
+                    } else {
+                        success_message.to_string()
+                    };
+                    DesktopEvent::GitMutation(detail)
+                });
             Self::send_result(tx, result);
         });
     }

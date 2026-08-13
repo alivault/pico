@@ -18,9 +18,16 @@ use smol::channel::{Receiver, Sender};
 
 use crate::client::PicoClient;
 use crate::models::{
-    AssistantBlock, ConversationItem, DesktopEvent, DirectorySessionsIndex, SessionListEntry,
-    SessionState, UserConversationItem,
+    AssistantBlock, ConversationItem, DesktopEvent, DirectorySessionsIndex, GitChangeFile,
+    GitLocalBranch, GitStatusSummary, SessionListEntry, SessionState, UserConversationItem,
 };
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum RightWorkspaceTab {
+    #[default]
+    Changes,
+    Files,
+}
 
 pub struct PicoDesktop {
     client: PicoClient,
@@ -34,11 +41,22 @@ pub struct PicoDesktop {
     directory_indexes: HashMap<String, DirectorySessionsIndex>,
     files: Vec<String>,
     files_cwd: Option<String>,
+    active_right_tab: RightWorkspaceTab,
+    selected_file_path: Option<String>,
+    selected_file_content: Option<String>,
+    git_status: Option<GitStatusSummary>,
+    git_files: Vec<GitChangeFile>,
+    git_branches: Vec<GitLocalBranch>,
+    git_commits: Vec<String>,
+    selected_git_path: Option<String>,
+    selected_git_diff: Option<String>,
+    pending_discard_path: Option<String>,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
     search: Entity<InputState>,
     composer: Entity<TextareaState>,
+    commit_message: Entity<InputState>,
     conversation_scroll: ScrollHandle,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
@@ -58,6 +76,7 @@ impl PicoDesktop {
                 .submit_on_enter(true)
                 .placeholder("Ask anything…")
         });
+        let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
         let (tx, rx) = smol::channel::unbounded();
 
         client.connect(tx.clone());
@@ -89,11 +108,22 @@ impl PicoDesktop {
             directory_indexes: HashMap::new(),
             files: Vec::new(),
             files_cwd: None,
+            active_right_tab: RightWorkspaceTab::Changes,
+            selected_file_path: None,
+            selected_file_content: None,
+            git_status: None,
+            git_files: Vec::new(),
+            git_branches: Vec::new(),
+            git_commits: Vec::new(),
+            selected_git_path: None,
+            selected_git_diff: None,
+            pending_discard_path: None,
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
             search,
             composer,
+            commit_message,
             conversation_scroll: ScrollHandle::new(),
             _event_task,
             _subscriptions,
@@ -135,7 +165,8 @@ impl PicoDesktop {
                     .unwrap_or_else(|| self.selected_directory.clone());
                 if self.files_cwd.as_deref() != Some(&cwd) {
                     self.files_cwd = Some(cwd.clone());
-                    self.client.load_files(cwd, self.tx.clone());
+                    self.client.load_files(cwd.clone(), self.tx.clone());
+                    self.client.load_git(cwd, self.tx.clone());
                 }
                 self.conversation_scroll.scroll_to_bottom();
             }
@@ -156,6 +187,37 @@ impl PicoDesktop {
                 }
             }
             DesktopEvent::Files(paths) => self.files = paths,
+            DesktopEvent::FileRead(response) => {
+                self.selected_file_path = Some(response.path);
+                self.selected_file_content = Some(response.content);
+                self.status_message = None;
+            }
+            DesktopEvent::GitStatus(status) => self.git_status = status,
+            DesktopEvent::GitChanges(response) => {
+                self.git_files = response.files.unwrap_or_default();
+                self.git_branches = response.local_branches.unwrap_or_default();
+                self.git_commits = response.commits.unwrap_or_default();
+                self.status_message = None;
+            }
+            DesktopEvent::GitDiff(response) => {
+                self.selected_git_path = Some(response.path);
+                self.selected_git_diff = Some(response.patch);
+                self.status_message = None;
+            }
+            DesktopEvent::GitMutation(message) => {
+                self.status_message = Some(message);
+                self.pending_discard_path = None;
+                if let Some(cwd) = self.files_cwd.clone() {
+                    self.client.load_files(cwd.clone(), self.tx.clone());
+                    self.client.load_git(cwd, self.tx.clone());
+                }
+            }
+            DesktopEvent::GitRefresh(cwd) => {
+                if self.files_cwd.as_deref() == Some(cwd.as_str()) {
+                    self.client.load_files(cwd.clone(), self.tx.clone());
+                    self.client.load_git(cwd, self.tx.clone());
+                }
+            }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
             }
@@ -297,6 +359,123 @@ impl PicoDesktop {
             self.session.session_key.clone(),
             self.tx.clone(),
         );
+        cx.notify();
+    }
+
+    fn refresh_right_workspace(&mut self, cx: &mut Context<Self>) {
+        if let Some(cwd) = self.files_cwd.clone() {
+            self.status_message = Some("Refreshing project…".into());
+            self.client.load_files(cwd.clone(), self.tx.clone());
+            self.client.load_git(cwd, self.tx.clone());
+            cx.notify();
+        }
+    }
+
+    fn open_project_file(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.status_message = Some(format!("Opening {path}…"));
+        self.client.load_file(cwd, path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn open_git_diff(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.status_message = Some(format!("Loading diff for {path}…"));
+        self.client.load_git_diff(cwd, path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn stage_all(&mut self, unstage: bool, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.status_message = Some(if unstage {
+            "Unstaging changes…".into()
+        } else {
+            "Staging changes…".into()
+        });
+        self.client.stage_git_all(cwd, unstage, self.tx.clone());
+        cx.notify();
+    }
+
+    fn stage_file(&mut self, file: GitChangeFile, unstage: bool, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client
+            .stage_git_file(cwd, file.path, file.previous_path, unstage, self.tx.clone());
+        self.status_message = Some(if unstage {
+            "Unstaging file…".into()
+        } else {
+            "Staging file…".into()
+        });
+        cx.notify();
+    }
+
+    fn discard_file(&mut self, file: GitChangeFile, cx: &mut Context<Self>) {
+        if self.pending_discard_path.as_deref() != Some(file.path.as_str()) {
+            self.pending_discard_path = Some(file.path);
+            self.status_message = Some("Click Discard again to confirm.".into());
+            cx.notify();
+            return;
+        }
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.discard_git_file(
+            cwd,
+            file.path,
+            file.previous_path,
+            file.status,
+            self.tx.clone(),
+        );
+        self.status_message = Some("Discarding file changes…".into());
+        cx.notify();
+    }
+
+    fn commit(&mut self, push: bool, cx: &mut Context<Self>) {
+        let message = self.commit_message.read(cx).value().trim().to_string();
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        if message.is_empty() {
+            self.status_message = Some("Enter a commit message first.".into());
+            cx.notify();
+            return;
+        }
+        self.client.commit_git(cwd, message, push, self.tx.clone());
+        self.status_message = Some("Committing changes…".into());
+        cx.notify();
+    }
+
+    fn push(&mut self, force: bool, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.push_git(cwd, force, self.tx.clone());
+        self.status_message = Some("Pushing changes…".into());
+        cx.notify();
+    }
+
+    fn pull(&mut self, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.pull_git(cwd, self.tx.clone());
+        self.status_message = Some("Pulling changes…".into());
+        cx.notify();
+    }
+
+    fn checkout_branch(&mut self, branch: String, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.checkout_branch(cwd, branch, self.tx.clone());
+        self.status_message = Some("Checking out branch…".into());
         cx.notify();
     }
 
@@ -785,31 +964,65 @@ impl PicoDesktop {
         )
     }
 
-    fn render_right_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border.opacity(0.72);
+    fn render_file_workspace(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let muted = cx.theme().muted_foreground;
+        let border = cx.theme().border.opacity(0.72);
+        if let (Some(path), Some(content)) = (
+            self.selected_file_path.as_ref(),
+            self.selected_file_content.as_ref(),
+        ) {
+            let rendered = if path.ends_with(".md") || path.ends_with(".markdown") {
+                content.clone()
+            } else {
+                format!("````text\n{content}\n````")
+            };
+            return v_flex()
+                .flex_1()
+                .min_h_0()
+                .child(
+                    h_flex()
+                        .h(px(48.))
+                        .px_2()
+                        .gap_2()
+                        .border_b_1()
+                        .border_color(border)
+                        .child(
+                            Button::new("close-file")
+                                .ghost()
+                                .small()
+                                .icon(IconName::ArrowLeft)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.selected_file_path = None;
+                                    this.selected_file_content = None;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_sm()
+                                .font_semibold()
+                                .child(path.clone()),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .id("file-preview")
+                        .flex_1()
+                        .min_h_0()
+                        .p_3()
+                        .overflow_scroll()
+                        .child(TextView::markdown("project-file", rendered).selectable(true)),
+                )
+                .into_any_element();
+        }
+
         v_flex()
-            .w(px(330.))
-            .h_full()
-            .flex_shrink_0()
-            .border_l_1()
-            .border_color(border)
-            .child(
-                h_flex()
-                    .h(px(52.))
-                    .px_3()
-                    .gap_2()
-                    .border_b_1()
-                    .border_color(border)
-                    .child(
-                        Button::new("changes-tab")
-                            .ghost()
-                            .small()
-                            .disabled(true)
-                            .label("Changes"),
-                    )
-                    .child(Button::new("files-tab").secondary().small().label("Files")),
-            )
+            .flex_1()
+            .min_h_0()
             .child(
                 h_flex()
                     .h(px(48.))
@@ -824,7 +1037,15 @@ impl PicoDesktop {
                             .text_color(muted)
                             .child(format!("{} FILES", self.files.len())),
                     )
-                    .child(Icon::new(IconName::FolderOpen).size_4()),
+                    .child(
+                        Button::new("refresh-files")
+                            .ghost()
+                            .small()
+                            .label("Refresh")
+                            .on_click(
+                                cx.listener(|this, _, _, cx| this.refresh_right_workspace(cx)),
+                            ),
+                    ),
             )
             .child(
                 v_flex()
@@ -836,16 +1057,21 @@ impl PicoDesktop {
                     .children(
                         self.files
                             .iter()
-                            .take(500)
+                            .take(1000)
                             .enumerate()
                             .map(|(index, path)| {
+                                let path_to_open = path.clone();
                                 h_flex()
                                     .id(("file", index))
                                     .px_2()
                                     .py_1p5()
                                     .gap_2()
                                     .rounded_md()
+                                    .cursor_pointer()
                                     .hover(|this| this.bg(cx.theme().secondary.opacity(0.55)))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.open_project_file(path_to_open.clone(), cx);
+                                    }))
                                     .child(Icon::new(IconName::File).size_4().text_color(muted))
                                     .child(
                                         div()
@@ -858,6 +1084,376 @@ impl PicoDesktop {
                             }),
                     ),
             )
+            .into_any_element()
+    }
+
+    fn render_git_workspace(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let border = cx.theme().border.opacity(0.72);
+        if let (Some(path), Some(diff)) = (
+            self.selected_git_path.as_ref(),
+            self.selected_git_diff.as_ref(),
+        ) {
+            let selected_file = self
+                .git_files
+                .iter()
+                .find(|file| &file.path == path)
+                .cloned();
+            let can_unstage = selected_file
+                .as_ref()
+                .and_then(|file| file.status.chars().next())
+                .is_some_and(|status| status != ' ' && status != '?');
+            return v_flex()
+                .flex_1()
+                .min_h_0()
+                .child(
+                    v_flex()
+                        .p_2()
+                        .gap_2()
+                        .border_b_1()
+                        .border_color(border)
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .child(
+                                    Button::new("close-diff")
+                                        .ghost()
+                                        .small()
+                                        .icon(IconName::ArrowLeft)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.selected_git_path = None;
+                                            this.selected_git_diff = None;
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_sm()
+                                        .font_semibold()
+                                        .child(path.clone()),
+                                ),
+                        )
+                        .when_some(selected_file, |this, file| {
+                            let stage_file = file.clone();
+                            let discard_file = file.clone();
+                            this.child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("stage-selected")
+                                            .secondary()
+                                            .small()
+                                            .label(if can_unstage { "Unstage" } else { "Stage" })
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.stage_file(
+                                                    stage_file.clone(),
+                                                    can_unstage,
+                                                    cx,
+                                                );
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("discard-selected")
+                                            .danger()
+                                            .small()
+                                            .label(
+                                                if self.pending_discard_path.as_deref()
+                                                    == Some(file.path.as_str())
+                                                {
+                                                    "Confirm discard"
+                                                } else {
+                                                    "Discard"
+                                                },
+                                            )
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.discard_file(discard_file.clone(), cx);
+                                            })),
+                                    ),
+                            )
+                        }),
+                )
+                .child(
+                    v_flex()
+                        .id("git-diff")
+                        .flex_1()
+                        .min_h_0()
+                        .p_3()
+                        .overflow_scroll()
+                        .child(
+                            TextView::markdown(
+                                "git-diff-content",
+                                format!("````diff\n{diff}\n````"),
+                            )
+                            .selectable(true),
+                        ),
+                )
+                .into_any_element();
+        }
+
+        let branch = self
+            .git_status
+            .as_ref()
+            .and_then(|status| status.branch.clone())
+            .unwrap_or_else(|| "No repository".into());
+        let status_detail = self
+            .git_status
+            .as_ref()
+            .map(|status| status.inline.clone())
+            .unwrap_or_default();
+        v_flex()
+            .flex_1()
+            .min_h_0()
+            .child(
+                v_flex()
+                    .p_3()
+                    .gap_2()
+                    .border_b_1()
+                    .border_color(border)
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(div().text_sm().font_semibold().child(branch))
+                            .child(
+                                Button::new("refresh-git")
+                                    .ghost()
+                                    .small()
+                                    .label("Refresh")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.refresh_right_workspace(cx)
+                                    })),
+                            ),
+                    )
+                    .when(!status_detail.is_empty(), |this| {
+                        this.child(div().text_xs().text_color(muted).child(status_detail))
+                    })
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .child(
+                                Button::new("stage-all")
+                                    .secondary()
+                                    .small()
+                                    .label("Stage all")
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.stage_all(false, cx)),
+                                    ),
+                            )
+                            .child(
+                                Button::new("unstage-all")
+                                    .ghost()
+                                    .small()
+                                    .label("Unstage")
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.stage_all(true, cx)),
+                                    ),
+                            )
+                            .child(
+                                Button::new("pull")
+                                    .ghost()
+                                    .small()
+                                    .label("Pull")
+                                    .on_click(cx.listener(|this, _, _, cx| this.pull(cx))),
+                            )
+                            .child(
+                                Button::new("push")
+                                    .ghost()
+                                    .small()
+                                    .label("Push")
+                                    .on_click(cx.listener(|this, _, _, cx| this.push(false, cx))),
+                            ),
+                    )
+                    .child(Input::new(&self.commit_message).cleanable(true))
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Button::new("commit")
+                                    .primary()
+                                    .small()
+                                    .label("Commit")
+                                    .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
+                            )
+                            .child(
+                                Button::new("commit-push")
+                                    .secondary()
+                                    .small()
+                                    .label("Commit & push")
+                                    .on_click(cx.listener(|this, _, _, cx| this.commit(true, cx))),
+                            ),
+                    ),
+            )
+            .child(
+                v_flex()
+                    .id("git-changes")
+                    .flex_1()
+                    .min_h_0()
+                    .p_2()
+                    .overflow_y_scrollbar()
+                    .child(
+                        div()
+                            .px_2()
+                            .py_2()
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(muted)
+                            .child(format!("{} CHANGED FILES", self.git_files.len())),
+                    )
+                    .children(self.git_files.iter().enumerate().map(|(index, file)| {
+                        let path = file.path.clone();
+                        let additions = file.lines_added.unwrap_or_default();
+                        let deletions = file.lines_deleted.unwrap_or_default();
+                        h_flex()
+                            .id(("git-file", index))
+                            .px_2()
+                            .py_2()
+                            .gap_2()
+                            .rounded_md()
+                            .cursor_pointer()
+                            .hover(|this| this.bg(cx.theme().secondary.opacity(0.55)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.open_git_diff(path.clone(), cx);
+                            }))
+                            .child(
+                                div()
+                                    .w(px(22.))
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(muted)
+                                    .child(file.status.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_sm()
+                                    .child(file.path.clone()),
+                            )
+                            .when(additions > 0 || deletions > 0, |this| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(muted)
+                                        .child(format!("+{additions} −{deletions}")),
+                                )
+                            })
+                    }))
+                    .when(!self.git_branches.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .px_2()
+                                .pt_4()
+                                .pb_2()
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(muted)
+                                .child("BRANCHES"),
+                        )
+                        .children(
+                            self.git_branches
+                                .iter()
+                                .take(20)
+                                .enumerate()
+                                .map(|(index, branch)| {
+                                    let branch_name = branch.name.clone();
+                                    Button::new(("branch", index))
+                                        .ghost()
+                                        .small()
+                                        .w_full()
+                                        .justify_start()
+                                        .disabled(branch.current)
+                                        .label(if branch.current {
+                                            format!("✓ {}", branch.name)
+                                        } else {
+                                            branch.name.clone()
+                                        })
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.checkout_branch(branch_name.clone(), cx);
+                                        }))
+                                }),
+                        )
+                    })
+                    .when(!self.git_commits.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .px_2()
+                                .pt_4()
+                                .pb_2()
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(muted)
+                                .child("RECENT COMMITS"),
+                        )
+                        .children(self.git_commits.iter().take(20).map(|commit| {
+                            div()
+                                .px_2()
+                                .py_1p5()
+                                .font_family("Menlo")
+                                .text_xs()
+                                .child(commit.clone())
+                        }))
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn render_right_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border.opacity(0.72);
+        v_flex()
+            .w(px(390.))
+            .h_full()
+            .flex_shrink_0()
+            .border_l_1()
+            .border_color(border)
+            .child(
+                h_flex()
+                    .h(px(52.))
+                    .px_3()
+                    .gap_2()
+                    .border_b_1()
+                    .border_color(border)
+                    .child(
+                        Button::new("changes-tab")
+                            .small()
+                            .when(
+                                self.active_right_tab == RightWorkspaceTab::Changes,
+                                |this| this.secondary(),
+                            )
+                            .when(
+                                self.active_right_tab != RightWorkspaceTab::Changes,
+                                |this| this.ghost(),
+                            )
+                            .label("Changes")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.active_right_tab = RightWorkspaceTab::Changes;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("files-tab")
+                            .small()
+                            .when(self.active_right_tab == RightWorkspaceTab::Files, |this| {
+                                this.secondary()
+                            })
+                            .when(self.active_right_tab != RightWorkspaceTab::Files, |this| {
+                                this.ghost()
+                            })
+                            .label("Files")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.active_right_tab = RightWorkspaceTab::Files;
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(match self.active_right_tab {
+                RightWorkspaceTab::Changes => self.render_git_workspace(cx),
+                RightWorkspaceTab::Files => self.render_file_workspace(cx),
+            })
     }
 }
 
