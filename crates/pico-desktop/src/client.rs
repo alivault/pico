@@ -530,6 +530,46 @@ impl PicoClient {
         );
     }
 
+    pub fn generate_and_rename_session(&self, path: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>("/api/session/name", &[], &json!({ "path": path.clone() }))
+                .and_then(|value| {
+                    let name = value
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| anyhow!("generated name response omitted name"))?;
+                    client.post_json::<Value, _>(
+                        "/api/session/rename",
+                        &[],
+                        &json!({ "path": path, "name": name }),
+                    )
+                })
+                .map(|_| DesktopEvent::SessionAction {
+                    message: "Generated session name".into(),
+                    clear_selection: false,
+                });
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn cleanup_directory(&self, directory: String, tx: Sender<DesktopEvent>) {
+        self.session_action(
+            "/api/directory-sessions/cleanup",
+            json!({
+                "directory": directory,
+                "olderThanMs": 30_u64 * 24 * 60 * 60 * 1000,
+                "dryRun": false,
+                "includeActiveSession": false,
+            }),
+            "Cleaned sessions older than 30 days",
+            false,
+            None,
+            tx,
+        );
+    }
+
     pub fn delete_session(&self, path: String, tx: Sender<DesktopEvent>) {
         self.session_action(
             "/api/session/delete",

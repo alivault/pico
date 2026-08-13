@@ -148,6 +148,7 @@ pub struct PicoDesktop {
     selected_session_path: Option<String>,
     selected_session_unread: bool,
     confirm_delete_session: bool,
+    confirm_directory_cleanup: bool,
     session: SessionState,
     directory_indexes: HashMap<String, DirectorySessionsIndex>,
     files: Vec<String>,
@@ -268,6 +269,7 @@ impl PicoDesktop {
             selected_session_path: None,
             selected_session_unread: false,
             confirm_delete_session: false,
+            confirm_directory_cleanup: false,
             session: SessionState::default(),
             directory_indexes: HashMap::new(),
             files: Vec::new(),
@@ -1003,6 +1005,32 @@ impl PicoDesktop {
         cx.notify();
     }
 
+    fn generate_selected_session_name(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.selected_session_path.clone() else {
+            return;
+        };
+        self.client
+            .generate_and_rename_session(path, self.tx.clone());
+        self.status_message = Some("Generating session name…".into());
+        cx.notify();
+    }
+
+    fn cleanup_selected_directory(&mut self, cx: &mut Context<Self>) {
+        if !self.confirm_directory_cleanup {
+            self.confirm_directory_cleanup = true;
+            self.status_message = Some(
+                "Click Clean old again to delete sessions inactive for more than 30 days.".into(),
+            );
+            cx.notify();
+            return;
+        }
+        self.client
+            .cleanup_directory(self.selected_directory.clone(), self.tx.clone());
+        self.status_message = Some("Cleaning old sessions…".into());
+        self.confirm_directory_cleanup = false;
+        cx.notify();
+    }
+
     fn delete_selected_session(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.selected_session_path.clone() else {
             return;
@@ -1594,25 +1622,37 @@ impl PicoDesktop {
 
     fn sessions(&self, cx: &App) -> Vec<SessionListEntry> {
         let query = self.search.read(cx).value().trim().to_lowercase();
+        if !query.is_empty() {
+            let mut seen = HashSet::new();
+            return self
+                .directory_indexes
+                .values()
+                .flat_map(|index| index.sessions.iter())
+                .filter(|session| {
+                    session.title.to_lowercase().contains(&query)
+                        || session
+                            .last_message_preview
+                            .as_deref()
+                            .unwrap_or_default()
+                            .to_lowercase()
+                            .contains(&query)
+                })
+                .filter(|session| {
+                    seen.insert(
+                        session
+                            .id
+                            .as_deref()
+                            .or(session.path.as_deref())
+                            .unwrap_or(&session.title)
+                            .to_string(),
+                    )
+                })
+                .cloned()
+                .collect();
+        }
         self.directory_indexes
             .get(&self.selected_directory)
-            .map(|index| {
-                index
-                    .sessions
-                    .iter()
-                    .filter(|session| {
-                        query.is_empty()
-                            || session.title.to_lowercase().contains(&query)
-                            || session
-                                .last_message_preview
-                                .as_deref()
-                                .unwrap_or_default()
-                                .to_lowercase()
-                                .contains(&query)
-                    })
-                    .cloned()
-                    .collect()
-            })
+            .map(|index| index.sessions.iter().cloned().collect())
             .unwrap_or_default()
     }
 
@@ -1626,7 +1666,6 @@ impl PicoDesktop {
 
     fn render_left_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border.opacity(0.72);
-        let foreground = cx.theme().foreground;
         let muted = cx.theme().muted_foreground;
         let selected = cx.theme().secondary;
         let selected_id = self.selected_session_id.clone();
@@ -1688,9 +1727,17 @@ impl PicoDesktop {
                             .text_color(muted)
                             .child("Directories")
                             .child(
-                                Icon::new(IconName::FolderOpen)
-                                    .size_4()
-                                    .text_color(foreground),
+                                Button::new("cleanup-directory")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(if self.confirm_directory_cleanup {
+                                        "Confirm clean"
+                                    } else {
+                                        "Clean old"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.cleanup_selected_directory(cx)
+                                    })),
                             ),
                     )
                     .child(
@@ -1874,6 +1921,15 @@ impl PicoDesktop {
                                         })),
                                 )
                                 .child(
+                                    Button::new("generate-session-name")
+                                        .ghost()
+                                        .xsmall()
+                                        .label("Auto name")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.generate_selected_session_name(cx)
+                                        })),
+                                )
+                                .child(
                                     Button::new("read-session")
                                         .ghost()
                                         .xsmall()
@@ -2048,15 +2104,28 @@ impl PicoDesktop {
                                 .w_full()
                                 .justify_end()
                                 .child(
-                                    div()
+                                    v_flex()
                                         .max_w(px(680.))
                                         .px_4()
                                         .py_3()
+                                        .gap_1()
                                         .rounded_xl()
                                         .bg(cx.theme().primary)
                                         .text_color(cx.theme().primary_foreground)
                                         .text_sm()
-                                        .child(user.text.clone()),
+                                        .when(!user.text.is_empty(), |this| {
+                                            this.child(user.text.clone())
+                                        })
+                                        .when(!user.images.is_empty(), |this| {
+                                            this.child(div().text_xs().child(format!(
+                                                "{} image attachment{}",
+                                                user.images.len(),
+                                                if user.images.len() == 1 { "" } else { "s" }
+                                            )))
+                                        })
+                                        .when(user.queued, |this| {
+                                            this.child(div().text_xs().child("Queued"))
+                                        }),
                                 )
                                 .into_any_element(),
                             ConversationItem::Assistant(assistant) => v_flex()
@@ -2140,6 +2209,20 @@ impl PicoDesktop {
                                                             ),
                                                         ),
                                                 )
+                                                .when_some(block.args.clone(), |this, args| {
+                                                    this.child(
+                                                        div()
+                                                            .px_3()
+                                                            .pt_3()
+                                                            .font_family("Menlo")
+                                                            .text_xs()
+                                                            .text_color(muted)
+                                                            .child(
+                                                                serde_json::to_string_pretty(&args)
+                                                                    .unwrap_or_default(),
+                                                            ),
+                                                    )
+                                                })
                                                 .when(!block.output.trim().is_empty(), |this| {
                                                     this.child(
                                                         div()
@@ -2150,6 +2233,9 @@ impl PicoDesktop {
                                                             .text_xs()
                                                             .child(block.output.clone()),
                                                     )
+                                                })
+                                                .when(block.is_error, |this| {
+                                                    this.border_color(gpui::rgb(0xdc2626))
                                                 })
                                                 .into_any_element(),
                                             AssistantBlock::Compaction(block) => v_flex()

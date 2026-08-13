@@ -298,6 +298,11 @@ pub enum ConversationItem {
 pub struct UserConversationItem {
     pub item_key: Option<String>,
     pub text: String,
+    #[serde(default)]
+    pub images: Vec<Value>,
+    #[serde(default)]
+    pub queued: bool,
+    pub streaming_behavior: Option<String>,
 }
 
 #[allow(dead_code)]
