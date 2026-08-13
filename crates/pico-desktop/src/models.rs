@@ -20,6 +20,8 @@ pub struct StateSync {
     pub items: Option<Vec<ConversationItem>>,
     pub items_patch: Option<ConversationItemsPatch>,
     pub pending_user_messages: Option<Vec<PendingMessage>>,
+    pub context_usage: Option<Value>,
+    pub available_skills: Option<Vec<SkillOption>>,
     pub draft: Option<bool>,
     pub streaming: Option<bool>,
     pub compacting: Option<bool>,
@@ -40,6 +42,8 @@ pub struct SessionState {
     pub session_key: Option<String>,
     pub items: Vec<ConversationItem>,
     pub pending_messages: Vec<PendingMessage>,
+    pub context_usage: Option<Value>,
+    pub available_skills: Vec<SkillOption>,
     pub draft: bool,
     pub streaming: bool,
     pub compacting: bool,
@@ -72,6 +76,12 @@ impl SessionState {
         }
         if let Some(value) = sync.pending_user_messages {
             self.pending_messages = value;
+        }
+        if let Some(value) = sync.context_usage {
+            self.context_usage = Some(value);
+        }
+        if let Some(value) = sync.available_skills {
+            self.available_skills = value;
         }
         if let Some(value) = sync.draft {
             self.draft = value;
@@ -364,6 +374,15 @@ pub struct ModelOption {
     pub name: Option<String>,
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SkillOption {
+    pub name: String,
+    pub description: Option<String>,
+    pub scope: Option<String>,
+    pub source: Option<String>,
+}
+
 impl ModelOption {
     pub fn label(&self) -> &str {
         self.name.as_deref().unwrap_or(&self.id)
@@ -609,6 +628,15 @@ pub struct TerminalCreateResponse {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PerformanceSettings {
+    pub transport: String,
+    pub cache_retention: String,
+    #[serde(default)]
+    pub applies_to_active_session_after_restart: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionTreeResponse {
     pub leaf_id: Option<String>,
     #[serde(default)]
@@ -736,6 +764,9 @@ pub enum DesktopEvent {
     TerminalOutput(String),
     SessionTree(SessionTreeResponse),
     ForkableMessages(Vec<ForkableMessage>),
+    CommitMessage(String),
+    PerformanceSettings(PerformanceSettings),
+    SessionDone(String),
     PromptSent,
     SessionCreated {
         session_key: String,

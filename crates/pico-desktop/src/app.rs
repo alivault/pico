@@ -7,7 +7,8 @@ use gpui::{
     Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Root, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Disableable as _, Icon, IconName, Root, Sizable as _, StyledExt as _, Theme,
+    ThemeMode,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState, Textarea, TextareaState},
@@ -81,6 +82,7 @@ pub struct PicoDesktop {
     selected_git_path: Option<String>,
     selected_git_diff: Option<String>,
     pending_discard_path: Option<String>,
+    pending_discard_all: bool,
     streaming_behavior: ComposerStreamingBehavior,
     composer_images: Vec<(String, serde_json::Value)>,
     hide_tools: bool,
@@ -93,6 +95,10 @@ pub struct PicoDesktop {
     tree_nodes: Vec<FlatTreeNode>,
     tree_leaf_id: Option<String>,
     forkable_messages: Vec<ForkableMessage>,
+    generated_commit_message: Option<String>,
+    pi_transport: String,
+    pi_cache_retention: String,
+    performance_restart_required: bool,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
@@ -174,6 +180,7 @@ impl PicoDesktop {
             selected_git_path: None,
             selected_git_diff: None,
             pending_discard_path: None,
+            pending_discard_all: false,
             streaming_behavior: ComposerStreamingBehavior::FollowUp,
             composer_images: Vec::new(),
             hide_tools: false,
@@ -186,6 +193,10 @@ impl PicoDesktop {
             tree_nodes: Vec::new(),
             tree_leaf_id: None,
             forkable_messages: Vec::new(),
+            generated_commit_message: None,
+            pi_transport: "auto".into(),
+            pi_cache_retention: "standard".into(),
+            performance_restart_required: false,
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
@@ -282,6 +293,7 @@ impl PicoDesktop {
             DesktopEvent::GitMutation(message) => {
                 self.status_message = Some(message);
                 self.pending_discard_path = None;
+                self.pending_discard_all = false;
                 if let Some(cwd) = self.files_cwd.clone() {
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
@@ -349,6 +361,26 @@ impl PicoDesktop {
                 self.forkable_messages = messages;
                 self.status_message = None;
             }
+            DesktopEvent::CommitMessage(message) => {
+                self.generated_commit_message = Some(message);
+                self.status_message = None;
+            }
+            DesktopEvent::PerformanceSettings(settings) => {
+                self.pi_transport = settings.transport;
+                self.pi_cache_retention = settings.cache_retention;
+                self.performance_restart_required =
+                    settings.applies_to_active_session_after_restart;
+                self.status_message = None;
+            }
+            DesktopEvent::SessionDone(title) => {
+                self.status_message = Some(format!("Completed: {title}"));
+                std::thread::spawn(move || {
+                    let _ = notify_rust::Notification::new()
+                        .summary("Pico")
+                        .body(&format!("{title} finished"))
+                        .show();
+                });
+            }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
             }
@@ -415,6 +447,44 @@ impl PicoDesktop {
     fn open_settings(&mut self, cx: &mut Context<Self>) {
         self.settings_open = true;
         self.client.load_auth_providers(self.tx.clone());
+        self.client.load_performance_settings(
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn cycle_pi_transport(&mut self, cx: &mut Context<Self>) {
+        self.pi_transport = match self.pi_transport.as_str() {
+            "auto" => "sse",
+            "sse" => "websocket",
+            "websocket" => "websocket-cached",
+            _ => "auto",
+        }
+        .into();
+        self.save_performance_settings(cx);
+    }
+
+    fn toggle_pi_cache_retention(&mut self, cx: &mut Context<Self>) {
+        self.pi_cache_retention = if self.pi_cache_retention == "long" {
+            "standard"
+        } else {
+            "long"
+        }
+        .into();
+        self.save_performance_settings(cx);
+    }
+
+    fn save_performance_settings(&mut self, cx: &mut Context<Self>) {
+        self.client.set_performance_settings(
+            self.pi_transport.clone(),
+            self.pi_cache_retention.clone(),
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        self.status_message = Some("Saving Pi performance settings…".into());
         cx.notify();
     }
 
@@ -422,6 +492,16 @@ impl PicoDesktop {
         self.settings_open = false;
         self.selected_auth_provider = None;
         cx.notify();
+    }
+
+    fn toggle_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let mode = if cx.theme().mode.is_dark() {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
+        };
+        Theme::change(mode, Some(window), cx);
+        cx.refresh_windows();
     }
 
     fn select_auth_provider(
@@ -848,6 +928,33 @@ impl PicoDesktop {
         }
     }
 
+    fn apply_skill(&mut self, skill: String, window: &mut Window, cx: &mut Context<Self>) {
+        let current = self.composer.read(cx).value().to_string();
+        let value = if current.trim().is_empty() {
+            format!("/skill:{skill} ")
+        } else {
+            format!("/skill:{skill} {current}")
+        };
+        self.composer.update(cx, |state, cx| {
+            state.set_value(value, window, cx);
+        });
+        cx.notify();
+    }
+
+    fn context_usage_label(&self) -> Option<String> {
+        let usage = self.session.context_usage.as_ref()?;
+        let percent = usage.get("percent").and_then(serde_json::Value::as_f64);
+        let tokens = usage.get("tokens").and_then(serde_json::Value::as_u64);
+        let window = usage
+            .get("contextWindow")
+            .and_then(serde_json::Value::as_u64);
+        match (percent, tokens, window) {
+            (Some(percent), _, _) => Some(format!("Context {:.0}%", percent)),
+            (_, Some(tokens), Some(window)) => Some(format!("Context {tokens}/{window}")),
+            _ => None,
+        }
+    }
+
     fn toggle_streaming_behavior(&mut self, cx: &mut Context<Self>) {
         self.streaming_behavior = match self.streaming_behavior {
             ComposerStreamingBehavior::Steer => ComposerStreamingBehavior::FollowUp,
@@ -990,6 +1097,44 @@ impl PicoDesktop {
             "Staging changes…".into()
         });
         self.client.stage_git_all(cwd, unstage, self.tx.clone());
+        cx.notify();
+    }
+
+    fn discard_all(&mut self, nuke: bool, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        if !self.pending_discard_all {
+            self.pending_discard_all = true;
+            self.status_message = Some("Click Discard all again to confirm.".into());
+            cx.notify();
+            return;
+        }
+        self.client.discard_git_all(cwd, nuke, self.tx.clone());
+        self.status_message = Some(if nuke {
+            "Nuking working tree…".into()
+        } else {
+            "Discarding all changes…".into()
+        });
+        cx.notify();
+    }
+
+    fn generate_commit_message(&mut self, cx: &mut Context<Self>) {
+        let Some(cwd) = self.files_cwd.clone() else {
+            return;
+        };
+        self.client.generate_commit_message(cwd, self.tx.clone());
+        self.status_message = Some("Generating commit message…".into());
+        cx.notify();
+    }
+
+    fn use_generated_commit_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(message) = self.generated_commit_message.take() else {
+            return;
+        };
+        self.commit_message.update(cx, |state, cx| {
+            state.set_value(message, window, cx);
+        });
         cx.notify();
     }
 
@@ -1782,6 +1927,7 @@ impl PicoDesktop {
             .clone()
             .unwrap_or_else(|| "Thinking".into());
         let busy = self.session.streaming || self.session.compacting;
+        let context_usage = self.context_usage_label();
 
         v_flex()
             .w_full()
@@ -1800,6 +1946,38 @@ impl PicoDesktop {
                     .border_color(cx.theme().border)
                     .bg(cx.theme().secondary.opacity(0.3))
                     .overflow_hidden()
+                    .when(!self.session.available_skills.is_empty(), |this| {
+                        this.child(
+                            h_flex()
+                                .px_2()
+                                .pt_2()
+                                .gap_1()
+                                .overflow_x_scrollbar()
+                                .children(
+                                    self.session
+                                        .available_skills
+                                        .iter()
+                                        .take(12)
+                                        .enumerate()
+                                        .map(|(index, skill)| {
+                                            let skill_name = skill.name.clone();
+                                            Button::new(("skill", index))
+                                                .ghost()
+                                                .xsmall()
+                                                .label(format!("/{}", skill.name))
+                                                .on_click(cx.listener(
+                                                    move |this, _, window, cx| {
+                                                        this.apply_skill(
+                                                            skill_name.clone(),
+                                                            window,
+                                                            cx,
+                                                        )
+                                                    },
+                                                ))
+                                        }),
+                                ),
+                        )
+                    })
                     .when(!self.composer_images.is_empty(), |this| {
                         this.child(
                             h_flex().p_2().gap_1().flex_wrap().children(
@@ -1865,6 +2043,15 @@ impl PicoDesktop {
                                                 .on_click(cx.listener(|this, _, _, cx| {
                                                     this.toggle_streaming_behavior(cx)
                                                 })),
+                                        )
+                                    })
+                                    .when_some(context_usage, |this, usage| {
+                                        this.child(
+                                            div()
+                                                .px_2()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(usage),
                                         )
                                     }),
                             )
@@ -2196,9 +2383,48 @@ impl PicoDesktop {
                                     .small()
                                     .label("Push")
                                     .on_click(cx.listener(|this, _, _, cx| this.push(false, cx))),
+                            )
+                            .child(
+                                Button::new("force-push")
+                                    .ghost()
+                                    .small()
+                                    .label("Force")
+                                    .on_click(cx.listener(|this, _, _, cx| this.push(true, cx))),
                             ),
                     )
-                    .child(Input::new(&self.commit_message).cleanable(true))
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .child(Input::new(&self.commit_message).cleanable(true))
+                            .child(
+                                Button::new("generate-commit")
+                                    .ghost()
+                                    .small()
+                                    .label("Generate")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.generate_commit_message(cx)
+                                    })),
+                            ),
+                    )
+                    .when_some(self.generated_commit_message.clone(), |this, message| {
+                        this.child(
+                            h_flex()
+                                .p_2()
+                                .gap_2()
+                                .rounded_md()
+                                .bg(cx.theme().secondary.opacity(0.45))
+                                .child(div().flex_1().text_xs().child(message))
+                                .child(
+                                    Button::new("use-commit-message")
+                                        .secondary()
+                                        .xsmall()
+                                        .label("Use")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.use_generated_commit_message(window, cx)
+                                        })),
+                                ),
+                        )
+                    })
                     .child(
                         h_flex()
                             .gap_2()
@@ -2215,6 +2441,19 @@ impl PicoDesktop {
                                     .small()
                                     .label("Commit & push")
                                     .on_click(cx.listener(|this, _, _, cx| this.commit(true, cx))),
+                            )
+                            .child(
+                                Button::new("discard-all")
+                                    .danger()
+                                    .small()
+                                    .label(if self.pending_discard_all {
+                                        "Confirm discard"
+                                    } else {
+                                        "Discard all"
+                                    })
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.discard_all(false, cx)),
+                                    ),
                             ),
                     ),
             )
@@ -2563,6 +2802,94 @@ impl PicoDesktop {
                                     ),
                             )
                             .child(
+                                h_flex()
+                                    .justify_between()
+                                    .child(
+                                        v_flex()
+                                            .child(div().font_semibold().child("Appearance"))
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(muted)
+                                                    .child("Follow Pico's light or dark workspace"),
+                                            ),
+                                    )
+                                    .child(
+                                        Button::new("toggle-theme")
+                                            .secondary()
+                                            .small()
+                                            .label(if cx.theme().mode.is_dark() {
+                                                "Use light theme"
+                                            } else {
+                                                "Use dark theme"
+                                            })
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.toggle_theme(window, cx)
+                                            })),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(div().font_semibold().child("Pi performance"))
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .child(
+                                                v_flex()
+                                                    .child(div().text_sm().child("Transport"))
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(muted)
+                                                            .child("RPC event transport for Pi sessions"),
+                                                    ),
+                                            )
+                                            .child(
+                                                Button::new("pi-transport")
+                                                    .secondary()
+                                                    .small()
+                                                    .label(self.pi_transport.clone())
+                                                    .on_click(cx.listener(|this, _, _, cx| {
+                                                        this.cycle_pi_transport(cx)
+                                                    })),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .child(
+                                                v_flex()
+                                                    .child(div().text_sm().child("Cache retention"))
+                                                    .child(
+                                                        div()
+                                                            .text_xs()
+                                                            .text_color(muted)
+                                                            .child("Keep transport caches longer"),
+                                                    ),
+                                            )
+                                            .child(
+                                                Button::new("pi-cache")
+                                                    .secondary()
+                                                    .small()
+                                                    .label(self.pi_cache_retention.clone())
+                                                    .on_click(cx.listener(|this, _, _, cx| {
+                                                        this.toggle_pi_cache_retention(cx)
+                                                    })),
+                                            ),
+                                    )
+                                    .when(self.performance_restart_required, |this| {
+                                        this.child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().warning)
+                                                .child(
+                                                    "The active session applies this after restart.",
+                                                ),
+                                        )
+                                    }),
+                            )
+                            .child(
                                 v_flex()
                                     .gap_2()
                                     .child(div().font_semibold().child("Provider authentication"))
@@ -2660,8 +2987,12 @@ impl PicoDesktop {
                                         .when(!message.is_empty(), |this| {
                                             this.child(TextView::markdown("ui-request", message))
                                         })
-                                        .when_some(request.auth_url.clone(), |this, url| {
-                                            this.child(
+                                .when_some(request.auth_url.clone(), |this, url| {
+                                    let auth_url = url.clone();
+                                    this.child(
+                                        v_flex()
+                                            .gap_2()
+                                            .child(
                                                 div()
                                                     .p_2()
                                                     .rounded_md()
@@ -2670,7 +3001,17 @@ impl PicoDesktop {
                                                     .text_xs()
                                                     .child(url),
                                             )
-                                        })
+                                            .child(
+                                                Button::new("open-auth-url")
+                                                    .primary()
+                                                    .small()
+                                                    .label("Open authentication page")
+                                                    .on_click(move |_, _, cx| {
+                                                        cx.open_url(&auth_url)
+                                                    }),
+                                            ),
+                                    )
+                                })
                                         .when(!request.options.is_empty(), |this| {
                                             this.children(request.options.iter().enumerate().map(
                                                 |(index, option)| {

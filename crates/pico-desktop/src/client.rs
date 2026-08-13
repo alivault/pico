@@ -15,8 +15,8 @@ use url::Url;
 use crate::models::{
     AuthProvidersResponse, ClientManifest, DesktopEvent, ForkableMessagesResponse,
     GitActionResponse, GitChangesResponse, GitFileDiffResponse, GitStatusResponse, PendingMessage,
-    ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest, SessionTreeResponse,
-    TerminalCreateResponse,
+    PerformanceSettings, ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest,
+    SessionTreeResponse, TerminalCreateResponse,
 };
 
 #[derive(Clone)]
@@ -149,6 +149,13 @@ impl PicoClient {
                 Some("extension_ui_request") => {
                     Some(DesktopEvent::UiRequest(serde_json::from_value(value)?))
                 }
+                Some("session_done") => Some(DesktopEvent::SessionDone(
+                    value
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .unwrap_or("Pico session completed")
+                        .to_string(),
+                )),
                 Some("request_error" | "extension_error") => Some(DesktopEvent::Error(
                     value
                         .get("error")
@@ -174,6 +181,47 @@ impl PicoClient {
             let result = client
                 .get_json::<AuthProvidersResponse>("/api/auth/providers", &[])
                 .map(DesktopEvent::AuthProviders);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_performance_settings(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .get_json::<PerformanceSettings>("/api/settings/performance", &query)
+                .map(DesktopEvent::PerformanceSettings);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn set_performance_settings(
+        &self,
+        transport: String,
+        cache_retention: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<PerformanceSettings, _>(
+                    "/api/settings/performance",
+                    &query,
+                    &json!({
+                        "transport": transport,
+                        "cacheRetention": cache_retention,
+                    }),
+                )
+                .map(DesktopEvent::PerformanceSettings);
             Self::send_result(tx, result);
         });
     }
@@ -869,6 +917,39 @@ impl PicoClient {
             "Discarded file changes",
             tx,
         );
+    }
+
+    pub fn discard_git_all(&self, cwd: String, nuke: bool, tx: Sender<DesktopEvent>) {
+        self.git_mutation(
+            "/api/git-discard",
+            json!({
+                "action": if nuke { "nuke-working-tree" } else { "discard-all" },
+                "all": true,
+                "cwd": cwd,
+            }),
+            if nuke {
+                "Nuked working tree"
+            } else {
+                "Discarded all changes"
+            },
+            tx,
+        );
+    }
+
+    pub fn generate_commit_message(&self, cwd: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>("/api/git-commit-message", &[], &json!({ "cwd": cwd }))
+                .and_then(|value| {
+                    value
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(|message| DesktopEvent::CommitMessage(message.to_string()))
+                        .ok_or_else(|| anyhow!("commit message response omitted message"))
+                });
+            Self::send_result(tx, result);
+        });
     }
 
     pub fn commit_git(&self, cwd: String, message: String, push: bool, tx: Sender<DesktopEvent>) {

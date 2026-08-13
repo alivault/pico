@@ -4817,6 +4817,7 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "gpui_platform",
+ "notify-rust",
  "reqwest",
  "serde",
  "serde_json",
