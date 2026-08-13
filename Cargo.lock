@@ -4812,6 +4812,7 @@ name = "pico-desktop"
 version = "0.14.1"
 dependencies = [
  "anyhow",
+ "base64",
  "gpui",
  "gpui-component",
  "gpui-component-assets",

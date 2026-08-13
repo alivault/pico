@@ -14,7 +14,8 @@ use url::Url;
 
 use crate::models::{
     ClientManifest, DesktopEvent, GitActionResponse, GitChangesResponse, GitFileDiffResponse,
-    GitStatusResponse, ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest,
+    GitStatusResponse, PendingMessage, ProjectFileReadResponse, ProjectFileTreeResponse,
+    PromptRequest,
 };
 
 #[derive(Clone)]
@@ -324,6 +325,8 @@ impl PicoClient {
     pub fn submit_prompt(
         &self,
         message: String,
+        streaming_behavior: String,
+        images: Vec<Value>,
         session_id: Option<String>,
         session_key: Option<String>,
         cwd: Option<String>,
@@ -340,8 +343,8 @@ impl PicoClient {
             }
             let body = PromptRequest {
                 message: &message,
-                images: Vec::new(),
-                streaming_behavior: "steer",
+                images,
+                streaming_behavior: &streaming_behavior,
                 draft_owner_key: session_key.as_deref(),
                 draft_cwd: cwd.as_deref(),
             };
@@ -350,6 +353,88 @@ impl PicoClient {
                 .map(|_| DesktopEvent::PromptSent);
             Self::send_result(tx, result);
         });
+    }
+
+    pub fn reorder_pending_messages(
+        &self,
+        pending_messages: Vec<PendingMessage>,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/pending-messages/reorder",
+                    &query,
+                    &json!({ "pendingMessages": pending_messages }),
+                )
+                .and_then(Self::pending_messages_event);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn remove_pending_message(
+        &self,
+        pending_id: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/pending-message/remove",
+                    &query,
+                    &json!({ "pendingId": pending_id }),
+                )
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn start_pending_messages(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>("/api/pending-messages/start", &query, &json!({}))
+                .and_then(Self::pending_messages_event);
+            Self::send_result(tx, result);
+        });
+    }
+
+    fn session_query<'a>(
+        session_id: Option<&'a str>,
+        session_key: Option<&'a str>,
+    ) -> Vec<(&'static str, &'a str)> {
+        let mut query = Vec::new();
+        if let Some(session_id) = session_id {
+            query.push(("session", session_id));
+        }
+        if let Some(session_key) = session_key {
+            query.push(("sessionKey", session_key));
+        }
+        query
+    }
+
+    fn pending_messages_event(value: Value) -> Result<DesktopEvent> {
+        let pending_messages = serde_json::from_value(
+            value
+                .get("pendingMessages")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        )?;
+        Ok(DesktopEvent::PendingMessages(pending_messages))
     }
 
     pub fn abort(
@@ -369,6 +454,49 @@ impl PicoClient {
             }
             let result = client
                 .post_json::<Value, _>("/api/abort", &query, &json!({}))
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn run_slash_command(
+        &self,
+        name: String,
+        args: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/slash-command",
+                    &query,
+                    &json!({ "name": name, "args": args }),
+                )
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn set_hide_thinking(
+        &self,
+        hidden: bool,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/settings/hide-thinking",
+                    &query,
+                    &json!({ "hidden": hidden }),
+                )
                 .map(|_| DesktopEvent::PromptSent);
             Self::send_result(tx, result);
         });

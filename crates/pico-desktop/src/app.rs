@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window, div, prelude::FluentBuilder as _, px,
+    ParentElement as _, PathPromptOptions, Render, ScrollHandle, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Root, Sizable as _, StyledExt as _,
@@ -27,6 +28,29 @@ enum RightWorkspaceTab {
     #[default]
     Changes,
     Files,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ComposerStreamingBehavior {
+    Steer,
+    #[default]
+    FollowUp,
+}
+
+impl ComposerStreamingBehavior {
+    fn api_value(self) -> String {
+        match self {
+            Self::Steer => "steer".into(),
+            Self::FollowUp => "followUp".into(),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Steer => "Steer",
+            Self::FollowUp => "Follow up",
+        }
+    }
 }
 
 pub struct PicoDesktop {
@@ -54,6 +78,9 @@ pub struct PicoDesktop {
     selected_git_path: Option<String>,
     selected_git_diff: Option<String>,
     pending_discard_path: Option<String>,
+    streaming_behavior: ComposerStreamingBehavior,
+    composer_images: Vec<(String, serde_json::Value)>,
+    hide_tools: bool,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
@@ -130,6 +157,9 @@ impl PicoDesktop {
             selected_git_path: None,
             selected_git_diff: None,
             pending_discard_path: None,
+            streaming_behavior: ComposerStreamingBehavior::FollowUp,
+            composer_images: Vec::new(),
+            hide_tools: false,
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
@@ -234,6 +264,10 @@ impl PicoDesktop {
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
                 }
+            }
+            DesktopEvent::PendingMessages(messages) => {
+                self.session.pending_messages = messages;
+                self.status_message = None;
             }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
@@ -457,16 +491,26 @@ impl PicoDesktop {
         self.composer.update(cx, |state, cx| {
             state.set_value("", window, cx);
         });
-        self.session
-            .items
-            .push(ConversationItem::User(UserConversationItem {
-                item_key: Some(format!("optimistic-{}", self.session.items.len())),
-                text: message.clone(),
-            }));
+        if self.run_builtin_slash_command(&message, cx) {
+            return;
+        }
+        if !self.session.streaming || self.streaming_behavior == ComposerStreamingBehavior::Steer {
+            self.session
+                .items
+                .push(ConversationItem::User(UserConversationItem {
+                    item_key: Some(format!("optimistic-{}", self.session.items.len())),
+                    text: message.clone(),
+                }));
+        }
         self.status_message = Some("Sending…".into());
         self.conversation_scroll.scroll_to_bottom();
         self.client.submit_prompt(
             message,
+            self.streaming_behavior.api_value(),
+            std::mem::take(&mut self.composer_images)
+                .into_iter()
+                .map(|(_, image)| image)
+                .collect(),
             self.selected_session_id.clone(),
             self.session.session_key.clone(),
             self.session
@@ -475,6 +519,176 @@ impl PicoDesktop {
                 .or_else(|| Some(self.selected_directory.clone())),
             self.tx.clone(),
         );
+        cx.notify();
+    }
+
+    fn run_builtin_slash_command(&mut self, message: &str, cx: &mut Context<Self>) -> bool {
+        let Some(command) = message.strip_prefix('/') else {
+            return false;
+        };
+        let mut parts = command.splitn(2, char::is_whitespace);
+        let name = parts.next().unwrap_or_default();
+        let args = parts.next().unwrap_or_default().trim().to_string();
+        match name {
+            "compact" => {
+                self.client.run_slash_command(
+                    "compact".into(),
+                    args,
+                    self.selected_session_id.clone(),
+                    self.session.session_key.clone(),
+                    self.tx.clone(),
+                );
+                self.status_message = Some("Compacting context…".into());
+            }
+            "clone" => self.clone_selected_session(cx),
+            "rename" => {
+                let Some(path) = self.selected_session_path.clone() else {
+                    self.status_message = Some("Start the session before renaming it.".into());
+                    cx.notify();
+                    return true;
+                };
+                if args.is_empty() {
+                    self.status_message = Some("Enter a name after /rename.".into());
+                } else {
+                    self.client.rename_session(path, args, self.tx.clone());
+                    self.status_message = Some("Renaming session…".into());
+                }
+            }
+            "delete" => {
+                self.confirm_delete_session = true;
+                self.status_message = Some("Use the sidebar Confirm button to delete.".into());
+            }
+            "hide-thinking" | "show-thinking" => {
+                let hidden = name == "hide-thinking";
+                self.session.hide_thinking_block = hidden;
+                self.client.set_hide_thinking(
+                    hidden,
+                    self.selected_session_id.clone(),
+                    self.session.session_key.clone(),
+                    self.tx.clone(),
+                );
+                self.status_message = None;
+            }
+            "hide-tools" | "show-tools" => {
+                self.hide_tools = name == "hide-tools";
+                self.status_message = None;
+            }
+            "fork" | "tree" | "login" | "logout" => {
+                self.status_message =
+                    Some(format!("/{name} is available from its workspace panel."));
+            }
+            _ => return false,
+        }
+        cx.notify();
+        true
+    }
+
+    fn pick_images(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let prompt = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Select up to 8 images".into()),
+        });
+        let view = cx.entity();
+        cx.spawn_in(window, async move |_, window| {
+            let paths = prompt.await.ok()?.ok()??;
+            let attachments = smol::unblock(move || {
+                paths
+                    .iter()
+                    .take(8)
+                    .filter_map(|path| {
+                        let data = std::fs::read(path).ok()?;
+                        let extension = path
+                            .extension()
+                            .and_then(|extension| extension.to_str())
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        let mime_type = match extension.as_str() {
+                            "jpg" | "jpeg" => "image/jpeg",
+                            "gif" => "image/gif",
+                            "webp" => "image/webp",
+                            _ => "image/png",
+                        };
+                        Some((
+                            path.file_name()?.to_string_lossy().to_string(),
+                            serde_json::json!({
+                                "type": "image",
+                                "mimeType": mime_type,
+                                "data": BASE64.encode(data),
+                            }),
+                        ))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .await;
+            window
+                .update(|_, cx| {
+                    view.update(cx, |this, cx| {
+                        let available = 8usize.saturating_sub(this.composer_images.len());
+                        this.composer_images
+                            .extend(attachments.into_iter().take(available));
+                        cx.notify();
+                    })
+                })
+                .ok()
+        })
+        .detach();
+    }
+
+    fn remove_composer_image(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index < self.composer_images.len() {
+            self.composer_images.remove(index);
+            cx.notify();
+        }
+    }
+
+    fn toggle_streaming_behavior(&mut self, cx: &mut Context<Self>) {
+        self.streaming_behavior = match self.streaming_behavior {
+            ComposerStreamingBehavior::Steer => ComposerStreamingBehavior::FollowUp,
+            ComposerStreamingBehavior::FollowUp => ComposerStreamingBehavior::Steer,
+        };
+        cx.notify();
+    }
+
+    fn move_pending_message(&mut self, index: usize, offset: isize, cx: &mut Context<Self>) {
+        let next = (index as isize + offset).clamp(
+            0,
+            self.session.pending_messages.len().saturating_sub(1) as isize,
+        ) as usize;
+        if next == index {
+            return;
+        }
+        self.session.pending_messages.swap(index, next);
+        self.client.reorder_pending_messages(
+            self.session.pending_messages.clone(),
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn remove_pending_message(&mut self, pending_id: String, cx: &mut Context<Self>) {
+        self.session
+            .pending_messages
+            .retain(|message| message.pending_id != pending_id);
+        self.client.remove_pending_message(
+            pending_id,
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn start_pending_messages(&mut self, cx: &mut Context<Self>) {
+        self.client.start_pending_messages(
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        self.status_message = Some("Starting queued prompts…".into());
         cx.notify();
     }
 
@@ -1130,6 +1344,11 @@ impl PicoDesktop {
                                             .text_sm()
                                             .line_height(gpui::relative(1.55))
                                             .into_any_element(),
+                                            AssistantBlock::Thinking(_)
+                                                if self.session.hide_thinking_block =>
+                                            {
+                                                div().into_any_element()
+                                            }
                                             AssistantBlock::Thinking(block) => v_flex()
                                                 .w_full()
                                                 .p_3()
@@ -1161,6 +1380,9 @@ impl PicoDesktop {
                                                     .text_sm(),
                                                 )
                                                 .into_any_element(),
+                                            AssistantBlock::Tool(_) if self.hide_tools => {
+                                                div().into_any_element()
+                                            }
                                             AssistantBlock::Tool(block) => v_flex()
                                                 .w_full()
                                                 .rounded_lg()
@@ -1246,6 +1468,102 @@ impl PicoDesktop {
             )
     }
 
+    fn render_pending_messages(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let count = self.session.pending_messages.len();
+        v_flex()
+            .w_full()
+            .max_w(px(920.))
+            .mb_2()
+            .p_2()
+            .gap_1()
+            .rounded_lg()
+            .border_1()
+            .border_color(cx.theme().border)
+            .bg(cx.theme().secondary.opacity(0.2))
+            .child(
+                h_flex()
+                    .px_2()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_semibold()
+                            .child(format!("QUEUED PROMPTS ({count})")),
+                    )
+                    .child(
+                        Button::new("start-queue")
+                            .secondary()
+                            .xsmall()
+                            .label("Start now")
+                            .on_click(
+                                cx.listener(|this, _, _, cx| this.start_pending_messages(cx)),
+                            ),
+                    ),
+            )
+            .children(
+                self.session
+                    .pending_messages
+                    .iter()
+                    .enumerate()
+                    .map(|(index, message)| {
+                        let remove_id = message.pending_id.clone();
+                        h_flex()
+                            .px_2()
+                            .py_1()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_sm()
+                                    .child(message.text.clone()),
+                            )
+                            .when(!message.images.is_empty(), |this| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(muted)
+                                        .child(format!("{} images", message.images.len())),
+                                )
+                            })
+                            .child(
+                                Button::new(("pending-up", index))
+                                    .ghost()
+                                    .xsmall()
+                                    .disabled(index == 0)
+                                    .label("↑")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.move_pending_message(index, -1, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new(("pending-down", index))
+                                    .ghost()
+                                    .xsmall()
+                                    .disabled(index + 1 == count)
+                                    .label("↓")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.move_pending_message(index, 1, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new(("pending-remove", index))
+                                    .ghost()
+                                    .xsmall()
+                                    .label("×")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.remove_pending_message(remove_id.clone(), cx)
+                                    })),
+                            )
+                    }),
+            )
+            .into_any_element()
+    }
+
     fn render_composer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let model_label = self
             .session
@@ -1260,64 +1578,117 @@ impl PicoDesktop {
             .unwrap_or_else(|| "Thinking".into());
         let busy = self.session.streaming || self.session.compacting;
 
-        v_flex().w_full().items_center().px_5().pb_5().child(
-            v_flex()
-                .w_full()
-                .max_w(px(920.))
-                .rounded_xl()
-                .border_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().secondary.opacity(0.3))
-                .overflow_hidden()
-                .child(Textarea::new(&self.composer).appearance(false).p_3())
-                .child(
-                    h_flex()
-                        .h(px(46.))
-                        .px_2()
-                        .border_t_1()
-                        .border_color(cx.theme().border.opacity(0.72))
-                        .justify_between()
-                        .child(
-                            h_flex()
-                                .gap_1()
-                                .child(
-                                    Button::new("model")
-                                        .ghost()
-                                        .small()
-                                        .label(model_label)
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.cycle_model(cx)),
-                                        ),
-                                )
-                                .child(
-                                    Button::new("thinking")
-                                        .ghost()
-                                        .small()
-                                        .label(thinking_label)
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.cycle_thinking(cx)),
-                                        ),
+        v_flex()
+            .w_full()
+            .items_center()
+            .px_5()
+            .pb_5()
+            .when(!self.session.pending_messages.is_empty(), |this| {
+                this.child(self.render_pending_messages(cx))
+            })
+            .child(
+                v_flex()
+                    .w_full()
+                    .max_w(px(920.))
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().secondary.opacity(0.3))
+                    .overflow_hidden()
+                    .when(!self.composer_images.is_empty(), |this| {
+                        this.child(
+                            h_flex().p_2().gap_1().flex_wrap().children(
+                                self.composer_images.iter().enumerate().map(
+                                    |(index, (name, _))| {
+                                        Button::new(("composer-image", index))
+                                            .secondary()
+                                            .xsmall()
+                                            .label(format!("{name} ×"))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.remove_composer_image(index, cx)
+                                            }))
+                                    },
                                 ),
+                            ),
                         )
-                        .child(if busy {
-                            Button::new("abort")
-                                .danger()
-                                .small()
-                                .icon(IconName::Close)
-                                .on_click(cx.listener(|this, _, _, cx| this.abort(cx)))
-                        } else {
-                            Button::new("send")
-                                .primary()
-                                .small()
-                                .icon(IconName::ArrowUp)
-                                .on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.submit_prompt(window, cx)
+                    })
+                    .child(Textarea::new(&self.composer).appearance(false).p_3())
+                    .child(
+                        h_flex()
+                            .h(px(46.))
+                            .px_2()
+                            .border_t_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .justify_between()
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .child(
+                                        Button::new("attach-images")
+                                            .ghost()
+                                            .small()
+                                            .label("Attach")
+                                            .disabled(self.composer_images.len() >= 8)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.pick_images(window, cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("model")
+                                            .ghost()
+                                            .small()
+                                            .label(model_label)
+                                            .on_click(
+                                                cx.listener(|this, _, _, cx| this.cycle_model(cx)),
+                                            ),
+                                    )
+                                    .child(
+                                        Button::new("thinking")
+                                            .ghost()
+                                            .small()
+                                            .label(thinking_label)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.cycle_thinking(cx)
+                                            })),
+                                    )
+                                    .when(busy, |this| {
+                                        this.child(
+                                            Button::new("streaming-behavior")
+                                                .ghost()
+                                                .small()
+                                                .label(self.streaming_behavior.label())
+                                                .on_click(cx.listener(|this, _, _, cx| {
+                                                    this.toggle_streaming_behavior(cx)
+                                                })),
+                                        )
                                     }),
-                                )
-                        }),
-                ),
-        )
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .when(busy, |this| {
+                                        this.child(
+                                            Button::new("abort")
+                                                .danger()
+                                                .small()
+                                                .icon(IconName::Close)
+                                                .on_click(
+                                                    cx.listener(|this, _, _, cx| this.abort(cx)),
+                                                ),
+                                        )
+                                    })
+                                    .child(
+                                        Button::new("send")
+                                            .primary()
+                                            .small()
+                                            .icon(IconName::ArrowUp)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.submit_prompt(window, cx)
+                                            })),
+                                    ),
+                            ),
+                    ),
+            )
     }
 
     fn render_file_workspace(&self, cx: &mut Context<Self>) -> gpui::AnyElement {

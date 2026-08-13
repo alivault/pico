@@ -19,9 +19,11 @@ pub struct StateSync {
     pub session_key: Option<String>,
     pub items: Option<Vec<ConversationItem>>,
     pub items_patch: Option<ConversationItemsPatch>,
+    pub pending_user_messages: Option<Vec<PendingMessage>>,
     pub draft: Option<bool>,
     pub streaming: Option<bool>,
     pub compacting: Option<bool>,
+    pub hide_thinking_block: Option<bool>,
     pub model: Option<ModelOption>,
     pub thinking_level: Option<String>,
     pub available_thinking_levels: Option<Vec<String>>,
@@ -37,9 +39,11 @@ pub struct StateSync {
 pub struct SessionState {
     pub session_key: Option<String>,
     pub items: Vec<ConversationItem>,
+    pub pending_messages: Vec<PendingMessage>,
     pub draft: bool,
     pub streaming: bool,
     pub compacting: bool,
+    pub hide_thinking_block: bool,
     pub model: Option<ModelOption>,
     pub thinking_level: Option<String>,
     pub available_thinking_levels: Vec<String>,
@@ -66,6 +70,9 @@ impl SessionState {
             let end = (start + patch.delete_count).min(self.items.len());
             self.items.splice(start..end, patch.items);
         }
+        if let Some(value) = sync.pending_user_messages {
+            self.pending_messages = value;
+        }
         if let Some(value) = sync.draft {
             self.draft = value;
         }
@@ -74,6 +81,9 @@ impl SessionState {
         }
         if let Some(value) = sync.compacting {
             self.compacting = value;
+        }
+        if let Some(value) = sync.hide_thinking_block {
+            self.hide_thinking_block = value;
         }
         if let Some(value) = sync.model {
             self.model = Some(value);
@@ -436,6 +446,21 @@ pub struct ProjectFileTreeResponse {
     pub paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingMessage {
+    pub pending_id: String,
+    pub text: String,
+    #[serde(default)]
+    pub images: Vec<Value>,
+    #[serde(default = "default_streaming_behavior")]
+    pub streaming_behavior: String,
+}
+
+fn default_streaming_behavior() -> String {
+    "followUp".into()
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFileReadResponse {
@@ -545,6 +570,7 @@ pub enum DesktopEvent {
     GitDiff(GitFileDiffResponse),
     GitMutation(String),
     GitRefresh(String),
+    PendingMessages(Vec<PendingMessage>),
     PromptSent,
     SessionCreated {
         session_key: String,

@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
   "font-kit",
