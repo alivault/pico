@@ -216,6 +216,14 @@
     "path": "/api/settings/hide-thinking"
   },
   {
+    "method": "GET",
+    "path": "/api/settings/performance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/settings/performance"
+  },
+  {
     "method": "POST",
     "path": "/api/slash-command"
   },

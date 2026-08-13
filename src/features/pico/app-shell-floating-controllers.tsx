@@ -523,6 +523,7 @@ const AppShellSettingsDialogHost = React.memo(
     settingsDialogRef,
     settingsOpenRef,
     systemTheme,
+    viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
     | "authDialogRef"
@@ -543,6 +544,7 @@ const AppShellSettingsDialogHost = React.memo(
     | "settingsDialogRef"
     | "settingsOpenRef"
     | "systemTheme"
+    | "viewerContextId"
   >) {
     const hideThinkingBlocks = useSelector(
       sessionStore,
@@ -576,6 +578,7 @@ const AppShellSettingsDialogHost = React.memo(
       <AppShellSettingsDialogController
         ref={settingsDialogRef}
         openStateRef={settingsOpenRef}
+        viewerContextId={viewerContextId}
         currentTheme={currentTheme}
         currentThemeColorMode={currentThemeColorMode}
         onThemeChange={onThemeChange}
@@ -811,6 +814,7 @@ export const AppShellFloatingControllers = React.memo(
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}
           systemTheme={systemTheme}
+          viewerContextId={viewerContextId}
         />
 
         <AppShellUiRequestDialogHost

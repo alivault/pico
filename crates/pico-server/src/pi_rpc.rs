@@ -46,6 +46,11 @@ impl PiSpawnOptions {
         self.session_dir = session_dir;
         self
     }
+
+    pub fn with_environment(mut self, environment: BTreeMap<String, String>) -> Self {
+        self.environment = environment;
+        self
+    }
 }
 
 #[derive(Debug)]

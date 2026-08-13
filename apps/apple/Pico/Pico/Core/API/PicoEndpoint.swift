@@ -41,6 +41,7 @@ public enum PicoEndpoint: Sendable {
   case model
   case thinking
   case settingsHideThinking
+  case settingsPerformance
   case authProviders
   case authApiKey
   case authOAuth
@@ -129,6 +130,8 @@ public enum PicoEndpoint: Sendable {
       "/api/thinking"
     case .settingsHideThinking:
       "/api/settings/hide-thinking"
+    case .settingsPerformance:
+      "/api/settings/performance"
     case .authProviders:
       "/api/auth/providers"
     case .authApiKey:

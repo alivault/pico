@@ -29,4 +29,17 @@ struct PicoServerEventTests {
     #expect(delta.sessionId == "demo")
     #expect(delta.operations.count == 3)
   }
+
+  @Test func decodesPiPerformanceSettings() throws {
+    let data = Data(
+      #"{"ok":true,"transport":"websocket-cached","cacheRetention":"long"}"#.utf8
+    )
+    let settings = try JSONDecoder().decode(
+      PiPerformanceSettingsResponse.self,
+      from: data
+    )
+
+    #expect(settings.transport == .websocketCached)
+    #expect(settings.cacheRetention == .long)
+  }
 }

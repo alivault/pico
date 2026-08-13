@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,6 +20,7 @@ pub struct RuntimeRegistry {
 struct RuntimeState {
     sessions: HashMap<String, RuntimeEntry>,
     session_owners: HashMap<PathBuf, String>,
+    environment: BTreeMap<String, String>,
 }
 
 struct RuntimeEntry {
@@ -86,7 +87,8 @@ impl RuntimeRegistry {
         let client = PiRpcClient::spawn(
             PiSpawnOptions::new(self.pi_binary.clone(), cwd)
                 .with_session(session)
-                .with_session_dir(self.session_dir.clone()),
+                .with_session_dir(self.session_dir.clone())
+                .with_environment(state.environment.clone()),
         )
         .await?;
         if let Some(identity) = &session_identity {
@@ -116,6 +118,15 @@ impl RuntimeRegistry {
 
     pub async fn contains(&self, id: &str) -> bool {
         self.state.read().await.sessions.contains_key(id)
+    }
+
+    pub async fn set_environment(&self, key: &str, value: Option<&str>) {
+        let mut state = self.state.write().await;
+        if let Some(value) = value {
+            state.environment.insert(key.to_string(), value.to_string());
+        } else {
+            state.environment.remove(key);
+        }
     }
 
     pub async fn get_by_session(&self, path: &Path) -> Option<(String, Arc<PiRpcClient>)> {
@@ -298,12 +309,14 @@ mod tests {
         let session_dir = root.join("sessions");
         std::fs::create_dir_all(&session_dir).expect("create session directory");
         let arguments = root.join("arguments.txt");
+        let cache_retention = root.join("cache-retention.txt");
         let executable = root.join("fake-pi.sh");
         std::fs::write(
             &executable,
             format!(
-                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nwhile IFS= read -r line; do :; done\n",
-                arguments.display()
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s' \"$PI_CACHE_RETENTION\" > '{}'\nwhile IFS= read -r line; do :; done\n",
+                arguments.display(),
+                cache_retention.display()
             ),
         )
         .expect("write fake Pi");
@@ -311,6 +324,9 @@ mod tests {
             .expect("make fake Pi executable");
 
         let registry = RuntimeRegistry::with_session_dir(executable, Some(session_dir.clone()));
+        registry
+            .set_environment("PI_CACHE_RETENTION", Some("long"))
+            .await;
         let runtime = registry
             .spawn("new-session".into(), root.clone(), None)
             .await
@@ -326,6 +342,10 @@ mod tests {
         assert!(recorded.contains("--mode\nrpc\n"));
         assert!(recorded.contains("--session-dir\n"));
         assert!(recorded.contains(&format!("{}\n", session_dir.display())));
+        assert_eq!(
+            std::fs::read_to_string(cache_retention).expect("read cache retention"),
+            "long"
+        );
 
         runtime.client.shutdown().await.expect("stop fake Pi");
         std::fs::remove_dir_all(root).expect("remove fixture");

@@ -16,6 +16,19 @@ export type ApiErrorResponse = {
   routePath?: string
 }
 
+export type PiTransport = "auto" | "sse" | "websocket" | "websocket-cached"
+
+export type PiCacheRetention = "standard" | "long"
+
+export type PiPerformanceSettingsResponse =
+  | {
+      ok: true
+      transport: PiTransport
+      cacheRetention: PiCacheRetention
+      appliesToActiveSessionAfterRestart?: boolean
+    }
+  | ApiErrorResponse
+
 export type ClientManifestResponse =
   | {
       ok: true

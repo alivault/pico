@@ -9,6 +9,7 @@ import {
   getAgentDir,
   ModelRuntime,
   readStoredCredential,
+  SettingsManager,
   type AgentSessionServices,
 } from "@earendil-works/pi-coding-agent"
 
@@ -59,6 +60,7 @@ interface BridgeCommand {
   sessionId?: string
   provider?: string
   key?: string
+  transport?: string
 }
 
 interface BridgeUiResponse {
@@ -523,6 +525,27 @@ function usageWindowLabel(seconds: number | undefined, fallback: string) {
 async function handleCommand(command: BridgeCommand) {
   const cwd = command.cwd ?? process.cwd()
   switch (command.type) {
+    case "get_performance_settings": {
+      const settings = SettingsManager.create(cwd, getAgentDir())
+      success(command, { transport: settings.getTransport() })
+      break
+    }
+    case "set_performance_settings": {
+      const transport = command.transport?.trim() ?? ""
+      if (
+        !["auto", "sse", "websocket", "websocket-cached"].includes(transport)
+      ) {
+        throw new Error("invalid Pi transport")
+      }
+      const settings = SettingsManager.create(cwd, getAgentDir())
+      settings.setTransport(
+        transport as Parameters<SettingsManager["setTransport"]>[0]
+      )
+      await settings.flush()
+      servicesByCwd.clear()
+      success(command, { transport: settings.getTransport() })
+      break
+    }
     case "get_auth_providers":
       success(command, await authProviders(cwd))
       break

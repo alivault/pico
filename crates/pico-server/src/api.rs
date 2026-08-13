@@ -35,7 +35,7 @@ use crate::control::{initial_status, ControlStatus};
 use crate::event_hub::{EventHub, ServerEvent};
 use crate::git_native::{self, GitRuntime};
 use crate::highlight::HighlightRuntime;
-use crate::persistence::{self, ServerSnapshot};
+use crate::persistence::{self, PiPerformanceSettings, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError, PiSpawnOptions};
 use crate::pi_stream::{ConversationDeltaBatch, PiStreamingMessage};
@@ -76,6 +76,7 @@ struct ServerContext {
     pending_queues: Arc<RwLock<HashMap<String, Vec<PendingPrompt>>>>,
     streaming_items: Arc<RwLock<HashMap<String, ConversationItem>>>,
     hide_thinking: Arc<AtomicBool>,
+    pi_performance: Arc<RwLock<PiPerformanceSettings>>,
     git_runtime: Arc<GitRuntime>,
     terminals: TerminalManager,
     highlighter: Arc<HighlightRuntime>,
@@ -272,6 +273,13 @@ struct RemovePendingRequest {
 struct HideThinkingRequest {
     #[serde(default)]
     hide: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PiPerformanceRequest {
+    transport: String,
+    cache_retention: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -518,10 +526,16 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
             .unwrap_or_default(),
     );
     let restored_sessions = restored_state.sessions();
-    persistence::store(
-        &config.paths.state_file,
-        &ServerSnapshot::started(config.port, restored_sessions),
-    )?;
+    let previous_clean_shutdown = previous_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.clean_shutdown);
+    let pi_performance = previous_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.pi_performance.clone())
+        .unwrap_or_default();
+    let mut started_snapshot = ServerSnapshot::started(config.port, restored_sessions);
+    started_snapshot.pi_performance = pi_performance.clone();
+    persistence::store(&config.paths.state_file, &started_snapshot)?;
 
     let (pi_version, pi_error) = match detect_pi_version(&config.pi_binary).await {
         Ok(version) => (Some(version), None),
@@ -543,7 +557,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         pi_error,
         control_status: control_status.clone(),
         active_work: Arc::new(ActiveWorkTracker::default()),
-        previous_clean_shutdown: previous_snapshot.map(|snapshot| snapshot.clean_shutdown),
+        previous_clean_shutdown,
         state_file: config.paths.state_file.clone(),
         persistence_lock: Arc::new(Mutex::new(())),
         port: config.port,
@@ -553,6 +567,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         pending_queues: Arc::new(RwLock::new(HashMap::new())),
         streaming_items: Arc::new(RwLock::new(HashMap::new())),
         hide_thinking: Arc::new(AtomicBool::new(false)),
+        pi_performance: Arc::new(RwLock::new(pi_performance.clone())),
         git_runtime: Arc::new(GitRuntime::default()),
         terminals: TerminalManager::default(),
         highlighter: Arc::new(HighlightRuntime::default()),
@@ -560,6 +575,10 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         pending_ui_requests: Arc::new(RwLock::new(HashMap::new())),
         static_assets,
     };
+    context
+        .runtimes
+        .set_environment("PI_CACHE_RETENTION", Some(&pi_performance.cache_retention))
+        .await;
     attach_auth_bridge_events(&context);
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
     restore_session_processes(&context).await;
@@ -1453,6 +1472,10 @@ fn router(context: ServerContext) -> Router {
         .route("/api/model", post(set_model))
         .route("/api/thinking", post(set_thinking))
         .route("/api/settings/hide-thinking", post(set_hide_thinking))
+        .route(
+            "/api/settings/performance",
+            get(get_pi_performance).post(set_pi_performance),
+        )
         .route("/api/slash-command", post(run_slash_command))
         .route("/api/directory/resolve", post(resolve_directory))
         .route("/api/directory-search", post(search_directories))
@@ -2253,6 +2276,7 @@ async fn client_manifest() -> Json<Value> {
           "/api/model",
           "/api/thinking",
           "/api/settings/hide-thinking",
+          "/api/settings/performance",
           "/api/slash-command",
           "/api/directory/resolve",
           "/api/directory-search",
@@ -2318,6 +2342,7 @@ async fn client_manifest() -> Json<Value> {
           "native-pty",
           "terminal-replay",
           "native-highlighting",
+          "pi-performance-settings",
           "provider-auth",
           "provider-usage",
           "extension-ui-bridge",
@@ -2783,6 +2808,89 @@ async fn set_hide_thinking(
         emit_session_state(&context, &runtime_id, streaming, None).await;
     }
     Json(json!({ "ok": true, "hideThinkingBlock": request.hide }))
+}
+
+async fn get_pi_performance(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<Value>, ApiError> {
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    let transport = bridge
+        .request(
+            json!({ "type": "get_performance_settings", "cwd": cwd }),
+            Some(Duration::from_secs(15)),
+        )
+        .await?
+        .get("transport")
+        .and_then(Value::as_str)
+        .unwrap_or("auto")
+        .to_string();
+    let cache_retention = context.pi_performance.read().await.cache_retention.clone();
+    Ok(Json(json!({
+      "ok": true,
+      "transport": transport,
+      "cacheRetention": cache_retention
+    })))
+}
+
+async fn set_pi_performance(
+    State(context): State<ServerContext>,
+    RawQuery(raw_query): RawQuery,
+    Json(request): Json<PiPerformanceRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let transport = request.transport.trim();
+    if !matches!(transport, "auto" | "sse" | "websocket" | "websocket-cached") {
+        return Err(ApiError::bad_request("Invalid Pi transport"));
+    }
+    let cache_retention = request.cache_retention.trim();
+    if !matches!(cache_retention, "standard" | "long") {
+        return Err(ApiError::bad_request("Invalid Pi cache retention"));
+    }
+    let target = parse_request_target(raw_query.as_deref());
+    let cwd = request_base_cwd(&context, &target).await?;
+    let bridge = require_auth_bridge(&context)?;
+    bridge
+        .request(
+            json!({
+              "type": "set_performance_settings",
+              "cwd": cwd,
+              "transport": transport
+            }),
+            Some(Duration::from_secs(15)),
+        )
+        .await?;
+
+    let settings = PiPerformanceSettings {
+        cache_retention: cache_retention.to_string(),
+    };
+    *context.pi_performance.write().await = settings.clone();
+    context
+        .runtimes
+        .set_environment("PI_CACHE_RETENTION", Some(cache_retention))
+        .await;
+    persist_pi_performance(&context, settings).await?;
+    evict_idle_runtimes(&context, Duration::ZERO).await;
+    Ok(Json(json!({
+      "ok": true,
+      "transport": transport,
+      "cacheRetention": cache_retention,
+      "appliesToActiveSessionAfterRestart": context.active_work.count().await > 0
+    })))
+}
+
+async fn persist_pi_performance(
+    context: &ServerContext,
+    settings: PiPerformanceSettings,
+) -> Result<(), ApiError> {
+    let _persistence_guard = context.persistence_lock.lock().await;
+    let mut snapshot = persistence::load(&context.state_file)
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .unwrap_or_else(|| ServerSnapshot::started(context.port, Vec::new()));
+    snapshot.pi_performance = settings;
+    persistence::store(&context.state_file, &snapshot)
+        .map_err(|error| ApiError::internal(error.to_string()))
 }
 
 async fn run_slash_command(
@@ -5453,6 +5561,7 @@ mod tests {
             pending_queues: Arc::new(RwLock::new(HashMap::new())),
             streaming_items: Arc::new(RwLock::new(HashMap::new())),
             hide_thinking: Arc::new(AtomicBool::new(false)),
+            pi_performance: Arc::new(RwLock::new(PiPerformanceSettings::default())),
             git_runtime: Arc::new(GitRuntime::default()),
             terminals: TerminalManager::default(),
             highlighter: Arc::new(HighlightRuntime::default()),
@@ -5495,6 +5604,11 @@ mod tests {
             .expect("features")
             .iter()
             .any(|feature| feature == "provider-auth"));
+        assert!(manifest["capabilities"]["features"]
+            .as_array()
+            .expect("features")
+            .iter()
+            .any(|feature| feature == "pi-performance-settings"));
         assert!(manifest["capabilities"]["features"]
             .as_array()
             .expect("features")
@@ -5630,6 +5744,10 @@ for line in sys.stdin:
     if kind == "get_auth_providers":
         data = {"ok":True,"oauthProviders":[{"id":"demo","name":"Demo","authType":"oauth","configured":False}],"apiKeyProviders":[],"loggedInProviders":[],"availableModels":[]}
         print(json.dumps({"type":"response","id":command["id"],"success":True,"data":data}), flush=True)
+    elif kind == "get_performance_settings":
+        print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"transport":"auto"}}), flush=True)
+    elif kind == "set_performance_settings":
+        print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"transport":command["transport"]}}), flush=True)
     elif kind == "get_provider_usage":
         print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"windows":[]}}), flush=True)
     elif kind == "start_ui":
@@ -5665,6 +5783,39 @@ for line in sys.stdin:
         let providers: Value = serde_json::from_slice(&body).expect("provider JSON");
         assert_eq!(providers["ok"], true);
         assert_eq!(providers["oauthProviders"][0]["id"], "demo");
+
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/settings/performance?context=viewer-demo")
+                    .body(Body::empty())
+                    .expect("performance request"),
+            )
+            .await
+            .expect("performance response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("performance body");
+        let performance: Value = serde_json::from_slice(&body).expect("performance JSON");
+        assert_eq!(performance["transport"], "auto");
+        assert_eq!(performance["cacheRetention"], "standard");
+
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/settings/performance?context=viewer-demo")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"transport":"websocket-cached","cacheRetention":"long"}"#,
+                    ))
+                    .expect("performance mutation"),
+            )
+            .await
+            .expect("performance mutation response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(context.pi_performance.read().await.cache_retention, "long");
 
         let response = router(context.clone())
             .oneshot(

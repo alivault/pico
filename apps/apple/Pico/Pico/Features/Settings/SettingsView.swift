@@ -66,7 +66,9 @@ struct SettingsView: View {
       #endif
     }
     .task {
-      await model.refreshAuthProviders()
+      async let auth: Void = model.refreshAuthProviders()
+      async let performance: Void = model.refreshPiPerformanceSettings()
+      _ = await (auth, performance)
     }
     .onChange(of: model.activeUiRequest) { _, request in
       presentedUiRequest = request
@@ -117,6 +119,8 @@ struct SettingsView: View {
               model.disconnect()
             }
           }
+
+          PiPerformanceSettingsSection(model: model)
 
           Section("Background Service") {
             Toggle(
@@ -225,10 +229,61 @@ private struct SettingsFormContent: View {
         }
       }
 
+      PiPerformanceSettingsSection(model: model)
+
       ProviderAuthSectionView(
         model: model,
         apiKeyProvider: $apiKeyProvider
       )
+    }
+  }
+}
+
+private struct PiPerformanceSettingsSection: View {
+  @Bindable var model: AppModel
+
+  var body: some View {
+    if model.manifest?.capabilities.features.contains("pi-performance-settings") == true {
+      Section("Pi Performance") {
+        Picker(
+          "Provider transport",
+          selection: Binding(
+            get: { model.piPerformanceSettings?.transport ?? .auto },
+            set: { transport in
+              Task {
+                await model.setPiPerformanceSettings(
+                  transport: transport,
+                  cacheRetention: model.piPerformanceSettings?.cacheRetention ?? .standard
+                )
+              }
+            }
+          )
+        ) {
+          ForEach(PiTransport.allCases, id: \.self) { transport in
+            Text(transport.label).tag(transport)
+          }
+        }
+
+        Toggle(
+          "Long prompt cache retention",
+          isOn: Binding(
+            get: { model.piPerformanceSettings?.cacheRetention == .long },
+            set: { enabled in
+              Task {
+                await model.setPiPerformanceSettings(
+                  transport: model.piPerformanceSettings?.transport ?? .auto,
+                  cacheRetention: enabled ? .long : .standard
+                )
+              }
+            }
+          )
+        )
+
+        Text("Long retention can reuse provider prompt caches across longer pauses. Active sessions apply changes after restart.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      .disabled(model.isUpdatingPiPerformance)
     }
   }
 }

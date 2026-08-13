@@ -51,6 +51,8 @@ public final class AppModel {
   public private(set) var manifest: ClientManifest?
   public private(set) var connectionStatus: ConnectionStatus = .disconnected
   public private(set) var authProviders: AuthProvidersResponse?
+  public private(set) var piPerformanceSettings: PiPerformanceSettingsResponse?
+  public private(set) var isUpdatingPiPerformance = false
   public private(set) var isLoadingAuthProviders = false
   public var authMutationProviderId: String?
   public var activeUiRequest: UiRequest?
@@ -2033,6 +2035,57 @@ public final class AppModel {
     } catch {
       alert = AppAlert(
         title: "Could not load providers",
+        message: Self.message(for: error)
+      )
+    }
+  }
+
+  public func refreshPiPerformanceSettings() async {
+    guard let baseURL else { return }
+    guard manifest?.capabilities.features.contains("pi-performance-settings") == true else {
+      return
+    }
+    do {
+      piPerformanceSettings = try await apiClient.piPerformanceSettings(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: requestSessionId,
+        sessionKey: requestSessionKey
+      )
+    } catch {
+      alert = AppAlert(
+        title: "Could not load Pi performance settings",
+        message: Self.message(for: error)
+      )
+    }
+  }
+
+  public func setPiPerformanceSettings(
+    transport: PiTransport,
+    cacheRetention: PiCacheRetention
+  ) async {
+    guard let baseURL else { return }
+    isUpdatingPiPerformance = true
+    defer { isUpdatingPiPerformance = false }
+    do {
+      let response = try await apiClient.setPiPerformanceSettings(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: requestSessionId,
+        sessionKey: requestSessionKey,
+        transport: transport,
+        cacheRetention: cacheRetention
+      )
+      piPerformanceSettings = response
+      if response.appliesToActiveSessionAfterRestart == true {
+        showToast(
+          title: "Pi performance setting saved",
+          message: "The active session will use it after its next restart."
+        )
+      }
+    } catch {
+      alert = AppAlert(
+        title: "Could not update Pi performance",
         message: Self.message(for: error)
       )
     }

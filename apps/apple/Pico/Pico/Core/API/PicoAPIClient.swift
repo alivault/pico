@@ -828,6 +828,44 @@ public actor PicoAPIClient {
     )
   }
 
+  public func piPerformanceSettings(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?
+  ) async throws -> PiPerformanceSettingsResponse {
+    try await send(
+      endpoint: .settingsPerformance,
+      baseURL: baseURL,
+      method: "GET",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey
+    )
+  }
+
+  public func setPiPerformanceSettings(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String?,
+    sessionKey: String?,
+    transport: PiTransport,
+    cacheRetention: PiCacheRetention
+  ) async throws -> PiPerformanceSettingsResponse {
+    try await send(
+      endpoint: .settingsPerformance,
+      baseURL: baseURL,
+      method: "POST",
+      contextId: contextId,
+      sessionId: sessionId,
+      sessionKey: sessionKey,
+      body: [
+        "transport": transport.rawValue,
+        "cacheRetention": cacheRetention.rawValue,
+      ]
+    )
+  }
+
   public func authProviders(
     baseURL: URL,
     contextId: String,

@@ -16,6 +16,27 @@ pub struct ServerSnapshot {
     pub clean_shutdown: bool,
     #[serde(default)]
     pub sessions: Vec<crate::app_state::SessionRecord>,
+    #[serde(default)]
+    pub pi_performance: PiPerformanceSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PiPerformanceSettings {
+    #[serde(default = "default_cache_retention")]
+    pub cache_retention: String,
+}
+
+impl Default for PiPerformanceSettings {
+    fn default() -> Self {
+        Self {
+            cache_retention: default_cache_retention(),
+        }
+    }
+}
+
+fn default_cache_retention() -> String {
+    "standard".into()
 }
 
 impl ServerSnapshot {
@@ -26,6 +47,7 @@ impl ServerSnapshot {
             started_at_ms: unix_time_ms(),
             clean_shutdown: false,
             sessions,
+            pi_performance: PiPerformanceSettings::default(),
         }
     }
 }
@@ -151,5 +173,14 @@ mod tests {
             io::ErrorKind::InvalidData
         );
         std::fs::remove_dir_all(directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn legacy_snapshots_default_to_standard_cache_retention() {
+        let snapshot: ServerSnapshot = serde_json::from_str(
+            r#"{"version":1,"port":3141,"startedAtMs":0,"cleanShutdown":true,"sessions":[]}"#,
+        )
+        .expect("legacy snapshot");
+        assert_eq!(snapshot.pi_performance.cache_retention, "standard");
     }
 }

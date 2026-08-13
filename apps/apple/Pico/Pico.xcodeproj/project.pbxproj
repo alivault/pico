@@ -56,6 +56,7 @@
 		65CD49DACF0D2DEBCD11E15E /* Core/Models/ConversationItemsPatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B70004BEED2BA32DB42F505 /* Core/Models/ConversationItemsPatch.swift */; };
 		F91000000000000000000001 /* Core/Models/ConversationDeltaEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91000000000000000000002 /* Core/Models/ConversationDeltaEvent.swift */; };
 		F91000000000000000000003 /* conversation_delta.json in Resources */ = {isa = PBXBuildFile; fileRef = F91000000000000000000004 /* conversation_delta.json */; };
+		F92000000000000000000001 /* Core/Models/PiPerformanceSettingsResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92000000000000000000002 /* Core/Models/PiPerformanceSettingsResponse.swift */; };
 		65E51806F8F3579DBC4EA7A9 /* Core/Models/ClientManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1431759DC59340AAE7DEDE7 /* Core/Models/ClientManifest.swift */; };
 		664BECAE2E5639E5D5C021AC /* Core/Models/UiRequestOptionObject.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17A19A6DBF23F40D2E73922 /* Core/Models/UiRequestOptionObject.swift */; };
 		66CEBC3BA7A37C71AF9EEFDF /* Core/Models/SimpleOkResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */; };
@@ -220,6 +221,7 @@
 		4B70004BEED2BA32DB42F505 /* Core/Models/ConversationItemsPatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ConversationItemsPatch.swift; sourceTree = "<group>"; };
 		F91000000000000000000002 /* Core/Models/ConversationDeltaEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ConversationDeltaEvent.swift; sourceTree = "<group>"; };
 		F91000000000000000000004 /* conversation_delta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = conversation_delta.json; sourceTree = "<group>"; };
+		F92000000000000000000002 /* Core/Models/PiPerformanceSettingsResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/PiPerformanceSettingsResponse.swift; sourceTree = "<group>"; };
 		4E347CB35281434D142A6137 /* Core/Events/PicoStreamEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Events/PicoStreamEvent.swift; sourceTree = "<group>"; };
 		4E721977D6C21211F8C74574 /* Features/Conversation/ConversationHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ConversationHeaderView.swift; sourceTree = "<group>"; };
 		4F66CB45B6BF5E7721748D81 /* Features/Connections/ConnectionFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Connections/ConnectionFormView.swift; sourceTree = "<group>"; };
@@ -415,6 +417,7 @@
 				B10000000000000000000007 /* Core/Models/PathCompletionsResponse.swift */,
 				5925A9E1ACB662178411CAA4 /* Core/Models/PendingUserMessage.swift */,
 				CB78EFF24232957A3ED467F2 /* Core/Models/PicoServerEvent.swift */,
+				F92000000000000000000002 /* Core/Models/PiPerformanceSettingsResponse.swift */,
 				E6093E9FD3F04AB2140A786C /* Core/Models/PromptImage.swift */,
 				C33DEB5D1B8020CEB5140416 /* Core/Models/PromptRequestBody.swift */,
 				5403C17E9C154187C52A69F0 /* Core/Models/PromptResponse.swift */,
@@ -722,6 +725,7 @@
 				98D14931C9DC99AFD169CA58 /* Core/Models/ModelResponse.swift in Sources */,
 				71CD6E6F0D8FCB590BCF73EE /* Core/Models/PendingUserMessage.swift in Sources */,
 				35D1CC824AEBC604720A92A5 /* Core/Models/PicoServerEvent.swift in Sources */,
+				F92000000000000000000001 /* Core/Models/PiPerformanceSettingsResponse.swift in Sources */,
 				282C8F6C19855D4C44267C89 /* Core/Models/PromptImage.swift in Sources */,
 				E68D62BC99F5DC1CD1F261E6 /* Core/Models/PromptRequestBody.swift in Sources */,
 				439B0008E232B4FB1F6D18E9 /* Core/Models/PromptResponse.swift in Sources */,

@@ -1,7 +1,16 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 
+import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
+import type {
+  PiCacheRetention,
+  PiPerformanceSettingsResponse,
+  PiTransport,
+} from "@/lib/pico/api"
 import {
   THEME_FAMILIES,
   themeColorModeLabel,
@@ -35,6 +44,12 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
+const PI_TRANSPORT_OPTIONS: Array<PiTransport> = [
+  "auto",
+  "websocket-cached",
+  "websocket",
+  "sse",
+]
 const THEME_SELECTION_SECTION_CONFIGS = [
   { heading: "Auto", colorMode: "auto" },
   { heading: "Dark", colorMode: "dark" },
@@ -291,6 +306,7 @@ export type AppShellSettingsDialogHandle = {
 type AppShellSettingsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  viewerContextId: string
   currentTheme: ThemeFamily
   currentThemeColorMode: ThemeColorMode
   onThemeChange: (value: ThemeFamily) => void
@@ -336,6 +352,25 @@ type SettingsCommandGroupsOptions = Pick<
   | "onLogoutProviders"
 > & {
   onThemeCommand: () => void
+  piTransport: PiTransport
+  piCacheRetention: PiCacheRetention
+  onPiTransportChange: (transport: PiTransport) => void | Promise<void>
+  onPiCacheRetentionChange: (
+    retention: PiCacheRetention
+  ) => void | Promise<void>
+}
+
+function piTransportLabel(transport: PiTransport) {
+  switch (transport) {
+    case "websocket-cached":
+      return "Cached WebSocket"
+    case "websocket":
+      return "WebSocket"
+    case "sse":
+      return "SSE"
+    default:
+      return "Auto"
+  }
 }
 
 function getSettingsCommandGroups({
@@ -358,6 +393,10 @@ function getSettingsCommandGroups({
   onLoginProviders,
   onLogoutProviders,
   onThemeCommand,
+  piTransport,
+  piCacheRetention,
+  onPiTransportChange,
+  onPiCacheRetentionChange,
 }: SettingsCommandGroupsOptions): Array<SettingsCommandGroup> {
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
@@ -427,6 +466,37 @@ function getSettingsCommandGroups({
           valueLabel: formatToggleValue(autoScrollEnabled),
           keywords: ["auto", "scroll", "latest", "follow", "streaming"],
           onSelect: () => onAutoScrollEnabledChange(!autoScrollEnabled),
+        },
+      ],
+    },
+    {
+      heading: "Pi performance",
+      commands: [
+        {
+          id: "pi-transport",
+          title: "Provider transport",
+          description:
+            "Choose how Pi streams provider responses. Auto uses the best supported transport.",
+          valueLabel: piTransportLabel(piTransport),
+          keywords: ["pi", "transport", "sse", "websocket", "performance"],
+          onSelect: () => {
+            const index = PI_TRANSPORT_OPTIONS.indexOf(piTransport)
+            return onPiTransportChange(
+              PI_TRANSPORT_OPTIONS[(index + 1) % PI_TRANSPORT_OPTIONS.length]
+            )
+          },
+        },
+        {
+          id: "pi-cache-retention",
+          title: "Long prompt cache retention",
+          description:
+            "Keep supported provider prompt caches longer for sessions with pauses between turns.",
+          valueLabel: formatToggleValue(piCacheRetention === "long"),
+          keywords: ["pi", "prompt", "cache", "retention", "performance"],
+          onSelect: () =>
+            onPiCacheRetentionChange(
+              piCacheRetention === "long" ? "standard" : "long"
+            ),
         },
       ],
     },
@@ -712,6 +782,7 @@ function SettingsDialogBody({
 function AppShellSettingsDialog({
   open,
   onOpenChange,
+  viewerContextId,
   currentTheme,
   currentThemeColorMode,
   onThemeChange,
@@ -734,6 +805,54 @@ function AppShellSettingsDialog({
   onLoginProviders,
   onLogoutProviders,
 }: AppShellSettingsDialogProps) {
+  const queryClient = useQueryClient()
+  const performanceQuery = useQuery({
+    queryKey: picoQueryKeys.piPerformance(viewerContextId),
+    queryFn: () =>
+      fetchJson<PiPerformanceSettingsResponse>(
+        buildRequestUrl("/api/settings/performance", {
+          contextId: viewerContextId,
+        })
+      ),
+    enabled: open && Boolean(viewerContextId),
+    staleTime: 30_000,
+  })
+  const performance = performanceQuery.data?.ok
+    ? performanceQuery.data
+    : undefined
+  const performanceMutation = useMutation({
+    mutationFn: async (settings: {
+      transport: PiTransport
+      cacheRetention: PiCacheRetention
+    }) =>
+      await fetchJson<PiPerformanceSettingsResponse>(
+        buildRequestUrl("/api/settings/performance", {
+          contextId: viewerContextId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(settings),
+        }
+      ),
+    onSuccess: (response) => {
+      if (!response.ok) return
+      queryClient.setQueryData(
+        picoQueryKeys.piPerformance(viewerContextId),
+        response
+      )
+      if (response.appliesToActiveSessionAfterRestart) {
+        toast.info("Pi performance setting saved", {
+          description: "The active session will use it after its next restart.",
+        })
+      }
+    },
+    onError: (error) => {
+      toast.error("Could not update Pi performance", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    },
+  })
   const [state, dispatch] = React.useReducer(
     settingsDialogReducer,
     { currentTheme, currentThemeColorMode },
@@ -812,6 +931,20 @@ function AppShellSettingsDialog({
     desktopNotificationPermission,
     onLoginProviders,
     onLogoutProviders,
+    piTransport: performance?.transport ?? "auto",
+    piCacheRetention: performance?.cacheRetention ?? "standard",
+    onPiTransportChange: async (transport) => {
+      await performanceMutation.mutateAsync({
+        transport,
+        cacheRetention: performance?.cacheRetention ?? "standard",
+      })
+    },
+    onPiCacheRetentionChange: async (cacheRetention) => {
+      await performanceMutation.mutateAsync({
+        transport: performance?.transport ?? "auto",
+        cacheRetention,
+      })
+    },
     onThemeCommand: () => {
       themePreviewInitialRef.current = themeSelectionForCurrent(
         currentTheme,
