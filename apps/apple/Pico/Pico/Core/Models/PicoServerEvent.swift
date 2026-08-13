@@ -2,6 +2,7 @@ import Foundation
 
 public enum PicoServerEvent: Decodable, Sendable {
   case stateSync(StateSyncPayload)
+  case conversationDelta(ConversationDeltaEvent)
   case sessions(SessionsEvent)
   case sessionStatus(SessionStatusEvent)
   case sessionDone(SessionDoneEvent)
@@ -24,6 +25,8 @@ public enum PicoServerEvent: Decodable, Sendable {
     switch type {
     case "state_sync":
       self = .stateSync(try StateSyncPayload(from: decoder))
+    case "conversation_delta":
+      self = .conversationDelta(try ConversationDeltaEvent(from: decoder))
     case "sessions":
       self = .sessions(try SessionsEvent(from: decoder))
     case "session_status":

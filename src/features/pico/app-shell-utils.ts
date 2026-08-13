@@ -106,7 +106,9 @@ function isCurrentResponseBoundaryUser(item: SessionState["items"][number]) {
   )
 }
 
-function latestCurrentTurnThinkingSummaryText(items: SessionState["items"]) {
+export function latestCurrentTurnThinkingSummaryText(
+  items: SessionState["items"]
+) {
   // Keep the current-response scope narrow: scan backwards until the latest
   // real user turn, but ignore queued follow-ups/steering messages.
   for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {

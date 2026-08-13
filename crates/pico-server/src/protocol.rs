@@ -264,6 +264,43 @@ pub struct ConversationItemsPatch {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationDeltaEvent {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub session_id: String,
+    pub operations: Vec<ConversationDeltaOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum ConversationDeltaOperation {
+    ReplaceItem {
+        item: ConversationItem,
+    },
+    AppendBlock {
+        content_index: usize,
+        block_key: String,
+        block_type: String,
+        delta: String,
+    },
+    ReplaceBlock {
+        content_index: usize,
+        block: AssistantBlock,
+    },
+    UpdateTool {
+        call_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        details: Option<Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
+        running: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionUiState {
     #[serde(default)]
     pub statuses: HashMap<String, String>,

@@ -241,6 +241,38 @@ export type ConversationItemsPatch = {
   items: Array<ConversationItem>
 }
 
+export type ConversationDeltaOperation =
+  | {
+      op: "replaceItem"
+      item: AssistantItem
+    }
+  | {
+      op: "appendBlock"
+      contentIndex: number
+      blockKey: string
+      blockType: "text" | "thinking"
+      delta: string
+    }
+  | {
+      op: "replaceBlock"
+      contentIndex: number
+      block: AssistantBlock
+    }
+  | {
+      op: "updateTool"
+      callId: string
+      output?: string
+      details?: unknown
+      isError?: boolean
+      running: boolean
+    }
+
+export type ConversationDeltaEvent = {
+  type: "conversation_delta"
+  sessionId: string
+  operations: Array<ConversationDeltaOperation>
+}
+
 export type SessionUiState = {
   statuses: Record<string, string>
   title?: string

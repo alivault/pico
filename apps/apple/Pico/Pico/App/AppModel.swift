@@ -2872,6 +2872,8 @@ public final class AppModel {
         }
       }
       refreshConversationGitStatusIfNeeded()
+    case .conversationDelta(let delta):
+      sessionState.apply(delta)
     case .sessions(let sessions):
       sessionsEvent = sessions
       let loadedDirectoryIndexKeys = sessions.directoryIndexes.map {

@@ -3,6 +3,31 @@ import Testing
 @testable import Pico
 
 struct SessionStateReducerTests {
+  @Test func appliesConversationDeltasWithoutReplacingHistory() throws {
+    let data = try FixtureLoader.data(named: "conversation_delta")
+    guard case .conversationDelta(let delta) = try JSONDecoder().decode(
+      PicoServerEvent.self,
+      from: data
+    ) else {
+      Issue.record("Expected conversation delta event")
+      return
+    }
+    var state = SessionState(sessionId: "demo")
+
+    state.apply(delta)
+
+    #expect(state.streaming)
+    #expect(state.items.count == 1)
+    guard let item = state.items.first,
+          case .assistant(let assistant) = item,
+          let assistantBlock = assistant.blocks.first,
+          case .text(let block) = assistantBlock else {
+      Issue.record("Expected streaming text block")
+      return
+    }
+    #expect(block.text == "Hello world")
+  }
+
   @Test func appliesInitialStateAndPatch() throws {
     let decoder = JSONDecoder()
     let initialData = try FixtureLoader.data(named: "state_sync_initial")

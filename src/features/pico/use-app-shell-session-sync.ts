@@ -18,6 +18,7 @@ import type {
 import {
   buildRequestUrl,
   fetchJson,
+  latestCurrentTurnThinkingSummaryText,
   updateStateFromSync,
 } from "@/features/pico/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pico/composer-utils"
@@ -34,8 +35,9 @@ import {
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pico"
-import { sameContextUsage } from "@/lib/pico/sync"
+import { applyConversationDelta, sameContextUsage } from "@/lib/pico/sync"
 import {
+  isConversationDeltaEvent,
   isGitChangedEvent,
   isSessionDoneEvent,
   isSessionStatusEvent,
@@ -768,6 +770,43 @@ export function useAppShellSessionSync({
         rememberStoredEventsLastId(viewerContextId, lastEventId)
       }
       const payload = JSON.parse(event.data) as PicoServerEvent
+
+      if (isConversationDeltaEvent(payload)) {
+        const previousState = sessionStateRef.current
+        if (
+          previousState.sessionId &&
+          previousState.sessionId !== payload.sessionId
+        ) {
+          return
+        }
+        const items = applyConversationDelta(previousState.items, payload)
+        if (items === previousState.items) return
+        const nextState = {
+          ...previousState,
+          connected: true,
+          replaying: false,
+          streaming: true,
+          items,
+          hiddenThinkingPreview: previousState.hideThinkingBlock
+            ? latestCurrentTurnThinkingSummaryText(items)
+            : undefined,
+        } satisfies SessionState
+        batch(() => {
+          sessionStateRef.current = nextState
+          setConversationItems(items)
+          setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
+            preserveExisting: Boolean(
+              previousState.streaming && !nextState.hiddenThinkingPreview
+            ),
+          })
+          if (!previousState.streaming) {
+            setComposerStreaming(true)
+            setWorkingState({ label: "Working…", cancelable: false })
+          }
+          setSessionState(nextState)
+        })
+        return
+      }
 
       if (isStateSyncEvent(payload)) {
         const activationRevision = payload.activationRevision

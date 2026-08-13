@@ -16,4 +16,17 @@ struct PicoServerEventTests {
     #expect(sessions.snapshots.count == 1)
     #expect(sessions.snapshots.first?.sessions.first?.title == "Demo session")
   }
+
+  @Test func decodesConversationDeltaFixture() throws {
+    let data = try FixtureLoader.data(named: "conversation_delta")
+    let event = try JSONDecoder().decode(PicoServerEvent.self, from: data)
+
+    guard case .conversationDelta(let delta) = event else {
+      Issue.record("Expected conversation delta event")
+      return
+    }
+
+    #expect(delta.sessionId == "demo")
+    #expect(delta.operations.count == 3)
+  }
 }

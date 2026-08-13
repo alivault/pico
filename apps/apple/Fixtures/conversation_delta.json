@@ -1,0 +1,31 @@
+{
+  "type": "conversation_delta",
+  "sessionId": "demo",
+  "operations": [
+    {
+      "op": "replaceItem",
+      "item": {
+        "kind": "assistant",
+        "itemKey": "streaming",
+        "renderKey": "streaming",
+        "blocks": [],
+        "streaming": true,
+        "done": false
+      }
+    },
+    {
+      "op": "appendBlock",
+      "contentIndex": 0,
+      "blockKey": "entry:streaming:part:0:text",
+      "blockType": "text",
+      "delta": "Hello"
+    },
+    {
+      "op": "appendBlock",
+      "contentIndex": 0,
+      "blockKey": "entry:streaming:part:0:text",
+      "blockType": "text",
+      "delta": " world"
+    }
+  ]
+}

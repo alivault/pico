@@ -54,6 +54,8 @@
 		61A513C2CE563B35B548AD26 /* state_sync_patch.json in Resources */ = {isa = PBXBuildFile; fileRef = 07E8B7F815FE4A06E1C73866 /* state_sync_patch.json */; };
 		64B2C8177941B7504CA0BAAE /* Features/Connections/ConnectionFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F66CB45B6BF5E7721748D81 /* Features/Connections/ConnectionFormView.swift */; };
 		65CD49DACF0D2DEBCD11E15E /* Core/Models/ConversationItemsPatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B70004BEED2BA32DB42F505 /* Core/Models/ConversationItemsPatch.swift */; };
+		F91000000000000000000001 /* Core/Models/ConversationDeltaEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91000000000000000000002 /* Core/Models/ConversationDeltaEvent.swift */; };
+		F91000000000000000000003 /* conversation_delta.json in Resources */ = {isa = PBXBuildFile; fileRef = F91000000000000000000004 /* conversation_delta.json */; };
 		65E51806F8F3579DBC4EA7A9 /* Core/Models/ClientManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1431759DC59340AAE7DEDE7 /* Core/Models/ClientManifest.swift */; };
 		664BECAE2E5639E5D5C021AC /* Core/Models/UiRequestOptionObject.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17A19A6DBF23F40D2E73922 /* Core/Models/UiRequestOptionObject.swift */; };
 		66CEBC3BA7A37C71AF9EEFDF /* Core/Models/SimpleOkResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427E40708A9D0F2DA5189A20 /* Core/Models/SimpleOkResponse.swift */; };
@@ -216,6 +218,8 @@
 		4A02F898202D843650506CF7 /* Features/Conversation/ThinkingBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ThinkingBlockView.swift; sourceTree = "<group>"; };
 		4A5B98205CAC380630135192 /* Features/Composer/StreamingBehaviorMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Composer/StreamingBehaviorMenu.swift; sourceTree = "<group>"; };
 		4B70004BEED2BA32DB42F505 /* Core/Models/ConversationItemsPatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ConversationItemsPatch.swift; sourceTree = "<group>"; };
+		F91000000000000000000002 /* Core/Models/ConversationDeltaEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/ConversationDeltaEvent.swift; sourceTree = "<group>"; };
+		F91000000000000000000004 /* conversation_delta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = conversation_delta.json; sourceTree = "<group>"; };
 		4E347CB35281434D142A6137 /* Core/Events/PicoStreamEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Events/PicoStreamEvent.swift; sourceTree = "<group>"; };
 		4E721977D6C21211F8C74574 /* Features/Conversation/ConversationHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/ConversationHeaderView.swift; sourceTree = "<group>"; };
 		4F66CB45B6BF5E7721748D81 /* Features/Connections/ConnectionFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Connections/ConnectionFormView.swift; sourceTree = "<group>"; };
@@ -395,6 +399,7 @@
 				B10000000000000000000001 /* Core/Models/CompletionItem.swift */,
 				8934FA9827018A9EC871088C /* Core/Models/ContextUsage.swift */,
 				98B6BF68B95F47088F453591 /* Core/Models/ConversationItem.swift */,
+				F91000000000000000000002 /* Core/Models/ConversationDeltaEvent.swift */,
 				4B70004BEED2BA32DB42F505 /* Core/Models/ConversationItemsPatch.swift */,
 				8D6A8C0C64C28FAC4AC2402F /* Core/Models/DirectorySessionsIndexSnapshot.swift */,
 				B10000000000000000000002 /* Core/Models/DirectoryResolveResponse.swift */,
@@ -545,6 +550,7 @@
 			isa = PBXGroup;
 			children = (
 				7409BE932B5774B607FBCC1D /* sessions_event.json */,
+				F91000000000000000000004 /* conversation_delta.json */,
 				D60000000000000000000002 /* highlight_response.json */,
 				4235466D4537838F00690942 /* state_sync_initial.json */,
 				07E8B7F815FE4A06E1C73866 /* state_sync_patch.json */,
@@ -664,6 +670,7 @@
 				77B627E03876940A25F538F5 /* sessions_event.json in Resources */,
 				D60000000000000000000001 /* highlight_response.json in Resources */,
 				3E44A66F62D4FD305DADFD45 /* state_sync_initial.json in Resources */,
+				F91000000000000000000003 /* conversation_delta.json in Resources */,
 				61A513C2CE563B35B548AD26 /* state_sync_patch.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -702,6 +709,7 @@
 				F82F82DC8CEECC76EC0C0453 /* Core/Models/CompactionBlock.swift in Sources */,
 				87D0CCD2F2B80CD4B360E008 /* Core/Models/ContextUsage.swift in Sources */,
 				01D0CDA9B576D642E32E3BCB /* Core/Models/ConversationItem.swift in Sources */,
+				F91000000000000000000001 /* Core/Models/ConversationDeltaEvent.swift in Sources */,
 				65CD49DACF0D2DEBCD11E15E /* Core/Models/ConversationItemsPatch.swift in Sources */,
 				AFDFFD31CEA0AA88C624717A /* Core/Models/DirectorySessionsIndexSnapshot.swift in Sources */,
 				D026655FA48D1220F9FA6827 /* Core/Models/DirectoryState.swift in Sources */,

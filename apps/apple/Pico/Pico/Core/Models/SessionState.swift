@@ -203,10 +203,123 @@ public struct SessionState: Hashable, Sendable {
     refreshHiddenThinkingPreview()
   }
 
+  public mutating func apply(_ delta: ConversationDeltaEvent) {
+    if let sessionId, sessionId != delta.sessionId {
+      return
+    }
+    var assistant = items.reversed().compactMap { item -> AssistantConversationItem? in
+      guard case .assistant(let assistant) = item, assistant.streaming == true else {
+        return nil
+      }
+      return assistant
+    }.first ?? AssistantConversationItem(
+      itemKey: "streaming",
+      renderKey: "streaming",
+      blocks: [],
+      streaming: true,
+      done: false
+    )
+
+    for operation in delta.operations {
+      switch operation {
+      case .replaceItem(let item):
+        assistant = item
+      case .appendBlock(let contentIndex, let blockKey, let blockType, let delta):
+        if let index = assistant.blocks.firstIndex(where: { Self.blockKey($0) == blockKey }) {
+          switch assistant.blocks[index] {
+          case .text(var block) where blockType == "text":
+            block.text.append(delta)
+            assistant.blocks[index] = .text(block)
+          case .thinking(var block) where blockType == "thinking":
+            block.text.append(delta)
+            assistant.blocks[index] = .thinking(block)
+          default:
+            assistant.blocks[index] = Self.deltaBlock(
+              type: blockType,
+              blockKey: blockKey,
+              text: delta
+            )
+          }
+        } else {
+          assistant.blocks.insert(
+            Self.deltaBlock(type: blockType, blockKey: blockKey, text: delta),
+            at: max(0, min(contentIndex, assistant.blocks.count))
+          )
+        }
+      case .replaceBlock(let contentIndex, let block):
+        if let blockKey = Self.blockKey(block),
+           let index = assistant.blocks.firstIndex(where: { Self.blockKey($0) == blockKey }) {
+          assistant.blocks[index] = block
+        } else {
+          assistant.blocks.insert(
+            block,
+            at: max(0, min(contentIndex, assistant.blocks.count))
+          )
+        }
+      case .updateTool(let callId, let output, let details, let isError, let running):
+        guard let index = assistant.blocks.firstIndex(where: { block in
+          guard case .tool(let tool) = block else { return false }
+          return tool.callId == callId
+        }), case .tool(var tool) = assistant.blocks[index] else {
+          continue
+        }
+        if let output {
+          tool.output = output
+        }
+        if let details {
+          tool.details = details
+        }
+        if let isError {
+          tool.isError = isError
+        }
+        tool.running = running
+        assistant.blocks[index] = .tool(tool)
+      case .unknown:
+        continue
+      }
+    }
+
+    assistant.streaming = true
+    assistant.done = false
+    if let index = items.lastIndex(where: { item in
+      guard case .assistant(let assistant) = item else { return false }
+      return assistant.streaming == true
+    }) {
+      items[index] = .assistant(assistant)
+    } else {
+      items.append(.assistant(assistant))
+    }
+    connected = true
+    replaying = false
+    streaming = true
+    refreshHiddenThinkingPreview()
+  }
+
   public mutating func refreshHiddenThinkingPreview() {
     hiddenThinkingPreview = streaming && hideThinkingBlock
       ? latestCurrentTurnThinkingSummary()
       : nil
+  }
+
+  private static func deltaBlock(
+    type: String,
+    blockKey: String,
+    text: String
+  ) -> AssistantBlock {
+    if type == "thinking" {
+      return .thinking(ThinkingBlock(blockKey: blockKey, text: text))
+    }
+    return .text(TextBlock(blockKey: blockKey, text: text))
+  }
+
+  private static func blockKey(_ block: AssistantBlock) -> String? {
+    switch block {
+    case .text(let block): return block.blockKey
+    case .thinking(let block): return block.blockKey
+    case .tool(let block): return block.blockKey
+    case .compaction(let block): return block.blockKey
+    case .unknown(let block): return block.blockKey
+    }
   }
 
   private static func applyItemsPatch(

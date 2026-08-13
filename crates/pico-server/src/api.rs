@@ -38,10 +38,11 @@ use crate::highlight::HighlightRuntime;
 use crate::persistence::{self, ServerSnapshot};
 use crate::pi_protocol::PiCommand;
 use crate::pi_rpc::{detect_pi_version, PiRpcClient, PiRpcError, PiSpawnOptions};
-use crate::pi_stream::PiStreamingMessage;
+use crate::pi_stream::{ConversationDeltaBatch, PiStreamingMessage};
 use crate::project_files;
 use crate::protocol::{
-    ConversationItem, API_CONTRACT_VERSION, PERSISTENCE_VERSION, SERVER_PROTOCOL_VERSION,
+    ConversationDeltaEvent, ConversationItem, API_CONTRACT_VERSION, PERSISTENCE_VERSION,
+    SERVER_PROTOCOL_VERSION,
 };
 use crate::runtime::RuntimeRegistry;
 use crate::security::{self, RequestPolicy};
@@ -851,15 +852,38 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
         let mut events = runtime.subscribe();
         let mut streaming_message = PiStreamingMessage::default();
         let mut tool_updates = HashMap::<String, Value>::new();
+        let mut delta_batch = ConversationDeltaBatch::default();
+        let mut delta_flush = tokio::time::interval(Duration::from_millis(33));
+        delta_flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            let event = match events.recv().await {
-                Ok(event) => event,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    tracing::warn!(skipped, %session_id, "Pi event consumer lagged");
-                    emit_session_state(&context, &session_id, runtime.is_running(), None).await;
+            let event = tokio::select! {
+                _ = delta_flush.tick(), if !delta_batch.is_empty() => {
+                    if let Some(item) = build_streaming_item(streaming_message.message(), &tool_updates) {
+                        context
+                            .streaming_items
+                            .write()
+                            .await
+                            .insert(session_id.clone(), item);
+                    }
+                    emit_conversation_delta(
+                        &context,
+                        &public_session_id,
+                        delta_batch.take(),
+                    );
                     continue;
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                result = events.recv() => {
+                    match result {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(skipped, %session_id, "Pi event consumer lagged");
+                            delta_batch.clear();
+                            emit_session_state(&context, &session_id, runtime.is_running(), None).await;
+                            continue;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
             };
             match event.get("type").and_then(Value::as_str) {
                 Some("agent_start") | Some("compaction_start") => {
@@ -867,19 +891,29 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     emit_session_state(&context, &session_id, true, None).await;
                 }
                 Some("message_start") => {
+                    if !delta_batch.is_empty() {
+                        emit_conversation_delta(&context, &public_session_id, delta_batch.take());
+                    }
+                    context.streaming_items.write().await.remove(&session_id);
+                    emit_session_state(&context, &session_id, true, None).await;
                     streaming_message.start(&event);
-                }
-                Some("message_update") => {
-                    streaming_message.update(&event);
-                    let item = build_streaming_item(streaming_message.message(), &tool_updates);
-                    if let Some(item) = &item {
+                    if let Some(item) =
+                        build_streaming_item(streaming_message.message(), &tool_updates)
+                    {
                         context
                             .streaming_items
                             .write()
                             .await
                             .insert(session_id.clone(), item.clone());
+                        delta_batch.replace_item(&item);
                     }
-                    emit_session_state(&context, &session_id, true, item).await;
+                }
+                Some("message_update") => {
+                    streaming_message.update(&event);
+                    let item = ConversationDeltaBatch::message_update_needs_item(&event)
+                        .then(|| build_streaming_item(streaming_message.message(), &tool_updates))
+                        .flatten();
+                    delta_batch.push_message_update(&event, item.as_ref());
                 }
                 Some("message_end") => {
                     streaming_message.finish(&event);
@@ -890,8 +924,8 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                             .write()
                             .await
                             .insert(session_id.clone(), item.clone());
+                        delta_batch.replace_item(item);
                     }
-                    emit_session_state(&context, &session_id, true, item).await;
                 }
                 Some("tool_execution_start")
                 | Some("tool_execution_update")
@@ -899,6 +933,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                     if let Some(call_id) = event.get("toolCallId").and_then(Value::as_str) {
                         tool_updates.insert(call_id.to_string(), event.clone());
                     }
+                    delta_batch.push_tool_update(&event);
                     let item = build_streaming_item(streaming_message.message(), &tool_updates);
                     if let Some(item) = &item {
                         context
@@ -907,13 +942,15 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                             .await
                             .insert(session_id.clone(), item.clone());
                     }
-                    emit_session_state(&context, &session_id, true, item).await;
                 }
                 Some("turn_end") => {
                     let _ = dispatch_pending_prompt(&context, &session_id, &runtime, "steer", true)
                         .await;
                 }
                 Some("agent_settled") | Some("compaction_end") => {
+                    if !delta_batch.is_empty() {
+                        emit_conversation_delta(&context, &public_session_id, delta_batch.take());
+                    }
                     streaming_message.clear();
                     tool_updates.clear();
                     context.streaming_items.write().await.remove(&session_id);
@@ -977,6 +1014,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                         .push(None, Some(public_session_id.clone()), event);
                 }
                 Some("pico_pi_process_exited") => {
+                    delta_batch.clear();
                     context.active_work.mark_inactive(&session_id).await;
                     emit_session_state(&context, &session_id, false, None).await;
                     context.event_hub.push(
@@ -1174,6 +1212,25 @@ fn content_text(value: &Value) -> String {
             .join("\n"),
         _ => String::new(),
     }
+}
+
+fn emit_conversation_delta(
+    context: &ServerContext,
+    public_session_id: &str,
+    operations: Vec<crate::protocol::ConversationDeltaOperation>,
+) {
+    if operations.is_empty() {
+        return;
+    }
+    let payload = serde_json::to_value(ConversationDeltaEvent {
+        kind: "conversation_delta".into(),
+        session_id: public_session_id.to_string(),
+        operations,
+    })
+    .unwrap_or_else(|_| json!({ "type": "conversation_delta", "operations": [] }));
+    context
+        .event_hub
+        .push(None, Some(public_session_id.to_string()), payload);
 }
 
 async fn session_document_for_runtime(
@@ -2052,6 +2109,7 @@ fn event_matches(event: &ServerEvent, context_id: &str, session_id: Option<&str>
         let selected_session_only = matches!(
             event_type,
             Some("state_sync")
+                | Some("conversation_delta")
                 | Some("user_message")
                 | Some("extension_ui_request")
                 | Some("extension_error")
@@ -2087,9 +2145,10 @@ async fn client_manifest() -> Json<Value> {
         "httpsRequired": false,
         "localHttpAllowed": true
       },
-      "capabilities": {
+        "capabilities": {
         "events": [
           "state_sync",
+          "conversation_delta",
           "sessions",
           "session_status",
           "session_done",

@@ -1,4 +1,5 @@
 import type {
+  ConversationDeltaEvent,
   DirectoryState,
   ModelOption,
   PromptImage,
@@ -649,6 +650,7 @@ export type GitChangedEvent = {
 
 export type PicoServerEvent =
   | StateSyncPayload
+  | ConversationDeltaEvent
   | SessionsEvent
   | SessionStatusEvent
   | SessionDoneEvent
@@ -673,6 +675,17 @@ export function isStateSyncEvent(value: unknown): value is StateSyncPayload {
     value &&
     typeof value === "object" &&
     (value as { type?: unknown }).type === "state_sync"
+  )
+}
+
+export function isConversationDeltaEvent(
+  value: unknown
+): value is ConversationDeltaEvent {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "conversation_delta" &&
+    Array.isArray((value as { operations?: unknown }).operations)
   )
 }
 

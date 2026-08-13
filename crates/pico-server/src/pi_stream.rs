@@ -2,6 +2,188 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value};
 
+use crate::protocol::{
+    AssistantBlock, AssistantConversationItem, ConversationDeltaOperation, ConversationItem,
+};
+
+#[derive(Default)]
+pub struct ConversationDeltaBatch {
+    operations: Vec<ConversationDeltaOperation>,
+}
+
+impl ConversationDeltaBatch {
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+
+    pub fn replace_item(&mut self, item: &ConversationItem) {
+        if !matches!(item, ConversationItem::Assistant(_)) {
+            return;
+        }
+        self.operations.clear();
+        self.operations
+            .push(ConversationDeltaOperation::ReplaceItem { item: item.clone() });
+    }
+
+    pub fn message_update_needs_item(event: &Value) -> bool {
+        if event.get("message").is_some() {
+            return true;
+        }
+        matches!(
+            event
+                .get("assistantMessageEvent")
+                .and_then(|delta| delta.get("type"))
+                .and_then(Value::as_str),
+            Some("text_start" | "text_end" | "thinking_start" | "thinking_end" | "toolcall_end")
+        )
+    }
+
+    pub fn push_message_update(&mut self, event: &Value, item: Option<&ConversationItem>) {
+        if event.get("message").is_some() {
+            if let Some(item) = item {
+                self.replace_item(item);
+            }
+            return;
+        }
+        let Some(delta) = event.get("assistantMessageEvent") else {
+            return;
+        };
+        let Some(kind) = delta.get("type").and_then(Value::as_str) else {
+            return;
+        };
+        let Some(index) = delta.get("contentIndex").and_then(Value::as_u64) else {
+            return;
+        };
+        match kind {
+            "text_delta" | "thinking_delta" => {
+                let Some(chunk) = delta.get("delta").and_then(Value::as_str) else {
+                    return;
+                };
+                let block_type = if kind == "text_delta" {
+                    "text"
+                } else {
+                    "thinking"
+                };
+                self.append_block(
+                    index as usize,
+                    format!("entry:streaming:part:{index}:{block_type}"),
+                    block_type,
+                    chunk,
+                );
+            }
+            "text_start" | "text_end" | "thinking_start" | "thinking_end" | "toolcall_end" => {
+                if let Some(block) = item.and_then(|item| assistant_block_at(item, index as usize))
+                {
+                    self.operations
+                        .push(ConversationDeltaOperation::ReplaceBlock {
+                            content_index: index as usize,
+                            block,
+                        });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn push_tool_update(&mut self, event: &Value) {
+        let Some(call_id) = event.get("toolCallId").and_then(Value::as_str) else {
+            return;
+        };
+        let event_type = event.get("type").and_then(Value::as_str);
+        let result = event.get("result").or_else(|| event.get("partialResult"));
+        let operation = ConversationDeltaOperation::UpdateTool {
+            call_id: call_id.to_string(),
+            output: result.map(content_text),
+            details: result.and_then(|result| result.get("details")).cloned(),
+            is_error: event.get("isError").and_then(Value::as_bool),
+            running: event_type != Some("tool_execution_end"),
+        };
+        if let Some(existing) = self.operations.iter_mut().rev().find(|existing| {
+            matches!(
+                existing,
+                ConversationDeltaOperation::UpdateTool {
+                    call_id: existing_call_id,
+                    ..
+                } if existing_call_id == call_id
+            )
+        }) {
+            *existing = operation;
+        } else {
+            self.operations.push(operation);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<ConversationDeltaOperation> {
+        std::mem::take(&mut self.operations)
+    }
+
+    pub fn clear(&mut self) {
+        self.operations.clear();
+    }
+
+    fn append_block(
+        &mut self,
+        content_index: usize,
+        block_key: String,
+        block_type: &str,
+        chunk: &str,
+    ) {
+        if let Some(ConversationDeltaOperation::AppendBlock {
+            content_index: previous_index,
+            block_key: previous_key,
+            block_type: previous_type,
+            delta,
+        }) = self.operations.last_mut()
+        {
+            if *previous_index == content_index
+                && previous_key == &block_key
+                && previous_type == block_type
+            {
+                delta.push_str(chunk);
+                return;
+            }
+        }
+        self.operations
+            .push(ConversationDeltaOperation::AppendBlock {
+                content_index,
+                block_key,
+                block_type: block_type.to_string(),
+                delta: chunk.to_string(),
+            });
+    }
+}
+
+fn assistant_block_at(item: &ConversationItem, index: usize) -> Option<AssistantBlock> {
+    let ConversationItem::Assistant(AssistantConversationItem { blocks, .. }) = item else {
+        return None;
+    };
+    blocks.get(index).cloned()
+}
+
+fn content_text(value: &Value) -> String {
+    if let Some(text) = value.as_str() {
+        return text.to_string();
+    }
+    let content = value.get("content").unwrap_or(value);
+    match content {
+        Value::String(text) => text.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|part| {
+                if let Some(text) = part.as_str() {
+                    Some(text)
+                } else if part.get("type").and_then(Value::as_str) == Some("text") {
+                    part.get("text").and_then(Value::as_str)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    }
+}
+
 /// Reconstructs Pi's live assistant message from delta-only RPC events.
 ///
 /// Pi 0.84 removed the cumulative `message` field from `message_update` to
@@ -154,6 +336,41 @@ fn string_part(part_type: &str, field: &str, value: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session_store::streaming_assistant_item;
+
+    #[test]
+    fn batches_compact_deltas_and_keeps_item_discriminator() {
+        let mut batch = ConversationDeltaBatch::default();
+        let first = json!({
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": "hello"
+          }
+        });
+        let second = json!({
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "text_delta",
+            "contentIndex": 0,
+            "delta": " world"
+          }
+        });
+        batch.push_message_update(&first, None);
+        batch.push_message_update(&second, None);
+        let operations = serde_json::to_value(batch.take()).expect("serialize operations");
+        assert_eq!(operations[0]["op"], "appendBlock");
+        assert_eq!(operations[0]["delta"], "hello world");
+
+        let item = streaming_assistant_item(&json!({
+          "role": "assistant",
+          "content": [{ "type": "text", "text": "complete" }]
+        }));
+        batch.replace_item(&item);
+        let operations = serde_json::to_value(batch.take()).expect("serialize replacement");
+        assert_eq!(operations[0]["item"]["kind"], "assistant");
+    }
 
     #[test]
     fn reconstructs_delta_only_assistant_messages() {

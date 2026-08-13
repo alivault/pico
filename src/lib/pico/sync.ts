@@ -1,6 +1,7 @@
 import type {
   AssistantBlock,
   AssistantItem,
+  ConversationDeltaEvent,
   ConversationItem,
   PromptImage,
   SessionState,
@@ -451,6 +452,123 @@ function reconcileConversationItems(
   }
 
   return changed ? reconciled : previousItems
+}
+
+export function applyConversationDelta(
+  previousItems: Array<ConversationItem>,
+  event: ConversationDeltaEvent
+) {
+  const streamingIndex = previousItems.findLastIndex(
+    (item) => item.kind === "assistant" && item.streaming
+  )
+  let assistant =
+    streamingIndex >= 0 && previousItems[streamingIndex]?.kind === "assistant"
+      ? previousItems[streamingIndex]
+      : ({
+          kind: "assistant",
+          itemKey: "streaming",
+          renderKey: "streaming",
+          blocks: [],
+          streaming: true,
+          done: false,
+        } satisfies AssistantItem)
+
+  for (const operation of event.operations) {
+    if (operation.op === "replaceItem") {
+      assistant = operation.item
+      continue
+    }
+
+    if (operation.op === "appendBlock") {
+      const blockIndex = assistant.blocks.findIndex(
+        (block) => block.blockKey === operation.blockKey
+      )
+      const nextBlock =
+        operation.blockType === "text"
+          ? ({
+              type: "text",
+              blockKey: operation.blockKey,
+              text:
+                (blockIndex >= 0 &&
+                assistant.blocks[blockIndex]?.type === "text"
+                  ? assistant.blocks[blockIndex].text
+                  : "") + operation.delta,
+            } satisfies AssistantBlock)
+          : ({
+              type: "thinking",
+              blockKey: operation.blockKey,
+              text:
+                (blockIndex >= 0 &&
+                assistant.blocks[blockIndex]?.type === "thinking"
+                  ? assistant.blocks[blockIndex].text
+                  : "") + operation.delta,
+            } satisfies AssistantBlock)
+      const blocks = [...assistant.blocks]
+      if (blockIndex >= 0) {
+        blocks[blockIndex] = nextBlock
+      } else {
+        blocks.splice(
+          Math.max(0, Math.min(operation.contentIndex, blocks.length)),
+          0,
+          nextBlock
+        )
+      }
+      assistant = { ...assistant, blocks }
+      continue
+    }
+
+    if (operation.op === "replaceBlock") {
+      const blockIndex = assistant.blocks.findIndex(
+        (block) => block.blockKey === operation.block.blockKey
+      )
+      const blocks = [...assistant.blocks]
+      if (blockIndex >= 0) {
+        blocks[blockIndex] = operation.block
+      } else {
+        blocks.splice(
+          Math.max(0, Math.min(operation.contentIndex, blocks.length)),
+          0,
+          operation.block
+        )
+      }
+      assistant = { ...assistant, blocks }
+      continue
+    }
+
+    const blockIndex = assistant.blocks.findIndex(
+      (block) => block.type === "tool" && block.callId === operation.callId
+    )
+    const block = assistant.blocks[blockIndex]
+    if (blockIndex < 0 || block?.type !== "tool") continue
+    const blocks = [...assistant.blocks]
+    blocks[blockIndex] = {
+      ...block,
+      ...(typeof operation.output === "string"
+        ? { output: operation.output }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(operation, "details")
+        ? { details: operation.details }
+        : {}),
+      ...(typeof operation.isError === "boolean"
+        ? { isError: operation.isError }
+        : {}),
+      running: operation.running,
+    }
+    assistant = { ...assistant, blocks }
+  }
+
+  const nextItems = [...previousItems]
+  const nextAssistant = {
+    ...assistant,
+    streaming: true,
+    done: false,
+  } satisfies AssistantItem
+  if (streamingIndex >= 0) {
+    nextItems[streamingIndex] = nextAssistant
+  } else {
+    nextItems.push(nextAssistant)
+  }
+  return reconcileConversationItems(previousItems, nextItems)
 }
 
 function assistantStopMessage(message: SyncMessage | undefined) {
