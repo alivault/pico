@@ -546,8 +546,20 @@ pub enum DesktopEvent {
     GitMutation(String),
     GitRefresh(String),
     PromptSent,
-    SessionCreated { session_key: String, cwd: String },
+    SessionCreated {
+        session_key: String,
+        cwd: String,
+    },
     SessionSelected(String),
+    DirectoryResolved(String),
+    SessionAction {
+        message: String,
+        clear_selection: bool,
+    },
+    SessionMoved {
+        path: String,
+        cwd: String,
+    },
     ModelChanged(ModelOption),
     ThinkingChanged(String),
     Error(String),

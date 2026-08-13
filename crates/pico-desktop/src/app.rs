@@ -37,6 +37,9 @@ pub struct PicoDesktop {
     directories: Vec<String>,
     selected_directory: String,
     selected_session_id: Option<String>,
+    selected_session_path: Option<String>,
+    selected_session_unread: bool,
+    confirm_delete_session: bool,
     session: SessionState,
     directory_indexes: HashMap<String, DirectorySessionsIndex>,
     files: Vec<String>,
@@ -55,6 +58,8 @@ pub struct PicoDesktop {
     left_sidebar_open: bool,
     right_sidebar_open: bool,
     search: Entity<InputState>,
+    directory_input: Entity<InputState>,
+    session_name_input: Entity<InputState>,
     composer: Entity<TextareaState>,
     commit_message: Entity<InputState>,
     conversation_scroll: ScrollHandle,
@@ -70,6 +75,10 @@ impl PicoDesktop {
         cx: &mut Context<Self>,
     ) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search sessions…"));
+        let directory_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Add project directory…"));
+        let session_name_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Rename selected session…"));
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(2, 8)
@@ -104,6 +113,9 @@ impl PicoDesktop {
             directories: vec![initial_directory.clone()],
             selected_directory: initial_directory,
             selected_session_id: None,
+            selected_session_path: None,
+            selected_session_unread: false,
+            confirm_delete_session: false,
             session: SessionState::default(),
             directory_indexes: HashMap::new(),
             files: Vec::new(),
@@ -122,6 +134,8 @@ impl PicoDesktop {
             left_sidebar_open: true,
             right_sidebar_open: true,
             search,
+            directory_input,
+            session_name_input,
             composer,
             commit_message,
             conversation_scroll: ScrollHandle::new(),
@@ -171,6 +185,9 @@ impl PicoDesktop {
                 self.conversation_scroll.scroll_to_bottom();
             }
             DesktopEvent::Sessions(event) => {
+                if !event.directories.is_empty() {
+                    self.directories = event.directories;
+                }
                 self.directory_indexes.extend(event.directory_indexes);
                 if let Some(active_session_id) = event.active_session_id
                     && self.selected_session_id.is_none()
@@ -227,6 +244,35 @@ impl PicoDesktop {
                 self.status_message = Some("Loading session…".into());
                 self.restart_events(Some(session_id), None);
             }
+            DesktopEvent::DirectoryResolved(directory) => {
+                if !self.directories.contains(&directory) {
+                    self.directories.push(directory.clone());
+                }
+                self.selected_directory = directory;
+                self.status_message = None;
+                self.restart_events(
+                    self.selected_session_id.clone(),
+                    self.session.session_key.clone(),
+                );
+            }
+            DesktopEvent::SessionAction {
+                message,
+                clear_selection,
+            } => {
+                self.status_message = Some(message);
+                self.confirm_delete_session = false;
+                if clear_selection {
+                    self.selected_session_id = None;
+                    self.selected_session_path = None;
+                    self.session = SessionState::default();
+                    self.restart_events(None, None);
+                }
+            }
+            DesktopEvent::SessionMoved { path, cwd } => {
+                self.selected_session_path = Some(path);
+                self.selected_directory = cwd;
+                self.status_message = Some("Moved session".into());
+            }
             DesktopEvent::SessionCreated { session_key, cwd } => {
                 self.selected_session_id = None;
                 self.session = SessionState {
@@ -261,12 +307,138 @@ impl PicoDesktop {
         );
     }
 
-    fn select_session(&mut self, session_id: String, cx: &mut Context<Self>) {
+    fn select_session(
+        &mut self,
+        session: SessionListEntry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session_id) = session.id.clone() else {
+            return;
+        };
         if self.selected_session_id.as_deref() == Some(session_id.as_str()) {
             return;
         }
+        self.selected_session_path = session.path.clone();
+        self.selected_session_unread = session.unread;
+        self.confirm_delete_session = false;
+        self.session_name_input.update(cx, |state, cx| {
+            state.set_value(session.name.unwrap_or(session.title), window, cx);
+        });
         self.status_message = Some("Loading session…".into());
-        self.client.select_session(session_id, self.tx.clone());
+        self.client
+            .select_session(session_id, session.path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn add_directory(&mut self, cx: &mut Context<Self>) {
+        let path = self.directory_input.read(cx).value().trim().to_string();
+        if path.is_empty() {
+            return;
+        }
+        self.status_message = Some("Resolving directory…".into());
+        self.client.resolve_directory(path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn remove_directory(&mut self, directory: String, cx: &mut Context<Self>) {
+        if self.directories.len() <= 1 {
+            self.status_message = Some("Keep at least one project directory.".into());
+            cx.notify();
+            return;
+        }
+        self.directories.retain(|candidate| candidate != &directory);
+        self.directory_indexes.remove(&directory);
+        if self.selected_directory == directory {
+            self.selected_directory = self.directories[0].clone();
+        }
+        self.restart_events(
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+        );
+        cx.notify();
+    }
+
+    fn select_directory(&mut self, directory: String, cx: &mut Context<Self>) {
+        self.selected_directory = directory;
+        cx.notify();
+    }
+
+    fn move_directory(&mut self, directory: String, offset: isize, cx: &mut Context<Self>) {
+        let Some(index) = self
+            .directories
+            .iter()
+            .position(|candidate| candidate == &directory)
+        else {
+            return;
+        };
+        let next = (index as isize + offset)
+            .clamp(0, self.directories.len().saturating_sub(1) as isize)
+            as usize;
+        if next != index {
+            self.directories.swap(index, next);
+            self.restart_events(
+                self.selected_session_id.clone(),
+                self.session.session_key.clone(),
+            );
+            cx.notify();
+        }
+    }
+
+    fn rename_selected_session(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.selected_session_path.clone() else {
+            return;
+        };
+        let name = self.session_name_input.read(cx).value().trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        self.client.rename_session(path, name, self.tx.clone());
+        self.status_message = Some("Renaming session…".into());
+        cx.notify();
+    }
+
+    fn delete_selected_session(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.selected_session_path.clone() else {
+            return;
+        };
+        if !self.confirm_delete_session {
+            self.confirm_delete_session = true;
+            self.status_message = Some("Click Delete again to confirm.".into());
+            cx.notify();
+            return;
+        }
+        self.client.delete_session(path, self.tx.clone());
+        self.status_message = Some("Deleting session…".into());
+        cx.notify();
+    }
+
+    fn clone_selected_session(&mut self, cx: &mut Context<Self>) {
+        let Some(session_id) = self.selected_session_id.clone() else {
+            return;
+        };
+        self.client.clone_session(session_id, self.tx.clone());
+        self.status_message = Some("Cloning session…".into());
+        cx.notify();
+    }
+
+    fn toggle_selected_session_read(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.selected_session_path.clone() else {
+            return;
+        };
+        let unread = !self.selected_session_unread;
+        self.selected_session_unread = unread;
+        self.client
+            .set_session_unread(path, unread, self.tx.clone());
+        cx.notify();
+    }
+
+    fn move_selected_session(&mut self, cwd: String, cx: &mut Context<Self>) {
+        let Some(path) = self.selected_session_path.clone() else {
+            return;
+        };
+        self.client.move_session(path, cwd, self.tx.clone());
+        self.status_message = Some("Moving session…".into());
         cx.notify();
     }
 
@@ -545,6 +717,18 @@ impl PicoDesktop {
                             .icon(IconName::Plus)
                             .label("New session")
                             .on_click(cx.listener(|this, _, _, cx| this.create_session(cx))),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_1()
+                            .child(Input::new(&self.directory_input).cleanable(true))
+                            .child(
+                                Button::new("add-directory")
+                                    .secondary()
+                                    .small()
+                                    .icon(IconName::Plus)
+                                    .on_click(cx.listener(|this, _, _, cx| this.add_directory(cx))),
+                            ),
                     ),
             )
             .child(
@@ -569,18 +753,97 @@ impl PicoDesktop {
                             ),
                     )
                     .child(
-                        h_flex()
-                            .px_2()
-                            .py_2()
-                            .gap_2()
-                            .text_sm()
-                            .font_semibold()
-                            .child(Icon::new(IconName::Folder).size_4())
-                            .child(Self::basename(&self.selected_directory).to_string()),
+                        v_flex()
+                            .max_h(px(230.))
+                            .flex_shrink_0()
+                            .overflow_y_scrollbar()
+                            .children(self.directories.iter().enumerate().map(
+                                |(index, directory)| {
+                                    let select_directory = directory.clone();
+                                    let move_up_directory = directory.clone();
+                                    let move_down_directory = directory.clone();
+                                    let remove_directory = directory.clone();
+                                    let is_selected = directory == &self.selected_directory;
+                                    h_flex()
+                                        .id(("directory", index))
+                                        .px_2()
+                                        .py_1()
+                                        .gap_1()
+                                        .rounded_md()
+                                        .when(is_selected, |this| this.bg(selected))
+                                        .child(
+                                            h_flex()
+                                                .id(("directory-select", index))
+                                                .flex_1()
+                                                .min_w_0()
+                                                .gap_2()
+                                                .cursor_pointer()
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.select_directory(
+                                                        select_directory.clone(),
+                                                        cx,
+                                                    );
+                                                }))
+                                                .child(Icon::new(IconName::Folder).size_4())
+                                                .child(
+                                                    div()
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .text_sm()
+                                                        .font_semibold()
+                                                        .child(
+                                                            Self::basename(directory).to_string(),
+                                                        ),
+                                                ),
+                                        )
+                                        .child(
+                                            Button::new(("directory-up", index))
+                                                .ghost()
+                                                .xsmall()
+                                                .disabled(index == 0)
+                                                .label("↑")
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.move_directory(
+                                                        move_up_directory.clone(),
+                                                        -1,
+                                                        cx,
+                                                    );
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new(("directory-down", index))
+                                                .ghost()
+                                                .xsmall()
+                                                .disabled(index + 1 == self.directories.len())
+                                                .label("↓")
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.move_directory(
+                                                        move_down_directory.clone(),
+                                                        1,
+                                                        cx,
+                                                    );
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new(("directory-remove", index))
+                                                .ghost()
+                                                .xsmall()
+                                                .label("×")
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.remove_directory(
+                                                        remove_directory.clone(),
+                                                        cx,
+                                                    );
+                                                })),
+                                        )
+                                },
+                            )),
                     )
                     .children(sessions.into_iter().enumerate().map(|(index, session)| {
                         let session_id = session.id.clone().unwrap_or_default();
                         let is_selected = selected_id.as_deref() == Some(session_id.as_str());
+                        let session_for_select = session.clone();
                         let preview = session.last_message_preview.unwrap_or_default();
                         v_flex()
                             .id(("session", index))
@@ -594,8 +857,8 @@ impl PicoDesktop {
                             .when(!is_selected, |this| {
                                 this.hover(|this| this.bg(selected.opacity(0.55)))
                             })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.select_session(session_id.clone(), cx);
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.select_session(session_for_select.clone(), window, cx);
                             }))
                             .child(
                                 h_flex()
@@ -617,6 +880,14 @@ impl PicoDesktop {
                                                 .rounded_full()
                                                 .bg(cx.theme().primary),
                                         )
+                                    })
+                                    .when(session.unread, |this| {
+                                        this.child(
+                                            div()
+                                                .size(px(7.))
+                                                .rounded_full()
+                                                .bg(cx.theme().warning),
+                                        )
                                     }),
                             )
                             .when(!preview.is_empty(), |this| {
@@ -632,6 +903,91 @@ impl PicoDesktop {
                             })
                     })),
             )
+            .when(self.selected_session_path.is_some(), |this| {
+                this.child(
+                    v_flex()
+                        .p_2()
+                        .gap_2()
+                        .border_t_1()
+                        .border_color(border)
+                        .child(Input::new(&self.session_name_input).cleanable(true))
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .child(
+                                    Button::new("rename-session")
+                                        .secondary()
+                                        .xsmall()
+                                        .label("Rename")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.rename_selected_session(cx)
+                                        })),
+                                )
+                                .child(
+                                    Button::new("clone-session")
+                                        .ghost()
+                                        .xsmall()
+                                        .label("Clone")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.clone_selected_session(cx)
+                                        })),
+                                )
+                                .child(
+                                    Button::new("read-session")
+                                        .ghost()
+                                        .xsmall()
+                                        .label(if self.selected_session_unread {
+                                            "Mark read"
+                                        } else {
+                                            "Mark unread"
+                                        })
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.toggle_selected_session_read(cx)
+                                        })),
+                                )
+                                .child(
+                                    Button::new("delete-session")
+                                        .danger()
+                                        .xsmall()
+                                        .label(if self.confirm_delete_session {
+                                            "Confirm"
+                                        } else {
+                                            "Delete"
+                                        })
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.delete_selected_session(cx)
+                                        })),
+                                ),
+                        )
+                        .when(self.directories.len() > 1, |this| {
+                            this.child(
+                                div()
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(muted)
+                                    .child("MOVE TO"),
+                            )
+                            .children(
+                                self.directories
+                                    .iter()
+                                    .filter(|directory| *directory != &self.selected_directory)
+                                    .enumerate()
+                                    .map(|(index, directory)| {
+                                        let target = directory.clone();
+                                        Button::new(("move-session", index))
+                                            .ghost()
+                                            .xsmall()
+                                            .w_full()
+                                            .justify_start()
+                                            .label(Self::basename(directory).to_string())
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.move_selected_session(target.clone(), cx)
+                                            }))
+                                    }),
+                            )
+                        }),
+                )
+            })
             .child(
                 v_flex().p_2().border_t_1().border_color(border).child(
                     Button::new("settings")

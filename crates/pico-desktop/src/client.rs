@@ -163,16 +163,137 @@ impl PicoClient {
         Ok(())
     }
 
-    pub fn select_session(&self, session_id: String, tx: Sender<DesktopEvent>) {
+    pub fn select_session(
+        &self,
+        session_id: String,
+        session_path: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = vec![("session", session_id.as_str())];
+            if let Some(session_path) = session_path.as_deref() {
+                query.push(("sessionPath", session_path));
+            }
+            let result = client
+                .post_json::<Value, _>("/api/session/select", &query, &json!({}))
+                .map(|_| DesktopEvent::SessionSelected(session_id));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn resolve_directory(&self, path: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>("/api/directory/resolve", &[], &json!({ "path": path }))
+                .and_then(|value| {
+                    value
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .map(|path| DesktopEvent::DirectoryResolved(path.to_string()))
+                        .ok_or_else(|| anyhow!("directory response omitted path"))
+                });
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn rename_session(&self, path: String, name: String, tx: Sender<DesktopEvent>) {
+        self.session_action(
+            "/api/session/rename",
+            json!({ "path": path, "name": name }),
+            "Renamed session",
+            false,
+            None,
+            tx,
+        );
+    }
+
+    pub fn delete_session(&self, path: String, tx: Sender<DesktopEvent>) {
+        self.session_action(
+            "/api/session/delete",
+            json!({ "path": path }),
+            "Deleted session",
+            true,
+            None,
+            tx,
+        );
+    }
+
+    pub fn clone_session(&self, session_id: String, tx: Sender<DesktopEvent>) {
+        self.session_action(
+            "/api/session/clone",
+            json!({}),
+            "Cloned session",
+            false,
+            Some(session_id),
+            tx,
+        );
+    }
+
+    pub fn set_session_unread(&self, path: String, unread: bool, tx: Sender<DesktopEvent>) {
+        self.session_action(
+            "/api/session/read-state",
+            json!({ "path": path, "unread": unread }),
+            if unread {
+                "Marked session unread"
+            } else {
+                "Marked session read"
+            },
+            false,
+            None,
+            tx,
+        );
+    }
+
+    pub fn move_session(&self, path: String, cwd: String, tx: Sender<DesktopEvent>) {
         let client = self.clone();
         std::thread::spawn(move || {
             let result = client
                 .post_json::<Value, _>(
-                    "/api/session/select",
-                    &[("session", session_id.as_str())],
-                    &json!({}),
+                    "/api/session/move",
+                    &[],
+                    &json!({ "path": path, "cwd": cwd }),
                 )
-                .map(|_| DesktopEvent::SessionSelected(session_id));
+                .and_then(|value| {
+                    Ok(DesktopEvent::SessionMoved {
+                        path: value
+                            .get("path")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow!("move response omitted path"))?
+                            .to_string(),
+                        cwd: value
+                            .get("cwd")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow!("move response omitted cwd"))?
+                            .to_string(),
+                    })
+                });
+            Self::send_result(tx, result);
+        });
+    }
+
+    fn session_action(
+        &self,
+        endpoint: &'static str,
+        body: Value,
+        message: &'static str,
+        clear_selection: bool,
+        session_id: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = Vec::new();
+            if let Some(session_id) = session_id.as_deref() {
+                query.push(("session", session_id));
+            }
+            let result = client
+                .post_json::<Value, _>(endpoint, &query, &body)
+                .map(|_| DesktopEvent::SessionAction {
+                    message: message.into(),
+                    clear_selection,
+                });
             Self::send_result(tx, result);
         });
     }
