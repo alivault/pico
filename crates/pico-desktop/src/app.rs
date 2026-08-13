@@ -20,8 +20,8 @@ use smol::channel::{Receiver, Sender};
 use crate::client::PicoClient;
 use crate::models::{
     AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
-    GitChangeFile, GitLocalBranch, GitStatusSummary, SessionListEntry, SessionState, UiRequest,
-    UserConversationItem,
+    FlatTreeNode, ForkableMessage, GitChangeFile, GitLocalBranch, GitStatusSummary,
+    SessionListEntry, SessionState, UiRequest, UserConversationItem,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -29,6 +29,8 @@ enum RightWorkspaceTab {
     #[default]
     Changes,
     Files,
+    Terminal,
+    History,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -86,6 +88,11 @@ pub struct PicoDesktop {
     auth_providers: Vec<AuthProvider>,
     selected_auth_provider: Option<AuthProvider>,
     ui_request: Option<UiRequest>,
+    terminal_id: Option<String>,
+    terminal_output: String,
+    tree_nodes: Vec<FlatTreeNode>,
+    tree_leaf_id: Option<String>,
+    forkable_messages: Vec<ForkableMessage>,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
@@ -95,6 +102,7 @@ pub struct PicoDesktop {
     composer: Entity<TextareaState>,
     commit_message: Entity<InputState>,
     auth_value: Entity<InputState>,
+    terminal_input: Entity<InputState>,
     conversation_scroll: ScrollHandle,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
@@ -121,6 +129,7 @@ impl PicoDesktop {
         let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
         let auth_value =
             cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
+        let terminal_input = cx.new(|cx| InputState::new(window, cx).placeholder("Enter command…"));
         let (tx, rx) = smol::channel::unbounded();
 
         client.connect(tx.clone());
@@ -172,6 +181,11 @@ impl PicoDesktop {
             auth_providers: Vec::new(),
             selected_auth_provider: None,
             ui_request: None,
+            terminal_id: None,
+            terminal_output: String::new(),
+            tree_nodes: Vec::new(),
+            tree_leaf_id: None,
+            forkable_messages: Vec::new(),
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
@@ -181,6 +195,7 @@ impl PicoDesktop {
             composer,
             commit_message,
             auth_value,
+            terminal_input,
             conversation_scroll: ScrollHandle::new(),
             _event_task,
             _subscriptions,
@@ -303,6 +318,37 @@ impl PicoDesktop {
                 self.ui_request = None;
                 self.status_message = None;
             }
+            DesktopEvent::TerminalCreated(terminal) => {
+                self.terminal_id = Some(terminal.id.clone());
+                self.terminal_output =
+                    format!("Pico terminal — {} — {}\n\n", terminal.shell, terminal.cwd);
+                self.client.start_terminal_events(
+                    terminal.id,
+                    self.selected_session_id.clone(),
+                    self.session.session_key.clone(),
+                    self.tx.clone(),
+                );
+                self.status_message = None;
+            }
+            DesktopEvent::TerminalOutput(output) => {
+                self.terminal_output.push_str(&output);
+                if self.terminal_output.len() > 200_000 {
+                    let split = self.terminal_output.len() - 160_000;
+                    self.terminal_output.drain(..split);
+                }
+            }
+            DesktopEvent::SessionTree(response) => {
+                self.tree_leaf_id = response.leaf_id;
+                self.tree_nodes.clear();
+                for node in response.tree {
+                    node.flatten(0, &mut self.tree_nodes);
+                }
+                self.status_message = None;
+            }
+            DesktopEvent::ForkableMessages(messages) => {
+                self.forkable_messages = messages;
+                self.status_message = None;
+            }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
             }
@@ -420,6 +466,74 @@ impl PicoDesktop {
         };
         self.client
             .resolve_ui_request(request.id, body, self.tx.clone());
+        cx.notify();
+    }
+
+    fn open_terminal(&mut self, cx: &mut Context<Self>) {
+        self.active_right_tab = RightWorkspaceTab::Terminal;
+        if self.terminal_id.is_none() {
+            self.status_message = Some("Starting terminal…".into());
+            self.client.create_terminal(
+                self.selected_session_id.clone(),
+                self.session.session_key.clone(),
+                self.tx.clone(),
+            );
+        }
+        cx.notify();
+    }
+
+    fn send_terminal_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.terminal_id.clone() else {
+            self.open_terminal(cx);
+            return;
+        };
+        let command = self.terminal_input.read(cx).value().to_string();
+        if command.trim().is_empty() {
+            return;
+        }
+        self.terminal_input.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+        self.client.send_terminal_input(
+            id,
+            format!("{command}\n"),
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn open_history(&mut self, cx: &mut Context<Self>) {
+        self.active_right_tab = RightWorkspaceTab::History;
+        self.status_message = Some("Loading session history…".into());
+        self.client.load_session_history_tools(
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn navigate_tree(&mut self, target_id: String, cx: &mut Context<Self>) {
+        self.client.navigate_session_tree(
+            target_id,
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        self.status_message = Some("Navigating session history…".into());
+        cx.notify();
+    }
+
+    fn fork_at(&mut self, entry_id: String, cx: &mut Context<Self>) {
+        self.client.fork_session(
+            entry_id,
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        self.status_message = Some("Forking session…".into());
         cx.notify();
     }
 
@@ -2266,12 +2380,139 @@ impl PicoDesktop {
                                 this.active_right_tab = RightWorkspaceTab::Files;
                                 cx.notify();
                             })),
+                    )
+                    .child(
+                        Button::new("terminal-tab")
+                            .small()
+                            .when(
+                                self.active_right_tab == RightWorkspaceTab::Terminal,
+                                |this| this.secondary(),
+                            )
+                            .when(
+                                self.active_right_tab != RightWorkspaceTab::Terminal,
+                                |this| this.ghost(),
+                            )
+                            .label("Terminal")
+                            .on_click(cx.listener(|this, _, _, cx| this.open_terminal(cx))),
+                    )
+                    .child(
+                        Button::new("history-tab")
+                            .small()
+                            .when(
+                                self.active_right_tab == RightWorkspaceTab::History,
+                                |this| this.secondary(),
+                            )
+                            .when(
+                                self.active_right_tab != RightWorkspaceTab::History,
+                                |this| this.ghost(),
+                            )
+                            .label("History")
+                            .on_click(cx.listener(|this, _, _, cx| this.open_history(cx))),
                     ),
             )
             .child(match self.active_right_tab {
                 RightWorkspaceTab::Changes => self.render_git_workspace(cx),
                 RightWorkspaceTab::Files => self.render_file_workspace(cx),
+                RightWorkspaceTab::Terminal => self.render_terminal(cx),
+                RightWorkspaceTab::History => self.render_history(cx),
             })
+    }
+
+    fn render_history(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let border = cx.theme().border.opacity(0.72);
+        let muted = cx.theme().muted_foreground;
+        v_flex()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scrollbar()
+            .child(
+                v_flex()
+                    .p_3()
+                    .gap_1()
+                    .border_b_1()
+                    .border_color(border)
+                    .child(div().text_sm().font_semibold().child("Session tree"))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(muted)
+                            .child("Select an earlier point to navigate the active branch."),
+                    )
+                    .children(self.tree_nodes.iter().enumerate().map(|(index, node)| {
+                        let target_id = node.id.clone();
+                        Button::new(("tree-node", index))
+                            .ghost()
+                            .small()
+                            .w_full()
+                            .justify_start()
+                            .disabled(self.tree_leaf_id.as_deref() == Some(node.id.as_str()))
+                            .label(format!("{}{}", "  ".repeat(node.depth), node.text))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.navigate_tree(target_id.clone(), cx)
+                            }))
+                    })),
+            )
+            .child(
+                v_flex()
+                    .p_3()
+                    .gap_1()
+                    .child(div().text_sm().font_semibold().child("Fork from message"))
+                    .children(
+                        self.forkable_messages
+                            .iter()
+                            .enumerate()
+                            .map(|(index, message)| {
+                                let entry_id = message.entry_id.clone();
+                                Button::new(("fork-message", index))
+                                    .secondary()
+                                    .small()
+                                    .w_full()
+                                    .justify_start()
+                                    .label(message.text.clone())
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.fork_at(entry_id.clone(), cx)
+                                    }))
+                            }),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_terminal(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        v_flex()
+            .flex_1()
+            .min_h_0()
+            .bg(gpui::rgb(0x111111))
+            .text_color(gpui::rgb(0xeeeeee))
+            .child(
+                div()
+                    .id("terminal-output")
+                    .flex_1()
+                    .min_h_0()
+                    .p_3()
+                    .overflow_scroll()
+                    .font_family("Menlo")
+                    .text_xs()
+                    .child(self.terminal_output.clone()),
+            )
+            .child(
+                h_flex()
+                    .p_2()
+                    .gap_2()
+                    .border_t_1()
+                    .border_color(gpui::rgb(0x333333))
+                    .child(Input::new(&self.terminal_input))
+                    .child(
+                        Button::new("terminal-send")
+                            .primary()
+                            .small()
+                            .label("Run")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.send_terminal_command(window, cx)
+                            })),
+                    ),
+            )
+            .into_any_element()
     }
 
     fn render_settings(&self, cx: &mut Context<Self>) -> gpui::AnyElement {

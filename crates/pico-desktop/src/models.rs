@@ -600,6 +600,95 @@ pub struct UiRequest {
     pub options: Vec<UiRequestOption>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TerminalCreateResponse {
+    pub id: String,
+    pub cwd: String,
+    pub shell: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionTreeResponse {
+    pub leaf_id: Option<String>,
+    #[serde(default)]
+    pub tree: Vec<TreeNode>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TreeNode {
+    pub entry: TreeEntry,
+    pub label: Option<String>,
+    #[serde(default)]
+    pub children: Vec<TreeNode>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreeEntry {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub entry_type: String,
+    pub message: Option<TreeMessage>,
+    pub text: Option<String>,
+    pub summary: Option<String>,
+    pub name: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TreeMessage {
+    pub role: Option<String>,
+    pub text: Option<String>,
+    pub command: Option<String>,
+}
+
+impl TreeNode {
+    pub fn flatten(&self, depth: usize, output: &mut Vec<FlatTreeNode>) {
+        let text = self
+            .label
+            .as_ref()
+            .or(self
+                .entry
+                .message
+                .as_ref()
+                .and_then(|message| message.text.as_ref()))
+            .or(self.entry.text.as_ref())
+            .or(self.entry.summary.as_ref())
+            .or(self.entry.name.as_ref())
+            .cloned()
+            .unwrap_or_else(|| self.entry.entry_type.clone());
+        output.push(FlatTreeNode {
+            id: self.entry.id.clone(),
+            depth,
+            text,
+        });
+        for child in &self.children {
+            child.flatten(depth + 1, output);
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FlatTreeNode {
+    pub id: String,
+    pub depth: usize,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ForkableMessagesResponse {
+    #[serde(default)]
+    pub messages: Vec<ForkableMessage>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkableMessage {
+    pub entry_id: String,
+    pub text: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum UiRequestOption {
@@ -643,6 +732,10 @@ pub enum DesktopEvent {
     AuthChanged(String),
     UiRequest(UiRequest),
     UiRequestResolved,
+    TerminalCreated(TerminalCreateResponse),
+    TerminalOutput(String),
+    SessionTree(SessionTreeResponse),
+    ForkableMessages(Vec<ForkableMessage>),
     PromptSent,
     SessionCreated {
         session_key: String,

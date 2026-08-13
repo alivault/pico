@@ -13,9 +13,10 @@ use smol::channel::Sender;
 use url::Url;
 
 use crate::models::{
-    AuthProvidersResponse, ClientManifest, DesktopEvent, GitActionResponse, GitChangesResponse,
-    GitFileDiffResponse, GitStatusResponse, PendingMessage, ProjectFileReadResponse,
-    ProjectFileTreeResponse, PromptRequest,
+    AuthProvidersResponse, ClientManifest, DesktopEvent, ForkableMessagesResponse,
+    GitActionResponse, GitChangesResponse, GitFileDiffResponse, GitStatusResponse, PendingMessage,
+    ProjectFileReadResponse, ProjectFileTreeResponse, PromptRequest, SessionTreeResponse,
+    TerminalCreateResponse,
 };
 
 #[derive(Clone)]
@@ -227,6 +228,188 @@ impl PicoClient {
             let result = client
                 .post_json::<Value, _>(&endpoint, &[], &body)
                 .map(|_| DesktopEvent::UiRequestResolved);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn create_terminal(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<TerminalCreateResponse, _>(
+                    "/api/terminal",
+                    &query,
+                    &json!({
+                        "clientKey": "gpui-desktop",
+                        "cols": 100,
+                        "rows": 30,
+                    }),
+                )
+                .map(DesktopEvent::TerminalCreated);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn start_terminal_events(
+        &self,
+        id: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut url = match client.endpoint(&format!("/api/terminal/{id}/events")) {
+                Ok(url) => url,
+                Err(error) => {
+                    let _ = tx.send_blocking(DesktopEvent::Error(error.to_string()));
+                    return;
+                }
+            };
+            {
+                let mut query = url.query_pairs_mut();
+                query.append_pair("context", &client.context_id);
+                if let Some(session_id) = session_id.as_deref() {
+                    query.append_pair("session", session_id);
+                }
+                if let Some(session_key) = session_key.as_deref() {
+                    query.append_pair("sessionKey", session_key);
+                }
+            }
+            let result = client
+                .http
+                .get(url)
+                .header("accept", "text/event-stream")
+                .send()
+                .and_then(Response::error_for_status);
+            let Ok(response) = result else {
+                let _ = tx.send_blocking(DesktopEvent::Error("Terminal disconnected".into()));
+                return;
+            };
+            for line in BufReader::new(response).lines().map_while(Result::ok) {
+                let Some(data) = line.strip_prefix("data:") else {
+                    continue;
+                };
+                let Ok(value) = serde_json::from_str::<Value>(data.trim()) else {
+                    continue;
+                };
+                match value.get("type").and_then(Value::as_str) {
+                    Some("output") => {
+                        if let Some(data) = value.get("data").and_then(Value::as_str) {
+                            if tx
+                                .send_blocking(DesktopEvent::TerminalOutput(data.to_string()))
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    Some("exit") => {
+                        let _ = tx.send_blocking(DesktopEvent::TerminalOutput(
+                            "\n[terminal process exited]\n".into(),
+                        ));
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    pub fn send_terminal_input(
+        &self,
+        id: String,
+        data: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let endpoint = format!("/api/terminal/{id}/input");
+            let result = client
+                .post_json::<Value, _>(&endpoint, &query, &json!({ "data": data }))
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_session_history_tools(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let tree_client = self.clone();
+        let tree_tx = tx.clone();
+        let tree_session_id = session_id.clone();
+        let tree_session_key = session_key.clone();
+        std::thread::spawn(move || {
+            let query =
+                Self::session_query(tree_session_id.as_deref(), tree_session_key.as_deref());
+            let result = tree_client
+                .get_json::<SessionTreeResponse>("/api/session/tree", &query)
+                .map(DesktopEvent::SessionTree);
+            Self::send_result(tree_tx, result);
+        });
+
+        let fork_client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = fork_client
+                .get_json::<ForkableMessagesResponse>("/api/session/fork", &query)
+                .map(|response| DesktopEvent::ForkableMessages(response.messages));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn navigate_session_tree(
+        &self,
+        target_id: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/session/tree",
+                    &query,
+                    &json!({ "targetId": target_id }),
+                )
+                .map(|_| DesktopEvent::SessionAction {
+                    message: "Navigated session history".into(),
+                    clear_selection: false,
+                });
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn fork_session(
+        &self,
+        entry_id: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
+                .post_json::<Value, _>("/api/session/fork", &query, &json!({ "entryId": entry_id }))
+                .map(|_| DesktopEvent::SessionAction {
+                    message: "Forked session".into(),
+                    clear_selection: false,
+                });
             Self::send_result(tx, result);
         });
     }
