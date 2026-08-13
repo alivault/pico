@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
@@ -22,7 +22,7 @@ use crate::client::PicoClient;
 use crate::models::{
     AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
     FlatTreeNode, ForkableMessage, GitChangeFile, GitLocalBranch, GitStatusSummary,
-    SessionListEntry, SessionState, UiRequest, UserConversationItem,
+    SessionListEntry, SessionState, UiRequest,
 };
 
 gpui::actions!(
@@ -82,6 +82,13 @@ impl ComposerStreamingBehavior {
     }
 }
 
+#[derive(Clone)]
+struct PromptSubmission {
+    message: String,
+    images: Vec<(String, serde_json::Value)>,
+    streaming_behavior: ComposerStreamingBehavior,
+}
+
 pub struct PicoDesktop {
     client: PicoClient,
     tx: Sender<DesktopEvent>,
@@ -112,6 +119,8 @@ pub struct PicoDesktop {
     pending_discard_all: bool,
     streaming_behavior: ComposerStreamingBehavior,
     composer_images: Vec<(String, serde_json::Value)>,
+    pending_submission: Option<PromptSubmission>,
+    failed_submission: Option<PromptSubmission>,
     hide_tools: bool,
     settings_open: bool,
     auth_providers: Vec<AuthProvider>,
@@ -126,6 +135,8 @@ pub struct PicoDesktop {
     pi_transport: String,
     pi_cache_retention: String,
     performance_restart_required: bool,
+    notifications_enabled: bool,
+    seen_completion_ids: HashSet<String>,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
@@ -215,6 +226,8 @@ impl PicoDesktop {
             pending_discard_all: false,
             streaming_behavior: ComposerStreamingBehavior::FollowUp,
             composer_images: Vec::new(),
+            pending_submission: None,
+            failed_submission: None,
             hide_tools: false,
             settings_open: false,
             auth_providers: Vec::new(),
@@ -229,6 +242,8 @@ impl PicoDesktop {
             pi_transport: "auto".into(),
             pi_cache_retention: "standard".into(),
             performance_restart_required: false,
+            notifications_enabled: true,
+            seen_completion_ids: HashSet::new(),
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
@@ -268,8 +283,26 @@ impl PicoDesktop {
                 self.server_label = format!("{} {}", manifest.display_name, manifest.version);
                 self.status_message = None;
             }
+            DesktopEvent::ConnectionChanged(connected) => {
+                self.connected = connected;
+                if !connected {
+                    self.server_label = "Reconnecting…".into();
+                }
+            }
             DesktopEvent::State(sync) => {
-                self.session.apply(sync);
+                let patch_applied = self.session.apply(sync);
+                if !patch_applied {
+                    self.status_message = Some("Resynchronizing conversation…".into());
+                    self.restart_events(
+                        self.selected_session_id.clone(),
+                        self.session.session_key.clone(),
+                    );
+                    cx.notify();
+                    return;
+                }
+                if self.session.session_file.is_some() {
+                    self.selected_session_path = self.session.session_file.clone();
+                }
                 self.status_message = None;
                 if self.selected_session_id.is_none() {
                     self.selected_session_id = self.session.session_id.clone();
@@ -280,6 +313,7 @@ impl PicoDesktop {
                     .clone()
                     .unwrap_or_else(|| self.selected_directory.clone());
                 if self.files_cwd.as_deref() != Some(&cwd) {
+                    self.reset_workspace_scope();
                     self.files_cwd = Some(cwd.clone());
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
@@ -296,6 +330,12 @@ impl PicoDesktop {
                 {
                     self.selected_session_id = Some(active_session_id);
                 }
+                if self.selected_session_path.is_none() {
+                    self.selected_session_path = event.active_session_path;
+                }
+                if self.session.session_key.is_none() {
+                    self.session.session_key = event.active_session_key;
+                }
             }
             DesktopEvent::Delta(event) => {
                 if self.selected_session_id.as_deref() == Some(event.session_id.as_str())
@@ -305,26 +345,46 @@ impl PicoDesktop {
                     self.conversation_scroll.scroll_to_bottom();
                 }
             }
-            DesktopEvent::Files(paths) => self.files = paths,
-            DesktopEvent::FileRead(response) => {
+            DesktopEvent::Files { cwd, paths } => {
+                if self.files_cwd.as_deref() == Some(cwd.as_str()) {
+                    self.files = paths;
+                }
+            }
+            DesktopEvent::FileRead { cwd, response } => {
+                if self.files_cwd.as_deref() != Some(cwd.as_str()) {
+                    return;
+                }
                 self.selected_file_path = Some(response.path);
                 self.selected_file_content = Some(response.content);
                 self.status_message = None;
             }
-            DesktopEvent::GitStatus(status) => self.git_status = status,
-            DesktopEvent::GitChanges(response) => {
+            DesktopEvent::GitStatus { cwd, status } => {
+                if self.files_cwd.as_deref() == Some(cwd.as_str()) {
+                    self.git_status = status;
+                }
+            }
+            DesktopEvent::GitChanges { cwd, response } => {
+                if self.files_cwd.as_deref() != Some(cwd.as_str()) {
+                    return;
+                }
                 self.git_files = response.files.unwrap_or_default();
                 self.git_branches = response.local_branches.unwrap_or_default();
                 self.git_commits = response.commits.unwrap_or_default();
                 self.status_message = None;
             }
-            DesktopEvent::GitDiff(response) => {
+            DesktopEvent::GitDiff { cwd, response } => {
+                if self.files_cwd.as_deref() != Some(cwd.as_str()) {
+                    return;
+                }
                 self.selected_git_path = Some(response.path);
                 self.selected_git_diff = Some(response.patch);
                 self.selected_commit_hash = None;
                 self.status_message = None;
             }
-            DesktopEvent::GitCommitDiff(response) => {
+            DesktopEvent::GitCommitDiff { cwd, response } => {
+                if self.files_cwd.as_deref() != Some(cwd.as_str()) {
+                    return;
+                }
                 self.selected_git_path = Some(response.title);
                 self.selected_git_diff = Some(response.patch);
                 self.selected_commit_hash = Some(response.commit);
@@ -371,6 +431,9 @@ impl PicoDesktop {
                 self.ui_request = None;
                 self.status_message = None;
             }
+            DesktopEvent::Notification(message) => {
+                self.status_message = Some(message);
+            }
             DesktopEvent::TerminalCreated(terminal) => {
                 self.terminal_id = Some(terminal.id.clone());
                 self.terminal_output =
@@ -413,19 +476,53 @@ impl PicoDesktop {
                     settings.applies_to_active_session_after_restart;
                 self.status_message = None;
             }
-            DesktopEvent::SessionDone(title) => {
-                self.status_message = Some(format!("Completed: {title}"));
-                std::thread::spawn(move || {
-                    let _ = notify_rust::Notification::new()
-                        .summary("Pico")
-                        .body(&format!("{title} finished"))
-                        .show();
-                });
+            DesktopEvent::SessionStatus(status) => {
+                for index in self.directory_indexes.values_mut() {
+                    if let Some(session) = index.sessions.iter_mut().find(|session| {
+                        status.session_id.as_deref() == session.id.as_deref()
+                            || status.session_path.as_deref() == session.path.as_deref()
+                    }) {
+                        if let Some(streaming) = status.streaming {
+                            session.streaming = streaming;
+                        }
+                        if let Some(unread) = status.unread {
+                            session.unread = unread;
+                        }
+                    }
+                }
+                if status.session_id.as_deref() == self.selected_session_id.as_deref()
+                    || status.session_path.as_deref() == self.selected_session_path.as_deref()
+                {
+                    if let Some(unread) = status.unread {
+                        self.selected_session_unread = unread;
+                    }
+                }
+            }
+            DesktopEvent::SessionDone(done) => {
+                if !self.seen_completion_ids.insert(done.id) {
+                    return;
+                }
+                let title = done.title.unwrap_or_else(|| "Pico session".into());
+                let outcome = done.outcome.unwrap_or_else(|| "success".into());
+                self.status_message = Some(format!("Completed: {title} ({outcome})"));
+                if self.notifications_enabled && done.reason == "agent" {
+                    std::thread::spawn(move || {
+                        let _ = notify_rust::Notification::new()
+                            .summary("Pico")
+                            .body(&format!("{title} finished ({outcome})"))
+                            .show();
+                    });
+                }
             }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
             }
+            DesktopEvent::PromptAcknowledged => {
+                self.pending_submission = None;
+                self.status_message = None;
+            }
             DesktopEvent::SessionSelected(session_id) => {
+                self.reset_workspace_scope();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
                 self.status_message = Some("Loading session…".into());
@@ -461,6 +558,7 @@ impl PicoDesktop {
                 self.status_message = Some("Moved session".into());
             }
             DesktopEvent::SessionCreated { session_key, cwd } => {
+                self.reset_workspace_scope();
                 self.selected_session_id = None;
                 self.session = SessionState {
                     session_key: Some(session_key.clone()),
@@ -479,6 +577,9 @@ impl PicoDesktop {
                 self.status_message = None;
             }
             DesktopEvent::Error(error) => {
+                if self.pending_submission.is_some() {
+                    self.failed_submission = self.pending_submission.take();
+                }
                 self.status_message = Some(error);
             }
         }
@@ -543,6 +644,11 @@ impl PicoDesktop {
         };
         Theme::change(mode, Some(window), cx);
         cx.refresh_windows();
+    }
+
+    fn toggle_notifications(&mut self, cx: &mut Context<Self>) {
+        self.notifications_enabled = !self.notifications_enabled;
+        cx.notify();
     }
 
     fn select_auth_provider(
@@ -665,6 +771,23 @@ impl PicoDesktop {
             self.directories.clone(),
             self.tx.clone(),
         );
+    }
+
+    fn reset_workspace_scope(&mut self) {
+        self.files.clear();
+        self.selected_file_path = None;
+        self.selected_file_content = None;
+        self.git_status = None;
+        self.git_files.clear();
+        self.git_branches.clear();
+        self.git_commits.clear();
+        self.selected_git_path = None;
+        self.selected_git_diff = None;
+        self.selected_commit_hash = None;
+        self.terminal_id = None;
+        self.terminal_output.clear();
+        self.tree_nodes.clear();
+        self.forkable_messages.clear();
     }
 
     fn select_session(
@@ -811,29 +934,29 @@ impl PicoDesktop {
 
     fn submit_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let message = self.composer.read(cx).value().trim().to_string();
-        if message.is_empty() {
+        if message.is_empty() && self.composer_images.is_empty() {
             return;
         }
         self.composer.update(cx, |state, cx| {
             state.set_value("", window, cx);
         });
-        if self.run_builtin_slash_command(&message, cx) {
+        if self.composer_images.is_empty() && self.run_builtin_slash_command(&message, cx) {
             return;
         }
-        if !self.session.streaming || self.streaming_behavior == ComposerStreamingBehavior::Steer {
-            self.session
-                .items
-                .push(ConversationItem::User(UserConversationItem {
-                    item_key: Some(format!("optimistic-{}", self.session.items.len())),
-                    text: message.clone(),
-                }));
-        }
+        let submission = PromptSubmission {
+            message: message.clone(),
+            images: std::mem::take(&mut self.composer_images),
+            streaming_behavior: self.streaming_behavior,
+        };
+        self.pending_submission = Some(submission.clone());
+        self.failed_submission = None;
         self.status_message = Some("Sending…".into());
         self.conversation_scroll.scroll_to_bottom();
         self.client.submit_prompt(
             message,
             self.streaming_behavior.api_value(),
-            std::mem::take(&mut self.composer_images)
+            submission
+                .images
                 .into_iter()
                 .map(|(_, image)| image)
                 .collect(),
@@ -909,6 +1032,20 @@ impl PicoDesktop {
         true
     }
 
+    fn restore_failed_submission(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(submission) = self.failed_submission.take() else {
+            return;
+        };
+        self.streaming_behavior = submission.streaming_behavior;
+        self.composer_images = submission.images;
+        self.composer.update(cx, |state, cx| {
+            state.set_value(submission.message, window, cx);
+            state.focus(window, cx);
+        });
+        self.status_message = None;
+        cx.notify();
+    }
+
     fn pick_images(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let prompt = cx.prompt_for_paths(PathPromptOptions {
             files: true,
@@ -925,6 +1062,9 @@ impl PicoDesktop {
                     .take(8)
                     .filter_map(|path| {
                         let data = std::fs::read(path).ok()?;
+                        if data.len() > 10 * 1024 * 1024 {
+                            return None;
+                        }
                         let extension = path
                             .extension()
                             .and_then(|extension| extension.to_str())
@@ -934,7 +1074,8 @@ impl PicoDesktop {
                             "jpg" | "jpeg" => "image/jpeg",
                             "gif" => "image/gif",
                             "webp" => "image/webp",
-                            _ => "image/png",
+                            "png" => "image/png",
+                            _ => return None,
                         };
                         Some((
                             path.file_name()?.to_string_lossy().to_string(),
@@ -1064,7 +1205,11 @@ impl PicoDesktop {
             .session
             .model
             .as_ref()
-            .and_then(|model| models.iter().position(|candidate| candidate.id == model.id))
+            .and_then(|model| {
+                models.iter().position(|candidate| {
+                    candidate.id == model.id && candidate.provider == model.provider
+                })
+            })
             .map(|index| (index + 1) % models.len())
             .unwrap_or(0);
         let model = models[index].clone();
@@ -3025,6 +3170,33 @@ impl PicoDesktop {
                                     ),
                             )
                             .child(
+                                h_flex()
+                                    .justify_between()
+                                    .child(
+                                        v_flex()
+                                            .child(div().font_semibold().child("Notifications"))
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(muted)
+                                                    .child("Notify when agent work completes"),
+                                            ),
+                                    )
+                                    .child(
+                                        Button::new("toggle-notifications")
+                                            .secondary()
+                                            .small()
+                                            .label(if self.notifications_enabled {
+                                                "Enabled"
+                                            } else {
+                                                "Disabled"
+                                            })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.toggle_notifications(cx)
+                                            })),
+                                    ),
+                            )
+                            .child(
                                 v_flex()
                                     .gap_2()
                                     .child(div().font_semibold().child("Pi performance"))
@@ -3295,6 +3467,7 @@ impl PicoDesktop {
 impl Render for PicoDesktop {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.status_message.clone();
+        let has_failed_submission = self.failed_submission.is_some();
         h_flex()
             .id("pico-desktop")
             .on_action(cx.listener(|this, _: &NewSession, _, cx| this.create_session(cx)))
@@ -3338,7 +3511,18 @@ impl Render for PicoDesktop {
                                 .bg(cx.theme().warning.opacity(0.12))
                                 .text_sm()
                                 .child(Icon::new(IconName::Info).size_4())
-                                .child(status),
+                                .child(div().flex_1().child(status))
+                                .when(has_failed_submission, |this| {
+                                    this.child(
+                                        Button::new("restore-prompt")
+                                            .secondary()
+                                            .small()
+                                            .label("Restore prompt")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.restore_failed_submission(window, cx)
+                                            })),
+                                    )
+                                }),
                         )
                     })
                     .child(self.render_conversation(cx))

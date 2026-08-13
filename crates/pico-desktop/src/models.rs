@@ -3,6 +3,23 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[derive(Clone, Debug, Default)]
+pub enum Patch<T> {
+    #[default]
+    Missing,
+    Null,
+    Value(T),
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Patch<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Option::<T>::deserialize(deserializer).map(|value| match value {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,24 +33,34 @@ pub struct ClientManifest {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateSync {
-    pub session_key: Option<String>,
+    #[serde(default)]
+    pub session_key: Patch<String>,
     pub items: Option<Vec<ConversationItem>>,
     pub items_patch: Option<ConversationItemsPatch>,
     pub pending_user_messages: Option<Vec<PendingMessage>>,
-    pub context_usage: Option<Value>,
+    #[serde(default)]
+    pub context_usage: Patch<Value>,
     pub available_skills: Option<Vec<SkillOption>>,
     pub draft: Option<bool>,
     pub streaming: Option<bool>,
     pub compacting: Option<bool>,
     pub hide_thinking_block: Option<bool>,
-    pub model: Option<ModelOption>,
-    pub thinking_level: Option<String>,
+    #[serde(default)]
+    pub model: Patch<ModelOption>,
+    #[serde(default)]
+    pub thinking_level: Patch<String>,
     pub available_thinking_levels: Option<Vec<String>>,
     pub available_models: Option<Vec<ModelOption>>,
-    pub session_id: Option<String>,
-    pub session_name: Option<String>,
-    pub first_message: Option<String>,
-    pub cwd: Option<String>,
+    #[serde(default)]
+    pub session_id: Patch<String>,
+    #[serde(default)]
+    pub session_file: Patch<String>,
+    #[serde(default)]
+    pub session_name: Patch<String>,
+    #[serde(default)]
+    pub first_message: Patch<String>,
+    #[serde(default)]
+    pub cwd: Patch<String>,
     pub ui_state: Option<SessionUiState>,
 }
 
@@ -53,6 +80,7 @@ pub struct SessionState {
     pub available_thinking_levels: Vec<String>,
     pub available_models: Vec<ModelOption>,
     pub session_id: Option<String>,
+    pub session_file: Option<String>,
     pub session_name: Option<String>,
     pub first_message: Option<String>,
     pub cwd: Option<String>,
@@ -60,26 +88,25 @@ pub struct SessionState {
 }
 
 impl SessionState {
-    pub fn apply(&mut self, sync: StateSync) {
-        if let Some(value) = sync.session_key {
-            self.session_key = Some(value);
-        }
+    pub fn apply(&mut self, sync: StateSync) -> bool {
+        let mut patch_applied = true;
+        apply_patch(&mut self.session_key, sync.session_key);
         if let Some(items) = sync.items {
             self.items = items;
         }
-        if let Some(patch) = sync.items_patch
-            && patch.previous_length == self.items.len()
-        {
-            let start = patch.start.min(self.items.len());
-            let end = (start + patch.delete_count).min(self.items.len());
-            self.items.splice(start..end, patch.items);
+        if let Some(patch) = sync.items_patch {
+            if patch.previous_length == self.items.len() {
+                let start = patch.start.min(self.items.len());
+                let end = (start + patch.delete_count).min(self.items.len());
+                self.items.splice(start..end, patch.items);
+            } else {
+                patch_applied = false;
+            }
         }
         if let Some(value) = sync.pending_user_messages {
             self.pending_messages = value;
         }
-        if let Some(value) = sync.context_usage {
-            self.context_usage = Some(value);
-        }
+        apply_patch(&mut self.context_usage, sync.context_usage);
         if let Some(value) = sync.available_skills {
             self.available_skills = value;
         }
@@ -95,33 +122,23 @@ impl SessionState {
         if let Some(value) = sync.hide_thinking_block {
             self.hide_thinking_block = value;
         }
-        if let Some(value) = sync.model {
-            self.model = Some(value);
-        }
-        if let Some(value) = sync.thinking_level {
-            self.thinking_level = Some(value);
-        }
+        apply_patch(&mut self.model, sync.model);
+        apply_patch(&mut self.thinking_level, sync.thinking_level);
         if let Some(value) = sync.available_thinking_levels {
             self.available_thinking_levels = value;
         }
         if let Some(value) = sync.available_models {
             self.available_models = value;
         }
-        if let Some(value) = sync.session_id {
-            self.session_id = Some(value);
-        }
-        if let Some(value) = sync.session_name {
-            self.session_name = Some(value);
-        }
-        if let Some(value) = sync.first_message {
-            self.first_message = Some(value);
-        }
-        if let Some(value) = sync.cwd {
-            self.cwd = Some(value);
-        }
+        apply_patch(&mut self.session_id, sync.session_id);
+        apply_patch(&mut self.session_file, sync.session_file);
+        apply_patch(&mut self.session_name, sync.session_name);
+        apply_patch(&mut self.first_message, sync.first_message);
+        apply_patch(&mut self.cwd, sync.cwd);
         if let Some(value) = sync.ui_state {
             self.working_message = value.working_message;
         }
+        patch_applied
     }
 
     pub fn apply_delta(&mut self, event: ConversationDeltaEvent) {
@@ -241,6 +258,14 @@ impl SessionState {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or("New session")
             .to_string()
+    }
+}
+
+fn apply_patch<T>(target: &mut Option<T>, patch: Patch<T>) {
+    match patch {
+        Patch::Missing => {}
+        Patch::Null => *target = None,
+        Patch::Value(value) => *target = Some(value),
     }
 }
 
@@ -394,6 +419,8 @@ impl ModelOption {
 #[serde(rename_all = "camelCase")]
 pub struct SessionsEvent {
     pub active_session_id: Option<String>,
+    pub active_session_path: Option<String>,
+    pub active_session_key: Option<String>,
     #[serde(default)]
     pub directories: Vec<String>,
     #[serde(default)]
@@ -644,6 +671,27 @@ pub struct PerformanceSettings {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SessionStatus {
+    pub session_id: Option<String>,
+    pub session_path: Option<String>,
+    pub streaming: Option<bool>,
+    pub unread: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDone {
+    pub id: String,
+    pub session_id: Option<String>,
+    pub session_path: Option<String>,
+    pub title: Option<String>,
+    pub reason: String,
+    pub outcome: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionTreeResponse {
     pub leaf_id: Option<String>,
     #[serde(default)]
@@ -752,15 +800,34 @@ impl UiRequestOption {
 #[derive(Clone, Debug)]
 pub enum DesktopEvent {
     Connected(ClientManifest),
+    ConnectionChanged(bool),
     State(StateSync),
     Sessions(SessionsEvent),
     Delta(ConversationDeltaEvent),
-    Files(Vec<String>),
-    FileRead(ProjectFileReadResponse),
-    GitStatus(Option<GitStatusSummary>),
-    GitChanges(GitChangesResponse),
-    GitDiff(GitFileDiffResponse),
-    GitCommitDiff(GitCommitDiffResponse),
+    Files {
+        cwd: String,
+        paths: Vec<String>,
+    },
+    FileRead {
+        cwd: String,
+        response: ProjectFileReadResponse,
+    },
+    GitStatus {
+        cwd: String,
+        status: Option<GitStatusSummary>,
+    },
+    GitChanges {
+        cwd: String,
+        response: GitChangesResponse,
+    },
+    GitDiff {
+        cwd: String,
+        response: GitFileDiffResponse,
+    },
+    GitCommitDiff {
+        cwd: String,
+        response: GitCommitDiffResponse,
+    },
     GitMutation(String),
     GitRefresh(String),
     PendingMessages(Vec<PendingMessage>),
@@ -768,14 +835,17 @@ pub enum DesktopEvent {
     AuthChanged(String),
     UiRequest(UiRequest),
     UiRequestResolved,
+    Notification(String),
     TerminalCreated(TerminalCreateResponse),
     TerminalOutput(String),
     SessionTree(SessionTreeResponse),
     ForkableMessages(Vec<ForkableMessage>),
     CommitMessage(String),
     PerformanceSettings(PerformanceSettings),
-    SessionDone(String),
+    SessionStatus(SessionStatus),
+    SessionDone(SessionDone),
     PromptSent,
+    PromptAcknowledged,
     SessionCreated {
         session_key: String,
         cwd: String,
@@ -857,5 +927,55 @@ mod tests {
             panic!("expected assistant item");
         };
         assert_eq!(assistant.blocks[0].text(), "Hello from GPUI");
+    }
+
+    #[test]
+    fn state_sync_distinguishes_missing_and_null_fields() {
+        let mut state = SessionState {
+            session_name: Some("Old name".into()),
+            cwd: Some("/old".into()),
+            model: Some(ModelOption {
+                id: "old-model".into(),
+                provider: Some("provider".into()),
+                name: None,
+            }),
+            ..SessionState::default()
+        };
+        let missing: StateSync = serde_json::from_value(serde_json::json!({
+            "type": "state_sync",
+            "streaming": false
+        }))
+        .unwrap();
+        let nulls: StateSync = serde_json::from_value(serde_json::json!({
+            "type": "state_sync",
+            "sessionName": null,
+            "cwd": null,
+            "model": null
+        }))
+        .unwrap();
+
+        assert!(state.apply(missing));
+        assert_eq!(state.session_name.as_deref(), Some("Old name"));
+        assert!(state.apply(nulls));
+        assert!(state.session_name.is_none());
+        assert!(state.cwd.is_none());
+        assert!(state.model.is_none());
+    }
+
+    #[test]
+    fn state_sync_reports_patch_length_mismatch() {
+        let mut state = SessionState::default();
+        let patch: StateSync = serde_json::from_value(serde_json::json!({
+            "type": "state_sync",
+            "itemsPatch": {
+                "previousLength": 1,
+                "start": 0,
+                "deleteCount": 0,
+                "items": []
+            }
+        }))
+        .unwrap();
+
+        assert!(!state.apply(patch));
     }
 }

@@ -1,6 +1,6 @@
 use std::io::{BufRead, BufReader};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicU64, Ordering},
 };
 use std::time::Duration;
@@ -25,6 +25,7 @@ pub struct PicoClient {
     context_id: String,
     http: Client,
     stream_generation: Arc<AtomicU64>,
+    last_event_id: Arc<Mutex<Option<String>>>,
 }
 
 impl PicoClient {
@@ -38,6 +39,7 @@ impl PicoClient {
             context_id,
             http,
             stream_generation: Arc::new(AtomicU64::new(0)),
+            last_event_id: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -81,6 +83,7 @@ impl PicoClient {
                     break;
                 }
                 if let Err(error) = result {
+                    let _ = tx.send_blocking(DesktopEvent::ConnectionChanged(false));
                     let _ = tx.send_blocking(DesktopEvent::Error(format!(
                         "Live updates disconnected: {error}"
                     )));
@@ -112,12 +115,12 @@ impl PicoClient {
                 query.append_pair("sidebarDirectory", directory);
             }
         }
-        let response = self
-            .http
-            .get(url)
-            .header("accept", "text/event-stream")
-            .send()?
-            .error_for_status()?;
+        let mut request = self.http.get(url).header("accept", "text/event-stream");
+        if let Some(last_event_id) = self.last_event_id.lock().ok().and_then(|id| id.clone()) {
+            request = request.header("last-event-id", last_event_id);
+        }
+        let response = request.send()?.error_for_status()?;
+        let _ = tx.send_blocking(DesktopEvent::ConnectionChanged(true));
         self.read_sse(response, generation, tx)
     }
 
@@ -127,14 +130,24 @@ impl PicoClient {
         generation: u64,
         tx: &Sender<DesktopEvent>,
     ) -> Result<()> {
+        let mut pending_event_id = None;
         for line in BufReader::new(response).lines() {
             if self.stream_generation.load(Ordering::SeqCst) != generation {
                 return Ok(());
             }
             let line = line?;
+            if let Some(id) = line.strip_prefix("id:") {
+                pending_event_id = Some(id.trim().to_string());
+                continue;
+            }
             let Some(data) = line.strip_prefix("data:") else {
                 continue;
             };
+            if let Some(id) = pending_event_id.take()
+                && let Ok(mut stored) = self.last_event_id.lock()
+            {
+                *stored = Some(id);
+            }
             let value: Value = serde_json::from_str(data.trim())?;
             let event = match value.get("type").and_then(Value::as_str) {
                 Some("state_sync") => Some(DesktopEvent::State(serde_json::from_value(value)?)),
@@ -147,15 +160,24 @@ impl PicoClient {
                     .and_then(Value::as_str)
                     .map(|cwd| DesktopEvent::GitRefresh(cwd.to_string())),
                 Some("extension_ui_request") => {
-                    Some(DesktopEvent::UiRequest(serde_json::from_value(value)?))
+                    if value.get("method").and_then(Value::as_str) == Some("notify") {
+                        Some(DesktopEvent::Notification(
+                            value
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("Pico notification")
+                                .to_string(),
+                        ))
+                    } else {
+                        Some(DesktopEvent::UiRequest(serde_json::from_value(value)?))
+                    }
                 }
-                Some("session_done") => Some(DesktopEvent::SessionDone(
-                    value
-                        .get("title")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Pico session completed")
-                        .to_string(),
-                )),
+                Some("session_done") => {
+                    Some(DesktopEvent::SessionDone(serde_json::from_value(value)?))
+                }
+                Some("session_status") => {
+                    Some(DesktopEvent::SessionStatus(serde_json::from_value(value)?))
+                }
                 Some("request_error" | "extension_error") => Some(DesktopEvent::Error(
                     value
                         .get("error")
@@ -648,7 +670,7 @@ impl PicoClient {
             };
             let result = client
                 .post_json::<Value, _>("/api/prompt", &query, &body)
-                .map(|_| DesktopEvent::PromptSent);
+                .map(|_| DesktopEvent::PromptAcknowledged);
             Self::send_result(tx, result);
         });
     }
@@ -805,7 +827,10 @@ impl PicoClient {
         std::thread::spawn(move || {
             let result = client
                 .get_json::<ProjectFileTreeResponse>("/api/files/tree", &[("cwd", &cwd)])
-                .map(|response| DesktopEvent::Files(response.paths));
+                .map(|response| DesktopEvent::Files {
+                    cwd,
+                    paths: response.paths,
+                });
             Self::send_result(tx, result);
         });
     }
@@ -818,7 +843,7 @@ impl PicoClient {
                     "/api/files/read",
                     &[("cwd", &cwd), ("path", &path)],
                 )
-                .map(DesktopEvent::FileRead);
+                .map(|response| DesktopEvent::FileRead { cwd, response });
             Self::send_result(tx, result);
         });
     }
@@ -830,7 +855,10 @@ impl PicoClient {
         std::thread::spawn(move || {
             let result = status_client
                 .get_json::<GitStatusResponse>("/api/git-status", &[("cwd", &status_cwd)])
-                .map(|response| DesktopEvent::GitStatus(response.git_status));
+                .map(|response| DesktopEvent::GitStatus {
+                    cwd: status_cwd,
+                    status: response.git_status,
+                });
             Self::send_result(status_tx, result);
         });
 
@@ -841,7 +869,7 @@ impl PicoClient {
                     "/api/git-changes",
                     &[("cwd", &cwd), ("gitScope", "all")],
                 )
-                .map(DesktopEvent::GitChanges);
+                .map(|response| DesktopEvent::GitChanges { cwd, response });
             Self::send_result(tx, result);
         });
     }
@@ -851,7 +879,7 @@ impl PicoClient {
         std::thread::spawn(move || {
             let result = client
                 .get_json::<GitFileDiffResponse>("/api/git-diff", &[("cwd", &cwd), ("path", &path)])
-                .map(DesktopEvent::GitDiff);
+                .map(|response| DesktopEvent::GitDiff { cwd, response });
             Self::send_result(tx, result);
         });
     }
@@ -864,7 +892,7 @@ impl PicoClient {
                     "/api/git-commit-diff",
                     &[("cwd", &cwd), ("commit", &commit), ("mode", "commit")],
                 )
-                .map(DesktopEvent::GitCommitDiff);
+                .map(|response| DesktopEvent::GitCommitDiff { cwd, response });
             Self::send_result(tx, result);
         });
     }
