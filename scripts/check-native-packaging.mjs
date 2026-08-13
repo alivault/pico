@@ -51,16 +51,11 @@ try {
     )
   }
   run("node", ["scripts/generate-native-release-manifest.mjs", temporaryRoot])
-  const dmg = join(temporaryRoot, "Pico.dmg")
-  writeFileSync(dmg, "test DMG fixture")
   run("node", ["scripts/generate-homebrew-artifacts.mjs", temporaryRoot], {
     PICO_HOMEBREW_OUTPUT_DIR: homebrewRoot,
-    PICO_MACOS_DMG: dmg,
   })
   const formula = join(homebrewRoot, "Formula", "pico.rb")
-  const cask = join(homebrewRoot, "Casks", "pico.rb")
   run("ruby", ["-c", formula])
-  run("ruby", ["-c", cask])
   const formulaText = readFileSync(formula, "utf8")
   for (const expected of [
     "service do",
@@ -69,12 +64,6 @@ try {
   ]) {
     if (!formulaText.includes(expected)) {
       throw new Error(`generated Homebrew formula omitted ${expected}`)
-    }
-  }
-  const caskText = readFileSync(cask, "utf8")
-  for (const expected of ["preflight do", 'args: ["stop", "--wait"]']) {
-    if (!caskText.includes(expected)) {
-      throw new Error(`generated Homebrew cask omitted ${expected}`)
     }
   }
   console.log("Native release and Homebrew generation checks passed.")

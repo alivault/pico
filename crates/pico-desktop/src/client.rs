@@ -1,0 +1,365 @@
+use std::io::{BufRead, BufReader};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
+use std::time::Duration;
+
+use anyhow::{Context as _, Result, anyhow};
+use reqwest::blocking::{Client, Response};
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+use smol::channel::Sender;
+use url::Url;
+
+use crate::models::{ClientManifest, DesktopEvent, ProjectFileTreeResponse, PromptRequest};
+
+#[derive(Clone)]
+pub struct PicoClient {
+    base_url: Url,
+    context_id: String,
+    http: Client,
+    stream_generation: Arc<AtomicU64>,
+}
+
+impl PicoClient {
+    pub fn new(base_url: &str, context_id: String) -> Result<Self> {
+        let base_url = Url::parse(base_url).context("invalid PICO_SERVER_URL")?;
+        let http = Client::builder()
+            .connect_timeout(Duration::from_secs(4))
+            .build()?;
+        Ok(Self {
+            base_url,
+            context_id,
+            http,
+            stream_generation: Arc::new(AtomicU64::new(0)),
+        })
+    }
+
+    pub fn connect(&self, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<ClientManifest>("/api/client/manifest", &[])
+                .and_then(|manifest| {
+                    if !manifest.ok || manifest.api_contract_version != 1 {
+                        return Err(anyhow!("unsupported Pico server API contract"));
+                    }
+                    tx.send_blocking(DesktopEvent::Connected(manifest))
+                        .map_err(|_| anyhow!("desktop event channel closed"))
+                });
+            if let Err(error) = result {
+                let _ = tx.send_blocking(DesktopEvent::Error(error.to_string()));
+            }
+        });
+    }
+
+    pub fn start_events(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        directories: Vec<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let generation = self.stream_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let client = self.clone();
+        std::thread::spawn(move || {
+            while client.stream_generation.load(Ordering::SeqCst) == generation {
+                let result = client.stream_once(
+                    generation,
+                    session_id.as_deref(),
+                    session_key.as_deref(),
+                    &directories,
+                    &tx,
+                );
+                if client.stream_generation.load(Ordering::SeqCst) != generation {
+                    break;
+                }
+                if let Err(error) = result {
+                    let _ = tx.send_blocking(DesktopEvent::Error(format!(
+                        "Live updates disconnected: {error}"
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(900));
+            }
+        });
+    }
+
+    fn stream_once(
+        &self,
+        generation: u64,
+        session_id: Option<&str>,
+        session_key: Option<&str>,
+        directories: &[String],
+        tx: &Sender<DesktopEvent>,
+    ) -> Result<()> {
+        let mut url = self.endpoint("/events")?;
+        {
+            let mut query = url.query_pairs_mut();
+            query.append_pair("context", &self.context_id);
+            if let Some(session_id) = session_id {
+                query.append_pair("session", session_id);
+            }
+            if let Some(session_key) = session_key {
+                query.append_pair("sessionKey", session_key);
+            }
+            for directory in directories {
+                query.append_pair("sidebarDirectory", directory);
+            }
+        }
+        let response = self
+            .http
+            .get(url)
+            .header("accept", "text/event-stream")
+            .send()?
+            .error_for_status()?;
+        self.read_sse(response, generation, tx)
+    }
+
+    fn read_sse(
+        &self,
+        response: Response,
+        generation: u64,
+        tx: &Sender<DesktopEvent>,
+    ) -> Result<()> {
+        for line in BufReader::new(response).lines() {
+            if self.stream_generation.load(Ordering::SeqCst) != generation {
+                return Ok(());
+            }
+            let line = line?;
+            let Some(data) = line.strip_prefix("data:") else {
+                continue;
+            };
+            let value: Value = serde_json::from_str(data.trim())?;
+            let event = match value.get("type").and_then(Value::as_str) {
+                Some("state_sync") => Some(DesktopEvent::State(serde_json::from_value(value)?)),
+                Some("sessions") => Some(DesktopEvent::Sessions(serde_json::from_value(value)?)),
+                Some("conversation_delta") => {
+                    Some(DesktopEvent::Delta(serde_json::from_value(value)?))
+                }
+                Some("request_error" | "extension_error") => Some(DesktopEvent::Error(
+                    value
+                        .get("error")
+                        .or_else(|| value.get("message"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("Pico request failed")
+                        .to_string(),
+                )),
+                _ => None,
+            };
+            if let Some(event) = event
+                && tx.send_blocking(event).is_err()
+            {
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn select_session(&self, session_id: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/session/select",
+                    &[("session", session_id.as_str())],
+                    &json!({}),
+                )
+                .map(|_| DesktopEvent::SessionSelected(session_id));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn create_session(&self, cwd: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>("/api/session/new", &[], &json!({ "cwd": cwd }))
+                .and_then(|value| {
+                    Ok(DesktopEvent::SessionCreated {
+                        session_key: value
+                            .get("sessionKey")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow!("new session response omitted sessionKey"))?
+                            .to_string(),
+                        cwd: value
+                            .get("cwd")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow!("new session response omitted cwd"))?
+                            .to_string(),
+                    })
+                });
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn submit_prompt(
+        &self,
+        message: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        cwd: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = Vec::new();
+            if let Some(session_id) = session_id.as_deref() {
+                query.push(("session", session_id));
+            }
+            if let Some(session_key) = session_key.as_deref() {
+                query.push(("sessionKey", session_key));
+            }
+            let body = PromptRequest {
+                message: &message,
+                images: Vec::new(),
+                streaming_behavior: "steer",
+                draft_owner_key: session_key.as_deref(),
+                draft_cwd: cwd.as_deref(),
+            };
+            let result = client
+                .post_json::<Value, _>("/api/prompt", &query, &body)
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn abort(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = Vec::new();
+            if let Some(session_id) = session_id.as_deref() {
+                query.push(("session", session_id));
+            }
+            if let Some(session_key) = session_key.as_deref() {
+                query.push(("sessionKey", session_key));
+            }
+            let result = client
+                .post_json::<Value, _>("/api/abort", &query, &json!({}))
+                .map(|_| DesktopEvent::PromptSent);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_files(&self, cwd: String, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<ProjectFileTreeResponse>("/api/files/tree", &[("cwd", &cwd)])
+                .map(|response| DesktopEvent::Files(response.paths));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn set_model(
+        &self,
+        model: crate::models::ModelOption,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = Vec::new();
+            if let Some(session_id) = session_id.as_deref() {
+                query.push(("session", session_id));
+            }
+            if let Some(session_key) = session_key.as_deref() {
+                query.push(("sessionKey", session_key));
+            }
+            let result = client
+                .post_json::<Value, _>(
+                    "/api/model",
+                    &query,
+                    &json!({
+                        "provider": model.provider.as_deref().unwrap_or_default(),
+                        "modelId": model.id.clone(),
+                    }),
+                )
+                .map(|_| DesktopEvent::ModelChanged(model));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn set_thinking(
+        &self,
+        level: String,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let mut query = Vec::new();
+            if let Some(session_id) = session_id.as_deref() {
+                query.push(("session", session_id));
+            }
+            if let Some(session_key) = session_key.as_deref() {
+                query.push(("sessionKey", session_key));
+            }
+            let result = client
+                .post_json::<Value, _>("/api/thinking", &query, &json!({ "level": level }))
+                .map(|_| DesktopEvent::ThinkingChanged(level));
+            Self::send_result(tx, result);
+        });
+    }
+
+    fn send_result(tx: Sender<DesktopEvent>, result: Result<DesktopEvent>) {
+        let event = result.unwrap_or_else(|error| DesktopEvent::Error(error.to_string()));
+        let _ = tx.send_blocking(event);
+    }
+
+    fn get_json<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
+        let url = self.request_url(path, query)?;
+        let response = self.http.get(url).send()?.error_for_status()?;
+        Self::decode(response)
+    }
+
+    fn post_json<T: DeserializeOwned, B: serde::Serialize + ?Sized>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = self.request_url(path, query)?;
+        let response = self.http.post(url).json(body).send()?.error_for_status()?;
+        Self::decode(response)
+    }
+
+    fn decode<T: DeserializeOwned>(response: Response) -> Result<T> {
+        let value: Value = response.json()?;
+        if value.get("ok").and_then(Value::as_bool) == Some(false) {
+            return Err(anyhow!(
+                "{}",
+                value
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Pico request failed")
+            ));
+        }
+        serde_json::from_value(value).map_err(Into::into)
+    }
+
+    fn request_url(&self, path: &str, query: &[(&str, &str)]) -> Result<Url> {
+        let mut url = self.endpoint(path)?;
+        {
+            let mut pairs = url.query_pairs_mut();
+            pairs.append_pair("context", &self.context_id);
+            for (key, value) in query {
+                pairs.append_pair(key, value);
+            }
+        }
+        Ok(url)
+    }
+
+    fn endpoint(&self, path: &str) -> Result<Url> {
+        self.base_url
+            .join(path.trim_start_matches('/'))
+            .map_err(Into::into)
+    }
+}

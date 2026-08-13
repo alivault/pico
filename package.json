@@ -1,7 +1,7 @@
 {
   "name": "@alivault/pico",
   "version": "0.14.1",
-  "description": "A local workspace for Pi coding-agent sessions with browser, macOS, and iOS clients.",
+  "description": "A local workspace for Pi coding-agent sessions with browser, GPUI desktop, and iOS clients.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
@@ -40,8 +40,9 @@
     "dogfood:server:stop": "node ./scripts/dogfood-server.mjs stop",
     "dogfood:server:status": "node ./scripts/dogfood-server.mjs status",
     "dogfood:server:network": "node ./scripts/dogfood-server.mjs network",
-    "dogfood:macos": "node ./scripts/dogfood-macos.mjs run",
-    "dogfood:macos:build": "node ./scripts/dogfood-macos.mjs build",
+    "desktop": "cargo run -p pico-desktop",
+    "desktop:dev": "node ./scripts/desktop-dev.mjs",
+    "desktop:check": "cargo check -p pico-desktop",
     "build": "vp build && node ./scripts/check-static-spa.mjs",
     "start": "node ./bin/pico.mjs",
     "rust:check": "cargo test --workspace",
@@ -49,7 +50,6 @@
     "rust:pi-smoke": "cargo run -p pico-server -- pi-smoke",
     "fetch:pi-standalone": "node ./scripts/fetch-pi-standalone.mjs",
     "build:pi-bridge": "node ./scripts/build-pi-bridge.mjs",
-    "package:macos": "node ./scripts/package-macos.mjs",
     "package:native": "node ./scripts/package-native-release.mjs",
     "prepack": "pnpm build",
     "preview": "vp preview",

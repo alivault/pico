@@ -49,17 +49,22 @@ function readPackageJson() {
   return JSON.parse(fs.readFileSync("package.json", "utf8"))
 }
 
-function updateRustServerVersion(version) {
-  const path = "crates/pico-server/Cargo.toml"
-  const source = fs.readFileSync(path, "utf8")
-  const updated = source.replace(
-    /^(\[package\]\nname = "pico-server"\nversion = ")[^"]+("$)/m,
-    `$1${version}$2`
-  )
-  if (updated === source) {
-    throw new Error(`Could not update pico-server version in ${path}`)
+function updateRustVersions(version) {
+  for (const name of ["pico-server", "pico-desktop"]) {
+    const path = `crates/${name}/Cargo.toml`
+    const source = fs.readFileSync(path, "utf8")
+    const updated = source.replace(
+      new RegExp(
+        `^(\\[package\\]\\nname = "${name}"\\nversion = ")[^"]+("$)`,
+        "m"
+      ),
+      `$1${version}$2`
+    )
+    if (updated === source) {
+      throw new Error(`Could not update ${name} version in ${path}`)
+    }
+    fs.writeFileSync(path, updated)
   }
-  fs.writeFileSync(path, updated)
 }
 
 function ensureCleanWorkingTree() {
@@ -175,11 +180,12 @@ try {
   ensureCleanWorkingTree()
 
   run("pnpm", ["version", nextVersion, "--no-git-tag-version"])
-  updateRustServerVersion(nextVersion)
-  run("cargo", ["check", "-p", "pico-server"])
+  updateRustVersions(nextVersion)
+  run("cargo", ["check", "--workspace"])
   run("git", [
     "add",
     "package.json",
+    "crates/pico-desktop/Cargo.toml",
     "crates/pico-server/Cargo.toml",
     "Cargo.lock",
   ])

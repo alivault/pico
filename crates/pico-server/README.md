@@ -1,8 +1,9 @@
 # Pico native server
 
 This crate is Pico's production persistent server. It implements the shared
-browser, macOS, and iOS HTTP/SSE/WebSocket contracts, owns long-lived Pi and PTY
-processes, and serves the static browser application without a Node runtime.
+browser, GPUI desktop, and iOS HTTP/SSE/WebSocket contracts, owns long-lived Pi
+and PTY processes, and serves the static browser application without a Node
+runtime.
 
 ## Why this architecture
 
@@ -31,8 +32,8 @@ standalone Bun-compiled macOS and Linux binaries:
 - `pi-linux-arm64.tar.gz`
 - `pi-linux-x64.tar.gz`
 
-The production DMG can therefore bundle a standalone Pi executable rather than
-Node and `node_modules`. The Rust server owns one or more `pi --mode rpc`
+Production bundles can therefore include a standalone Pi executable rather
+than Node and `node_modules`. The Rust server owns one or more `pi --mode rpc`
 processes and translates their commands/events into Pico's HTTP/SSE contracts.
 
 This keeps Pi as the compatibility authority while making the persistent Pico
@@ -128,23 +129,15 @@ Implemented:
 - SPA navigation fallback that never rewrites `/api/*`, `/events`, terminal
   transports, or missing file-like asset paths
 - headless browser validation against Rust with Node absent from `PATH`
-- universal arm64/x86_64 macOS packaging with the Rust server, standalone Pi,
-  Pi bridge, static web assets, and an app-bundled `SMAppService` LaunchAgent
-- an independent SwiftUI `MenuBarExtra` login item named Pico Server with
-  server health, exact-address remote listener settings, open/new chat, restart,
-  logs, Login Items settings, and complete-quit controls
-- nested-code Hardened Runtime signing, Developer ID notarization/stapling, and
-  drag-to-Applications DMG automation in `pnpm package:macos`
 - checksum-verified macOS/Linux native CLI bundles selected by `pico-app`, plus
-  generated Homebrew formula/service and signed-app cask metadata
+  generated Homebrew formula/service metadata
 - versioned control/API compatibility checks and update draining that rejects
   new prompts while allowing active Pi runs and queued follow-ups to settle
 - experimental low-level process creation, command, event, and deletion routes
 - manifest and health endpoints
 - loopback defaults, exact-address optional remote listeners, valid hostname
   authorities, same-origin/explicit Origin validation, and request size bounds
-- private persistent network configuration with CLI and Pico Server menu-bar
-  controls
+- private persistent network configuration with CLI controls
 - daily structured logs and atomically persisted lifecycle state
 
 Process-control routes remain under `/api/rust/*`. The npm `pico-app` launcher

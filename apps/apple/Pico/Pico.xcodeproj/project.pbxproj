@@ -34,7 +34,6 @@
 		32DDC2B93600C8E6AFEABD17 /* PicoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E6470F1A03986D4B67A4BCD /* PicoApp.swift */; };
 		349DA9EB0217F380D127501C /* Features/Sessions/SessionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8CDE257BD3B5940400B9788 /* Features/Sessions/SessionRowView.swift */; };
 		34D4E50F6B15CB6912CCFE86 /* App/WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A99C79EE95E2FAFC35B9211 /* App/WorkspaceView.swift */; };
-		E63000000000000000000001 /* App/MacWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E63000000000000000000002 /* App/MacWorkspaceView.swift */; };
 		E64000000000000000000001 /* App/IOSWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64000000000000000000002 /* App/IOSWorkspaceView.swift */; };
 		34ECB8B0CC8D2DE3146DD651 /* Core/Models/JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1C39A4CAF49FBFE0E9AD69E /* Core/Models/JSONValue.swift */; };
 		35D1CC824AEBC604720A92A5 /* Core/Models/PicoServerEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB78EFF24232957A3ED467F2 /* Core/Models/PicoServerEvent.swift */; };
@@ -167,8 +166,6 @@
 		D50000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000006 /* Features/Git/CodeAttributedStringBuilder.swift */; };
 		D50000000000000000000007 /* Features/Git/CodeFileTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000007 /* Features/Git/CodeFileTextView.swift */; };
 		D60000000000000000000001 /* highlight_response.json in Resources */ = {isa = PBXBuildFile; fileRef = D60000000000000000000002 /* highlight_response.json */; };
-		D70000000000000000000001 /* App/PicoServerServiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D70000000000000000000002 /* App/PicoServerServiceController.swift */; };
-		D71000000000000000000001 /* PicoServerServiceControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71000000000000000000002 /* PicoServerServiceControllerTests.swift */; };
 		D80000000000000000000003 /* AppIconDev.icon in Resources */ = {isa = PBXBuildFile; fileRef = D80000000000000000000004 /* AppIconDev.icon */; };
 /* End PBXBuildFile section */
 
@@ -252,7 +249,6 @@
 		896E75A417B1FF0BCCF0C446 /* Core/Models/SessionDoneEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/SessionDoneEvent.swift; sourceTree = "<group>"; };
 		8A6E9BB69579C255654DF643 /* Core/Models/AssistantConversationItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/AssistantConversationItem.swift; sourceTree = "<group>"; };
 		8A99C79EE95E2FAFC35B9211 /* App/WorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/WorkspaceView.swift; sourceTree = "<group>"; };
-		E63000000000000000000002 /* App/MacWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/MacWorkspaceView.swift; sourceTree = "<group>"; };
 		E64000000000000000000002 /* App/IOSWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/IOSWorkspaceView.swift; sourceTree = "<group>"; };
 		8B4ABD94DFE86DD531A6A656 /* Core/Models/DirectoryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/DirectoryState.swift; sourceTree = "<group>"; };
 		8D6A8C0C64C28FAC4AC2402F /* Core/Models/DirectorySessionsIndexSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/DirectorySessionsIndexSnapshot.swift; sourceTree = "<group>"; };
@@ -324,8 +320,6 @@
 		B30000000000000000000001 /* Core/Models/GitStatusResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/GitStatusResponse.swift; sourceTree = "<group>"; };
 		D40000000000000000000001 /* Core/Models/HighlightResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Core/Models/HighlightResponse.swift; sourceTree = "<group>"; };
 		D60000000000000000000002 /* highlight_response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = highlight_response.json; sourceTree = "<group>"; };
-		D70000000000000000000002 /* App/PicoServerServiceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/PicoServerServiceController.swift; sourceTree = "<group>"; };
-		D71000000000000000000002 /* PicoServerServiceControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicoServerServiceControllerTests.swift; sourceTree = "<group>"; };
 		FFEB0A8714341A1CDD708DD4 /* Features/Conversation/AssistantBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Conversation/AssistantBlockView.swift; sourceTree = "<group>"; };
 		C40000000000000000000001 /* App/AppModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/AppModel+Git.swift"; sourceTree = "<group>"; };
 		C40000000000000000000002 /* Features/Git/GitFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Git/GitFormatting.swift; sourceTree = "<group>"; };
@@ -377,11 +371,9 @@
 				B6A93FBCDF8E4B32FF6A8C75 /* App/AppModel.swift */,
 				C40000000000000000000001 /* App/AppModel+Git.swift */,
 				B1E447475068E9268F083D08 /* App/ConnectionStatus.swift */,
-				D70000000000000000000002 /* App/PicoServerServiceController.swift */,
 				11E8B4150A6FF58BBCED5F14 /* App/RootView.swift */,
 				8A99C79EE95E2FAFC35B9211 /* App/WorkspaceView.swift */,
 				E64000000000000000000002 /* App/IOSWorkspaceView.swift */,
-				E63000000000000000000002 /* App/MacWorkspaceView.swift */,
 				0E1DF8C2558503E4E6679E94 /* Core/API/PicoAPIClient.swift */,
 				4FCFAE19EF4045665C95D048 /* Core/API/PicoAPIError.swift */,
 				8E96355AEF5B561C25C23E50 /* Core/API/PicoEndpoint.swift */,
@@ -535,7 +527,6 @@
 				289C7DE7F440C3014996C6DB /* SessionStateReducerTests.swift */,
 				F30000000000000000000004 /* ToolFormattingTests.swift */,
 				C4000000000000000000000C /* GitFeatureTests.swift */,
-				D71000000000000000000002 /* PicoServerServiceControllerTests.swift */,
 			);
 			path = PicoTests;
 			sourceTree = "<group>";
@@ -693,7 +684,6 @@
 				D1A0B7AD3FD98F9CB326AA46 /* App/RootView.swift in Sources */,
 				34D4E50F6B15CB6912CCFE86 /* App/WorkspaceView.swift in Sources */,
 				E64000000000000000000001 /* App/IOSWorkspaceView.swift in Sources */,
-				E63000000000000000000001 /* App/MacWorkspaceView.swift in Sources */,
 				BF4AA6C8B322E15BF8FD8D1E /* Core/API/PicoAPIClient.swift in Sources */,
 				6D977BE53B09E224C6FC0078 /* Core/API/PicoAPIError.swift in Sources */,
 				49604C4E34846C79B8430365 /* Core/API/PicoEndpoint.swift in Sources */,
@@ -828,7 +818,6 @@
 				A20000000000000000000006 /* Features/Settings/AuthProviderRowView.swift in Sources */,
 				A20000000000000000000007 /* Features/Settings/ApiKeyAuthSheetView.swift in Sources */,
 				A20000000000000000000008 /* Features/Settings/AuthUiRequestSheetView.swift in Sources */,
-				D70000000000000000000001 /* App/PicoServerServiceController.swift in Sources */,
 				32DDC2B93600C8E6AFEABD17 /* PicoApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -844,7 +833,6 @@
 				4838CA16507E6CD34206D173 /* SessionStateReducerTests.swift in Sources */,
 				F30000000000000000000003 /* ToolFormattingTests.swift in Sources */,
 				C5000000000000000000000C /* GitFeatureTests.swift in Sources */,
-				D71000000000000000000001 /* PicoServerServiceControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -937,7 +925,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = auto;
@@ -959,11 +946,9 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios.tests;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.2;
@@ -1012,7 +997,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1033,11 +1017,9 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios.tests;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.2;
@@ -1051,7 +1033,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS-Debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZJDZ622NMU;
@@ -1063,19 +1044,16 @@
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pico/Resources/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = Pico/Resources/Info-macOS.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
 				PICO_DISPLAY_NAME = Pico;
 				PICO_URL_SCHEME = pico;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -1089,26 +1067,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZJDZ622NMU;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pico/Resources/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = Pico/Resources/Info-macOS.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
 				PICO_DISPLAY_NAME = Pico;
 				PICO_URL_SCHEME = pico;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -1164,7 +1138,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = auto;
@@ -1179,7 +1152,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Pico/Resources/Pico-macOS-Debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZJDZ622NMU;
@@ -1187,12 +1159,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Pico/Resources/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = Pico/Resources/Info-macOS.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
 					-Xlinker,
@@ -1201,9 +1171,8 @@
 				PICO_DISPLAY_NAME = "Pico Dev";
 				PICO_URL_SCHEME = "pico-dev";
 				PRODUCT_BUNDLE_IDENTIFIER = com.alivault.pico.ios.dev;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.alivault.pico.macos.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;

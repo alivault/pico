@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -43,24 +42,5 @@ for (const target of requiredTargets) {
 }
 mkdirSync(join(outputRoot, "Formula"), { recursive: true })
 writeFileSync(join(outputRoot, "Formula", "pico.rb"), formula)
-
-const dmgPath = process.env.PICO_MACOS_DMG
-if (dmgPath) {
-  const absoluteDmgPath = resolve(dmgPath)
-  if (!existsSync(absoluteDmgPath)) {
-    throw new Error(`PICO_MACOS_DMG does not exist: ${absoluteDmgPath}`)
-  }
-  const checksum = createHash("sha256")
-    .update(readFileSync(absoluteDmgPath))
-    .digest("hex")
-  const cask = readFileSync(
-    join(root, "packaging/homebrew/Casks/pico.rb.template"),
-    "utf8"
-  )
-    .replaceAll("{{VERSION}}", manifest.version)
-    .replaceAll("{{DMG_SHA256}}", checksum)
-  mkdirSync(join(outputRoot, "Casks"), { recursive: true })
-  writeFileSync(join(outputRoot, "Casks", "pico.rb"), cask)
-}
 
 console.log(`Generated Homebrew artifacts in ${outputRoot}`)

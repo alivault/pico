@@ -118,6 +118,11 @@ jobs:
             echo "Rust server version $rust_version does not match package version ${{ steps.package.outputs.version }}."
             exit 1
           fi
+          desktop_version="$(awk -F '"' '/^version = / { print $2; exit }' crates/pico-desktop/Cargo.toml)"
+          if [ "$desktop_version" != "${{ steps.package.outputs.version }}" ]; then
+            echo "Rust desktop version $desktop_version does not match package version ${{ steps.package.outputs.version }}."
+            exit 1
+          fi
 
       - name: Check package
         run: pnpm check
@@ -167,86 +172,3 @@ jobs:
       - name: Publish to npm
         if: steps.npm_status.outputs.published != 'true'
         run: npx --yes npm@latest publish --access public --provenance --tag "${{ steps.dist_tag.outputs.tag }}"
-
-  macos-app:
-    name: Signed macOS app and cask
-    if: vars.PICO_MACOS_RELEASE_ENABLED == 'true'
-    needs: [native, release]
-    runs-on: macos-15
-    environment: macos
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Import Developer ID certificate
-        env:
-          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        run: |
-          certificate="$RUNNER_TEMP/pico-certificate.p12"
-          keychain="$RUNNER_TEMP/pico-signing.keychain-db"
-          echo "$MACOS_CERTIFICATE_P12" | base64 -D > "$certificate"
-          security create-keychain -p runner "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p runner "$keychain"
-          security import "$certificate" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
-          security list-keychains -d user -s "$keychain"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k runner "$keychain"
-
-      - name: Configure notarization credentials
-        env:
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
-        run: |
-          key="$RUNNER_TEMP/AuthKey.p8"
-          printf '%s' "$MACOS_NOTARY_KEY" > "$key"
-          xcrun notarytool store-credentials Pico-Notary \
-            --key "$key" \
-            --key-id "$MACOS_NOTARY_KEY_ID" \
-            --issuer "$MACOS_NOTARY_ISSUER"
-
-      - name: Build, sign, notarize, and staple Pico
-        env:
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          MACOS_NOTARY_PROFILE: Pico-Notary
-        run: pnpm package:macos
-
-      - name: Download native release metadata
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pico-native-*
-          path: dist/native
-          merge-multiple: true
-
-      - name: Generate Homebrew cask
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          export PICO_MACOS_DMG="dist/macos/Pico-${version}-universal.dmg"
-          node scripts/generate-native-release-manifest.mjs dist/native
-          node scripts/generate-homebrew-artifacts.mjs dist/native
-
-      - name: Upload macOS app and cask
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          gh release upload "$GITHUB_REF_NAME" \
-            "dist/macos/Pico-${version}-universal.dmg" \
-            "dist/homebrew/Casks/pico.rb" \
-            --clobber
