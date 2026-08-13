@@ -47,8 +47,8 @@ use crate::protocol::{
 use crate::runtime::RuntimeRegistry;
 use crate::security::{self, RequestPolicy};
 use crate::session_store::{
-    streaming_assistant_item, update_streaming_tool, IndexedSessionFile, SessionDocument,
-    SessionStore,
+    conversation_items_from_entries, streaming_assistant_item, update_streaming_tool,
+    IndexedSessionFile, SessionDocument, SessionStore,
 };
 use crate::static_assets::StaticAssets;
 use crate::terminal::{TerminalEvent, TerminalManager};
@@ -96,6 +96,14 @@ struct RuntimeProjection {
     available_skills: Vec<Value>,
     context_usage: Option<Value>,
     compacting: bool,
+    entries: Option<Arc<RuntimeEntriesProjection>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RuntimeEntriesProjection {
+    all: Vec<Value>,
+    cursor: Option<String>,
+    items: Vec<ConversationItem>,
 }
 
 #[derive(Debug)]
@@ -895,6 +903,7 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                         emit_conversation_delta(&context, &public_session_id, delta_batch.take());
                     }
                     context.streaming_items.write().await.remove(&session_id);
+                    refresh_runtime_entries_projection(&context, &session_id, &runtime).await;
                     emit_session_state(&context, &session_id, true, None).await;
                     streaming_message.start(&event);
                     if let Some(item) =
@@ -1739,8 +1748,11 @@ async fn directory_sessions_indexes(
 }
 
 fn build_state_sync(document: Option<&SessionDocument>, options: StateSyncOptions<'_>) -> Value {
-    let mut items = document
-        .map(SessionDocument::conversation_items)
+    let mut items = options
+        .projection
+        .and_then(|projection| projection.entries.as_deref())
+        .map(|entries| entries.items.clone())
+        .or_else(|| document.map(SessionDocument::conversation_items))
         .unwrap_or_default();
     if let Some(item) = options.streaming_item {
         items.push(item.clone());
@@ -5009,12 +5021,19 @@ async fn refresh_runtime_projection(
     runtime_id: &str,
     client: &PiRpcClient,
 ) {
-    let (state, models, levels, stats, commands) = tokio::join!(
+    let previous_entries = context
+        .runtime_projections
+        .read()
+        .await
+        .get(runtime_id)
+        .and_then(|projection| projection.entries.clone());
+    let (state, models, levels, stats, commands, entries) = tokio::join!(
         client.request_typed(&PiCommand::GetState),
         client.request_typed(&PiCommand::GetAvailableModels),
         client.request_typed(&PiCommand::GetAvailableThinkingLevels),
         client.request_typed(&PiCommand::GetSessionStats),
         client.request_typed(&PiCommand::GetCommands),
+        refresh_runtime_entries(client, previous_entries),
     );
     let data = |response: Result<Value, PiRpcError>| {
         response
@@ -5086,12 +5105,83 @@ async fn refresh_runtime_projection(
             .and_then(|state| state.get("isCompacting"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        entries,
     };
     context
         .runtime_projections
         .write()
         .await
         .insert(runtime_id.to_string(), projection);
+}
+
+async fn refresh_runtime_entries_projection(
+    context: &ServerContext,
+    runtime_id: &str,
+    client: &PiRpcClient,
+) {
+    let previous = context
+        .runtime_projections
+        .read()
+        .await
+        .get(runtime_id)
+        .and_then(|projection| projection.entries.clone());
+    let Some(entries) = refresh_runtime_entries(client, previous).await else {
+        return;
+    };
+    if let Some(projection) = context
+        .runtime_projections
+        .write()
+        .await
+        .get_mut(runtime_id)
+    {
+        projection.entries = Some(entries);
+    }
+}
+
+async fn refresh_runtime_entries(
+    client: &PiRpcClient,
+    previous: Option<Arc<RuntimeEntriesProjection>>,
+) -> Option<Arc<RuntimeEntriesProjection>> {
+    let previous_cursor = previous
+        .as_ref()
+        .and_then(|projection| projection.cursor.clone());
+    let mut incremental = previous_cursor.is_some();
+    let mut response = client
+        .request_typed(&PiCommand::GetEntries {
+            since: previous_cursor,
+        })
+        .await
+        .ok()
+        .and_then(|response| pi_response_data(response).ok());
+    if response.is_none() && incremental {
+        incremental = false;
+        response = client
+            .request_typed(&PiCommand::GetEntries { since: None })
+            .await
+            .ok()
+            .and_then(|response| pi_response_data(response).ok());
+    }
+    let data = response?;
+    let additions = data.get("entries").and_then(Value::as_array)?.clone();
+    let mut all = if incremental {
+        previous
+            .as_ref()
+            .map(|projection| projection.all.clone())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    all.extend(additions);
+    let leaf_id = data
+        .get("leafId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let cursor = all
+        .iter()
+        .rev()
+        .find_map(|entry| entry.get("id").and_then(Value::as_str).map(str::to_string));
+    let items = conversation_items_from_entries(&all, leaf_id.as_deref());
+    Some(Arc::new(RuntimeEntriesProjection { all, cursor, items }))
 }
 
 fn draining_error() -> ApiError {

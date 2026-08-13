@@ -137,4 +137,18 @@ mod tests {
         assert_eq!(value["type"], "switch_session");
         assert_eq!(value["sessionPath"], "/tmp/session.jsonl");
     }
+
+    #[test]
+    fn entry_cursor_is_sent_only_for_incremental_reads() {
+        let incremental = serde_json::to_value(PiCommand::GetEntries {
+            since: Some("entry-42".into()),
+        })
+        .expect("serialize incremental entries request");
+        assert_eq!(incremental["type"], "get_entries");
+        assert_eq!(incremental["since"], "entry-42");
+
+        let initial = serde_json::to_value(PiCommand::GetEntries { since: None })
+            .expect("serialize initial entries request");
+        assert!(initial.get("since").is_none());
+    }
 }

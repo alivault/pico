@@ -460,107 +460,121 @@ impl SessionDocument {
     }
 
     pub fn conversation_items(&self) -> Vec<ConversationItem> {
-        let mut items = Vec::new();
-        let mut tools = HashMap::<String, (usize, usize)>::new();
-        for entry in self.active_entries() {
-            let entry_id = entry
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-                .to_string();
-            match entry_type(entry) {
-                Some("message") => {
-                    let Some(message) = entry.get("message") else {
-                        continue;
-                    };
-                    match message.get("role").and_then(Value::as_str) {
-                        Some("user") => items.push(ConversationItem::User(UserConversationItem {
-                            item_key: Some(format!("entry:{entry_id}")),
-                            render_key: None,
-                            pending_id: None,
-                            fork_entry_id: Some(entry_id),
-                            text: message_text(message),
-                            images: message_images(message),
-                            queued: None,
-                            streaming_behavior: None,
-                        })),
-                        Some("assistant") => {
-                            let mut blocks = assistant_blocks(message, &entry_id);
-                            let item_index = items.len();
-                            for (block_index, block) in blocks.iter().enumerate() {
-                                if let AssistantBlock::Tool(tool) = block {
-                                    if let Some(call_id) = &tool.call_id {
-                                        tools.insert(call_id.clone(), (item_index, block_index));
-                                    }
-                                }
-                            }
-                            if blocks.is_empty() {
-                                if let Some(error) = message
-                                    .get("errorMessage")
-                                    .and_then(Value::as_str)
-                                    .filter(|error| !error.is_empty())
-                                {
-                                    blocks.push(AssistantBlock::Text(TextBlock {
-                                        block_key: Some(format!("entry:{entry_id}:error")),
-                                        render_key: None,
-                                        text: error.into(),
-                                        is_error: Some(true),
-                                    }));
-                                }
-                            }
-                            items.push(ConversationItem::Assistant(AssistantConversationItem {
-                                item_key: Some(format!("entry:{entry_id}")),
-                                render_key: None,
-                                branch_entry_id: Some(entry_id),
-                                blocks,
-                                streaming: Some(false),
-                                done: Some(true),
-                                model: assistant_model(message),
-                            }));
-                        }
-                        Some("toolResult") => {
-                            apply_tool_result(&mut items, &tools, message);
-                        }
-                        _ => {}
-                    }
-                }
-                Some("compaction") => {
-                    let summary = entry
-                        .get("summary")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string();
-                    let tokens_before = entry
-                        .get("tokensBefore")
-                        .and_then(Value::as_u64)
-                        .unwrap_or_default();
-                    items.push(ConversationItem::Assistant(AssistantConversationItem {
-                        item_key: Some(format!("entry:{entry_id}")),
-                        render_key: None,
-                        branch_entry_id: Some(entry_id.clone()),
-                        blocks: vec![AssistantBlock::Compaction(CompactionBlock {
-                            block_key: Some(format!("entry:{entry_id}:compaction")),
-                            render_key: None,
-                            summary,
-                            tokens_before,
-                            estimated_tokens_after: entry
-                                .get("estimatedTokensAfter")
-                                .and_then(Value::as_u64),
-                        })],
-                        streaming: Some(false),
-                        done: Some(true),
-                        model: None,
-                    }));
-                }
-                _ => {}
-            }
-        }
-        items
+        conversation_items_for_entries(self.active_entries())
     }
 
     pub fn revision(&self) -> String {
         format!("{}:{}", self.entries.len(), self.revision)
     }
+}
+
+pub fn conversation_items_from_entries(
+    entries: &[Value],
+    leaf_id: Option<&str>,
+) -> Vec<ConversationItem> {
+    let (indices, _) = active_path_from(entries, leaf_id);
+    conversation_items_for_entries(indices.iter().filter_map(|index| entries.get(*index)))
+}
+
+fn conversation_items_for_entries<'a>(
+    entries: impl IntoIterator<Item = &'a Value>,
+) -> Vec<ConversationItem> {
+    let mut items = Vec::new();
+    let mut tools = HashMap::<String, (usize, usize)>::new();
+    for entry in entries {
+        let entry_id = entry
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string();
+        match entry_type(entry) {
+            Some("message") => {
+                let Some(message) = entry.get("message") else {
+                    continue;
+                };
+                match message.get("role").and_then(Value::as_str) {
+                    Some("user") => items.push(ConversationItem::User(UserConversationItem {
+                        item_key: Some(format!("entry:{entry_id}")),
+                        render_key: None,
+                        pending_id: None,
+                        fork_entry_id: Some(entry_id),
+                        text: message_text(message),
+                        images: message_images(message),
+                        queued: None,
+                        streaming_behavior: None,
+                    })),
+                    Some("assistant") => {
+                        let mut blocks = assistant_blocks(message, &entry_id);
+                        let item_index = items.len();
+                        for (block_index, block) in blocks.iter().enumerate() {
+                            if let AssistantBlock::Tool(tool) = block {
+                                if let Some(call_id) = &tool.call_id {
+                                    tools.insert(call_id.clone(), (item_index, block_index));
+                                }
+                            }
+                        }
+                        if blocks.is_empty() {
+                            if let Some(error) = message
+                                .get("errorMessage")
+                                .and_then(Value::as_str)
+                                .filter(|error| !error.is_empty())
+                            {
+                                blocks.push(AssistantBlock::Text(TextBlock {
+                                    block_key: Some(format!("entry:{entry_id}:error")),
+                                    render_key: None,
+                                    text: error.into(),
+                                    is_error: Some(true),
+                                }));
+                            }
+                        }
+                        items.push(ConversationItem::Assistant(AssistantConversationItem {
+                            item_key: Some(format!("entry:{entry_id}")),
+                            render_key: None,
+                            branch_entry_id: Some(entry_id),
+                            blocks,
+                            streaming: Some(false),
+                            done: Some(true),
+                            model: assistant_model(message),
+                        }));
+                    }
+                    Some("toolResult") => {
+                        apply_tool_result(&mut items, &tools, message);
+                    }
+                    _ => {}
+                }
+            }
+            Some("compaction") => {
+                let summary = entry
+                    .get("summary")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let tokens_before = entry
+                    .get("tokensBefore")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                items.push(ConversationItem::Assistant(AssistantConversationItem {
+                    item_key: Some(format!("entry:{entry_id}")),
+                    render_key: None,
+                    branch_entry_id: Some(entry_id.clone()),
+                    blocks: vec![AssistantBlock::Compaction(CompactionBlock {
+                        block_key: Some(format!("entry:{entry_id}:compaction")),
+                        render_key: None,
+                        summary,
+                        tokens_before,
+                        estimated_tokens_after: entry
+                            .get("estimatedTokensAfter")
+                            .and_then(Value::as_u64),
+                    })],
+                    streaming: Some(false),
+                    done: Some(true),
+                    model: None,
+                }));
+            }
+            _ => {}
+        }
+    }
+    items
 }
 
 fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
@@ -865,16 +879,21 @@ fn collect_session_files(directory: &Path, output: &mut Vec<PathBuf>) -> io::Res
 }
 
 fn active_path(entries: &[Value]) -> (Vec<usize>, Option<String>) {
+    let leaf_id = entries
+        .iter()
+        .rev()
+        .find_map(|entry| entry.get("id").and_then(Value::as_str).map(str::to_string));
+    let (indices, _) = active_path_from(entries, leaf_id.as_deref());
+    (indices, leaf_id)
+}
+
+fn active_path_from(entries: &[Value], leaf_id: Option<&str>) -> (Vec<usize>, Option<String>) {
     let by_id = entries
         .iter()
         .enumerate()
         .filter_map(|(index, entry)| Some((entry.get("id")?.as_str()?, index)))
         .collect::<HashMap<_, _>>();
-    let leaf_id = entries
-        .iter()
-        .rev()
-        .find_map(|entry| entry.get("id").and_then(Value::as_str).map(str::to_string));
-    let mut current = leaf_id.as_deref();
+    let mut current = leaf_id;
     let mut seen = HashSet::new();
     let mut reversed = Vec::new();
     while let Some(id) = current {
@@ -888,7 +907,7 @@ fn active_path(entries: &[Value]) -> (Vec<usize>, Option<String>) {
         current = entries[index].get("parentId").and_then(Value::as_str);
     }
     reversed.reverse();
-    (reversed, leaf_id)
+    (reversed, leaf_id.map(str::to_string))
 }
 
 fn entry_type(entry: &Value) -> Option<&str> {
@@ -1261,6 +1280,15 @@ mod tests {
         assert_eq!(document.first_user_message(), "first");
         assert_eq!(document.last_message_preview().as_deref(), Some("branch"));
         assert_eq!(document.conversation_items().len(), 2);
+        let older_branch = conversation_items_from_entries(&document.entries, Some("a1"));
+        assert_eq!(older_branch.len(), 2);
+        let ConversationItem::Assistant(assistant) = &older_branch[1] else {
+            panic!("expected assistant on selected durable branch");
+        };
+        let AssistantBlock::Text(text) = &assistant.blocks[0] else {
+            panic!("expected assistant text");
+        };
+        assert_eq!(text.text, "old");
         std::fs::remove_dir_all(directory).expect("remove fixture");
     }
 
