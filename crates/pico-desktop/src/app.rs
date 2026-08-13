@@ -19,8 +19,9 @@ use smol::channel::{Receiver, Sender};
 
 use crate::client::PicoClient;
 use crate::models::{
-    AssistantBlock, ConversationItem, DesktopEvent, DirectorySessionsIndex, GitChangeFile,
-    GitLocalBranch, GitStatusSummary, SessionListEntry, SessionState, UserConversationItem,
+    AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
+    GitChangeFile, GitLocalBranch, GitStatusSummary, SessionListEntry, SessionState, UiRequest,
+    UserConversationItem,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -81,6 +82,10 @@ pub struct PicoDesktop {
     streaming_behavior: ComposerStreamingBehavior,
     composer_images: Vec<(String, serde_json::Value)>,
     hide_tools: bool,
+    settings_open: bool,
+    auth_providers: Vec<AuthProvider>,
+    selected_auth_provider: Option<AuthProvider>,
+    ui_request: Option<UiRequest>,
     status_message: Option<String>,
     left_sidebar_open: bool,
     right_sidebar_open: bool,
@@ -89,6 +94,7 @@ pub struct PicoDesktop {
     session_name_input: Entity<InputState>,
     composer: Entity<TextareaState>,
     commit_message: Entity<InputState>,
+    auth_value: Entity<InputState>,
     conversation_scroll: ScrollHandle,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
@@ -113,6 +119,8 @@ impl PicoDesktop {
                 .placeholder("Ask anything…")
         });
         let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
+        let auth_value =
+            cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
         let (tx, rx) = smol::channel::unbounded();
 
         client.connect(tx.clone());
@@ -160,6 +168,10 @@ impl PicoDesktop {
             streaming_behavior: ComposerStreamingBehavior::FollowUp,
             composer_images: Vec::new(),
             hide_tools: false,
+            settings_open: false,
+            auth_providers: Vec::new(),
+            selected_auth_provider: None,
+            ui_request: None,
             status_message: None,
             left_sidebar_open: true,
             right_sidebar_open: true,
@@ -168,6 +180,7 @@ impl PicoDesktop {
             session_name_input,
             composer,
             commit_message,
+            auth_value,
             conversation_scroll: ScrollHandle::new(),
             _event_task,
             _subscriptions,
@@ -269,6 +282,27 @@ impl PicoDesktop {
                 self.session.pending_messages = messages;
                 self.status_message = None;
             }
+            DesktopEvent::AuthProviders(response) => {
+                self.auth_providers = response
+                    .oauth_providers
+                    .into_iter()
+                    .chain(response.api_key_providers)
+                    .collect();
+                self.status_message = None;
+            }
+            DesktopEvent::AuthChanged(message) => {
+                self.status_message = Some(message);
+                self.selected_auth_provider = None;
+                self.client.load_auth_providers(self.tx.clone());
+            }
+            DesktopEvent::UiRequest(request) => {
+                self.ui_request = Some(request);
+                self.settings_open = true;
+            }
+            DesktopEvent::UiRequestResolved => {
+                self.ui_request = None;
+                self.status_message = None;
+            }
             DesktopEvent::PromptSent => {
                 self.status_message = None;
             }
@@ -329,6 +363,63 @@ impl PicoDesktop {
                 self.status_message = Some(error);
             }
         }
+        cx.notify();
+    }
+
+    fn open_settings(&mut self, cx: &mut Context<Self>) {
+        self.settings_open = true;
+        self.client.load_auth_providers(self.tx.clone());
+        cx.notify();
+    }
+
+    fn close_settings(&mut self, cx: &mut Context<Self>) {
+        self.settings_open = false;
+        self.selected_auth_provider = None;
+        cx.notify();
+    }
+
+    fn select_auth_provider(
+        &mut self,
+        provider: AuthProvider,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if provider.configured {
+            self.client.logout_provider(provider.id, self.tx.clone());
+            self.status_message = Some("Logging out provider…".into());
+        } else if provider.auth_type == "oauth" {
+            self.client.login_oauth(provider.id, self.tx.clone());
+            self.status_message = Some("Starting provider login…".into());
+        } else {
+            self.auth_value.update(cx, |state, cx| {
+                state.set_value("", window, cx);
+            });
+            self.selected_auth_provider = Some(provider);
+        }
+        cx.notify();
+    }
+
+    fn submit_api_key(&mut self, cx: &mut Context<Self>) {
+        let Some(provider) = self.selected_auth_provider.clone() else {
+            return;
+        };
+        let key = self.auth_value.read(cx).value().trim().to_string();
+        if key.is_empty() {
+            self.status_message = Some("Enter an API key.".into());
+            cx.notify();
+            return;
+        }
+        self.client.save_api_key(provider.id, key, self.tx.clone());
+        self.status_message = Some("Saving API key…".into());
+        cx.notify();
+    }
+
+    fn resolve_ui_request(&mut self, body: serde_json::Value, cx: &mut Context<Self>) {
+        let Some(request) = self.ui_request.take() else {
+            return;
+        };
+        self.client
+            .resolve_ui_request(request.id, body, self.tx.clone());
         cx.notify();
     }
 
@@ -1206,11 +1297,11 @@ impl PicoDesktop {
                 v_flex().p_2().border_t_1().border_color(border).child(
                     Button::new("settings")
                         .ghost()
-                        .disabled(true)
                         .w_full()
                         .justify_start()
                         .icon(IconName::Settings)
-                        .label(self.server_label.clone()),
+                        .label(self.server_label.clone())
+                        .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx))),
                 ),
             )
     }
@@ -2182,6 +2273,245 @@ impl PicoDesktop {
                 RightWorkspaceTab::Files => self.render_file_workspace(cx),
             })
     }
+
+    fn render_settings(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let border = cx.theme().border.opacity(0.72);
+        let muted = cx.theme().muted_foreground;
+        let request = self.ui_request.clone();
+        v_flex()
+            .absolute()
+            .inset_0()
+            .bg(cx.theme().background)
+            .child(
+                h_flex()
+                    .h(px(56.))
+                    .px_4()
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(border)
+                    .child(div().text_lg().font_semibold().child("Settings"))
+                    .child(
+                        Button::new("close-settings")
+                            .ghost()
+                            .small()
+                            .icon(IconName::Close)
+                            .on_click(cx.listener(|this, _, _, cx| this.close_settings(cx))),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_h_0()
+                    .justify_center()
+                    .child(
+                        v_flex()
+                            .w(px(720.))
+                            .max_h_full()
+                            .p_6()
+                            .gap_5()
+                            .overflow_y_scrollbar()
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(div().font_semibold().child("Pico server"))
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(muted)
+                                            .child(self.server_label.clone()),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(div().font_semibold().child("Provider authentication"))
+                                    .children(self.auth_providers.iter().enumerate().map(
+                                        |(index, provider)| {
+                                            let provider_for_action = provider.clone();
+                                            h_flex()
+                                                .p_3()
+                                                .justify_between()
+                                                .rounded_lg()
+                                                .border_1()
+                                                .border_color(border)
+                                                .child(
+                                                    v_flex()
+                                                        .gap_0p5()
+                                                        .child(
+                                                            div()
+                                                                .text_sm()
+                                                                .font_semibold()
+                                                                .child(provider.name.clone()),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .text_color(muted)
+                                                                .child(if provider.configured {
+                                                                    "Configured"
+                                                                } else if provider.auth_type
+                                                                    == "oauth"
+                                                                {
+                                                                    "OAuth"
+                                                                } else {
+                                                                    "API key"
+                                                                }),
+                                                        ),
+                                                )
+                                                .child(
+                                                    Button::new(("auth-provider", index))
+                                                        .secondary()
+                                                        .small()
+                                                        .label(if provider.configured {
+                                                            "Log out"
+                                                        } else {
+                                                            "Configure"
+                                                        })
+                                                        .on_click(cx.listener(
+                                                            move |this, _, window, cx| {
+                                                                this.select_auth_provider(
+                                                                    provider_for_action.clone(),
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                            },
+                                                        )),
+                                                )
+                                        },
+                                    ))
+                                    .when_some(self.selected_auth_provider.clone(), |this, provider| {
+                                        this.child(
+                                            v_flex()
+                                                .p_3()
+                                                .gap_2()
+                                                .rounded_lg()
+                                                .bg(cx.theme().secondary.opacity(0.35))
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .font_semibold()
+                                                        .child(format!("{} API key", provider.name)),
+                                                )
+                                                .child(Input::new(&self.auth_value))
+                                                .child(
+                                                    Button::new("save-api-key")
+                                                        .primary()
+                                                        .small()
+                                                        .label("Save key")
+                                                        .on_click(cx.listener(|this, _, _, cx| {
+                                                            this.submit_api_key(cx)
+                                                        })),
+                                                ),
+                                        )
+                                    }),
+                            )
+                            .when_some(request, |this, request| {
+                                let title = request.title.clone().unwrap_or_else(|| "Pico request".into());
+                                let message = request.message.clone().unwrap_or_default();
+                                this.child(
+                                    v_flex()
+                                        .p_4()
+                                        .gap_3()
+                                        .rounded_lg()
+                                        .border_1()
+                                        .border_color(cx.theme().primary)
+                                        .child(div().font_semibold().child(title))
+                                        .when(!message.is_empty(), |this| {
+                                            this.child(TextView::markdown("ui-request", message))
+                                        })
+                                        .when_some(request.auth_url.clone(), |this, url| {
+                                            this.child(
+                                                div()
+                                                    .p_2()
+                                                    .rounded_md()
+                                                    .bg(cx.theme().secondary)
+                                                    .font_family("Menlo")
+                                                    .text_xs()
+                                                    .child(url),
+                                            )
+                                        })
+                                        .when(!request.options.is_empty(), |this| {
+                                            this.children(request.options.iter().enumerate().map(
+                                                |(index, option)| {
+                                                    let value = option.value().to_string();
+                                                    Button::new(("ui-option", index))
+                                                        .secondary()
+                                                        .small()
+                                                        .justify_start()
+                                                        .label(option.label().to_string())
+                                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                                            this.resolve_ui_request(
+                                                                serde_json::json!({ "value": value }),
+                                                                cx,
+                                                            )
+                                                        }))
+                                                },
+                                            ))
+                                        })
+                                        .when(request.options.is_empty() && request.method != "confirm", |this| {
+                                            this.child(Input::new(&self.auth_value))
+                                        })
+                                        .child(
+                                            h_flex()
+                                                .gap_2()
+                                                .child(
+                                                    Button::new("ui-cancel")
+                                                        .ghost()
+                                                        .small()
+                                                        .label("Cancel")
+                                                        .on_click(cx.listener(|this, _, _, cx| {
+                                                            this.resolve_ui_request(
+                                                                serde_json::json!({ "cancelled": true }),
+                                                                cx,
+                                                            )
+                                                        })),
+                                                )
+                                                .when(request.method == "confirm", |this| {
+                                                    this.child(
+                                                        Button::new("ui-confirm")
+                                                            .primary()
+                                                            .small()
+                                                            .label("Confirm")
+                                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                                this.resolve_ui_request(
+                                                                    serde_json::json!({ "confirmed": true }),
+                                                                    cx,
+                                                                )
+                                                            })),
+                                                    )
+                                                })
+                                                .when(
+                                                    request.options.is_empty()
+                                                        && request.method != "confirm",
+                                                    |this| {
+                                                        this.child(
+                                                            Button::new("ui-submit")
+                                                                .primary()
+                                                                .small()
+                                                                .label("Submit")
+                                                                .on_click(cx.listener(
+                                                                    |this, _, _, cx| {
+                                                                        let value = this
+                                                                            .auth_value
+                                                                            .read(cx)
+                                                                            .value()
+                                                                            .to_string();
+                                                                        this.resolve_ui_request(
+                                                                            serde_json::json!({ "value": value }),
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                )),
+                                                        )
+                                                    },
+                                                ),
+                                        ),
+                                )
+                            }),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
 impl Render for PicoDesktop {
@@ -2217,6 +2547,9 @@ impl Render for PicoDesktop {
             )
             .when(self.right_sidebar_open, |this| {
                 this.child(self.render_right_sidebar(cx))
+            })
+            .when(self.settings_open, |this| {
+                this.child(self.render_settings(cx))
             })
     }
 }

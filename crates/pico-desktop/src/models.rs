@@ -557,6 +557,74 @@ pub struct GitActionResponse {
     pub stderr: String,
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthProvidersResponse {
+    #[serde(default)]
+    pub oauth_providers: Vec<AuthProvider>,
+    #[serde(default)]
+    pub api_key_providers: Vec<AuthProvider>,
+    #[serde(default)]
+    pub logged_in_providers: Vec<AuthProvider>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthProvider {
+    pub id: String,
+    pub name: String,
+    pub auth_type: String,
+    pub configured: bool,
+    pub source: Option<String>,
+    pub label: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiRequest {
+    pub id: String,
+    pub method: String,
+    pub title: Option<String>,
+    pub message: Option<String>,
+    pub placeholder: Option<String>,
+    pub prefill: Option<String>,
+    pub auth_url: Option<String>,
+    #[serde(default)]
+    pub auth_manual_allowed: bool,
+    #[serde(default)]
+    pub allow_empty: bool,
+    #[serde(default)]
+    pub options: Vec<UiRequestOption>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum UiRequestOption {
+    Text(String),
+    Item {
+        value: String,
+        label: Option<String>,
+    },
+}
+
+impl UiRequestOption {
+    pub fn value(&self) -> &str {
+        match self {
+            Self::Text(value) | Self::Item { value, .. } => value,
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Text(value) => value,
+            Self::Item { value, label } => label.as_deref().unwrap_or(value),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum DesktopEvent {
     Connected(ClientManifest),
@@ -571,6 +639,10 @@ pub enum DesktopEvent {
     GitMutation(String),
     GitRefresh(String),
     PendingMessages(Vec<PendingMessage>),
+    AuthProviders(AuthProvidersResponse),
+    AuthChanged(String),
+    UiRequest(UiRequest),
+    UiRequestResolved,
     PromptSent,
     SessionCreated {
         session_key: String,

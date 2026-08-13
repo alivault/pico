@@ -13,9 +13,9 @@ use smol::channel::Sender;
 use url::Url;
 
 use crate::models::{
-    ClientManifest, DesktopEvent, GitActionResponse, GitChangesResponse, GitFileDiffResponse,
-    GitStatusResponse, PendingMessage, ProjectFileReadResponse, ProjectFileTreeResponse,
-    PromptRequest,
+    AuthProvidersResponse, ClientManifest, DesktopEvent, GitActionResponse, GitChangesResponse,
+    GitFileDiffResponse, GitStatusResponse, PendingMessage, ProjectFileReadResponse,
+    ProjectFileTreeResponse, PromptRequest,
 };
 
 #[derive(Clone)]
@@ -145,6 +145,9 @@ impl PicoClient {
                     .get("cwd")
                     .and_then(Value::as_str)
                     .map(|cwd| DesktopEvent::GitRefresh(cwd.to_string())),
+                Some("extension_ui_request") => {
+                    Some(DesktopEvent::UiRequest(serde_json::from_value(value)?))
+                }
                 Some("request_error" | "extension_error") => Some(DesktopEvent::Error(
                     value
                         .get("error")
@@ -162,6 +165,70 @@ impl PicoClient {
             }
         }
         Ok(())
+    }
+
+    pub fn load_auth_providers(&self, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .get_json::<AuthProvidersResponse>("/api/auth/providers", &[])
+                .map(DesktopEvent::AuthProviders);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn save_api_key(&self, provider: String, key: String, tx: Sender<DesktopEvent>) {
+        self.auth_mutation(
+            "/api/auth/api-key",
+            json!({ "provider": provider, "key": key }),
+            "Saved provider API key",
+            tx,
+        );
+    }
+
+    pub fn login_oauth(&self, provider: String, tx: Sender<DesktopEvent>) {
+        self.auth_mutation(
+            "/api/auth/oauth",
+            json!({ "provider": provider }),
+            "Provider login completed",
+            tx,
+        );
+    }
+
+    pub fn logout_provider(&self, provider: String, tx: Sender<DesktopEvent>) {
+        self.auth_mutation(
+            "/api/auth/logout",
+            json!({ "provider": provider }),
+            "Logged out provider",
+            tx,
+        );
+    }
+
+    fn auth_mutation(
+        &self,
+        endpoint: &'static str,
+        body: Value,
+        message: &'static str,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let result = client
+                .post_json::<Value, _>(endpoint, &[], &body)
+                .map(|_| DesktopEvent::AuthChanged(message.into()));
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn resolve_ui_request(&self, id: String, body: Value, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let endpoint = format!("/api/ui/{id}");
+            let result = client
+                .post_json::<Value, _>(&endpoint, &[], &body)
+                .map(|_| DesktopEvent::UiRequestResolved);
+            Self::send_result(tx, result);
+        });
     }
 
     pub fn select_session(
