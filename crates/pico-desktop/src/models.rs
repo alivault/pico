@@ -813,6 +813,10 @@ pub enum DesktopEvent {
         cwd: String,
         paths: Vec<String>,
     },
+    WorkspaceUnavailable {
+        cwd: String,
+        error: String,
+    },
     FileRead {
         cwd: String,
         response: ProjectFileReadResponse,

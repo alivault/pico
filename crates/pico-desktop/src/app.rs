@@ -7,11 +7,10 @@ use std::rc::Rc;
 use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
-    Anchor, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, PathPromptOptions, Pixels,
-    Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window,
-    div,
-    prelude::FluentBuilder as _, px,
+    Anchor, App, AppContext as _, ClipboardItem, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, PathPromptOptions,
+    Pixels, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Subscription, Task,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
@@ -26,6 +25,7 @@ use gpui_component::{
     menu::{DropdownMenu as _, PopupMenuItem},
     scroll::ScrollableElement as _,
     text::TextView,
+    tooltip::Tooltip,
     v_flex,
 };
 use lsp_types::{
@@ -349,6 +349,7 @@ pub struct PicoDesktop {
     directory_indexes: HashMap<String, DirectorySessionsIndex>,
     files: Vec<String>,
     files_cwd: Option<String>,
+    workspace_error: Option<String>,
     active_right_tab: RightWorkspaceTab,
     selected_file_path: Option<String>,
     selected_file_content: Option<String>,
@@ -503,6 +504,7 @@ impl PicoDesktop {
             directory_indexes: HashMap::new(),
             files: Vec::new(),
             files_cwd: None,
+            workspace_error: None,
             active_right_tab: RightWorkspaceTab::Changes,
             selected_file_path: None,
             selected_file_content: None,
@@ -717,6 +719,16 @@ impl PicoDesktop {
             DesktopEvent::Files { cwd, paths } => {
                 if self.files_cwd.as_deref() == Some(cwd.as_str()) {
                     self.files = paths;
+                }
+            }
+            DesktopEvent::WorkspaceUnavailable { cwd, error } => {
+                if self.files_cwd.as_deref() == Some(cwd.as_str()) {
+                    self.files.clear();
+                    self.git_status = None;
+                    self.git_files.clear();
+                    self.git_branches.clear();
+                    self.git_commits.clear();
+                    self.workspace_error = Some(error);
                 }
             }
             DesktopEvent::FileRead { cwd, response } => {
@@ -1193,6 +1205,7 @@ impl PicoDesktop {
 
     fn reset_workspace_scope(&mut self) {
         self.files.clear();
+        self.workspace_error = None;
         self.selected_file_path = None;
         self.selected_file_content = None;
         self.git_status = None;
@@ -1793,6 +1806,7 @@ impl PicoDesktop {
 
     fn refresh_right_workspace(&mut self, cx: &mut Context<Self>) {
         if let Some(cwd) = self.files_cwd.clone() {
+            self.workspace_error = None;
             self.status_message = Some("Refreshing project…".into());
             self.client.load_files(cwd.clone(), self.tx.clone());
             self.client.load_git(cwd, self.tx.clone());
@@ -2604,14 +2618,8 @@ impl PicoDesktop {
                             .small()
                             .icon(IconName::SquareTerminal)
                             .selected(self.terminal_panel_open)
-                            .tooltip_with_action(
-                                "Toggle terminal panel",
-                                &ToggleTerminal,
-                                None,
-                            )
-                            .on_click(
-                                cx.listener(|this, _, _, cx| this.toggle_terminal(cx)),
-                            ),
+                            .tooltip_with_action("Toggle terminal panel", &ToggleTerminal, None)
+                            .on_click(cx.listener(|this, _, _, cx| this.toggle_terminal(cx))),
                     )
                     .child(
                         Button::new("toggle-right")
@@ -3890,6 +3898,36 @@ impl PicoDesktop {
                             .on_click(cx.listener(|this, _, _, cx| this.open_history(cx))),
                     ),
             )
+            .when_some(self.workspace_error.clone(), |this, error| {
+                let error_to_copy = error.clone();
+                this.child(
+                    h_flex()
+                        .id("workspace-error")
+                        .min_w_0()
+                        .px_3()
+                        .py_2()
+                        .gap_2()
+                        .border_b_1()
+                        .border_color(border)
+                        .bg(cx.theme().warning.opacity(0.12))
+                        .cursor_pointer()
+                        .tooltip(|window, cx| Tooltip::new("Click to copy error").build(window, cx))
+                        .on_click(move |_, _, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(error_to_copy.clone()));
+                        })
+                        .child(Icon::new(IconName::Info).size_4().flex_none())
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_xs()
+                                .child(error),
+                        ),
+                )
+            })
             .child(match self.active_right_tab {
                 RightWorkspaceTab::Changes => self.render_git_workspace(cx),
                 RightWorkspaceTab::Files => self.render_file_workspace(cx),
@@ -5016,9 +5054,7 @@ impl Render for PicoDesktop {
                 this.persist_preferences();
                 cx.notify();
             }))
-            .on_action(cx.listener(|this, _: &ToggleTerminal, _, cx| {
-                this.toggle_terminal(cx)
-            }))
+            .on_action(cx.listener(|this, _: &ToggleTerminal, _, cx| this.toggle_terminal(cx)))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
                 let _ = window;
@@ -5052,15 +5088,40 @@ impl Render for PicoDesktop {
                                     .h_full()
                                     .child(self.render_header(cx))
                                     .when_some(status, |this, status| {
+                                        let status_to_copy = status.clone();
                                         this.child(
                                             h_flex()
+                                                .id("status-message")
+                                                .min_w_0()
                                                 .px_4()
                                                 .py_2()
                                                 .gap_2()
                                                 .bg(cx.theme().warning.opacity(0.12))
                                                 .text_sm()
-                                                .child(Icon::new(IconName::Info).size_4())
-                                                .child(div().flex_1().child(status))
+                                                .cursor_pointer()
+                                                .tooltip(|window, cx| {
+                                                    Tooltip::new("Click to copy error")
+                                                        .build(window, cx)
+                                                })
+                                                .on_click(move |_, _, cx| {
+                                                    cx.write_to_clipboard(
+                                                        ClipboardItem::new_string(
+                                                            status_to_copy.clone(),
+                                                        ),
+                                                    );
+                                                })
+                                                .child(
+                                                    Icon::new(IconName::Info).size_4().flex_none(),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .flex_1()
+                                                        .min_w_0()
+                                                        .overflow_hidden()
+                                                        .whitespace_nowrap()
+                                                        .text_ellipsis()
+                                                        .child(status),
+                                                )
                                                 .when(has_failed_submission, |this| {
                                                     this.child(
                                                         Button::new("restore-prompt")

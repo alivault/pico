@@ -6,7 +6,10 @@ use std::sync::{
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow};
-use reqwest::blocking::{Client, Response};
+use reqwest::{
+    StatusCode,
+    blocking::{Client, Response},
+};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use smol::channel::Sender;
@@ -865,13 +868,19 @@ impl PicoClient {
     pub fn load_files(&self, cwd: String, tx: Sender<DesktopEvent>) {
         let client = self.clone();
         std::thread::spawn(move || {
-            let result = client
+            let event = match client
                 .get_json::<ProjectFileTreeResponse>("/api/files/tree", &[("cwd", &cwd)])
-                .map(|response| DesktopEvent::Files {
+            {
+                Ok(response) => DesktopEvent::Files {
                     cwd,
                     paths: response.paths,
-                });
-            Self::send_result(tx, result);
+                },
+                Err(error) => DesktopEvent::WorkspaceUnavailable {
+                    cwd,
+                    error: error.to_string(),
+                },
+            };
+            let _ = tx.send_blocking(event);
         });
     }
 
@@ -893,24 +902,34 @@ impl PicoClient {
         let status_tx = tx.clone();
         let status_cwd = cwd.clone();
         std::thread::spawn(move || {
-            let result = status_client
+            let event = match status_client
                 .get_json::<GitStatusResponse>("/api/git-status", &[("cwd", &status_cwd)])
-                .map(|response| DesktopEvent::GitStatus {
+            {
+                Ok(response) => DesktopEvent::GitStatus {
                     cwd: status_cwd,
                     status: response.git_status,
-                });
-            Self::send_result(status_tx, result);
+                },
+                Err(error) => DesktopEvent::WorkspaceUnavailable {
+                    cwd: status_cwd,
+                    error: error.to_string(),
+                },
+            };
+            let _ = status_tx.send_blocking(event);
         });
 
         let changes_client = self.clone();
         std::thread::spawn(move || {
-            let result = changes_client
-                .get_json::<GitChangesResponse>(
-                    "/api/git-changes",
-                    &[("cwd", &cwd), ("gitScope", "all")],
-                )
-                .map(|response| DesktopEvent::GitChanges { cwd, response });
-            Self::send_result(tx, result);
+            let event = match changes_client.get_json::<GitChangesResponse>(
+                "/api/git-changes",
+                &[("cwd", &cwd), ("gitScope", "all")],
+            ) {
+                Ok(response) => DesktopEvent::GitChanges { cwd, response },
+                Err(error) => DesktopEvent::WorkspaceUnavailable {
+                    cwd,
+                    error: error.to_string(),
+                },
+            };
+            let _ = tx.send_blocking(event);
         });
     }
 
@@ -1187,7 +1206,7 @@ impl PicoClient {
 
     fn get_json<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
         let url = self.request_url(path, query)?;
-        let response = self.http.get(url).send()?.error_for_status()?;
+        let response = self.http.get(url).send()?;
         Self::decode(response)
     }
 
@@ -1198,19 +1217,32 @@ impl PicoClient {
         body: &B,
     ) -> Result<T> {
         let url = self.request_url(path, query)?;
-        let response = self.http.post(url).json(body).send()?.error_for_status()?;
+        let response = self.http.post(url).json(body).send()?;
         Self::decode(response)
     }
 
     fn decode<T: DeserializeOwned>(response: Response) -> Result<T> {
-        let value: Value = response.json()?;
-        if value.get("ok").and_then(Value::as_bool) == Some(false) {
+        let status = response.status();
+        let body = response.text()?;
+        Self::decode_body(status, &body)
+    }
+
+    fn decode_body<T: DeserializeOwned>(status: StatusCode, body: &str) -> Result<T> {
+        let value: Value = serde_json::from_str(body).map_err(|error| {
+            if status.is_success() {
+                anyhow!("Invalid Pico response: {error}")
+            } else {
+                anyhow!("Pico request failed ({status})")
+            }
+        })?;
+        if !status.is_success() || value.get("ok").and_then(Value::as_bool) == Some(false) {
             return Err(anyhow!(
                 "{}",
                 value
                     .get("error")
                     .and_then(Value::as_str)
-                    .unwrap_or("Pico request failed")
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| format!("Pico request failed ({status})"))
             ));
         }
         serde_json::from_value(value).map_err(Into::into)
@@ -1232,5 +1264,24 @@ impl PicoClient {
         self.base_url
             .join(path.trim_start_matches('/'))
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use reqwest::StatusCode;
+    use serde_json::Value;
+
+    use super::PicoClient;
+
+    #[test]
+    fn api_errors_preserve_the_server_message_without_the_request_url() {
+        let error = PicoClient::decode_body::<Value>(
+            StatusCode::BAD_REQUEST,
+            r#"{"ok":false,"error":"Directory not found: /missing"}"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "Directory not found: /missing");
     }
 }
