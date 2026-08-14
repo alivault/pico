@@ -705,6 +705,47 @@ impl PicoDesktop {
             .unwrap_or_else(|| TextView::markdown(key, fallback_source.to_string()))
     }
 
+    fn conversation_row_is_visible(&self, index: usize) -> bool {
+        match self.conversation_rows.get(index) {
+            Some(ConversationRow::User { item_index, .. }) => {
+                matches!(
+                    self.session.items.get(*item_index),
+                    Some(ConversationItem::User(_))
+                )
+            }
+            Some(ConversationRow::AssistantBlock {
+                item_index,
+                block_index,
+                ..
+            }) => {
+                let Some(ConversationItem::Assistant(assistant)) =
+                    self.session.items.get(*item_index)
+                else {
+                    return false;
+                };
+                match assistant.blocks.get(*block_index) {
+                    Some(AssistantBlock::Thinking(_)) => !self.session.hide_thinking_block,
+                    Some(AssistantBlock::Tool(_)) => !self.hide_tools,
+                    Some(_) => true,
+                    None => false,
+                }
+            }
+            None => false,
+        }
+    }
+
+    fn previous_visible_conversation_row(&self, index: usize) -> Option<&ConversationRow> {
+        (0..index)
+            .rev()
+            .find(|candidate| self.conversation_row_is_visible(*candidate))
+            .and_then(|candidate| self.conversation_rows.get(candidate))
+    }
+
+    fn has_visible_conversation_row_after(&self, index: usize) -> bool {
+        (index + 1..self.conversation_rows.len())
+            .any(|candidate| self.conversation_row_is_visible(candidate))
+    }
+
     pub fn new(
         client: PicoClient,
         initial_directory: String,
@@ -3017,9 +3058,34 @@ impl PicoDesktop {
         let Some(row) = self.conversation_rows.get(index).cloned() else {
             return div().into_any_element();
         };
+        if !self.conversation_row_is_visible(index) {
+            return div().into_any_element();
+        }
+        let previous_row = self.previous_visible_conversation_row(index);
+        let continues_assistant = matches!(
+            (&row, previous_row),
+            (
+                ConversationRow::AssistantBlock { item_index, .. },
+                Some(ConversationRow::AssistantBlock {
+                    item_index: previous_item_index,
+                    ..
+                })
+            ) if item_index == previous_item_index
+        );
+        let is_first_visible_row = previous_row.is_none();
+        let is_last_visible_row = !self.has_visible_conversation_row_after(index);
 
         h_flex()
             .w_full()
+            .px_5()
+            .when(is_first_visible_row, |this| this.pt_8())
+            .when(!is_first_visible_row && continues_assistant, |this| {
+                this.pt_3()
+            })
+            .when(!is_first_visible_row && !continues_assistant, |this| {
+                this.pt_6()
+            })
+            .when(is_last_visible_row, |this| this.pb_8())
             .justify_center()
             .child(div().w_full().max_w(px(920.)).child(match row {
                 ConversationRow::User { item_index, .. } => {
@@ -3336,10 +3402,7 @@ impl PicoDesktop {
                         gpui::list(conversation_list.clone(), move |index, _, cx| {
                             view.update(cx, |this, cx| this.render_conversation_item(index, cx))
                         })
-                        .size_full()
-                        .px_5()
-                        .py_8()
-                        .gap_3(),
+                        .size_full(),
                     )
                     .vertical_scrollbar(&conversation_list),
             )
