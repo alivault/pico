@@ -7,13 +7,15 @@ use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, ClipboardItem, Context, Entity, FocusHandle, Focusable,
-    FollowMode, InteractiveElement as _, IntoElement, KeyBinding, ListAlignment, ListState,
-    ParentElement as _, PathPromptOptions, Pixels, Render, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Task, Window, div, prelude::FluentBuilder as _, px,
+    FollowMode, InteractiveElement as _, IntoElement, KeyBinding, Keystroke, ListAlignment,
+    ListState, ParentElement as _, PathPromptOptions, Pixels, Render,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
+    prelude::FluentBuilder as _, px,
 };
+use gpui_base::actions::{SelectDown, SelectUp};
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
-    StyledExt as _, Theme, ThemeMode,
+    ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Root, Selectable as _,
+    Sizable as _, StyledExt as _, Theme, ThemeMode,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{
@@ -21,6 +23,7 @@ use gpui_component::{
         TextareaState,
     },
     kbd::Kbd,
+    list::{List, ListDelegate, ListEvent, ListItem, ListState as ComponentListState},
     menu::{DropdownMenu as _, PopupMenuItem},
     scroll::ScrollableElement as _,
     text::{TextView, TextViewState},
@@ -66,6 +69,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-k", FocusSessionSearch, None),
         KeyBinding::new("cmd-l", FocusComposer, None),
         KeyBinding::new("cmd-.", AbortSession, None),
+        KeyBinding::new("ctrl-j", SelectDown, Some("List")),
+        KeyBinding::new("ctrl-k", SelectUp, Some("List")),
     ]);
 }
 
@@ -216,6 +221,272 @@ fn git_action_visibility(
         push: can_use_remote && ahead > 0,
         force_push: can_use_remote && ahead > 0 && behind > 0,
         pull: can_use_remote && behind > 0,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DesktopPaletteCommand {
+    NewSession,
+    SearchSessions,
+    ProjectFiles,
+    GitChanges,
+    ToggleTerminal,
+    CloneSession,
+    Settings,
+}
+
+impl DesktopPaletteCommand {
+    const ALL: [Self; 7] = [
+        Self::NewSession,
+        Self::SearchSessions,
+        Self::ProjectFiles,
+        Self::GitChanges,
+        Self::ToggleTerminal,
+        Self::CloneSession,
+        Self::Settings,
+    ];
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::NewSession => "New session",
+            Self::SearchSessions => "Search all sessions",
+            Self::ProjectFiles => "Open project files",
+            Self::GitChanges => "Open Git changes",
+            Self::ToggleTerminal => "Toggle terminal panel",
+            Self::CloneSession => "Clone current session",
+            Self::Settings => "Open settings",
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::NewSession => "Start a new conversation in the current directory",
+            Self::SearchSessions => "Find a session across your project directories",
+            Self::ProjectFiles => "Browse files in the current project",
+            Self::GitChanges => "Review working tree changes and repository status",
+            Self::ToggleTerminal => "Show or hide the terminal panel",
+            Self::CloneSession => "Duplicate the selected session and its history",
+            Self::Settings => "Configure appearance, providers, and performance",
+        }
+    }
+
+    fn section(self) -> usize {
+        match self {
+            Self::NewSession | Self::SearchSessions => 0,
+            Self::ProjectFiles | Self::GitChanges | Self::ToggleTerminal => 1,
+            Self::CloneSession => 2,
+            Self::Settings => 3,
+        }
+    }
+
+    fn icon(self) -> IconName {
+        match self {
+            Self::NewSession => IconName::Plus,
+            Self::SearchSessions => IconName::Search,
+            Self::ProjectFiles => IconName::Folder,
+            Self::GitChanges => IconName::File,
+            Self::ToggleTerminal => IconName::SquareTerminal,
+            Self::CloneSession => IconName::Copy,
+            Self::Settings => IconName::Settings,
+        }
+    }
+
+    fn shortcut(self) -> Option<&'static str> {
+        match self {
+            Self::NewSession => Some("cmd-n"),
+            Self::ToggleTerminal => Some("cmd-j"),
+            Self::Settings => Some("cmd-,"),
+            _ => None,
+        }
+    }
+
+    fn matches(self, query: &str) -> bool {
+        let query = query.trim().to_lowercase();
+        query.is_empty()
+            || self.title().to_lowercase().contains(&query)
+            || self.description().to_lowercase().contains(&query)
+    }
+}
+
+struct CommandPaletteDelegate {
+    sections: Vec<Vec<DesktopPaletteCommand>>,
+    selected_index: Option<IndexPath>,
+    has_selected_session: bool,
+    query_active: bool,
+}
+
+impl CommandPaletteDelegate {
+    const SECTION_TITLES: [&'static str; 4] = ["General", "Workspace", "Session", "Settings"];
+
+    fn new(has_selected_session: bool) -> Self {
+        let mut delegate = Self {
+            sections: vec![Vec::new(); Self::SECTION_TITLES.len()],
+            selected_index: None,
+            has_selected_session,
+            query_active: false,
+        };
+        delegate.filter("");
+        delegate
+    }
+
+    fn filter(&mut self, query: &str) {
+        self.query_active = !query.trim().is_empty();
+        self.sections = vec![Vec::new(); Self::SECTION_TITLES.len()];
+        for command in DesktopPaletteCommand::ALL {
+            if command == DesktopPaletteCommand::CloneSession && !self.has_selected_session {
+                continue;
+            }
+            if command.matches(query) {
+                let section = if self.query_active {
+                    0
+                } else {
+                    command.section()
+                };
+                self.sections[section].push(command);
+            }
+        }
+    }
+
+    fn reset(&mut self, has_selected_session: bool) {
+        self.has_selected_session = has_selected_session;
+        self.selected_index = Some(IndexPath::default());
+        self.filter("");
+    }
+
+    fn command(&self, index: IndexPath) -> Option<DesktopPaletteCommand> {
+        self.sections
+            .get(index.section)
+            .and_then(|commands| commands.get(index.row))
+            .copied()
+    }
+}
+
+impl ListDelegate for CommandPaletteDelegate {
+    type Item = ListItem;
+
+    fn sections_count(&self, _: &App) -> usize {
+        Self::SECTION_TITLES.len()
+    }
+
+    fn items_count(&self, section: usize, _: &App) -> usize {
+        self.sections.get(section).map_or(0, Vec::len)
+    }
+
+    fn perform_search(
+        &mut self,
+        query: &str,
+        _: &mut Window,
+        _: &mut Context<ComponentListState<Self>>,
+    ) -> Task<()> {
+        self.filter(query);
+        Task::ready(())
+    }
+
+    fn render_item(
+        &mut self,
+        index: IndexPath,
+        _: &mut Window,
+        cx: &mut Context<ComponentListState<Self>>,
+    ) -> Option<Self::Item> {
+        let command = self.command(index)?;
+        let shortcut = command
+            .shortcut()
+            .and_then(|shortcut| Keystroke::parse(shortcut).ok())
+            .map(Kbd::new);
+
+        Some(
+            ListItem::new(index).h(px(58.)).px_3().child(
+                h_flex()
+                    .size_full()
+                    .min_w_0()
+                    .gap_3()
+                    .child(
+                        div()
+                            .size_8()
+                            .flex_none()
+                            .rounded_md()
+                            .bg(cx.theme().secondary.opacity(0.55))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(Icon::new(command.icon()).size_4()),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_0p5()
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_sm()
+                                    .font_medium()
+                                    .child(command.title()),
+                            )
+                            .child(
+                                div()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(command.description()),
+                            ),
+                    )
+                    .when_some(shortcut, |this, shortcut| this.child(shortcut)),
+            ),
+        )
+    }
+
+    fn render_section_header(
+        &mut self,
+        section: usize,
+        _: &mut Window,
+        cx: &mut Context<ComponentListState<Self>>,
+    ) -> Option<impl IntoElement> {
+        Some(
+            div()
+                .h(px(30.))
+                .px_3()
+                .pt_2()
+                .text_xs()
+                .font_semibold()
+                .text_color(cx.theme().muted_foreground)
+                .child(if self.query_active {
+                    "Commands"
+                } else {
+                    Self::SECTION_TITLES
+                        .get(section)
+                        .copied()
+                        .unwrap_or_default()
+                }),
+        )
+    }
+
+    fn render_empty(
+        &mut self,
+        _: &mut Window,
+        cx: &mut Context<ComponentListState<Self>>,
+    ) -> impl IntoElement {
+        v_flex()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .gap_2()
+            .text_color(cx.theme().muted_foreground)
+            .child(Icon::new(IconName::Search).size_5())
+            .child(div().text_sm().child("No commands found."))
+    }
+
+    fn set_selected_index(
+        &mut self,
+        index: Option<IndexPath>,
+        _: &mut Window,
+        _: &mut Context<ComponentListState<Self>>,
+    ) {
+        self.selected_index = index;
     }
 }
 
@@ -407,6 +678,8 @@ pub struct PicoDesktop {
     conversation_rows: Vec<ConversationRow>,
     settings_open: bool,
     command_palette_open: bool,
+    command_palette: Entity<ComponentListState<CommandPaletteDelegate>>,
+    command_palette_previous_focus: Option<FocusHandle>,
     add_directory_dialog_open: bool,
     reset_directory_input_on_open: bool,
     auth_providers: Vec<AuthProvider>,
@@ -758,6 +1031,9 @@ impl PicoDesktop {
             preferences.directories.push(initial_directory.clone());
         }
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search sessions…"));
+        let command_palette = cx.new(|cx| {
+            ComponentListState::new(CommandPaletteDelegate::new(false), window, cx).searchable(true)
+        });
         let directory_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Add project directory…"));
         let session_name_input =
@@ -818,6 +1094,20 @@ impl PicoDesktop {
                     cx.notify();
                 }
             }),
+            cx.subscribe_in(
+                &command_palette,
+                window,
+                |this, state, event, window, cx| match event {
+                    ListEvent::Confirm(index) => {
+                        let command = state.read(cx).delegate().command(*index);
+                        if let Some(command) = command {
+                            this.execute_palette_command(command, window, cx);
+                        }
+                    }
+                    ListEvent::Cancel => this.close_command_palette(window, cx),
+                    ListEvent::Select(_) => {}
+                },
+            ),
         ];
 
         Self {
@@ -863,6 +1153,8 @@ impl PicoDesktop {
             preferences: preferences.clone(),
             settings_open: false,
             command_palette_open: false,
+            command_palette,
+            command_palette_previous_focus: None,
             add_directory_dialog_open: false,
             reset_directory_input_on_open: false,
             auth_providers: Vec::new(),
@@ -1444,9 +1736,65 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn toggle_command_palette(&mut self, cx: &mut Context<Self>) {
-        self.command_palette_open = !self.command_palette_open;
+    fn open_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.command_palette_previous_focus = window.focused(cx);
+        self.command_palette_open = true;
+        let has_selected_session = self.selected_session_id.is_some();
+        self.command_palette.update(cx, |list, cx| {
+            list.delegate_mut().reset(has_selected_session);
+            list.set_query("", window, cx);
+            list.set_selected_index(Some(IndexPath::default()), window, cx);
+            list.focus(window, cx);
+        });
         cx.notify();
+    }
+
+    fn close_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.command_palette_open = false;
+        if let Some(previous_focus) = self.command_palette_previous_focus.take() {
+            previous_focus.focus(window, cx);
+        } else {
+            self.focus_handle.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn toggle_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.command_palette_open {
+            self.close_command_palette(window, cx);
+        } else {
+            self.open_command_palette(window, cx);
+        }
+    }
+
+    fn execute_palette_command(
+        &mut self,
+        command: DesktopPaletteCommand,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.close_command_palette(window, cx);
+        match command {
+            DesktopPaletteCommand::NewSession => self.create_session(cx),
+            DesktopPaletteCommand::SearchSessions => {
+                self.left_sidebar_open = true;
+                self.search.update(cx, |state, cx| state.focus(window, cx));
+                cx.notify();
+            }
+            DesktopPaletteCommand::ProjectFiles => {
+                self.right_sidebar_open = true;
+                self.active_right_tab = RightWorkspaceTab::Files;
+                cx.notify();
+            }
+            DesktopPaletteCommand::GitChanges => {
+                self.right_sidebar_open = true;
+                self.active_right_tab = RightWorkspaceTab::Changes;
+                cx.notify();
+            }
+            DesktopPaletteCommand::ToggleTerminal => self.toggle_terminal(cx),
+            DesktopPaletteCommand::CloneSession => self.clone_selected_session(cx),
+            DesktopPaletteCommand::Settings => self.open_settings(cx),
+        }
     }
 
     fn toggle_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2966,9 +3314,9 @@ impl PicoDesktop {
                                     .child(div().flex_1().min_w_0().text_left().child("Commands"))
                                     .when_some(commands_kbd, |this, kbd| this.child(kbd)),
                             )
-                            .on_click(
-                                cx.listener(|this, _, _, cx| this.toggle_command_palette(cx)),
-                            ),
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_command_palette(window, cx)
+                            })),
                     )
                     .child(
                         Button::new("settings")
@@ -5409,121 +5757,61 @@ impl PicoDesktop {
     }
 
     fn render_command_palette(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let up = Kbd::new(Keystroke::parse("up").expect("valid palette key"));
+        let down = Kbd::new(Keystroke::parse("down").expect("valid palette key"));
+        let control_k = Kbd::new(Keystroke::parse("ctrl-k").expect("valid palette key"));
+        let control_j = Kbd::new(Keystroke::parse("ctrl-j").expect("valid palette key"));
+        let enter = Kbd::new(Keystroke::parse("enter").expect("valid palette key"));
+        let escape = Kbd::new(Keystroke::parse("escape").expect("valid palette key"));
+
         v_flex()
+            .key_context("CommandPalette")
             .absolute()
             .inset_0()
             .items_center()
-            .pt(px(120.))
+            .pt(px(96.))
             .bg(cx.theme().background.opacity(0.82))
             .child(
                 v_flex()
-                    .w(px(560.))
-                    .p_3()
-                    .gap_1()
+                    .w(px(640.))
+                    .h(px(520.))
+                    .max_h(px(520.))
+                    .overflow_hidden()
                     .rounded_xl()
                     .border_1()
                     .border_color(cx.theme().border)
                     .bg(cx.theme().popover)
                     .shadow_lg()
                     .child(
+                        List::new(&self.command_palette)
+                            .search_placeholder("Search commands")
+                            .scrollbar_visible(true)
+                            .flex_1()
+                            .min_h_0(),
+                    )
+                    .child(
                         h_flex()
-                            .justify_between()
-                            .px_2()
+                            .flex_none()
+                            .min_h(px(42.))
+                            .px_3()
                             .py_2()
-                            .child(div().font_semibold().child("Pico commands"))
+                            .gap_4()
+                            .border_t_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
                             .child(
-                                Button::new("close-palette")
-                                    .ghost()
-                                    .xsmall()
-                                    .label("Esc")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.toggle_command_palette(cx)
-                                    })),
-                            ),
-                    )
-                    .child(
-                        Button::new("palette-new")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("New session                                  ⌘N")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.create_session(cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-search")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("Search all sessions")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.command_palette_open = false;
-                                this.left_sidebar_open = true;
-                                this.search.update(cx, |state, cx| state.focus(window, cx));
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-files")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("Open project files")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.right_sidebar_open = true;
-                                this.active_right_tab = RightWorkspaceTab::Files;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-git")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("Open Git changes")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.right_sidebar_open = true;
-                                this.active_right_tab = RightWorkspaceTab::Changes;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-terminal")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("Open terminal")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.open_terminal(cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-clone")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .disabled(self.selected_session_id.is_none())
-                            .label("Clone current session")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.clone_selected_session(cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("palette-settings")
-                            .ghost()
-                            .w_full()
-                            .justify_start()
-                            .label("Settings                                      ⌘,")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.command_palette_open = false;
-                                this.open_settings(cx)
-                            })),
+                                h_flex()
+                                    .gap_1()
+                                    .child(up)
+                                    .child(down)
+                                    .child(div().px_0p5().child("or"))
+                                    .child(control_k)
+                                    .child(control_j)
+                                    .child("Navigate"),
+                            )
+                            .child(h_flex().gap_1().child(enter).child("Run"))
+                            .child(h_flex().gap_1().child(escape).child("Close")),
                     ),
             )
             .into_any_element()
@@ -5551,8 +5839,7 @@ impl Render for PicoDesktop {
             .on_action(cx.listener(|this, _: &ToggleTerminal, _, cx| this.toggle_terminal(cx)))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
-                let _ = window;
-                this.toggle_command_palette(cx);
+                this.toggle_command_palette(window, cx);
             }))
             .on_action(cx.listener(|this, _: &FocusComposer, window, cx| {
                 this.composer
@@ -5693,8 +5980,8 @@ pub fn root(
 #[cfg(test)]
 mod tests {
     use super::{
-        ConversationRow, PicoDesktop, git_action_visibility, is_slash_menu_input,
-        slash_menu_capacity,
+        CommandPaletteDelegate, ConversationRow, DesktopPaletteCommand, PicoDesktop,
+        git_action_visibility, is_slash_menu_input, slash_menu_capacity,
     };
     use crate::models::{ConversationItem, GitChangeFile, GitStatusSummary};
     use gpui::px;
@@ -5770,6 +6057,24 @@ mod tests {
                 .all(|row| matches!(row, ConversationRow::AssistantBlock { item_index: 1, .. }))
         );
         assert!(rows[2].key().contains("tool:call-1"));
+    }
+
+    #[test]
+    fn command_palette_search_flattens_matches_for_keyboard_selection() {
+        let mut delegate = CommandPaletteDelegate::new(true);
+        assert_eq!(delegate.sections[0].len(), 2);
+        assert_eq!(
+            delegate.sections[2],
+            vec![DesktopPaletteCommand::CloneSession]
+        );
+
+        delegate.filter("terminal");
+
+        assert_eq!(
+            delegate.sections[0],
+            vec![DesktopPaletteCommand::ToggleTerminal]
+        );
+        assert!(delegate.sections[1..].iter().all(Vec::is_empty));
     }
 
     #[test]
