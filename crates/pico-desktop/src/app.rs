@@ -2984,13 +2984,6 @@ impl PicoDesktop {
                                     .when_some(settings_kbd, |this, kbd| this.child(kbd)),
                             )
                             .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx))),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .text_xs()
-                            .text_color(muted)
-                            .child(self.server_label.clone()),
                     ),
             )
     }
