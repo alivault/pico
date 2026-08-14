@@ -742,6 +742,7 @@ pub struct PicoDesktop {
     ui_request: Option<UiRequest>,
     terminal_id: Option<String>,
     terminal_view: Entity<TerminalView>,
+    terminal_focus_handle: FocusHandle,
     terminal_transport: Arc<Mutex<Option<Sender<TerminalTransportCommand>>>>,
     terminal_label: String,
     terminal_query_tail: Vec<u8>,
@@ -1160,8 +1161,9 @@ impl PicoDesktop {
             Self::terminal_grid_size(window, preferences.left_sidebar_open);
         let terminal_transport = Arc::new(Mutex::new(None::<Sender<TerminalTransportCommand>>));
         let terminal_input_transport = terminal_transport.clone();
-        let terminal_view = cx.new(|cx| {
-            let focus_handle = cx.focus_handle();
+        let terminal_focus_handle = cx.focus_handle();
+        let terminal_view_focus_handle = terminal_focus_handle.clone();
+        let terminal_view = cx.new(move |_cx| {
             let session = TerminalSession::new(TerminalConfig {
                 cols: terminal_cols,
                 rows: terminal_rows,
@@ -1178,7 +1180,7 @@ impl PicoDesktop {
                     let _ = transport.try_send(TerminalTransportCommand::Input(bytes.to_vec()));
                 }
             });
-            TerminalView::new_with_input(session, focus_handle, input)
+            TerminalView::new_with_input(session, terminal_view_focus_handle, input)
         });
 
         client.connect(tx.clone());
@@ -1281,6 +1283,7 @@ impl PicoDesktop {
             ui_request: None,
             terminal_id: None,
             terminal_view,
+            terminal_focus_handle,
             terminal_transport,
             terminal_label: "Terminal".into(),
             terminal_query_tail: Vec::new(),
@@ -2033,6 +2036,9 @@ impl PicoDesktop {
     fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.terminal_panel_open = true;
         self.sync_terminal_grid_size(window, cx);
+        self.terminal_focus_handle.focus(window, cx);
+        let focus_handle = self.terminal_focus_handle.clone();
+        window.defer(cx, move |window, cx| focus_handle.focus(window, cx));
         if self.terminal_id.is_none() {
             self.status_message = Some("Starting terminal…".into());
             self.client.create_terminal(
