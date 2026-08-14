@@ -464,29 +464,32 @@ impl PicoClient {
         command_tx
     }
 
-    pub fn load_session_history_tools(
+    pub fn load_session_tree(
         &self,
         session_id: Option<String>,
         session_key: Option<String>,
         tx: Sender<DesktopEvent>,
     ) {
-        let tree_client = self.clone();
-        let tree_tx = tx.clone();
-        let tree_session_id = session_id.clone();
-        let tree_session_key = session_key.clone();
-        std::thread::spawn(move || {
-            let query =
-                Self::session_query(tree_session_id.as_deref(), tree_session_key.as_deref());
-            let result = tree_client
-                .get_json::<SessionTreeResponse>("/api/session/tree", &query)
-                .map(DesktopEvent::SessionTree);
-            Self::send_result(tree_tx, result);
-        });
-
-        let fork_client = self.clone();
+        let client = self.clone();
         std::thread::spawn(move || {
             let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
-            let result = fork_client
+            let result = client
+                .get_json::<SessionTreeResponse>("/api/session/tree", &query)
+                .map(DesktopEvent::SessionTree);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_forkable_messages(
+        &self,
+        session_id: Option<String>,
+        session_key: Option<String>,
+        tx: Sender<DesktopEvent>,
+    ) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let result = client
                 .get_json::<ForkableMessagesResponse>("/api/session/fork", &query)
                 .map(|response| DesktopEvent::ForkableMessages(response.messages));
             Self::send_result(tx, result);

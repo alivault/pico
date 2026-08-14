@@ -718,9 +718,13 @@ pub struct TreeEntry {
     #[serde(rename = "type")]
     pub entry_type: String,
     pub message: Option<TreeMessage>,
+    pub custom_type: Option<String>,
     pub text: Option<String>,
     pub summary: Option<String>,
+    pub model_id: Option<String>,
+    pub thinking_level: Option<String>,
     pub name: Option<String>,
+    pub label: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -733,23 +737,42 @@ pub struct TreeMessage {
 
 impl TreeNode {
     pub fn flatten(&self, depth: usize, output: &mut Vec<FlatTreeNode>) {
+        let message_text = self
+            .entry
+            .message
+            .as_ref()
+            .and_then(|message| message.text.as_ref().or(message.command.as_ref()).cloned());
         let text = self
             .label
             .as_ref()
-            .or(self
-                .entry
-                .message
-                .as_ref()
-                .and_then(|message| message.text.as_ref()))
-            .or(self.entry.text.as_ref())
-            .or(self.entry.summary.as_ref())
-            .or(self.entry.name.as_ref())
             .cloned()
-            .unwrap_or_else(|| self.entry.entry_type.clone());
+            .or(message_text.clone())
+            .or(self.entry.summary.clone())
+            .or(self.entry.text.clone())
+            .or(self.entry.model_id.clone())
+            .or(self.entry.thinking_level.clone())
+            .or(self.entry.name.clone())
+            .or(self.entry.label.clone())
+            .or(self.entry.custom_type.clone())
+            .unwrap_or_else(|| match self.entry.entry_type.as_str() {
+                "branch_summary" => "Branch summary".into(),
+                "compaction" => "Compaction event".into(),
+                "message" => "Message".into(),
+                "model_change" => "Model changed".into(),
+                "thinking_level_change" => "Thinking level changed".into(),
+                "session_info" => "Session title".into(),
+                other => other.replace('_', " "),
+            });
+        let visible_by_default = match self.entry.entry_type.as_str() {
+            "label" | "custom" | "model_change" | "thinking_level_change" | "session_info" => false,
+            "message" => message_text.is_some(),
+            _ => true,
+        };
         output.push(FlatTreeNode {
             id: self.entry.id.clone(),
             depth,
             text,
+            visible_by_default,
         });
         for child in &self.children {
             child.flatten(depth + 1, output);
@@ -762,6 +785,7 @@ pub struct FlatTreeNode {
     pub id: String,
     pub depth: usize,
     pub text: String,
+    pub visible_by_default: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -887,6 +911,34 @@ pub struct PromptRequest<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_tree_uses_readable_labels_and_hides_settings_entries() {
+        let tree: TreeNode = serde_json::from_value(serde_json::json!({
+            "entry": {
+                "id": "model",
+                "type": "model_change",
+                "modelId": "anthropic/claude"
+            },
+            "children": [{
+                "entry": {
+                    "id": "message",
+                    "type": "message",
+                    "message": { "role": "user", "text": "Review this change" }
+                },
+                "children": []
+            }]
+        }))
+        .unwrap();
+        let mut nodes = Vec::new();
+
+        tree.flatten(0, &mut nodes);
+
+        assert_eq!(nodes[0].text, "anthropic/claude");
+        assert!(!nodes[0].visible_by_default);
+        assert_eq!(nodes[1].text, "Review this change");
+        assert!(nodes[1].visible_by_default);
+    }
 
     #[test]
     fn state_sync_patch_replaces_the_streaming_item() {

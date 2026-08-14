@@ -136,7 +136,6 @@ enum RightWorkspaceTab {
     #[default]
     Changes,
     Files,
-    History,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -286,17 +285,21 @@ enum DesktopPaletteCommand {
     ProjectFiles,
     GitChanges,
     ToggleTerminal,
+    SessionTree,
+    ForkSession,
     CloneSession,
     Settings,
 }
 
 impl DesktopPaletteCommand {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 9] = [
         Self::NewSession,
         Self::SearchSessions,
         Self::ProjectFiles,
         Self::GitChanges,
         Self::ToggleTerminal,
+        Self::SessionTree,
+        Self::ForkSession,
         Self::CloneSession,
         Self::Settings,
     ];
@@ -308,6 +311,8 @@ impl DesktopPaletteCommand {
             Self::ProjectFiles => "Open project files",
             Self::GitChanges => "Open Git changes",
             Self::ToggleTerminal => "Toggle terminal panel",
+            Self::SessionTree => "Open session tree",
+            Self::ForkSession => "Fork current session",
             Self::CloneSession => "Clone current session",
             Self::Settings => "Open settings",
         }
@@ -320,6 +325,8 @@ impl DesktopPaletteCommand {
             Self::ProjectFiles => "Browse files in the current project",
             Self::GitChanges => "Review working tree changes and repository status",
             Self::ToggleTerminal => "Show or hide the terminal panel",
+            Self::SessionTree => "Jump to an earlier point in the current session tree",
+            Self::ForkSession => "Create a new session from a previous user message",
             Self::CloneSession => "Duplicate the selected session and its history",
             Self::Settings => "Configure appearance, providers, and performance",
         }
@@ -329,7 +336,7 @@ impl DesktopPaletteCommand {
         match self {
             Self::NewSession | Self::SearchSessions => 0,
             Self::ProjectFiles | Self::GitChanges | Self::ToggleTerminal => 1,
-            Self::CloneSession => 2,
+            Self::SessionTree | Self::ForkSession | Self::CloneSession => 2,
             Self::Settings => 3,
         }
     }
@@ -341,6 +348,8 @@ impl DesktopPaletteCommand {
             Self::ProjectFiles => IconName::Folder,
             Self::GitChanges => IconName::File,
             Self::ToggleTerminal => IconName::SquareTerminal,
+            Self::SessionTree => IconName::File,
+            Self::ForkSession => IconName::Copy,
             Self::CloneSession => IconName::Copy,
             Self::Settings => IconName::Settings,
         }
@@ -388,7 +397,13 @@ impl CommandPaletteDelegate {
         self.query_active = !query.trim().is_empty();
         self.sections = vec![Vec::new(); Self::SECTION_TITLES.len()];
         for command in DesktopPaletteCommand::ALL {
-            if command == DesktopPaletteCommand::CloneSession && !self.has_selected_session {
+            if matches!(
+                command,
+                DesktopPaletteCommand::SessionTree
+                    | DesktopPaletteCommand::ForkSession
+                    | DesktopPaletteCommand::CloneSession
+            ) && !self.has_selected_session
+            {
                 continue;
             }
             if command.matches(query) {
@@ -749,6 +764,8 @@ pub struct PicoDesktop {
     terminal_cols: u16,
     terminal_rows: u16,
     terminal_panel_open: bool,
+    tree_dialog_open: bool,
+    fork_dialog_open: bool,
     tree_nodes: Vec<FlatTreeNode>,
     tree_leaf_id: Option<String>,
     forkable_messages: Vec<ForkableMessage>,
@@ -1290,6 +1307,8 @@ impl PicoDesktop {
             terminal_cols,
             terminal_rows,
             terminal_panel_open: false,
+            tree_dialog_open: false,
+            fork_dialog_open: false,
             tree_nodes: Vec::new(),
             tree_leaf_id: None,
             forkable_messages: Vec::new(),
@@ -1943,6 +1962,8 @@ impl PicoDesktop {
                 cx.notify();
             }
             DesktopPaletteCommand::ToggleTerminal => self.toggle_terminal(window, cx),
+            DesktopPaletteCommand::SessionTree => self.open_tree_dialog(cx),
+            DesktopPaletteCommand::ForkSession => self.open_fork_dialog(cx),
             DesktopPaletteCommand::CloneSession => self.clone_selected_session(cx),
             DesktopPaletteCommand::Settings => self.open_settings(cx),
         }
@@ -2079,10 +2100,10 @@ impl PicoDesktop {
         }
     }
 
-    fn open_history(&mut self, cx: &mut Context<Self>) {
-        self.active_right_tab = RightWorkspaceTab::History;
-        self.status_message = Some("Loading session history…".into());
-        self.client.load_session_history_tools(
+    fn open_tree_dialog(&mut self, cx: &mut Context<Self>) {
+        self.tree_dialog_open = true;
+        self.status_message = Some("Loading session tree…".into());
+        self.client.load_session_tree(
             self.selected_session_id.clone(),
             self.session.session_key.clone(),
             self.tx.clone(),
@@ -2090,7 +2111,29 @@ impl PicoDesktop {
         cx.notify();
     }
 
+    fn close_tree_dialog(&mut self, cx: &mut Context<Self>) {
+        self.tree_dialog_open = false;
+        cx.notify();
+    }
+
+    fn open_fork_dialog(&mut self, cx: &mut Context<Self>) {
+        self.fork_dialog_open = true;
+        self.status_message = Some("Loading fork points…".into());
+        self.client.load_forkable_messages(
+            self.selected_session_id.clone(),
+            self.session.session_key.clone(),
+            self.tx.clone(),
+        );
+        cx.notify();
+    }
+
+    fn close_fork_dialog(&mut self, cx: &mut Context<Self>) {
+        self.fork_dialog_open = false;
+        cx.notify();
+    }
+
     fn navigate_tree(&mut self, target_id: String, cx: &mut Context<Self>) {
+        self.tree_dialog_open = false;
         self.client.navigate_session_tree(
             target_id,
             self.selected_session_id.clone(),
@@ -2102,6 +2145,7 @@ impl PicoDesktop {
     }
 
     fn fork_at(&mut self, entry_id: String, cx: &mut Context<Self>) {
+        self.fork_dialog_open = false;
         self.client.fork_session(
             entry_id,
             self.selected_session_id.clone(),
@@ -2140,6 +2184,8 @@ impl PicoDesktop {
             .terminal_transport
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        self.tree_dialog_open = false;
+        self.fork_dialog_open = false;
         self.tree_nodes.clear();
         self.forkable_messages.clear();
     }
@@ -2511,7 +2557,8 @@ impl PicoDesktop {
                 self.status_message = Some("Compacting context…".into());
             }
             "clone" => self.clone_selected_session(cx),
-            "fork" | "tree" => self.open_history(cx),
+            "fork" => self.open_fork_dialog(cx),
+            "tree" => self.open_tree_dialog(cx),
             "rename" => {
                 let Some(path) = self.selected_session_path.clone() else {
                     self.status_message = Some("Start the session before renaming it.".into());
@@ -3513,6 +3560,8 @@ impl PicoDesktop {
     }
 
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity();
+        let has_selected_session = self.selected_session_id.is_some();
         h_flex()
             .h(px(52.))
             .w_full()
@@ -3573,6 +3622,52 @@ impl PicoDesktop {
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.toggle_terminal(window, cx)),
                             ),
+                    )
+                    .child(
+                        Button::new("session-menu")
+                            .ghost()
+                            .small()
+                            .icon(IconName::Ellipsis)
+                            .tooltip("Session menu")
+                            .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, window, _| {
+                                let tree_view = view.clone();
+                                let fork_view = view.clone();
+                                let clone_view = view.clone();
+                                menu.min_w(190.)
+                                    .item(
+                                        PopupMenuItem::new("Tree")
+                                            .disabled(!has_selected_session)
+                                            .on_click(
+                                                window
+                                                    .listener_for(&tree_view, |this, _, _, cx| {
+                                                        this.open_tree_dialog(cx)
+                                                    }),
+                                            ),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("Fork")
+                                            .disabled(!has_selected_session)
+                                            .on_click(
+                                                window
+                                                    .listener_for(&fork_view, |this, _, _, cx| {
+                                                        this.open_fork_dialog(cx)
+                                                    }),
+                                            ),
+                                    )
+                                    .separator()
+                                    .item(
+                                        PopupMenuItem::new("Clone session")
+                                            .disabled(!has_selected_session)
+                                            .on_click(
+                                                window.listener_for(
+                                                    &clone_view,
+                                                    |this, _, _, cx| {
+                                                        this.clone_selected_session(cx)
+                                                    },
+                                                ),
+                                            ),
+                                    )
+                            }),
                     )
                     .child(
                         Button::new("toggle-right")
@@ -4905,20 +5000,6 @@ impl PicoDesktop {
                                 this.active_right_tab = RightWorkspaceTab::Files;
                                 cx.notify();
                             })),
-                    )
-                    .child(
-                        Button::new("history-tab")
-                            .small()
-                            .when(
-                                self.active_right_tab == RightWorkspaceTab::History,
-                                |this| this.secondary(),
-                            )
-                            .when(
-                                self.active_right_tab != RightWorkspaceTab::History,
-                                |this| this.ghost(),
-                            )
-                            .label("History")
-                            .on_click(cx.listener(|this, _, _, cx| this.open_history(cx))),
                     ),
             )
             .when_some(self.workspace_error.clone(), |this, error| {
@@ -4954,68 +5035,7 @@ impl PicoDesktop {
             .child(match self.active_right_tab {
                 RightWorkspaceTab::Changes => self.render_git_workspace(cx),
                 RightWorkspaceTab::Files => self.render_file_workspace(cx),
-                RightWorkspaceTab::History => self.render_history(cx),
             })
-    }
-
-    fn render_history(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let border = cx.theme().border.opacity(0.72);
-        let muted = cx.theme().muted_foreground;
-        v_flex()
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scrollbar()
-            .child(
-                v_flex()
-                    .p_3()
-                    .gap_1()
-                    .border_b_1()
-                    .border_color(border)
-                    .child(div().text_sm().font_semibold().child("Session tree"))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(muted)
-                            .child("Select an earlier point to navigate the active branch."),
-                    )
-                    .children(self.tree_nodes.iter().enumerate().map(|(index, node)| {
-                        let target_id = node.id.clone();
-                        Button::new(("tree-node", index))
-                            .ghost()
-                            .small()
-                            .w_full()
-                            .justify_start()
-                            .disabled(self.tree_leaf_id.as_deref() == Some(node.id.as_str()))
-                            .label(format!("{}{}", "  ".repeat(node.depth), node.text))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.navigate_tree(target_id.clone(), cx)
-                            }))
-                    })),
-            )
-            .child(
-                v_flex()
-                    .p_3()
-                    .gap_1()
-                    .child(div().text_sm().font_semibold().child("Fork from message"))
-                    .children(
-                        self.forkable_messages
-                            .iter()
-                            .enumerate()
-                            .map(|(index, message)| {
-                                let entry_id = message.entry_id.clone();
-                                Button::new(("fork-message", index))
-                                    .secondary()
-                                    .small()
-                                    .w_full()
-                                    .justify_start()
-                                    .label(message.text.clone())
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.fork_at(entry_id.clone(), cx)
-                                    }))
-                            }),
-                    ),
-            )
-            .into_any_element()
     }
 
     fn render_terminal(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -5550,6 +5570,7 @@ impl PicoDesktop {
             .child(
                 v_flex()
                     .w(px(620.))
+                    .h(px(620.))
                     .max_h(px(680.))
                     .rounded_xl()
                     .border_1()
@@ -5751,6 +5772,213 @@ impl PicoDesktop {
                                         })),
                                 )
                             }),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_tree_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let border = cx.theme().border.opacity(0.72);
+        let muted = cx.theme().muted_foreground;
+        v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .justify_center()
+            .bg(cx.theme().background.opacity(0.82))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    this.close_tree_dialog(cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(
+                v_flex()
+                    .w(px(620.))
+                    .h(px(620.))
+                    .max_h(px(680.))
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().popover)
+                    .shadow_lg()
+                    .child(
+                        h_flex()
+                            .p_4()
+                            .justify_between()
+                            .border_b_1()
+                            .border_color(border)
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(div().text_lg().font_semibold().child("Session tree"))
+                                    .child(
+                                        div().text_sm().text_color(muted).child(
+                                            "Jump to an earlier point in the active branch.",
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                Button::new("close-tree-dialog")
+                                    .ghost()
+                                    .small()
+                                    .label("Close")
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.close_tree_dialog(cx)),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_h_0()
+                            .p_3()
+                            .gap_1()
+                            .overflow_y_scrollbar()
+                            .when(self.tree_nodes.is_empty(), |this| {
+                                this.child(
+                                    div()
+                                        .p_4()
+                                        .text_sm()
+                                        .text_color(muted)
+                                        .child("Loading session tree…"),
+                                )
+                            })
+                            .children(
+                                self.tree_nodes
+                                    .iter()
+                                    .filter(|node| {
+                                        node.visible_by_default
+                                            || self.tree_leaf_id.as_deref()
+                                                == Some(node.id.as_str())
+                                    })
+                                    .enumerate()
+                                    .map(|(index, node)| {
+                                        let target_id = node.id.clone();
+                                        let is_current =
+                                            self.tree_leaf_id.as_deref() == Some(node.id.as_str());
+                                        Button::new(("tree-dialog-node", index))
+                                            .ghost()
+                                            .small()
+                                            .w_full()
+                                            .justify_start()
+                                            .disabled(is_current)
+                                            .child(
+                                                div()
+                                                    .w_full()
+                                                    .min_w_0()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_ellipsis()
+                                                    .text_left()
+                                                    .child(format!(
+                                                        "{}{}{}",
+                                                        "  ".repeat(node.depth),
+                                                        node.text,
+                                                        if is_current {
+                                                            "  ·  Current"
+                                                        } else {
+                                                            ""
+                                                        }
+                                                    )),
+                                            )
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.navigate_tree(target_id.clone(), cx)
+                                            }))
+                                    }),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_fork_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let border = cx.theme().border.opacity(0.72);
+        let muted = cx.theme().muted_foreground;
+        v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .justify_center()
+            .bg(cx.theme().background.opacity(0.82))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    this.close_fork_dialog(cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(
+                v_flex()
+                    .w(px(620.))
+                    .max_h(px(680.))
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().popover)
+                    .shadow_lg()
+                    .child(
+                        h_flex()
+                            .p_4()
+                            .justify_between()
+                            .border_b_1()
+                            .border_color(border)
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(div().text_lg().font_semibold().child("Fork session"))
+                                    .child(div().text_sm().text_color(muted).child(
+                                        "Create a new session from a previous user message.",
+                                    )),
+                            )
+                            .child(
+                                Button::new("close-fork-dialog")
+                                    .ghost()
+                                    .small()
+                                    .label("Close")
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.close_fork_dialog(cx)),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_h_0()
+                            .p_3()
+                            .gap_1()
+                            .overflow_y_scrollbar()
+                            .when(self.forkable_messages.is_empty(), |this| {
+                                this.child(
+                                    div()
+                                        .p_4()
+                                        .text_sm()
+                                        .text_color(muted)
+                                        .child("Loading fork points…"),
+                                )
+                            })
+                            .children(self.forkable_messages.iter().enumerate().map(
+                                |(index, message)| {
+                                    let entry_id = message.entry_id.clone();
+                                    Button::new(("fork-dialog-message", index))
+                                        .secondary()
+                                        .small()
+                                        .w_full()
+                                        .justify_start()
+                                        .child(
+                                            div()
+                                                .w_full()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .text_left()
+                                                .child(message.text.clone()),
+                                        )
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.fork_at(entry_id.clone(), cx)
+                                        }))
+                                },
+                            )),
                     ),
             )
             .into_any_element()
@@ -6108,6 +6336,12 @@ impl Render for PicoDesktop {
             .when(self.command_palette_open, |this| {
                 this.child(self.render_command_palette(cx))
             })
+            .when(self.tree_dialog_open, |this| {
+                this.child(self.render_tree_dialog(cx))
+            })
+            .when(self.fork_dialog_open, |this| {
+                this.child(self.render_fork_dialog(cx))
+            })
             .when(self.rename_session_target.is_some(), |this| {
                 this.child(self.render_rename_session_dialog(cx))
             })
@@ -6252,7 +6486,11 @@ mod tests {
         assert_eq!(delegate.sections[0].len(), 2);
         assert_eq!(
             delegate.sections[2],
-            vec![DesktopPaletteCommand::CloneSession]
+            vec![
+                DesktopPaletteCommand::SessionTree,
+                DesktopPaletteCommand::ForkSession,
+                DesktopPaletteCommand::CloneSession,
+            ]
         );
 
         delegate.filter("terminal");
