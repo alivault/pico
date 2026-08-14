@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -205,6 +206,7 @@ pub struct PicoDesktop {
     terminal_input: Entity<InputState>,
     git_comment_input: Entity<InputState>,
     conversation_scroll: ScrollHandle,
+    scroll_conversation_to_bottom: Cell<bool>,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -329,6 +331,7 @@ impl PicoDesktop {
             terminal_input,
             git_comment_input,
             conversation_scroll: ScrollHandle::new(),
+            scroll_conversation_to_bottom: Cell::new(false),
             _event_task,
             _subscriptions,
         }
@@ -451,7 +454,7 @@ impl PicoDesktop {
                         );
                     }
                 }
-                self.conversation_scroll.scroll_to_bottom();
+                self.scroll_conversation_to_bottom.set(true);
             }
             DesktopEvent::Sessions(event) => {
                 if !event.directories.is_empty() {
@@ -476,7 +479,7 @@ impl PicoDesktop {
                     || self.session.session_id.as_deref() == Some(event.session_id.as_str())
                 {
                     self.session.apply_delta(event);
-                    self.conversation_scroll.scroll_to_bottom();
+                    self.scroll_conversation_to_bottom.set(true);
                 }
             }
             DesktopEvent::Files { cwd, paths } => {
@@ -659,6 +662,8 @@ impl PicoDesktop {
                 self.reset_workspace_scope();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
+                self.conversation_scroll = ScrollHandle::new();
+                self.scroll_conversation_to_bottom.set(false);
                 self.status_message = Some("Loading session…".into());
                 self.restart_events(Some(session_id), None);
             }
@@ -1226,7 +1231,7 @@ impl PicoDesktop {
         self.pending_submission = Some(submission.clone());
         self.failed_submission = None;
         self.status_message = Some("Sending…".into());
-        self.conversation_scroll.scroll_to_bottom();
+        self.scroll_conversation_to_bottom.set(true);
         self.client.submit_prompt(
             message,
             self.streaming_behavior.api_value(),
@@ -2279,6 +2284,9 @@ impl PicoDesktop {
         let muted = cx.theme().muted_foreground;
         let secondary = cx.theme().secondary;
         let border = cx.theme().border.opacity(0.72);
+        if self.scroll_conversation_to_bottom.replace(false) {
+            self.conversation_scroll.scroll_to_bottom();
+        }
 
         v_flex()
             .id("conversation")
