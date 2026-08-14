@@ -3616,8 +3616,15 @@ impl PicoDesktop {
                                         .small()
                                         .w_full()
                                         .justify_start()
-                                        .text_left()
-                                        .label(label)
+                                        .child(
+                                            div()
+                                                .w_full()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .text_left()
+                                                .child(label),
+                                        )
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.open_commit_diff(hash.clone(), cx)
                                         }))
