@@ -9,7 +9,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, ClipboardItem, Context, Entity, FocusHandle, Focusable,
     FollowMode, InteractiveElement as _, IntoElement, KeyBinding, Keystroke, ListAlignment,
-    ListState, ParentElement as _, PathPromptOptions, Pixels, Render, SharedString,
+    ListOffset, ListState, ParentElement as _, PathPromptOptions, Pixels, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
     prelude::FluentBuilder as _, px,
 };
@@ -17,7 +17,7 @@ use gpui_base::actions::{SelectDown, SelectUp};
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Root, Selectable as _,
     Sizable as _, StyledExt as _, Theme, ThemeMode,
-    button::{Button, ButtonVariants as _},
+    button::{Button, ButtonRounded, ButtonVariants as _},
     h_flex,
     input::{
         CompletionProvider, Input, InputBaseState, InputEvent, InputState, Rope, RopeExt, Textarea,
@@ -804,6 +804,69 @@ impl PicoDesktop {
         list
     }
 
+    fn previous_message_jump_target_for_rows(
+        rows: &[ConversationRow],
+        scroll_top: ListOffset,
+    ) -> Option<usize> {
+        let mut anchors = Vec::new();
+        let mut previous_item_index = None;
+        for (row_index, row) in rows.iter().enumerate() {
+            let item_index = row.item_index();
+            if previous_item_index != Some(item_index) {
+                anchors.push(row_index);
+                previous_item_index = Some(item_index);
+            }
+        }
+
+        let position = anchors.partition_point(|row_index| *row_index <= scroll_top.item_ix);
+        if position == 0 {
+            return None;
+        }
+        let current_anchor = anchors[position - 1];
+        if current_anchor < scroll_top.item_ix || scroll_top.offset_in_item > px(1.) {
+            return Some(current_anchor);
+        }
+        position
+            .checked_sub(2)
+            .and_then(|index| anchors.get(index).copied())
+    }
+
+    fn previous_message_jump_target(&self) -> Option<usize> {
+        Self::previous_message_jump_target_for_rows(
+            &self.conversation_rows,
+            self.conversation_list.logical_scroll_top(),
+        )
+    }
+
+    fn jump_to_previous_message(&mut self, cx: &mut Context<Self>) {
+        let Some(target) = self.previous_message_jump_target() else {
+            return;
+        };
+        self.conversation_list.scroll_to(ListOffset {
+            item_ix: target,
+            offset_in_item: px(0.),
+        });
+        cx.notify();
+    }
+
+    fn jump_to_latest_message(&mut self, cx: &mut Context<Self>) {
+        self.conversation_list.set_follow_mode(FollowMode::Tail);
+        self.conversation_list.scroll_to_end();
+        cx.notify();
+    }
+
+    fn reset_conversation_list(&mut self, cx: &mut Context<Self>) {
+        let conversation_list = Self::new_conversation_list(0);
+        let conversation_view = cx.entity().downgrade();
+        conversation_list.set_scroll_handler(move |_, _, cx| {
+            let conversation_view = conversation_view.clone();
+            cx.defer(move |cx| {
+                let _ = conversation_view.update(cx, |_, cx| cx.notify());
+            });
+        });
+        self.conversation_list = conversation_list;
+    }
+
     fn conversation_rows_for_items(items: &[ConversationItem]) -> Vec<ConversationRow> {
         let mut rows = Vec::new();
         for (item_index, item) in items.iter().enumerate() {
@@ -1199,6 +1262,14 @@ impl PicoDesktop {
             });
             TerminalView::new_with_input(session, terminal_view_focus_handle, input)
         });
+        let conversation_list = Self::new_conversation_list(0);
+        let conversation_view = cx.entity().downgrade();
+        conversation_list.set_scroll_handler(move |_, _, cx| {
+            let conversation_view = conversation_view.clone();
+            cx.defer(move |cx| {
+                let _ = conversation_view.update(cx, |_, cx| cx.notify());
+            });
+        });
 
         client.connect(tx.clone());
         client.start_events(None, None, preferences.directories.clone(), tx.clone());
@@ -1335,7 +1406,7 @@ impl PicoDesktop {
             auth_value,
             git_comment_input,
             focus_handle: cx.focus_handle(),
-            conversation_list: Self::new_conversation_list(0),
+            conversation_list,
             _event_task,
             _subscriptions,
         }
@@ -1764,7 +1835,7 @@ impl PicoDesktop {
                 self.conversation_rows.clear();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
-                self.conversation_list = Self::new_conversation_list(0);
+                self.reset_conversation_list(cx);
                 self.status_message = Some("Loading session…".into());
                 self.restart_events(Some(session_id), None);
             }
@@ -1796,7 +1867,7 @@ impl PicoDesktop {
                     self.selected_session_id = None;
                     self.selected_session_path = None;
                     self.session = SessionState::default();
-                    self.conversation_list = Self::new_conversation_list(0);
+                    self.reset_conversation_list(cx);
                     self.restart_events(None, None);
                 }
             }
@@ -1818,7 +1889,7 @@ impl PicoDesktop {
                     draft: true,
                     ..SessionState::default()
                 };
-                self.conversation_list = Self::new_conversation_list(0);
+                self.reset_conversation_list(cx);
                 self.restart_events(None, Some(session_key));
             }
             DesktopEvent::ModelChanged(model) => {
@@ -4027,6 +4098,9 @@ impl PicoDesktop {
 
         let conversation_list = self.conversation_list.clone();
         let view = cx.entity().clone();
+        let show_jump_to_latest =
+            !self.conversation_rows.is_empty() && !self.conversation_list.is_following_tail();
+        let show_jump_to_previous = self.previous_message_jump_target().is_some();
 
         v_flex()
             .id("conversation")
@@ -4045,7 +4119,43 @@ impl PicoDesktop {
                         })
                         .size_full(),
                     )
-                    .vertical_scrollbar(&conversation_list),
+                    .vertical_scrollbar(&conversation_list)
+                    .when(show_jump_to_latest, |this| {
+                        this.child(
+                            h_flex()
+                                .absolute()
+                                .left_0()
+                                .right_0()
+                                .bottom(px(18.))
+                                .justify_center()
+                                .child(
+                                    Button::new("jump-to-latest-message")
+                                        .secondary()
+                                        .small()
+                                        .rounded(ButtonRounded::Size(px(999.)))
+                                        .icon(IconName::ArrowDown)
+                                        .tooltip("Jump to latest message")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.jump_to_latest_message(cx)
+                                        })),
+                                ),
+                        )
+                    })
+                    .when(show_jump_to_previous, |this| {
+                        this.child(
+                            div().absolute().right(px(18.)).bottom(px(18.)).child(
+                                Button::new("jump-to-previous-message")
+                                    .secondary()
+                                    .small()
+                                    .rounded(ButtonRounded::Size(px(999.)))
+                                    .icon(IconName::ArrowUp)
+                                    .tooltip("Jump to previous message")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.jump_to_previous_message(cx)
+                                    })),
+                            ),
+                        )
+                    }),
             )
             .when(is_working, |this| {
                 this.child(
@@ -6500,6 +6610,46 @@ mod tests {
             vec![DesktopPaletteCommand::ToggleTerminal]
         );
         assert!(delegate.sections[1..].iter().all(Vec::is_empty));
+    }
+
+    #[test]
+    fn previous_message_jump_targets_each_conversation_item_anchor() {
+        let rows = vec![
+            ConversationRow::User {
+                key: "user-0".into(),
+                item_index: 0,
+            },
+            ConversationRow::AssistantBlock {
+                key: "assistant-1-text".into(),
+                item_index: 1,
+                block_index: 0,
+            },
+            ConversationRow::AssistantBlock {
+                key: "assistant-1-tool".into(),
+                item_index: 1,
+                block_index: 1,
+            },
+            ConversationRow::User {
+                key: "user-2".into(),
+                item_index: 2,
+            },
+        ];
+
+        let target = |item_ix, offset| {
+            PicoDesktop::previous_message_jump_target_for_rows(
+                &rows,
+                gpui::ListOffset {
+                    item_ix,
+                    offset_in_item: px(offset),
+                },
+            )
+        };
+
+        assert_eq!(target(0, 0.), None);
+        assert_eq!(target(1, 0.), Some(0));
+        assert_eq!(target(2, 0.), Some(1));
+        assert_eq!(target(3, 0.), Some(1));
+        assert_eq!(target(4, 0.), Some(3));
     }
 
     #[test]
