@@ -13,8 +13,8 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Root, Sizable as _, StyledExt as _, Theme,
-    ThemeMode,
+    ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
+    StyledExt as _, Theme, ThemeMode,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{
@@ -2390,7 +2390,9 @@ impl PicoDesktop {
                         Button::new("toggle-terminal")
                             .ghost()
                             .small()
-                            .label("Terminal")
+                            .icon(IconName::SquareTerminal)
+                            .selected(self.terminal_panel_open)
+                            .tooltip("Toggle terminal panel")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 if this.terminal_panel_open {
                                     this.close_terminal(cx)
