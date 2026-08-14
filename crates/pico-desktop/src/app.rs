@@ -2685,6 +2685,15 @@ impl PicoDesktop {
             "Collapse all directories"
         };
         let directories = self.directories.clone();
+        let visible_directories = directories
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter_map(|(index, directory)| {
+                let sessions = self.sidebar_sessions(&directory, &query);
+                (!search_active || !sessions.is_empty()).then_some((index, directory, sessions))
+            })
+            .collect::<Vec<_>>();
 
         v_flex()
             .w(px(300.))
@@ -2767,9 +2776,8 @@ impl PicoDesktop {
                     .child(
                         v_flex()
                             .gap_1()
-                            .children(directories.into_iter().enumerate().map(
-                                |(index, directory)| {
-                                    let sessions = self.sidebar_sessions(&directory, &query);
+                            .children(visible_directories.into_iter().map(
+                                |(index, directory, sessions)| {
                                     let collapsed = query.is_empty()
                                         && self
                                             .preferences
