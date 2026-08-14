@@ -33,6 +33,7 @@ use lsp_types::{
 use serde::{Deserialize, Serialize};
 use smol::channel::{Receiver, Sender};
 
+use crate::assets::PicoIcon;
 use crate::client::PicoClient;
 use crate::models::{
     AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
@@ -2352,25 +2353,7 @@ impl PicoDesktop {
                                                 this.icon(IconName::ChevronsUpDown)
                                             })
                                             .when(!all_directories_collapsed, |this| {
-                                                this.child(
-                                                    div()
-                                                        .relative()
-                                                        .size_4()
-                                                        .child(
-                                                            Icon::new(IconName::ChevronDown)
-                                                                .size_3()
-                                                                .absolute()
-                                                                .top(px(-1.))
-                                                                .left(px(2.)),
-                                                        )
-                                                        .child(
-                                                            Icon::new(IconName::ChevronUp)
-                                                                .size_3()
-                                                                .absolute()
-                                                                .bottom(px(-1.))
-                                                                .left(px(2.)),
-                                                        ),
-                                                )
+                                                this.icon(PicoIcon::ChevronsDownUp)
                                             })
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.toggle_all_directories(cx)
@@ -2383,20 +2366,7 @@ impl PicoDesktop {
                                             .w(px(28.))
                                             .px_0()
                                             .tooltip("Add directory")
-                                            .child(
-                                                div()
-                                                    .relative()
-                                                    .size_4()
-                                                    .child(Icon::new(IconName::Folder).size_4())
-                                                    .child(
-                                                        Icon::new(IconName::Plus)
-                                                            .w(px(9.))
-                                                            .h(px(9.))
-                                                            .absolute()
-                                                            .right(px(-2.))
-                                                            .bottom(px(-1.)),
-                                                    ),
-                                            )
+                                            .icon(PicoIcon::FolderPlus)
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.open_add_directory_dialog(window, cx)
                                             })),
@@ -2938,7 +2908,8 @@ impl PicoDesktop {
                                     .ghost()
                                     .xsmall()
                                     .disabled(index == 0)
-                                    .label("↑")
+                                    .icon(IconName::ArrowUp)
+                                    .tooltip("Move message up")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.move_pending_message(index, -1, cx)
                                     })),
@@ -2948,7 +2919,8 @@ impl PicoDesktop {
                                     .ghost()
                                     .xsmall()
                                     .disabled(index + 1 == count)
-                                    .label("↓")
+                                    .icon(IconName::ArrowDown)
+                                    .tooltip("Move message down")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.move_pending_message(index, 1, cx)
                                     })),
@@ -2957,7 +2929,8 @@ impl PicoDesktop {
                                 Button::new(("pending-remove", index))
                                     .ghost()
                                     .xsmall()
-                                    .label("×")
+                                    .icon(IconName::Close)
+                                    .tooltip("Remove pending message")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.remove_pending_message(remove_id.clone(), cx)
                                     })),

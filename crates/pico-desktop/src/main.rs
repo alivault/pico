@@ -1,11 +1,12 @@
 mod app;
+mod assets;
 mod client;
 mod models;
 
 use anyhow::Result;
 use gpui::{WindowBounds, WindowOptions, px, size};
-use gpui_component_assets::Assets;
 
+use crate::assets::PicoAssets;
 use crate::client::PicoClient;
 
 fn main() -> Result<()> {
@@ -23,7 +24,7 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| ".".into());
     let client = PicoClient::new(&server_url, context_id)?;
 
-    let application = gpui_platform::application().with_assets(Assets);
+    let application = gpui_platform::application().with_assets(PicoAssets);
     application.run(move |cx| {
         gpui_component::init(cx);
         app::apply_saved_theme(cx);
