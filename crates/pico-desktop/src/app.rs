@@ -20,6 +20,7 @@ use gpui_component::{
         CompletionProvider, Input, InputBaseState, InputEvent, InputState, Rope, RopeExt, Textarea,
         TextareaState,
     },
+    kbd::Kbd,
     menu::{DropdownMenu as _, PopupMenuItem},
     scroll::ScrollableElement as _,
     text::{TextView, TextViewState},
@@ -2710,7 +2711,7 @@ impl PicoDesktop {
             .into_any_element()
     }
 
-    fn render_left_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_left_sidebar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border.opacity(0.72);
         let muted = cx.theme().muted_foreground;
         let query = self.search.read(cx).value().trim().to_lowercase();
@@ -2735,6 +2736,9 @@ impl PicoDesktop {
                 (!search_active || !sessions.is_empty()).then_some((index, directory, sessions))
             })
             .collect::<Vec<_>>();
+        let new_session_kbd = Kbd::binding_for_action(&NewSession, None, window);
+        let commands_kbd = Kbd::binding_for_action(&FocusSessionSearch, None, window);
+        let settings_kbd = Kbd::binding_for_action(&OpenSettings, None, window);
 
         v_flex()
             .w(px(300.))
@@ -2758,9 +2762,17 @@ impl PicoDesktop {
                         Button::new("new-session")
                             .ghost()
                             .w_full()
-                            .justify_start()
-                            .icon(IconName::Plus)
-                            .label("New session")
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .min_w_0()
+                                    .gap_2()
+                                    .child(Icon::new(IconName::Plus).size_4().flex_none())
+                                    .child(
+                                        div().flex_1().min_w_0().text_left().child("New session"),
+                                    )
+                                    .when_some(new_session_kbd, |this, kbd| this.child(kbd)),
+                            )
                             .on_click(cx.listener(|this, _, _, cx| this.create_session(cx))),
                     ),
             )
@@ -2945,9 +2957,15 @@ impl PicoDesktop {
                         Button::new("commands")
                             .ghost()
                             .w_full()
-                            .justify_start()
-                            .icon(IconName::Search)
-                            .label("Commands")
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .min_w_0()
+                                    .gap_2()
+                                    .child(Icon::new(IconName::Search).size_4().flex_none())
+                                    .child(div().flex_1().min_w_0().text_left().child("Commands"))
+                                    .when_some(commands_kbd, |this, kbd| this.child(kbd)),
+                            )
                             .on_click(
                                 cx.listener(|this, _, _, cx| this.toggle_command_palette(cx)),
                             ),
@@ -2956,9 +2974,15 @@ impl PicoDesktop {
                         Button::new("settings")
                             .ghost()
                             .w_full()
-                            .justify_start()
-                            .icon(IconName::Settings)
-                            .label("Settings")
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .min_w_0()
+                                    .gap_2()
+                                    .child(Icon::new(IconName::Settings).size_4().flex_none())
+                                    .child(div().flex_1().min_w_0().text_left().child("Settings"))
+                                    .when_some(settings_kbd, |this, kbd| this.child(kbd)),
+                            )
                             .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx))),
                     )
                     .child(
@@ -5546,7 +5570,7 @@ impl Render for PicoDesktop {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .when(self.left_sidebar_open, |this| {
-                this.child(self.render_left_sidebar(cx))
+                this.child(self.render_left_sidebar(window, cx))
             })
             .child(
                 v_flex()
