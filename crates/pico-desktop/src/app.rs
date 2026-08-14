@@ -246,7 +246,7 @@ impl PicoDesktop {
         let (tx, rx) = smol::channel::unbounded();
 
         client.connect(tx.clone());
-        client.start_events(None, None, vec![initial_directory.clone()], tx.clone());
+        client.start_events(None, None, preferences.directories.clone(), tx.clone());
 
         let _event_task = Self::listen_for_events(rx, cx);
         let _subscriptions = vec![
