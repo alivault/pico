@@ -597,7 +597,7 @@ async fn files(cwd: &Path) -> io::Result<Vec<Value>> {
         let renamed = status.contains('R') || status.contains('C');
         let previous = renamed.then(|| records.get(index + 1).copied()).flatten();
         files.push(json!({
-          "status": status.trim(),
+          "status": status,
           "path": path,
           "previousPath": previous
         }));
@@ -1020,6 +1020,7 @@ mod tests {
         let status = status(&root).await.expect("status").expect("repo");
         assert_eq!(status["branch"], "main");
         assert_eq!(status["dirty"], true);
+        assert_eq!(files(&root).await.expect("files")[0]["status"], " M");
         assert!(file_diff(&root, "README.md")
             .await
             .expect("diff")
@@ -1027,6 +1028,7 @@ mod tests {
         stage(&root, "stage", false, Some("README.md"), None)
             .await
             .expect("stage");
+        assert_eq!(files(&root).await.expect("files")[0]["status"], "M ");
         commit(&root, "Update readme", false, false, false)
             .await
             .expect("commit");

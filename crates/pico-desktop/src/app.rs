@@ -172,6 +172,49 @@ fn slash_menu_capacity(viewport_height: Pixels) -> usize {
     (((max_height - 8.) / 20.).floor() as usize).max(2)
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct GitActionVisibility {
+    stage_all: bool,
+    unstage_all: bool,
+    commit: bool,
+    discard_all: bool,
+    push: bool,
+    force_push: bool,
+    pull: bool,
+}
+
+fn git_file_can_stage(file: &GitChangeFile) -> bool {
+    let mut status = file.status.chars();
+    let index_status = status.next().unwrap_or(' ');
+    let worktree_status = status.next().unwrap_or(' ');
+    worktree_status != ' ' || index_status == '?'
+}
+
+fn git_file_can_unstage(file: &GitChangeFile) -> bool {
+    let index_status = file.status.chars().next().unwrap_or(' ');
+    index_status != ' ' && index_status != '?'
+}
+
+fn git_action_visibility(
+    status: Option<&GitStatusSummary>,
+    files: &[GitChangeFile],
+) -> GitActionVisibility {
+    let has_changes = status.is_some_and(|status| status.dirty) || !files.is_empty();
+    let can_use_remote = status.is_some_and(|status| !status.detached);
+    let ahead = status.map_or(0, |status| status.ahead);
+    let behind = status.map_or(0, |status| status.behind);
+
+    GitActionVisibility {
+        stage_all: files.iter().any(git_file_can_stage),
+        unstage_all: files.iter().any(git_file_can_unstage),
+        commit: has_changes,
+        discard_all: !files.is_empty(),
+        push: can_use_remote && ahead > 0,
+        force_push: can_use_remote && ahead > 0 && behind > 0,
+        pull: can_use_remote && behind > 0,
+    }
+}
+
 #[derive(Clone, Default)]
 struct SlashCompletionProvider {
     skills: Rc<RefCell<Vec<SkillOption>>>,
@@ -3271,6 +3314,12 @@ impl PicoDesktop {
             .as_ref()
             .map(|status| status.inline.clone())
             .unwrap_or_default();
+        let actions = git_action_visibility(self.git_status.as_ref(), &self.git_files);
+        let show_toolbar_actions = actions.stage_all
+            || actions.unstage_all
+            || actions.push
+            || actions.force_push
+            || actions.pull;
         v_flex()
             .flex_1()
             .min_h_0()
@@ -3297,113 +3346,137 @@ impl PicoDesktop {
                     .when(!status_detail.is_empty(), |this| {
                         this.child(div().text_xs().text_color(muted).child(status_detail))
                     })
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .child(
-                                Button::new("stage-all")
-                                    .secondary()
-                                    .small()
-                                    .label("Stage all")
-                                    .on_click(
-                                        cx.listener(|this, _, _, cx| this.stage_all(false, cx)),
-                                    ),
-                            )
-                            .child(
-                                Button::new("unstage-all")
-                                    .ghost()
-                                    .small()
-                                    .label("Unstage")
-                                    .on_click(
-                                        cx.listener(|this, _, _, cx| this.stage_all(true, cx)),
-                                    ),
-                            )
-                            .child(
-                                Button::new("pull")
-                                    .ghost()
-                                    .small()
-                                    .label("Pull")
-                                    .on_click(cx.listener(|this, _, _, cx| this.pull(cx))),
-                            )
-                            .child(
-                                Button::new("push")
-                                    .ghost()
-                                    .small()
-                                    .label("Push")
-                                    .on_click(cx.listener(|this, _, _, cx| this.push(false, cx))),
-                            )
-                            .child(
-                                Button::new("force-push")
-                                    .ghost()
-                                    .small()
-                                    .label("Force")
-                                    .on_click(cx.listener(|this, _, _, cx| this.push(true, cx))),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .child(Input::new(&self.commit_message).cleanable(true))
-                            .child(
-                                Button::new("generate-commit")
-                                    .ghost()
-                                    .small()
-                                    .label("Generate")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.generate_commit_message(cx)
-                                    })),
-                            ),
-                    )
-                    .when_some(self.generated_commit_message.clone(), |this, message| {
+                    .when(show_toolbar_actions, |this| {
                         this.child(
                             h_flex()
-                                .p_2()
-                                .gap_2()
-                                .rounded_md()
-                                .bg(cx.theme().secondary.opacity(0.45))
-                                .child(div().flex_1().text_xs().child(message))
+                                .gap_1()
+                                .when(actions.stage_all, |this| {
+                                    this.child(
+                                        Button::new("stage-all")
+                                            .secondary()
+                                            .small()
+                                            .label("Stage all")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.stage_all(false, cx)
+                                            })),
+                                    )
+                                })
+                                .when(actions.unstage_all, |this| {
+                                    this.child(
+                                        Button::new("unstage-all")
+                                            .ghost()
+                                            .small()
+                                            .label("Unstage all")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.stage_all(true, cx)
+                                            })),
+                                    )
+                                })
+                                .when(actions.pull, |this| {
+                                    this.child(
+                                        Button::new("pull")
+                                            .ghost()
+                                            .small()
+                                            .label("Pull")
+                                            .on_click(cx.listener(|this, _, _, cx| this.pull(cx))),
+                                    )
+                                })
+                                .when(actions.push, |this| {
+                                    this.child(
+                                        Button::new("push").ghost().small().label("Push").on_click(
+                                            cx.listener(|this, _, _, cx| this.push(false, cx)),
+                                        ),
+                                    )
+                                })
+                                .when(actions.force_push, |this| {
+                                    this.child(
+                                        Button::new("force-push")
+                                            .ghost()
+                                            .small()
+                                            .label("Force push")
+                                            .on_click(
+                                                cx.listener(|this, _, _, cx| this.push(true, cx)),
+                                            ),
+                                    )
+                                }),
+                        )
+                    })
+                    .when(actions.commit, |this| {
+                        this.child(
+                            h_flex()
+                                .gap_1()
+                                .child(Input::new(&self.commit_message).cleanable(true))
                                 .child(
-                                    Button::new("use-commit-message")
-                                        .secondary()
-                                        .xsmall()
-                                        .label("Use")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.use_generated_commit_message(window, cx)
+                                    Button::new("generate-commit")
+                                        .ghost()
+                                        .small()
+                                        .label("Generate")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.generate_commit_message(cx)
                                         })),
                                 ),
                         )
                     })
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Button::new("commit")
-                                    .primary()
-                                    .small()
-                                    .label("Commit")
-                                    .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
-                            )
-                            .child(
-                                Button::new("commit-push")
-                                    .secondary()
-                                    .small()
-                                    .label("Commit & push")
-                                    .on_click(cx.listener(|this, _, _, cx| this.commit(true, cx))),
-                            )
-                            .child(
-                                Button::new("discard-all")
-                                    .danger()
-                                    .small()
-                                    .label(if self.pending_discard_all {
-                                        "Confirm discard"
-                                    } else {
-                                        "Discard all"
-                                    })
-                                    .on_click(
-                                        cx.listener(|this, _, _, cx| this.discard_all(false, cx)),
+                    .when(actions.commit, |this| {
+                        this.when_some(self.generated_commit_message.clone(), |this, message| {
+                            this.child(
+                                h_flex()
+                                    .p_2()
+                                    .gap_2()
+                                    .rounded_md()
+                                    .bg(cx.theme().secondary.opacity(0.45))
+                                    .child(div().flex_1().text_xs().child(message))
+                                    .child(
+                                        Button::new("use-commit-message")
+                                            .secondary()
+                                            .xsmall()
+                                            .label("Use")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.use_generated_commit_message(window, cx)
+                                            })),
                                     ),
-                            ),
-                    ),
+                            )
+                        })
+                    })
+                    .when(actions.commit, |this| {
+                        this.child(
+                            h_flex()
+                                .gap_2()
+                                .child(
+                                    Button::new("commit")
+                                        .primary()
+                                        .small()
+                                        .label("Commit")
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.commit(false, cx)),
+                                        ),
+                                )
+                                .child(
+                                    Button::new("commit-push")
+                                        .secondary()
+                                        .small()
+                                        .label("Commit & push")
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.commit(true, cx)),
+                                        ),
+                                )
+                                .when(actions.discard_all, |this| {
+                                    this.child(
+                                        Button::new("discard-all")
+                                            .danger()
+                                            .small()
+                                            .label(if self.pending_discard_all {
+                                                "Confirm discard"
+                                            } else {
+                                                "Discard all"
+                                            })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.discard_all(false, cx)
+                                            })),
+                                    )
+                                }),
+                        )
+                    }),
             )
             .child(
                 v_flex()
@@ -4501,8 +4574,17 @@ pub fn root(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_slash_menu_input, slash_menu_capacity};
+    use super::{git_action_visibility, is_slash_menu_input, slash_menu_capacity};
+    use crate::models::{GitChangeFile, GitStatusSummary};
     use gpui::px;
+
+    fn git_file(status: &str) -> GitChangeFile {
+        GitChangeFile {
+            status: status.into(),
+            path: "src/main.rs".into(),
+            ..GitChangeFile::default()
+        }
+    }
 
     #[test]
     fn slash_menu_only_opens_for_a_command_without_arguments() {
@@ -4517,5 +4599,52 @@ mod tests {
         assert_eq!(slash_menu_capacity(px(240.)), 5);
         assert_eq!(slash_menu_capacity(px(480.)), 11);
         assert_eq!(slash_menu_capacity(px(900.)), 12);
+    }
+
+    #[test]
+    fn git_working_tree_actions_follow_file_statuses() {
+        let status = GitStatusSummary {
+            dirty: true,
+            ..GitStatusSummary::default()
+        };
+
+        let unstaged = git_action_visibility(Some(&status), &[git_file(" M")]);
+        assert!(unstaged.stage_all);
+        assert!(!unstaged.unstage_all);
+        assert!(unstaged.commit);
+        assert!(unstaged.discard_all);
+
+        let staged = git_action_visibility(Some(&status), &[git_file("M ")]);
+        assert!(!staged.stage_all);
+        assert!(staged.unstage_all);
+
+        let untracked = git_action_visibility(Some(&status), &[git_file("??")]);
+        assert!(untracked.stage_all);
+        assert!(!untracked.unstage_all);
+    }
+
+    #[test]
+    fn git_remote_actions_follow_sync_and_detached_state() {
+        let diverged = GitStatusSummary {
+            ahead: 2,
+            behind: 3,
+            ..GitStatusSummary::default()
+        };
+        let actions = git_action_visibility(Some(&diverged), &[]);
+        assert!(actions.push);
+        assert!(actions.force_push);
+        assert!(actions.pull);
+        assert!(!actions.commit);
+
+        let detached = GitStatusSummary {
+            detached: true,
+            ahead: 2,
+            behind: 3,
+            ..GitStatusSummary::default()
+        };
+        let actions = git_action_visibility(Some(&detached), &[]);
+        assert!(!actions.push);
+        assert!(!actions.force_push);
+        assert!(!actions.pull);
     }
 }
