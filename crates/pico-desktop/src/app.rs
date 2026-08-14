@@ -1,12 +1,15 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::rc::Rc;
 
+use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     KeyBinding, ParentElement as _, PathPromptOptions, Render, ScrollHandle,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
@@ -14,11 +17,18 @@ use gpui_component::{
     ThemeMode,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{Input, InputEvent, InputState, Textarea, TextareaState},
+    input::{
+        CompletionProvider, Input, InputBaseState, InputEvent, InputState, Rope, RopeExt, Textarea,
+        TextareaState,
+    },
     menu::{DropdownMenu as _, PopupMenuItem},
     scroll::ScrollableElement as _,
     text::TextView,
     v_flex,
+};
+use lsp_types::{
+    CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
+    InsertReplaceEdit,
 };
 use serde::{Deserialize, Serialize};
 use smol::channel::{Receiver, Sender};
@@ -27,7 +37,7 @@ use crate::client::PicoClient;
 use crate::models::{
     AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
     FlatTreeNode, ForkableMessage, GitChangeFile, GitLocalBranch, GitStatusSummary,
-    SessionListEntry, SessionState, UiRequest,
+    SessionListEntry, SessionState, SkillOption, UiRequest,
 };
 
 gpui::actions!(
@@ -134,6 +144,108 @@ impl ComposerStreamingBehavior {
     }
 }
 
+const BUILTIN_SLASH_COMMANDS: &[(&str, &str)] = &[
+    ("login", "Configure provider authentication"),
+    ("logout", "Remove provider authentication"),
+    ("compact", "Summarize the session to reduce context size"),
+    ("clone", "Duplicate the current session"),
+    ("delete", "Delete the current session"),
+    ("fork", "Create a session from a previous message"),
+    ("tree", "Navigate the current session tree"),
+    ("rename", "Rename the current session"),
+    ("hide-thinking", "Hide assistant thinking blocks"),
+    ("show-thinking", "Show assistant thinking blocks"),
+    ("hide-tools", "Hide assistant tool calls"),
+    ("show-tools", "Show assistant tool calls"),
+];
+
+fn is_slash_menu_input(value: &str) -> bool {
+    let value = value.trim_start();
+    value.starts_with('/') && !value.chars().any(char::is_whitespace)
+}
+
+#[derive(Clone, Default)]
+struct SlashCompletionProvider {
+    skills: Rc<RefCell<Vec<SkillOption>>>,
+}
+
+impl SlashCompletionProvider {
+    fn set_skills(&self, skills: Vec<SkillOption>) {
+        *self.skills.borrow_mut() = skills;
+    }
+
+    fn completion_item(
+        rope: &Rope,
+        start: usize,
+        end: usize,
+        label: String,
+        description: String,
+    ) -> CompletionItem {
+        let range =
+            lsp_types::Range::new(rope.offset_to_position(start), rope.offset_to_position(end));
+        CompletionItem {
+            label: label.clone(),
+            detail: Some(description.clone()),
+            documentation: Some(lsp_types::Documentation::String(description)),
+            kind: Some(CompletionItemKind::FUNCTION),
+            filter_text: Some(label.clone()),
+            text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                new_text: format!("{label} "),
+                insert: range,
+                replace: range,
+            })),
+            ..CompletionItem::default()
+        }
+    }
+}
+
+impl CompletionProvider for SlashCompletionProvider {
+    fn completions(
+        &self,
+        rope: &Rope,
+        offset: usize,
+        _: CompletionContext,
+        _: &mut Window,
+        _: &mut Context<InputBaseState>,
+    ) -> Task<AnyResult<CompletionResponse>> {
+        let prefix = rope.slice(..offset).to_string();
+        let trimmed = prefix.trim_start();
+        if !is_slash_menu_input(trimmed) {
+            return Task::ready(Ok(CompletionResponse::Array(Vec::new())));
+        }
+
+        let leading_chars = prefix.chars().count() - trimmed.chars().count();
+        let query = trimmed.to_lowercase();
+        let mut items = BUILTIN_SLASH_COMMANDS
+            .iter()
+            .filter_map(|(name, description)| {
+                let label = format!("/{name}");
+                label.to_lowercase().contains(&query).then(|| {
+                    Self::completion_item(rope, leading_chars, offset, label, (*description).into())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        items.extend(self.skills.borrow().iter().filter_map(|skill| {
+            let label = format!("/skill:{}", skill.name);
+            let description = skill
+                .description
+                .clone()
+                .unwrap_or_else(|| "Use this skill".into());
+            let search = format!("{label} {description}").to_lowercase();
+            search
+                .contains(&query)
+                .then(|| Self::completion_item(rope, leading_chars, offset, label, description))
+        }));
+
+        Task::ready(Ok(CompletionResponse::Array(items)))
+    }
+
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputBaseState>) -> bool {
+        true
+    }
+}
+
 #[derive(Clone)]
 struct PromptSubmission {
     message: String,
@@ -201,6 +313,7 @@ pub struct PicoDesktop {
     directory_input: Entity<InputState>,
     session_name_input: Entity<InputState>,
     composer: Entity<TextareaState>,
+    slash_completion_provider: Rc<SlashCompletionProvider>,
     commit_message: Entity<InputState>,
     auth_value: Entity<InputState>,
     terminal_input: Entity<InputState>,
@@ -239,6 +352,11 @@ impl PicoDesktop {
                 .placeholder("Ask anything…")
                 .default_value(initial_draft)
         });
+        let slash_completion_provider = Rc::new(SlashCompletionProvider::default());
+        let composer_base_state = composer.read(cx).base_state().clone();
+        composer_base_state.update(cx, |state, _| {
+            state.lsp.completion_provider = Some(slash_completion_provider.clone())
+        });
         let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
         let auth_value =
             cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
@@ -262,6 +380,7 @@ impl PicoDesktop {
                     this.submit_prompt(window, cx);
                 } else if matches!(event, InputEvent::Change) {
                     this.persist_current_draft(cx);
+                    cx.notify();
                 }
             }),
         ];
@@ -326,6 +445,7 @@ impl PicoDesktop {
             directory_input,
             session_name_input,
             composer,
+            slash_completion_provider,
             commit_message,
             auth_value,
             terminal_input,
@@ -429,6 +549,8 @@ impl PicoDesktop {
                     cx.notify();
                     return;
                 }
+                self.slash_completion_provider
+                    .set_skills(self.session.available_skills.clone());
                 if self.session.session_file.is_some() {
                     self.selected_session_path = self.session.session_file.clone();
                 }
@@ -1259,6 +1381,7 @@ impl PicoDesktop {
         let name = parts.next().unwrap_or_default();
         let args = parts.next().unwrap_or_default().trim().to_string();
         match name {
+            "login" | "logout" => self.open_settings(cx),
             "compact" => {
                 self.client.run_slash_command(
                     "compact".into(),
@@ -1270,6 +1393,7 @@ impl PicoDesktop {
                 self.status_message = Some("Compacting context…".into());
             }
             "clone" => self.clone_selected_session(cx),
+            "fork" | "tree" => self.open_history(cx),
             "rename" => {
                 let Some(path) = self.selected_session_path.clone() else {
                     self.status_message = Some("Start the session before renaming it.".into());
@@ -1305,10 +1429,6 @@ impl PicoDesktop {
                 self.hide_tools = name == "hide-tools";
                 self.persist_preferences();
                 self.status_message = None;
-            }
-            "fork" | "tree" | "login" | "logout" => {
-                self.status_message =
-                    Some(format!("/{name} is available from its workspace panel."));
             }
             _ => return false,
         }
@@ -1392,19 +1512,6 @@ impl PicoDesktop {
             self.composer_images.remove(index);
             cx.notify();
         }
-    }
-
-    fn apply_skill(&mut self, skill: String, window: &mut Window, cx: &mut Context<Self>) {
-        let current = self.composer.read(cx).value().to_string();
-        let value = if current.trim().is_empty() {
-            format!("/skill:{skill} ")
-        } else {
-            format!("/skill:{skill} {current}")
-        };
-        self.composer.update(cx, |state, cx| {
-            state.set_value(value, window, cx);
-        });
-        cx.notify();
     }
 
     fn context_usage_label(&self) -> Option<String> {
@@ -2622,6 +2729,7 @@ impl PicoDesktop {
         let available_thinking_levels = self.session.available_thinking_levels.clone();
         let model_view = cx.entity();
         let thinking_view = model_view.clone();
+        let slash_menu_open = is_slash_menu_input(self.composer.read(cx).value().as_ref());
         let busy = self.session.streaming || self.session.compacting;
         let context_usage = self.context_usage_label();
 
@@ -2642,38 +2750,6 @@ impl PicoDesktop {
                     .border_color(cx.theme().border)
                     .bg(cx.theme().secondary.opacity(0.3))
                     .overflow_hidden()
-                    .when(!self.session.available_skills.is_empty(), |this| {
-                        this.child(
-                            h_flex()
-                                .px_2()
-                                .pt_2()
-                                .gap_1()
-                                .overflow_x_scrollbar()
-                                .children(
-                                    self.session
-                                        .available_skills
-                                        .iter()
-                                        .take(12)
-                                        .enumerate()
-                                        .map(|(index, skill)| {
-                                            let skill_name = skill.name.clone();
-                                            Button::new(("skill", index))
-                                                .ghost()
-                                                .xsmall()
-                                                .label(format!("/{}", skill.name))
-                                                .on_click(cx.listener(
-                                                    move |this, _, window, cx| {
-                                                        this.apply_skill(
-                                                            skill_name.clone(),
-                                                            window,
-                                                            cx,
-                                                        )
-                                                    },
-                                                ))
-                                        }),
-                                ),
-                        )
-                    })
                     .when(!self.composer_images.is_empty(), |this| {
                         this.child(
                             h_flex().p_2().gap_1().flex_wrap().children(
@@ -2692,6 +2768,9 @@ impl PicoDesktop {
                         )
                     })
                     .child(Textarea::new(&self.composer).appearance(false).p_3())
+                    .when(slash_menu_open, |this| {
+                        this.child(div().h(px(260.)).flex_shrink_0())
+                    })
                     .child(
                         h_flex()
                             .h(px(46.))
@@ -4382,4 +4461,17 @@ pub fn root(
 ) -> Entity<Root> {
     let view = cx.new(|cx| PicoDesktop::new(client, initial_directory, window, cx));
     cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_slash_menu_input;
+
+    #[test]
+    fn slash_menu_only_opens_for_a_command_without_arguments() {
+        assert!(is_slash_menu_input("/"));
+        assert!(is_slash_menu_input("  /skill:cupertino"));
+        assert!(!is_slash_menu_input("hello /skill:cupertino"));
+        assert!(!is_slash_menu_input("/skill:cupertino review this"));
+    }
 }
