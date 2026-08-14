@@ -14,7 +14,6 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
     StyledExt as _, Theme, ThemeMode,
-    accordion::Accordion,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{
@@ -2689,7 +2688,7 @@ impl PicoDesktop {
         let muted = cx.theme().muted_foreground;
         let secondary = cx.theme().secondary;
         let border = cx.theme().border.opacity(0.72);
-        let Some(item) = self.session.items.get(index).cloned() else {
+        let Some(item) = self.session.items.get(index) else {
             return div().into_any_element();
         };
 
@@ -2807,69 +2806,114 @@ impl PicoDesktop {
                                                 let has_content = block.args.is_some()
                                                     || !block.output.trim().is_empty();
 
-                                                Accordion::new(format!(
-                                                    "tool-accordion-{index}-{block_index}"
-                                                ))
-                                                .w_full()
-                                                .bg(secondary.opacity(0.3))
-                                                .when(block.running, |this| {
-                                                    this.border_color(gpui::rgb(0xd97706))
-                                                        .bg(gpui::rgba(0xd9770610))
-                                                })
-                                                .when(block.is_error, |this| {
-                                                    this.border_color(gpui::rgb(0xdc2626))
-                                                        .bg(gpui::rgba(0xdc262610))
-                                                })
-                                                .item(|item| {
-                                                    item.open(is_open)
-                                                        .disabled(!has_content)
-                                                        .icon(if block.running {
-                                                            IconName::LoaderCircle
-                                                        } else {
-                                                            IconName::SquareTerminal
-                                                        })
-                                                        .title(
-                                                            h_flex()
-                                                                .min_w_0()
-                                                                .gap_2()
-                                                                .child(
-                                                                    div()
-                                                                        .min_w_0()
-                                                                        .overflow_hidden()
-                                                                        .whitespace_nowrap()
-                                                                        .text_ellipsis()
-                                                                        .font_semibold()
-                                                                        .child(name),
+                                                v_flex()
+                                                    .id(format!(
+                                                        "tool-accordion-{index}-{block_index}"
+                                                    ))
+                                                    .w_full()
+                                                    .rounded_lg()
+                                                    .border_1()
+                                                    .border_color(border)
+                                                    .bg(secondary.opacity(0.3))
+                                                    .when(block.running, |this| {
+                                                        this.border_color(gpui::rgb(0xd97706))
+                                                            .bg(gpui::rgba(0xd9770610))
+                                                    })
+                                                    .when(block.is_error, |this| {
+                                                        this.border_color(gpui::rgb(0xdc2626))
+                                                            .bg(gpui::rgba(0xdc262610))
+                                                    })
+                                                    .child(
+                                                        h_flex()
+                                                            .id(format!(
+                                                                "tool-accordion-header-{index}-{block_index}"
+                                                            ))
+                                                            .min_w_0()
+                                                            .p_2()
+                                                            .gap_2()
+                                                            .when(has_content, |this| {
+                                                                this.cursor_pointer().on_click(
+                                                                    cx.listener(
+                                                                        move |this, _, _, cx| {
+                                                                            if is_open {
+                                                                                this.expanded_tool_blocks
+                                                                                    .remove(&toggle_key);
+                                                                            } else {
+                                                                                this.expanded_tool_blocks
+                                                                                    .insert(toggle_key.clone());
+                                                                            }
+                                                                            this.conversation_list
+                                                                                .remeasure_items(
+                                                                                    index
+                                                                                        ..index
+                                                                                            + 1,
+                                                                                );
+                                                                            cx.notify();
+                                                                        },
+                                                                    ),
                                                                 )
-                                                                .when(block.running, |this| {
-                                                                    this.child(
-                                                                        div()
-                                                                            .text_xs()
-                                                                            .text_color(
-                                                                                gpui::rgb(
-                                                                                    0xd97706,
-                                                                                ),
-                                                                            )
-                                                                            .child("Running"),
-                                                                    )
+                                                            })
+                                                            .child(
+                                                                Icon::new(if has_content {
+                                                                    if is_open {
+                                                                        IconName::ChevronDown
+                                                                    } else {
+                                                                        IconName::ChevronRight
+                                                                    }
+                                                                } else {
+                                                                    IconName::SquareTerminal
                                                                 })
-                                                                .when(block.is_error, |this| {
-                                                                    this.child(
-                                                                        div()
-                                                                            .text_xs()
-                                                                            .text_color(
-                                                                                gpui::rgb(
-                                                                                    0xdc2626,
-                                                                                ),
-                                                                            )
-                                                                            .child("Error"),
-                                                                    )
-                                                                }),
-                                                        )
-                                                        .child(
+                                                                .size_4()
+                                                                .flex_none(),
+                                                            )
+                                                            .child(
+                                                                Icon::new(if block.running {
+                                                                    IconName::LoaderCircle
+                                                                } else {
+                                                                    IconName::SquareTerminal
+                                                                })
+                                                                .size_4()
+                                                                .flex_none(),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .flex_1()
+                                                                    .min_w_0()
+                                                                    .overflow_hidden()
+                                                                    .whitespace_nowrap()
+                                                                    .text_ellipsis()
+                                                                    .font_semibold()
+                                                                    .child(name),
+                                                            )
+                                                            .when(block.running, |this| {
+                                                                this.child(
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .text_color(gpui::rgb(
+                                                                            0xd97706,
+                                                                        ))
+                                                                        .child("Running"),
+                                                                )
+                                                            })
+                                                            .when(block.is_error, |this| {
+                                                                this.child(
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .text_color(gpui::rgb(
+                                                                            0xdc2626,
+                                                                        ))
+                                                                        .child("Error"),
+                                                                )
+                                                            }),
+                                                    )
+                                                    .when(is_open && has_content, |this| {
+                                                        this.child(
                                                             v_flex()
                                                                 .w_full()
+                                                                .p_3()
                                                                 .gap_3()
+                                                                .border_t_1()
+                                                                .border_color(border)
                                                                 .when_some(
                                                                     block.args.clone(),
                                                                     |this, args| {
@@ -2907,22 +2951,8 @@ impl PicoDesktop {
                                                                     },
                                                                 ),
                                                         )
-                                                })
-                                                .on_toggle_click(cx.listener(
-                                                    move |this, open_indices: &[usize], _, cx| {
-                                                        if open_indices.contains(&0) {
-                                                            this.expanded_tool_blocks
-                                                                .insert(toggle_key.clone());
-                                                        } else {
-                                                            this.expanded_tool_blocks
-                                                                .remove(&toggle_key);
-                                                        }
-                                                        this.conversation_list
-                                                            .remeasure_items(index..index + 1);
-                                                        cx.notify();
-                                                    },
-                                                ))
-                                                .into_any_element()
+                                                    })
+                                                    .into_any_element()
                                             }
                                             AssistantBlock::Compaction(block) => v_flex()
                                                 .w_full()
