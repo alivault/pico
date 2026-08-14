@@ -173,6 +173,7 @@ pub struct PicoDesktop {
     preferences: DesktopPreferences,
     hide_tools: bool,
     settings_open: bool,
+    command_palette_open: bool,
     auth_providers: Vec<AuthProvider>,
     selected_auth_provider: Option<AuthProvider>,
     ui_request: Option<UiRequest>,
@@ -294,6 +295,7 @@ impl PicoDesktop {
             hide_tools: preferences.hide_tools,
             preferences: preferences.clone(),
             settings_open: false,
+            command_palette_open: false,
             auth_providers: Vec::new(),
             selected_auth_provider: None,
             ui_request: None,
@@ -751,6 +753,11 @@ impl PicoDesktop {
     fn close_settings(&mut self, cx: &mut Context<Self>) {
         self.settings_open = false;
         self.selected_auth_provider = None;
+        cx.notify();
+    }
+
+    fn toggle_command_palette(&mut self, cx: &mut Context<Self>) {
+        self.command_palette_open = !self.command_palette_open;
         cx.notify();
     }
 
@@ -3673,6 +3680,128 @@ impl PicoDesktop {
             )
             .into_any_element()
     }
+
+    fn render_command_palette(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .pt(px(120.))
+            .bg(cx.theme().background.opacity(0.82))
+            .child(
+                v_flex()
+                    .w(px(560.))
+                    .p_3()
+                    .gap_1()
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().popover)
+                    .shadow_lg()
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .px_2()
+                            .py_2()
+                            .child(div().font_semibold().child("Pico commands"))
+                            .child(
+                                Button::new("close-palette")
+                                    .ghost()
+                                    .xsmall()
+                                    .label("Esc")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.toggle_command_palette(cx)
+                                    })),
+                            ),
+                    )
+                    .child(
+                        Button::new("palette-new")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("New session                                  ⌘N")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.create_session(cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-search")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("Search all sessions")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.command_palette_open = false;
+                                this.left_sidebar_open = true;
+                                this.search.update(cx, |state, cx| state.focus(window, cx));
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-files")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("Open project files")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.right_sidebar_open = true;
+                                this.active_right_tab = RightWorkspaceTab::Files;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-git")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("Open Git changes")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.right_sidebar_open = true;
+                                this.active_right_tab = RightWorkspaceTab::Changes;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-terminal")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("Open terminal")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.right_sidebar_open = true;
+                                this.open_terminal(cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-clone")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .disabled(self.selected_session_id.is_none())
+                            .label("Clone current session")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.clone_selected_session(cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("palette-settings")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label("Settings                                      ⌘,")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.command_palette_open = false;
+                                this.open_settings(cx)
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
 impl Render for PicoDesktop {
@@ -3694,9 +3823,8 @@ impl Render for PicoDesktop {
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
-                this.left_sidebar_open = true;
-                this.search.update(cx, |state, cx| state.focus(window, cx));
-                cx.notify();
+                let _ = window;
+                this.toggle_command_palette(cx);
             }))
             .on_action(cx.listener(|this, _: &FocusComposer, window, cx| {
                 this.composer
@@ -3746,6 +3874,9 @@ impl Render for PicoDesktop {
             })
             .when(self.settings_open, |this| {
                 this.child(self.render_settings(cx))
+            })
+            .when(self.command_palette_open, |this| {
+                this.child(self.render_command_palette(cx))
             })
     }
 }
