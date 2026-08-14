@@ -1475,23 +1475,7 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn cycle_model(&mut self, cx: &mut Context<Self>) {
-        let models = &self.session.available_models;
-        if models.is_empty() {
-            return;
-        }
-        let index = self
-            .session
-            .model
-            .as_ref()
-            .and_then(|model| {
-                models.iter().position(|candidate| {
-                    candidate.id == model.id && candidate.provider == model.provider
-                })
-            })
-            .map(|index| (index + 1) % models.len())
-            .unwrap_or(0);
-        let model = models[index].clone();
+    fn select_model(&mut self, model: crate::models::ModelOption, cx: &mut Context<Self>) {
         self.status_message = Some(format!("Switching to {}…", model.label()));
         self.client.set_model(
             model,
@@ -1502,19 +1486,7 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn cycle_thinking(&mut self, cx: &mut Context<Self>) {
-        let levels = &self.session.available_thinking_levels;
-        if levels.is_empty() {
-            return;
-        }
-        let index = self
-            .session
-            .thinking_level
-            .as_ref()
-            .and_then(|level| levels.iter().position(|candidate| candidate == level))
-            .map(|index| (index + 1) % levels.len())
-            .unwrap_or(0);
-        let level = levels[index].clone();
+    fn select_thinking_level(&mut self, level: String, cx: &mut Context<Self>) {
         self.status_message = Some(format!("Setting thinking to {level}…"));
         self.client.set_thinking(
             level,
@@ -1799,6 +1771,7 @@ impl PicoDesktop {
             .ghost()
             .xsmall()
             .icon(IconName::Ellipsis)
+            .tooltip("Session actions")
             .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, window, cx| {
                 let read_session = session.clone();
                 let read_label = if session.unread {
@@ -1961,6 +1934,7 @@ impl PicoDesktop {
             .ghost()
             .xsmall()
             .icon(IconName::Ellipsis)
+            .tooltip("Directory actions")
             .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, window, _| {
                 let up_directory = directory.clone();
                 let down_directory = directory.clone();
@@ -2043,6 +2017,7 @@ impl PicoDesktop {
                                     .secondary()
                                     .small()
                                     .icon(IconName::Plus)
+                                    .tooltip("Add directory")
                                     .on_click(cx.listener(|this, _, _, cx| this.add_directory(cx))),
                             ),
                     ),
@@ -2135,6 +2110,7 @@ impl PicoDesktop {
                                                         .ghost()
                                                         .xsmall()
                                                         .icon(IconName::Plus)
+                                                        .tooltip("New session in this directory")
                                                         .on_click(cx.listener(
                                                             move |this, _, _, cx| {
                                                                 this.create_session_in_directory(
@@ -2237,6 +2213,7 @@ impl PicoDesktop {
                     } else {
                         IconName::PanelLeftOpen
                     })
+                    .tooltip("Toggle session sidebar")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.left_sidebar_open = !this.left_sidebar_open;
                         this.persist_preferences();
@@ -2630,6 +2607,12 @@ impl PicoDesktop {
             .thinking_level
             .clone()
             .unwrap_or_else(|| "Thinking".into());
+        let selected_model = self.session.model.clone();
+        let selected_thinking = self.session.thinking_level.clone();
+        let available_models = self.session.available_models.clone();
+        let available_thinking_levels = self.session.available_thinking_levels.clone();
+        let model_view = cx.entity();
+        let thinking_view = model_view.clone();
         let busy = self.session.streaming || self.session.compacting;
         let context_usage = self.context_usage_label();
 
@@ -2714,7 +2697,8 @@ impl PicoDesktop {
                                         Button::new("attach-images")
                                             .ghost()
                                             .small()
-                                            .label("Attach")
+                                            .icon(IconName::Plus)
+                                            .tooltip("Attach images")
                                             .disabled(self.composer_images.len() >= 8)
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.pick_images(window, cx)
@@ -2725,8 +2709,40 @@ impl PicoDesktop {
                                             .ghost()
                                             .small()
                                             .label(model_label)
-                                            .on_click(
-                                                cx.listener(|this, _, _, cx| this.cycle_model(cx)),
+                                            .tooltip("Choose model")
+                                            .disabled(available_models.is_empty())
+                                            .dropdown_menu_with_anchor(
+                                                Anchor::BottomLeft,
+                                                move |menu, window, _| {
+                                                    available_models.iter().fold(
+                                                        menu.min_w(260.),
+                                                        |menu, model| {
+                                                            let option = model.clone();
+                                                            let checked = selected_model
+                                                                .as_ref()
+                                                                .is_some_and(|selected| {
+                                                                    selected.id == model.id
+                                                                        && selected.provider
+                                                                            == model.provider
+                                                                });
+                                                            menu.item(
+                                                                PopupMenuItem::new(
+                                                                    model.label().to_string(),
+                                                                )
+                                                                .checked(checked)
+                                                                .on_click(window.listener_for(
+                                                                    &model_view,
+                                                                    move |this, _, _, cx| {
+                                                                        this.select_model(
+                                                                            option.clone(),
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                )),
+                                                            )
+                                                        },
+                                                    )
+                                                },
                                             ),
                                     )
                                     .child(
@@ -2734,9 +2750,41 @@ impl PicoDesktop {
                                             .ghost()
                                             .small()
                                             .label(thinking_label)
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.cycle_thinking(cx)
-                                            })),
+                                            .tooltip("Choose thinking level")
+                                            .disabled(available_thinking_levels.is_empty())
+                                            .dropdown_menu_with_anchor(
+                                                Anchor::BottomLeft,
+                                                move |menu, window, _| {
+                                                    available_thinking_levels.iter().fold(
+                                                        menu.min_w(180.),
+                                                        |menu, level| {
+                                                            let option = level.clone();
+                                                            menu.item(
+                                                                PopupMenuItem::new(level.clone())
+                                                                    .checked(
+                                                                        selected_thinking
+                                                                            .as_ref()
+                                                                            == Some(level),
+                                                                    )
+                                                                    .on_click(
+                                                                        window.listener_for(
+                                                                            &thinking_view,
+                                                                            move |this,
+                                                                                  _,
+                                                                                  _,
+                                                                                  cx| {
+                                                                                this.select_thinking_level(
+                                                                                    option.clone(),
+                                                                                    cx,
+                                                                                )
+                                                                            },
+                                                                        ),
+                                                                    ),
+                                                            )
+                                                        },
+                                                    )
+                                                },
+                                            ),
                                     )
                                     .when(busy, |this| {
                                         this.child(
@@ -2768,6 +2816,7 @@ impl PicoDesktop {
                                                 .danger()
                                                 .small()
                                                 .icon(IconName::Close)
+                                                .tooltip("Stop response")
                                                 .on_click(
                                                     cx.listener(|this, _, _, cx| this.abort(cx)),
                                                 ),
@@ -2778,6 +2827,7 @@ impl PicoDesktop {
                                             .primary()
                                             .small()
                                             .icon(IconName::ArrowUp)
+                                            .tooltip("Send message")
                                             .on_click(cx.listener(|this, _, window, cx| {
                                                 this.submit_prompt(window, cx)
                                             })),
@@ -2814,6 +2864,7 @@ impl PicoDesktop {
                                 .ghost()
                                 .small()
                                 .icon(IconName::ArrowLeft)
+                                .tooltip("Back to project files")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.selected_file_path = None;
                                     this.selected_file_content = None;
@@ -2955,6 +3006,7 @@ impl PicoDesktop {
                                         .ghost()
                                         .small()
                                         .icon(IconName::ArrowLeft)
+                                        .tooltip("Back to changes")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.selected_git_path = None;
                                             this.selected_git_diff = None;
@@ -3573,6 +3625,7 @@ impl PicoDesktop {
                             .ghost()
                             .small()
                             .icon(IconName::Close)
+                            .tooltip("Close settings")
                             .on_click(cx.listener(|this, _, _, cx| this.close_settings(cx))),
                     ),
             )
