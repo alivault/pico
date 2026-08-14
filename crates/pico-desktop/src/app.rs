@@ -375,6 +375,11 @@ pub struct PicoDesktop {
     tree_leaf_id: Option<String>,
     forkable_messages: Vec<ForkableMessage>,
     generated_commit_message: Option<String>,
+    commit_dialog_open: bool,
+    commit_in_flight: bool,
+    commit_message_generating: bool,
+    pending_commit_after_generation: Option<(bool, bool)>,
+    reset_commit_message_on_open: bool,
     pi_transport: String,
     pi_cache_retention: String,
     performance_restart_required: bool,
@@ -388,7 +393,7 @@ pub struct PicoDesktop {
     session_name_input: Entity<InputState>,
     composer: Entity<TextareaState>,
     slash_completion_provider: Rc<SlashCompletionProvider>,
-    commit_message: Entity<InputState>,
+    commit_message: Entity<TextareaState>,
     auth_value: Entity<InputState>,
     terminal_input: Entity<InputState>,
     git_comment_input: Entity<InputState>,
@@ -431,7 +436,11 @@ impl PicoDesktop {
         composer_base_state.update(cx, |state, _| {
             state.lsp.completion_provider = Some(slash_completion_provider.clone())
         });
-        let commit_message = cx.new(|cx| InputState::new(window, cx).placeholder("Commit message"));
+        let commit_message = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(4, 8)
+                .placeholder("Leave blank to autogenerate a commit message")
+        });
         let auth_value =
             cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
         let terminal_input = cx.new(|cx| InputState::new(window, cx).placeholder("Enter command…"));
@@ -507,6 +516,11 @@ impl PicoDesktop {
             tree_leaf_id: None,
             forkable_messages: Vec::new(),
             generated_commit_message: None,
+            commit_dialog_open: false,
+            commit_in_flight: false,
+            commit_message_generating: false,
+            pending_commit_after_generation: None,
+            reset_commit_message_on_open: false,
             pi_transport: "auto".into(),
             pi_cache_retention: "standard".into(),
             performance_restart_required: false,
@@ -728,6 +742,13 @@ impl PicoDesktop {
                 self.pending_discard_path = None;
                 self.pending_discard_all = false;
                 self.pending_commit_action = None;
+                if self.commit_in_flight {
+                    self.commit_in_flight = false;
+                    self.commit_message_generating = false;
+                    self.commit_dialog_open = false;
+                    self.generated_commit_message = None;
+                    self.reset_commit_message_on_open = true;
+                }
                 if let Some(cwd) = self.files_cwd.clone() {
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
@@ -799,8 +820,18 @@ impl PicoDesktop {
                 self.status_message = None;
             }
             DesktopEvent::CommitMessage(message) => {
-                self.generated_commit_message = Some(message);
-                self.status_message = None;
+                self.commit_message_generating = false;
+                if let Some((push, force_push)) = self.pending_commit_after_generation.take() {
+                    if let Some(cwd) = self.files_cwd.clone() {
+                        self.client
+                            .commit_git(cwd, message, push, force_push, self.tx.clone());
+                        self.commit_in_flight = true;
+                        self.status_message = Some("Committing changes…".into());
+                    }
+                } else {
+                    self.generated_commit_message = Some(message);
+                    self.status_message = None;
+                }
             }
             DesktopEvent::PerformanceSettings(settings) => {
                 self.pi_transport = settings.transport;
@@ -916,6 +947,9 @@ impl PicoDesktop {
                 if self.pending_submission.is_some() {
                     self.failed_submission = self.pending_submission.take();
                 }
+                self.commit_in_flight = false;
+                self.commit_message_generating = false;
+                self.pending_commit_after_generation = None;
                 self.status_message = Some(error);
             }
         }
@@ -1814,8 +1848,31 @@ impl PicoDesktop {
         let Some(cwd) = self.files_cwd.clone() else {
             return;
         };
+        self.commit_message_generating = true;
         self.client.generate_commit_message(cwd, self.tx.clone());
         self.status_message = Some("Generating commit message…".into());
+        cx.notify();
+    }
+
+    fn open_commit_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.reset_commit_message_on_open {
+            self.commit_message.update(cx, |state, cx| {
+                state.set_value("", window, cx);
+            });
+            self.reset_commit_message_on_open = false;
+        }
+        self.commit_dialog_open = true;
+        self.generated_commit_message = None;
+        self.commit_message
+            .update(cx, |state, cx| state.focus(window, cx));
+        cx.notify();
+    }
+
+    fn close_commit_dialog(&mut self, cx: &mut Context<Self>) {
+        if self.commit_in_flight || self.pending_commit_after_generation.is_some() {
+            return;
+        }
+        self.commit_dialog_open = false;
         cx.notify();
     }
 
@@ -1864,17 +1921,22 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn commit(&mut self, push: bool, cx: &mut Context<Self>) {
+    fn commit(&mut self, push: bool, force_push: bool, cx: &mut Context<Self>) {
         let message = self.commit_message.read(cx).value().trim().to_string();
         let Some(cwd) = self.files_cwd.clone() else {
             return;
         };
         if message.is_empty() {
-            self.status_message = Some("Enter a commit message first.".into());
+            self.pending_commit_after_generation = Some((push, force_push));
+            self.commit_message_generating = true;
+            self.client.generate_commit_message(cwd, self.tx.clone());
+            self.status_message = Some("Generating commit message…".into());
             cx.notify();
             return;
         }
-        self.client.commit_git(cwd, message, push, self.tx.clone());
+        self.client
+            .commit_git(cwd, message, push, force_push, self.tx.clone());
+        self.commit_in_flight = true;
         self.status_message = Some("Committing changes…".into());
         cx.notify();
     }
@@ -3315,11 +3377,13 @@ impl PicoDesktop {
             .map(|status| status.inline.clone())
             .unwrap_or_default();
         let actions = git_action_visibility(self.git_status.as_ref(), &self.git_files);
-        let show_toolbar_actions = actions.stage_all
+        let show_toolbar_actions = actions.commit
+            || actions.stage_all
             || actions.unstage_all
             || actions.push
             || actions.force_push
-            || actions.pull;
+            || actions.pull
+            || actions.discard_all;
         v_flex()
             .flex_1()
             .min_h_0()
@@ -3350,6 +3414,17 @@ impl PicoDesktop {
                         this.child(
                             h_flex()
                                 .gap_1()
+                                .when(actions.commit, |this| {
+                                    this.child(
+                                        Button::new("open-commit-dialog")
+                                            .secondary()
+                                            .small()
+                                            .label("Commit…")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.open_commit_dialog(window, cx)
+                                            })),
+                                    )
+                                })
                                 .when(actions.stage_all, |this| {
                                     this.child(
                                         Button::new("stage-all")
@@ -3398,68 +3473,7 @@ impl PicoDesktop {
                                                 cx.listener(|this, _, _, cx| this.push(true, cx)),
                                             ),
                                     )
-                                }),
-                        )
-                    })
-                    .when(actions.commit, |this| {
-                        this.child(
-                            h_flex()
-                                .gap_1()
-                                .child(Input::new(&self.commit_message).cleanable(true))
-                                .child(
-                                    Button::new("generate-commit")
-                                        .ghost()
-                                        .small()
-                                        .label("Generate")
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.generate_commit_message(cx)
-                                        })),
-                                ),
-                        )
-                    })
-                    .when(actions.commit, |this| {
-                        this.when_some(self.generated_commit_message.clone(), |this, message| {
-                            this.child(
-                                h_flex()
-                                    .p_2()
-                                    .gap_2()
-                                    .rounded_md()
-                                    .bg(cx.theme().secondary.opacity(0.45))
-                                    .child(div().flex_1().text_xs().child(message))
-                                    .child(
-                                        Button::new("use-commit-message")
-                                            .secondary()
-                                            .xsmall()
-                                            .label("Use")
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.use_generated_commit_message(window, cx)
-                                            })),
-                                    ),
-                            )
-                        })
-                    })
-                    .when(actions.commit, |this| {
-                        this.child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Button::new("commit")
-                                        .primary()
-                                        .small()
-                                        .label("Commit")
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.commit(false, cx)),
-                                        ),
-                                )
-                                .child(
-                                    Button::new("commit-push")
-                                        .secondary()
-                                        .small()
-                                        .label("Commit & push")
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.commit(true, cx)),
-                                        ),
-                                )
+                                })
                                 .when(actions.discard_all, |this| {
                                     this.child(
                                         Button::new("discard-all")
@@ -4170,6 +4184,261 @@ impl PicoDesktop {
             .into_any_element()
     }
 
+    fn render_commit_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let file_count = self.git_files.len();
+        let additions = self
+            .git_files
+            .iter()
+            .filter_map(|file| file.lines_added)
+            .sum::<usize>();
+        let deletions = self
+            .git_files
+            .iter()
+            .filter_map(|file| file.lines_deleted)
+            .sum::<usize>();
+        let branch = self
+            .git_status
+            .as_ref()
+            .map(|status| {
+                if status.detached {
+                    format!("Detached {}", status.revision.as_deref().unwrap_or("HEAD"))
+                } else {
+                    status
+                        .branch
+                        .clone()
+                        .unwrap_or_else(|| "Unknown branch".into())
+                }
+            })
+            .unwrap_or_else(|| "Unknown branch".into());
+        let can_force_push = self
+            .git_status
+            .as_ref()
+            .is_some_and(|status| !status.detached && status.ahead > 0 && status.behind > 0);
+        let busy = self.commit_in_flight
+            || self.commit_message_generating
+            || self.pending_commit_after_generation.is_some();
+
+        v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .justify_center()
+            .bg(cx.theme().background.opacity(0.82))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    this.close_commit_dialog(cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(
+                v_flex()
+                    .w(px(620.))
+                    .max_h(px(680.))
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().popover)
+                    .shadow_lg()
+                    .overflow_hidden()
+                    .child(
+                        h_flex()
+                            .p_4()
+                            .gap_3()
+                            .justify_between()
+                            .border_b_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .text_lg()
+                                            .font_semibold()
+                                            .child("Commit your changes"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Edit the message and choose whether to push."),
+                                    ),
+                            )
+                            .child(
+                                Button::new("close-commit-dialog")
+                                    .ghost()
+                                    .small()
+                                    .label("Close")
+                                    .disabled(busy)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.close_commit_dialog(cx)),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .p_4()
+                            .gap_4()
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .text_sm()
+                                            .child(div().font_semibold().child("Branch"))
+                                            .child(
+                                                div()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(branch),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .text_sm()
+                                            .child(div().font_semibold().child("Changes"))
+                                            .child(
+                                                h_flex()
+                                                    .gap_2()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(format!(
+                                                        "{file_count} file{}",
+                                                        if file_count == 1 { "" } else { "s" }
+                                                    ))
+                                                    .when(additions > 0, |this| {
+                                                        this.child(
+                                                            div()
+                                                                .text_color(cx.theme().success)
+                                                                .child(format!("+{additions}")),
+                                                        )
+                                                    })
+                                                    .when(deletions > 0, |this| {
+                                                        this.child(
+                                                            div()
+                                                                .text_color(cx.theme().danger)
+                                                                .child(format!("−{deletions}")),
+                                                        )
+                                                    }),
+                                            ),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .justify_between()
+                                            .child(div().text_sm().font_semibold().child("Message"))
+                                            .child(
+                                                Button::new("generate-dialog-commit-message")
+                                                    .ghost()
+                                                    .small()
+                                                    .label("Generate")
+                                                    .disabled(busy || file_count == 0)
+                                                    .on_click(cx.listener(|this, _, _, cx| {
+                                                        this.generate_commit_message(cx)
+                                                    })),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .rounded_xl()
+                                            .border_1()
+                                            .border_color(cx.theme().border)
+                                            .bg(cx.theme().secondary.opacity(0.2))
+                                            .child(
+                                                Textarea::new(&self.commit_message)
+                                                    .appearance(false)
+                                                    .disabled(busy)
+                                                    .p_3(),
+                                            ),
+                                    )
+                                    .when_some(
+                                        self.generated_commit_message.clone(),
+                                        |this, message| {
+                                            this.child(
+                                                h_flex()
+                                                    .p_2()
+                                                    .gap_2()
+                                                    .rounded_md()
+                                                    .bg(cx.theme().secondary.opacity(0.45))
+                                                    .child(
+                                                        div()
+                                                            .flex_1()
+                                                            .text_xs()
+                                                            .child(message),
+                                                    )
+                                                    .child(
+                                                        Button::new(
+                                                            "use-dialog-commit-message",
+                                                        )
+                                                        .secondary()
+                                                        .xsmall()
+                                                        .label("Use")
+                                                        .disabled(busy)
+                                                        .on_click(cx.listener(
+                                                            |this, _, window, cx| {
+                                                                this.use_generated_commit_message(
+                                                                    window, cx,
+                                                                )
+                                                            },
+                                                        )),
+                                                    ),
+                                            )
+                                        },
+                                    ),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .p_4()
+                            .gap_2()
+                            .justify_end()
+                            .border_t_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .child(
+                                Button::new("cancel-commit-dialog")
+                                    .ghost()
+                                    .label("Cancel")
+                                    .disabled(busy)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.close_commit_dialog(cx)),
+                                    ),
+                            )
+                            .child(
+                                Button::new("commit-dialog-commit")
+                                    .primary()
+                                    .label(if busy { "Working…" } else { "Commit" })
+                                    .disabled(busy || file_count == 0)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.commit(false, false, cx)),
+                                    ),
+                            )
+                            .child(
+                                Button::new("commit-dialog-push")
+                                    .secondary()
+                                    .label("Commit & push")
+                                    .disabled(busy || file_count == 0)
+                                    .on_click(
+                                        cx.listener(|this, _, _, cx| this.commit(true, false, cx)),
+                                    ),
+                            )
+                            .when(can_force_push, |this| {
+                                this.child(
+                                    Button::new("commit-dialog-force-push")
+                                        .danger()
+                                        .label("Commit & force push")
+                                        .disabled(busy || file_count == 0)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.commit(true, true, cx)
+                                        })),
+                                )
+                            }),
+                    ),
+            )
+            .into_any_element()
+    }
+
     fn render_rename_session_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let title = self
             .rename_session_target
@@ -4558,6 +4827,9 @@ impl Render for PicoDesktop {
             })
             .when(self.cleanup_directory_target.is_some(), |this| {
                 this.child(self.render_cleanup_directory_dialog(cx))
+            })
+            .when(self.commit_dialog_open, |this| {
+                this.child(self.render_commit_dialog(cx))
             })
     }
 }

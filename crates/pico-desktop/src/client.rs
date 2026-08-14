@@ -1048,17 +1048,26 @@ impl PicoClient {
         });
     }
 
-    pub fn commit_git(&self, cwd: String, message: String, push: bool, tx: Sender<DesktopEvent>) {
+    pub fn commit_git(
+        &self,
+        cwd: String,
+        message: String,
+        push: bool,
+        force_push: bool,
+        tx: Sender<DesktopEvent>,
+    ) {
         self.git_mutation(
             "/api/git-commit",
             json!({
                 "cwd": cwd,
                 "message": message,
                 "push": push,
-                "forcePush": false,
+                "forcePush": force_push,
                 "includeUnstaged": true,
             }),
-            if push {
+            if force_push {
+                "Committed and force pushed changes"
+            } else if push {
                 "Committed and pushed changes"
             } else {
                 "Committed changes"
