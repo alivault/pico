@@ -365,6 +365,8 @@ pub struct PicoDesktop {
     hide_tools: bool,
     settings_open: bool,
     command_palette_open: bool,
+    add_directory_dialog_open: bool,
+    reset_directory_input_on_open: bool,
     auth_providers: Vec<AuthProvider>,
     selected_auth_provider: Option<AuthProvider>,
     ui_request: Option<UiRequest>,
@@ -466,6 +468,15 @@ impl PicoDesktop {
                     cx.notify();
                 }
             }),
+            cx.subscribe_in(&directory_input, window, |this, _, event, _, cx| {
+                if this.add_directory_dialog_open
+                    && matches!(event, InputEvent::PressEnter { shift: false, .. })
+                {
+                    this.add_directory(cx);
+                } else if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
         ];
 
         Self {
@@ -506,6 +517,8 @@ impl PicoDesktop {
             preferences: preferences.clone(),
             settings_open: false,
             command_palette_open: false,
+            add_directory_dialog_open: false,
+            reset_directory_input_on_open: false,
             auth_providers: Vec::new(),
             selected_auth_provider: None,
             ui_request: None,
@@ -899,6 +912,8 @@ impl PicoDesktop {
                     self.directories.push(directory.clone());
                 }
                 self.selected_directory = directory;
+                self.add_directory_dialog_open = false;
+                self.reset_directory_input_on_open = true;
                 self.persist_preferences();
                 self.status_message = None;
                 self.restart_events(
@@ -1211,6 +1226,45 @@ impl PicoDesktop {
         }
         self.status_message = Some("Resolving directory…".into());
         self.client.resolve_directory(path, self.tx.clone());
+        cx.notify();
+    }
+
+    fn open_add_directory_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.reset_directory_input_on_open {
+            self.directory_input.update(cx, |state, cx| {
+                state.set_value("", window, cx);
+            });
+            self.reset_directory_input_on_open = false;
+        }
+        self.add_directory_dialog_open = true;
+        self.directory_input
+            .update(cx, |state, cx| state.focus(window, cx));
+        cx.notify();
+    }
+
+    fn close_add_directory_dialog(&mut self, cx: &mut Context<Self>) {
+        self.add_directory_dialog_open = false;
+        cx.notify();
+    }
+
+    fn toggle_all_directories(&mut self, cx: &mut Context<Self>) {
+        if self.directories.is_empty() {
+            return;
+        }
+        let all_collapsed = self
+            .directories
+            .iter()
+            .all(|directory| self.preferences.collapsed_directories.contains(directory));
+        if all_collapsed {
+            for directory in &self.directories {
+                self.preferences.collapsed_directories.remove(directory);
+            }
+        } else {
+            self.preferences
+                .collapsed_directories
+                .extend(self.directories.iter().cloned());
+        }
+        self.persist_preferences();
         cx.notify();
     }
 
@@ -2227,6 +2281,17 @@ impl PicoDesktop {
         let border = cx.theme().border.opacity(0.72);
         let muted = cx.theme().muted_foreground;
         let query = self.search.read(cx).value().trim().to_lowercase();
+        let search_active = !query.is_empty();
+        let all_directories_collapsed = !self.directories.is_empty()
+            && self
+                .directories
+                .iter()
+                .all(|directory| self.preferences.collapsed_directories.contains(directory));
+        let collapse_tooltip = if all_directories_collapsed {
+            "Expand all directories"
+        } else {
+            "Collapse all directories"
+        };
         let directories = self.directories.clone();
 
         v_flex()
@@ -2255,19 +2320,6 @@ impl PicoDesktop {
                             .icon(IconName::Plus)
                             .label("New session")
                             .on_click(cx.listener(|this, _, _, cx| this.create_session(cx))),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .child(Input::new(&self.directory_input).cleanable(true))
-                            .child(
-                                Button::new("add-directory")
-                                    .secondary()
-                                    .small()
-                                    .icon(IconName::Plus)
-                                    .tooltip("Add directory")
-                                    .on_click(cx.listener(|this, _, _, cx| this.add_directory(cx))),
-                            ),
                     ),
             )
             .child(
@@ -2283,7 +2335,73 @@ impl PicoDesktop {
                             .py_2()
                             .text_sm()
                             .text_color(muted)
-                            .child("Directories"),
+                            .justify_between()
+                            .child("Directories")
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .child(
+                                        Button::new("toggle-all-directories")
+                                            .ghost()
+                                            .small()
+                                            .w(px(28.))
+                                            .px_0()
+                                            .disabled(search_active || directories.is_empty())
+                                            .tooltip(collapse_tooltip)
+                                            .when(all_directories_collapsed, |this| {
+                                                this.icon(IconName::ChevronsUpDown)
+                                            })
+                                            .when(!all_directories_collapsed, |this| {
+                                                this.child(
+                                                    div()
+                                                        .relative()
+                                                        .size_4()
+                                                        .child(
+                                                            Icon::new(IconName::ChevronDown)
+                                                                .size_3()
+                                                                .absolute()
+                                                                .top(px(-1.))
+                                                                .left(px(2.)),
+                                                        )
+                                                        .child(
+                                                            Icon::new(IconName::ChevronUp)
+                                                                .size_3()
+                                                                .absolute()
+                                                                .bottom(px(-1.))
+                                                                .left(px(2.)),
+                                                        ),
+                                                )
+                                            })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.toggle_all_directories(cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("open-add-directory")
+                                            .ghost()
+                                            .small()
+                                            .w(px(28.))
+                                            .px_0()
+                                            .tooltip("Add directory")
+                                            .child(
+                                                div()
+                                                    .relative()
+                                                    .size_4()
+                                                    .child(Icon::new(IconName::Folder).size_4())
+                                                    .child(
+                                                        Icon::new(IconName::Plus)
+                                                            .w(px(9.))
+                                                            .h(px(9.))
+                                                            .absolute()
+                                                            .right(px(-2.))
+                                                            .bottom(px(-1.)),
+                                                    ),
+                                            )
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.open_add_directory_dialog(window, cx)
+                                            })),
+                                    ),
+                            ),
                     )
                     .child(
                         v_flex()
@@ -4191,6 +4309,78 @@ impl PicoDesktop {
             .into_any_element()
     }
 
+    fn render_add_directory_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let can_add = !self.directory_input.read(cx).value().trim().is_empty();
+
+        v_flex()
+            .absolute()
+            .inset_0()
+            .items_center()
+            .justify_center()
+            .bg(cx.theme().background.opacity(0.82))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    this.close_add_directory_dialog(cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .child(
+                v_flex()
+                    .w(px(520.))
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .bg(cx.theme().popover)
+                    .shadow_lg()
+                    .overflow_hidden()
+                    .child(
+                        v_flex()
+                            .p_4()
+                            .gap_1()
+                            .border_b_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .child(div().text_lg().font_semibold().child("Add directory"))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Enter a project directory to add to the sidebar."),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .p_4()
+                            .gap_2()
+                            .child(div().text_sm().font_semibold().child("Directory path"))
+                            .child(Input::new(&self.directory_input).cleanable(true)),
+                    )
+                    .child(
+                        h_flex()
+                            .p_4()
+                            .gap_2()
+                            .justify_end()
+                            .border_t_1()
+                            .border_color(cx.theme().border.opacity(0.72))
+                            .child(
+                                Button::new("cancel-add-directory")
+                                    .ghost()
+                                    .label("Cancel")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.close_add_directory_dialog(cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new("confirm-add-directory")
+                                    .primary()
+                                    .label("Add directory")
+                                    .disabled(!can_add)
+                                    .on_click(cx.listener(|this, _, _, cx| this.add_directory(cx))),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
     fn render_commit_dialog(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let file_count = self.git_files.len();
         let additions = self
@@ -4834,6 +5024,9 @@ impl Render for PicoDesktop {
             })
             .when(self.cleanup_directory_target.is_some(), |this| {
                 this.child(self.render_cleanup_directory_dialog(cx))
+            })
+            .when(self.add_directory_dialog_open, |this| {
+                this.child(self.render_add_directory_dialog(cx))
             })
             .when(self.commit_dialog_open, |this| {
                 this.child(self.render_commit_dialog(cx))
