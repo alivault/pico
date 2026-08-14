@@ -1904,6 +1904,20 @@ impl PicoDesktop {
         }
     }
 
+    fn focus_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.command_palette_open {
+            self.command_palette_open = false;
+            self.command_palette_previous_focus = None;
+        }
+        self.composer
+            .update(cx, |state, cx| state.focus(window, cx));
+        let composer = self.composer.clone();
+        window.defer(cx, move |window, cx| {
+            composer.update(cx, |state, cx| state.focus(window, cx));
+        });
+        cx.notify();
+    }
+
     fn execute_palette_command(
         &mut self,
         command: DesktopPaletteCommand,
@@ -6000,8 +6014,7 @@ impl Render for PicoDesktop {
                 this.toggle_command_palette(window, cx);
             }))
             .on_action(cx.listener(|this, _: &FocusComposer, window, cx| {
-                this.composer
-                    .update(cx, |state, cx| state.focus(window, cx));
+                this.focus_composer(window, cx);
             }))
             .on_action(cx.listener(|this, _: &AbortSession, _, cx| this.abort(cx)))
             .size_full()
