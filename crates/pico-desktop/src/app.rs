@@ -22,7 +22,7 @@ use gpui_component::{
     },
     menu::{DropdownMenu as _, PopupMenuItem},
     scroll::ScrollableElement as _,
-    text::TextView,
+    text::{TextView, TextViewState},
     tooltip::Tooltip,
     v_flex,
 };
@@ -330,6 +330,39 @@ struct PromptSubmission {
     streaming_behavior: ComposerStreamingBehavior,
 }
 
+struct CachedConversationMarkdown {
+    item_index: usize,
+    source: String,
+    state: Entity<TextViewState>,
+}
+
+#[derive(Clone, Debug)]
+enum ConversationRow {
+    User {
+        key: String,
+        item_index: usize,
+    },
+    AssistantBlock {
+        key: String,
+        item_index: usize,
+        block_index: usize,
+    },
+}
+
+impl ConversationRow {
+    fn key(&self) -> &str {
+        match self {
+            Self::User { key, .. } | Self::AssistantBlock { key, .. } => key,
+        }
+    }
+
+    fn item_index(&self) -> usize {
+        match self {
+            Self::User { item_index, .. } | Self::AssistantBlock { item_index, .. } => *item_index,
+        }
+    }
+}
+
 pub struct PicoDesktop {
     client: PicoClient,
     tx: Sender<DesktopEvent>,
@@ -368,6 +401,9 @@ pub struct PicoDesktop {
     preferences: DesktopPreferences,
     hide_tools: bool,
     expanded_tool_blocks: HashSet<String>,
+    conversation_markdown: HashMap<String, CachedConversationMarkdown>,
+    conversation_markdown_subscriptions: HashMap<String, Subscription>,
+    conversation_rows: Vec<ConversationRow>,
     settings_open: bool,
     command_palette_open: bool,
     add_directory_dialog_open: bool,
@@ -412,9 +448,261 @@ pub struct PicoDesktop {
 
 impl PicoDesktop {
     fn new_conversation_list(item_count: usize) -> ListState {
-        let list = ListState::new(item_count, ListAlignment::Top, px(1200.));
+        let list = ListState::new(item_count, ListAlignment::Top, px(2048.));
         list.set_follow_mode(FollowMode::Tail);
         list
+    }
+
+    fn conversation_rows_for_items(items: &[ConversationItem]) -> Vec<ConversationRow> {
+        let mut rows = Vec::new();
+        for (item_index, item) in items.iter().enumerate() {
+            match item {
+                ConversationItem::User(user) => {
+                    let item_key = user
+                        .item_key
+                        .clone()
+                        .unwrap_or_else(|| format!("index:{item_index}"));
+                    rows.push(ConversationRow::User {
+                        key: format!("user:{item_key}"),
+                        item_index,
+                    });
+                }
+                ConversationItem::Assistant(assistant) => {
+                    let item_key = assistant
+                        .item_key
+                        .clone()
+                        .unwrap_or_else(|| format!("index:{item_index}"));
+                    for (block_index, block) in assistant.blocks.iter().enumerate() {
+                        let kind = match block {
+                            AssistantBlock::Text(_) => "text",
+                            AssistantBlock::Thinking(_) => "thinking",
+                            AssistantBlock::Tool(_) => "tool",
+                            AssistantBlock::Compaction(_) => "compaction",
+                        };
+                        let block_key = match block {
+                            AssistantBlock::Tool(block) => {
+                                block.call_id.as_deref().or(block.block_key.as_deref())
+                            }
+                            _ => block.block_key(),
+                        }
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_else(|| format!("index:{block_index}"));
+                        rows.push(ConversationRow::AssistantBlock {
+                            key: format!("assistant:{item_key}:{kind}:{block_key}"),
+                            item_index,
+                            block_index,
+                        });
+                    }
+                }
+            }
+        }
+        rows
+    }
+
+    fn conversation_rows(&self) -> Vec<ConversationRow> {
+        Self::conversation_rows_for_items(&self.session.items)
+    }
+
+    fn sync_conversation_rows(
+        &mut self,
+        reset: bool,
+        changed_items: Option<std::ops::Range<usize>>,
+    ) {
+        let new_rows = self.conversation_rows();
+        if reset {
+            self.conversation_list.reset(new_rows.len());
+            self.conversation_rows = new_rows;
+            self.conversation_list.scroll_to_end();
+            return;
+        }
+
+        let mut prefix = 0;
+        while prefix < self.conversation_rows.len()
+            && prefix < new_rows.len()
+            && self.conversation_rows[prefix].key() == new_rows[prefix].key()
+        {
+            prefix += 1;
+        }
+
+        let mut suffix = 0;
+        while suffix < self.conversation_rows.len().saturating_sub(prefix)
+            && suffix < new_rows.len().saturating_sub(prefix)
+            && self.conversation_rows[self.conversation_rows.len() - 1 - suffix].key()
+                == new_rows[new_rows.len() - 1 - suffix].key()
+        {
+            suffix += 1;
+        }
+
+        let old_end = self.conversation_rows.len() - suffix;
+        let new_end = new_rows.len() - suffix;
+        if prefix != old_end || prefix != new_end {
+            self.conversation_list
+                .splice(prefix..old_end, new_end - prefix);
+        }
+        self.conversation_rows = new_rows;
+
+        if let Some(changed_items) = changed_items {
+            let changed_rows = self
+                .conversation_rows
+                .iter()
+                .enumerate()
+                .filter_map(|(index, row)| {
+                    changed_items.contains(&row.item_index()).then_some(index)
+                })
+                .collect::<Vec<_>>();
+            if let (Some(first), Some(last)) = (changed_rows.first(), changed_rows.last()) {
+                self.conversation_list.remeasure_items(*first..*last + 1);
+            }
+        }
+    }
+
+    fn conversation_markdown_key(
+        item_index: usize,
+        item_key: Option<&str>,
+        block_index: usize,
+        block_key: Option<&str>,
+        kind: &str,
+    ) -> String {
+        format!(
+            "{kind}:{}:{}",
+            item_key
+                .map(|key| format!("item-key:{key}"))
+                .unwrap_or_else(|| format!("item-index:{item_index}")),
+            block_key
+                .map(|key| format!("block-key:{key}"))
+                .unwrap_or_else(|| format!("block-index:{block_index}")),
+        )
+    }
+
+    fn conversation_markdown_descriptors(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> Vec<(usize, String, String)> {
+        let mut descriptors = Vec::new();
+        for item_index in range {
+            let Some(ConversationItem::Assistant(assistant)) = self.session.items.get(item_index)
+            else {
+                continue;
+            };
+            for (block_index, block) in assistant.blocks.iter().enumerate() {
+                let (kind, block_key, source) = match block {
+                    AssistantBlock::Text(block) => {
+                        ("text", block.block_key.as_deref(), block.text.as_str())
+                    }
+                    AssistantBlock::Thinking(block) => {
+                        ("thinking", block.block_key.as_deref(), block.text.as_str())
+                    }
+                    AssistantBlock::Compaction(block) => (
+                        "compaction",
+                        block.block_key.as_deref(),
+                        block.summary.as_str(),
+                    ),
+                    AssistantBlock::Tool(_) => continue,
+                };
+                descriptors.push((
+                    item_index,
+                    Self::conversation_markdown_key(
+                        item_index,
+                        assistant.item_key.as_deref(),
+                        block_index,
+                        block_key,
+                        kind,
+                    ),
+                    source.to_string(),
+                ));
+            }
+        }
+        descriptors
+    }
+
+    fn conversation_markdown_keys(&self, range: std::ops::Range<usize>) -> HashSet<String> {
+        let mut keys = HashSet::new();
+        for item_index in range {
+            let Some(ConversationItem::Assistant(assistant)) = self.session.items.get(item_index)
+            else {
+                continue;
+            };
+            for (block_index, block) in assistant.blocks.iter().enumerate() {
+                let kind = match block {
+                    AssistantBlock::Text(_) => "text",
+                    AssistantBlock::Thinking(_) => "thinking",
+                    AssistantBlock::Compaction(_) => "compaction",
+                    AssistantBlock::Tool(_) => continue,
+                };
+                keys.insert(Self::conversation_markdown_key(
+                    item_index,
+                    assistant.item_key.as_deref(),
+                    block_index,
+                    block.block_key(),
+                    kind,
+                ));
+            }
+        }
+        keys
+    }
+
+    fn sync_conversation_markdown(
+        &mut self,
+        descriptors: Vec<(usize, String, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        for (item_index, key, source) in descriptors {
+            if let Some(cached) = self.conversation_markdown.get_mut(&key) {
+                cached.item_index = item_index;
+                if cached.source == source {
+                    continue;
+                }
+                if let Some(suffix) = source.strip_prefix(&cached.source) {
+                    cached
+                        .state
+                        .update(cx, |state, cx| state.push_str(suffix, cx));
+                } else {
+                    cached
+                        .state
+                        .update(cx, |state, cx| state.set_text(&source, cx));
+                }
+                cached.source = source;
+            } else {
+                let initial_source = source.clone();
+                let state = cx.new(|cx| TextViewState::markdown(&initial_source, cx));
+                let observer_key = key.clone();
+                let subscription = cx.observe(&state, move |this, _, cx| {
+                    if let Some(cached) = this.conversation_markdown.get(&observer_key) {
+                        this.remeasure_conversation_item(cached.item_index);
+                    }
+                    cx.notify();
+                });
+                self.conversation_markdown.insert(
+                    key.clone(),
+                    CachedConversationMarkdown {
+                        item_index,
+                        source,
+                        state,
+                    },
+                );
+                self.conversation_markdown_subscriptions
+                    .insert(key, subscription);
+            }
+        }
+    }
+
+    fn remeasure_conversation_item(&self, item_index: usize) {
+        let rows = self
+            .conversation_rows
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| (row.item_index() == item_index).then_some(index))
+            .collect::<Vec<_>>();
+        if let (Some(first), Some(last)) = (rows.first(), rows.last()) {
+            self.conversation_list.remeasure_items(*first..*last + 1);
+        }
+    }
+
+    fn markdown_view(&self, key: String, fallback_source: &str) -> TextView {
+        self.conversation_markdown
+            .get(&key)
+            .map(|cached| TextView::new(&cached.state))
+            .unwrap_or_else(|| TextView::markdown(key, fallback_source.to_string()))
     }
 
     pub fn new(
@@ -527,6 +815,9 @@ impl PicoDesktop {
             failed_submission: None,
             hide_tools: preferences.hide_tools,
             expanded_tool_blocks: HashSet::new(),
+            conversation_markdown: HashMap::new(),
+            conversation_markdown_subscriptions: HashMap::new(),
+            conversation_rows: Vec::new(),
             preferences: preferences.clone(),
             settings_open: false,
             command_palette_open: false,
@@ -660,6 +951,13 @@ impl PicoDesktop {
                     .as_ref()
                     .map(|patch| (patch.start, patch.delete_count, patch.items.len()));
                 let old_item_count = self.session.items.len();
+                let replaced_markdown_keys = item_patch
+                    .map(|(start, delete_count, _)| {
+                        self.conversation_markdown_keys(
+                            start.min(old_item_count)..(start + delete_count).min(old_item_count),
+                        )
+                    })
+                    .unwrap_or_default();
                 let patch_applied = self.session.apply(sync);
                 if !patch_applied {
                     self.status_message = Some("Resynchronizing conversation…".into());
@@ -672,12 +970,28 @@ impl PicoDesktop {
                 }
                 let new_item_count = self.session.items.len();
                 if had_full_items {
-                    self.conversation_list.reset(new_item_count);
-                    self.conversation_list.scroll_to_end();
-                } else if let Some((start, delete_count, inserted_count)) = item_patch {
-                    let end = (start + delete_count).min(old_item_count);
-                    self.conversation_list
-                        .splice(start.min(old_item_count)..end, inserted_count);
+                    self.sync_conversation_rows(true, None);
+                    self.conversation_markdown.clear();
+                    self.conversation_markdown_subscriptions.clear();
+                    let descriptors = self.conversation_markdown_descriptors(0..new_item_count);
+                    self.sync_conversation_markdown(descriptors, cx);
+                } else if let Some((start, _delete_count, inserted_count)) = item_patch {
+                    let inserted_end = (start + inserted_count).min(new_item_count);
+                    self.sync_conversation_rows(
+                        false,
+                        Some(start.min(new_item_count)..inserted_end),
+                    );
+                    let descriptors = self
+                        .conversation_markdown_descriptors(start.min(new_item_count)..inserted_end);
+                    let inserted_keys = descriptors
+                        .iter()
+                        .map(|(_, key, _)| key.clone())
+                        .collect::<HashSet<_>>();
+                    for key in replaced_markdown_keys.difference(&inserted_keys) {
+                        self.conversation_markdown.remove(key);
+                        self.conversation_markdown_subscriptions.remove(key);
+                    }
+                    self.sync_conversation_markdown(descriptors, cx);
                 } else if conversation_visibility_changed {
                     self.conversation_list.remeasure();
                 }
@@ -731,7 +1045,6 @@ impl PicoDesktop {
                 if self.selected_session_id.as_deref() == Some(event.session_id.as_str())
                     || self.session.session_id.as_deref() == Some(event.session_id.as_str())
                 {
-                    let old_item_count = self.session.items.len();
                     let changed_index = self
                         .session
                         .items
@@ -739,18 +1052,14 @@ impl PicoDesktop {
                         .rposition(
                             |item| matches!(item, ConversationItem::Assistant(item) if item.streaming),
                         )
-                        .unwrap_or(old_item_count);
+                        .unwrap_or(self.session.items.len());
                     self.session.apply_delta(event);
                     let new_item_count = self.session.items.len();
-                    if new_item_count > old_item_count {
-                        self.conversation_list.splice(
-                            old_item_count..old_item_count,
-                            new_item_count - old_item_count,
-                        );
-                    }
                     if changed_index < new_item_count {
-                        self.conversation_list
-                            .remeasure_items(changed_index..changed_index + 1);
+                        self.sync_conversation_rows(false, Some(changed_index..changed_index + 1));
+                        let descriptors = self
+                            .conversation_markdown_descriptors(changed_index..changed_index + 1);
+                        self.sync_conversation_markdown(descriptors, cx);
                     }
                 }
             }
@@ -960,6 +1269,9 @@ impl PicoDesktop {
             DesktopEvent::SessionSelected(session_id) => {
                 self.reset_workspace_scope();
                 self.expanded_tool_blocks.clear();
+                self.conversation_markdown.clear();
+                self.conversation_markdown_subscriptions.clear();
+                self.conversation_rows.clear();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
                 self.conversation_list = Self::new_conversation_list(0);
@@ -988,6 +1300,9 @@ impl PicoDesktop {
                 self.delete_session_target = None;
                 if clear_selection {
                     self.expanded_tool_blocks.clear();
+                    self.conversation_markdown.clear();
+                    self.conversation_markdown_subscriptions.clear();
+                    self.conversation_rows.clear();
                     self.selected_session_id = None;
                     self.selected_session_path = None;
                     self.session = SessionState::default();
@@ -1003,6 +1318,9 @@ impl PicoDesktop {
             DesktopEvent::SessionCreated { session_key, cwd } => {
                 self.reset_workspace_scope();
                 self.expanded_tool_blocks.clear();
+                self.conversation_markdown.clear();
+                self.conversation_markdown_subscriptions.clear();
+                self.conversation_rows.clear();
                 self.selected_session_id = None;
                 self.session = SessionState {
                     session_key: Some(session_key.clone()),
@@ -2688,299 +3006,274 @@ impl PicoDesktop {
         let muted = cx.theme().muted_foreground;
         let secondary = cx.theme().secondary;
         let border = cx.theme().border.opacity(0.72);
-        let Some(item) = self.session.items.get(index) else {
+        let Some(row) = self.conversation_rows.get(index).cloned() else {
             return div().into_any_element();
         };
 
         h_flex()
             .w_full()
             .justify_center()
-            .child(
-                div()
-                    .w_full()
-                    .max_w(px(920.))
-                    .child(match item {
-                            ConversationItem::User(user) => h_flex()
+            .child(div().w_full().max_w(px(920.)).child(match row {
+                ConversationRow::User { item_index, .. } => {
+                    let Some(ConversationItem::User(user)) = self.session.items.get(item_index)
+                    else {
+                        return div().into_any_element();
+                    };
+                    h_flex()
+                        .w_full()
+                        .justify_end()
+                        .child(
+                            v_flex()
+                                .max_w(px(680.))
+                                .px_4()
+                                .py_3()
+                                .gap_1()
+                                .rounded_xl()
+                                .bg(cx.theme().primary)
+                                .text_color(cx.theme().primary_foreground)
+                                .text_sm()
+                                .when(!user.text.is_empty(), |this| this.child(user.text.clone()))
+                                .when(!user.images.is_empty(), |this| {
+                                    this.child(div().text_xs().child(format!(
+                                        "{} image attachment{}",
+                                        user.images.len(),
+                                        if user.images.len() == 1 { "" } else { "s" }
+                                    )))
+                                })
+                                .when(user.queued, |this| {
+                                    this.child(div().text_xs().child("Queued"))
+                                }),
+                        )
+                        .into_any_element()
+                }
+                ConversationRow::AssistantBlock {
+                    item_index,
+                    block_index,
+                    ..
+                } => {
+                    let Some(ConversationItem::Assistant(assistant)) =
+                        self.session.items.get(item_index)
+                    else {
+                        return div().into_any_element();
+                    };
+                    let Some(block) = assistant.blocks.get(block_index) else {
+                        return div().into_any_element();
+                    };
+                    match block {
+                        AssistantBlock::Text(block) => self
+                            .markdown_view(
+                                Self::conversation_markdown_key(
+                                    item_index,
+                                    assistant.item_key.as_deref(),
+                                    block_index,
+                                    block.block_key.as_deref(),
+                                    "text",
+                                ),
+                                &block.text,
+                            )
+                            .selectable(true)
+                            .text_sm()
+                            .line_height(gpui::relative(1.55))
+                            .into_any_element(),
+                        AssistantBlock::Thinking(_) if self.session.hide_thinking_block => {
+                            div().into_any_element()
+                        }
+                        AssistantBlock::Thinking(block) => v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2()
+                            .rounded_lg()
+                            .border_1()
+                            .border_color(border)
+                            .bg(secondary.opacity(0.45))
+                            .child(
+                                div().text_xs().font_semibold().text_color(muted).child(
+                                    block
+                                        .summary_label
+                                        .clone()
+                                        .unwrap_or_else(|| "Thinking".into()),
+                                ),
+                            )
+                            .child(
+                                self.markdown_view(
+                                    Self::conversation_markdown_key(
+                                        item_index,
+                                        assistant.item_key.as_deref(),
+                                        block_index,
+                                        block.block_key.as_deref(),
+                                        "thinking",
+                                    ),
+                                    &block.text,
+                                )
+                                .selectable(true)
+                                .text_sm(),
+                            )
+                            .into_any_element(),
+                        AssistantBlock::Tool(_) if self.hide_tools => div().into_any_element(),
+                        AssistantBlock::Tool(block) => {
+                            let disclosure_key = if let Some(call_id) = block.call_id.as_deref() {
+                                format!("tool:call:{call_id}")
+                            } else if let Some(block_key) = block.block_key.as_deref() {
+                                format!("tool:block:{block_key}")
+                            } else {
+                                format!("tool:item:{index}:block:{block_index}")
+                            };
+                            let is_open = self.expanded_tool_blocks.contains(&disclosure_key);
+                            let toggle_key = disclosure_key.clone();
+                            let name = block.name.clone().unwrap_or_else(|| "Tool".into());
+                            let has_content =
+                                block.args.is_some() || !block.output.trim().is_empty();
+
+                            v_flex()
+                                .id(format!("tool-accordion-{index}-{block_index}"))
                                 .w_full()
-                                .justify_end()
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(border)
+                                .bg(secondary.opacity(0.3))
+                                .when(block.running, |this| {
+                                    this.border_color(gpui::rgb(0xd97706))
+                                        .bg(gpui::rgba(0xd9770610))
+                                })
+                                .when(block.is_error, |this| {
+                                    this.border_color(gpui::rgb(0xdc2626))
+                                        .bg(gpui::rgba(0xdc262610))
+                                })
                                 .child(
-                                    v_flex()
-                                        .max_w(px(680.))
-                                        .px_4()
-                                        .py_3()
-                                        .gap_1()
-                                        .rounded_xl()
-                                        .bg(cx.theme().primary)
-                                        .text_color(cx.theme().primary_foreground)
-                                        .text_sm()
-                                        .when(!user.text.is_empty(), |this| {
-                                            this.child(user.text.clone())
+                                    h_flex()
+                                        .id(format!("tool-accordion-header-{index}-{block_index}"))
+                                        .min_w_0()
+                                        .p_2()
+                                        .gap_2()
+                                        .when(has_content, |this| {
+                                            this.cursor_pointer().on_click(cx.listener(
+                                                move |this, _, _, cx| {
+                                                    if is_open {
+                                                        this.expanded_tool_blocks
+                                                            .remove(&toggle_key);
+                                                    } else {
+                                                        this.expanded_tool_blocks
+                                                            .insert(toggle_key.clone());
+                                                    }
+                                                    this.conversation_list
+                                                        .remeasure_items(index..index + 1);
+                                                    cx.notify();
+                                                },
+                                            ))
                                         })
-                                        .when(!user.images.is_empty(), |this| {
-                                            this.child(div().text_xs().child(format!(
-                                                "{} image attachment{}",
-                                                user.images.len(),
-                                                if user.images.len() == 1 { "" } else { "s" }
-                                            )))
+                                        .child(
+                                            Icon::new(if has_content {
+                                                if is_open {
+                                                    IconName::ChevronDown
+                                                } else {
+                                                    IconName::ChevronRight
+                                                }
+                                            } else {
+                                                IconName::SquareTerminal
+                                            })
+                                            .size_4()
+                                            .flex_none(),
+                                        )
+                                        .child(
+                                            Icon::new(if block.running {
+                                                IconName::LoaderCircle
+                                            } else {
+                                                IconName::SquareTerminal
+                                            })
+                                            .size_4()
+                                            .flex_none(),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .whitespace_nowrap()
+                                                .text_ellipsis()
+                                                .font_semibold()
+                                                .child(name),
+                                        )
+                                        .when(block.running, |this| {
+                                            this.child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(gpui::rgb(0xd97706))
+                                                    .child("Running"),
+                                            )
                                         })
-                                        .when(user.queued, |this| {
-                                            this.child(div().text_xs().child("Queued"))
+                                        .when(block.is_error, |this| {
+                                            this.child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(gpui::rgb(0xdc2626))
+                                                    .child("Error"),
+                                            )
                                         }),
                                 )
-                                .into_any_element(),
-                            ConversationItem::Assistant(assistant) => v_flex()
-                                .w_full()
-                                .gap_3()
-                                .children(assistant.blocks.iter().enumerate().map(
-                                    |(block_index, block)| {
-                                        match block {
-                                            AssistantBlock::Text(block) => TextView::markdown(
-                                                format!("assistant-{index}-{block_index}"),
-                                                block.text.clone(),
-                                            )
-                                            .selectable(true)
-                                            .text_sm()
-                                            .line_height(gpui::relative(1.55))
-                                            .into_any_element(),
-                                            AssistantBlock::Thinking(_)
-                                                if self.session.hide_thinking_block =>
-                                            {
-                                                div().into_any_element()
-                                            }
-                                            AssistantBlock::Thinking(block) => v_flex()
-                                                .w_full()
-                                                .p_3()
-                                                .gap_2()
-                                                .rounded_lg()
-                                                .border_1()
-                                                .border_color(border)
-                                                .bg(secondary.opacity(0.45))
-                                                .child(
+                                .when(is_open && has_content, |this| {
+                                    this.child(
+                                        v_flex()
+                                            .w_full()
+                                            .p_3()
+                                            .gap_3()
+                                            .border_t_1()
+                                            .border_color(border)
+                                            .when_some(block.args.clone(), |this, args| {
+                                                this.child(
                                                     div()
+                                                        .font_family("Menlo")
                                                         .text_xs()
-                                                        .font_semibold()
                                                         .text_color(muted)
                                                         .child(
-                                                            block
-                                                                .summary_label
-                                                                .clone()
-                                                                .unwrap_or_else(|| {
-                                                                    "Thinking".into()
-                                                                }),
+                                                            serde_json::to_string_pretty(&args)
+                                                                .unwrap_or_default(),
                                                         ),
                                                 )
-                                                .child(
-                                                    TextView::markdown(
-                                                        format!("thinking-{index}-{block_index}"),
-                                                        block.text.clone(),
-                                                    )
-                                                    .selectable(true)
-                                                    .text_sm(),
-                                                )
-                                                .into_any_element(),
-                                            AssistantBlock::Tool(_) if self.hide_tools => {
-                                                div().into_any_element()
-                                            }
-                                            AssistantBlock::Tool(block) => {
-                                                let disclosure_key = if let Some(call_id) =
-                                                    block.call_id.as_deref()
-                                                {
-                                                    format!("tool:call:{call_id}")
-                                                } else if let Some(block_key) =
-                                                    block.block_key.as_deref()
-                                                {
-                                                    format!("tool:block:{block_key}")
-                                                } else {
-                                                    format!(
-                                                        "tool:item:{index}:block:{block_index}"
-                                                    )
-                                                };
-                                                let is_open = self
-                                                    .expanded_tool_blocks
-                                                    .contains(&disclosure_key);
-                                                let toggle_key = disclosure_key.clone();
-                                                let name = block
-                                                    .name
-                                                    .clone()
-                                                    .unwrap_or_else(|| "Tool".into());
-                                                let has_content = block.args.is_some()
-                                                    || !block.output.trim().is_empty();
-
-                                                v_flex()
-                                                    .id(format!(
-                                                        "tool-accordion-{index}-{block_index}"
-                                                    ))
-                                                    .w_full()
-                                                    .rounded_lg()
-                                                    .border_1()
-                                                    .border_color(border)
-                                                    .bg(secondary.opacity(0.3))
-                                                    .when(block.running, |this| {
-                                                        this.border_color(gpui::rgb(0xd97706))
-                                                            .bg(gpui::rgba(0xd9770610))
-                                                    })
-                                                    .when(block.is_error, |this| {
-                                                        this.border_color(gpui::rgb(0xdc2626))
-                                                            .bg(gpui::rgba(0xdc262610))
-                                                    })
-                                                    .child(
-                                                        h_flex()
-                                                            .id(format!(
-                                                                "tool-accordion-header-{index}-{block_index}"
-                                                            ))
-                                                            .min_w_0()
-                                                            .p_2()
-                                                            .gap_2()
-                                                            .when(has_content, |this| {
-                                                                this.cursor_pointer().on_click(
-                                                                    cx.listener(
-                                                                        move |this, _, _, cx| {
-                                                                            if is_open {
-                                                                                this.expanded_tool_blocks
-                                                                                    .remove(&toggle_key);
-                                                                            } else {
-                                                                                this.expanded_tool_blocks
-                                                                                    .insert(toggle_key.clone());
-                                                                            }
-                                                                            this.conversation_list
-                                                                                .remeasure_items(
-                                                                                    index
-                                                                                        ..index
-                                                                                            + 1,
-                                                                                );
-                                                                            cx.notify();
-                                                                        },
-                                                                    ),
-                                                                )
-                                                            })
-                                                            .child(
-                                                                Icon::new(if has_content {
-                                                                    if is_open {
-                                                                        IconName::ChevronDown
-                                                                    } else {
-                                                                        IconName::ChevronRight
-                                                                    }
-                                                                } else {
-                                                                    IconName::SquareTerminal
-                                                                })
-                                                                .size_4()
-                                                                .flex_none(),
-                                                            )
-                                                            .child(
-                                                                Icon::new(if block.running {
-                                                                    IconName::LoaderCircle
-                                                                } else {
-                                                                    IconName::SquareTerminal
-                                                                })
-                                                                .size_4()
-                                                                .flex_none(),
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .flex_1()
-                                                                    .min_w_0()
-                                                                    .overflow_hidden()
-                                                                    .whitespace_nowrap()
-                                                                    .text_ellipsis()
-                                                                    .font_semibold()
-                                                                    .child(name),
-                                                            )
-                                                            .when(block.running, |this| {
-                                                                this.child(
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .text_color(gpui::rgb(
-                                                                            0xd97706,
-                                                                        ))
-                                                                        .child("Running"),
-                                                                )
-                                                            })
-                                                            .when(block.is_error, |this| {
-                                                                this.child(
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .text_color(gpui::rgb(
-                                                                            0xdc2626,
-                                                                        ))
-                                                                        .child("Error"),
-                                                                )
-                                                            }),
-                                                    )
-                                                    .when(is_open && has_content, |this| {
-                                                        this.child(
-                                                            v_flex()
-                                                                .w_full()
-                                                                .p_3()
-                                                                .gap_3()
-                                                                .border_t_1()
-                                                                .border_color(border)
-                                                                .when_some(
-                                                                    block.args.clone(),
-                                                                    |this, args| {
-                                                                        this.child(
-                                                                            div()
-                                                                                .font_family(
-                                                                                    "Menlo",
-                                                                                )
-                                                                                .text_xs()
-                                                                                .text_color(muted)
-                                                                                .child(
-                                                                                    serde_json::to_string_pretty(&args)
-                                                                                        .unwrap_or_default(),
-                                                                                ),
-                                                                        )
-                                                                    },
-                                                                )
-                                                                .when(
-                                                                    !block.output.trim().is_empty(),
-                                                                    |this| {
-                                                                        this.child(
-                                                                            div()
-                                                                                .max_h(px(260.))
-                                                                                .overflow_y_scrollbar()
-                                                                                .font_family(
-                                                                                    "Menlo",
-                                                                                )
-                                                                                .text_xs()
-                                                                                .child(
-                                                                                    block
-                                                                                        .output
-                                                                                        .clone(),
-                                                                                ),
-                                                                        )
-                                                                    },
-                                                                ),
-                                                        )
-                                                    })
-                                                    .into_any_element()
-                                            }
-                                            AssistantBlock::Compaction(block) => v_flex()
-                                                .w_full()
-                                                .p_3()
-                                                .rounded_lg()
-                                                .border_1()
-                                                .border_color(border)
-                                                .child(
+                                            })
+                                            .when(!block.output.trim().is_empty(), |this| {
+                                                this.child(
                                                     div()
+                                                        .max_h(px(260.))
+                                                        .overflow_y_scrollbar()
+                                                        .font_family("Menlo")
                                                         .text_xs()
-                                                        .font_semibold()
-                                                        .text_color(muted)
-                                                        .child("Context compacted"),
+                                                        .child(block.output.clone()),
                                                 )
-                                                .child(
-                                                    TextView::markdown(
-                                                        format!("compaction-{index}-{block_index}"),
-                                                        block.summary.clone(),
-                                                    )
-                                                    .text_sm(),
-                                                )
-                                                .into_any_element(),
-                                        }
-                                    },
-                                ))
-                                .into_any_element(),
-                    }),
-            )
+                                            }),
+                                    )
+                                })
+                                .into_any_element()
+                        }
+                        AssistantBlock::Compaction(block) => v_flex()
+                            .w_full()
+                            .p_3()
+                            .rounded_lg()
+                            .border_1()
+                            .border_color(border)
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(muted)
+                                    .child("Context compacted"),
+                            )
+                            .child(
+                                self.markdown_view(
+                                    Self::conversation_markdown_key(
+                                        item_index,
+                                        assistant.item_key.as_deref(),
+                                        block_index,
+                                        block.block_key.as_deref(),
+                                        "compaction",
+                                    ),
+                                    &block.summary,
+                                )
+                                .text_sm(),
+                            )
+                            .into_any_element(),
+                    }
+                }
+            }))
             .into_any_element()
     }
 
@@ -2988,7 +3281,7 @@ impl PicoDesktop {
         let muted = cx.theme().muted_foreground;
         let is_working = self.session.streaming || self.session.compacting;
 
-        if self.session.items.is_empty() {
+        if self.conversation_rows.is_empty() {
             return v_flex()
                 .id("conversation")
                 .flex_1()
@@ -3038,7 +3331,7 @@ impl PicoDesktop {
                         .size_full()
                         .px_5()
                         .py_8()
-                        .gap_6(),
+                        .gap_3(),
                     )
                     .vertical_scrollbar(&conversation_list),
             )
@@ -5311,8 +5604,11 @@ pub fn root(
 
 #[cfg(test)]
 mod tests {
-    use super::{git_action_visibility, is_slash_menu_input, slash_menu_capacity};
-    use crate::models::{GitChangeFile, GitStatusSummary};
+    use super::{
+        ConversationRow, PicoDesktop, git_action_visibility, is_slash_menu_input,
+        slash_menu_capacity,
+    };
+    use crate::models::{ConversationItem, GitChangeFile, GitStatusSummary};
     use gpui::px;
 
     fn git_file(status: &str) -> GitChangeFile {
@@ -5336,6 +5632,56 @@ mod tests {
         assert_eq!(slash_menu_capacity(px(240.)), 5);
         assert_eq!(slash_menu_capacity(px(480.)), 11);
         assert_eq!(slash_menu_capacity(px(900.)), 12);
+    }
+
+    #[test]
+    fn conversation_projection_virtualizes_each_assistant_block() {
+        let items: Vec<ConversationItem> = serde_json::from_value(serde_json::json!([
+            {
+                "kind": "user",
+                "itemKey": "user-1",
+                "text": "hello"
+            },
+            {
+                "kind": "assistant",
+                "itemKey": "assistant-1",
+                "blocks": [
+                    { "type": "text", "blockKey": "text-1", "text": "answer" },
+                    {
+                        "type": "tool",
+                        "blockKey": "tool-1",
+                        "callId": "call-1",
+                        "name": "read",
+                        "output": "large output"
+                    },
+                    {
+                        "type": "thinking",
+                        "blockKey": "thought-1",
+                        "text": "reasoning"
+                    },
+                    {
+                        "type": "compaction",
+                        "blockKey": "compact-1",
+                        "summary": "summary"
+                    }
+                ]
+            }
+        ]))
+        .unwrap();
+
+        let rows = PicoDesktop::conversation_rows_for_items(&items);
+
+        assert_eq!(rows.len(), 5);
+        assert!(matches!(
+            rows[0],
+            ConversationRow::User { item_index: 0, .. }
+        ));
+        assert!(
+            rows[1..]
+                .iter()
+                .all(|row| matches!(row, ConversationRow::AssistantBlock { item_index: 1, .. }))
+        );
+        assert!(rows[2].key().contains("tool:call-1"));
     }
 
     #[test]
