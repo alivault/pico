@@ -130,6 +130,14 @@ run the desktop client from the repository root:
 pnpm desktop
 ```
 
+The desktop client uses the same server contracts as the web workspace and
+includes live session sync, global session search and management, persistent
+drafts, image prompts, skills, steer/follow-up queues, model and thinking
+controls, provider authentication, extension UI requests, project files,
+working-tree and commit diffs, Git mutations, session tree/fork tools, a
+server-owned terminal, completion notifications, settings, and keyboard
+commands. Press `⌘K` to open the command palette.
+
 It defaults to `http://127.0.0.1:3141` and the current working directory. You
 can override either value:
 
