@@ -7,9 +7,10 @@ use std::rc::Rc;
 use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
-    Anchor, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, PathPromptOptions, Pixels, Render, ScrollHandle,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
+    Anchor, App, AppContext as _, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, PathPromptOptions, Pixels,
+    Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window,
+    div,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
@@ -402,6 +403,7 @@ pub struct PicoDesktop {
     auth_value: Entity<InputState>,
     terminal_input: Entity<InputState>,
     git_comment_input: Entity<InputState>,
+    focus_handle: FocusHandle,
     conversation_scroll: ScrollHandle,
     scroll_conversation_to_bottom: Cell<bool>,
     _event_task: gpui::Task<()>,
@@ -555,6 +557,7 @@ impl PicoDesktop {
             auth_value,
             terminal_input,
             git_comment_input,
+            focus_handle: cx.focus_handle(),
             conversation_scroll: ScrollHandle::new(),
             scroll_conversation_to_bottom: Cell::new(false),
             _event_task,
@@ -4991,6 +4994,7 @@ impl Render for PicoDesktop {
         let has_failed_submission = self.failed_submission.is_some();
         h_flex()
             .id("pico-desktop")
+            .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &NewSession, _, cx| this.create_session(cx)))
             .on_action(cx.listener(|this, _: &ToggleLeftSidebar, _, cx| {
                 this.left_sidebar_open = !this.left_sidebar_open;
@@ -5096,6 +5100,12 @@ impl Render for PicoDesktop {
     }
 }
 
+impl Focusable for PicoDesktop {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
 pub fn root(
     client: PicoClient,
     initial_directory: String,
@@ -5103,6 +5113,12 @@ pub fn root(
     cx: &mut App,
 ) -> Entity<Root> {
     let view = cx.new(|cx| PicoDesktop::new(client, initial_directory, window, cx));
+    let focus_handle = view.focus_handle(cx);
+    window.defer(cx, move |window, cx| {
+        if window.focused(cx).is_none() {
+            focus_handle.focus(window, cx);
+        }
+    });
     cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
 }
 
