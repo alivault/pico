@@ -2295,7 +2295,8 @@ impl PicoDesktop {
             .w_full()
             .items_center()
             .track_scroll(&self.conversation_scroll)
-            .overflow_y_scrollbar()
+            .overflow_y_scroll()
+            .vertical_scrollbar(&self.conversation_scroll)
             .child(
                 v_flex()
                     .w_full()
