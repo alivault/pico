@@ -8,6 +8,9 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use serde::Serialize;
 use tokio::sync::broadcast;
 
+#[cfg(unix)]
+use std::ffi::CStr;
+
 const BACKLOG_MAX_CHUNKS: usize = 500;
 const BACKLOG_MAX_BYTES: usize = 512 * 1024;
 const EXITED_TTL: Duration = Duration::from_secs(30 * 60);
@@ -189,6 +192,7 @@ impl TerminalManager {
             })
             .map_err(pty_error)?;
         let mut command = CommandBuilder::new(&shell);
+        command.arg("-l");
         command.cwd(&cwd);
         configure_environment(&mut command);
         let child = pty.slave.spawn_command(command).map_err(pty_error)?;
@@ -630,18 +634,80 @@ fn portable_signal_number(signal: &str) -> Option<u32> {
 }
 
 fn configure_environment(command: &mut CommandBuilder) {
-    for key in ["ZELLIJ", "ZELLIJ_SESSION_NAME", "TMUX", "TMUX_PANE"] {
+    for key in [
+        "ZELLIJ",
+        "ZELLIJ_SESSION_NAME",
+        "TMUX",
+        "TMUX_PANE",
+        "STARSHIP_SESSION_KEY",
+        "STARSHIP_SHELL",
+        "TERMINFO",
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+    ] {
         command.env_remove(key);
     }
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
+    command.env("TERM_PROGRAM", "Pico");
 }
 
 fn default_shell() -> String {
-    std::env::var("SHELL")
-        .ok()
+    choose_default_shell(
+        std::env::var("PICO_TERMINAL_SHELL").ok(),
+        account_shell(),
+        std::env::var("SHELL").ok(),
+    )
+}
+
+fn choose_default_shell(
+    explicit_shell: Option<String>,
+    account_shell: Option<String>,
+    environment_shell: Option<String>,
+) -> String {
+    explicit_shell
         .filter(|shell| !shell.is_empty())
+        .or_else(|| account_shell.filter(|shell| !shell.is_empty()))
+        .or_else(|| environment_shell.filter(|shell| !shell.is_empty()))
         .unwrap_or_else(|| "/bin/sh".into())
+}
+
+#[cfg(unix)]
+fn account_shell() -> Option<String> {
+    let buffer_size = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+    let buffer_size = if buffer_size > 0 {
+        buffer_size as usize
+    } else {
+        16 * 1024
+    };
+    let mut buffer = vec![0_u8; buffer_size];
+    let mut passwd = std::mem::MaybeUninit::<libc::passwd>::uninit();
+    let mut result = std::ptr::null_mut();
+    let status = unsafe {
+        libc::getpwuid_r(
+            libc::geteuid(),
+            passwd.as_mut_ptr(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if status != 0 || result.is_null() {
+        return None;
+    }
+    let passwd = unsafe { passwd.assume_init() };
+    if passwd.pw_shell.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(passwd.pw_shell) }
+        .to_str()
+        .ok()
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(not(unix))]
+fn account_shell() -> Option<String> {
+    None
 }
 
 fn shell_label(shell: &str) -> String {
@@ -679,6 +745,30 @@ fn invalid(message: impl Into<String>) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_shell_prefers_an_explicit_override_then_the_account_shell() {
+        assert_eq!(
+            choose_default_shell(
+                Some("/custom/fish".into()),
+                Some("/account/fish".into()),
+                Some("/environment/bash".into()),
+            ),
+            "/custom/fish"
+        );
+        assert_eq!(
+            choose_default_shell(
+                None,
+                Some("/account/fish".into()),
+                Some("/environment/bash".into()),
+            ),
+            "/account/fish"
+        );
+        assert_eq!(
+            choose_default_shell(None, None, Some("/environment/bash".into())),
+            "/environment/bash"
+        );
+    }
 
     #[test]
     fn portable_signal_names_preserve_numeric_terminal_contract() {
