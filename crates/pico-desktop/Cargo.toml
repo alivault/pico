@@ -16,6 +16,7 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
 ] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "dc2943fac0ee9b907e21cc415867bd45615c220c" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "dc2943fac0ee9b907e21cc415867bd45615c220c" }
+gpui_ghostty_terminal = { git = "https://github.com/Xuanwo/gpui-ghostty", rev = "e3025981c6211dd7db2a825dc364ffb5d342f45e" }
 lsp-types = "0.97"
 notify-rust = "4.12"
 reqwest = { version = "0.12", features = [
@@ -26,4 +27,5 @@ reqwest = { version = "0.12", features = [
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 smol = "2.0"
+tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 url = "2.5"

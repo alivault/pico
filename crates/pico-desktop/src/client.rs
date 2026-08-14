@@ -15,6 +15,29 @@ use serde_json::{Value, json};
 use smol::channel::Sender;
 use url::Url;
 
+#[derive(Clone, Debug)]
+pub enum TerminalTransportCommand {
+    Input(Vec<u8>),
+    Resize { cols: u16, rows: u16 },
+}
+
+fn set_terminal_socket_timeout(
+    socket: &mut tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
+    timeout: Duration,
+) {
+    match socket.get_mut() {
+        tungstenite::stream::MaybeTlsStream::Plain(stream) => {
+            let _ = stream.set_read_timeout(Some(timeout));
+            let _ = stream.set_nodelay(true);
+        }
+        tungstenite::stream::MaybeTlsStream::Rustls(stream) => {
+            let _ = stream.sock.set_read_timeout(Some(timeout));
+            let _ = stream.sock.set_nodelay(true);
+        }
+        _ => {}
+    }
+}
+
 use crate::models::{
     AuthProvidersResponse, ClientManifest, DesktopEvent, ForkableMessagesResponse,
     GitActionResponse, GitChangesResponse, GitCommitDiffResponse, GitFileDiffResponse,
@@ -309,6 +332,8 @@ impl PicoClient {
         &self,
         session_id: Option<String>,
         session_key: Option<String>,
+        cols: u16,
+        rows: u16,
         tx: Sender<DesktopEvent>,
     ) {
         let client = self.clone();
@@ -320,8 +345,8 @@ impl PicoClient {
                     &query,
                     &json!({
                         "clientKey": "gpui-desktop",
-                        "cols": 100,
-                        "rows": 30,
+                        "cols": cols,
+                        "rows": rows,
                     }),
                 )
                 .map(DesktopEvent::TerminalCreated);
@@ -329,89 +354,114 @@ impl PicoClient {
         });
     }
 
-    pub fn start_terminal_events(
+    pub fn start_terminal_transport(
         &self,
         id: String,
         session_id: Option<String>,
         session_key: Option<String>,
         tx: Sender<DesktopEvent>,
-    ) {
+    ) -> Sender<TerminalTransportCommand> {
+        let (command_tx, command_rx) = smol::channel::unbounded();
         let client = self.clone();
         std::thread::spawn(move || {
-            let mut url = match client.endpoint(&format!("/api/terminal/{id}/events")) {
+            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
+            let mut url = match client.request_url(&format!("/api/terminal/{id}/ws"), &query) {
                 Ok(url) => url,
                 Err(error) => {
                     let _ = tx.send_blocking(DesktopEvent::Error(error.to_string()));
                     return;
                 }
             };
-            {
-                let mut query = url.query_pairs_mut();
-                query.append_pair("context", &client.context_id);
-                if let Some(session_id) = session_id.as_deref() {
-                    query.append_pair("session", session_id);
-                }
-                if let Some(session_key) = session_key.as_deref() {
-                    query.append_pair("sessionKey", session_key);
-                }
-            }
-            let result = client
-                .http
-                .get(url)
-                .header("accept", "text/event-stream")
-                .send()
-                .and_then(Response::error_for_status);
-            let Ok(response) = result else {
-                let _ = tx.send_blocking(DesktopEvent::Error("Terminal disconnected".into()));
+            let websocket_scheme = if url.scheme() == "https" { "wss" } else { "ws" };
+            if url.set_scheme(websocket_scheme).is_err() {
+                let _ =
+                    tx.send_blocking(DesktopEvent::Error("Invalid terminal WebSocket URL".into()));
                 return;
+            }
+            let (mut socket, _) = match tungstenite::connect(url.as_str()) {
+                Ok(connection) => connection,
+                Err(error) => {
+                    let _ = tx.send_blocking(DesktopEvent::Error(format!(
+                        "Terminal connection failed: {error}"
+                    )));
+                    return;
+                }
             };
-            for line in BufReader::new(response).lines().map_while(Result::ok) {
-                let Some(data) = line.strip_prefix("data:") else {
-                    continue;
-                };
-                let Ok(value) = serde_json::from_str::<Value>(data.trim()) else {
-                    continue;
-                };
-                match value.get("type").and_then(Value::as_str) {
-                    Some("output") => {
-                        if let Some(data) = value.get("data").and_then(Value::as_str) {
-                            if tx
-                                .send_blocking(DesktopEvent::TerminalOutput(data.to_string()))
-                                .is_err()
-                            {
-                                break;
+            set_terminal_socket_timeout(&mut socket, Duration::from_millis(16));
+
+            loop {
+                while let Ok(command) = command_rx.try_recv() {
+                    let payload = match command {
+                        TerminalTransportCommand::Input(bytes) => json!({
+                            "type": "input",
+                            "data": String::from_utf8_lossy(&bytes),
+                        }),
+                        TerminalTransportCommand::Resize { cols, rows } => json!({
+                            "type": "resize",
+                            "cols": cols,
+                            "rows": rows,
+                        }),
+                    };
+                    if socket
+                        .send(tungstenite::Message::Text(payload.to_string()))
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                if command_rx.is_closed() {
+                    let _ = socket.close(None);
+                    return;
+                }
+
+                match socket.read() {
+                    Ok(tungstenite::Message::Text(text)) => {
+                        let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                            continue;
+                        };
+                        match value.get("type").and_then(Value::as_str) {
+                            Some("output") => {
+                                if let Some(data) = value.get("data").and_then(Value::as_str) {
+                                    if tx
+                                        .send_blocking(DesktopEvent::TerminalOutput(data.into()))
+                                        .is_err()
+                                    {
+                                        return;
+                                    }
+                                }
                             }
+                            Some("exit") => {
+                                let _ = tx.send_blocking(DesktopEvent::TerminalOutput(
+                                    "\r\n[terminal process exited]\r\n".into(),
+                                ));
+                                return;
+                            }
+                            Some("error") => {
+                                if let Some(error) = value.get("error").and_then(Value::as_str) {
+                                    let _ = tx.send_blocking(DesktopEvent::Error(error.into()));
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    Some("exit") => {
-                        let _ = tx.send_blocking(DesktopEvent::TerminalOutput(
-                            "\n[terminal process exited]\n".into(),
-                        ));
-                        break;
+                    Ok(tungstenite::Message::Close(_)) => return,
+                    Ok(_) => {}
+                    Err(tungstenite::Error::Io(error))
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) => {}
+                    Err(tungstenite::Error::ConnectionClosed) => return,
+                    Err(error) => {
+                        let _ = tx.send_blocking(DesktopEvent::Error(format!(
+                            "Terminal disconnected: {error}"
+                        )));
+                        return;
                     }
-                    _ => {}
                 }
             }
         });
-    }
-
-    pub fn send_terminal_input(
-        &self,
-        id: String,
-        data: String,
-        session_id: Option<String>,
-        session_key: Option<String>,
-        tx: Sender<DesktopEvent>,
-    ) {
-        let client = self.clone();
-        std::thread::spawn(move || {
-            let query = Self::session_query(session_id.as_deref(), session_key.as_deref());
-            let endpoint = format!("/api/terminal/{id}/input");
-            let result = client
-                .post_json::<Value, _>(&endpoint, &query, &json!({ "data": data }))
-                .map(|_| DesktopEvent::PromptSent);
-            Self::send_result(tx, result);
-        });
+        command_tx
     }
 
     pub fn load_session_history_tools(

@@ -4,10 +4,13 @@ import { spawn } from "node:child_process"
 import { watch } from "node:fs"
 import process from "node:process"
 
+import { ensureDesktopZig } from "./with-desktop-zig.mjs"
+
 const watchedPaths = ["crates/pico-desktop", "Cargo.toml"]
 let child
 let restartTimer
 let stopping = false
+const zig = await ensureDesktopZig()
 
 function stopChild() {
   if (!child || child.exitCode !== null) return
@@ -24,7 +27,7 @@ function run() {
   child = spawn("cargo", ["run", "-p", "pico-desktop"], {
     detached: true,
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, ZIG: zig },
   })
   child.on("exit", (code, signal) => {
     if (!stopping && code && signal !== "SIGTERM") {

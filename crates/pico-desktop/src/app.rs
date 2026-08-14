@@ -2,13 +2,14 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, ClipboardItem, Context, Entity, FocusHandle, Focusable,
     FollowMode, InteractiveElement as _, IntoElement, KeyBinding, Keystroke, ListAlignment,
-    ListState, ParentElement as _, PathPromptOptions, Pixels, Render,
+    ListState, ParentElement as _, PathPromptOptions, Pixels, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
     prelude::FluentBuilder as _, px,
 };
@@ -30,6 +31,11 @@ use gpui_component::{
     tooltip::Tooltip,
     v_flex,
 };
+use gpui_ghostty_terminal::view::{
+    Copy as TerminalCopy, Paste as TerminalPaste, SelectAll as TerminalSelectAll, TerminalInput,
+    TerminalView,
+};
+use gpui_ghostty_terminal::{TerminalConfig, TerminalSession};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit,
     InsertReplaceEdit,
@@ -38,7 +44,7 @@ use serde::{Deserialize, Serialize};
 use smol::channel::{Receiver, Sender};
 
 use crate::assets::PicoIcon;
-use crate::client::PicoClient;
+use crate::client::{PicoClient, TerminalTransportCommand};
 use crate::models::{
     AssistantBlock, AuthProvider, ConversationItem, DesktopEvent, DirectorySessionsIndex,
     FlatTreeNode, ForkableMessage, GitChangeFile, GitLocalBranch, GitStatusSummary,
@@ -71,6 +77,9 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-.", AbortSession, None),
         KeyBinding::new("ctrl-j", SelectDown, Some("List")),
         KeyBinding::new("ctrl-k", SelectUp, Some("List")),
+        KeyBinding::new("cmd-c", TerminalCopy, Some("Terminal")),
+        KeyBinding::new("cmd-v", TerminalPaste, Some("Terminal")),
+        KeyBinding::new("cmd-a", TerminalSelectAll, Some("Terminal")),
     ]);
 }
 
@@ -179,6 +188,52 @@ fn slash_menu_capacity(viewport_height: Pixels) -> usize {
     // composer can reserve just enough room instead of letting it clip.
     let max_height = (viewport_height.as_f32() * 0.5).clamp(48., 248.);
     (((max_height - 8.) / 20.).floor() as usize).max(2)
+}
+
+fn terminal_device_attribute_responses(tail: &mut Vec<u8>, output: &[u8]) -> Vec<&'static [u8]> {
+    const PRIMARY_REQUESTS: [&[u8]; 2] = [b"\x1b[c", b"\x1b[0c"];
+    const SECONDARY_REQUESTS: [&[u8]; 2] = [b"\x1b[>c", b"\x1b[>0c"];
+    const PRIMARY_RESPONSE: &[u8] = b"\x1b[?62;22c";
+    const SECONDARY_RESPONSE: &[u8] = b"\x1b[>1;10;0c";
+
+    tail.extend_from_slice(output);
+    let mut matches = Vec::new();
+    for request in PRIMARY_REQUESTS {
+        matches.extend(
+            tail.windows(request.len())
+                .filter(|window| *window == request)
+                .map(|_| PRIMARY_RESPONSE),
+        );
+    }
+    for request in SECONDARY_REQUESTS {
+        matches.extend(
+            tail.windows(request.len())
+                .filter(|window| *window == request)
+                .map(|_| SECONDARY_RESPONSE),
+        );
+    }
+
+    let pending_suffix_length = PRIMARY_REQUESTS
+        .into_iter()
+        .chain(SECONDARY_REQUESTS)
+        .flat_map(|request| 1..request.len())
+        .filter(|length| {
+            if tail.len() < *length {
+                return false;
+            }
+            let suffix = &tail[tail.len() - *length..];
+            let mut requests = PRIMARY_REQUESTS.into_iter().chain(SECONDARY_REQUESTS);
+            !requests.clone().any(|request| suffix == request)
+                && requests.any(|request| request.len() > *length && suffix == &request[..*length])
+        })
+        .max()
+        .unwrap_or(0);
+    if pending_suffix_length == 0 {
+        tail.clear();
+    } else {
+        tail.drain(..tail.len() - pending_suffix_length);
+    }
+    matches
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -686,7 +741,12 @@ pub struct PicoDesktop {
     selected_auth_provider: Option<AuthProvider>,
     ui_request: Option<UiRequest>,
     terminal_id: Option<String>,
-    terminal_output: String,
+    terminal_view: Entity<TerminalView>,
+    terminal_transport: Arc<Mutex<Option<Sender<TerminalTransportCommand>>>>,
+    terminal_label: String,
+    terminal_query_tail: Vec<u8>,
+    terminal_cols: u16,
+    terminal_rows: u16,
     terminal_panel_open: bool,
     tree_nodes: Vec<FlatTreeNode>,
     tree_leaf_id: Option<String>,
@@ -712,7 +772,6 @@ pub struct PicoDesktop {
     slash_completion_provider: Rc<SlashCompletionProvider>,
     commit_message: Entity<TextareaState>,
     auth_value: Entity<InputState>,
-    terminal_input: Entity<InputState>,
     git_comment_input: Entity<InputState>,
     focus_handle: FocusHandle,
     conversation_list: ListState,
@@ -1020,6 +1079,38 @@ impl PicoDesktop {
             .any(|candidate| self.conversation_row_is_visible(candidate))
     }
 
+    fn terminal_grid_size(window: &mut Window, left_sidebar_open: bool) -> (u16, u16) {
+        let width =
+            f32::from(window.viewport_size().width) - if left_sidebar_open { 300. } else { 0. };
+        let height = 242.;
+        let font = gpui_ghostty_terminal::default_terminal_font();
+        let mut style = window.text_style();
+        style.font_family = font.family.clone();
+        style.font_features = gpui_ghostty_terminal::default_terminal_font_features();
+        style.font_fallbacks = font.fallbacks.clone();
+        let rem_size = window.rem_size();
+        let font_size = style.font_size.to_pixels(rem_size);
+        let line_height = style.line_height.to_pixels(style.font_size, rem_size);
+        let cell_width = window
+            .text_system()
+            .shape_text(
+                SharedString::from("M"),
+                font_size,
+                &[style.to_run(1)],
+                None,
+                Some(1),
+            )
+            .ok()
+            .and_then(|lines| lines.first().map(|line| f32::from(line.width())))
+            .unwrap_or(8.)
+            .max(1.);
+        let cell_height = f32::from(line_height).max(1.);
+        (
+            (width / cell_width).floor().clamp(20., 500.) as u16,
+            (height / cell_height).floor().clamp(5., 200.) as u16,
+        )
+    }
+
     pub fn new(
         client: PicoClient,
         initial_directory: String,
@@ -1062,16 +1153,44 @@ impl PicoDesktop {
         });
         let auth_value =
             cx.new(|cx| InputState::new(window, cx).placeholder("API key or response"));
-        let terminal_input = cx.new(|cx| InputState::new(window, cx).placeholder("Enter command…"));
         let git_comment_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Comment on this diff…"));
         let (tx, rx) = smol::channel::unbounded();
+        let (terminal_cols, terminal_rows) =
+            Self::terminal_grid_size(window, preferences.left_sidebar_open);
+        let terminal_transport = Arc::new(Mutex::new(None::<Sender<TerminalTransportCommand>>));
+        let terminal_input_transport = terminal_transport.clone();
+        let terminal_view = cx.new(|cx| {
+            let focus_handle = cx.focus_handle();
+            let session = TerminalSession::new(TerminalConfig {
+                cols: terminal_cols,
+                rows: terminal_rows,
+                update_window_title: false,
+                ..TerminalConfig::default()
+            })
+            .expect("failed to initialize libghostty terminal");
+            let input = TerminalInput::new(move |bytes| {
+                let transport = terminal_input_transport
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone();
+                if let Some(transport) = transport {
+                    let _ = transport.try_send(TerminalTransportCommand::Input(bytes.to_vec()));
+                }
+            });
+            TerminalView::new_with_input(session, focus_handle, input)
+        });
 
         client.connect(tx.clone());
         client.start_events(None, None, preferences.directories.clone(), tx.clone());
 
         let _event_task = Self::listen_for_events(rx, cx);
         let _subscriptions = vec![
+            cx.observe_window_bounds(window, |this, window, cx| {
+                if this.terminal_panel_open {
+                    this.sync_terminal_grid_size(window, cx);
+                }
+            }),
             cx.subscribe_in(&search, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
@@ -1161,7 +1280,12 @@ impl PicoDesktop {
             selected_auth_provider: None,
             ui_request: None,
             terminal_id: None,
-            terminal_output: String::new(),
+            terminal_view,
+            terminal_transport,
+            terminal_label: "Terminal".into(),
+            terminal_query_tail: Vec::new(),
+            terminal_cols,
+            terminal_rows,
             terminal_panel_open: false,
             tree_nodes: Vec::new(),
             tree_leaf_id: None,
@@ -1187,7 +1311,6 @@ impl PicoDesktop {
             slash_completion_provider,
             commit_message,
             auth_value,
-            terminal_input,
             git_comment_input,
             focus_handle: cx.focus_handle(),
             conversation_list: Self::new_conversation_list(0),
@@ -1352,6 +1475,8 @@ impl PicoDesktop {
                         self.client.create_terminal(
                             self.selected_session_id.clone(),
                             self.session.session_key.clone(),
+                            self.terminal_cols,
+                            self.terminal_rows,
                             self.tx.clone(),
                         );
                     }
@@ -1504,23 +1629,32 @@ impl PicoDesktop {
                 self.status_message = Some(message);
             }
             DesktopEvent::TerminalCreated(terminal) => {
+                self.terminal_label = format!(
+                    "Terminal · {} · {}",
+                    terminal.shell,
+                    Self::basename(&terminal.cwd)
+                );
                 self.terminal_id = Some(terminal.id.clone());
-                self.terminal_output =
-                    format!("Pico terminal — {} — {}\n\n", terminal.shell, terminal.cwd);
-                self.client.start_terminal_events(
+                self.terminal_view.update(cx, |view, cx| {
+                    view.feed_output_bytes(b"\x1bc", cx);
+                });
+                let transport = self.client.start_terminal_transport(
                     terminal.id,
                     self.selected_session_id.clone(),
                     self.session.session_key.clone(),
                     self.tx.clone(),
                 );
+                *self
+                    .terminal_transport
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(transport);
                 self.status_message = None;
             }
             DesktopEvent::TerminalOutput(output) => {
-                self.terminal_output.push_str(&output);
-                if self.terminal_output.len() > 200_000 {
-                    let split = self.terminal_output.len() - 160_000;
-                    self.terminal_output.drain(..split);
-                }
+                self.respond_to_terminal_queries(output.as_bytes());
+                self.terminal_view.update(cx, |view, cx| {
+                    view.queue_output_bytes(output.as_bytes(), cx)
+                });
             }
             DesktopEvent::SessionTree(response) => {
                 self.tree_leaf_id = response.leaf_id;
@@ -1791,7 +1925,7 @@ impl PicoDesktop {
                 self.active_right_tab = RightWorkspaceTab::Changes;
                 cx.notify();
             }
-            DesktopPaletteCommand::ToggleTerminal => self.toggle_terminal(cx),
+            DesktopPaletteCommand::ToggleTerminal => self.toggle_terminal(window, cx),
             DesktopPaletteCommand::CloneSession => self.clone_selected_session(cx),
             DesktopPaletteCommand::Settings => self.open_settings(cx),
         }
@@ -1860,13 +1994,52 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn open_terminal(&mut self, cx: &mut Context<Self>) {
+    fn sync_terminal_grid_size(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (cols, rows) = Self::terminal_grid_size(window, self.left_sidebar_open);
+        if (cols, rows) == (self.terminal_cols, self.terminal_rows) {
+            return;
+        }
+        self.terminal_cols = cols;
+        self.terminal_rows = rows;
+        self.terminal_view
+            .update(cx, |view, cx| view.resize_terminal(cols, rows, cx));
+        let transport = self
+            .terminal_transport
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(transport) = transport {
+            let _ = transport.try_send(TerminalTransportCommand::Resize { cols, rows });
+        }
+    }
+
+    fn respond_to_terminal_queries(&mut self, output: &[u8]) {
+        let responses = terminal_device_attribute_responses(&mut self.terminal_query_tail, output);
+        if responses.is_empty() {
+            return;
+        }
+        let transport = self
+            .terminal_transport
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(transport) = transport {
+            for response in responses {
+                let _ = transport.try_send(TerminalTransportCommand::Input(response.to_vec()));
+            }
+        }
+    }
+
+    fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.terminal_panel_open = true;
+        self.sync_terminal_grid_size(window, cx);
         if self.terminal_id.is_none() {
             self.status_message = Some("Starting terminal…".into());
             self.client.create_terminal(
                 self.selected_session_id.clone(),
                 self.session.session_key.clone(),
+                self.terminal_cols,
+                self.terminal_rows,
                 self.tx.clone(),
             );
         }
@@ -1878,34 +2051,12 @@ impl PicoDesktop {
         cx.notify();
     }
 
-    fn toggle_terminal(&mut self, cx: &mut Context<Self>) {
+    fn toggle_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.terminal_panel_open {
             self.close_terminal(cx);
         } else {
-            self.open_terminal(cx);
+            self.open_terminal(window, cx);
         }
-    }
-
-    fn send_terminal_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.terminal_id.clone() else {
-            self.open_terminal(cx);
-            return;
-        };
-        let command = self.terminal_input.read(cx).value().to_string();
-        if command.trim().is_empty() {
-            return;
-        }
-        self.terminal_input.update(cx, |state, cx| {
-            state.set_value("", window, cx);
-        });
-        self.client.send_terminal_input(
-            id,
-            format!("{command}\n"),
-            self.selected_session_id.clone(),
-            self.session.session_key.clone(),
-            self.tx.clone(),
-        );
-        cx.notify();
     }
 
     fn open_history(&mut self, cx: &mut Context<Self>) {
@@ -1963,7 +2114,12 @@ impl PicoDesktop {
         self.selected_git_diff = None;
         self.selected_commit_hash = None;
         self.terminal_id = None;
-        self.terminal_output.clear();
+        self.terminal_label = "Terminal".into();
+        self.terminal_query_tail.clear();
+        *self
+            .terminal_transport
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
         self.tree_nodes.clear();
         self.forkable_messages.clear();
     }
@@ -3355,8 +3511,11 @@ impl PicoDesktop {
                         IconName::PanelLeftOpen
                     })
                     .tooltip("Toggle session sidebar")
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(|this, _, window, cx| {
                         this.left_sidebar_open = !this.left_sidebar_open;
+                        if this.terminal_panel_open {
+                            this.sync_terminal_grid_size(window, cx);
+                        }
                         this.persist_preferences();
                         cx.notify();
                     })),
@@ -3391,7 +3550,9 @@ impl PicoDesktop {
                             .icon(IconName::SquareTerminal)
                             .selected(self.terminal_panel_open)
                             .tooltip_with_action("Toggle terminal panel", &ToggleTerminal, None)
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_terminal(cx))),
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.toggle_terminal(window, cx)),
+                            ),
                     )
                     .child(
                         Button::new("toggle-right")
@@ -4855,7 +5016,12 @@ impl PicoDesktop {
                     .justify_between()
                     .border_b_1()
                     .border_color(gpui::rgb(0x333333))
-                    .child(div().text_sm().font_semibold().child("Terminal"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_semibold()
+                            .child(self.terminal_label.clone()),
+                    )
                     .child(
                         Button::new("close-terminal")
                             .ghost()
@@ -4866,31 +5032,10 @@ impl PicoDesktop {
             )
             .child(
                 div()
-                    .id("terminal-output")
                     .flex_1()
                     .min_h_0()
-                    .p_3()
-                    .overflow_scroll()
-                    .font_family("Menlo")
-                    .text_xs()
-                    .child(self.terminal_output.clone()),
-            )
-            .child(
-                h_flex()
-                    .p_2()
-                    .gap_2()
-                    .border_t_1()
-                    .border_color(gpui::rgb(0x333333))
-                    .child(Input::new(&self.terminal_input))
-                    .child(
-                        Button::new("terminal-send")
-                            .primary()
-                            .small()
-                            .label("Run")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.send_terminal_command(window, cx)
-                            })),
-                    ),
+                    .w_full()
+                    .child(self.terminal_view.clone()),
             )
             .into_any_element()
     }
@@ -5826,8 +5971,11 @@ impl Render for PicoDesktop {
             .id("pico-desktop")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &NewSession, _, cx| this.create_session(cx)))
-            .on_action(cx.listener(|this, _: &ToggleLeftSidebar, _, cx| {
+            .on_action(cx.listener(|this, _: &ToggleLeftSidebar, window, cx| {
                 this.left_sidebar_open = !this.left_sidebar_open;
+                if this.terminal_panel_open {
+                    this.sync_terminal_grid_size(window, cx);
+                }
                 this.persist_preferences();
                 cx.notify();
             }))
@@ -5836,7 +5984,11 @@ impl Render for PicoDesktop {
                 this.persist_preferences();
                 cx.notify();
             }))
-            .on_action(cx.listener(|this, _: &ToggleTerminal, _, cx| this.toggle_terminal(cx)))
+            .on_action(
+                cx.listener(|this, _: &ToggleTerminal, window, cx| {
+                    this.toggle_terminal(window, cx)
+                }),
+            )
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
                 this.toggle_command_palette(window, cx);
@@ -5982,6 +6134,7 @@ mod tests {
     use super::{
         CommandPaletteDelegate, ConversationRow, DesktopPaletteCommand, PicoDesktop,
         git_action_visibility, is_slash_menu_input, slash_menu_capacity,
+        terminal_device_attribute_responses,
     };
     use crate::models::{ConversationItem, GitChangeFile, GitStatusSummary};
     use gpui::px;
@@ -6007,6 +6160,21 @@ mod tests {
         assert_eq!(slash_menu_capacity(px(240.)), 5);
         assert_eq!(slash_menu_capacity(px(480.)), 11);
         assert_eq!(slash_menu_capacity(px(900.)), 12);
+    }
+
+    #[test]
+    fn terminal_answers_device_attribute_queries_across_output_chunks() {
+        let mut tail = Vec::new();
+        assert!(terminal_device_attribute_responses(&mut tail, b"\x1b[").is_empty());
+        assert_eq!(
+            terminal_device_attribute_responses(&mut tail, b"c"),
+            vec![b"\x1b[?62;22c".as_slice()]
+        );
+        assert_eq!(
+            terminal_device_attribute_responses(&mut tail, b"\x1b[>0c"),
+            vec![b"\x1b[>1;10;0c".as_slice()]
+        );
+        assert!(terminal_device_attribute_responses(&mut tail, b"plain text").is_empty());
     }
 
     #[test]

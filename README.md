@@ -19,7 +19,8 @@ It gives you a persistent session browser, a live conversation shell, git tools,
 The native desktop client is written in Rust with GPUI and
 [GPUI Component](https://github.com/longbridge/gpui-component). It follows the
 web workspace's three-pane session, conversation, and files layout while using
-the same HTTP JSON and SSE server contracts.
+the same HTTP JSON and SSE server contracts. Its integrated terminal uses
+libghostty's terminal core with a native GPUI renderer.
 
 The SwiftUI client is now focused on iPhone and iPad instead of sharing its UI
 with macOS.
@@ -157,6 +158,10 @@ The watcher rebuilds and relaunches the GPUI process when files under
 `crates/pico-desktop` or the root `Cargo.toml` change. It is process-level hot
 reload rather than state-preserving in-process patching; the stable viewer
 context reconnects to the existing server session after each relaunch.
+
+The first desktop build downloads the pinned Zig compiler required by
+libghostty into the ignored `.pico-dev` directory. Pico verifies the download's
+SHA-256 checksum. Set `ZIG=/path/to/zig` to use an existing Zig 0.14.1 binary.
 
 Check the desktop crate without launching it:
 
