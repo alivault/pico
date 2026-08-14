@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -8,9 +7,9 @@ use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, ClipboardItem, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, PathPromptOptions,
-    Pixels, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Subscription, Task,
-    Window, div, prelude::FluentBuilder as _, px,
+    FollowMode, InteractiveElement as _, IntoElement, KeyBinding, ListAlignment, ListState,
+    ParentElement as _, PathPromptOptions, Pixels, Render, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Task, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
@@ -407,13 +406,18 @@ pub struct PicoDesktop {
     terminal_input: Entity<InputState>,
     git_comment_input: Entity<InputState>,
     focus_handle: FocusHandle,
-    conversation_scroll: ScrollHandle,
-    scroll_conversation_to_bottom: Cell<bool>,
+    conversation_list: ListState,
     _event_task: gpui::Task<()>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl PicoDesktop {
+    fn new_conversation_list(item_count: usize) -> ListState {
+        let list = ListState::new(item_count, ListAlignment::Top, px(1200.));
+        list.set_follow_mode(FollowMode::Tail);
+        list
+    }
+
     pub fn new(
         client: PicoClient,
         initial_directory: String,
@@ -562,8 +566,7 @@ impl PicoDesktop {
             terminal_input,
             git_comment_input,
             focus_handle: cx.focus_handle(),
-            conversation_scroll: ScrollHandle::new(),
-            scroll_conversation_to_bottom: Cell::new(false),
+            conversation_list: Self::new_conversation_list(0),
             _event_task,
             _subscriptions,
         }
@@ -651,6 +654,13 @@ impl PicoDesktop {
                 }
             }
             DesktopEvent::State(sync) => {
+                let had_full_items = sync.items.is_some();
+                let conversation_visibility_changed = sync.hide_thinking_block.is_some();
+                let item_patch = sync
+                    .items_patch
+                    .as_ref()
+                    .map(|patch| (patch.start, patch.delete_count, patch.items.len()));
+                let old_item_count = self.session.items.len();
                 let patch_applied = self.session.apply(sync);
                 if !patch_applied {
                     self.status_message = Some("Resynchronizing conversation…".into());
@@ -660,6 +670,17 @@ impl PicoDesktop {
                     );
                     cx.notify();
                     return;
+                }
+                let new_item_count = self.session.items.len();
+                if had_full_items {
+                    self.conversation_list.reset(new_item_count);
+                    self.conversation_list.scroll_to_end();
+                } else if let Some((start, delete_count, inserted_count)) = item_patch {
+                    let end = (start + delete_count).min(old_item_count);
+                    self.conversation_list
+                        .splice(start.min(old_item_count)..end, inserted_count);
+                } else if conversation_visibility_changed {
+                    self.conversation_list.remeasure();
                 }
                 self.slash_completion_provider
                     .set_skills(self.session.available_skills.clone());
@@ -688,7 +709,6 @@ impl PicoDesktop {
                         );
                     }
                 }
-                self.scroll_conversation_to_bottom.set(true);
             }
             DesktopEvent::Sessions(event) => {
                 if !event.directories.is_empty() {
@@ -712,8 +732,27 @@ impl PicoDesktop {
                 if self.selected_session_id.as_deref() == Some(event.session_id.as_str())
                     || self.session.session_id.as_deref() == Some(event.session_id.as_str())
                 {
+                    let old_item_count = self.session.items.len();
+                    let changed_index = self
+                        .session
+                        .items
+                        .iter()
+                        .rposition(
+                            |item| matches!(item, ConversationItem::Assistant(item) if item.streaming),
+                        )
+                        .unwrap_or(old_item_count);
                     self.session.apply_delta(event);
-                    self.scroll_conversation_to_bottom.set(true);
+                    let new_item_count = self.session.items.len();
+                    if new_item_count > old_item_count {
+                        self.conversation_list.splice(
+                            old_item_count..old_item_count,
+                            new_item_count - old_item_count,
+                        );
+                    }
+                    if changed_index < new_item_count {
+                        self.conversation_list
+                            .remeasure_items(changed_index..changed_index + 1);
+                    }
                 }
             }
             DesktopEvent::Files { cwd, paths } => {
@@ -924,8 +963,7 @@ impl PicoDesktop {
                 self.expanded_tool_blocks.clear();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
-                self.conversation_scroll = ScrollHandle::new();
-                self.scroll_conversation_to_bottom.set(false);
+                self.conversation_list = Self::new_conversation_list(0);
                 self.status_message = Some("Loading session…".into());
                 self.restart_events(Some(session_id), None);
             }
@@ -954,6 +992,7 @@ impl PicoDesktop {
                     self.selected_session_id = None;
                     self.selected_session_path = None;
                     self.session = SessionState::default();
+                    self.conversation_list = Self::new_conversation_list(0);
                     self.restart_events(None, None);
                 }
             }
@@ -972,6 +1011,7 @@ impl PicoDesktop {
                     draft: true,
                     ..SessionState::default()
                 };
+                self.conversation_list = Self::new_conversation_list(0);
                 self.restart_events(None, Some(session_key));
             }
             DesktopEvent::ModelChanged(model) => {
@@ -1548,7 +1588,7 @@ impl PicoDesktop {
         self.pending_submission = Some(submission.clone());
         self.failed_submission = None;
         self.status_message = Some("Sending…".into());
-        self.scroll_conversation_to_bottom.set(true);
+        self.conversation_list.scroll_to_end();
         self.client.submit_prompt(
             message,
             self.streaming_behavior.api_value(),
@@ -1622,6 +1662,7 @@ impl PicoDesktop {
             }
             "hide-tools" | "show-tools" => {
                 self.hide_tools = name == "hide-tools";
+                self.conversation_list.remeasure();
                 self.persist_preferences();
                 self.status_message = None;
             }
@@ -2640,51 +2681,26 @@ impl PicoDesktop {
             )
     }
 
-    fn render_conversation(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_conversation_item(
+        &mut self,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let muted = cx.theme().muted_foreground;
         let secondary = cx.theme().secondary;
         let border = cx.theme().border.opacity(0.72);
-        if self.scroll_conversation_to_bottom.replace(false) {
-            self.conversation_scroll.scroll_to_bottom();
-        }
+        let Some(item) = self.session.items.get(index).cloned() else {
+            return div().into_any_element();
+        };
 
-        v_flex()
-            .id("conversation")
-            .flex_1()
-            .min_h_0()
+        h_flex()
             .w_full()
-            .items_center()
-            .track_scroll(&self.conversation_scroll)
-            .overflow_y_scroll()
-            .vertical_scrollbar(&self.conversation_scroll)
+            .justify_center()
             .child(
-                v_flex()
+                div()
                     .w_full()
                     .max_w(px(920.))
-                    .px_5()
-                    .py_8()
-                    .gap_6()
-                    .when(self.session.items.is_empty(), |this| {
-                        this.flex_1().justify_center().items_center().child(
-                            v_flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .text_xl()
-                                        .font_semibold()
-                                        .child("What are we building?"),
-                                )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(muted)
-                                        .child("Start a session in this project."),
-                                ),
-                        )
-                    })
-                    .children(self.session.items.iter().enumerate().map(|(index, item)| {
-                        match item {
+                    .child(match item {
                             ConversationItem::User(user) => h_flex()
                                 .w_full()
                                 .justify_end()
@@ -2901,6 +2917,8 @@ impl PicoDesktop {
                                                             this.expanded_tool_blocks
                                                                 .remove(&toggle_key);
                                                         }
+                                                        this.conversation_list
+                                                            .remeasure_items(index..index + 1);
                                                         cx.notify();
                                                     },
                                                 ))
@@ -2931,24 +2949,89 @@ impl PicoDesktop {
                                     },
                                 ))
                                 .into_any_element(),
-                        }
-                    }))
-                    .when(self.session.streaming || self.session.compacting, |this| {
-                        this.child(
-                            h_flex()
-                                .gap_2()
-                                .text_sm()
-                                .text_color(muted)
-                                .child(Icon::new(IconName::LoaderCircle).size_4())
-                                .child(
-                                    self.session
-                                        .working_message
-                                        .clone()
-                                        .unwrap_or_else(|| "Working…".into()),
-                                ),
-                        )
                     }),
             )
+            .into_any_element()
+    }
+
+    fn render_conversation(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let is_working = self.session.streaming || self.session.compacting;
+
+        if self.session.items.is_empty() {
+            return v_flex()
+                .id("conversation")
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .justify_center()
+                .items_center()
+                .gap_4()
+                .child(
+                    v_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .text_xl()
+                                .font_semibold()
+                                .child("What are we building?"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(muted)
+                                .child("Start a session in this project."),
+                        ),
+                )
+                .into_any_element();
+        }
+
+        let conversation_list = self.conversation_list.clone();
+        let view = cx.entity().clone();
+
+        v_flex()
+            .id("conversation")
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .child(
+                        gpui::list(conversation_list.clone(), move |index, _, cx| {
+                            view.update(cx, |this, cx| this.render_conversation_item(index, cx))
+                        })
+                        .size_full()
+                        .px_5()
+                        .py_8()
+                        .gap_6(),
+                    )
+                    .vertical_scrollbar(&conversation_list),
+            )
+            .when(is_working, |this| {
+                this.child(
+                    h_flex().w_full().justify_center().px_5().pb_3().child(
+                        h_flex()
+                            .w_full()
+                            .max_w(px(920.))
+                            .gap_2()
+                            .text_sm()
+                            .text_color(muted)
+                            .child(Icon::new(IconName::LoaderCircle).size_4())
+                            .child(
+                                self.session
+                                    .working_message
+                                    .clone()
+                                    .unwrap_or_else(|| "Working…".into()),
+                            ),
+                    ),
+                )
+            })
+            .into_any_element()
     }
 
     fn render_pending_messages(&self, cx: &mut Context<Self>) -> gpui::AnyElement {

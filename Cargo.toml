@@ -13,6 +13,15 @@ opt-level = 3
 [profile.dev.package.gpui_platform]
 opt-level = 3
 
+[profile.dev.package.gpui-base]
+opt-level = 3
+
+[profile.dev.package.gpui-component]
+opt-level = 3
+
+[profile.dev.package.pico-desktop]
+opt-level = 1
+
 [profile.dev.package.resvg]
 opt-level = 3
 
