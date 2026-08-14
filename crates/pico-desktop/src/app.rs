@@ -15,6 +15,7 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Root, Selectable as _, Sizable as _,
     StyledExt as _, Theme, ThemeMode,
+    accordion::Accordion,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{
@@ -364,6 +365,7 @@ pub struct PicoDesktop {
     failed_submission: Option<PromptSubmission>,
     preferences: DesktopPreferences,
     hide_tools: bool,
+    expanded_tool_blocks: HashSet<String>,
     settings_open: bool,
     command_palette_open: bool,
     add_directory_dialog_open: bool,
@@ -515,6 +517,7 @@ impl PicoDesktop {
             pending_submission: None,
             failed_submission: None,
             hide_tools: preferences.hide_tools,
+            expanded_tool_blocks: HashSet::new(),
             preferences: preferences.clone(),
             settings_open: false,
             command_palette_open: false,
@@ -901,6 +904,7 @@ impl PicoDesktop {
             }
             DesktopEvent::SessionSelected(session_id) => {
                 self.reset_workspace_scope();
+                self.expanded_tool_blocks.clear();
                 self.selected_session_id = Some(session_id.clone());
                 self.session = SessionState::default();
                 self.conversation_scroll = ScrollHandle::new();
@@ -929,6 +933,7 @@ impl PicoDesktop {
                 self.status_message = Some(message);
                 self.delete_session_target = None;
                 if clear_selection {
+                    self.expanded_tool_blocks.clear();
                     self.selected_session_id = None;
                     self.selected_session_path = None;
                     self.session = SessionState::default();
@@ -942,6 +947,7 @@ impl PicoDesktop {
             }
             DesktopEvent::SessionCreated { session_key, cwd } => {
                 self.reset_workspace_scope();
+                self.expanded_tool_blocks.clear();
                 self.selected_session_id = None;
                 self.session = SessionState {
                     session_key: Some(session_key.clone()),
@@ -2739,63 +2745,146 @@ impl PicoDesktop {
                                             AssistantBlock::Tool(_) if self.hide_tools => {
                                                 div().into_any_element()
                                             }
-                                            AssistantBlock::Tool(block) => v_flex()
+                                            AssistantBlock::Tool(block) => {
+                                                let disclosure_key = if let Some(call_id) =
+                                                    block.call_id.as_deref()
+                                                {
+                                                    format!("tool:call:{call_id}")
+                                                } else if let Some(block_key) =
+                                                    block.block_key.as_deref()
+                                                {
+                                                    format!("tool:block:{block_key}")
+                                                } else {
+                                                    format!(
+                                                        "tool:item:{index}:block:{block_index}"
+                                                    )
+                                                };
+                                                let is_open = self
+                                                    .expanded_tool_blocks
+                                                    .contains(&disclosure_key);
+                                                let toggle_key = disclosure_key.clone();
+                                                let name = block
+                                                    .name
+                                                    .clone()
+                                                    .unwrap_or_else(|| "Tool".into());
+                                                let has_content = block.args.is_some()
+                                                    || !block.output.trim().is_empty();
+
+                                                Accordion::new(format!(
+                                                    "tool-accordion-{index}-{block_index}"
+                                                ))
                                                 .w_full()
-                                                .rounded_lg()
-                                                .border_1()
-                                                .border_color(border)
-                                                .overflow_hidden()
-                                                .child(
-                                                    h_flex()
-                                                        .px_3()
-                                                        .py_2()
-                                                        .gap_2()
-                                                        .bg(secondary.opacity(0.5))
-                                                        .child(
-                                                            Icon::new(if block.running {
-                                                                IconName::LoaderCircle
-                                                            } else {
-                                                                IconName::SquareTerminal
-                                                            })
-                                                            .size_4(),
-                                                        )
-                                                        .child(
-                                                            div().text_sm().font_semibold().child(
-                                                                block.name.clone().unwrap_or_else(
-                                                                    || "Tool".into(),
-                                                                ),
-                                                            ),
-                                                        ),
-                                                )
-                                                .when_some(block.args.clone(), |this, args| {
-                                                    this.child(
-                                                        div()
-                                                            .px_3()
-                                                            .pt_3()
-                                                            .font_family("Menlo")
-                                                            .text_xs()
-                                                            .text_color(muted)
-                                                            .child(
-                                                                serde_json::to_string_pretty(&args)
-                                                                    .unwrap_or_default(),
-                                                            ),
-                                                    )
-                                                })
-                                                .when(!block.output.trim().is_empty(), |this| {
-                                                    this.child(
-                                                        div()
-                                                            .p_3()
-                                                            .max_h(px(260.))
-                                                            .overflow_y_scrollbar()
-                                                            .font_family("Menlo")
-                                                            .text_xs()
-                                                            .child(block.output.clone()),
-                                                    )
+                                                .bg(secondary.opacity(0.3))
+                                                .when(block.running, |this| {
+                                                    this.border_color(gpui::rgb(0xd97706))
+                                                        .bg(gpui::rgba(0xd9770610))
                                                 })
                                                 .when(block.is_error, |this| {
                                                     this.border_color(gpui::rgb(0xdc2626))
+                                                        .bg(gpui::rgba(0xdc262610))
                                                 })
-                                                .into_any_element(),
+                                                .item(|item| {
+                                                    item.open(is_open)
+                                                        .disabled(!has_content)
+                                                        .icon(if block.running {
+                                                            IconName::LoaderCircle
+                                                        } else {
+                                                            IconName::SquareTerminal
+                                                        })
+                                                        .title(
+                                                            h_flex()
+                                                                .min_w_0()
+                                                                .gap_2()
+                                                                .child(
+                                                                    div()
+                                                                        .min_w_0()
+                                                                        .overflow_hidden()
+                                                                        .whitespace_nowrap()
+                                                                        .text_ellipsis()
+                                                                        .font_semibold()
+                                                                        .child(name),
+                                                                )
+                                                                .when(block.running, |this| {
+                                                                    this.child(
+                                                                        div()
+                                                                            .text_xs()
+                                                                            .text_color(
+                                                                                gpui::rgb(
+                                                                                    0xd97706,
+                                                                                ),
+                                                                            )
+                                                                            .child("Running"),
+                                                                    )
+                                                                })
+                                                                .when(block.is_error, |this| {
+                                                                    this.child(
+                                                                        div()
+                                                                            .text_xs()
+                                                                            .text_color(
+                                                                                gpui::rgb(
+                                                                                    0xdc2626,
+                                                                                ),
+                                                                            )
+                                                                            .child("Error"),
+                                                                    )
+                                                                }),
+                                                        )
+                                                        .child(
+                                                            v_flex()
+                                                                .w_full()
+                                                                .gap_3()
+                                                                .when_some(
+                                                                    block.args.clone(),
+                                                                    |this, args| {
+                                                                        this.child(
+                                                                            div()
+                                                                                .font_family(
+                                                                                    "Menlo",
+                                                                                )
+                                                                                .text_xs()
+                                                                                .text_color(muted)
+                                                                                .child(
+                                                                                    serde_json::to_string_pretty(&args)
+                                                                                        .unwrap_or_default(),
+                                                                                ),
+                                                                        )
+                                                                    },
+                                                                )
+                                                                .when(
+                                                                    !block.output.trim().is_empty(),
+                                                                    |this| {
+                                                                        this.child(
+                                                                            div()
+                                                                                .max_h(px(260.))
+                                                                                .overflow_y_scrollbar()
+                                                                                .font_family(
+                                                                                    "Menlo",
+                                                                                )
+                                                                                .text_xs()
+                                                                                .child(
+                                                                                    block
+                                                                                        .output
+                                                                                        .clone(),
+                                                                                ),
+                                                                        )
+                                                                    },
+                                                                ),
+                                                        )
+                                                })
+                                                .on_toggle_click(cx.listener(
+                                                    move |this, open_indices: &[usize], _, cx| {
+                                                        if open_indices.contains(&0) {
+                                                            this.expanded_tool_blocks
+                                                                .insert(toggle_key.clone());
+                                                        } else {
+                                                            this.expanded_tool_blocks
+                                                                .remove(&toggle_key);
+                                                        }
+                                                        cx.notify();
+                                                    },
+                                                ))
+                                                .into_any_element()
+                                            }
                                             AssistantBlock::Compaction(block) => v_flex()
                                                 .w_full()
                                                 .p_3()
