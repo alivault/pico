@@ -107,7 +107,6 @@ enum RightWorkspaceTab {
     #[default]
     Changes,
     Files,
-    Terminal,
     History,
 }
 
@@ -184,6 +183,7 @@ pub struct PicoDesktop {
     ui_request: Option<UiRequest>,
     terminal_id: Option<String>,
     terminal_output: String,
+    terminal_panel_open: bool,
     tree_nodes: Vec<FlatTreeNode>,
     tree_leaf_id: Option<String>,
     forkable_messages: Vec<ForkableMessage>,
@@ -307,6 +307,7 @@ impl PicoDesktop {
             ui_request: None,
             terminal_id: None,
             terminal_output: String::new(),
+            terminal_panel_open: false,
             tree_nodes: Vec::new(),
             tree_leaf_id: None,
             forkable_messages: Vec::new(),
@@ -442,6 +443,13 @@ impl PicoDesktop {
                     self.files_cwd = Some(cwd.clone());
                     self.client.load_files(cwd.clone(), self.tx.clone());
                     self.client.load_git(cwd, self.tx.clone());
+                    if self.terminal_panel_open {
+                        self.client.create_terminal(
+                            self.selected_session_id.clone(),
+                            self.session.session_key.clone(),
+                            self.tx.clone(),
+                        );
+                    }
                 }
                 self.conversation_scroll.scroll_to_bottom();
             }
@@ -832,7 +840,7 @@ impl PicoDesktop {
     }
 
     fn open_terminal(&mut self, cx: &mut Context<Self>) {
-        self.active_right_tab = RightWorkspaceTab::Terminal;
+        self.terminal_panel_open = true;
         if self.terminal_id.is_none() {
             self.status_message = Some("Starting terminal…".into());
             self.client.create_terminal(
@@ -841,6 +849,11 @@ impl PicoDesktop {
                 self.tx.clone(),
             );
         }
+        cx.notify();
+    }
+
+    fn close_terminal(&mut self, cx: &mut Context<Self>) {
+        self.terminal_panel_open = false;
         cx.notify();
     }
 
@@ -2251,19 +2264,37 @@ impl PicoDesktop {
                     ),
             )
             .child(
-                Button::new("toggle-right")
-                    .ghost()
-                    .small()
-                    .icon(if self.right_sidebar_open {
-                        IconName::PanelRightClose
-                    } else {
-                        IconName::PanelRightOpen
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.right_sidebar_open = !this.right_sidebar_open;
-                        this.persist_preferences();
-                        cx.notify();
-                    })),
+                h_flex()
+                    .gap_1()
+                    .child(
+                        Button::new("toggle-terminal")
+                            .ghost()
+                            .small()
+                            .label("Terminal")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                if this.terminal_panel_open {
+                                    this.close_terminal(cx)
+                                } else {
+                                    this.open_terminal(cx)
+                                }
+                            })),
+                    )
+                    .child(
+                        Button::new("toggle-right")
+                            .ghost()
+                            .small()
+                            .icon(if self.right_sidebar_open {
+                                IconName::PanelRightClose
+                            } else {
+                                IconName::PanelRightOpen
+                            })
+                            .tooltip("Toggle project sidebar")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.right_sidebar_open = !this.right_sidebar_open;
+                                this.persist_preferences();
+                                cx.notify();
+                            })),
+                    ),
             )
     }
 
@@ -3322,6 +3353,7 @@ impl PicoDesktop {
                                         .small()
                                         .w_full()
                                         .justify_start()
+                                        .text_left()
                                         .label(label)
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.open_commit_diff(hash.clone(), cx)
@@ -3381,20 +3413,6 @@ impl PicoDesktop {
                             })),
                     )
                     .child(
-                        Button::new("terminal-tab")
-                            .small()
-                            .when(
-                                self.active_right_tab == RightWorkspaceTab::Terminal,
-                                |this| this.secondary(),
-                            )
-                            .when(
-                                self.active_right_tab != RightWorkspaceTab::Terminal,
-                                |this| this.ghost(),
-                            )
-                            .label("Terminal")
-                            .on_click(cx.listener(|this, _, _, cx| this.open_terminal(cx))),
-                    )
-                    .child(
                         Button::new("history-tab")
                             .small()
                             .when(
@@ -3412,7 +3430,6 @@ impl PicoDesktop {
             .child(match self.active_right_tab {
                 RightWorkspaceTab::Changes => self.render_git_workspace(cx),
                 RightWorkspaceTab::Files => self.render_file_workspace(cx),
-                RightWorkspaceTab::Terminal => self.render_terminal(cx),
                 RightWorkspaceTab::History => self.render_history(cx),
             })
     }
@@ -3479,10 +3496,31 @@ impl PicoDesktop {
 
     fn render_terminal(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         v_flex()
-            .flex_1()
+            .h(px(280.))
+            .w_full()
+            .flex_shrink_0()
             .min_h_0()
+            .border_t_1()
+            .border_color(cx.theme().border.opacity(0.72))
             .bg(gpui::rgb(0x111111))
             .text_color(gpui::rgb(0xeeeeee))
+            .child(
+                h_flex()
+                    .h(px(38.))
+                    .flex_shrink_0()
+                    .px_3()
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(gpui::rgb(0x333333))
+                    .child(div().text_sm().font_semibold().child("Terminal"))
+                    .child(
+                        Button::new("close-terminal")
+                            .ghost()
+                            .xsmall()
+                            .label("Close")
+                            .on_click(cx.listener(|this, _, _, cx| this.close_terminal(cx))),
+                    ),
+            )
             .child(
                 div()
                     .id("terminal-output")
@@ -4138,7 +4176,6 @@ impl PicoDesktop {
                             .label("Open terminal")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.command_palette_open = false;
-                                this.right_sidebar_open = true;
                                 this.open_terminal(cx)
                             })),
                     )
@@ -4208,36 +4245,55 @@ impl Render for PicoDesktop {
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .child(self.render_header(cx))
-                    .when_some(status, |this, status| {
-                        this.child(
-                            h_flex()
-                                .px_4()
-                                .py_2()
-                                .gap_2()
-                                .bg(cx.theme().warning.opacity(0.12))
-                                .text_sm()
-                                .child(Icon::new(IconName::Info).size_4())
-                                .child(div().flex_1().child(status))
-                                .when(has_failed_submission, |this| {
-                                    this.child(
-                                        Button::new("restore-prompt")
-                                            .secondary()
-                                            .small()
-                                            .label("Restore prompt")
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                this.restore_failed_submission(window, cx)
-                                            })),
-                                    )
-                                }),
-                        )
-                    })
-                    .child(self.render_conversation(cx))
-                    .child(self.render_composer(cx)),
+                    .child(
+                        h_flex()
+                            .flex_1()
+                            .min_h_0()
+                            .w_full()
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .h_full()
+                                    .child(self.render_header(cx))
+                                    .when_some(status, |this, status| {
+                                        this.child(
+                                            h_flex()
+                                                .px_4()
+                                                .py_2()
+                                                .gap_2()
+                                                .bg(cx.theme().warning.opacity(0.12))
+                                                .text_sm()
+                                                .child(Icon::new(IconName::Info).size_4())
+                                                .child(div().flex_1().child(status))
+                                                .when(has_failed_submission, |this| {
+                                                    this.child(
+                                                        Button::new("restore-prompt")
+                                                            .secondary()
+                                                            .small()
+                                                            .label("Restore prompt")
+                                                            .on_click(cx.listener(
+                                                                |this, _, window, cx| {
+                                                                    this.restore_failed_submission(
+                                                                        window, cx,
+                                                                    )
+                                                                },
+                                                            )),
+                                                    )
+                                                }),
+                                        )
+                                    })
+                                    .child(self.render_conversation(cx))
+                                    .child(self.render_composer(cx)),
+                            )
+                            .when(self.right_sidebar_open, |this| {
+                                this.child(self.render_right_sidebar(cx))
+                            }),
+                    )
+                    .when(self.terminal_panel_open, |this| {
+                        this.child(self.render_terminal(cx))
+                    }),
             )
-            .when(self.right_sidebar_open, |this| {
-                this.child(self.render_right_sidebar(cx))
-            })
             .when(self.settings_open, |this| {
                 this.child(self.render_settings(cx))
             })
