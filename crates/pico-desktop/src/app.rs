@@ -8,7 +8,7 @@ use anyhow::Result as AnyResult;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gpui::{
     Anchor, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, PathPromptOptions, Render, ScrollHandle,
+    KeyBinding, ParentElement as _, PathPromptOptions, Pixels, Render, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div,
     prelude::FluentBuilder as _, px,
 };
@@ -164,6 +164,14 @@ fn is_slash_menu_input(value: &str) -> bool {
     value.starts_with('/') && !value.chars().any(char::is_whitespace)
 }
 
+fn slash_menu_capacity(viewport_height: Pixels) -> usize {
+    // gpui-component's completion overlay currently always opens below the
+    // cursor. Keep the visible result set within half of the viewport so the
+    // composer can reserve just enough room instead of letting it clip.
+    let max_height = (viewport_height.as_f32() * 0.5).clamp(48., 248.);
+    (((max_height - 8.) / 20.).floor() as usize).max(2)
+}
+
 #[derive(Clone, Default)]
 struct SlashCompletionProvider {
     skills: Rc<RefCell<Vec<SkillOption>>>,
@@ -186,7 +194,6 @@ impl SlashCompletionProvider {
         CompletionItem {
             label: label.clone(),
             detail: Some(description.clone()),
-            documentation: Some(lsp_types::Documentation::String(description)),
             kind: Some(CompletionItemKind::FUNCTION),
             filter_text: Some(label.clone()),
             text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
@@ -197,6 +204,48 @@ impl SlashCompletionProvider {
             ..CompletionItem::default()
         }
     }
+
+    fn matching_options(&self, value: &str) -> Vec<(String, String)> {
+        if !is_slash_menu_input(value) {
+            return Vec::new();
+        }
+
+        let query = value.trim_start().to_lowercase();
+        let mut options = BUILTIN_SLASH_COMMANDS
+            .iter()
+            .filter_map(|(name, description)| {
+                let label = format!("/{name}");
+                label
+                    .to_lowercase()
+                    .contains(&query)
+                    .then(|| (label, (*description).into()))
+            })
+            .collect::<Vec<_>>();
+
+        options.extend(self.skills.borrow().iter().filter_map(|skill| {
+            let label = format!("/skill:{}", skill.name);
+            let description = skill
+                .description
+                .clone()
+                .unwrap_or_else(|| "Use this skill".into());
+            let search = format!("{label} {description}").to_lowercase();
+            search.contains(&query).then_some((label, description))
+        }));
+
+        options
+    }
+
+    fn reserved_height(&self, value: &str, viewport_height: Pixels) -> Pixels {
+        let visible_items = self
+            .matching_options(value)
+            .len()
+            .min(slash_menu_capacity(viewport_height));
+        if visible_items == 0 {
+            return px(0.);
+        }
+
+        px(visible_items as f32 * 20. + 8.)
+    }
 }
 
 impl CompletionProvider for SlashCompletionProvider {
@@ -205,38 +254,20 @@ impl CompletionProvider for SlashCompletionProvider {
         rope: &Rope,
         offset: usize,
         _: CompletionContext,
-        _: &mut Window,
+        window: &mut Window,
         _: &mut Context<InputBaseState>,
     ) -> Task<AnyResult<CompletionResponse>> {
         let prefix = rope.slice(..offset).to_string();
         let trimmed = prefix.trim_start();
-        if !is_slash_menu_input(trimmed) {
-            return Task::ready(Ok(CompletionResponse::Array(Vec::new())));
-        }
-
         let leading_chars = prefix.chars().count() - trimmed.chars().count();
-        let query = trimmed.to_lowercase();
-        let mut items = BUILTIN_SLASH_COMMANDS
-            .iter()
-            .filter_map(|(name, description)| {
-                let label = format!("/{name}");
-                label.to_lowercase().contains(&query).then(|| {
-                    Self::completion_item(rope, leading_chars, offset, label, (*description).into())
-                })
+        let items = self
+            .matching_options(trimmed)
+            .into_iter()
+            .take(slash_menu_capacity(window.viewport_size().height))
+            .map(|(label, description)| {
+                Self::completion_item(rope, leading_chars, offset, label, description)
             })
-            .collect::<Vec<_>>();
-
-        items.extend(self.skills.borrow().iter().filter_map(|skill| {
-            let label = format!("/skill:{}", skill.name);
-            let description = skill
-                .description
-                .clone()
-                .unwrap_or_else(|| "Use this skill".into());
-            let search = format!("{label} {description}").to_lowercase();
-            search
-                .contains(&query)
-                .then(|| Self::completion_item(rope, leading_chars, offset, label, description))
-        }));
+            .collect();
 
         Task::ready(Ok(CompletionResponse::Array(items)))
     }
@@ -2711,7 +2742,7 @@ impl PicoDesktop {
             .into_any_element()
     }
 
-    fn render_composer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_composer(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model_label = self
             .session
             .model
@@ -2729,7 +2760,10 @@ impl PicoDesktop {
         let available_thinking_levels = self.session.available_thinking_levels.clone();
         let model_view = cx.entity();
         let thinking_view = model_view.clone();
-        let slash_menu_open = is_slash_menu_input(self.composer.read(cx).value().as_ref());
+        let slash_menu_height = self.slash_completion_provider.reserved_height(
+            self.composer.read(cx).value().as_ref(),
+            window.viewport_size().height,
+        );
         let busy = self.session.streaming || self.session.compacting;
         let context_usage = self.context_usage_label();
 
@@ -2768,8 +2802,8 @@ impl PicoDesktop {
                         )
                     })
                     .child(Textarea::new(&self.composer).appearance(false).p_3())
-                    .when(slash_menu_open, |this| {
-                        this.child(div().h(px(260.)).flex_shrink_0())
+                    .when(slash_menu_height > px(0.), |this| {
+                        this.child(div().h(slash_menu_height).flex_shrink_0())
                     })
                     .child(
                         h_flex()
@@ -4349,7 +4383,7 @@ impl PicoDesktop {
 }
 
 impl Render for PicoDesktop {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.status_message.clone();
         let has_failed_submission = self.failed_submission.is_some();
         h_flex()
@@ -4425,7 +4459,7 @@ impl Render for PicoDesktop {
                                         )
                                     })
                                     .child(self.render_conversation(cx))
-                                    .child(self.render_composer(cx)),
+                                    .child(self.render_composer(window, cx)),
                             )
                             .when(self.right_sidebar_open, |this| {
                                 this.child(self.render_right_sidebar(cx))
@@ -4465,7 +4499,8 @@ pub fn root(
 
 #[cfg(test)]
 mod tests {
-    use super::is_slash_menu_input;
+    use super::{is_slash_menu_input, slash_menu_capacity};
+    use gpui::px;
 
     #[test]
     fn slash_menu_only_opens_for_a_command_without_arguments() {
@@ -4473,5 +4508,12 @@ mod tests {
         assert!(is_slash_menu_input("  /skill:cupertino"));
         assert!(!is_slash_menu_input("hello /skill:cupertino"));
         assert!(!is_slash_menu_input("/skill:cupertino review this"));
+    }
+
+    #[test]
+    fn slash_menu_capacity_adapts_to_the_window_height() {
+        assert_eq!(slash_menu_capacity(px(240.)), 5);
+        assert_eq!(slash_menu_capacity(px(480.)), 11);
+        assert_eq!(slash_menu_capacity(px(900.)), 12);
     }
 }
