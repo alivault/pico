@@ -49,6 +49,7 @@ gpui::actions!(
         NewSession,
         ToggleLeftSidebar,
         ToggleRightSidebar,
+        ToggleTerminal,
         OpenSettings,
         FocusSessionSearch,
         FocusComposer,
@@ -61,6 +62,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-n", NewSession, None),
         KeyBinding::new("cmd-b", ToggleLeftSidebar, None),
         KeyBinding::new("cmd-shift-b", ToggleRightSidebar, None),
+        KeyBinding::new("cmd-j", ToggleTerminal, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-k", FocusSessionSearch, None),
         KeyBinding::new("cmd-l", FocusComposer, None),
@@ -1115,6 +1117,14 @@ impl PicoDesktop {
     fn close_terminal(&mut self, cx: &mut Context<Self>) {
         self.terminal_panel_open = false;
         cx.notify();
+    }
+
+    fn toggle_terminal(&mut self, cx: &mut Context<Self>) {
+        if self.terminal_panel_open {
+            self.close_terminal(cx);
+        } else {
+            self.open_terminal(cx);
+        }
     }
 
     fn send_terminal_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2594,14 +2604,14 @@ impl PicoDesktop {
                             .small()
                             .icon(IconName::SquareTerminal)
                             .selected(self.terminal_panel_open)
-                            .tooltip("Toggle terminal panel")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if this.terminal_panel_open {
-                                    this.close_terminal(cx)
-                                } else {
-                                    this.open_terminal(cx)
-                                }
-                            })),
+                            .tooltip_with_action(
+                                "Toggle terminal panel",
+                                &ToggleTerminal,
+                                None,
+                            )
+                            .on_click(
+                                cx.listener(|this, _, _, cx| this.toggle_terminal(cx)),
+                            ),
                     )
                     .child(
                         Button::new("toggle-right")
@@ -5005,6 +5015,9 @@ impl Render for PicoDesktop {
                 this.right_sidebar_open = !this.right_sidebar_open;
                 this.persist_preferences();
                 cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleTerminal, _, cx| {
+                this.toggle_terminal(cx)
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &FocusSessionSearch, window, cx| {
