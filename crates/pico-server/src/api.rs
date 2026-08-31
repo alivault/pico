@@ -581,7 +581,6 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         .await;
     attach_auth_bridge_events(&context);
     GitRuntime::spawn_watcher(&context.git_runtime, context.event_hub.clone());
-    restore_session_processes(&context).await;
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let (serve_shutdown_tx, _) = watch::channel(false);
@@ -724,39 +723,6 @@ fn server_task_error(result: Result<Result<(), std::io::Error>, tokio::task::Joi
         Ok(Ok(())) => "Pico listener stopped unexpectedly".into(),
         Ok(Err(error)) => format!("Pico listener failed: {error}"),
         Err(error) => format!("Pico listener task failed: {error}"),
-    }
-}
-
-async fn restore_session_processes(context: &ServerContext) {
-    let sessions = context.app.read().await.sessions();
-    for session in sessions {
-        let Some(session_path) = session.session_path.clone() else {
-            continue;
-        };
-        match context
-            .runtimes
-            .spawn(session.id.clone(), session.cwd.clone(), Some(session_path))
-            .await
-        {
-            Ok(runtime) if runtime.spawned => {
-                attach_pi_events((*context).clone(), session.id.clone(), runtime.client);
-            }
-            Ok(runtime) => {
-                tracing::warn!(
-                    runtime_id = %session.id,
-                    owner_runtime_id = %runtime.owner_id,
-                    "skipped duplicate restored Pi session process"
-                );
-            }
-            Err(error) => {
-                tracing::warn!(
-                    %error,
-                    session_id = %session.id,
-                    cwd = %session.cwd.display(),
-                    "failed to restore Pi session process"
-                );
-            }
-        }
     }
 }
 
