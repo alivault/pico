@@ -15,7 +15,8 @@ use crate::protocol::{
     PromptImage, SessionListEntry, TextBlock, ThinkingBlock, ToolBlock, UserConversationItem,
 };
 
-const MAX_SESSION_FILE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_SESSION_HEADER_BYTES: usize = 1024 * 1024;
+const MAX_SESSION_ENTRY_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SESSION_COUNT: usize = 20_000;
 const MAX_CACHED_DOCUMENTS: usize = 4;
 const MAX_CACHED_DOCUMENT_SOURCE_BYTES: u64 = 96 * 1024 * 1024;
@@ -308,7 +309,10 @@ impl SessionDocument {
         let file = std::fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
         let header = read_session_header(&mut reader)?;
-        let entries = read_jsonl_tail::<Value>(&mut reader, path)?;
+        let mut entries = read_jsonl_tail::<Value>(&mut reader, path)?;
+        for entry in &mut entries {
+            compact_session_entry(entry);
+        }
         let (active_entry_indices, leaf_id) = active_path(&entries);
         Ok(Self {
             path: path.to_path_buf(),
@@ -592,10 +596,10 @@ fn index_session_file(path: &Path) -> io::Result<IndexedSessionFile> {
 
 fn supported_session_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
     let metadata = std::fs::metadata(path)?;
-    if !metadata.is_file() || metadata.len() > MAX_SESSION_FILE_BYTES {
+    if !metadata.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "session file is not a supported regular file",
+            "Pi session path is not a regular file",
         ));
     }
     Ok(metadata)
@@ -603,7 +607,7 @@ fn supported_session_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
 
 fn read_session_header(reader: &mut impl BufRead) -> io::Result<SessionHeader> {
     let mut header_line = String::new();
-    if reader.read_line(&mut header_line)? == 0 {
+    if read_bounded_line(reader, &mut header_line, MAX_SESSION_HEADER_BYTES)? == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "empty session file",
@@ -629,7 +633,7 @@ fn read_jsonl_tail<T: DeserializeOwned>(
     let mut trailing_error = None;
     loop {
         line.clear();
-        if reader.read_line(&mut line)? == 0 {
+        if read_bounded_line(reader, &mut line, MAX_SESSION_ENTRY_BYTES)? == 0 {
             break;
         }
         if line.trim().is_empty() {
@@ -651,6 +655,36 @@ fn read_jsonl_tail<T: DeserializeOwned>(
         );
     }
     Ok(values)
+}
+
+fn read_bounded_line(
+    reader: &mut impl BufRead,
+    line: &mut String,
+    max_bytes: usize,
+) -> io::Result<usize> {
+    let mut limited = std::io::Read::take(reader, max_bytes.saturating_add(1) as u64);
+    let bytes_read = limited.read_line(line)?;
+    if bytes_read > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Pi session JSONL entry exceeds the {max_bytes}-byte limit"),
+        ));
+    }
+    Ok(bytes_read)
+}
+
+fn compact_session_entry(entry: &mut Value) {
+    let Some(message) = entry.get_mut("message").and_then(Value::as_object_mut) else {
+        return;
+    };
+    if message.get("role").and_then(Value::as_str) != Some("toolResult") {
+        return;
+    }
+
+    let Some(parts) = message.get_mut("content").and_then(Value::as_array_mut) else {
+        return;
+    };
+    parts.retain(|part| part.get("type").and_then(Value::as_str) != Some("image"));
 }
 
 fn load_session_summary(indexed: &IndexedSessionFile) -> io::Result<SessionListEntry> {
@@ -1379,6 +1413,69 @@ mod tests {
         };
         assert_eq!(tool.output, "# Hello");
         assert!(!tool.running);
+        std::fs::remove_dir_all(directory).expect("remove fixture");
+    }
+
+    #[test]
+    fn indexing_accepts_large_regular_session_files() {
+        let (directory, path) = fixture(&[]);
+        use std::io::Write as _;
+        let mut append = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open fixture for newline");
+        writeln!(append).expect("terminate header line");
+        drop(append);
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .expect("open fixture");
+        file.set_len(64 * 1024 * 1024 + 1)
+            .expect("extend fixture past the former total-size limit");
+
+        let indexed = index_session_file(&path).expect("index large session header");
+        assert_eq!(indexed.header.id, "session-1");
+        std::fs::remove_dir_all(directory).expect("remove fixture");
+    }
+
+    #[test]
+    fn document_discards_tool_result_images_but_keeps_text() {
+        let (directory, path) = fixture(&[
+            serde_json::json!({
+              "type": "message", "id": "u1", "parentId": null,
+              "timestamp": "2026-07-31T00:00:01.000Z",
+              "message": {"role": "user", "content": "inspect", "timestamp": 1}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "a1", "parentId": "u1",
+              "timestamp": "2026-07-31T00:00:02.000Z",
+              "message": {"role": "assistant", "content": [{"type":"toolCall","id":"call-1","name":"view_image","arguments":{"path":"image.png"}}], "provider":"test", "model":"one", "stopReason":"toolUse", "timestamp":2}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "t1", "parentId": "a1",
+              "timestamp": "2026-07-31T00:00:03.000Z",
+              "message": {"role":"toolResult","toolCallId":"call-1","toolName":"view_image","content":[{"type":"image","mimeType":"image/png","data":"large-base64-payload"},{"type":"text","text":"Image Size: 10x10"}],"details":{"viewImage":true},"isError":false,"timestamp":3}
+            }),
+        ]);
+
+        let document = SessionDocument::load(&path).expect("load");
+        let tool_result = document
+            .entries
+            .iter()
+            .find_map(|entry| message_with_role(entry, "toolResult"))
+            .expect("tool result");
+        let content = tool_result["content"].as_array().expect("content array");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "text");
+
+        let items = document.conversation_items();
+        let ConversationItem::Assistant(assistant) = &items[1] else {
+            panic!("expected assistant");
+        };
+        let AssistantBlock::Tool(tool) = &assistant.blocks[0] else {
+            panic!("expected tool");
+        };
+        assert_eq!(tool.output, "Image Size: 10x10");
         std::fs::remove_dir_all(directory).expect("remove fixture");
     }
 }

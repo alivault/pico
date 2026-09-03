@@ -2380,13 +2380,12 @@ async fn new_session(
                 std::env::current_dir().map_err(|error| ApiError::internal(error.to_string()))?,
             )
     };
-    let resolved = spawn_runtime(&context, cwd.clone(), None, true).await?;
     let session_key = format!("draft:{}", cwd.to_string_lossy());
     context.app.write().await.select_draft(
         &target.context_id,
         session_key.clone(),
         cwd.clone(),
-        Some(resolved.record.id.clone()),
+        None,
     );
     Ok(Json(json!({
       "ok": true,
@@ -2412,23 +2411,6 @@ async fn select_session(
         .await
         .select_session(&target.context_id, public_id);
 
-    if context.runtimes.get(&record.id).await.is_none() {
-        let background_context = context.clone();
-        let background_record = record.clone();
-        let background_runtime_id = record.id.clone();
-        tokio::spawn(async move {
-            match start_runtime_record(&background_context, background_record).await {
-                Ok(resolved) => {
-                    emit_session_state(&background_context, &resolved.record.id, false, None).await;
-                }
-                Err(error) => tracing::warn!(
-                    error = %error.message,
-                    runtime_id = %background_runtime_id,
-                    "failed to start selected Pi session runtime"
-                ),
-            }
-        });
-    }
     emit_session_state(&context, &record.id, false, None).await;
     Ok(Json(json!({ "ok": true })))
 }
