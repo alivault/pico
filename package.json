@@ -1,6 +1,6 @@
 {
   "name": "@alivault/pico",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "description": "A local workspace for Pi coding-agent sessions with browser, GPUI desktop, and iOS clients.",
   "license": "AGPL-3.0-only",
   "type": "module",
