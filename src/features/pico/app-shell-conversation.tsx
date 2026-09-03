@@ -171,7 +171,13 @@ function ConversationPreviousMessageButton({
 
 type AppShellConversationSessionState = Pick<
   SessionState,
-  "cwd" | "draft" | "sessionFile" | "sessionId" | "streaming"
+  | "cwd"
+  | "draft"
+  | "historyOffset"
+  | "historyTotalCount"
+  | "sessionFile"
+  | "sessionId"
+  | "streaming"
 >
 
 const ConversationContentChangeContext = React.createContext<
@@ -184,6 +190,8 @@ function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
     (sessionState) => ({
       cwd: sessionState.cwd,
       draft: sessionState.draft,
+      historyOffset: sessionState.historyOffset,
+      historyTotalCount: sessionState.historyTotalCount,
       sessionFile: sessionState.sessionFile,
       sessionId: sessionState.sessionId,
       streaming: sessionState.streaming,
@@ -192,12 +200,57 @@ function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
   )
 }
 
+function ConversationEarlierMessages({
+  cancelHistoryPrepend,
+  isLoading,
+  onLoad,
+  prepareForHistoryPrepend,
+  scrollStateStore,
+}: {
+  cancelHistoryPrepend: () => void
+  isLoading: boolean
+  onLoad: () => Promise<void>
+  prepareForHistoryPrepend: () => void
+  scrollStateStore: MessageScrollStateStore
+}) {
+  const isNearTop = useMessageScrollValue(
+    scrollStateStore,
+    (snapshot) => snapshot.isMessagesNearTop
+  )
+  const load = React.useCallback(() => {
+    if (isLoading) return
+    prepareForHistoryPrepend()
+    void onLoad().finally(cancelHistoryPrepend)
+  }, [cancelHistoryPrepend, isLoading, onLoad, prepareForHistoryPrepend])
+
+  React.useEffect(() => {
+    if (isNearTop && !isLoading) load()
+  }, [isLoading, isNearTop, load])
+
+  return (
+    <div className="flex justify-center py-3">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={isLoading}
+        onClick={load}
+      >
+        {isLoading ? <Spinner /> : null}
+        {isLoading ? "Loading earlier messages…" : "Load earlier messages"}
+      </Button>
+    </div>
+  )
+}
+
 function AppShellConversationFrame({
   autoScrollEnabled,
   children,
   centerMessages,
   conversationItemsStore,
+  isLoadingOlderHistory,
   isSessionViewLoading,
+  onLoadOlderHistory,
   ref,
   sessionState,
 }: {
@@ -205,16 +258,20 @@ function AppShellConversationFrame({
   centerMessages: boolean
   children: React.ReactNode
   conversationItemsStore: ConversationItemsStore
+  isLoadingOlderHistory: boolean
   isSessionViewLoading: boolean
+  onLoadOlderHistory: () => Promise<void>
   ref?: React.Ref<AppShellConversationFrameHandle>
   sessionState: AppShellConversationSessionState
 }) {
   const {
     bottomRef,
+    cancelHistoryPrepend,
     jumpToNextMessage,
     jumpToPreviousMessage,
     messagesContentRef,
     messagesScrollAreaRef,
+    prepareForHistoryPrepend,
     scrollConversationToBottom,
     scrollConversationToTop,
     scrollStateStore,
@@ -274,6 +331,15 @@ function AppShellConversationFrame({
           <ConversationContentChangeContext.Provider
             value={syncAfterConversationChange}
           >
+            {sessionState.historyOffset > 0 && !isSessionViewLoading ? (
+              <ConversationEarlierMessages
+                cancelHistoryPrepend={cancelHistoryPrepend}
+                isLoading={isLoadingOlderHistory}
+                onLoad={onLoadOlderHistory}
+                prepareForHistoryPrepend={prepareForHistoryPrepend}
+                scrollStateStore={scrollStateStore}
+              />
+            ) : null}
             {children}
           </ConversationContentChangeContext.Provider>
           <div ref={bottomRef} />
@@ -750,10 +816,12 @@ export const AppShellSessionConversation = React.memo(
     conversationItemsStore,
     displaySettingsStore,
     hiddenThinkingPreviewStore,
+    isLoadingOlderHistory,
     isSessionViewLoading,
     isSubmitting,
     onCancelCompaction,
     onCreateSession,
+    onLoadOlderHistory,
     sessionStore,
     viewerContextId,
     workingStateStore,
@@ -763,10 +831,12 @@ export const AppShellSessionConversation = React.memo(
     conversationItemsStore: ConversationItemsStore
     displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
     hiddenThinkingPreviewStore: PicoStore<string>
+    isLoadingOlderHistory: boolean
     isSessionViewLoading: boolean
     isSubmitting: boolean
     onCancelCompaction: () => void
     onCreateSession: () => void
+    onLoadOlderHistory: () => Promise<void>
     sessionStore: PicoStore<SessionState>
     viewerContextId: string
     workingStateStore: PicoStore<AppShellWorkingState | null>
@@ -789,7 +859,9 @@ export const AppShellSessionConversation = React.memo(
         autoScrollEnabled={autoScrollEnabled}
         centerMessages={centerMessages}
         conversationItemsStore={conversationItemsStore}
+        isLoadingOlderHistory={isLoadingOlderHistory}
         isSessionViewLoading={isSessionViewLoading}
+        onLoadOlderHistory={onLoadOlderHistory}
         sessionState={sessionState}
       >
         <AppShellConversationEmptyState

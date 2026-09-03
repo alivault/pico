@@ -1,5 +1,14 @@
 import Foundation
 
+public struct SessionHistoryResponse: Decodable, Hashable, Sendable {
+  public var ok: Bool
+  public var offset: Int
+  public var limit: Int
+  public var totalCount: Int
+  public var hasMoreBefore: Bool
+  public var items: [ConversationItem]
+}
+
 public struct SessionState: Hashable, Sendable {
   public var connected: Bool
   public var replaying: Bool
@@ -118,7 +127,16 @@ public struct SessionState: Hashable, Sendable {
 
     connected = true
     replaying = false
-    let previousItems = items
+    let incomingHistoryOffset = sync.historyOffset ?? historyOffset
+    let preservedHistoryItemCount = if let patch = sync.itemsPatch {
+      Self.historyPrefixCount(in: items, previousLength: patch.previousLength)
+    } else if incomingHistoryOffset > historyOffset {
+      min(items.count, incomingHistoryOffset - historyOffset)
+    } else {
+      0
+    }
+    let preservedHistoryItems = Array(items.prefix(preservedHistoryItemCount))
+    let currentHistoryWindow = Array(items.dropFirst(preservedHistoryItemCount))
 
     if let streaming = sync.streaming {
       self.streaming = streaming
@@ -131,12 +149,17 @@ public struct SessionState: Hashable, Sendable {
     }
 
     if let patch = sync.itemsPatch {
-      items = Self.mergingLocalUserItems(
-        from: previousItems,
-        into: Self.applyItemsPatch(to: items, patch: patch)
+      let currentItems = Self.mergingLocalUserItems(
+        from: currentHistoryWindow,
+        into: Self.applyItemsPatch(to: currentHistoryWindow, patch: patch)
       )
+      items = preservedHistoryItems + currentItems
     } else if let items = sync.items {
-      self.items = Self.mergingLocalUserItems(from: previousItems, into: items)
+      let currentItems = Self.mergingLocalUserItems(
+        from: currentHistoryWindow,
+        into: items
+      )
+      self.items = preservedHistoryItems + currentItems
     }
     items = Self.deduplicatingLocalUserItems(items)
 
@@ -144,7 +167,9 @@ public struct SessionState: Hashable, Sendable {
       pendingMessages = pendingUserMessages
     }
     if let historyOffset = sync.historyOffset {
-      self.historyOffset = historyOffset
+      self.historyOffset = preservedHistoryItems.isEmpty
+        ? historyOffset
+        : self.historyOffset
     }
     if let historyTotalCount = sync.historyTotalCount {
       self.historyTotalCount = historyTotalCount
@@ -196,6 +221,15 @@ public struct SessionState: Hashable, Sendable {
     }
 
     refreshHiddenThinkingPreview()
+  }
+
+  public mutating func prependHistory(_ response: SessionHistoryResponse) {
+    guard response.offset < historyOffset else { return }
+    let existingIds = Set(items.map(\.id))
+    let olderItems = response.items.filter { !existingIds.contains($0.id) }
+    items = olderItems + items
+    historyOffset = response.offset
+    historyTotalCount = response.totalCount
   }
 
   public mutating func setHideThinkingBlock(_ hideThinkingBlock: Bool) {
@@ -334,6 +368,27 @@ public struct SessionState: Hashable, Sendable {
     nextItems.append(contentsOf: patch.items)
     nextItems.append(contentsOf: previousItems.suffix(previousItems.count - deleteEnd))
     return nextItems
+  }
+
+  private static func historyPrefixCount(
+    in items: [ConversationItem],
+    previousLength: Int
+  ) -> Int {
+    let authoritativeCount = items.count { item in
+      guard case .user(let user) = item else { return true }
+      return !isLocalUserItem(user)
+    }
+    var remaining = max(0, authoritativeCount - previousLength)
+    guard remaining > 0 else { return 0 }
+
+    for (index, item) in items.enumerated() {
+      if case .user(let user) = item, isLocalUserItem(user) {
+        continue
+      }
+      remaining -= 1
+      if remaining == 0 { return index + 1 }
+    }
+    return 0
   }
 
   private static func localUserItemsCarriedAcrossSessionKeyChange(

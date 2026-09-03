@@ -247,6 +247,24 @@ function isLocalOnlyConversationItem(item: ConversationItem) {
   return item.kind === "assistant" && item.streaming && item.blocks.length === 0
 }
 
+function conversationPatchPrefixLength(
+  items: Array<ConversationItem>,
+  previousLength: number
+) {
+  const authoritativeCount = items.filter(
+    (item) => !isLocalOnlyConversationItem(item)
+  ).length
+  let remaining = Math.max(0, authoritativeCount - previousLength)
+  if (remaining === 0) return 0
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    if (item && !isLocalOnlyConversationItem(item)) remaining -= 1
+    if (remaining === 0) return index + 1
+  }
+  return 0
+}
+
 function applyConversationItemsPatch(
   previousItems: Array<ConversationItem>,
   patch: Parameters<typeof buildItemsFromSync>[0]["itemsPatch"]
@@ -306,7 +324,27 @@ export function updateStateFromSync(
   const replacingOptimisticDraft =
     replacingSession &&
     previous.sessionKey === `optimistic:${nextDraftOwnerKey}`
-  const previousItems = replacingOptimisticDraft ? previous.items : base.items
+  const incomingHistoryOffset =
+    typeof sync.historyOffset === "number"
+      ? sync.historyOffset
+      : base.historyOffset
+  const preservedHistoryItemCount =
+    !replacingSession && sync.itemsPatch
+      ? conversationPatchPrefixLength(
+          base.items,
+          sync.itemsPatch.previousLength
+        )
+      : !replacingSession && incomingHistoryOffset > base.historyOffset
+        ? Math.min(
+            base.items.length,
+            incomingHistoryOffset - base.historyOffset
+          )
+        : 0
+  const preservedHistoryItems = base.items.slice(0, preservedHistoryItemCount)
+  const currentHistoryWindow = base.items.slice(preservedHistoryItemCount)
+  const previousItems = replacingOptimisticDraft
+    ? previous.items
+    : currentHistoryWindow
   const streaming =
     typeof sync.streaming === "boolean" ? sync.streaming : base.streaming
   const compacting =
@@ -325,11 +363,17 @@ export function updateStateFromSync(
         streaming,
       }
   const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
-  const { items } = buildItemsFromSync(syncForItems, previousItems)
+  const { items: currentItems } = buildItemsFromSync(
+    syncForItems,
+    previousItems
+  )
+  const items = preservedHistoryItems.length
+    ? [...preservedHistoryItems, ...currentItems]
+    : currentItems
   const historyOffset =
-    typeof sync.historyOffset === "number"
-      ? sync.historyOffset
-      : base.historyOffset
+    preservedHistoryItems.length > 0
+      ? base.historyOffset
+      : incomingHistoryOffset
   const historyTotalCount =
     typeof sync.historyTotalCount === "number"
       ? sync.historyTotalCount

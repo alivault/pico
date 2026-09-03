@@ -7,6 +7,7 @@ public enum PicoEndpoint: Sendable {
   case abort
   case sessionNew
   case sessionSelect
+  case sessionHistory
   case sessionFork
   case sessionName
   case sessionRename
@@ -62,6 +63,8 @@ public enum PicoEndpoint: Sendable {
       "/api/session/new"
     case .sessionSelect:
       "/api/session/select"
+    case .sessionHistory:
+      "/api/session/history"
     case .sessionFork:
       "/api/session/fork"
     case .sessionName:

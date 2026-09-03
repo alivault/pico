@@ -374,10 +374,10 @@ The `/events` endpoint streams:
 Important current behavior:
 
 - `state_sync` is patch-friendly; follow-up events may omit unchanged fields
-- initial session sync sends render-ready conversation items, not the full sanitized message list; do not reintroduce full-history `messages` in live SSE payloads unless there is a deliberate reason
+- initial session sync sends the latest render-ready conversation-item window, not the full sanitized message list; older items load through `/api/session/history`
 - follow-up conversation updates may use `itemsPatch` rather than full `items`; update `src/features/pico/app-shell-utils.ts`, `src/lib/pico/index.ts`, `src/lib/pico/sync.ts`, Swift `SessionState.apply(_:)`, `ConversationItemsPatch`, fixtures/tests, and runtime patching together if changing this contract
 - avoid duplicating large payloads such as base64 images across both `messages` and `items` in `/events`; use `/api/session/history` for paginated raw history needs
-- `/api/session/history` still exists as a paginated history endpoint, but the current conversation UI does not lazy-load older messages on scroll
+- `/api/session/history` returns paginated conversation items, and clients load older pages when the conversation reaches the top
 - session data is stored in `sessionStore` plus `sessionStateRef`; there is intentionally no broad React `sessionState` mirror
 - if you update `sessionStateRef.current` directly, you must still publish the same state to `sessionStore` with `setSessionState()` or selector-driven UI such as the composer/model picker will stay stale
 
@@ -599,7 +599,7 @@ Path and `@file` completion requests are debounced with TanStack Pacer while pre
 
 ### Conversation history and rendering
 
-The main conversation view currently receives full session history through `state_sync` and renders from the `SessionState.items` projection. A paginated `/api/session/history` endpoint exists, but older-history lazy loading is not currently wired into the UI.
+The main conversation view receives the latest session-history window through `state_sync`, renders from the `SessionState.items` projection, and prepends older pages from `/api/session/history` as the user scrolls upward.
 
 If you touch conversation/session sync behavior, inspect all of:
 
@@ -620,7 +620,7 @@ If you touch conversation/session sync behavior, inspect all of:
 
 Be careful not to break the distinction between:
 
-- full session messages/items delivered over the initial `state_sync`
+- the latest session item window delivered over the initial `state_sync`
 - patch-friendly follow-up `state_sync` events that may omit unchanged fields
 - the still-available paginated `/api/session/history` endpoint
 - pending user messages and the current streaming assistant message

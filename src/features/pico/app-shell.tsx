@@ -196,6 +196,7 @@ import type {
   GitActionResponse,
   SessionDoneEvent,
   SessionListEntry,
+  SessionHistoryResponse,
   SessionReadStateResponse,
   SessionStatusEvent,
 } from "@/lib/pico/api"
@@ -758,6 +759,9 @@ function useAppShellSessionWorkspaceView({
   const uiRequestOpenRef = React.useRef(false)
   const conversationFrameRef =
     React.useRef<AppShellConversationFrameHandle | null>(null)
+  const loadingOlderHistoryRef = React.useRef(false)
+  const [isLoadingOlderHistory, setIsLoadingOlderHistory] =
+    React.useState(false)
   const lastSyncedEditorTextRef = React.useRef("")
   const publishSidebarActiveSession = React.useCallback(
     (
@@ -852,6 +856,57 @@ function useAppShellSessionWorkspaceView({
     )
   }
   const conversationItemsStore = conversationItemsStoreRef.current
+  const loadOlderHistory = React.useCallback(async () => {
+    const currentState = sessionStateRef.current
+    const before = currentState.historyOffset
+    const sessionId = currentState.sessionId?.trim()
+    if (
+      loadingOlderHistoryRef.current ||
+      currentState.draft ||
+      !sessionId ||
+      before <= 0
+    ) {
+      return
+    }
+
+    const sessionKey = currentState.sessionKey
+    loadingOlderHistoryRef.current = true
+    setIsLoadingOlderHistory(true)
+    try {
+      const history = await fetchJson<
+        Extract<SessionHistoryResponse, { ok: true }>
+      >(
+        buildRequestUrl("/api/session/history", {
+          contextId: viewerContextId,
+          sessionId,
+          searchParams: { before, limit: 50 },
+        })
+      )
+      const latestState = sessionStateRef.current
+      if (
+        latestState.sessionKey !== sessionKey ||
+        latestState.historyOffset !== before
+      ) {
+        return
+      }
+
+      const nextState = {
+        ...latestState,
+        items: [...history.items, ...latestState.items],
+        historyOffset: history.offset,
+        historyTotalCount: history.totalCount,
+      }
+      conversationItemsStore.setItems(nextState.items)
+      setSessionState(nextState)
+    } catch (error) {
+      toast.error("Could not load earlier messages", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      loadingOlderHistoryRef.current = false
+      setIsLoadingOlderHistory(false)
+    }
+  }, [conversationItemsStore, setSessionState, viewerContextId])
   const hiddenThinkingPreviewStoreRef = React.useRef<PicoStore<string> | null>(
     null
   )
@@ -3516,6 +3571,7 @@ function useAppShellSessionWorkspaceView({
             gitPanelOpen={gitPanelOpen}
             terminalPanelOpen={terminalPanelOpen}
             hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+            isLoadingOlderHistory={isLoadingOlderHistory}
             isSessionViewLoading={isSessionViewLoading}
             isSubmitting={isSubmitting}
             isMobile={isMobile}
@@ -3524,6 +3580,7 @@ function useAppShellSessionWorkspaceView({
             onCreateSession={(cwdOverride) => {
               void createSession(cwdOverride)
             }}
+            onLoadOlderHistory={loadOlderHistory}
             onOpenAddDirectoryDialog={openAddDirectoryDialog}
             onCloseAllFileViewTabs={closeAllFileViewTabs}
             onCloseFileViewTab={closeFileViewTab}

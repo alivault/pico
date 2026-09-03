@@ -217,6 +217,10 @@ export function useAppShellMessageScroll({
   const userScrollIntentUntilRef = React.useRef(0)
   const previousStreamingRef = React.useRef(sessionState.streaming)
   const followScrollFrameRef = React.useRef(0)
+  const pendingHistoryPrependRef = React.useRef<{
+    scrollHeight: number
+    scrollTop: number
+  } | null>(null)
   const scrollStateStoreRef = React.useRef(createMessageScrollStateStore())
 
   const syncViewportState = React.useCallback((viewport: HTMLDivElement) => {
@@ -269,6 +273,20 @@ export function useAppShellMessageScroll({
     if (!viewport) return
     followMessagesRef.current = false
     viewport.scrollTo({ top: 0, behavior: "auto" })
+  }, [])
+
+  const prepareForHistoryPrepend = React.useCallback(() => {
+    const viewport = messageViewportRef.current
+    if (!viewport) return
+    followMessagesRef.current = false
+    pendingHistoryPrependRef.current = {
+      scrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    }
+  }, [])
+
+  const cancelHistoryPrepend = React.useCallback(() => {
+    pendingHistoryPrependRef.current = null
   }, [])
 
   const scrollConversationToBottom = React.useCallback(() => {
@@ -415,12 +433,24 @@ export function useAppShellMessageScroll({
     if (!viewport) return
 
     messageViewportRef.current = viewport
+    const pendingHistoryPrepend = pendingHistoryPrependRef.current
+    if (pendingHistoryPrepend) {
+      pendingHistoryPrependRef.current = null
+      viewport.scrollTop =
+        pendingHistoryPrepend.scrollTop +
+        Math.max(0, viewport.scrollHeight - pendingHistoryPrepend.scrollHeight)
+      rememberViewportLayout(viewport)
+      syncViewportState(viewport)
+      return
+    }
     scrollViewportToBottomIfFollowing(viewport)
     scheduleFollowScrollIfFollowing(viewport)
   }, [
     isSessionViewLoading,
+    rememberViewportLayout,
     scheduleFollowScrollIfFollowing,
     scrollViewportToBottomIfFollowing,
+    syncViewportState,
   ])
 
   React.useLayoutEffect(() => {
@@ -497,10 +527,12 @@ export function useAppShellMessageScroll({
 
   return {
     bottomRef,
+    cancelHistoryPrepend,
     jumpToNextMessage,
     jumpToPreviousMessage,
     messagesContentRef,
     messagesScrollAreaRef,
+    prepareForHistoryPrepend,
     scrollConversationToBottom,
     scrollConversationToTop,
     scrollStateStore: scrollStateStoreRef.current,

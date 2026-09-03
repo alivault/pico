@@ -47,6 +47,13 @@ pub struct SessionDocument {
 }
 
 #[derive(Debug, Clone)]
+pub struct ConversationPage {
+    pub items: Vec<ConversationItem>,
+    pub offset: usize,
+    pub total_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SessionStore {
     root: PathBuf,
     cache: Arc<Mutex<SessionCache>>,
@@ -467,8 +474,55 @@ impl SessionDocument {
         conversation_items_for_entries(self.active_entries())
     }
 
+    pub fn conversation_page(&self, before: Option<usize>, limit: usize) -> ConversationPage {
+        let active_indices = &self.active_entry_indices;
+        let item_starts = active_indices
+            .iter()
+            .enumerate()
+            .filter_map(|(active_position, entry_index)| {
+                conversation_item_starts(&self.entries[*entry_index]).then_some(active_position)
+            })
+            .collect::<Vec<_>>();
+        let total_count = item_starts.len();
+        let before = before.unwrap_or(total_count).min(total_count);
+        let offset = before.saturating_sub(limit);
+        let start_position = item_starts
+            .get(offset)
+            .copied()
+            .unwrap_or(active_indices.len());
+        let end_position = item_starts
+            .get(before)
+            .copied()
+            .unwrap_or(active_indices.len());
+        let items = conversation_items_for_entries(
+            active_indices[start_position..end_position]
+                .iter()
+                .filter_map(|index| self.entries.get(*index)),
+        );
+
+        ConversationPage {
+            items,
+            offset,
+            total_count,
+        }
+    }
+
     pub fn revision(&self) -> String {
         format!("{}:{}", self.entries.len(), self.revision)
+    }
+}
+
+fn conversation_item_starts(entry: &Value) -> bool {
+    match entry_type(entry) {
+        Some("message") => matches!(
+            entry
+                .get("message")
+                .and_then(|message| message.get("role"))
+                .and_then(Value::as_str),
+            Some("user" | "assistant")
+        ),
+        Some("compaction") => true,
+        _ => false,
     }
 }
 
@@ -1413,6 +1467,55 @@ mod tests {
         };
         assert_eq!(tool.output, "# Hello");
         assert!(!tool.running);
+        std::fs::remove_dir_all(directory).expect("remove fixture");
+    }
+
+    #[test]
+    fn conversation_pages_keep_tool_results_with_their_assistant() {
+        let (directory, path) = fixture(&[
+            serde_json::json!({
+              "type": "message", "id": "u1", "parentId": null,
+              "timestamp": "2026-07-31T00:00:01.000Z",
+              "message": {"role":"user","content":"first","timestamp":1}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "a1", "parentId": "u1",
+              "timestamp": "2026-07-31T00:00:02.000Z",
+              "message": {"role":"assistant","content":[{"type":"toolCall","id":"call-1","name":"read","arguments":{"path":"README.md"}}],"timestamp":2}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "t1", "parentId": "a1",
+              "timestamp": "2026-07-31T00:00:03.000Z",
+              "message": {"role":"toolResult","toolCallId":"call-1","toolName":"read","content":[{"type":"text","text":"# Hello"}],"isError":false,"timestamp":3}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "u2", "parentId": "t1",
+              "timestamp": "2026-07-31T00:00:04.000Z",
+              "message": {"role":"user","content":"second","timestamp":4}
+            }),
+            serde_json::json!({
+              "type": "message", "id": "a2", "parentId": "u2",
+              "timestamp": "2026-07-31T00:00:05.000Z",
+              "message": {"role":"assistant","content":[{"type":"text","text":"done"}],"timestamp":5}
+            }),
+        ]);
+        let document = SessionDocument::load(&path).expect("load");
+
+        let assistant_page = document.conversation_page(Some(2), 1);
+        assert_eq!(assistant_page.offset, 1);
+        assert_eq!(assistant_page.total_count, 4);
+        let ConversationItem::Assistant(assistant) = &assistant_page.items[0] else {
+            panic!("expected assistant");
+        };
+        let AssistantBlock::Tool(tool) = &assistant.blocks[0] else {
+            panic!("expected tool");
+        };
+        assert_eq!(tool.output, "# Hello");
+
+        let latest_page = document.conversation_page(None, 2);
+        assert_eq!(latest_page.offset, 2);
+        assert_eq!(latest_page.total_count, 4);
+        assert_eq!(latest_page.items.len(), 2);
         std::fs::remove_dir_all(directory).expect("remove fixture");
     }
 

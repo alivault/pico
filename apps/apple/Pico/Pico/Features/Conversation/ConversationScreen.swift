@@ -300,9 +300,12 @@ struct ConversationScreen: View {
         ConversationView(
           model: model,
           items: model.conversationItems,
+          sessionIdentity: model.sessionState.sessionKey ?? "conversation",
           hideThinking: model.sessionState.hideThinkingBlock,
           hideToolBlocks: model.hideToolBlocks,
           hiddenThinkingPreview: model.sessionState.hiddenThinkingPreview,
+          hasMoreHistory: model.sessionState.historyOffset > 0,
+          isLoadingOlderHistory: model.isLoadingOlderHistory,
           isStreaming: model.sessionState.streaming,
           isCompacting: model.sessionState.compacting,
           workingLabel: model.conversationWorkingLabel,
@@ -311,6 +314,7 @@ struct ConversationScreen: View {
           canBranchAssistantMessages: model.canBranchAssistantMessages,
           onEditUserMessage: editUserMessage,
           onBranchAssistantMessage: confirmBranchAssistantMessage,
+          onLoadOlderHistory: model.loadOlderHistory,
           onCancelCompaction: cancelCompaction
         )
       }

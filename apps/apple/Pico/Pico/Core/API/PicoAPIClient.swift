@@ -76,6 +76,27 @@ public actor PicoAPIClient {
     return try await perform(request)
   }
 
+  public func sessionHistory(
+    baseURL: URL,
+    contextId: String,
+    sessionId: String,
+    before: Int,
+    limit: Int = 50
+  ) async throws -> SessionHistoryResponse {
+    let url = try PicoEndpoint.sessionHistory.url(
+      baseURL: baseURL,
+      contextId: contextId,
+      sessionId: sessionId,
+      extraQueryItems: [
+        URLQueryItem(name: "before", value: String(before)),
+        URLQueryItem(name: "limit", value: String(limit)),
+      ]
+    )
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    return try await perform(request)
+  }
+
   public func forkableMessages(
     baseURL: URL,
     contextId: String,

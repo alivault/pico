@@ -228,4 +228,44 @@ struct SessionStateReducerTests {
     state.apply(stoppedSync)
     #expect(state.hiddenThinkingPreview == nil)
   }
+
+  @Test func preservesLoadedHistoryWhenLatestWindowResynchronizes() throws {
+    let user = { (key: String, text: String) in
+      ConversationItem.user(
+        UserConversationItem(itemKey: key, text: text, images: [])
+      )
+    }
+    var state = SessionState(
+      items: [
+        user("u-old", "Older"),
+        user("u-current", "Current"),
+      ],
+      historyOffset: 49,
+      historyTotalCount: 51,
+      sessionKey: "session:demo"
+    )
+    let sync = try JSONDecoder().decode(
+      StateSyncPayload.self,
+      from: Data(
+        #"{"type":"state_sync","sessionKey":"session:demo","historyOffset":50,"historyTotalCount":52,"items":[{"kind":"user","itemKey":"u-current","text":"Current","images":[]},{"kind":"user","itemKey":"u-new","text":"New","images":[]}]}"#.utf8
+      )
+    )
+
+    state.apply(sync)
+
+    #expect(state.historyOffset == 49)
+    #expect(state.historyTotalCount == 52)
+    #expect(state.items.map(\.id) == ["u-old", "u-current", "u-new"])
+
+    let page = try JSONDecoder().decode(
+      SessionHistoryResponse.self,
+      from: Data(
+        #"{"ok":true,"offset":0,"limit":49,"totalCount":52,"hasMoreBefore":false,"items":[{"kind":"user","itemKey":"u-first","text":"First","images":[]}]}"#.utf8
+      )
+    )
+    state.prependHistory(page)
+
+    #expect(state.historyOffset == 0)
+    #expect(state.items.first?.id == "u-first")
+  }
 }

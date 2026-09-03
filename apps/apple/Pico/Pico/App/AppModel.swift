@@ -64,6 +64,7 @@ public final class AppModel {
   public var selectedSessionId: String?
   public private(set) var loadingSessionTitle: String?
   public private(set) var loadingSessionCwd: String?
+  public private(set) var isLoadingOlderHistory = false
   public var isComposingNewSession = true
   public var composerText = ""
   public var composerImages: [PromptImage] = []
@@ -566,6 +567,42 @@ public final class AppModel {
         message: Self.message(for: error)
       )
       return false
+    }
+  }
+
+  public func loadOlderHistory() async {
+    guard !isLoadingOlderHistory,
+          let baseURL,
+          let sessionId = sessionState.sessionId,
+          sessionState.historyOffset > 0 else {
+      return
+    }
+
+    let sessionKey = sessionState.sessionKey
+    let before = sessionState.historyOffset
+    isLoadingOlderHistory = true
+    defer { isLoadingOlderHistory = false }
+
+    do {
+      let response = try await apiClient.sessionHistory(
+        baseURL: baseURL,
+        contextId: connectionStore.contextId,
+        sessionId: sessionId,
+        before: before
+      )
+      guard response.ok,
+            sessionState.sessionKey == sessionKey,
+            sessionState.historyOffset == before else {
+        return
+      }
+      sessionState.prependHistory(response)
+    } catch {
+      guard !Self.isCancellation(error) else { return }
+      showToast(
+        title: "Could not load earlier messages",
+        message: Self.message(for: error),
+        style: .error
+      )
     }
   }
 

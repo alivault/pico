@@ -1,4 +1,5 @@
 import type {
+  ConversationItem,
   ConversationDeltaEvent,
   DirectoryState,
   ModelOption,
@@ -15,6 +16,17 @@ export type ApiErrorResponse = {
   error: string
   routePath?: string
 }
+
+export type SessionHistoryResponse =
+  | {
+      ok: true
+      offset: number
+      limit: number
+      totalCount: number
+      hasMoreBefore: boolean
+      items: Array<ConversationItem>
+    }
+  | ApiErrorResponse
 
 export type PiTransport = "auto" | "sse" | "websocket" | "websocket-cached"
 

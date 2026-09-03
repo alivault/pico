@@ -38,11 +38,13 @@ export type AppShellSessionContentProps = {
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
   hiddenThinkingPreviewStore: PicoStore<string>
+  isLoadingOlderHistory: boolean
   isSessionViewLoading: boolean
   isSubmitting: boolean
   newSessionDirectoryOptions: Array<{ path: string; label: string }>
   onCancelCompaction: () => void
   onCreateSession: (cwdOverride?: string) => void
+  onLoadOlderHistory: () => Promise<void>
   onOpenAddDirectoryDialog: () => void
   sessionStore: PicoStore<SessionState>
   store: PicoStore<AppShellComposerSnapshot>
@@ -61,11 +63,13 @@ export function AppShellSessionContent({
   displaySettingsStore,
   fileInputRef,
   hiddenThinkingPreviewStore,
+  isLoadingOlderHistory,
   isSessionViewLoading,
   isSubmitting,
   newSessionDirectoryOptions,
   onCancelCompaction,
   onCreateSession,
+  onLoadOlderHistory,
   onOpenAddDirectoryDialog,
   sessionStore,
   store,
@@ -118,10 +122,12 @@ export function AppShellSessionContent({
         conversationItemsStore={conversationItemsStore}
         displaySettingsStore={displaySettingsStore}
         hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        isLoadingOlderHistory={isLoadingOlderHistory}
         isSessionViewLoading={isSessionViewLoading}
         isSubmitting={isSubmitting}
         onCancelCompaction={onCancelCompaction}
         onCreateSession={onCreateSession}
+        onLoadOlderHistory={onLoadOlderHistory}
         sessionStore={sessionStore}
         viewerContextId={viewerContextId}
         workingStateStore={workingStateStore}

@@ -44,6 +44,8 @@ pub struct StateSync {
     pub draft: Option<bool>,
     pub streaming: Option<bool>,
     pub compacting: Option<bool>,
+    pub history_offset: Option<usize>,
+    pub history_total_count: Option<usize>,
     pub hide_thinking_block: Option<bool>,
     #[serde(default)]
     pub model: Patch<ModelOption>,
@@ -74,6 +76,8 @@ pub struct SessionState {
     pub draft: bool,
     pub streaming: bool,
     pub compacting: bool,
+    pub history_offset: usize,
+    pub history_total_count: usize,
     pub hide_thinking_block: bool,
     pub model: Option<ModelOption>,
     pub thinking_level: Option<String>,
@@ -90,18 +94,42 @@ pub struct SessionState {
 impl SessionState {
     pub fn apply(&mut self, sync: StateSync) -> bool {
         let mut patch_applied = true;
+        let incoming_history_offset = sync.history_offset.unwrap_or(self.history_offset);
+        let preserved_history_item_count = sync
+            .items_patch
+            .as_ref()
+            .map(|patch| self.items.len().saturating_sub(patch.previous_length))
+            .unwrap_or_else(|| {
+                incoming_history_offset
+                    .saturating_sub(self.history_offset)
+                    .min(self.items.len())
+            });
         apply_patch(&mut self.session_key, sync.session_key);
         if let Some(items) = sync.items {
-            self.items = items;
+            self.items.splice(preserved_history_item_count.., items);
         }
         if let Some(patch) = sync.items_patch {
-            if patch.previous_length == self.items.len() {
-                let start = patch.start.min(self.items.len());
+            let current_window_length = self
+                .items
+                .len()
+                .saturating_sub(preserved_history_item_count);
+            if patch.previous_length == current_window_length {
+                let start = preserved_history_item_count + patch.start.min(current_window_length);
                 let end = (start + patch.delete_count).min(self.items.len());
                 self.items.splice(start..end, patch.items);
             } else {
                 patch_applied = false;
             }
+        }
+        if sync.history_offset.is_some() {
+            self.history_offset = if preserved_history_item_count > 0 {
+                self.history_offset
+            } else {
+                incoming_history_offset
+            };
+        }
+        if let Some(value) = sync.history_total_count {
+            self.history_total_count = value;
         }
         if let Some(value) = sync.pending_user_messages {
             self.pending_messages = value;
@@ -139,6 +167,15 @@ impl SessionState {
             self.working_message = value.working_message;
         }
         patch_applied
+    }
+
+    pub fn prepend_history(&mut self, response: SessionHistoryResponse) {
+        if response.offset >= self.history_offset {
+            return;
+        }
+        self.items.splice(0..0, response.items);
+        self.history_offset = response.offset;
+        self.history_total_count = response.total_count;
     }
 
     pub fn apply_delta(&mut self, event: ConversationDeltaEvent) {
@@ -497,6 +534,14 @@ pub struct ProjectFileTreeResponse {
     pub paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryResponse {
+    pub offset: usize,
+    pub total_count: usize,
+    pub items: Vec<ConversationItem>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingMessage {
@@ -831,6 +876,10 @@ pub enum DesktopEvent {
     Connected(ClientManifest),
     ConnectionChanged(bool),
     State(StateSync),
+    History {
+        session_id: String,
+        response: SessionHistoryResponse,
+    },
     Sessions(SessionsEvent),
     Delta(ConversationDeltaEvent),
     Files {
@@ -1038,5 +1087,43 @@ mod tests {
         .unwrap();
 
         assert!(!state.apply(patch));
+    }
+
+    #[test]
+    fn state_sync_patch_preserves_pages_loaded_before_the_live_window() {
+        let mut state = SessionState {
+            items: serde_json::from_value(serde_json::json!([
+                {"kind":"user","itemKey":"old","text":"Older","images":[]},
+                {"kind":"user","itemKey":"current","text":"Current","images":[]},
+                {"kind":"assistant","itemKey":"answer","blocks":[],"streaming":true}
+            ]))
+            .unwrap(),
+            history_offset: 49,
+            history_total_count: 51,
+            ..SessionState::default()
+        };
+        let patch: StateSync = serde_json::from_value(serde_json::json!({
+            "type": "state_sync",
+            "itemsPatch": {
+                "previousLength": 2,
+                "start": 1,
+                "deleteCount": 1,
+                "items": [{
+                    "kind":"assistant", "itemKey":"answer", "blocks":[], "streaming":false
+                }]
+            }
+        }))
+        .unwrap();
+
+        assert!(state.apply(patch));
+        assert_eq!(state.items.len(), 3);
+        let ConversationItem::User(oldest) = &state.items[0] else {
+            panic!("expected preserved user item");
+        };
+        assert_eq!(oldest.item_key.as_deref(), Some("old"));
+        let ConversationItem::Assistant(answer) = &state.items[2] else {
+            panic!("expected patched assistant item");
+        };
+        assert!(!answer.streaming);
     }
 }

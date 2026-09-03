@@ -726,12 +726,14 @@ function useAppShellTabsControllerView({
   gitPanelOpen,
   terminalPanelOpen,
   hiddenThinkingPreviewStore,
+  isLoadingOlderHistory,
   isSessionViewLoading,
   isSubmitting,
   isMobile,
   newSessionDirectoryOptions,
   onCancelCompaction,
   onCreateSession,
+  onLoadOlderHistory,
   onOpenAddDirectoryDialog,
   onCloseAllFileViewTabs,
   onCloseFileViewTab,
@@ -895,11 +897,13 @@ function useAppShellTabsControllerView({
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          isLoadingOlderHistory={isLoadingOlderHistory}
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
           newSessionDirectoryOptions={newSessionDirectoryOptions}
           onCancelCompaction={onCancelCompaction}
           onCreateSession={onCreateSession}
+          onLoadOlderHistory={onLoadOlderHistory}
           onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
           sessionStore={sessionStore}
           store={store}

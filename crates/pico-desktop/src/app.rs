@@ -746,6 +746,7 @@ pub struct PicoDesktop {
     conversation_markdown: HashMap<String, CachedConversationMarkdown>,
     conversation_markdown_subscriptions: HashMap<String, Subscription>,
     conversation_rows: Vec<ConversationRow>,
+    is_loading_older_history: bool,
     settings_open: bool,
     command_palette_open: bool,
     command_palette: Entity<ComponentListState<CommandPaletteDelegate>>,
@@ -861,10 +862,29 @@ impl PicoDesktop {
         conversation_list.set_scroll_handler(move |_, _, cx| {
             let conversation_view = conversation_view.clone();
             cx.defer(move |cx| {
-                let _ = conversation_view.update(cx, |_, cx| cx.notify());
+                let _ = conversation_view.update(cx, |this, cx| {
+                    this.maybe_load_older_history();
+                    cx.notify();
+                });
             });
         });
         self.conversation_list = conversation_list;
+    }
+
+    fn maybe_load_older_history(&mut self) {
+        if self.is_loading_older_history
+            || self.session.history_offset == 0
+            || self.conversation_list.logical_scroll_top().item_ix > 1
+        {
+            return;
+        }
+        let Some(session_id) = self.session.session_id.clone() else {
+            return;
+        };
+
+        self.is_loading_older_history = true;
+        self.client
+            .load_older_history(session_id, self.session.history_offset, self.tx.clone());
     }
 
     fn conversation_rows_for_items(items: &[ConversationItem]) -> Vec<ConversationRow> {
@@ -1267,7 +1287,10 @@ impl PicoDesktop {
         conversation_list.set_scroll_handler(move |_, _, cx| {
             let conversation_view = conversation_view.clone();
             cx.defer(move |cx| {
-                let _ = conversation_view.update(cx, |_, cx| cx.notify());
+                let _ = conversation_view.update(cx, |this, cx| {
+                    this.maybe_load_older_history();
+                    cx.notify();
+                });
             });
         });
 
@@ -1359,6 +1382,7 @@ impl PicoDesktop {
             conversation_markdown: HashMap::new(),
             conversation_markdown_subscriptions: HashMap::new(),
             conversation_rows: Vec::new(),
+            is_loading_older_history: false,
             preferences: preferences.clone(),
             settings_open: false,
             command_palette_open: false,
@@ -1496,11 +1520,27 @@ impl PicoDesktop {
             DesktopEvent::State(sync) => {
                 let had_full_items = sync.items.is_some();
                 let conversation_visibility_changed = sync.hide_thinking_block.is_some();
-                let item_patch = sync
-                    .items_patch
-                    .as_ref()
-                    .map(|patch| (patch.start, patch.delete_count, patch.items.len()));
                 let old_item_count = self.session.items.len();
+                let preserve_scroll_anchor = had_full_items
+                    && sync
+                        .history_offset
+                        .is_some_and(|offset| offset > self.session.history_offset);
+                let scroll_top = self.conversation_list.logical_scroll_top();
+                let scroll_anchor_key = preserve_scroll_anchor
+                    .then(|| {
+                        self.conversation_rows
+                            .get(scroll_top.item_ix)
+                            .map(|row| row.key().to_string())
+                    })
+                    .flatten();
+                let item_patch = sync.items_patch.as_ref().map(|patch| {
+                    let window_start = old_item_count.saturating_sub(patch.previous_length);
+                    (
+                        window_start + patch.start,
+                        patch.delete_count,
+                        patch.items.len(),
+                    )
+                });
                 let replaced_markdown_keys = item_patch
                     .map(|(start, delete_count, _)| {
                         self.conversation_markdown_keys(
@@ -1520,11 +1560,22 @@ impl PicoDesktop {
                 }
                 let new_item_count = self.session.items.len();
                 if had_full_items {
-                    self.sync_conversation_rows(true, None);
+                    self.sync_conversation_rows(!preserve_scroll_anchor, None);
                     self.conversation_markdown.clear();
                     self.conversation_markdown_subscriptions.clear();
                     let descriptors = self.conversation_markdown_descriptors(0..new_item_count);
                     self.sync_conversation_markdown(descriptors, cx);
+                    if let Some(scroll_anchor_key) = scroll_anchor_key
+                        && let Some(item_ix) = self
+                            .conversation_rows
+                            .iter()
+                            .position(|row| row.key() == scroll_anchor_key)
+                    {
+                        self.conversation_list.scroll_to(ListOffset {
+                            item_ix,
+                            offset_in_item: scroll_top.offset_in_item,
+                        });
+                    }
                 } else if let Some((start, _delete_count, inserted_count)) = item_patch {
                     let inserted_end = (start + inserted_count).min(new_item_count);
                     self.sync_conversation_rows(
@@ -1573,6 +1624,38 @@ impl PicoDesktop {
                             self.tx.clone(),
                         );
                     }
+                }
+            }
+            DesktopEvent::History {
+                session_id,
+                response,
+            } => {
+                self.is_loading_older_history = false;
+                if self.session.session_id.as_deref() != Some(session_id.as_str()) {
+                    return;
+                }
+                let scroll_top = self.conversation_list.logical_scroll_top();
+                let anchor_key = self
+                    .conversation_rows
+                    .get(scroll_top.item_ix)
+                    .map(|row| row.key().to_string());
+                self.session.prepend_history(response);
+                let new_item_count = self.session.items.len();
+                self.sync_conversation_rows(false, None);
+                self.conversation_markdown.clear();
+                self.conversation_markdown_subscriptions.clear();
+                let descriptors = self.conversation_markdown_descriptors(0..new_item_count);
+                self.sync_conversation_markdown(descriptors, cx);
+                if let Some(anchor_key) = anchor_key
+                    && let Some(item_ix) = self
+                        .conversation_rows
+                        .iter()
+                        .position(|row| row.key() == anchor_key)
+                {
+                    self.conversation_list.scroll_to(ListOffset {
+                        item_ix,
+                        offset_in_item: scroll_top.offset_in_item,
+                    });
                 }
             }
             DesktopEvent::Sessions(event) => {
@@ -1828,6 +1911,7 @@ impl PicoDesktop {
                 self.status_message = None;
             }
             DesktopEvent::SessionSelected(session_id) => {
+                self.is_loading_older_history = false;
                 self.reset_workspace_scope();
                 self.expanded_tool_blocks.clear();
                 self.conversation_markdown.clear();
@@ -1860,6 +1944,7 @@ impl PicoDesktop {
                 self.status_message = Some(message);
                 self.delete_session_target = None;
                 if clear_selection {
+                    self.is_loading_older_history = false;
                     self.expanded_tool_blocks.clear();
                     self.conversation_markdown.clear();
                     self.conversation_markdown_subscriptions.clear();
@@ -1877,6 +1962,7 @@ impl PicoDesktop {
                 self.status_message = Some("Moved session".into());
             }
             DesktopEvent::SessionCreated { session_key, cwd } => {
+                self.is_loading_older_history = false;
                 self.reset_workspace_scope();
                 self.expanded_tool_blocks.clear();
                 self.conversation_markdown.clear();
@@ -1901,6 +1987,7 @@ impl PicoDesktop {
                 self.status_message = None;
             }
             DesktopEvent::Error(error) => {
+                self.is_loading_older_history = false;
                 if self.pending_submission.is_some() {
                     self.failed_submission = self.pending_submission.take();
                 }

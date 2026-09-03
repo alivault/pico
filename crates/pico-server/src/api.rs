@@ -53,8 +53,9 @@ use crate::session_store::{
 use crate::static_assets::StaticAssets;
 use crate::terminal::{TerminalEvent, TerminalManager};
 
-const RUNTIME_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const RUNTIME_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const RUNTIME_EVICTION_INTERVAL: Duration = Duration::from_secs(60);
+const INITIAL_HISTORY_ITEM_LIMIT: usize = 100;
 
 #[derive(Clone)]
 struct ServerContext {
@@ -1793,12 +1794,19 @@ async fn directory_sessions_indexes(
 }
 
 fn build_state_sync(document: Option<&SessionDocument>, options: StateSyncOptions<'_>) -> Value {
-    let mut items = options
+    let (mut items, history_offset, history_total_count) = if let Some(entries) = options
         .projection
         .and_then(|projection| projection.entries.as_deref())
-        .map(|entries| entries.items.clone())
-        .or_else(|| document.map(SessionDocument::conversation_items))
-        .unwrap_or_default();
+    {
+        let total_count = entries.items.len();
+        let offset = total_count.saturating_sub(INITIAL_HISTORY_ITEM_LIMIT);
+        (entries.items[offset..].to_vec(), offset, total_count)
+    } else if let Some(document) = document {
+        let page = document.conversation_page(None, INITIAL_HISTORY_ITEM_LIMIT);
+        (page.items, page.offset, page.total_count)
+    } else {
+        (Vec::new(), 0, 0)
+    };
     if let Some(item) = options.streaming_item {
         items.push(item.clone());
     }
@@ -1818,8 +1826,8 @@ fn build_state_sync(document: Option<&SessionDocument>, options: StateSyncOption
       "compacting": false,
       "pendingUserMessages": [],
       "items": items,
-      "historyOffset": 0,
-      "historyTotalCount": document.map(SessionDocument::message_count).unwrap_or(0),
+      "historyOffset": history_offset,
+      "historyTotalCount": history_total_count,
       "hideThinkingBlock": options.hide_thinking,
       "thinkingLevel": document.and_then(SessionDocument::thinking_level).unwrap_or_else(|| "xhigh".into()),
       "availableThinkingLevels": ["off", "minimal", "low", "medium", "high", "xhigh"],
@@ -2288,6 +2296,7 @@ async fn client_manifest() -> Json<Value> {
           "pi-rpc-process-isolation",
           "session-index",
           "conversation",
+          "paginated-conversation-history",
           "state-sync",
           "sse-replay",
           "prompt",
@@ -4165,22 +4174,19 @@ async fn session_history(
 ) -> Result<Json<Value>, ApiError> {
     let target = parse_request_target(raw_query.as_deref());
     let document = resolve_session_document(&context, &target).await?;
-    let messages = document.messages();
-    let total_count = messages.len();
     let limit = query
         .limit
         .filter(|limit| *limit > 0)
         .unwrap_or(50)
         .min(200);
-    let before = query.before.unwrap_or(total_count).min(total_count);
-    let offset = before.saturating_sub(limit);
+    let page = document.conversation_page(query.before, limit);
     Ok(Json(json!({
       "ok": true,
-      "offset": offset,
+      "offset": page.offset,
       "limit": limit,
-      "totalCount": total_count,
-      "hasMoreBefore": offset > 0,
-      "messages": &messages[offset..before]
+      "totalCount": page.total_count,
+      "hasMoreBefore": page.offset > 0,
+      "items": page.items
     })))
 }
 
@@ -6009,7 +6015,8 @@ for line in sys.stdin:
             .expect("history body");
         let history: Value = serde_json::from_slice(&body).expect("history JSON");
         assert_eq!(history["totalCount"], 2);
-        assert_eq!(history["messages"][1]["content"][0]["text"], "fake reply");
+        assert_eq!(history["items"][1]["kind"], "assistant");
+        assert_eq!(history["items"][1]["blocks"][0]["text"], "fake reply");
 
         context.runtimes.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fake Pi fixture");

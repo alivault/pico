@@ -42,7 +42,8 @@ use crate::models::{
     AuthProvidersResponse, ClientManifest, DesktopEvent, ForkableMessagesResponse,
     GitActionResponse, GitChangesResponse, GitCommitDiffResponse, GitFileDiffResponse,
     GitStatusResponse, PendingMessage, PerformanceSettings, ProjectFileReadResponse,
-    ProjectFileTreeResponse, PromptRequest, SessionTreeResponse, TerminalCreateResponse,
+    ProjectFileTreeResponse, PromptRequest, SessionHistoryResponse, SessionTreeResponse,
+    TerminalCreateResponse,
 };
 
 #[derive(Clone)]
@@ -229,6 +230,27 @@ impl PicoClient {
             let result = client
                 .get_json::<AuthProvidersResponse>("/api/auth/providers", &[])
                 .map(DesktopEvent::AuthProviders);
+            Self::send_result(tx, result);
+        });
+    }
+
+    pub fn load_older_history(&self, session_id: String, before: usize, tx: Sender<DesktopEvent>) {
+        let client = self.clone();
+        std::thread::spawn(move || {
+            let before = before.to_string();
+            let result = client
+                .get_json::<SessionHistoryResponse>(
+                    "/api/session/history",
+                    &[
+                        ("session", session_id.as_str()),
+                        ("before", before.as_str()),
+                        ("limit", "50"),
+                    ],
+                )
+                .map(|response| DesktopEvent::History {
+                    session_id,
+                    response,
+                });
             Self::send_result(tx, result);
         });
     }

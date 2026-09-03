@@ -11,9 +11,12 @@ struct ConversationView: View {
 
   var model: AppModel? = nil
   var items: [ConversationItem]
+  var sessionIdentity = "conversation"
   var hideThinking: Bool
   var hideToolBlocks: Bool = false
   var hiddenThinkingPreview: String?
+  var hasMoreHistory = false
+  var isLoadingOlderHistory = false
   var isStreaming: Bool = false
   var isCompacting: Bool = false
   var workingLabel: String = "Working…"
@@ -22,6 +25,7 @@ struct ConversationView: View {
   var canBranchAssistantMessages = true
   var onEditUserMessage: (UserConversationItem) -> Void = { _ in }
   var onBranchAssistantMessage: (AssistantConversationItem) -> Void = { _ in }
+  var onLoadOlderHistory: () async -> Void = {}
   var onCancelCompaction: () -> Void = {}
 
   @State private var isNearBottom = true
@@ -34,6 +38,23 @@ struct ConversationView: View {
       ZStack(alignment: .bottom) {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 16, pinnedViews: [.sectionHeaders]) {
+            if hasMoreHistory {
+              Group {
+                if isLoadingOlderHistory {
+                  ProgressView("Loading earlier messages…")
+                } else {
+                  Button("Load earlier messages") {
+                    Task { await onLoadOlderHistory() }
+                  }
+                }
+              }
+              .frame(maxWidth: .infinity)
+              .task(id: historyLoadIdentity) {
+                guard !isLoadingOlderHistory else { return }
+                await onLoadOlderHistory()
+              }
+            }
+
             if items.isEmpty {
               ContentUnavailableView(
                 "No conversation yet",
@@ -272,7 +293,11 @@ struct ConversationView: View {
   }
 
   private var conversationIdentity: String {
-    items.first?.id ?? "empty"
+    sessionIdentity
+  }
+
+  private var historyLoadIdentity: String {
+    "\(hasMoreHistory):\(items.first?.id ?? "empty")"
   }
 
   private var scrollSignature: String {
