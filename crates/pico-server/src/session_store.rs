@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use serde::de::{DeserializeOwned, IgnoredAny, MapAccess, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -20,7 +19,6 @@ const MAX_SESSION_ENTRY_BYTES: usize = 16 * 1024 * 1024;
 const MAX_SESSION_COUNT: usize = 20_000;
 const MAX_CACHED_DOCUMENTS: usize = 4;
 const MAX_CACHED_DOCUMENT_SOURCE_BYTES: u64 = 96 * 1024 * 1024;
-const SUMMARY_TEXT_CHARS: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionHeader {
@@ -39,11 +37,35 @@ pub struct SessionHeader {
 pub struct SessionDocument {
     pub path: PathBuf,
     pub header: SessionHeader,
-    pub entries: Vec<Value>,
+    entry_index: Vec<SessionEntryIndex>,
     active_entry_indices: Vec<usize>,
     pub leaf_id: Option<String>,
     pub modified: Option<String>,
     revision: String,
+}
+
+#[derive(Debug)]
+struct SessionEntryIndex {
+    offset: u64,
+    kind: Option<String>,
+    id: Option<String>,
+    parent_id: Option<String>,
+    message_role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionEntryIndexRecord {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    id: Option<String>,
+    parent_id: Option<String>,
+    message: Option<SessionEntryIndexMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionEntryIndexMessage {
+    role: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,36 +102,6 @@ struct CachedSummary {
     revision: String,
     summary: SessionListEntry,
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SummaryEntry {
-    #[serde(rename = "type")]
-    kind: Option<String>,
-    id: Option<String>,
-    parent_id: Option<String>,
-    timestamp: Option<String>,
-    name: Option<String>,
-    message: Option<SummaryMessage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SummaryMessage {
-    role: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_summary_content")]
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct SummaryContentPart {
-    #[serde(rename = "type")]
-    kind: Option<String>,
-    #[serde(default)]
-    text: BoundedText,
-}
-
-#[derive(Debug, Default)]
-struct BoundedText(String);
 
 #[derive(Debug, Clone)]
 pub struct IndexedSessionFile {
@@ -238,7 +230,7 @@ impl SessionStore {
     }
 
     pub fn summary(&self, indexed: &IndexedSessionFile) -> io::Result<SessionListEntry> {
-        {
+        let cached_document = {
             let cache = self
                 .cache
                 .lock()
@@ -248,8 +240,16 @@ impl SessionStore {
                     return Ok(cached.summary.clone());
                 }
             }
-        }
-        let summary = load_session_summary(indexed)?;
+            cache
+                .documents
+                .get(&indexed.path)
+                .filter(|cached| cached.revision == indexed.revision)
+                .map(|cached| cached.document.clone())
+        };
+        let summary = match cached_document {
+            Some(document) => document.summary(),
+            None => load_session_summary(indexed)?,
+        };
         self.cache
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -316,15 +316,12 @@ impl SessionDocument {
         let file = std::fs::File::open(path)?;
         let mut reader = io::BufReader::new(file);
         let header = read_session_header(&mut reader)?;
-        let mut entries = read_jsonl_tail::<Value>(&mut reader, path)?;
-        for entry in &mut entries {
-            compact_session_entry(entry);
-        }
-        let (active_entry_indices, leaf_id) = active_path(&entries);
+        let entry_index = read_session_entry_index(&mut reader, path)?;
+        let (active_entry_indices, leaf_id) = active_index_path(&entry_index);
         Ok(Self {
             path: path.to_path_buf(),
             header,
-            entries,
+            entry_index,
             active_entry_indices,
             leaf_id,
             modified: metadata.modified().ok().and_then(format_system_time),
@@ -332,31 +329,100 @@ impl SessionDocument {
         })
     }
 
-    fn active_entries(&self) -> impl DoubleEndedIterator<Item = &Value> {
+    fn active_entries(&self) -> impl DoubleEndedIterator<Item = &SessionEntryIndex> {
         self.active_entry_indices
             .iter()
-            .filter_map(|index| self.entries.get(*index))
+            .filter_map(|index| self.entry_index.get(*index))
+    }
+
+    fn read_entry(&self, entry: &SessionEntryIndex) -> Option<Value> {
+        match read_session_entry_at(&self.path, entry.offset) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %self.path.display(),
+                    offset = entry.offset,
+                    "failed to read indexed Pi session entry"
+                );
+                None
+            }
+        }
+    }
+
+    fn read_entries<'a>(
+        &self,
+        entries: impl IntoIterator<Item = &'a SessionEntryIndex>,
+    ) -> Vec<Value> {
+        let mut reader = match std::fs::File::open(&self.path).map(io::BufReader::new) {
+            Ok(reader) => reader,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %self.path.display(),
+                    "failed to open indexed Pi session"
+                );
+                return Vec::new();
+            }
+        };
+        entries
+            .into_iter()
+            .filter_map(|entry| {
+                read_session_entry_from_reader(&mut reader, entry.offset)
+                    .map_err(|error| {
+                        tracing::warn!(
+                            %error,
+                            path = %self.path.display(),
+                            offset = entry.offset,
+                            "failed to read indexed Pi session entry"
+                        );
+                    })
+                    .ok()
+            })
+            .collect()
+    }
+
+    pub fn contains_entry_id(&self, id: &str) -> bool {
+        self.entry_index
+            .iter()
+            .any(|entry| entry.id.as_deref() == Some(id))
     }
 
     pub fn session_name(&self) -> Option<String> {
         self.active_entries().rev().find_map(|entry| {
-            (entry_type(entry) == Some("session_info"))
-                .then(|| entry.get("name").and_then(Value::as_str))
+            (entry.kind.as_deref() == Some("session_info"))
+                .then(|| self.read_entry(entry))
                 .flatten()
-                .map(str::trim)
+                .and_then(|entry| {
+                    entry
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .map(|name| name.trim().to_string())
                 .filter(|name| !name.is_empty())
-                .map(str::to_string)
         })
     }
 
     pub fn first_user_message(&self) -> String {
         self.active_entries()
-            .find_map(|entry| message_with_role(entry, "user").map(message_text))
+            .find(|entry| {
+                entry.kind.as_deref() == Some("message")
+                    && entry.message_role.as_deref() == Some("user")
+            })
+            .and_then(|entry| self.read_entry(entry))
+            .and_then(|entry| message_with_role(&entry, "user").map(message_text))
             .unwrap_or_default()
     }
 
     pub fn last_message_preview(&self) -> Option<String> {
-        self.active_entries().rev().find_map(|entry| {
+        self.active_entries().rev().find_map(|indexed| {
+            if indexed.kind.as_deref() != Some("message")
+                || !matches!(indexed.message_role.as_deref(), Some("user" | "assistant"))
+            {
+                return None;
+            }
+            let entry = self.read_entry(indexed)?;
             let message = entry.get("message")?;
             let role = message.get("role").and_then(Value::as_str)?;
             matches!(role, "user" | "assistant")
@@ -367,13 +433,14 @@ impl SessionDocument {
 
     pub fn message_count(&self) -> usize {
         self.active_entries()
-            .filter(|entry| entry_type(entry) == Some("message"))
+            .filter(|entry| entry.kind.as_deref() == Some("message"))
             .count()
     }
 
     pub fn model(&self) -> Option<ModelOption> {
-        for entry in self.active_entries().rev() {
-            if entry_type(entry) == Some("model_change") {
+        for indexed in self.active_entries().rev() {
+            if indexed.kind.as_deref() == Some("model_change") {
+                let entry = self.read_entry(indexed)?;
                 let id = entry.get("modelId").and_then(Value::as_str)?;
                 return Some(ModelOption {
                     id: id.into(),
@@ -385,7 +452,13 @@ impl SessionDocument {
                     reasoning: None,
                 });
             }
-            if let Some(message) = message_with_role(entry, "assistant") {
+            if indexed.kind.as_deref() == Some("message")
+                && indexed.message_role.as_deref() == Some("assistant")
+            {
+                let entry = self.read_entry(indexed)?;
+                let Some(message) = message_with_role(&entry, "assistant") else {
+                    continue;
+                };
                 if let Some(id) = message.get("model").and_then(Value::as_str) {
                     return Some(ModelOption {
                         id: id.into(),
@@ -403,11 +476,16 @@ impl SessionDocument {
     }
 
     pub fn thinking_level(&self) -> Option<String> {
-        self.active_entries().rev().find_map(|entry| {
-            (entry_type(entry) == Some("thinking_level_change"))
-                .then(|| entry.get("thinkingLevel").and_then(Value::as_str))
+        self.active_entries().rev().find_map(|indexed| {
+            (indexed.kind.as_deref() == Some("thinking_level_change"))
+                .then(|| self.read_entry(indexed))
                 .flatten()
-                .map(str::to_string)
+                .and_then(|entry| {
+                    entry
+                        .get("thinkingLevel")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
         })
     }
 
@@ -433,8 +511,8 @@ impl SessionDocument {
             title,
             modified: self.modified.clone(),
             last_user_message_at: None,
-            last_message_at: self.active_entries().rev().find_map(|entry| {
-                entry
+            last_message_at: self.active_entries().rev().find_map(|indexed| {
+                self.read_entry(indexed)?
                     .get("timestamp")
                     .and_then(Value::as_str)
                     .map(str::to_string)
@@ -449,7 +527,8 @@ impl SessionDocument {
     }
 
     pub fn messages(&self) -> Vec<Value> {
-        self.active_entries()
+        self.read_entries(self.active_entries())
+            .iter()
             .filter_map(|entry| match entry_type(entry) {
                 Some("message") => entry.get("message").map(sanitize_message),
                 Some("compaction") => Some(json_compaction_message(entry)),
@@ -471,7 +550,8 @@ impl SessionDocument {
     }
 
     pub fn conversation_items(&self) -> Vec<ConversationItem> {
-        conversation_items_for_entries(self.active_entries())
+        let entries = self.read_entries(self.active_entries());
+        conversation_items_for_entries(entries.iter())
     }
 
     pub fn conversation_page(&self, before: Option<usize>, limit: usize) -> ConversationPage {
@@ -480,7 +560,8 @@ impl SessionDocument {
             .iter()
             .enumerate()
             .filter_map(|(active_position, entry_index)| {
-                conversation_item_starts(&self.entries[*entry_index]).then_some(active_position)
+                conversation_item_starts_index(&self.entry_index[*entry_index])
+                    .then_some(active_position)
             })
             .collect::<Vec<_>>();
         let total_count = item_starts.len();
@@ -494,11 +575,12 @@ impl SessionDocument {
             .get(before)
             .copied()
             .unwrap_or(active_indices.len());
-        let items = conversation_items_for_entries(
+        let entries = self.read_entries(
             active_indices[start_position..end_position]
                 .iter()
-                .filter_map(|index| self.entries.get(*index)),
+                .filter_map(|index| self.entry_index.get(*index)),
         );
+        let items = conversation_items_for_entries(entries.iter());
 
         ConversationPage {
             items,
@@ -508,19 +590,13 @@ impl SessionDocument {
     }
 
     pub fn revision(&self) -> String {
-        format!("{}:{}", self.entries.len(), self.revision)
+        format!("{}:{}", self.entry_index.len(), self.revision)
     }
 }
 
-fn conversation_item_starts(entry: &Value) -> bool {
-    match entry_type(entry) {
-        Some("message") => matches!(
-            entry
-                .get("message")
-                .and_then(|message| message.get("role"))
-                .and_then(Value::as_str),
-            Some("user" | "assistant")
-        ),
+fn conversation_item_starts_index(entry: &SessionEntryIndex) -> bool {
+    match entry.kind.as_deref() {
+        Some("message") => matches!(entry.message_role.as_deref(), Some("user" | "assistant")),
         Some("compaction") => true,
         _ => false,
     }
@@ -678,14 +754,15 @@ fn read_session_header(reader: &mut impl BufRead) -> io::Result<SessionHeader> {
     Ok(header)
 }
 
-fn read_jsonl_tail<T: DeserializeOwned>(
-    reader: &mut impl BufRead,
+fn read_session_entry_index(
+    reader: &mut (impl BufRead + Seek),
     path: &Path,
-) -> io::Result<Vec<T>> {
-    let mut values = Vec::new();
+) -> io::Result<Vec<SessionEntryIndex>> {
+    let mut entries = Vec::new();
     let mut line = String::new();
     let mut trailing_error = None;
     loop {
+        let offset = reader.stream_position()?;
         line.clear();
         if read_bounded_line(reader, &mut line, MAX_SESSION_ENTRY_BYTES)? == 0 {
             break;
@@ -696,8 +773,14 @@ fn read_jsonl_tail<T: DeserializeOwned>(
         if let Some(error) = trailing_error.take() {
             return Err(io::Error::new(io::ErrorKind::InvalidData, error));
         }
-        match serde_json::from_str(&line) {
-            Ok(value) => values.push(value),
+        match serde_json::from_str::<SessionEntryIndexRecord>(&line) {
+            Ok(entry) => entries.push(SessionEntryIndex {
+                offset,
+                kind: entry.kind,
+                id: entry.id,
+                parent_id: entry.parent_id,
+                message_role: entry.message.and_then(|message| message.role),
+            }),
             Err(error) => trailing_error = Some(error),
         }
     }
@@ -708,7 +791,30 @@ fn read_jsonl_tail<T: DeserializeOwned>(
             "ignoring an incomplete trailing Pi session entry"
         );
     }
-    Ok(values)
+    Ok(entries)
+}
+
+fn read_session_entry_at(path: &Path, offset: u64) -> io::Result<Value> {
+    let file = std::fs::File::open(path)?;
+    read_session_entry_from_reader(&mut io::BufReader::new(file), offset)
+}
+
+fn read_session_entry_from_reader(
+    reader: &mut (impl BufRead + Seek),
+    offset: u64,
+) -> io::Result<Value> {
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut line = String::new();
+    if read_bounded_line(reader, &mut line, MAX_SESSION_ENTRY_BYTES)? == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "indexed Pi session entry is missing",
+        ));
+    }
+    let mut entry = serde_json::from_str(&line)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    compact_session_entry(&mut entry);
+    Ok(entry)
 }
 
 fn read_bounded_line(
@@ -742,196 +848,9 @@ fn compact_session_entry(entry: &mut Value) {
 }
 
 fn load_session_summary(indexed: &IndexedSessionFile) -> io::Result<SessionListEntry> {
-    let file = std::fs::File::open(&indexed.path)?;
-    let mut reader = io::BufReader::new(file);
-    let header = read_session_header(&mut reader)?;
-    let entries = read_jsonl_tail::<SummaryEntry>(&mut reader, &indexed.path)?;
-    let active = active_summary_path(&entries);
-    let name = active.iter().rev().find_map(|index| {
-        let entry = &entries[*index];
-        (entry.kind.as_deref() == Some("session_info"))
-            .then_some(entry.name.as_deref())
-            .flatten()
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .map(str::to_string)
-    });
-    let first_message = active
-        .iter()
-        .filter_map(|index| entries[*index].message.as_ref())
-        .find(|message| message.role.as_deref() == Some("user"))
-        .map(|message| message.content.clone())
-        .unwrap_or_default();
-    let title = name
-        .clone()
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| {
-            let first = truncate_preview(&first_message, 80);
-            if first.is_empty() {
-                "New session".into()
-            } else {
-                first
-            }
-        });
-    let last_message_preview = active.iter().rev().find_map(|index| {
-        let message = entries[*index].message.as_ref()?;
-        matches!(message.role.as_deref(), Some("user" | "assistant"))
-            .then(|| truncate_preview(&message.content, 160))
-            .filter(|preview| !preview.is_empty())
-    });
-    Ok(SessionListEntry {
-        path: Some(indexed.path.clone()),
-        id: Some(header.id),
-        cwd: Some(header.cwd),
-        name,
-        title,
-        modified: indexed.modified.clone(),
-        last_user_message_at: None,
-        last_message_at: active
-            .iter()
-            .rev()
-            .find_map(|index| entries[*index].timestamp.clone()),
-        last_message_preview,
-        message_count: Some(
-            active
-                .iter()
-                .filter(|index| entries[**index].kind.as_deref() == Some("message"))
-                .count(),
-        ),
-        context_usage: None,
-        streaming: Some(false),
-        unread: Some(false),
-        optimistic: None,
-    })
-}
-
-fn active_summary_path(entries: &[SummaryEntry]) -> Vec<usize> {
-    let by_id = entries
-        .iter()
-        .enumerate()
-        .filter_map(|(index, entry)| Some((entry.id.as_deref()?, index)))
-        .collect::<HashMap<_, _>>();
-    let mut current = entries.iter().rev().find_map(|entry| entry.id.as_deref());
-    let mut seen = HashSet::new();
-    let mut reversed = Vec::new();
-    while let Some(id) = current {
-        if !seen.insert(id) {
-            break;
-        }
-        let Some(index) = by_id.get(id).copied() else {
-            break;
-        };
-        reversed.push(index);
-        current = entries[index].parent_id.as_deref();
-    }
-    reversed.reverse();
-    reversed
-}
-
-impl<'de> Deserialize<'de> for BoundedText {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct BoundedTextVisitor;
-
-        impl Visitor<'_> for BoundedTextVisitor {
-            type Value = BoundedText;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("a string")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(BoundedText(bounded_summary_text(value)))
-            }
-
-            fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
-                Ok(BoundedText(bounded_summary_text(&value)))
-            }
-        }
-
-        deserializer.deserialize_string(BoundedTextVisitor)
-    }
-}
-
-fn deserialize_summary_content<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct SummaryContentVisitor;
-
-    impl<'de> Visitor<'de> for SummaryContentVisitor {
-        type Value = String;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("message text or content parts")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-            Ok(bounded_summary_text(value))
-        }
-
-        fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
-            Ok(bounded_summary_text(&value))
-        }
-
-        fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
-        where
-            A: SeqAccess<'de>,
-        {
-            let mut text = String::new();
-            while let Some(part) = sequence.next_element::<SummaryContentPart>()? {
-                if part.kind.as_deref() != Some("text") || part.text.0.is_empty() {
-                    continue;
-                }
-                if !text.is_empty() {
-                    text.push('\n');
-                }
-                text.push_str(&part.text.0);
-                text = bounded_summary_text(&text);
-            }
-            Ok(text)
-        }
-
-        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where
-            A: MapAccess<'de>,
-        {
-            while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
-            Ok(String::new())
-        }
-
-        fn visit_none<E>(self) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-
-        fn visit_unit<E>(self) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-
-        fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-
-        fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-
-        fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-
-        fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E> {
-            Ok(String::new())
-        }
-    }
-
-    deserializer.deserialize_any(SummaryContentVisitor)
-}
-
-fn bounded_summary_text(value: &str) -> String {
-    value.chars().take(SUMMARY_TEXT_CHARS).collect()
+    let metadata = supported_session_metadata(&indexed.path)?;
+    SessionDocument::load_with_metadata(&indexed.path, metadata, indexed.revision.clone())
+        .map(|document| document.summary())
 }
 
 fn json_compaction_message(entry: &Value) -> Value {
@@ -966,13 +885,28 @@ fn collect_session_files(directory: &Path, output: &mut Vec<PathBuf>) -> io::Res
     Ok(())
 }
 
-fn active_path(entries: &[Value]) -> (Vec<usize>, Option<String>) {
-    let leaf_id = entries
+fn active_index_path(entries: &[SessionEntryIndex]) -> (Vec<usize>, Option<String>) {
+    let leaf_id = entries.iter().rev().find_map(|entry| entry.id.clone());
+    let by_id = entries
         .iter()
-        .rev()
-        .find_map(|entry| entry.get("id").and_then(Value::as_str).map(str::to_string));
-    let (indices, _) = active_path_from(entries, leaf_id.as_deref());
-    (indices, leaf_id)
+        .enumerate()
+        .filter_map(|(index, entry)| Some((entry.id.as_deref()?, index)))
+        .collect::<HashMap<_, _>>();
+    let mut current = leaf_id.as_deref();
+    let mut seen = HashSet::new();
+    let mut reversed = Vec::new();
+    while let Some(id) = current {
+        if !seen.insert(id) {
+            break;
+        }
+        let Some(index) = by_id.get(id).copied() else {
+            break;
+        };
+        reversed.push(index);
+        current = entries[index].parent_id.as_deref();
+    }
+    reversed.reverse();
+    (reversed, leaf_id)
 }
 
 fn active_path_from(entries: &[Value], leaf_id: Option<&str>) -> (Vec<usize>, Option<String>) {
@@ -1345,7 +1279,7 @@ mod tests {
 
     #[test]
     fn active_branch_and_conversation_items_follow_parent_ids() {
-        let (directory, path) = fixture(&[
+        let entries = vec![
             serde_json::json!({
               "type": "message", "id": "u1", "parentId": null,
               "timestamp": "2026-07-31T00:00:01.000Z",
@@ -1361,14 +1295,15 @@ mod tests {
               "timestamp": "2026-07-31T00:00:03.000Z",
               "message": {"role": "user", "content": "branch", "timestamp": 3}
             }),
-        ]);
+        ];
+        let (directory, path) = fixture(&entries);
         let document = SessionDocument::load(&path).expect("load");
         assert_eq!(document.leaf_id.as_deref(), Some("u2"));
         assert_eq!(document.active_entry_indices.len(), 2);
         assert_eq!(document.first_user_message(), "first");
         assert_eq!(document.last_message_preview().as_deref(), Some("branch"));
         assert_eq!(document.conversation_items().len(), 2);
-        let older_branch = conversation_items_from_entries(&document.entries, Some("a1"));
+        let older_branch = conversation_items_from_entries(&entries, Some("a1"));
         assert_eq!(older_branch.len(), 2);
         let ConversationItem::Assistant(assistant) = &older_branch[1] else {
             panic!("expected assistant on selected durable branch");
@@ -1562,11 +1497,14 @@ mod tests {
         ]);
 
         let document = SessionDocument::load(&path).expect("load");
-        let tool_result = document
-            .entries
-            .iter()
-            .find_map(|entry| message_with_role(entry, "toolResult"))
-            .expect("tool result");
+        let tool_result_entry = document
+            .active_entries()
+            .find(|entry| entry.message_role.as_deref() == Some("toolResult"))
+            .expect("tool result index");
+        let tool_result_entry = document
+            .read_entry(tool_result_entry)
+            .expect("read tool result");
+        let tool_result = message_with_role(&tool_result_entry, "toolResult").expect("tool result");
         let content = tool_result["content"].as_array().expect("content array");
         assert_eq!(content.len(), 1);
         assert_eq!(content[0]["type"], "text");

@@ -4408,11 +4408,7 @@ async fn navigate_session_tree(
         .as_deref()
         .and_then(|path| context.session_store.load(path).ok())
         .ok_or_else(|| ApiError::not_found("session file not found"))?;
-    if !document
-        .entries
-        .iter()
-        .any(|entry| entry.get("id").and_then(Value::as_str) == Some(request.target_id.as_str()))
-    {
+    if !document.contains_entry_id(&request.target_id) {
         return Err(ApiError::not_found("tree target not found"));
     }
     context.runtimes.remove(&resolved.record.id).await?;
@@ -4456,11 +4452,7 @@ async fn set_session_tree_label(
         .as_deref()
         .and_then(|path| context.session_store.load(path).ok())
         .ok_or_else(|| ApiError::not_found("session file not found"))?;
-    if !document
-        .entries
-        .iter()
-        .any(|entry| entry.get("id").and_then(Value::as_str) == Some(request.entry_id.as_str()))
-    {
+    if !document.contains_entry_id(&request.entry_id) {
         return Err(ApiError::not_found("tree entry not found"));
     }
     context.runtimes.remove(&resolved.record.id).await?;

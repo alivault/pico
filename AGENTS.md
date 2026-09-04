@@ -105,6 +105,12 @@ provider credentials continue to come from the one canonical
 `PI_CODING_AGENT_DIR`. Never point both servers at the same session directory
 or interrupt the stable server while it owns an active development session.
 
+When running inside Herdr, reuse the existing `pico server` tab for the
+long-lived local Pico server instead of starting a duplicate server elsewhere.
+Inspect its output there and, after validated server/runtime changes, restart
+the server in that tab when needed. Preserve the tab and avoid interrupting
+active agent work unless the user explicitly asks for the restart.
+
 Use any available simulator from `xcrun simctl list devices available` if `iPhone 16 Pro` is not installed.
 
 When the user asks to launch a new iOS build on their iPhone, use the physical device id `00008150-00110C2A1A88401C` and run this from the repo root:
