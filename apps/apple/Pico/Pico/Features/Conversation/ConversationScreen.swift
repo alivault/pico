@@ -121,14 +121,6 @@ struct ConversationScreen: View {
       #if os(iOS)
         .sharedBackgroundVisibility(.hidden)
       #endif
-      #if os(iOS)
-        if showsContextUsageMenu {
-          ToolbarItem(placement: .primaryAction) {
-            contextUsageMenu
-          }
-        }
-      #endif
-
       #if os(macOS)
         ToolbarItemGroup(placement: .primaryAction) {
           contextUsageMenu
@@ -159,7 +151,11 @@ struct ConversationScreen: View {
           }
         }
       #else
-        ToolbarItemGroup(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .picoTrailing) {
+          if showsContextUsageMenu {
+            contextUsageMenu
+          }
+
           ConversationHeaderOptionsMenu(
             model: model,
             isPreparingCommit: isPreparingHeaderCommit,

@@ -1,0 +1,23 @@
+{
+  "name": "@alivault/pico-pi-extensions",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test index.test.js"
+  },
+  "files": [
+    "index.js",
+    "scope.js"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "dependencies": {
+    "@howaboua/pi-codex-conversion": "3.0.25",
+    "@howaboua/pi-codex-web-run": "0.0.1"
+  }
+}

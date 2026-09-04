@@ -86,6 +86,8 @@ Environment:
   PICO_PORT / PICO_HOST      Server bind address
   PICO_PI_BIN                Explicit standalone Pi binary
   PICO_PI_BRIDGE_BIN         Explicit standalone Pi bridge
+  PICO_PI_EXTENSIONS         Comma-separated Pi extension paths
+  PICO_DISABLE_DEFAULT_PI_EXTENSIONS=1
   PICO_WEB_DIR               Explicit static browser asset directory
 `)
 }

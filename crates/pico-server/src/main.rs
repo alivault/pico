@@ -26,6 +26,14 @@ enum Command {
         pi_bin: PathBuf,
         #[arg(long, env = "PICO_PI_BRIDGE_BIN")]
         pi_bridge_bin: Option<PathBuf>,
+        #[arg(
+            long = "pi-extension",
+            env = "PICO_PI_EXTENSIONS",
+            value_delimiter = ','
+        )]
+        pi_extensions: Vec<PathBuf>,
+        #[arg(long, env = "PICO_DISABLE_DEFAULT_PI_EXTENSIONS")]
+        disable_default_pi_extensions: bool,
         #[arg(long, env = "PICO_WEB_DIR")]
         web_dir: Option<PathBuf>,
         #[arg(long, env = "PICO_DATA_DIR")]
@@ -100,6 +108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         port: 3141,
         pi_bin: PathBuf::from("pi"),
         pi_bridge_bin: None,
+        pi_extensions: Vec::new(),
+        disable_default_pi_extensions: false,
         web_dir: None,
         data_dir: None,
         agent_dir: None,
@@ -113,6 +123,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             port,
             pi_bin,
             pi_bridge_bin,
+            pi_extensions,
+            disable_default_pi_extensions,
             web_dir,
             data_dir,
             agent_dir,
@@ -124,6 +136,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 port,
                 pi_bin,
                 ServerOptions {
+                    pi_extensions,
+                    disable_default_pi_extensions,
                     pi_bridge_binary: pi_bridge_bin,
                     web_dir,
                     data_dir,

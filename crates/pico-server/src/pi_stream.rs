@@ -34,7 +34,14 @@ impl ConversationDeltaBatch {
                 .get("assistantMessageEvent")
                 .and_then(|delta| delta.get("type"))
                 .and_then(Value::as_str),
-            Some("text_start" | "text_end" | "thinking_start" | "thinking_end" | "toolcall_end")
+            Some(
+                "text_start"
+                    | "text_end"
+                    | "thinking_start"
+                    | "thinking_end"
+                    | "toolcall_start"
+                    | "toolcall_end"
+            )
         )
     }
 
@@ -71,7 +78,8 @@ impl ConversationDeltaBatch {
                     chunk,
                 );
             }
-            "text_start" | "text_end" | "thinking_start" | "thinking_end" | "toolcall_end" => {
+            "text_start" | "text_end" | "thinking_start" | "thinking_end" | "toolcall_start"
+            | "toolcall_end" => {
                 if let Some(block) = item.and_then(|item| assistant_block_at(item, index as usize))
                 {
                     self.operations
@@ -236,6 +244,19 @@ impl PiStreamingMessage {
             "thinking_end" => self.finish_string(index, "thinking", "thinking", delta),
             "toolcall_start" => {
                 self.tool_call_buffers.insert(index, String::new());
+                if let (Some(id), Some(name)) = (
+                    delta.get("id").and_then(Value::as_str),
+                    delta.get("toolName").and_then(Value::as_str),
+                ) {
+                    self.set_content(
+                        index,
+                        json!({
+                          "type": "toolCall",
+                          "id": id,
+                          "name": name
+                        }),
+                    );
+                }
             }
             "toolcall_delta" => {
                 if let Some(chunk) = delta.get("delta").and_then(Value::as_str) {
@@ -415,6 +436,46 @@ mod tests {
             message.message().unwrap()["content"][1]["thinking"],
             "considering"
         );
+    }
+
+    #[test]
+    fn exposes_tool_metadata_at_toolcall_start() {
+        let mut message = PiStreamingMessage::default();
+        message.start(&json!({
+          "type": "message_start",
+          "message": {
+            "role": "assistant",
+            "content": [],
+            "provider": "test",
+            "model": "test-model",
+            "stopReason": "pending",
+            "timestamp": 1
+          }
+        }));
+        let event = json!({
+          "type": "message_update",
+          "assistantMessageEvent": {
+            "type": "toolcall_start",
+            "contentIndex": 0,
+            "id": "call-1",
+            "toolName": "read"
+          }
+        });
+
+        assert!(message.update(&event));
+        let item = streaming_assistant_item(message.message().unwrap());
+        let mut batch = ConversationDeltaBatch::default();
+        assert!(ConversationDeltaBatch::message_update_needs_item(&event));
+        batch.push_message_update(&event, Some(&item));
+
+        assert_eq!(message.message().unwrap()["content"][0]["id"], "call-1");
+        assert_eq!(message.message().unwrap()["content"][0]["name"], "read");
+        let operations = serde_json::to_value(batch.take()).expect("serialize operations");
+        assert_eq!(operations[0]["op"], "replaceBlock");
+        assert_eq!(operations[0]["block"]["type"], "tool");
+        assert_eq!(operations[0]["block"]["callId"], "call-1");
+        assert_eq!(operations[0]["block"]["name"], "read");
+        assert_eq!(operations[0]["block"]["running"], true);
     }
 
     #[test]

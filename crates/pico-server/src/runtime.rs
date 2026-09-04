@@ -13,6 +13,7 @@ use crate::pi_rpc::{PiRpcClient, PiRpcError, PiSpawnOptions};
 pub struct RuntimeRegistry {
     pi_binary: PathBuf,
     session_dir: Option<PathBuf>,
+    pi_extensions: Vec<PathBuf>,
     state: RwLock<RuntimeState>,
 }
 
@@ -41,15 +42,28 @@ impl RuntimeRegistry {
     }
 
     pub fn with_session_dir(pi_binary: PathBuf, session_dir: Option<PathBuf>) -> Self {
+        Self::with_session_dir_and_extensions(pi_binary, session_dir, Vec::new())
+    }
+
+    pub fn with_session_dir_and_extensions(
+        pi_binary: PathBuf,
+        session_dir: Option<PathBuf>,
+        pi_extensions: Vec<PathBuf>,
+    ) -> Self {
         Self {
             pi_binary,
             session_dir,
+            pi_extensions,
             state: RwLock::new(RuntimeState::default()),
         }
     }
 
     pub fn pi_binary(&self) -> &PathBuf {
         &self.pi_binary
+    }
+
+    pub fn pi_extensions(&self) -> &[PathBuf] {
+        &self.pi_extensions
     }
 
     pub async fn spawn(
@@ -88,6 +102,7 @@ impl RuntimeRegistry {
             PiSpawnOptions::new(self.pi_binary.clone(), cwd)
                 .with_session(session)
                 .with_session_dir(self.session_dir.clone())
+                .with_extensions(self.pi_extensions.clone())
                 .with_environment(state.environment.clone()),
         )
         .await?;
@@ -323,7 +338,12 @@ mod tests {
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755))
             .expect("make fake Pi executable");
 
-        let registry = RuntimeRegistry::with_session_dir(executable, Some(session_dir.clone()));
+        let extension = root.join("default-extension");
+        let registry = RuntimeRegistry::with_session_dir_and_extensions(
+            executable,
+            Some(session_dir.clone()),
+            vec![extension.clone()],
+        );
         registry
             .set_environment("PI_CACHE_RETENTION", Some("long"))
             .await;
@@ -342,6 +362,8 @@ mod tests {
         assert!(recorded.contains("--mode\nrpc\n"));
         assert!(recorded.contains("--session-dir\n"));
         assert!(recorded.contains(&format!("{}\n", session_dir.display())));
+        assert!(recorded.contains("--extension\n"));
+        assert!(recorded.contains(&format!("{}\n", extension.display())));
         assert_eq!(
             std::fs::read_to_string(cache_retention).expect("read cache retention"),
             "long"

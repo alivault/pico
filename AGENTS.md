@@ -934,6 +934,9 @@ Do not run `pnpm version` or push release tags manually unless the release scrip
 
 ## Validation expectations
 
+Commit completed changes after validating them instead of leaving the working
+tree uncommitted, unless the user explicitly asks not to commit.
+
 At minimum after non-trivial browser/server changes:
 
 ```bash

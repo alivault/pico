@@ -117,6 +117,26 @@ run("pnpm", ["build:pi-bridge"], {
 run("node", ["scripts/fetch-pi-standalone.mjs"], {
   env: { PI_STANDALONE_TARGET: target },
 })
+const piExtensionsRoot = join(staging, "pi-extensions")
+mkdirSync(piExtensionsRoot, { recursive: true })
+for (const file of ["package.json", "pnpm-lock.yaml", "index.js", "scope.js"]) {
+  cpSync(
+    join(root, "native", "pi-extensions", file),
+    join(piExtensionsRoot, file)
+  )
+}
+writeFileSync(
+  join(piExtensionsRoot, "pnpm-workspace.yaml"),
+  "onlyBuiltDependencies:\n  - tree-sitter-bash\n  - zeromq\n"
+)
+run("pnpm", [
+  "--dir",
+  piExtensionsRoot,
+  "install",
+  "--prod",
+  "--frozen-lockfile",
+  "--config.auto-install-peers=false",
+])
 
 const piVersion = packageJson.devDependencies["@earendil-works/pi-coding-agent"]
 const piRuntimeRoot = join(root, "artifacts", "pi", piVersion, target, "pi")
@@ -143,9 +163,13 @@ for (const required of [
   "photon_rs_bg.wasm",
   "theme/dark.json",
   "theme/light.json",
+  "pi-extensions/index.js",
+  "pi-extensions/scope.js",
+  "pi-extensions/node_modules/@howaboua/pi-codex-conversion/package.json",
+  "pi-extensions/node_modules/@howaboua/pi-codex-web-run/package.json",
 ]) {
   if (!existsSync(join(staging, required))) {
-    throw new Error(`Packaged Pi runtime omitted ${required}`)
+    throw new Error(`Packaged native runtime omitted ${required}`)
   }
 }
 cpSync(join(root, ".output", "public"), join(staging, "web"), {

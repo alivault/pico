@@ -548,9 +548,10 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     )));
     let context = ServerContext {
         app: Arc::new(RwLock::new(restored_state)),
-        runtimes: Arc::new(RuntimeRegistry::with_session_dir(
+        runtimes: Arc::new(RuntimeRegistry::with_session_dir_and_extensions(
             config.pi_binary.clone(),
             Some(config.session_dir.clone()),
+            config.pi_extensions.clone(),
         )),
         runtime_start_lock: Arc::new(Mutex::new(())),
         started_at: Instant::now(),
@@ -3395,10 +3396,10 @@ async fn generate_ai_commit_message(
     if diff.trim().is_empty() {
         return Err(ApiError::bad_request("No changes to commit"));
     }
-    let client = PiRpcClient::spawn(PiSpawnOptions::new(
-        context.runtimes.pi_binary().clone(),
-        cwd.to_path_buf(),
-    ))
+    let client = PiRpcClient::spawn(
+        PiSpawnOptions::new(context.runtimes.pi_binary().clone(), cwd.to_path_buf())
+            .with_extensions(context.runtimes.pi_extensions().to_vec()),
+    )
     .await?;
     let state = match client.request_typed(&PiCommand::GetState).await {
         Ok(response) => match pi_response_data(response) {

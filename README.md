@@ -46,8 +46,18 @@ with macOS.
 
 The native Pico server runs the standalone Pi RPC executable and keeps Pi
 sessions alive independently of browser and desktop clients. Native release
-bundles include Pi `0.80.6` and the compiled Pi authentication bridge, so normal
+bundles include Pi `0.84.4` and the compiled Pi authentication bridge, so normal
 use does not require a global Pi installation or a Node server runtime.
+
+Pico also bundles pinned versions of
+[`pi-codex-conversion`](https://github.com/IgorWarzocha/howaboua-pi-stuff/tree/main/packages/pi-codex-conversion)
+and
+[`pi-codex-web-run`](https://github.com/IgorWarzocha/howaboua-pi-stuff/tree/main/packages/pi-codex-web-run).
+The Codex tool adapter applies to Codex-like GPT models, and Pico exposes the
+`web_run` search and browsing tool only while an `openai-codex` model is active.
+Set `PICO_DISABLE_DEFAULT_PI_EXTENSIONS=1` to opt out, or
+`PICO_PI_EXTENSIONS=/path/to/extension` to replace Pico's default extension
+bundle. Pi extensions execute with the same system access as Pi itself.
 
 The repository still pins `@earendil-works/pi-coding-agent` to the same version
 for building Pi release artifacts and the authentication bridge. Refresh it

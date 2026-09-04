@@ -24,6 +24,7 @@ pub struct PiSpawnOptions {
     pub session: Option<PathBuf>,
     pub session_dir: Option<PathBuf>,
     pub environment: BTreeMap<String, String>,
+    pub extensions: Vec<PathBuf>,
 }
 
 impl PiSpawnOptions {
@@ -34,6 +35,7 @@ impl PiSpawnOptions {
             session: None,
             session_dir: None,
             environment: BTreeMap::new(),
+            extensions: Vec::new(),
         }
     }
 
@@ -49,6 +51,11 @@ impl PiSpawnOptions {
 
     pub fn with_environment(mut self, environment: BTreeMap<String, String>) -> Self {
         self.environment = environment;
+        self
+    }
+
+    pub fn with_extensions(mut self, extensions: Vec<PathBuf>) -> Self {
+        self.extensions = extensions;
         self
     }
 }
@@ -120,6 +127,9 @@ impl PiRpcClient {
             .env("PI_CODING_AGENT", "true")
             .envs(&options.environment)
             .kill_on_drop(true);
+        for extension in &options.extensions {
+            command.arg("--extension").arg(extension);
+        }
         if let Some(session_dir) = &options.session_dir {
             command.arg("--session-dir").arg(session_dir);
         }

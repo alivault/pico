@@ -7,6 +7,7 @@ pub struct ServerConfig {
     pub listen_hosts: Vec<IpAddr>,
     pub port: u16,
     pub pi_binary: PathBuf,
+    pub pi_extensions: Vec<PathBuf>,
     pub pi_bridge_binary: Option<PathBuf>,
     pub web_dir: Option<PathBuf>,
     pub agent_dir: PathBuf,
@@ -18,6 +19,8 @@ pub struct ServerConfig {
 
 #[derive(Debug, Default)]
 pub struct ServerOptions {
+    pub pi_extensions: Vec<PathBuf>,
+    pub disable_default_pi_extensions: bool,
     pub pi_bridge_binary: Option<PathBuf>,
     pub web_dir: Option<PathBuf>,
     pub data_dir: Option<PathBuf>,
@@ -52,6 +55,10 @@ impl ServerConfig {
             listen_hosts: listen_hosts(host, network_config.active_remote_address()),
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            pi_extensions: resolve_pi_extensions(
+                options.pi_extensions,
+                options.disable_default_pi_extensions,
+            ),
             pi_bridge_binary: resolve_pi_bridge_binary(options.pi_bridge_binary),
             web_dir: resolve_web_dir(options.web_dir),
             agent_dir,
@@ -67,6 +74,7 @@ impl ServerConfig {
             listen_hosts: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
             port,
             pi_binary: crate::pi_installation::resolve_pi_binary(pi_binary),
+            pi_extensions: Vec::new(),
             pi_bridge_binary: None,
             web_dir: None,
             agent_dir: PathBuf::from(".pi/agent"),
@@ -109,6 +117,37 @@ fn resolve_pi_bridge_binary(explicit: Option<PathBuf>) -> Option<PathBuf> {
     let executable = std::env::current_exe().ok()?;
     let adjacent = executable.parent()?.join("pico-pi-bridge");
     adjacent.is_file().then_some(adjacent)
+}
+
+fn resolve_pi_extensions(explicit: Vec<PathBuf>, disable_defaults: bool) -> Vec<PathBuf> {
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    if disable_defaults {
+        return Vec::new();
+    }
+
+    let adjacent = std::env::current_exe().ok().and_then(|executable| {
+        executable
+            .parent()
+            .map(|parent| parent.join("pi-extensions"))
+    });
+    let development = PathBuf::from("native/pi-extensions");
+    [adjacent, Some(development)]
+        .into_iter()
+        .flatten()
+        .find(|path| {
+            path.join("package.json").is_file()
+                && path.join("index.js").is_file()
+                && path
+                    .join("node_modules/@howaboua/pi-codex-conversion/package.json")
+                    .is_file()
+                && path
+                    .join("node_modules/@howaboua/pi-codex-web-run/package.json")
+                    .is_file()
+        })
+        .into_iter()
+        .collect()
 }
 
 impl ServerPaths {
@@ -204,6 +243,16 @@ mod tests {
             paths.data_dir.join("server-config.json")
         );
         assert_eq!(paths.log_dir, paths.data_dir.join("logs"));
+    }
+
+    #[test]
+    fn default_pi_extensions_can_be_disabled_or_replaced() {
+        assert!(resolve_pi_extensions(Vec::new(), true).is_empty());
+        let explicit = PathBuf::from("/tmp/custom-extension");
+        assert_eq!(
+            resolve_pi_extensions(vec![explicit.clone()], true),
+            vec![explicit]
+        );
     }
 
     #[test]

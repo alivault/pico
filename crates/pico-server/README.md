@@ -36,6 +36,14 @@ Production bundles can therefore include a standalone Pi executable rather
 than Node and `node_modules`. The Rust server owns one or more `pi --mode rpc`
 processes and translates their commands/events into Pico's HTTP/SSE contracts.
 
+Pico passes an adjacent, pinned extension bundle to every Pi process. It loads
+`@howaboua/pi-codex-conversion` for the Codex-shaped tool adapter and
+`@howaboua/pi-codex-web-run` for search and page browsing, with `web_run`
+activated only for `openai-codex` models. Set
+`PICO_DISABLE_DEFAULT_PI_EXTENSIONS=1` to disable that bundle, or provide
+comma-separated replacement paths through `PICO_PI_EXTENSIONS`. As with all Pi
+extensions, these third-party packages execute with full Pi process access.
+
 This keeps Pi as the compatibility authority while making the persistent Pico
 server a native binary.
 
@@ -83,6 +91,8 @@ Implemented:
 - graceful SIGINT/SIGTERM/control-socket shutdown
 - server state/process-runtime separation
 - adjacent bundled-Pi discovery, version reporting, and checksum-verified downloads
+- adjacent pinned Pi extension discovery with Codex conversion and model-scoped
+  web search, explicit replacement paths, and a default-extension opt-out
 - strict LF-delimited typed Pi RPC transport
 - correlated bounded concurrent RPC commands without unsafe global timeouts
 - Pi event broadcast and unexpected-exit reporting
