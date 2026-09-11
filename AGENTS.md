@@ -105,11 +105,15 @@ provider credentials continue to come from the one canonical
 `PI_CODING_AGENT_DIR`. Never point both servers at the same session directory
 or interrupt the stable server while it owns an active development session.
 
-When running inside Herdr, reuse the existing `pico server` tab for the
-long-lived local Pico server instead of starting a duplicate server elsewhere.
-Inspect its output there and, after validated server/runtime changes, restart
-the server in that tab when needed. Preserve the tab and avoid interrupting
-active agent work unless the user explicitly asks for the restart.
+When the local Pico server is running in Herdr, reuse the existing `pico server`
+tab instead of starting a duplicate server elsewhere. After validating any
+changes that require a server restart, rebuild the affected artifacts and
+restart the server in that tab as part of completing the work; do not leave it
+running stale code or wait for a separate restart request. Preserve the tab and
+its launch configuration, use graceful draining, and wait for active agent work
+to finish rather than force-killing it. Verify the restarted server's health and
+the affected behavior. If active work prevents a safe restart, report that the
+restart is pending instead of interrupting it.
 
 Use any available simulator from `xcrun simctl list devices available` if `iPhone 16 Pro` is not installed.
 
