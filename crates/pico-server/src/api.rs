@@ -1241,7 +1241,13 @@ fn build_streaming_item(
     message: Option<&Value>,
     tool_updates: &HashMap<String, Value>,
 ) -> Option<ConversationItem> {
-    let mut item = streaming_assistant_item(message?);
+    let message = message?;
+    // Pi emits message_start/message_end for user and tool-result messages too.
+    // They belong to history, never to the live assistant overlay.
+    if message.get("role").and_then(Value::as_str) != Some("assistant") {
+        return None;
+    }
+    let mut item = streaming_assistant_item(message);
     for (call_id, event) in tool_updates {
         let event_type = event.get("type").and_then(Value::as_str);
         let result = event.get("result").or_else(|| event.get("partialResult"));
@@ -1719,6 +1725,7 @@ async fn pico_events(
     let live_context_id = context_id.clone();
     let live_context = context.clone();
     let mut previous_session_id = selected_session_id.clone();
+    let mut items_changed_by_delta = false;
     let live = BroadcastStream::new(receiver).then(move |result| {
         let context = live_context.clone();
         let context_id = live_context_id.clone();
@@ -1740,19 +1747,27 @@ async fn pico_events(
                 return None;
             }
             if event.payload.get("type").and_then(Value::as_str) == Some("state_sync") {
-                let payload = if previous_session_id != live_session_id {
+                let payload = if previous_session_id != live_session_id || items_changed_by_delta {
                     // A patch strips sessionId/sessionFile/cwd and assumes a
                     // shared item baseline. A newly bound session needs both
                     // its identity and a full item window first.
                     previous_session_id = live_session_id;
                     previous_items = event.payload.get("items")
                         .and_then(Value::as_array).cloned().unwrap_or_default();
+                    // Deltas mutate the client's item list without updating
+                    // previous_items. Reset with a bounded full window rather
+                    // than patching an obsolete baseline (which clients can
+                    // mistake for extra paginated history).
+                    items_changed_by_delta = false;
                     event.payload.as_ref().clone()
                 } else {
                     patch_state_sync(&mut previous_items, &event.payload)
                 };
                 Some(Ok(sse_event(&payload, Some(event.sequence))))
             } else {
+                if event.payload.get("type").and_then(Value::as_str) == Some("conversation_delta") {
+                    items_changed_by_delta = true;
+                }
                 Some(Ok(sse_event(&event.payload, Some(event.sequence))))
             }
         }
@@ -5755,6 +5770,16 @@ mod tests {
     }
 
     #[test]
+    fn only_assistant_messages_create_streaming_items() {
+        for role in ["user", "toolResult", "system"] {
+            let message = json!({"role": role, "content": [{"type": "text", "text": "not a reply"}]});
+            assert!(build_streaming_item(Some(&message), &HashMap::new()).is_none());
+        }
+        let message = json!({"role": "assistant", "content": [{"type": "text", "text": "reply"}]});
+        assert!(build_streaming_item(Some(&message), &HashMap::new()).is_some());
+    }
+
+    #[test]
     fn follow_up_state_sync_uses_the_shared_items_patch_contract() {
         let initial: Value = serde_json::from_str(include_str!(
             "../../../apps/apple/Fixtures/state_sync_initial.json"
@@ -5983,6 +6008,56 @@ for line in sys.stdin:
             .expect("SSE frame")
             .expect("SSE body");
         String::from_utf8(frame.to_vec()).expect("SSE UTF-8")
+    }
+
+    #[tokio::test]
+    async fn sse_resets_item_baseline_after_streaming_deltas() {
+        let context = test_context();
+        let response = router(context.clone()).oneshot(
+            Request::builder().uri("/events?context=delta-test&session=original")
+                .body(Body::empty()).unwrap(),
+        ).await.unwrap();
+        let mut events = response.into_body().into_data_stream();
+        events.next().await.unwrap().unwrap(); // Initial state.
+        events.next().await.unwrap().unwrap(); // Sidebar.
+
+        let user = json!({"kind":"user", "itemKey":"user", "text":"hello", "images":[]});
+        let reply = json!({"kind":"assistant", "itemKey":"saved-reply", "streaming":false,
+            "blocks":[{"type":"text", "blockKey":"saved-text", "text":"reply"}]});
+        let live_reply = json!({"kind":"assistant", "itemKey":"streaming", "streaming":true,
+            "blocks":[{"type":"text", "blockKey":"streaming-text", "text":"reply"}]});
+        let payloads = [
+            json!({"type":"state_sync", "items":[user], "streaming":true}),
+            json!({"type":"conversation_delta", "sessionId":"original",
+                "operations":[{"op":"replaceItem", "item":live_reply}]}),
+            json!({"type":"state_sync", "items":[user, reply], "streaming":false,
+                "historyOffset":0, "historyTotalCount":2}),
+            json!({"type":"state_sync", "items":[user, reply], "streaming":false}),
+        ];
+        for payload in &payloads {
+            context.event_hub.push(None, Some("original".into()), payload.clone());
+        }
+        for index in 0..payloads.len() {
+            let frame = tokio::time::timeout(Duration::from_secs(1), events.next())
+                .await.unwrap().unwrap().unwrap();
+            let frame = String::from_utf8(frame.to_vec()).unwrap();
+            let data = frame.lines().find_map(|line| line.strip_prefix("data: ")).unwrap();
+            let event: Value = serde_json::from_str(data).unwrap();
+            match index {
+                0 => assert!(event.get("itemsPatch").is_some()),
+                1 => assert_eq!(event, payloads[1]),
+                2 => {
+                    assert_eq!(event, payloads[2], "final history must replace the live overlay");
+                    assert!(event.get("itemsPatch").is_none());
+                }
+                3 => {
+                    assert_eq!(event["itemsPatch"]["previousLength"], 2);
+                    assert_eq!(event["itemsPatch"]["deleteCount"], 0);
+                    assert_eq!(event["itemsPatch"]["items"], json!([]));
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 
     #[tokio::test]
