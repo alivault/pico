@@ -1385,6 +1385,9 @@ async fn state_payload_for_runtime(
             hide_thinking: context.hide_thinking.load(Ordering::Acquire),
         },
     );
+    if projection.is_none() {
+        populate_idle_models(context, &record.cwd, &mut payload).await;
+    }
     if let Some(object) = payload.as_object_mut() {
         object.insert("draft".into(), Value::Bool(record.draft));
         let pending = context
@@ -1534,6 +1537,8 @@ async fn pico_events(
     headers: HeaderMap,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let query = parse_events_query(raw_query.as_deref(), &headers);
+    // Retain live updates while the initial snapshot/catalog is being read.
+    let receiver = context.event_hub.subscribe();
     let (stored_selection, draft_session_id) = {
         let app = context.app.read().await;
         let viewer = app.context(&query.context);
@@ -1616,7 +1621,7 @@ async fn pico_events(
     } else {
         None
     };
-    let state_payload = build_state_sync(
+    let mut state_payload = build_state_sync(
         document.as_deref(),
         StateSyncOptions {
             fallback_session_id: selected_session_id.as_deref(),
@@ -1628,6 +1633,15 @@ async fn pico_events(
             hide_thinking: context.hide_thinking.load(Ordering::Acquire),
         },
     );
+    if projection.is_none() {
+        let cwd = document
+            .as_ref()
+            .map(|document| document.header.cwd.clone())
+            .or(draft_cwd)
+            .or(context.app.read().await.base_cwd(&query.context))
+            .unwrap_or_else(|| PathBuf::from("."));
+        populate_idle_models(&context, &cwd, &mut state_payload).await;
+    }
     let unread_session_ids = context
         .app
         .read()
@@ -1647,11 +1661,26 @@ async fn pico_events(
         .cloned()
         .unwrap_or_default();
 
-    let receiver = context.event_hub.subscribe();
     let mut bootstrap = Vec::new();
     if let Some(last_event_id) = query.last_event_id {
         if let Some(events) = context.event_hub.events_after(last_event_id) {
+            let pending = context.pending_ui_requests.read().await;
             for event in events {
+                // Replaying an answered or expired prompt reopens a dialog whose
+                // next response can only fail with "Unknown UI request id".
+                if event.payload.get("type").and_then(Value::as_str)
+                    == Some("extension_ui_request")
+                    && ui_method_expects_response(
+                        event.payload.get("method").and_then(Value::as_str),
+                    )
+                    && !event
+                        .payload
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| pending.contains_key(id))
+                {
+                    continue;
+                }
                 if event_matches(&event, &query.context, selected_session_id.as_deref()) {
                     bootstrap.push(Ok(sse_event(&event.payload, Some(event.sequence))));
                 }
@@ -3598,6 +3627,28 @@ async fn auth_providers(
         )
         .await?;
     Ok(Json(data))
+}
+
+// Browsing history and opening a draft intentionally do not start a Pi
+// process. Their model picker still needs the authenticated model catalog.
+async fn populate_idle_models(context: &ServerContext, cwd: &Path, payload: &mut Value) {
+    let Ok(bridge) = require_auth_bridge(context) else {
+        return;
+    };
+    match bridge
+        .request(
+            json!({ "type": "get_auth_providers", "cwd": cwd }),
+            Some(Duration::from_secs(5)),
+        )
+        .await
+    {
+        Ok(data) => {
+            if let Some(models) = data.get("availableModels").and_then(Value::as_array) {
+                payload["availableModels"] = Value::Array(models.clone());
+            }
+        }
+        Err(error) => tracing::warn!(%error, "failed to load idle session model catalog"),
+    }
 }
 
 async fn save_provider_api_key(
@@ -5689,7 +5740,7 @@ for line in sys.stdin:
     command = json.loads(line)
     kind = command.get("type")
     if kind == "get_auth_providers":
-        data = {"ok":True,"oauthProviders":[{"id":"demo","name":"Demo","authType":"oauth","configured":False}],"apiKeyProviders":[],"loggedInProviders":[],"availableModels":[]}
+        data = {"ok":True,"oauthProviders":[{"id":"demo","name":"Demo","authType":"oauth","configured":False}],"apiKeyProviders":[],"loggedInProviders":[],"availableModels":[{"id":"model-a","provider":"demo","name":"Model A"},{"id":"model-b","provider":"demo","name":"Model B"}]}
         print(json.dumps({"type":"response","id":command["id"],"success":True,"data":data}), flush=True)
     elif kind == "get_performance_settings":
         print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"transport":"auto"}}), flush=True)
@@ -5730,6 +5781,25 @@ for line in sys.stdin:
         let providers: Value = serde_json::from_slice(&body).expect("provider JSON");
         assert_eq!(providers["ok"], true);
         assert_eq!(providers["oauthProviders"][0]["id"], "demo");
+
+        // Drafts and selected history must expose the catalog without spawning
+        // a Pi runtime (the fake bridge is the only child needed here).
+        let frame = first_sse_frame(context.clone(), "/events?context=idle-draft").await;
+        assert!(frame.contains("model-a"));
+        assert!(frame.contains("model-b"));
+        let record = context.app.write().await.reserve_session(root.clone(), None);
+        context.app.write().await.insert_session(record.clone());
+        let state = state_payload_for_runtime(&context, &record.id, false, None)
+            .await
+            .expect("idle session state");
+        assert_eq!(state["availableModels"], providers["availableModels"]);
+        assert!(context.runtimes.get(&record.id).await.is_none());
+        let frame = first_sse_frame(
+            context.clone(),
+            &format!("/events?context=idle-session&session={}", record.id),
+        )
+        .await;
+        assert!(frame.contains("model-b"));
 
         let response = router(context.clone())
             .oneshot(
@@ -5795,6 +5865,10 @@ for line in sys.stdin:
         assert_eq!(event.payload["id"], "ui-demo");
         assert!(event.payload.get("picoContextId").is_none());
 
+        let replay_url = "/events?context=viewer-demo&session=session-demo&lastEventId=0";
+        let frame = first_sse_frame(context.clone(), replay_url).await;
+        assert!(frame.contains("ui-demo"), "pending prompts should replay");
+
         let response = router(context.clone())
             .oneshot(
                 Request::builder()
@@ -5813,8 +5887,41 @@ for line in sys.stdin:
             .expect("bridge UI result");
         assert_eq!(completed["confirmed"], true);
 
+        let frame = first_sse_frame(context.clone(), replay_url).await;
+        assert!(frame.contains("state_sync"));
+        assert!(!frame.contains("ui-demo"), "answered prompts must not replay");
+
+        context.event_hub.push(
+            Some("viewer-demo".into()),
+            Some("session-demo".into()),
+            json!({"type":"extension_ui_request","id":"expired","method":"auth"}),
+        );
+        let frame = first_sse_frame(context.clone(), replay_url).await;
+        assert!(frame.contains("state_sync"));
+        assert!(!frame.contains("expired"), "expired prompts must not replay");
+
         bridge.shutdown().await.expect("shutdown auth bridge");
         std::fs::remove_dir_all(root).expect("remove auth bridge test root");
+    }
+
+    async fn first_sse_frame(context: ServerContext, uri: &str) -> String {
+        let response = router(context)
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("SSE request"),
+            )
+            .await
+            .expect("SSE response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut stream = response.into_body().into_data_stream();
+        let frame = tokio::time::timeout(Duration::from_secs(2), stream.next())
+            .await
+            .expect("SSE timeout")
+            .expect("SSE frame")
+            .expect("SSE body");
+        String::from_utf8(frame.to_vec()).expect("SSE UTF-8")
     }
 
     #[tokio::test]
