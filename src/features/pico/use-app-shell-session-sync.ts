@@ -43,6 +43,7 @@ import {
   isSessionStatusEvent,
   isSessionsEvent,
   isStateSyncEvent,
+  uiRequestExpectsResponse,
 } from "@/lib/pico/api"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
@@ -1048,7 +1049,11 @@ export function useAppShellSessionSync({
           return
         }
 
-        pendingUiRequestHandlerRef.current(payload)
+        // Older servers may forward Pi's fire-and-forget terminal updates.
+        // Only interactive methods have a request ID that can be answered.
+        if (uiRequestExpectsResponse(payload.method)) {
+          pendingUiRequestHandlerRef.current(payload)
+        }
       }
     },
     [

@@ -789,6 +789,9 @@ fn attach_auth_bridge_events(context: &ServerContext) {
             };
             match event.get("type").and_then(Value::as_str) {
                 Some("extension_ui_request") => {
+                    if !ui_method_is_client_event(event.get("method").and_then(Value::as_str)) {
+                        continue;
+                    }
                     let context_id = event
                         .get("picoContextId")
                         .and_then(Value::as_str)
@@ -855,6 +858,13 @@ fn ui_method_expects_response(method: Option<&str>) -> bool {
         method,
         Some("select" | "confirm" | "input" | "editor" | "auth" | "auth_input" | "auth_select")
     )
+}
+
+fn ui_method_is_client_event(method: Option<&str>) -> bool {
+    // Pi also uses extension_ui_request for fire-and-forget status/widget/editor
+    // updates. Until mapped to Pico's UI state, ignore these optional updates:
+    // they are not dialogs and their IDs must never be offered for a response.
+    method == Some("notify") || ui_method_expects_response(method)
 }
 
 async fn register_ui_request(
@@ -1044,6 +1054,9 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
                 }
                 Some("extension_ui_request") | Some("extension_error") => {
                     if event.get("type").and_then(Value::as_str) == Some("extension_ui_request") {
+                        if !ui_method_is_client_event(event.get("method").and_then(Value::as_str)) {
+                            continue;
+                        }
                         if let Some(id) = event.get("id").and_then(Value::as_str) {
                             if ui_method_expects_response(
                                 event.get("method").and_then(Value::as_str),
@@ -5750,6 +5763,8 @@ for line in sys.stdin:
         print(json.dumps({"type":"response","id":command["id"],"success":True,"data":{"windows":[]}}), flush=True)
     elif kind == "start_ui":
         pending = command["id"]
+        for method in ["setStatus", "setWidget", "setTitle", "set_editor_text", "future_method"]:
+            print(json.dumps({"type":"extension_ui_request","id":"ignored-"+method,"method":method,"picoContextId":"viewer-demo","picoSessionId":"session-demo"}), flush=True)
         print(json.dumps({"type":"extension_ui_request","id":"ui-demo","method":"confirm","title":"Continue?","picoContextId":"viewer-demo","picoSessionId":"session-demo"}), flush=True)
     elif kind == "extension_ui_response" and command.get("id") == "ui-demo":
         print(json.dumps({"type":"response","id":pending,"success":True,"data":{"confirmed":command.get("confirmed")}}), flush=True)
@@ -6024,13 +6039,21 @@ import json, sys
 from pathlib import Path
 session = Path(__SESSION__)
 cwd = __CWD__
+model = {"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}
 session.write_text(json.dumps({"type":"session","version":3,"id":"fake-session","timestamp":"2026-07-31T00:00:00.000Z","cwd":cwd}) + "\n")
 for line in sys.stdin:
     request = json.loads(line)
     command = request["type"]
     response = {"type":"response","id":request.get("id"),"command":command,"success":True}
     if command == "get_state":
-        response["data"] = {"sessionFile":str(session),"sessionId":"fake-session","isStreaming":False,"isCompacting":False,"thinkingLevel":"high","model":{"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}}
+        response["data"] = {"sessionFile":str(session),"sessionId":"fake-session","isStreaming":False,"isCompacting":False,"thinkingLevel":"high","model":model}
+    elif command == "set_model":
+        model = {"id":request["modelId"],"provider":request["provider"],"name":"Selected Model","reasoning":True}
+        response["data"] = model
+        for method in ["setStatus", "setWidget", "setTitle", "set_editor_text", "future_method"]:
+            print(json.dumps({"type":"extension_ui_request","id":"ignored-"+method,"method":method,"statusKey":"codex-adapter"}), flush=True)
+        print(json.dumps({"type":"extension_ui_request","id":"model-notify","method":"notify","message":"Model selected"}), flush=True)
+        print(json.dumps({"type":"extension_ui_request","id":"model-confirm","method":"confirm","title":"Continue?"}), flush=True)
     elif command == "get_available_models":
         response["data"] = {"models":[{"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}]}
     elif command == "get_available_thinking_levels":
@@ -6117,6 +6140,52 @@ for line in sys.stdin:
         assert_eq!(history["totalCount"], 2);
         assert_eq!(history["items"][1]["kind"], "assistant");
         assert_eq!(history["items"][1]["blocks"][0]["text"], "fake reply");
+
+        // Codex emits terminal status updates during model_select. Only real
+        // dialogs and notifications belong in Pico's extension UI stream.
+        let mut events = context.event_hub.subscribe();
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/model?context=fake&session=fake-session")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"provider":"fake","modelId":"fake-astra"}).to_string(),
+                    ))
+                    .expect("model request"),
+            )
+            .await
+            .expect("model response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("model body");
+        let selected: Value = serde_json::from_slice(&body).expect("model JSON");
+        assert_eq!(selected["model"]["id"], "fake-astra");
+        let mut methods = Vec::new();
+        let mut saw_model_sync = false;
+        loop {
+            let event = tokio::time::timeout(Duration::from_secs(2), events.recv())
+                .await
+                .expect("model events timeout")
+                .expect("model event");
+            if event.payload["type"] == "extension_ui_request" {
+                methods.push(event.payload["method"].as_str().unwrap().to_string());
+            }
+            if event.payload["type"] == "state_sync" {
+                assert_eq!(event.payload["model"]["id"], "fake-astra");
+                saw_model_sync = true;
+            }
+            if saw_model_sync && methods.iter().any(|method| method == "confirm") {
+                break;
+            }
+        }
+        assert_eq!(methods, vec!["notify", "confirm"]);
+        let pending = context.pending_ui_requests.read().await;
+        assert!(pending.contains_key("model-confirm"));
+        assert!(!pending.contains_key("ignored-setStatus"));
+        drop(pending);
 
         context.runtimes.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fake Pi fixture");

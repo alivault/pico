@@ -8,6 +8,7 @@ import type {
   DeleteSessionsResponse,
   DirectorySessionsIndexSnapshot,
   MoveSessionResponse,
+  ModelResponse,
   RenameSessionResponse,
   SessionListEntry,
   SessionsEvent,
@@ -23,6 +24,7 @@ import {
 
 type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
+type ModelResponseData = Extract<ModelResponse, { ok: true }>
 type RenameSessionResponseData = Extract<RenameSessionResponse, { ok: true }>
 type MoveSessionResponseData = Extract<MoveSessionResponse, { ok: true }>
 type DirectoryIndexDataByPath = Record<string, DirectorySessionsIndexSnapshot>
@@ -32,16 +34,13 @@ type SidebarSelectionSnapshot = {
   sidebarSessionSelectionAnchor: string
 }
 
-type ThinkingLevelSessionTarget = {
-  cwd: string | undefined
-  draft: boolean
-  sessionFile: string | undefined
-  sessionId: string | undefined
-  sessionKey: string | undefined
-}
+type SessionMutationTarget = Pick<
+  SessionState,
+  "cwd" | "draft" | "sessionFile" | "sessionId" | "sessionKey"
+>
 
-function sameThinkingLevelSessionTarget(
-  target: ThinkingLevelSessionTarget,
+function sameSessionMutationTarget(
+  target: SessionMutationTarget,
   state: SessionState
 ) {
   if (target.sessionKey || state.sessionKey) {
@@ -388,6 +387,7 @@ export function useAppShellSessionMutations({
   isCompactAbortRequested,
 }: UseAppShellSessionMutationsOptions) {
   const queryClient = useQueryClient()
+  const modelRequestIdRef = React.useRef(0)
   const thinkingLevelRequestIdRef = React.useRef(0)
   const thinkingLevelSyncTimerRef = React.useRef<ReturnType<
     typeof setTimeout
@@ -406,11 +406,14 @@ export function useAppShellSessionMutations({
       if (!viewerContextId) return
       const [provider, modelId] = value.split("/")
       if (!provider || !modelId) return
+      const requestId = ++modelRequestIdRef.current
+      const targetSession = sessionStateRef.current
       try {
-        await fetchJson(
+        const response = await fetchJson<ModelResponseData>(
           buildRequestUrl("/api/model", {
             contextId: viewerContextId,
             sessionId: activeSessionId,
+            searchParams: { sessionKey: targetSession.sessionKey },
           }),
           {
             method: "POST",
@@ -418,13 +421,27 @@ export function useAppShellSessionMutations({
             body: JSON.stringify({ provider, modelId }),
           }
         )
+        if (modelRequestIdRef.current !== requestId) return
+        const currentState = sessionStateRef.current
+        if (!sameSessionMutationTarget(targetSession, currentState)) return
+
+        // A fresh draft's SSE connection may predate its Pi runtime/session ID.
+        // Publish the acknowledged model even if that scoped event is missed.
+        setSessionState({
+          ...currentState,
+          model: response.model ?? currentState.model,
+          thinkingLevel: response.thinkingLevel ?? currentState.thinkingLevel,
+          availableThinkingLevels:
+            response.availableThinkingLevels ??
+            currentState.availableThinkingLevels,
+        })
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to update model"
         )
       }
     },
-    [activeSessionId, viewerContextId]
+    [activeSessionId, viewerContextId, sessionStateRef, setSessionState]
   )
 
   const setThinkingLevel = React.useCallback(
@@ -443,7 +460,7 @@ export function useAppShellSessionMutations({
         sessionFile: previousState.sessionFile,
         sessionId: previousState.sessionId,
         sessionKey: previousState.sessionKey,
-      } satisfies ThinkingLevelSessionTarget
+      } satisfies SessionMutationTarget
 
       if (previousLevel !== level) {
         setSessionState({ ...previousState, thinkingLevel: level })
@@ -471,7 +488,7 @@ export function useAppShellSessionMutations({
             if (thinkingLevelRequestIdRef.current !== requestId) return
 
             const currentState = sessionStateRef.current
-            if (!sameThinkingLevelSessionTarget(targetSession, currentState)) {
+            if (!sameSessionMutationTarget(targetSession, currentState)) {
               return
             }
 
@@ -498,7 +515,7 @@ export function useAppShellSessionMutations({
 
             const currentState = sessionStateRef.current
             if (
-              sameThinkingLevelSessionTarget(targetSession, currentState) &&
+              sameSessionMutationTarget(targetSession, currentState) &&
               currentState.thinkingLevel === level
             ) {
               setSessionState({

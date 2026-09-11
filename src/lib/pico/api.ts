@@ -646,6 +646,21 @@ export type ExtensionUiEvent = UiRequest & {
   type: "extension_ui_request"
 }
 
+export function uiRequestExpectsResponse(method: unknown): boolean {
+  switch (method) {
+    case "auth":
+    case "auth_input":
+    case "auth_select":
+    case "confirm":
+    case "editor":
+    case "input":
+    case "select":
+      return true
+    default:
+      return false
+  }
+}
+
 type UserMessageEvent = {
   type: "user_message"
   message?: string

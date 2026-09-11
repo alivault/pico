@@ -5,6 +5,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { currentRouteInventory } from "./update-route-inventory.mjs"
+import { uiRequestExpectsResponse } from "../src/lib/pico/api.ts"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const fixturesDir = join(root, "apps", "apple", "Fixtures")
@@ -131,5 +132,33 @@ invariant(
     ),
   "API response fixtures must cover representative domains"
 )
+
+for (const method of [
+  "select",
+  "confirm",
+  "input",
+  "editor",
+  "auth",
+  "auth_input",
+  "auth_select",
+]) {
+  invariant(uiRequestExpectsResponse(method), `${method} must open a dialog`)
+}
+for (const method of [
+  "notify",
+  "setStatus",
+  "setWidget",
+  "setTitle",
+  "set_editor_text",
+  "future_method",
+  "",
+  undefined,
+  null,
+]) {
+  invariant(
+    !uiRequestExpectsResponse(method),
+    `${String(method)} must not open a dialog or send a UI response`
+  )
+}
 
 console.log("Contract fixtures are valid.")
