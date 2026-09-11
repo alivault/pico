@@ -892,6 +892,9 @@ async fn register_ui_request(
 }
 
 fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiRpcClient>) {
+    // Subscribe before the spawned task does any asynchronous setup, so a fast
+    // first prompt cannot finish before its event consumer is listening.
+    let mut events = runtime.subscribe();
     tokio::spawn(async move {
         let completion_document = session_document_for_runtime(&context, &session_id).await;
         let persisted_pi_session_id = context
@@ -907,7 +910,6 @@ fn attach_pi_events(context: ServerContext, session_id: String, runtime: Arc<PiR
             .map(|document| document.header.id.clone())
             .or(persisted_pi_session_id)
             .unwrap_or_else(|| session_id.clone());
-        let mut events = runtime.subscribe();
         let mut streaming_message = PiStreamingMessage::default();
         let mut tool_updates = HashMap::<String, Value>::new();
         let mut delta_batch = ConversationDeltaBatch::default();
@@ -1391,7 +1393,7 @@ async fn state_payload_for_runtime(
         StateSyncOptions {
             fallback_session_id: Some(public_session_id),
             fallback_session_key: None,
-            fallback_cwd: None,
+            fallback_cwd: Some(&record.cwd),
             streaming,
             streaming_item: streaming_item.as_ref().or(retained_streaming_item.as_ref()),
             projection: projection.as_ref(),
@@ -1713,14 +1715,42 @@ async fn pico_events(
     bootstrap.push(Ok(sse_event(&sessions_payload, None)));
 
     let context_id = query.context;
-    let live_session_id = selected_session_id;
-    let live = BroadcastStream::new(receiver).filter_map(move |result| match result {
+    let follow_viewer = query.session.is_none();
+    let live_context_id = context_id.clone();
+    let live_context = context.clone();
+    let mut previous_session_id = selected_session_id.clone();
+    let live = BroadcastStream::new(receiver).then(move |result| {
+        let context = live_context.clone();
+        let context_id = live_context_id.clone();
+        let pinned_session_id = selected_session_id.clone();
+        async move {
+            // An unpinned draft stream may open before its Pi runtime exists.
+            // Resolve its viewer's selection as events arrive, not just once
+            // at connection time. Explicit session subscriptions stay pinned.
+            let session_id = if follow_viewer {
+                viewer_session_id(&context, &context_id).await
+            } else {
+                pinned_session_id
+            };
+            (result, session_id)
+        }
+    }).filter_map(move |(result, live_session_id)| match result {
         Ok(event) => {
             if !event_matches(&event, &context_id, live_session_id.as_deref()) {
                 return None;
             }
             if event.payload.get("type").and_then(Value::as_str) == Some("state_sync") {
-                let payload = patch_state_sync(&mut previous_items, &event.payload);
+                let payload = if previous_session_id != live_session_id {
+                    // A patch strips sessionId/sessionFile/cwd and assumes a
+                    // shared item baseline. A newly bound session needs both
+                    // its identity and a full item window first.
+                    previous_session_id = live_session_id;
+                    previous_items = event.payload.get("items")
+                        .and_then(Value::as_array).cloned().unwrap_or_default();
+                    event.payload.as_ref().clone()
+                } else {
+                    patch_state_sync(&mut previous_items, &event.payload)
+                };
                 Some(Ok(sse_event(&payload, Some(event.sequence))))
             } else {
                 Some(Ok(sse_event(&event.payload, Some(event.sequence))))
@@ -1741,6 +1771,18 @@ async fn pico_events(
             .interval(std::time::Duration::from_secs(15))
             .text("keepalive"),
     ))
+}
+
+async fn viewer_session_id(context: &ServerContext, context_id: &str) -> Option<String> {
+    let app = context.app.read().await;
+    let viewer = app.context(context_id)?;
+    if let Some(session_id) = &viewer.selected_session {
+        return Some(session_id.clone());
+    }
+    let runtime_id = viewer.active_draft.as_ref()?.runtime_id.as_deref()?;
+    app.sessions().into_iter()
+        .find(|record| record.id == runtime_id)
+        .and_then(|record| record.pi_session_id)
 }
 
 async fn directory_sessions(
@@ -2577,6 +2619,10 @@ async fn prompt(
             .await
             .select_session(&target.context_id, public_id);
         persist_sessions(&context).await?;
+        // Fast prompts can settle before promotion finishes. Publish the
+        // promoted identity even when no further Pi event will arrive.
+        let streaming = runtime_streaming(&resolved.client).await?;
+        emit_session_state(&context, &resolved.record.id, streaming, None).await;
     }
     context.event_hub.push(
         Some(target.context_id),
@@ -5940,6 +5986,37 @@ for line in sys.stdin:
     }
 
     #[tokio::test]
+    async fn explicit_sse_session_stays_pinned_when_viewer_selection_changes() {
+        let context = test_context();
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/events?context=pinned&session=original")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await.unwrap();
+        let mut events = response.into_body().into_data_stream();
+        events.next().await.unwrap().unwrap(); // Initial state.
+        events.next().await.unwrap().unwrap(); // Sidebar.
+        context.app.write().await.select_session("pinned", "different".into());
+        for (viewer, session, marker) in [
+            ("pinned", "different", "wrong-session"),
+            ("other-viewer", "original", "wrong-viewer"),
+            ("pinned", "original", "expected"),
+        ] {
+            context.event_hub.push(Some(viewer.into()), Some(session.into()), json!({
+                "type":"state_sync", "sessionId":session, "items":[], "sessionName":marker
+            }));
+        }
+        let frame = tokio::time::timeout(Duration::from_secs(1), events.next())
+            .await.unwrap().unwrap().unwrap();
+        let frame = String::from_utf8(frame.to_vec()).unwrap();
+        assert!(frame.contains("expected"));
+        assert!(!frame.contains("wrong-"));
+    }
+
+    #[tokio::test]
     async fn directory_index_and_sse_bootstrap_use_pi_session_files() {
         let root =
             std::env::temp_dir().join(format!("pico-api-session-test-{}", std::process::id()));
@@ -6105,6 +6182,27 @@ for line in sys.stdin:
                 created["sessionKey"].as_str().expect("session key"),
             )
             .finish();
+        // Keep the original draft connection open throughout the first turn.
+        // Reconnecting after the prompt would hide the missing handoff bug.
+        let response = router(context.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/events?{prompt_query}"))
+                    .body(Body::empty())
+                    .expect("draft SSE request"),
+            )
+            .await
+            .expect("draft SSE response");
+        let mut draft_stream = response.into_body().into_data_stream();
+        let initial = draft_stream.next().await.unwrap().unwrap();
+        let initial = String::from_utf8(initial.to_vec()).unwrap();
+        assert!(initial.contains("\"draft\":true"));
+        assert!(!initial.contains("\"sessionId\""));
+        // Unrelated sessions must not be adopted just because this stream has
+        // no session ID yet.
+        context.event_hub.push(None, Some("unrelated".into()), json!({
+            "type":"state_sync", "sessionId":"unrelated", "items":[]
+        }));
         let response = router(context.clone())
             .oneshot(
                 Request::builder()
@@ -6122,6 +6220,46 @@ for line in sys.stdin:
         let prompted: Value = serde_json::from_slice(&body).expect("prompt JSON");
         assert_eq!(prompted["ok"], true);
         assert_eq!(prompted["queued"], false);
+
+        tokio::time::timeout(Duration::from_secs(3), async {
+            let mut items = Vec::<Value>::new();
+            let mut session_id = None;
+            let mut streaming = true;
+            let mut draft = true;
+            let mut done = false;
+            loop {
+                let frame = draft_stream.next().await.unwrap().unwrap();
+                let frame = String::from_utf8(frame.to_vec()).unwrap();
+                let data = frame.lines().find_map(|line| line.strip_prefix("data: ")).unwrap();
+                let event: Value = serde_json::from_str(data).unwrap();
+                if event["type"] == "state_sync" {
+                    if let Some(id) = event["sessionId"].as_str() {
+                        assert_eq!(id, "fake-session");
+                        assert!(event["items"].is_array(), "handoff must be a full snapshot");
+                        assert_eq!(event["cwd"], cwd.to_string_lossy().as_ref());
+                        session_id = Some(id.to_string());
+                    }
+                    if let Some(next) = event["items"].as_array() {
+                        items = next.clone();
+                    } else if let Some(patch) = event.get("itemsPatch") {
+                        assert!(session_id.is_some(), "patch arrived before session identity");
+                        assert_eq!(patch["previousLength"].as_u64().unwrap() as usize, items.len());
+                        let start = patch["start"].as_u64().unwrap() as usize;
+                        let count = patch["deleteCount"].as_u64().unwrap() as usize;
+                        items.splice(start..start + count, patch["items"].as_array().unwrap().clone());
+                    }
+                    streaming = event["streaming"].as_bool().unwrap();
+                    draft = event["draft"].as_bool().unwrap();
+                }
+                done |= event["type"] == "session_done";
+                if done && !streaming && !draft {
+                    assert_eq!(session_id.as_deref(), Some("fake-session"));
+                    assert!(serde_json::to_string(&items).unwrap().contains("fake reply"));
+                    break;
+                }
+            }
+        }).await.expect("draft stream must deliver the completed reply without reconnecting");
+        drop(draft_stream);
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         let response = router(context.clone())
