@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 
 import { currentRouteInventory } from "./update-route-inventory.mjs"
 import { uiRequestExpectsResponse } from "../src/lib/pico/api.ts"
+import { modelLabel } from "../src/features/pico/model-label.ts"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const fixturesDir = join(root, "apps", "apple", "Fixtures")
@@ -160,5 +161,28 @@ for (const method of [
     `${String(method)} must not open a dialog or send a UI response`
   )
 }
+
+const savedModel = { provider: "openai-codex", id: "gpt-6-astra" }
+const modelCatalog = [
+  { ...savedModel, provider: "other-provider", name: "Other Astra" },
+  { ...savedModel, name: "GPT-6 Astra" },
+]
+invariant(
+  modelLabel(savedModel, modelCatalog) === "GPT-6 Astra",
+  "saved model labels must resolve by provider and ID without a Pi runtime"
+)
+invariant(
+  modelLabel(savedModel, []) === "gpt-6-astra",
+  "selected models without catalog metadata must display their ID"
+)
+invariant(
+  modelLabel({ ...savedModel, name: "Runtime Astra" }, modelCatalog) ===
+    "Runtime Astra",
+  "runtime display names must be preserved"
+)
+invariant(
+  modelLabel(undefined, modelCatalog) === "Select model",
+  "an unselected model must not be inferred from the available catalog"
+)
 
 console.log("Contract fixtures are valid.")

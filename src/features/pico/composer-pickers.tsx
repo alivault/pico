@@ -23,6 +23,7 @@ import {
   type ComposerContextUsageStore,
 } from "@/features/pico/composer-context-usage-indicator"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import { modelLabel } from "@/features/pico/model-label"
 import {
   useSelector,
   type PicoStore,
@@ -165,7 +166,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
     return [...groups.entries()]
   })()
 
-  const modelLabel = model?.name || "Select model"
+  const selectedModelLabel = modelLabel(model, availableModels)
 
   return (
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
@@ -179,7 +180,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
             />
           }
         >
-          <span className="truncate">{modelLabel}</span>
+          <span className="truncate">{selectedModelLabel}</span>
           <ChevronDownIcon data-icon="inline-end" />
         </PopoverTrigger>
       </TitleTooltip>
