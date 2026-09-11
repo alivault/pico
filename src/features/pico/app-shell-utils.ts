@@ -341,7 +341,9 @@ export function updateStateFromSync(
           )
         : 0
   const preservedHistoryItems = base.items.slice(0, preservedHistoryItemCount)
-  const currentHistoryWindow = base.items.slice(preservedHistoryItemCount)
+  const currentHistoryWindow = preservedHistoryItemCount
+    ? base.items.slice(preservedHistoryItemCount)
+    : base.items
   const previousItems = replacingOptimisticDraft
     ? previous.items
     : currentHistoryWindow
@@ -363,10 +365,18 @@ export function updateStateFromSync(
         streaming,
       }
   const messages = Array.isArray(sync.messages) ? sync.messages : base.messages
-  const { items: currentItems } = buildItemsFromSync(
-    syncForItems,
-    previousItems
-  )
+  // Display-only patches must not synthesize a streaming update from the
+  // retained streaming flag or rebuild the current conversation.
+  const hasConversationUpdate =
+    Array.isArray(sync.items) ||
+    Boolean(sync.itemsPatch) ||
+    Array.isArray(sync.messages) ||
+    Array.isArray(sync.pendingUserMessages) ||
+    typeof sync.streaming === "boolean" ||
+    Object.prototype.hasOwnProperty.call(sync, "streamingMessage")
+  const currentItems = hasConversationUpdate
+    ? buildItemsFromSync(syncForItems, previousItems).items
+    : previousItems
   const items = preservedHistoryItems.length
     ? [...preservedHistoryItems, ...currentItems]
     : currentItems

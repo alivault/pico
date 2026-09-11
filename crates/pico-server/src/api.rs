@@ -1747,7 +1747,10 @@ async fn pico_events(
                 return None;
             }
             if event.payload.get("type").and_then(Value::as_str) == Some("state_sync") {
-                let payload = if previous_session_id != live_session_id || items_changed_by_delta {
+                // Settings-only patches must not reset the conversation baseline
+                // or consume the full-window refresh required after a delta.
+                let has_items = event.payload.get("items").and_then(Value::as_array).is_some();
+                let payload = if has_items && (previous_session_id != live_session_id || items_changed_by_delta) {
                     // A patch strips sessionId/sessionFile/cwd and assumes a
                     // shared item baseline. A newly bound session needs both
                     // its identity and a full item window first.
@@ -2138,7 +2141,6 @@ fn patch_state_sync(previous_items: &mut Vec<Value>, payload: &Value) -> Value {
         for key in [
             "historyOffset",
             "historyTotalCount",
-            "hideThinkingBlock",
             "availableSkills",
             "firstMessage",
             "sessionId",
@@ -2852,22 +2854,13 @@ async fn set_hide_thinking(
     Json(request): Json<HideThinkingRequest>,
 ) -> Json<Value> {
     context.hide_thinking.store(request.hide, Ordering::Release);
-    let runtime_ids = context
-        .app
-        .read()
-        .await
-        .sessions()
-        .into_iter()
-        .map(|record| record.id)
-        .collect::<Vec<_>>();
-    for runtime_id in runtime_ids {
-        let streaming = if let Some(client) = context.runtimes.get(&runtime_id).await {
-            runtime_streaming(&client).await.unwrap_or(false)
-        } else {
-            false
-        };
-        emit_session_state(&context, &runtime_id, streaming, None).await;
-    }
+    // This is a global display setting, including for archived sessions and
+    // drafts that have no Pi runtime. Do not rebuild conversation snapshots.
+    context.event_hub.push(
+        None,
+        None,
+        json!({ "type": "state_sync", "hideThinkingBlock": request.hide }),
+    );
     Json(json!({ "ok": true, "hideThinkingBlock": request.hide }))
 }
 
@@ -5805,6 +5798,52 @@ mod tests {
         assert_eq!(patch_state_sync(&mut previous, &next), expected);
     }
 
+    #[test]
+    fn thinking_visibility_survives_follow_up_state_patching() {
+        let mut previous = vec![json!({ "kind": "user", "text": "hello" })];
+        for hide in [true, false] {
+            let settings = json!({ "type": "state_sync", "hideThinkingBlock": hide });
+            let baseline = previous.clone();
+            assert_eq!(patch_state_sync(&mut previous, &settings), settings);
+            assert_eq!(previous, baseline);
+
+            let full = json!({
+                "type": "state_sync", "hideThinkingBlock": hide, "items": previous
+            });
+            let patched = patch_state_sync(&mut previous, &full);
+            assert_eq!(patched["hideThinkingBlock"], hide);
+            assert_eq!(patched["itemsPatch"]["deleteCount"], 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn thinking_toggle_broadcasts_without_a_runtime() {
+        let context = test_context();
+        let mut events = context.event_hub.subscribe();
+        for hide in [true, false] {
+            let response = router(context.clone())
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/settings/hide-thinking?context=viewer&session=archived")
+                        .header("content-type", "application/json")
+                        .body(Body::from(json!({ "hide": hide }).to_string()))
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(context.hide_thinking.load(Ordering::Acquire), hide);
+            let event = events.try_recv().expect("live settings update");
+            assert!(event_matches(&event, "viewer", Some("archived")));
+            assert!(event_matches(&event, "another-viewer", None));
+            assert_eq!(
+                event.payload.as_ref(),
+                &json!({ "type": "state_sync", "hideThinkingBlock": hide })
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn provider_bridge_routes_and_ui_responses_preserve_client_contracts() {
@@ -6032,6 +6071,7 @@ for line in sys.stdin:
             json!({"type":"state_sync", "items":[user], "streaming":true}),
             json!({"type":"conversation_delta", "sessionId":"original",
                 "operations":[{"op":"replaceItem", "item":live_reply}]}),
+            json!({"type":"state_sync", "hideThinkingBlock":true}),
             json!({"type":"state_sync", "items":[user, reply], "streaming":false,
                 "historyOffset":0, "historyTotalCount":2}),
             json!({"type":"state_sync", "items":[user, reply], "streaming":false}),
@@ -6047,12 +6087,12 @@ for line in sys.stdin:
             let event: Value = serde_json::from_str(data).unwrap();
             match index {
                 0 => assert!(event.get("itemsPatch").is_some()),
-                1 => assert_eq!(event, payloads[1]),
-                2 => {
-                    assert_eq!(event, payloads[2], "final history must replace the live overlay");
+                1 | 2 => assert_eq!(event, payloads[index]),
+                3 => {
+                    assert_eq!(event, payloads[3], "final history must replace the live overlay");
                     assert!(event.get("itemsPatch").is_none());
                 }
-                3 => {
+                4 => {
                     assert_eq!(event["itemsPatch"]["previousLength"], 2);
                     assert_eq!(event["itemsPatch"]["deleteCount"], 0);
                     assert_eq!(event["itemsPatch"]["items"], json!([]));

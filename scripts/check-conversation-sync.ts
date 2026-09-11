@@ -116,3 +116,46 @@ for (let turn = 0; turn < 3; turn++) {
 console.log(
   "Conversation sync: three turns have unique rows, stable keys, and text-only streaming"
 )
+
+for (const streaming of [true, false]) {
+  state = updateStateFromSync(createInitialSessionState(), {
+    type: "state_sync",
+    sessionKey: "session:thinking-toggle",
+    streaming,
+    items: [
+      { kind: "user", itemKey: "prompt", text: "hello", images: [] },
+      {
+        kind: "assistant",
+        itemKey: "reply",
+        streaming,
+        done: !streaming,
+        blocks: [
+          {
+            type: "thinking",
+            blockKey: "thought",
+            text: "Checking the toggle",
+          },
+          { type: "text", blockKey: "answer", text: "Hello" },
+        ],
+      },
+    ],
+  })
+  for (const hideThinkingBlock of [true, false]) {
+    const previous = state
+    state = updateStateFromSync(state, {
+      type: "state_sync",
+      hideThinkingBlock,
+    })
+    assert.equal(state.hideThinkingBlock, hideThinkingBlock)
+    assert.equal(state.streaming, streaming)
+    assert.equal(state.items, previous.items)
+    assert.equal(state.sessionKey, previous.sessionKey)
+    assert.equal(
+      state.hiddenThinkingPreview,
+      streaming && hideThinkingBlock ? "Checking the toggle" : undefined
+    )
+  }
+}
+console.log(
+  "Thinking visibility patches preserve conversation and streaming state"
+)
