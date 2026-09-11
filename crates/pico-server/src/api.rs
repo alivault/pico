@@ -5450,7 +5450,7 @@ async fn available_thinking_levels(client: &PiRpcClient) -> Result<Value, ApiErr
 }
 
 fn validate_thinking_level(level: &str) -> Result<(), ApiError> {
-    const LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh"];
+    const LEVELS: &[&str] = &["off", "minimal", "low", "medium", "high", "xhigh", "max"];
     if LEVELS.contains(&level) {
         Ok(())
     } else {
@@ -5796,6 +5796,23 @@ mod tests {
             expected["itemsPatch"]["items"][0].clone()
         ]);
         assert_eq!(patch_state_sync(&mut previous, &next), expected);
+    }
+
+    #[test]
+    fn thinking_level_validation_accepts_all_pi_levels_including_max() {
+        for level in ["off", "minimal", "low", "medium", "high", "xhigh", "max"] {
+            assert!(validate_thinking_level(level).is_ok(), "rejected {level}");
+        }
+    }
+
+    #[test]
+    fn thinking_level_validation_rejects_unknown_and_empty_levels() {
+        for level in ["", "unknown", "MAX", " max", "max "] {
+            let error = validate_thinking_level(level).expect_err("invalid level");
+            assert_eq!(error.status, StatusCode::BAD_REQUEST);
+            let label = if level.is_empty() { "(empty)" } else { level };
+            assert_eq!(error.message, format!("Invalid thinking level: {label}"));
+        }
     }
 
     #[test]
@@ -6264,6 +6281,7 @@ from pathlib import Path
 session = Path(__SESSION__)
 cwd = __CWD__
 model = {"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}
+thinking_level = "high"
 if not session.exists():
     session.write_text(json.dumps({"type":"session","version":3,"id":"fake-session","timestamp":"2026-07-31T00:00:00.000Z","cwd":cwd}) + "\n")
 for line in sys.stdin:
@@ -6271,7 +6289,9 @@ for line in sys.stdin:
     command = request["type"]
     response = {"type":"response","id":request.get("id"),"command":command,"success":True}
     if command == "get_state":
-        response["data"] = {"sessionFile":str(session),"sessionId":"fake-session","isStreaming":False,"isCompacting":False,"thinkingLevel":"high","model":model}
+        response["data"] = {"sessionFile":str(session),"sessionId":"fake-session","isStreaming":False,"isCompacting":False,"thinkingLevel":thinking_level,"model":model}
+    elif command == "set_thinking_level":
+        thinking_level = request["level"]
     elif command == "set_model":
         model = {"id":request["modelId"],"provider":request["provider"],"name":"Selected Model","reasoning":True}
         response["data"] = model
@@ -6282,13 +6302,15 @@ for line in sys.stdin:
     elif command == "get_available_models":
         response["data"] = {"models":[{"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}]}
     elif command == "get_available_thinking_levels":
-        response["data"] = {"levels":["low","high"]}
+        response["data"] = {"levels":["low","high","max"]}
     elif command == "get_session_stats":
         response["data"] = {"contextUsage":{"tokens":10,"contextWindow":100,"percent":10}}
     elif command == "get_tree":
         response["data"] = {"tree":[],"leafId":"a1"}
     elif command == "get_fork_messages":
         response["data"] = {"messages":[{"entryId":"u1","text":"hello"}]}
+    elif command == "prompt":
+        assert thinking_level == "max", "prompt must apply its thinking level before submission"
     print(json.dumps(response), flush=True)
     if command == "prompt":
         with session.open("a") as file:
@@ -6357,7 +6379,7 @@ for line in sys.stdin:
                     .method("POST")
                     .uri(format!("/api/prompt?{prompt_query}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(json!({"message":"hello"}).to_string()))
+                    .body(Body::from(json!({"message":"hello", "thinkingLevel":"max"}).to_string()))
                     .expect("request"),
             )
             .await
@@ -6472,6 +6494,35 @@ for line in sys.stdin:
         assert!(pending.contains_key("model-confirm"));
         assert!(!pending.contains_key("ignored-setStatus"));
         drop(pending);
+
+        // Both prompt submission and the picker must accept levels advertised
+        // by Pi, including max, and publish the applied value through SSE.
+        for level in ["low", "max"] {
+            let mut events = context.event_hub.subscribe();
+            let response = router(context.clone())
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/thinking?context=fake&session=fake-session")
+                        .header("content-type", "application/json")
+                        .body(Body::from(json!({"level":level}).to_string()))
+                        .expect("thinking request"),
+                )
+                .await
+                .expect("thinking response");
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let selected: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(selected["thinkingLevel"], level);
+            assert_eq!(selected["availableThinkingLevels"], json!(["low", "high", "max"]));
+            let event = tokio::time::timeout(Duration::from_secs(2), events.recv())
+                .await
+                .expect("thinking sync timeout")
+                .expect("thinking sync");
+            assert_eq!(event.payload["type"], "state_sync");
+            assert_eq!(event.payload["thinkingLevel"], level);
+            assert_eq!(event.payload["availableThinkingLevels"], selected["availableThinkingLevels"]);
+        }
 
         // Label mutations return the same disk-backed tree, not the fake Pi's
         // empty get_tree response. Navigation must retain the saved branches.
