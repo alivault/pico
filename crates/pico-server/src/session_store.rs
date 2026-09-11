@@ -388,6 +388,17 @@ impl SessionDocument {
             .any(|entry| entry.id.as_deref() == Some(id))
     }
 
+    pub fn tree_json(&self, streaming: bool) -> io::Result<Vec<u8>> {
+        let mut reader = io::BufReader::new(std::fs::File::open(&self.path)?);
+        crate::session_tree::serialize_tree(
+            self.entry_index
+                .iter()
+                .map(|entry| read_session_entry_from_reader(&mut reader, entry.offset)),
+            self.leaf_id.as_deref(),
+            streaming,
+        )
+    }
+
     pub fn session_name(&self) -> Option<String> {
         self.active_entries().rev().find_map(|entry| {
             (entry.kind.as_deref() == Some("session_info"))

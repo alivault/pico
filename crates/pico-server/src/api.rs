@@ -4560,7 +4560,7 @@ async fn set_session_tree_label(
     State(context): State<ServerContext>,
     RawQuery(raw_query): RawQuery,
     Json(request): Json<TreeLabelRequest>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     if request.entry_id.trim().is_empty() {
         return Err(ApiError::bad_request("entryId is required"));
     }
@@ -4594,29 +4594,31 @@ async fn set_session_tree_label(
         label_entry["label"] = Value::String(label.into());
     }
     append_session_entry(&document, label_entry, None)?;
-    let restarted = start_runtime_record(&context, resolved.record).await?;
-    let tree = pi_response_data(restarted.client.request_typed(&PiCommand::GetTree).await?)?;
-    Ok(Json(json!({
-      "ok": true,
-      "leafId": tree.get("leafId"),
-      "streamingEntryId": null,
-      "tree": tree.get("tree").cloned().unwrap_or_else(|| json!([]))
-    })))
+    start_runtime_record(&context, resolved.record).await?;
+    session_tree_response(&context, &target).await
 }
 
 async fn session_tree(
     State(context): State<ServerContext>,
     RawQuery(raw_query): RawQuery,
-) -> Result<Json<Value>, ApiError> {
-    let resolved =
-        resolve_runtime(&context, &parse_request_target(raw_query.as_deref()), false).await?;
-    let data = pi_response_data(resolved.client.request_typed(&PiCommand::GetTree).await?)?;
-    Ok(Json(json!({
-      "ok": true,
-      "leafId": data.get("leafId"),
-      "streamingEntryId": if runtime_streaming(&resolved.client).await? { data.get("leafId").cloned() } else { None },
-      "tree": data.get("tree").cloned().unwrap_or_else(|| json!([]))
-    })))
+) -> Result<Response, ApiError> {
+    session_tree_response(&context, &parse_request_target(raw_query.as_deref())).await
+}
+
+async fn session_tree_response(
+    context: &ServerContext,
+    target: &RequestTarget,
+) -> Result<Response, ApiError> {
+    let document = resolve_session_document(context, target).await?;
+    let streaming = match record_for_path(context, &document.path).await {
+        Some(record) => context.active_work.is_active(&record.id).await,
+        None => false,
+    };
+    let body = tokio::task::spawn_blocking(move || document.tree_json(streaming))
+        .await
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .map_err(|error| ApiError::internal(error.to_string()))?;
+    Ok(([(axum::http::header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
 async fn fork_messages(
@@ -6139,6 +6141,36 @@ for line in sys.stdin:
         assert_eq!(index["sessions"][0]["id"], "demo");
         assert_eq!(index["sessions"][0]["title"], "Build Pico");
 
+        // Browsing a saved tree must work without a Pi runtime, including when
+        // selection comes from the viewer context rather than an explicit id.
+        context
+            .app
+            .write()
+            .await
+            .select_session("tree-test", "demo".into());
+        for query in ["context=tree-test", "context=other&session=demo"] {
+            let response = tokio::time::timeout(
+                Duration::from_secs(2),
+                router(context.clone()).oneshot(
+                    Request::builder()
+                        .uri(format!("/api/session/tree?{query}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                ),
+            )
+            .await
+            .expect("tree should not wait for Pi")
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let tree: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(tree["leafId"], "u1");
+            assert_eq!(
+                tree["tree"][0]["entry"]["message"]["text"],
+                "Build Pico"
+            );
+        }
+
         let response = router(context)
             .oneshot(
                 Request::builder()
@@ -6192,7 +6224,8 @@ from pathlib import Path
 session = Path(__SESSION__)
 cwd = __CWD__
 model = {"id":"fake-model","provider":"fake","name":"Fake Model","reasoning":True}
-session.write_text(json.dumps({"type":"session","version":3,"id":"fake-session","timestamp":"2026-07-31T00:00:00.000Z","cwd":cwd}) + "\n")
+if not session.exists():
+    session.write_text(json.dumps({"type":"session","version":3,"id":"fake-session","timestamp":"2026-07-31T00:00:00.000Z","cwd":cwd}) + "\n")
 for line in sys.stdin:
     request = json.loads(line)
     command = request["type"]
@@ -6399,6 +6432,40 @@ for line in sys.stdin:
         assert!(pending.contains_key("model-confirm"));
         assert!(!pending.contains_key("ignored-setStatus"));
         drop(pending);
+
+        // Label mutations return the same disk-backed tree, not the fake Pi's
+        // empty get_tree response. Navigation must retain the saved branches.
+        for (route, body) in [
+            ("tree/label", json!({"entryId":"u1", "label":"Start here"})),
+            ("tree", json!({"targetId":"u1"})),
+        ] {
+            let response = tokio::time::timeout(
+                Duration::from_secs(3),
+                router(context.clone()).oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/api/session/{route}?context=fake&session=fake-session"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                ),
+            )
+            .await
+            .expect("tree mutation should complete")
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let result: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(result["ok"], true);
+            if route == "tree/label" {
+                assert_eq!(result["tree"][0]["label"], "Start here");
+                assert_eq!(result["tree"][0]["entry"]["id"], "u1");
+            }
+        }
+        let document = context.session_store.load(&session_path).unwrap();
+        assert!(document.contains_entry_id("a1"));
+        let tree: Value = serde_json::from_slice(&document.tree_json(false).unwrap()).unwrap();
+        assert_eq!(tree["tree"][0]["children"].as_array().unwrap().len(), 2);
 
         context.runtimes.shutdown().await;
         std::fs::remove_dir_all(root).expect("remove fake Pi fixture");

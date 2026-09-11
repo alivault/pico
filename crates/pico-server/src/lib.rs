@@ -19,5 +19,6 @@ pub mod protocol;
 pub mod runtime;
 pub mod security;
 pub mod session_store;
+mod session_tree;
 pub mod static_assets;
 pub mod terminal;
