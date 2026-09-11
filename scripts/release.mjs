@@ -9,7 +9,7 @@ const releaseBranch = process.env.RELEASE_BRANCH ?? "main"
 function usage() {
   console.error(`Usage: pnpm release <patch|minor|major>
 
-Runs local release checks, keeps npm and Rust versions aligned, creates the git tag, and pushes the branch plus tags. The GitHub release workflow publishes native assets and npm from the pushed tag.
+Runs local release checks, keeps npm and Rust versions aligned, creates the git tag, and atomically pushes the branch and release tag. The GitHub release workflow publishes native assets and npm from the pushed tag.
 
 Set RELEASE_BRANCH=<branch> to release from a branch other than main.`)
 }
@@ -192,7 +192,14 @@ try {
   run("git", ["diff", "--cached", "--check"])
   run("git", ["commit", "-m", `release ${nextTag}`])
   run("git", ["tag", nextTag])
-  run("git", ["push", "origin", branch, "--follow-tags"])
+  // --follow-tags skips lightweight tags, so name the release tag explicitly.
+  run("git", [
+    "push",
+    "--atomic",
+    "origin",
+    `refs/heads/${branch}`,
+    `refs/tags/${nextTag}`,
+  ])
 
   console.log(
     `Released ${nextTag}. GitHub Actions will publish native assets and ${packageJson.name}@${nextVersion}.`
