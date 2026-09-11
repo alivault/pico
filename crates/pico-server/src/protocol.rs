@@ -272,7 +272,7 @@ pub struct ConversationDeltaEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "camelCase")]
+#[serde(tag = "op", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ConversationDeltaOperation {
     ReplaceItem {
         item: ConversationItem,
@@ -466,6 +466,12 @@ mod tests {
     #[test]
     fn patch_state_sync_round_trips() {
         assert_value_round_trip::<StateSync>("state_sync_patch.json");
+    }
+
+    #[test]
+    fn conversation_delta_uses_client_field_names() {
+        assert_value_round_trip::<ConversationDeltaEvent>("conversation_delta.json");
+        assert_value_round_trip::<ConversationDeltaEvent>("conversation_delta_operations.json");
     }
 
     #[test]

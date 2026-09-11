@@ -55,7 +55,7 @@
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt",
-    "check:contracts": "node ./scripts/check-contract-fixtures.mjs",
+    "check:contracts": "node ./scripts/check-contract-fixtures.mjs && bun ./scripts/check-conversation-sync.ts",
     "check:native-cutover": "node ./scripts/check-native-cutover.mjs",
     "check:native-launcher": "node ./scripts/check-native-launcher.mjs",
     "check:native-packaging": "node ./scripts/check-native-packaging.mjs",

@@ -1,0 +1,36 @@
+{
+  "type": "conversation_delta",
+  "sessionId": "demo",
+  "operations": [
+    {
+      "op": "replaceItem",
+      "item": {
+        "kind": "assistant",
+        "itemKey": "streaming",
+        "renderKey": "streaming",
+        "blocks": [],
+        "streaming": true,
+        "done": false
+      }
+    },
+    {
+      "op": "appendBlock",
+      "contentIndex": 0,
+      "blockKey": "text-0",
+      "blockType": "text",
+      "delta": "Hello"
+    },
+    {
+      "op": "replaceBlock",
+      "contentIndex": 0,
+      "block": { "type": "text", "blockKey": "text-0", "text": "Hello!" }
+    },
+    {
+      "op": "updateTool",
+      "callId": "tool-1",
+      "output": "done",
+      "isError": false,
+      "running": false
+    }
+  ]
+}

@@ -461,6 +461,12 @@ export function applyConversationDelta(
   const streamingIndex = previousItems.findLastIndex(
     (item) => item.kind === "assistant" && item.streaming
   )
+  const renderKey = streamingAssistantRenderKey({
+    hasMessages: false,
+    messages: [],
+    items: previousItems.filter((_, index) => index !== streamingIndex),
+    previousStreamingItem: previousItems[streamingIndex] || null,
+  })
   let assistant =
     streamingIndex >= 0 && previousItems[streamingIndex]?.kind === "assistant"
       ? previousItems[streamingIndex]
@@ -560,6 +566,7 @@ export function applyConversationDelta(
   const nextItems = [...previousItems]
   const nextAssistant = {
     ...assistant,
+    renderKey,
     streaming: true,
     done: false,
   } satisfies AssistantItem
@@ -1154,7 +1161,17 @@ export function buildItemsFromSync(
         preserveOptimisticItems,
       })
     )
-    items.push(...streamingItems)
+    // The server's live item key is reusable across turns. Keep a stable,
+    // unique client render key, just as the delta path does.
+    for (const item of streamingItems) {
+      const renderKey = streamingAssistantRenderKey({
+        hasMessages: false,
+        messages: [],
+        items,
+        previousStreamingItem: findStreamingAssistantItem(previousItems),
+      })
+      items.push({ ...item, renderKey })
+    }
 
     const reconciledItems = reconcileConversationItems(previousItems, items)
     return {
