@@ -41,9 +41,13 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install Linux ARM64 linker
+      - name: Install Linux ARM64 C/C++ toolchain
         if: matrix.target == 'linux-arm64'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc --version
+          aarch64-linux-gnu-g++ --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
