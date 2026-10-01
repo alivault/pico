@@ -1,35 +1,3 @@
 [workspace]
-members = ["crates/pico-desktop", "crates/pico-server"]
+members = ["crates/pico-server"]
 resolver = "2"
-
-[profile.dev]
-codegen-units = 16
-debug = "limited"
-split-debuginfo = "unpacked"
-
-[profile.dev.package.gpui]
-opt-level = 3
-
-[profile.dev.package.gpui_platform]
-opt-level = 3
-
-[profile.dev.package.gpui-base]
-opt-level = 3
-
-[profile.dev.package.gpui-component]
-opt-level = 3
-
-[profile.dev.package.pico-desktop]
-opt-level = 1
-
-[profile.dev.package.resvg]
-opt-level = 3
-
-[profile.dev.package.rustybuzz]
-opt-level = 3
-
-[profile.dev.package.taffy]
-opt-level = 3
-
-[profile.dev.package.ttf-parser]
-opt-level = 3

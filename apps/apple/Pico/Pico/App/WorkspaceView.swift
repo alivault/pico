@@ -4,7 +4,7 @@ struct WorkspaceView: View {
   @Bindable var model: AppModel
 
   var body: some View {
-    IOSWorkspaceView(model: model)
+    PlatformWorkspaceView(model: model)
   }
 }
 
