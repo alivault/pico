@@ -12,7 +12,10 @@
       #if PICO_DOGFOOD
         serverController = PicoServerController(allowsManagement: false)
       #else
-        serverController = PicoServerController()
+        // Unit tests host the app; they must never start a real server.
+        let isTestHost =
+          ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        serverController = PicoServerController(allowsManagement: !isTestHost)
       #endif
       super.init()
     }
