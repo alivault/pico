@@ -268,22 +268,116 @@ trust-gated) prompt dirs become `/name` commands. Frontmatter `description`,
 `argument-hint`. Substitutions: `$1…`, `$@`, `$ARGUMENTS`, `${1:-default}`,
 `${@:-default}`, `${@:N}`, `${@:N:L}` with shell-like quoting.
 
-**Compaction** (match Pi's algorithm and format)
+**Compaction** (hybrid: Pi's structure and safety rules, plus lossless,
+verifiable, cache-friendly handoffs inspired by Vercel's fx)
 
-- Trigger when `contextTokens > contextWindow - reserveTokens` (defaults
-  `reserveTokens` 16384, `keepRecentTokens` 20000; per-model overrides). Check
-  before a new prompt and between turns after tool results.
-- Find the cut point walking back until `keepRecentTokens`; never cut at tool
-  results; handle split user-message spans with two summaries merged.
-- Summarize with the structured format: Goal, Constraints & Preferences,
+Goals, in priority order: the agent keeps following the user's instructions
+exactly; nothing compacted is lost for good; summaries cannot silently invent
+facts; compaction is cheap and fast; behavior is predictable and testable.
+
+*Triggers*
+
+- Automatic when the projected request reaches `compaction.triggerPercent`
+  (default 80, range 10–80) of the model's usable input window (context window
+  minus `reserveTokens`, default 16384). Check before a new prompt and between
+  turns after tool results are appended; skip when the run is ending with no
+  queued work.
+- Overflow recovery: a provider context-overflow error, or an early `length`
+  stop before any text or tool call, triggers one compact-and-retry. Never
+  treat rate limits or transient errors as overflow.
+- Manual `/compact [instructions]` between prompts; instructions focus the
+  handoff. With nothing to compact, make no model request. Auto-compaction can
+  be disabled; manual compaction still works. Per-model overrides for all
+  token settings.
+
+*What stays verbatim*
+
+- Recent history: walk back from the leaf until `keepRecentTokens` (default
+  20000, also capped at a percentage of the window) and keep that range
+  unchanged. Cut only at user, assistant, or bash-execution entries and only
+  between complete tool steps; never separate a tool call from its result.
+- Older user messages are kept word for word, in order, while they fit the
+  handoff budget; when they do not, summarize the oldest first.
+- User rules and constraints are kept as quoted text, never paraphrased.
+
+*The handoff* (replaces older history in model context)
+
+- Structured sections (from Pi): Goal, Constraints & Preferences (quoted),
   Progress (Done / In Progress / Blocked), Key Decisions, Next Steps, Critical
-  Context, plus cumulative `<read-files>` and `<modified-files>` lists.
-  Serialize the conversation as `[User]:`, `[Assistant thinking]:`,
-  `[Assistant]:`, `[Assistant tool calls]:`, `[Tool result]:` with tool results
-  truncated to 2000 chars. Iterate on the previous summary.
+  Context, plus cumulative `<read-files>` and `<modified-files>` lists carried
+  across compactions and branch summaries.
+- A ledger of numbered, append-only entries for rules, facts, decisions,
+  status, and open questions. Entries are never rewritten; a later entry may
+  state that it supersedes an earlier one. Entries in force carry forward
+  verbatim across compactions.
+- Per compacted turn: the user message (verbatim), a short note on what the
+  assistant did, and one line per tool call. Pico writes the factual part of
+  each tool line itself from the call and result (e.g. `bash: zig build test
+  — failed, exit 1, 3120 bytes`); the model adds why it was called and what it
+  showed.
+- Every item cites the stored IDs it came from (see recall below).
+- The handoff is capped at a percentage of the usable window (default 10%).
+  On repeated compactions, earlier handoffs are condensed into a
+  summary-of-summaries, while ledger entries still in force stay verbatim. Only
+  if the result still does not fit, shorten the longest texts to their start
+  and end, each naming the stored ID that keeps it whole.
+
+*Lossless recall*
+
+- Compacted turns, tool calls (input, output as the model saw it, and any full
+  output blob), and earlier handoffs remain in SQLite with short stable IDs
+  (e.g. `M12`, `T40`, `C2`).
+- Provide a built-in `recall` tool: full-text search over the active branch's
+  compacted records (via FTS5) returning matches with IDs, counts, and first
+  and last positions, and fetch-by-ID returning the record whole. Mention the
+  tool and the ID scheme in the handoff so the model knows to use it.
+
+*Verification*
+
+- Before accepting a handoff, check every note and ledger entry against the
+  source entries: it must cite an existing ID; quoted user text must appear in
+  that user's messages; paths, numbers, versions, and quoted strings must appear
+  in the cited turns or tool calls; a failed tool call may not be described as
+  successful. Flag violations in the stored handoff (do not silently drop
+  them) and re-ask the model once for skipped turns or a missing
+  summary-of-summaries.
+
+*Requests*
+
+- Preferred path: ask for the handoff as a continuation of the exact request
+  the agent was about to send (same system prompt, tools, and settings) so the
+  provider's prompt cache is reused.
+- Fallback (request does not fit, fails, or for manual compaction): serialize
+  the turns (`[User]:`, `[Assistant thinking]:`, `[Assistant]:`,
+  `[Assistant tool calls]:`, `[Tool result]:`, tool results truncated to 2000
+  chars for this request only) and summarize at the model's lowest reasoning
+  level, oldest first, in as many requests as needed. Do not write prompt-cache
+  entries for these one-off requests. Retry an empty or failed fallback once,
+  with another available model if configured.
+- Split oversized spans: when one user-message span exceeds the retained
+  budget, summarize its earlier part separately and merge it (Pi behavior).
+- All compaction usage counts toward session totals.
+
+*Persistence and context building*
+
 - Persist a compaction entry with `firstKeptEntryId`, `tokensBefore`, usage,
-  file lists, and a system-prompt checkpoint. Original entries remain.
-- Manual `/compact [instructions]`. Auto-compaction can be disabled.
+  the handoff, ledger, file lists, verification flags, and a system-prompt
+  checkpoint. Switch to the compacted context only after this entry is saved;
+  if saving fails, keep the previous context. Original entries are never
+  deleted and remain visible in the apps.
+- Context building uses the latest compaction on the active branch, then
+  retained and later entries, then context edits.
+- Branch summaries (section below) reuse the same structure, ledger, file
+  tracking, verification, and recall IDs.
+
+*Evaluation*
+
+- Build a compaction evaluation harness in `pico-testkit`: replay long
+  recorded sessions, force compaction at chosen points, and score whether the
+  agent can continue correctly (follows earlier constraints, does not redo or
+  contradict finished work, recalls specific details on request). Track token
+  cost and latency. Use it to tune defaults and to compare against a plain
+  Pi-style summary baseline before locking v1 behavior.
 
 **Sessions and branching**
 
