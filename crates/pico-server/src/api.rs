@@ -654,16 +654,8 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         let _ = shutdown_tx.send(true);
         lifecycle_task.await.map_err(std::io::Error::other)?;
     }
-    while let Some(result) = server_tasks.join_next().await {
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                server_error.get_or_insert_with(|| format!("Pico listener failed: {error}"));
-            }
-            Err(error) => {
-                server_error.get_or_insert_with(|| format!("Pico listener task failed: {error}"));
-            }
-        }
+    if let Some(error) = drain_listener_tasks(&mut server_tasks, CONNECTION_DRAIN_TIMEOUT).await {
+        server_error.get_or_insert(error);
     }
     context.control_status.write().await.phase = "stopping".into();
     let _ = runtime_eviction_task.await;
@@ -683,6 +675,46 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
         return Err(std::io::Error::other(error).into());
     }
     Ok(())
+}
+
+/// How long shutdown waits for clients to close long-lived connections.
+const CONNECTION_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Waits for listener tasks to finish graceful shutdown. Graceful shutdown
+/// waits for open connections, but SSE streams and terminal WebSockets stay
+/// open until clients disconnect. Active Pi work has already drained by now,
+/// so lingering connections are closed after `timeout`.
+async fn drain_listener_tasks(
+    server_tasks: &mut JoinSet<Result<(), std::io::Error>>,
+    timeout: std::time::Duration,
+) -> Option<String> {
+    let mut server_error = None;
+    let deadline = tokio::time::sleep(timeout);
+    tokio::pin!(deadline);
+    loop {
+        tokio::select! {
+            result = server_tasks.join_next() => {
+                let Some(result) = result else { break };
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        server_error.get_or_insert_with(|| format!("Pico listener failed: {error}"));
+                    }
+                    Err(error) if error.is_cancelled() => {}
+                    Err(error) => {
+                        server_error.get_or_insert_with(|| format!("Pico listener task failed: {error}"));
+                    }
+                }
+            }
+            _ = &mut deadline => {
+                info!("closing remaining client connections");
+                server_tasks.abort_all();
+                while server_tasks.join_next().await.is_some() {}
+                break;
+            }
+        }
+    }
+    server_error
 }
 
 async fn bind_listeners(
@@ -6951,6 +6983,27 @@ for line in sys.stdin:
             .expect("shutdown did not finish after work settled")
             .expect("shutdown task failed");
         assert!(*serve_shutdown_rx.borrow());
+    }
+
+    #[tokio::test]
+    async fn shutdown_closes_lingering_client_connections() {
+        let mut server_tasks = JoinSet::new();
+        server_tasks.spawn(async {
+            // Stands in for a listener held open by an SSE client.
+            std::future::pending::<()>().await;
+            Ok(())
+        });
+        server_tasks.spawn(async { Ok(()) });
+
+        let error = tokio::time::timeout(
+            Duration::from_secs(2),
+            drain_listener_tasks(&mut server_tasks, Duration::from_millis(50)),
+        )
+        .await
+        .expect("lingering connections blocked shutdown");
+
+        assert_eq!(error, None);
+        assert!(server_tasks.is_empty());
     }
 
     #[tokio::test]

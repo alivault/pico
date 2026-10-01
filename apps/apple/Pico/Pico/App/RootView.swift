@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
   @Bindable var model: AppModel
+  /// Starts or attaches to a server this app manages and returns its URL.
+  var prepareLocalServer: (@MainActor () async -> URL?)?
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
@@ -22,6 +24,9 @@ struct RootView: View {
       model.dismissToast(id: id)
     }
     .task {
+      if let prepareLocalServer, let localURL = await prepareLocalServer() {
+        await model.connectToLocalServerIfNeeded(localURL)
+      }
       await model.restoreConnection()
     }
     .onChange(of: scenePhase, initial: true) {

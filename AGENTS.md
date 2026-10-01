@@ -323,8 +323,8 @@ There are intentionally no TypeScript server routes. Browser API calls use same-
   - app metadata, `pico://` URL scheme, quick action, local-network/photos/camera/notification usage strings, and local-network ATS allowance
 - `apps/apple/Pico/PicoTests/*` and `apps/apple/Fixtures/*`
   - Swift Testing coverage for SSE parsing, event decoding, session-state merge/patch behavior, Git formatting/tree/highlight helpers, host normalization, and shared JSON fixtures
-- `apps/apple/PicoMenu/*`
-  - independently launched Pico Server menu-bar UI for health, exact-address remote listener configuration, restart/log controls, and complete quit
+- `apps/apple/Pico/Pico/App/PicoServerController.swift`, `PicoServerProcess.swift`, `PicoMacAppDelegate.swift`, and `PicoMenuBarView.swift`
+  - macOS server lifecycle: attach to a running server or launch `pico-server serve` detached (own session, clean signal state), menu bar health/network/restart/logs/launch-at-login/quit UI, Dock-less background mode after the window closes, and drain-then-stop on quit only for a server this app launched
 
 ## Core architecture
 

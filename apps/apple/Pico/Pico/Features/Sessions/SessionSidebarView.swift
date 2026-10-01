@@ -65,9 +65,14 @@ struct SessionSidebarView: View {
         }
       }
       .sheet(isPresented: $isShowingSettings) {
-        NavigationStack {
-          SettingsView(model: model)
-        }
+        #if os(iOS)
+          NavigationStack {
+            SettingsView(model: model)
+          }
+        #else
+          // macOS presents settings through the Settings scene.
+          EmptyView()
+        #endif
       }
       .sheet(isPresented: $isShowingAddDirectory) {
         SidebarAddDirectoryView(model: model) {

@@ -3,14 +3,11 @@ import SwiftUI
 struct SettingsView: View {
   @Bindable var model: AppModel
   #if os(macOS)
-    @Bindable var serverService: PicoServerServiceController
+    @Bindable var serverController: PicoServerController
 
-    init(
-      model: AppModel,
-      serverService: PicoServerServiceController = PicoServerServiceController()
-    ) {
+    init(model: AppModel, serverController: PicoServerController) {
       self.model = model
-      self.serverService = serverService
+      self.serverController = serverController
     }
   #endif
   @Environment(\.dismiss) private var dismiss
@@ -37,7 +34,7 @@ struct SettingsView: View {
           case .server:
             MacServerSettingsTab(
               model: model,
-              serverService: serverService
+              serverController: serverController
             )
           case .providers:
             MacProviderSettingsTab(
@@ -106,7 +103,7 @@ struct SettingsView: View {
 
   private struct MacServerSettingsTab: View {
     @Bindable var model: AppModel
-    @Bindable var serverService: PicoServerServiceController
+    @Bindable var serverController: PicoServerController
 
     var body: some View {
       ScrollView {
@@ -122,29 +119,39 @@ struct SettingsView: View {
 
           PiPerformanceSettingsSection(model: model)
 
-          Section("Background Service") {
-            Toggle(
-              "Start Pico at login",
-              isOn: $serverService.startAtLogin
-            )
-            .disabled(!serverService.isAvailable)
+          Section("Local Server") {
+            if serverController.isManagementAvailable {
+              LabeledContent("Status", value: serverController.statusText)
+              LabeledContent(
+                "Managed by",
+                value: serverController.isExternalServer
+                  ? "Another process"
+                  : serverController.ownsServer ? "Pico" : "Pico (attached)"
+              )
+              Toggle(
+                "Launch Pico at login",
+                isOn: Binding(
+                  get: { serverController.launchAtLogin },
+                  set: { serverController.setLaunchAtLogin($0) }
+                )
+              )
+              Text(
+                "Closing the window keeps Pico and its server running in the menu bar. Quit Pico to stop the server after active work finishes."
+              )
+              .foregroundStyle(.secondary)
 
-            LabeledContent("Server agent", value: serverService.serverStatus)
-            LabeledContent("Menu bar app", value: serverService.menuStatus)
-
-            if !serverService.isAvailable {
-              Text("Background services require a signed distribution build.")
+              if serverController.launchAtLoginRequiresApproval {
+                Button(
+                  "Open Login Item Settings",
+                  action: serverController.openLoginItemSettings
+                )
+              }
+            } else {
+              Text("This build connects to an existing Pico server.")
                 .foregroundStyle(.secondary)
             }
 
-            if serverService.requiresApproval {
-              Button(
-                "Open Login Item Settings",
-                action: serverService.openLoginItemSettings
-              )
-            }
-
-            if let errorMessage = serverService.errorMessage {
+            if let errorMessage = serverController.errorMessage {
               Text(errorMessage)
                 .foregroundStyle(.red)
             }
@@ -172,7 +179,7 @@ struct SettingsView: View {
       }
       .scrollContentBackground(.visible)
       .task {
-        serverService.refreshStatus()
+        serverController.refreshLaunchAtLoginStatus()
       }
     }
   }
@@ -292,7 +299,7 @@ private struct PiPerformanceSettingsSection: View {
   #Preview {
     SettingsView(
       model: AppModel(),
-      serverService: PicoServerServiceController()
+      serverController: PicoServerController(allowsManagement: false)
     )
   }
 #else

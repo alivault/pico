@@ -36,7 +36,6 @@ const outputRoot = resolve(
 )
 const workRoot = join(outputRoot, "work")
 const derivedData = join(workRoot, "DerivedData")
-const menuScratch = join(workRoot, "PicoMenuBuild")
 const appPath = join(outputRoot, "Pico.app")
 const dmgPath = join(outputRoot, `Pico-${version}-universal.dmg`)
 const dmgRoot = join(workRoot, "dmg")
@@ -163,40 +162,10 @@ run("xcodebuild", [
 const builtApp = join(derivedData, "Build/Products/Release/Pico.app")
 if (!existsSync(builtApp)) throw new Error("Xcode did not produce Pico.app")
 cpSync(builtApp, appPath, { recursive: true })
-const appInfoPlist = join(appPath, "Contents/Info.plist")
-setBundleVersions(appInfoPlist)
-run("/usr/libexec/PlistBuddy", [
-  "-c",
-  `Add :PicoBackgroundServicesAvailable bool ${signingIdentity !== "-"}`,
-  appInfoPlist,
-])
-
-run("swift", [
-  "build",
-  "--package-path",
-  "apps/apple/PicoMenu",
-  "--configuration",
-  "release",
-  "--scratch-path",
-  menuScratch,
-  "--arch",
-  "arm64",
-  "--arch",
-  "x86_64",
-])
-const menuBinary = join(menuScratch, "apple/Products/Release/PicoMenu")
-if (!existsSync(menuBinary)) {
-  throw new Error(
-    `SwiftPM did not produce the menu app binary at ${menuBinary}`
-  )
-}
+setBundleVersions(join(appPath, "Contents/Info.plist"))
 
 const serverRoot = join(appPath, "Contents/Resources/PicoServer")
-const launchAgentRoot = join(appPath, "Contents/Library/LaunchAgents")
-const loginItemRoot = join(appPath, "Contents/Library/LoginItems")
 mkdirSync(serverRoot, { recursive: true })
-mkdirSync(launchAgentRoot, { recursive: true })
-mkdirSync(loginItemRoot, { recursive: true })
 universal(
   join(serverRoot, "pico-server"),
   join(root, "target/aarch64-apple-darwin/release/pico-server"),
@@ -229,21 +198,6 @@ for (const required of [
 cpSync(join(root, ".output/public"), join(serverRoot, "web"), {
   recursive: true,
 })
-cpSync(
-  join(root, "apps/apple/Pico/Pico/Resources/com.alivault.pico.server.plist"),
-  join(launchAgentRoot, "com.alivault.pico.server.plist")
-)
-
-const menuApp = join(loginItemRoot, "PicoMenu.app")
-mkdirSync(join(menuApp, "Contents/MacOS"), { recursive: true })
-cpSync(menuBinary, join(menuApp, "Contents/MacOS/PicoMenu"))
-chmodSync(join(menuApp, "Contents/MacOS/PicoMenu"), 0o755)
-cpSync(
-  join(root, "apps/apple/PicoMenu/Resources/Info.plist"),
-  join(menuApp, "Contents/Info.plist")
-)
-setBundleVersions(join(menuApp, "Contents/Info.plist"))
-
 for (const binary of ["pico-server", "pico-pi-bridge", "pi"]) {
   sign(join(serverRoot, binary))
 }
@@ -253,7 +207,6 @@ if (packagedPiVersion !== piVersion) {
     `Packaged Pi reported ${packagedPiVersion || "no version"}; expected ${piVersion}`
   )
 }
-sign(menuApp)
 const frameworksRoot = join(appPath, "Contents/Frameworks")
 if (existsSync(frameworksRoot)) {
   const frameworks = output("find", [

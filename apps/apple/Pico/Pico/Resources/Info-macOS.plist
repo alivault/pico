@@ -22,6 +22,8 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
+  <key>PicoDevelopmentRepositoryRoot</key>
+  <string>$(PICO_DEVELOPMENT_REPOSITORY_ROOT)</string>
   <key>PicoURLScheme</key>
   <string>$(PICO_URL_SCHEME)</string>
   <key>CFBundleURLTypes</key>

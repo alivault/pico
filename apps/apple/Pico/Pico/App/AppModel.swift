@@ -411,6 +411,14 @@ public final class AppModel {
     return nil
   }
 
+  /// Connects to the app-managed local server unless the user already chose
+  /// a server.
+  public func connectToLocalServerIfNeeded(_ url: URL) async {
+    guard baseURL == nil, !connectionStore.hasSavedServerURL else { return }
+    serverURLText = url.absoluteString
+    await connect()
+  }
+
   public func restoreConnection() async {
     guard baseURL == nil, connectionStore.hasSavedServerURL else { return }
     await connect()

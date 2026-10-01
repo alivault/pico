@@ -15,23 +15,9 @@ extension Notification.Name {
 
 @main
 struct PicoApp: App {
-  #if os(macOS)
-    private let serverService: PicoServerServiceController
-  #endif
+  static let mainWindowID = "main"
 
   init() {
-    #if os(macOS)
-      #if PICO_DOGFOOD
-        let serverService = PicoServerServiceController(
-          allowsBackgroundServices: false
-        )
-      #else
-        let serverService = PicoServerServiceController()
-      #endif
-      self.serverService = serverService
-      serverService.start()
-    #endif
-
     #if DEBUG
       #if os(iOS)
         _ = Bundle(
@@ -47,14 +33,20 @@ struct PicoApp: App {
 
   #if os(iOS)
     @UIApplicationDelegateAdaptor(PicoAppDelegate.self) private var appDelegate
+  #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(PicoMacAppDelegate.self) private var appDelegate
   #endif
   @State private var model = AppModel()
 
   var body: some Scene {
     #if os(macOS)
-      WindowGroup {
-        RootView(model: model)
-          .frame(minWidth: 900, minHeight: 600)
+      // A single main window: closing it keeps Pico running in the menu bar.
+      Window("Pico", id: Self.mainWindowID) {
+        RootView(
+          model: model,
+          prepareLocalServer: appDelegate.serverController.waitUntilReady
+        )
+        .frame(minWidth: 900, minHeight: 600)
       }
       .defaultSize(CGSize(width: 1280, height: 820))
       .commands {
@@ -78,10 +70,20 @@ struct PicoApp: App {
       Settings {
         SettingsView(
           model: model,
-          serverService: serverService
+          serverController: appDelegate.serverController
         )
         .frame(minWidth: 520, minHeight: 420)
       }
+
+      MenuBarExtra {
+        PicoMenuBarView(
+          model: model,
+          serverController: appDelegate.serverController
+        )
+      } label: {
+        PicoMenuBarLabel(serverController: appDelegate.serverController)
+      }
+      .menuBarExtraStyle(.window)
     #else
       WindowGroup {
         RootView(model: model)

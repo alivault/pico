@@ -105,8 +105,8 @@ This lets the iOS app show useful connection errors instead of failing on the fi
 
 ### 6.2 Support an explicitly trusted private-network listener
 
-The production macOS app keeps Pico on loopback by default. The Pico Server
-menu-bar app can optionally configure one additional private or VPN interface IP
+The production macOS app keeps Pico on loopback by default. Its menu bar item
+can optionally configure one additional private or VPN interface IP
 address:
 
 1. The server always listens on `127.0.0.1:3141`.

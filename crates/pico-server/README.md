@@ -139,10 +139,11 @@ Implemented:
   transports, or missing file-like asset paths
 - headless browser validation against Rust with Node absent from `PATH`
 - universal arm64/x86_64 macOS packaging with the Rust server, standalone Pi,
-  Pi bridge, static web assets, and an app-bundled `SMAppService` LaunchAgent
-- an independent SwiftUI `MenuBarExtra` login item named Pico Server with
-  server health, exact-address remote listener settings, open/new chat, restart,
-  logs, Login Items settings, and complete-quit controls
+  Pi bridge, and static web assets; Pico.app attaches to a running server or
+  launches `pico-server serve` detached, and drains it on quit
+- a SwiftUI `MenuBarExtra` inside Pico.app with server health, exact-address
+  remote listener settings, open/new chat, restart, logs, launch at login, and
+  quit controls
 - nested-code Hardened Runtime signing, Developer ID notarization/stapling, and
   drag-to-Applications DMG automation in `pnpm package:macos`
 - checksum-verified macOS/Linux native CLI bundles selected by `pico-app`, plus
@@ -153,7 +154,7 @@ Implemented:
 - manifest and health endpoints
 - loopback defaults, exact-address optional remote listeners, valid hostname
   authorities, same-origin/explicit Origin validation, and request size bounds
-- private persistent network configuration with CLI and Pico Server menu-bar
+- private persistent network configuration with CLI and Pico menu bar
   controls
 - daily structured logs and atomically persisted lifecycle state
 

@@ -14,7 +14,6 @@ __unconfig*
 todos.json
 /target
 /artifacts
-/apps/apple/PicoMenu/.build/
 
 # Xcode user-specific state
 *.xcuserstate

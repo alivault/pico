@@ -154,8 +154,18 @@ xcodebuild \
 open /tmp/pico-macos-build/Build/Products/Debug/Pico.app
 ```
 
-The macOS client defaults to `localhost`, which resolves to
-`http://localhost:3141`.
+The macOS app manages its local server the way a terminal multiplexer manages
+its daemon. On launch it attaches to a compatible server already running on
+`localhost:3141`; otherwise it starts `pico-server serve` as a detached process
+and connects to it. Closing the window keeps Pico and its server running from
+the menu bar. Quitting with ⌘Q or **Quit Pico** in the menu bar drains active
+Pi work and stops the server only when this app started it; a server started
+elsewhere, such as from a terminal, keeps running. If Pi is still working, Pico
+asks whether to quit when the work finishes or leave the server running.
+
+Debug builds run the server from this checkout. Build it first with
+`cargo build -p pico-server`, `pnpm build:pi-bridge`, `pnpm build`, and
+`node scripts/fetch-pi-standalone.mjs` (or install `pi` on your `PATH`).
 
 ### Dogfooding Pico safely
 
@@ -171,7 +181,7 @@ The command verifies the client-only bundle, replaces
 `~/Applications/Pico Dev.app`, and relaunches it. Pico Dev uses bundle identifier
 `com.alivault.pico.macos.dev`, the purple development icon, a `pico-dev://` URL
 scheme, and separate preferences. It cannot register or update Pico's
-production server or menu-bar services. It can connect to the stable server on
+production server. It can connect to the stable server on
 `localhost:3141`, so server-owned Pi work keeps running while Pico Dev is
 rebuilt or crashes.
 
@@ -211,10 +221,10 @@ the control environment for active work.
 
 ### Connecting over a trusted private network
 
-The macOS distribution includes the **Pico Server** menu-bar app. To let another
-Pico client connect without SSH or CLI setup:
+The macOS app's menu bar item manages network access. To let another Pico
+client connect without SSH or CLI setup:
 
-1. Open Pico Server from the menu bar.
+1. Open the Pico menu bar item.
 2. Enable **Allow remote connections**.
 3. Enter one specific private or VPN interface IP address.
 4. Apply the setting and allow the server to drain and restart.
@@ -224,7 +234,7 @@ Pico client connect without SSH or CLI setup:
 Pico continues listening on `127.0.0.1:3141` and adds the configured address on
 port `3141`. Browser clients can open `http://<address>:3141` or a resolvable
 hostname such as `http://macbook-pro:3141`. If the configured interface is
-unavailable, local Pico access remains available and the menu app reports that
+unavailable, local Pico access remains available and the menu bar reports that
 the remote listener could not start.
 
 This mode intentionally has no Pico-level authentication and accepts any valid
@@ -272,12 +282,9 @@ and cask templates live under `packaging/homebrew`.
 ### Packaging the macOS app
 
 The native packaging command builds universal arm64/x86_64 copies of Pico,
-`pico-server`, Pi, the standalone Pi bridge, and the independent `PicoMenu.app`
-menu-bar login item. It assembles the bundled `SMAppService` LaunchAgent, signs
-nested code in order, verifies the app, and creates a drag-to-Applications DMG.
-Without a signing identity it produces an ad-hoc-signed build for inspecting the
-app and DMG; macOS background-service registration remains disabled in that
-artifact:
+`pico-server`, Pi, and the standalone Pi bridge, signs nested code in order,
+verifies the app, and creates a drag-to-Applications DMG. Without a signing
+identity it produces an ad-hoc-signed build for inspecting the app and DMG:
 
 ```bash
 pnpm package:macos
@@ -292,11 +299,10 @@ MACOS_NOTARY_PROFILE='Pico Notary' \
 pnpm package:macos
 ```
 
-Developer ID-signed packaged builds expose Start at Login and approval state in
-Pico Settings. The separate **Pico Server** menu-bar app keeps the server
-available when the main app quits and provides trusted-network listener
-configuration, Open, New Chat, Restart Server, Show Logs, Start at Login
-settings, and Quit Completely actions.
+Packaged builds register Pico to launch at login on first run; toggle this from
+the menu bar or Pico Settings. The menu bar item shows server health and
+provides trusted-network listener configuration, Open Pico, New Chat, Restart
+Server, Show Logs, Launch at Login, and Quit Pico.
 
 ## Development commands
 
