@@ -82,9 +82,6 @@ async function health(state: ServerState) {
       `http://${host}:${state.port}/api/system/health`,
       {
         signal: AbortSignal.timeout(2000),
-        headers: process.env.PICO_TOKEN
-          ? { authorization: `Bearer ${process.env.PICO_TOKEN}` }
-          : {},
       }
     )
     return response.ok
@@ -273,9 +270,6 @@ async function stopCommand(options: Map<string, string | boolean>) {
     state.host === "0.0.0.0" || state.host === "::" ? "127.0.0.1" : state.host
   await fetch(`http://${host}:${state.port}/api/system/shutdown`, {
     method: "POST",
-    headers: process.env.PICO_TOKEN
-      ? { authorization: `Bearer ${process.env.PICO_TOKEN}` }
-      : {},
   })
     .then((response) => {
       if (!response.ok) throw new Error(`Shutdown failed: ${response.status}`)

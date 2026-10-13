@@ -59,24 +59,22 @@ highlighting, and PTY terminals.
 
 ## Remote access
 
-Pico can execute shell commands and read files. Do not expose it to an
-untrusted network. Non-loopback binding requires `PICO_TOKEN` with at least
-24 characters.
+Pico has no app login or access token. Use Tailscale access rules and your
+firewall to control who can reach it.
 
 ```sh
-export PICO_TOKEN="$(openssl rand -hex 32)"
 pnpm start --host 0.0.0.0 --no-open
 ```
 
-Use Tailscale Serve with HTTPS in front of the server. Visit `/login` and enter
-the token. The browser uses an HTTP-only, same-site cookie for HTTP, events,
-and terminal connections. API clients can use `Authorization: Bearer TOKEN`.
-Keep the token secret and do not put it in a URL. The token is also required
-for the status and stop commands when authentication is enabled.
+Open `http://<your-tailscale-ip>:3141/`, or use Tailscale Serve for HTTPS.
+Binding to `0.0.0.0` also exposes the port on other network interfaces.
+To restrict listening to Tailscale, pass your machine's Tailscale IP to
+`--host` instead. Do not expose Pico to the public internet.
 
-Local-only servers check the Host header. Browser requests and terminal
-connections reject cross-origin access. These controls are not a filesystem
-sandbox: authenticated users have the server user's access.
+Anyone who can reach Pico can run commands and access files as the server
+user. Local-only servers check the Host header. Browser requests and terminal
+connections reject cross-origin access; these checks are not authentication
+or a filesystem sandbox.
 
 ## Development
 

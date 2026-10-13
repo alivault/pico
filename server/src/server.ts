@@ -68,7 +68,6 @@ export async function startServer(options: {
     port: () => listeningPort,
     listenHosts: () => [options.host],
     draining: () => draining,
-    tokenAuthentication: Boolean(security.token),
   })
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
@@ -82,7 +81,6 @@ export async function startServer(options: {
   const server = createServer((request, response) => {
     void (async () => {
       try {
-        if (await security.login(request, response)) return
         security.check(request)
         if (await router.handle(request, response)) return
         const path = new URL(request.url ?? "/", "http://localhost").pathname

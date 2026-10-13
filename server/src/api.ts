@@ -51,7 +51,6 @@ export type ApiContext = {
   port: () => number
   listenHosts: () => string[]
   draining: () => boolean
-  tokenAuthentication: boolean
 }
 
 type Target = {
@@ -158,7 +157,7 @@ export function createApi(api: ApiContext) {
     serverProtocolVersion: SERVER_PROTOCOL_VERSION,
     apiContractVersion: API_CONTRACT_VERSION,
     pairingRequired: false,
-    authentication: { type: api.tokenAuthentication ? "bearer" : "none" },
+    authentication: { type: "none" },
     transport: { sse: true, httpsRequired: false, localHttpAllowed: true },
     capabilities: {
       events: [

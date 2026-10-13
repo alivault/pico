@@ -5,17 +5,17 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 
-void test("server authenticates, refuses a second owner, and stops cleanly", async () => {
+void test("server needs no token, refuses a second owner, and stops cleanly", async () => {
   const data = await mkdtemp(join(tmpdir(), "pico-test-"))
-  const token = "pico-test-token-" + "a".repeat(32)
   const env = {
     ...process.env,
-    PICO_TOKEN: token,
     PI_CODING_AGENT_DIR: join(data, "agent"),
   }
   const args = [
     "dist/pico-server.mjs",
     "serve",
+    "--host",
+    "0.0.0.0",
     "--port",
     "0",
     "--data-dir",
@@ -51,37 +51,24 @@ void test("server authenticates, refuses a second owner, and stops cleanly", asy
     }
     assert.ok(port, log)
     const url = `http://127.0.0.1:${port}`
-    assert.equal((await fetch(`${url}/api/system/health`)).status, 401)
-    const headers = { authorization: `Bearer ${token}` }
-    assert.equal(
-      (await fetch(`${url}/api/system/health`, { headers })).status,
-      200
-    )
+    assert.equal((await fetch(`${url}/api/system/health`)).status, 200)
     assert.equal(
       (
         await fetch(`${url}/api/system/health`, {
-          headers: { ...headers, origin: "https://evil.example" },
+          headers: { origin: "https://evil.example" },
         })
       ).status,
       403
     )
-    const login = await fetch(`${url}/login`, {
-      method: "POST",
-      body: new URLSearchParams({ token }),
-      redirect: "manual",
-    })
-    assert.equal(login.status, 303)
-    const cookie = login.headers.get("set-cookie")!.split(";")[0]!
-    assert.equal(
-      (await fetch(`${url}/api/system/health`, { headers: { cookie } })).status,
-      200
-    )
+    const manifest = (await (
+      await fetch(`${url}/api/client/manifest`)
+    ).json()) as { authentication: { type: string } }
+    assert.equal(manifest.authentication.type, "none")
     const duplicate = spawn(process.execPath, args, { env, stdio: "ignore" })
     const code = await new Promise((done) => duplicate.once("exit", done))
     assert.equal(code, 1)
     assert.equal(
-      (await fetch(`${url}/api/system/shutdown`, { method: "POST", headers }))
-        .status,
+      (await fetch(`${url}/api/system/shutdown`, { method: "POST" })).status,
       200
     )
     await exited

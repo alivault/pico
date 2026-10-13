@@ -82,17 +82,21 @@ void test("message conversion preserves text, images, and tool calls", () => {
 const request = (headers: Record<string, string>) =>
   ({ headers }) as IncomingMessage
 
-void test("remote binding requires a strong token", () => {
-  assert.throws(() => new Security("0.0.0.0", ""), /PICO_TOKEN/)
-  const security = new Security("0.0.0.0", "a".repeat(32))
-  assert.throws(() => security.check(request({ host: "pico:3141" })), /token/)
-  security.check(
-    request({ host: "pico:3141", authorization: `Bearer ${"a".repeat(32)}` })
+void test("remote requests need no token but reject foreign origins", () => {
+  const security = new Security("0.0.0.0")
+  security.check(request({ host: "pico:3141" }))
+  security.check(request({ host: "pico:3141", origin: "http://pico:3141" }))
+  assert.throws(
+    () =>
+      security.check(
+        request({ host: "pico:3141", origin: "https://evil.example" })
+      ),
+    /Cross-origin/
   )
 })
 
 void test("local requests reject foreign hosts and origins", () => {
-  const security = new Security("127.0.0.1", "")
+  const security = new Security("127.0.0.1")
   security.check(request({ host: "127.0.0.1:3141" }))
   assert.throws(
     () => security.check(request({ host: "evil.example:3141" })),
