@@ -1,6 +1,6 @@
 # Plan: More capability in Pico through pi-durable
 
-Status: draft. Scope: all ideas from the agent review, with two changes:
+Status: implemented in seven commits (Phase 0 to Phase 6). See the notes at the end for the differences from this plan. Scope: all ideas from the agent review, with two changes:
 
 - **YOLO mode.** No approval wrapper and no `request_approval`. Tools run at once.
 - **Worktrees are optional.** A new session (from the UI or from `spawn_session`)
@@ -428,3 +428,31 @@ Each step is one PR, with `pnpm check` green and restart tests for its tasks.
 7. **Preview proxy security.** The proxy exposes local dev servers to anyone who
    can reach Pico. This is the same trust model as the terminals, but say it in
    the README.
+
+## Implementation notes
+
+The code follows this plan, with these differences:
+
+- **Tool renderers (0.3):** the existing `bash`, `write`, and `edit` views stay
+  in `conversation-view.tsx`; the card asks the registry first.
+- **Agent panel (0.4):** the panel reads one route,
+  `GET /api/session/extensions`, which returns the state of every extension.
+  A `session_extensions` event tells clients to read it again.
+- **`ask_user` (1.2):** a chat message answers the open question and also
+  reaches the model as a steer, so the transcript keeps the message.
+- **Scratchpad (2.4):** entries are files with a metadata file each, not a
+  document, because an `afterTool` hook can read documents but cannot commit
+  them.
+- **Jobs (2.3):** jobs run in shared terminals of the `Terminals` service; a
+  job tab in the terminal panel attaches to the job's terminal.
+- **Notifications (5.2):** the server notifies when a run finishes and when a
+  question waits. Job exits, watches, and child reports arrive as follow-up
+  messages, so their runs notify when they finish.
+- **Previews (5.1):** a separate port for each preview, as decided after the
+  plan.
+- **Tool profiles (6.2):** the picker is in the new-session view and the Agent
+  tab, not next to the model picker.
+- **MCP OAuth (6.4):** tokens go to `~/.pico/mcp-oauth.json`, because
+  `pi-mcp` leaves storage to the application.
+- **Language servers (4.4):** Pico ships `typescript-language-server` and
+  TypeScript, so TypeScript and JavaScript work without setup.

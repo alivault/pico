@@ -86,7 +86,7 @@ export async function openRuntime(
   })
   registry.install(images ? createCodingTools({ images }) : createCodingTools())
   registry.install(createWebAccessExtension())
-  const mcp = createMcpExtension(agentDir)
+  const mcp = createMcpExtension(agentDir, paths.dataDir)
   registry.install(mcp.extension)
   registry.install(createToolSearchExtension())
   registry.install(

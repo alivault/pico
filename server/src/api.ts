@@ -28,6 +28,7 @@ import type { HostBridge } from "./extensions/host.ts"
 import { stopJob } from "./extensions/jobs.ts"
 import { ensurePreview } from "./extensions/preview.ts"
 import { TimersDoc } from "./extensions/schedule.ts"
+import type { MemoryChange } from "./extensions/memory.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
@@ -218,6 +219,26 @@ export function createApi(api: ApiContext) {
         "static-spa",
         "web-access",
         "mcp",
+        "mcp-oauth",
+        "agent-panel",
+        "todo",
+        "ask-user",
+        "rich-output",
+        "timers",
+        "watches",
+        "background-jobs",
+        "scratchpad",
+        "child-sessions",
+        "worktrees",
+        "git-tools",
+        "github",
+        "run-tests",
+        "lsp",
+        "preview",
+        "push-notifications",
+        "browser",
+        "memory",
+        "tool-profiles",
       ],
     },
   }))
@@ -432,6 +453,7 @@ export function createApi(api: ApiContext) {
           sessionCwd = worktree.cwd
         }
         id = await sessions.create(sessionCwd, {
+          ...(draft?.profile ? { profile: draft.profile } : {}),
           ...(worktree
             ? {
                 group: cwd,
@@ -1298,6 +1320,171 @@ export function createApi(api: ApiContext) {
         .filter(Boolean)
     runtime.settings.update(change as never)
     return { ok: true, ...agentSettings(runtime) }
+  })
+
+  // ---------------------------------------------------------------------------
+  // MCP servers
+
+  router.get("/api/mcp/servers", () => ({
+    ok: true,
+    servers: runtime.mcp.status(),
+  }))
+
+  router.post("/api/mcp/:name/auth", async (request) => {
+    const headers = request.raw.headers
+    const host = String(headers["x-forwarded-host"] ?? headers.host ?? "")
+    if (!host) throw badRequest("The request has no host")
+    const proto = String(
+      headers["x-forwarded-proto"] ??
+        ((request.raw.socket as { encrypted?: boolean }).encrypted
+          ? "https"
+          : "http")
+    ).split(",")[0]!
+    const redirectUrl = `${proto}://${host}/api/mcp/oauth/callback`
+    try {
+      return {
+        ok: true,
+        ...(await runtime.mcp.startAuth(request.params.name!, redirectUrl)),
+      }
+    } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    }
+  })
+
+  router.post("/api/mcp/:name/signout", async (request) => {
+    await runtime.mcp.signOut(request.params.name!).catch((error: unknown) => {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    })
+    return { ok: true }
+  })
+
+  router.post("/api/mcp/:name/reconnect", async (request) => {
+    await runtime.mcp
+      .reconnect(request.params.name!)
+      .catch((error: unknown) => {
+        throw badRequest(error instanceof Error ? error.message : String(error))
+      })
+    return { ok: true }
+  })
+
+  router.get("/api/mcp/oauth/callback", async (request, response) => {
+    const code = stringField(request.query.get("code"))
+    const state = stringField(request.query.get("state"))
+    const failure =
+      stringField(request.query.get("error_description")) ??
+      stringField(request.query.get("error"))
+    let title: string
+    let message: string
+    if (!code || !state) {
+      title = "Sign-in failed"
+      message = failure ?? "The response has no code."
+    } else {
+      try {
+        const name = await runtime.mcp.finishAuth(
+          state,
+          code,
+          stringField(request.query.get("iss"))
+        )
+        title = "Signed in"
+        message = `Pico is signed in to the MCP server ${name}. You can close this tab.`
+      } catch (error) {
+        title = "Sign-in failed"
+        message = error instanceof Error ? error.message : String(error)
+      }
+    }
+    const escape = (text: string) =>
+      text.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`)
+    const body = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(title)}</title><body style="font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem"><h1>${escape(title)}</h1><p>${escape(message)}</p></body>`
+    response.writeHead(title === "Signed in" ? 200 : 400, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    })
+    response.end(body)
+    return HANDLED
+  })
+
+  router.get("/api/profiles", (request) => {
+    const { contextId } = target(request)
+    const id = sessionOf(request)
+    return {
+      ok: true,
+      profiles: sessions.profiles(),
+      current: id
+        ? (sessions.meta(id).profile ?? "full")
+        : (viewers.get(contextId)?.activeDraft?.profile ?? "full"),
+    }
+  })
+
+  router.post("/api/session/profile", async (request) => {
+    const body = await request.body<{ profile?: unknown; cwd?: unknown }>()
+    const name = stringField(body.profile) ?? "full"
+    const id = sessionOf(request)
+    if (id) return { ok: true, profile: await sessions.setProfile(id, name) }
+    if (!sessions.profiles().some((profile) => profile.name === name))
+      throw badRequest(`Unknown profile: ${name}`)
+    const { contextId } = target(request)
+    const cwd =
+      typeof body.cwd === "string" && body.cwd.trim()
+        ? await files.canonicalDirectory(body.cwd)
+        : baseCwd(request)
+    ensureDraft(api, contextId, cwd)
+    viewers.updateDraft(contextId, {
+      profile: name === "full" ? undefined : name,
+    })
+    return { ok: true, profile: name }
+  })
+
+  router.post("/api/settings/profiles", async (request) => {
+    const body = await request.body<{ profiles?: unknown }>()
+    const value = body.profiles
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw badRequest("profiles must be an object of profiles by name")
+    const clean: Record<string, Record<string, unknown>> = {}
+    for (const [name, raw] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      if (!/^[a-z0-9][a-z0-9-_]{0,31}$/i.test(name))
+        throw badRequest(`Invalid profile name: ${name}`)
+      const profile = (raw ?? {}) as Record<string, unknown>
+      const list = (key: string) =>
+        Array.isArray(profile[key])
+          ? (profile[key] as unknown[]).filter(
+              (item): item is string => typeof item === "string"
+            )
+          : undefined
+      clean[name] = {
+        description:
+          typeof profile.description === "string" ? profile.description : name,
+        ...(list("extensions") ? { extensions: list("extensions") } : {}),
+        ...(list("removeTools") ? { removeTools: list("removeTools") } : {}),
+        ...(typeof profile.instructions === "string"
+          ? { instructions: profile.instructions }
+          : {}),
+      }
+    }
+    runtime.settings.update({ profiles: clean as never })
+    return { ok: true, profiles: sessions.profiles(), custom: clean }
+  })
+
+  router.post("/api/session/memory", async (request) => {
+    const id = requireSession(request)
+    const body = await request.body<Record<string, unknown>>()
+    const scope = body.scope === "global" ? "global" : "project"
+    const op = stringField(body.op)
+    const text = typeof body.text === "string" ? body.text : undefined
+    const factId = stringField(body.id)
+    let change: MemoryChange
+    if (op === "add") {
+      if (!text?.trim()) throw badRequest("text is required")
+      change = { op, text }
+    } else if (op === "update" && factId) {
+      change = { op, id: factId, ...(text ? { text } : {}) }
+    } else if (op === "remove" && factId) {
+      change = { op, id: factId }
+    } else {
+      throw badRequest("op must be add, update (with id), or remove (with id)")
+    }
+    return { ok: true, facts: await sessions.changeMemory(id, scope, change) }
   })
 
   router.get("/api/session/extensions", async (request) => {

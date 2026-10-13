@@ -1,4 +1,5 @@
 import * as React from "react"
+import "@/features/pico/agent/register"
 import { AgentSettingsDialogController } from "@/features/pico/agent/agent-settings-dialog"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "sonner"

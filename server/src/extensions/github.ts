@@ -142,6 +142,8 @@ export function createGithubExtension() {
       state: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Number()),
     }),
+    // create, comment, and merge are memoized, so a rerun does not repeat them.
+    replay: "safe",
     async execute(args, api, context) {
       const memoKey = `pr-${String(args.action)}`
       if (["create", "comment", "merge"].includes(args.action)) {
@@ -282,6 +284,7 @@ export function createGithubExtension() {
       state: Type.Optional(Type.String()),
       limit: Type.Optional(Type.Number()),
     }),
+    replay: "safe",
     async execute(args, api, context) {
       const memoKey = `issue-${String(args.action)}`
       if (args.action === "create" || args.action === "comment") {

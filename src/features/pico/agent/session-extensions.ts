@@ -27,7 +27,11 @@ export function useSessionExtensions(
 ) {
   const queryClient = useQueryClient()
   usePicoEvent("pico:session-extensions", (detail) => {
-    if (!sessionId || detail.sessionId !== sessionId) return
+    if (
+      !sessionId ||
+      (detail.sessionId !== sessionId && detail.sessionId !== "*")
+    )
+      return
     void queryClient.invalidateQueries({
       queryKey: sessionExtensionsQueryKey(viewerContextId, sessionId),
     })

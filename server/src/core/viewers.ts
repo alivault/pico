@@ -15,6 +15,8 @@ export type DraftSelection = {
   thinkingLevel?: string
   /** Make a git worktree for the session when the first prompt creates it. */
   worktree?: { branch?: string; base?: string }
+  /** The tool profile of the session that the first prompt creates. */
+  profile?: string
 }
 
 export type ViewerContext = {

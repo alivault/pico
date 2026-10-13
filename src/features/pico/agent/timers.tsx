@@ -69,8 +69,9 @@ function TimersSection({
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 {pending ? (
                   <span>
-                    {item.kind === "watch" ? "checks " : "fires "}
-                    {relativeTime(item.nextAt, now) || "soon"}
+                    {item.nextAt && item.nextAt > now
+                      ? `${item.kind === "watch" ? "checks" : "fires"} ${relativeTime(item.nextAt, now)}`
+                      : "due now"}
                   </span>
                 ) : (
                   <Badge variant="outline" className="h-4 px-1 text-[10px]">

@@ -54,7 +54,14 @@ import type {
   HostSessions,
   HostSessionSummary,
 } from "../extensions/host.ts"
+import {
+  changeMemory,
+  GLOBAL_MEMORY,
+  projectKey,
+  type MemoryChange,
+} from "../extensions/memory.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
+import { allProfiles, applyProfile, findProfile } from "./profiles.ts"
 import { removeWorktree } from "../services/worktree.ts"
 import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
@@ -512,6 +519,18 @@ export class Sessions implements HostSessions {
         this.#noteEntry(id, entry)
         this.#markDirty(id, { entries: true })
       } else if (change.type === "document") {
+        if (
+          change.conversationId === undefined &&
+          this.#isStateKind(change.record.kind)
+        ) {
+          // A session-wide document, such as project memory: every session may show it.
+          this.#hub.push({
+            type: "session_extensions",
+            sessionId: "*",
+            kind: change.record.kind,
+          })
+          continue
+        }
         const id =
           change.conversationId === undefined
             ? undefined
@@ -595,6 +614,7 @@ export class Sessions implements HostSessions {
     const children = this.list({ parent: id })
     if (children.length > 0) state.children = children
     const meta = this.meta(id)
+    state.profile = meta.profile ?? "full"
     if (meta.parent || meta.worktree) {
       state.session = {
         ...(meta.parent && this.#metas.has(meta.parent)
@@ -1272,6 +1292,14 @@ export class Sessions implements HostSessions {
     this.#docs.set(id, {})
     this.#transcripts.set(id, { entries: [] })
     this.#updateMeta(id, { family: id })
+    if (options.profile && options.profile !== "full") {
+      const profile = findProfile(
+        options.profile,
+        this.#runtime.settings.data.profiles
+      )
+      if (profile)
+        await applyProfile(conversation, this.#runtime.registry, profile, ctx)
+    }
     this.#scheduleSessionsBroadcast()
     if (options.parent) this.extensionStateChanged(options.parent, "children")
     return id
@@ -1419,6 +1447,53 @@ export class Sessions implements HostSessions {
       ctx
     )
     if (!answered) throw conflict("The question is already closed")
+  }
+
+  profiles() {
+    return allProfiles(this.#runtime.settings.data.profiles)
+  }
+
+  /** Give a session a tool profile; `full` clears it. */
+  async setProfile(id: string, name: string) {
+    this.meta(id)
+    const profile = findProfile(name, this.#runtime.settings.data.profiles)
+    if (!profile) throw badRequest(`Unknown profile: ${name}`)
+    const conversation = await this.conversation(id)
+    await applyProfile(
+      conversation,
+      this.#runtime.registry,
+      profile.name === "full" ? undefined : profile,
+      ctx
+    )
+    this.#updateMeta(id, {
+      profile: profile.name === "full" ? undefined : profile.name,
+    })
+    this.extensionStateChanged(id, "profile")
+    void this.publishStateIfWatched(id)
+    return profile.name
+  }
+
+  /** Change the project or global memory of a session from the web client. */
+  async changeMemory(
+    id: string,
+    scope: "project" | "global",
+    change: MemoryChange
+  ) {
+    const meta = this.meta(id)
+    const key = scope === "global" ? GLOBAL_MEMORY : await projectKey(meta.cwd)
+    try {
+      return await changeMemory(
+        this.#harness,
+        key,
+        {
+          ...change,
+          ...(change.op === "add" ? { source: "user" as const } : {}),
+        },
+        ctx
+      )
+    } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    }
   }
 
   /** Change the todo list of a session from the web client. */

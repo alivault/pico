@@ -36,6 +36,7 @@ import {
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
+import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
   ComposerPanel,
   type ComposerPanelHandle,
@@ -381,6 +382,11 @@ export function NewSessionComposerSelectors({
           viewerContextId={viewerContextId}
         />
       ) : null}
+
+      <ProfilePicker
+        cwd={selectedDirectory}
+        viewerContextId={viewerContextId}
+      />
 
       <Dialog
         open={createBranchOpen}
