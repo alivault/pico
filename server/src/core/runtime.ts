@@ -168,6 +168,7 @@ export async function openRuntime(
     extensions: pico.services,
     piSettings: currentPiSettings,
     async close() {
+      await pico.services.close().catch(() => undefined)
       await mcp.close()
       await harness.close(BACKGROUND_CONTEXT)
     },

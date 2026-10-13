@@ -4,6 +4,7 @@
  */
 import "@/features/pico/agent/ask"
 import "@/features/pico/agent/children"
+import "@/features/pico/agent/dev-tools"
 import "@/features/pico/agent/jobs"
 import "@/features/pico/agent/scratch"
 import "@/features/pico/agent/timers"

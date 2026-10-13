@@ -20,9 +20,11 @@ export type PicoSettingsData = {
   maxChildSessions: number
   /** How deep `spawn_session` may nest. */
   maxSpawnDepth: number
+  /** Add language server errors to the results of edit and write. */
+  lspAfterEdit: boolean
 }
 
-const DEFAULTS: PicoSettingsData = {
+export const DEFAULT_SETTINGS: PicoSettingsData = {
   hideThinkingBlock: false,
   transport: "auto",
   cacheRetention: "standard",
@@ -30,6 +32,7 @@ const DEFAULTS: PicoSettingsData = {
   worktreeCopy: [".env*"],
   maxChildSessions: 6,
   maxSpawnDepth: 3,
+  lspAfterEdit: false,
 }
 
 export class PicoSettings {
@@ -46,7 +49,7 @@ export class PicoSettings {
     } catch {
       // No settings yet.
     }
-    this.#data = { ...DEFAULTS, ...stored }
+    this.#data = { ...DEFAULT_SETTINGS, ...stored }
   }
 
   get data(): Readonly<PicoSettingsData> {

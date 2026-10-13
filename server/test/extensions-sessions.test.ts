@@ -8,6 +8,7 @@ import { test } from "node:test"
 import type { Message } from "@earendil-works/pi-ai"
 import type { Harness } from "@earendil-works/pi-durable"
 
+import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
 import {
   HostBridge,
   sessionIdOf,
@@ -137,15 +138,7 @@ function bind(host: HostBridge, harness: Harness, dataDir: string) {
     events: { push: () => undefined },
     terminals: {} as HostServices["terminals"],
     harness,
-    settings: () => ({
-      hideThinkingBlock: false,
-      transport: "auto",
-      cacheRetention: "standard",
-      scratchSpillKb: 0,
-      worktreeCopy: [".env*"],
-      maxChildSessions: 6,
-      maxSpawnDepth: 3,
-    }),
+    settings: () => ({ ...DEFAULT_SETTINGS }),
     dataDir,
   })
   return fake

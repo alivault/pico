@@ -6,6 +6,7 @@ import { test } from "node:test"
 import type { Message } from "@earendil-works/pi-ai"
 import type { Conversation, Harness } from "@earendil-works/pi-durable"
 
+import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
 import { HostBridge, type HostServices } from "../src/extensions/host.ts"
 import {
   createJobsExtension,
@@ -74,13 +75,9 @@ function bindHost(host: HostBridge, harness: Harness, dataDir: string) {
     terminals,
     harness,
     settings: () => ({
-      hideThinkingBlock: false,
-      transport: "auto",
-      cacheRetention: "standard",
+      ...DEFAULT_SETTINGS,
       scratchSpillKb: 1,
       worktreeCopy: [],
-      maxChildSessions: 6,
-      maxSpawnDepth: 3,
     }),
     dataDir,
   })

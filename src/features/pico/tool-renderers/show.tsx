@@ -120,7 +120,7 @@ function HtmlView({ html, title }: { html: string; title?: string }) {
   )
 }
 
-function DiffView({ patch }: { patch: string }) {
+export function DiffView({ patch }: { patch: string }) {
   const themeOptions = usePicoDiffThemeOptions()
   return (
     <div className="overflow-hidden rounded-md border bg-background text-xs">

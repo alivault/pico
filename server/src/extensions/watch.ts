@@ -17,6 +17,7 @@ import {
   defineTool,
 } from "@earendil-works/pi-durable"
 
+import { summarizeChecks, type CheckRun } from "./github.ts"
 import type { HostBridge } from "./host.ts"
 import {
   cancelTimer,
@@ -88,8 +89,6 @@ const OUTPUT_LIMIT = 4000
 function fingerprint(text: string) {
   return createHash("sha256").update(text).digest("hex").slice(0, 16)
 }
-
-type CiCheck = { name: string; state: string; bucket?: string; link?: string }
 
 /** Run one check. `baseline` is the first fingerprint, for `change`. */
 export async function runCheck(
@@ -209,27 +208,18 @@ export async function runCheck(
           `gh pr checks failed: ${(result.stderr || result.stdout).trim()}`
         )
       }
-      const checks = JSON.parse(result.stdout || "[]") as CiCheck[]
-      const pending = checks.filter(
-        (item) =>
-          item.bucket === "pending" ||
-          /PENDING|QUEUED|IN_PROGRESS/i.test(item.state)
-      )
-      const failed = checks.filter(
-        (item) =>
-          item.bucket === "fail" || /FAIL|ERROR|CANCEL/i.test(item.state)
-      )
-      const done = checks.length > 0 && pending.length === 0
+      const checks = JSON.parse(result.stdout || "[]") as CheckRun[]
+      const counts = summarizeChecks(checks)
       const until = check.until ?? "done"
       const met =
         until === "failure"
-          ? failed.length > 0
+          ? counts.failed > 0
           : until === "success"
-            ? done && failed.length === 0
-            : done
+            ? counts.done && counts.failed === 0
+            : counts.done
       const summary = [
-        `${checks.length} checks: ${checks.length - pending.length - failed.length} passed, ${failed.length} failed, ${pending.length} pending`,
-        ...failed.map(
+        `${counts.total} checks: ${counts.passed} passed, ${counts.failed} failed, ${counts.pending} pending`,
+        ...counts.failures.map(
           (item) => `FAILED ${item.name}${item.link ? ` ${item.link}` : ""}`
         ),
       ].join("\n")
