@@ -335,6 +335,7 @@ type AssistantBlockGroup =
       type: "explore"
       key: string
       blocks: Array<AssistantToolBlock>
+      blockKeys: Array<string>
     }
 
 type AssistantBlockGroupDescriptor =
@@ -631,12 +632,20 @@ function exploreToolLine(
   }
 }
 
-function assistantBlockRenderKey(
-  block: AssistantConversationBlock,
-  index: number
-) {
-  const baseKey = block.renderKey || block.blockKey || assistantBlockKey(block)
-  return `${baseKey}:${index}`
+/**
+ * React keys for the visible blocks of a message group. Keys do not include
+ * the block position, so a block keeps its key when blocks before it appear
+ * or disappear. The position only separates duplicate keys.
+ */
+function assistantBlockRenderKeys(blocks: Array<AssistantConversationBlock>) {
+  const seen = new Set<string>()
+  return blocks.map((block, index) => {
+    const baseKey =
+      block.renderKey || block.blockKey || assistantBlockKey(block)
+    const key = seen.has(baseKey) ? `${baseKey}:${index}` : baseKey
+    seen.add(key)
+    return key
+  })
 }
 
 function sameUnknownValue(left: unknown, right: unknown): boolean {
@@ -714,7 +723,10 @@ function sameAssistantBlock(
   }
 }
 
-function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
+function groupAssistantBlocks(
+  blocks: Array<AssistantConversationBlock>,
+  keys: Array<string>
+) {
   const result: Array<AssistantBlockGroup> = []
   let start = -1
 
@@ -733,8 +745,9 @@ function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
 
     result.push({
       type: "explore",
-      key: `explore:${assistantBlockRenderKey(first, start)}`,
+      key: `explore:${keys[start]}`,
       blocks: groupedBlocks,
+      blockKeys: groupedBlocks.map((block) => keys[blocks.indexOf(block)]!),
     })
 
     start = -1
@@ -751,7 +764,7 @@ function groupAssistantBlocks(blocks: Array<AssistantConversationBlock>) {
     flushExploreGroup(index - 1)
     result.push({
       type: "block",
-      key: assistantBlockRenderKey(block, index),
+      key: keys[index]!,
       block,
     })
   })
@@ -816,10 +829,11 @@ function buildAssistantBlockSnapshot(
   previousSnapshot?: AssistantBlockStoreSnapshot
 ): AssistantBlockStoreSnapshot {
   const blockByKey = new Map<string, AssistantConversationBlock>()
-  const fullGroups = groupAssistantBlocks(blocks)
+  const keys = assistantBlockRenderKeys(blocks)
+  const fullGroups = groupAssistantBlocks(blocks, keys)
 
   blocks.forEach((block, index) => {
-    const key = assistantBlockRenderKey(block, index)
+    const key = keys[index]!
     const previousBlock = previousSnapshot?.blockByKey.get(key)
     blockByKey.set(
       key,
@@ -842,9 +856,7 @@ function buildAssistantBlockSnapshot(
     return {
       type: "explore",
       key: group.key,
-      blockKeys: group.blocks.map((block) =>
-        assistantBlockRenderKey(block, blocks.indexOf(block))
-      ),
+      blockKeys: group.blockKeys,
     }
   })
 
@@ -898,15 +910,26 @@ function createAssistantMessagesShellStore(
 function visibleAssistantBlocksFromSnapshot(
   snapshot: AssistantMessagesSnapshot
 ) {
-  return snapshot.items.flatMap((item) =>
-    item.blocks.filter((block) =>
-      assistantBlockIsVisible({
-        block,
-        hideThinking: snapshot.hideThinking,
-        hideToolBlocks: snapshot.hideToolBlocks,
-      })
-    )
-  )
+  return snapshot.items.flatMap((item) => {
+    // Scope block keys to their message. The streaming message keeps its
+    // item render key when the server commits it, so its blocks keep their
+    // React identity and do not remount.
+    const itemKey = item.renderKey || item.itemKey || ""
+    return item.blocks.flatMap((block) => {
+      if (
+        !assistantBlockIsVisible({
+          block,
+          hideThinking: snapshot.hideThinking,
+          hideToolBlocks: snapshot.hideToolBlocks,
+        })
+      ) {
+        return []
+      }
+      const blockKey =
+        block.renderKey || block.blockKey || assistantBlockKey(block)
+      return [{ ...block, renderKey: `${itemKey}/${blockKey}` }]
+    })
+  })
 }
 
 function assistantBlockIsMessageJumpAnchor(block: AssistantConversationBlock) {
@@ -989,10 +1012,7 @@ function assistantMessagesShellSnapshotFromBlocks(
   return {
     ...(anchorBlock
       ? {
-          anchorBlockKey: assistantBlockRenderKey(
-            anchorBlock,
-            anchorBlockIndex
-          ),
+          anchorBlockKey: assistantBlockRenderKeys(blocks)[anchorBlockIndex],
         }
       : {}),
     hasBlocks: blocks.length > 0,

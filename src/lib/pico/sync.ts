@@ -308,6 +308,50 @@ function sameAssistantBlockListPayload(
   return true
 }
 
+/**
+ * Whether `next` is the same content block as `previous`, after more output
+ * arrived or after the server committed it. Streaming and committed blocks
+ * have different block keys, so match tool calls by call id and text by prefix.
+ */
+function assistantBlockContinues(
+  previous: AssistantBlock,
+  next: AssistantBlock
+) {
+  if (!previous || !next || previous.type !== next.type) return false
+
+  switch (previous.type) {
+    case "text":
+    case "thinking":
+      return (
+        (next.type === "text" || next.type === "thinking") &&
+        next.text.startsWith(previous.text)
+      )
+    case "tool":
+      return (
+        next.type === "tool" &&
+        Boolean(previous.callId) &&
+        previous.callId === next.callId
+      )
+    default:
+      return false
+  }
+}
+
+/** Whether `next` is the committed message that the streaming `previous` became. */
+function streamingAssistantItemContinues(
+  previous: AssistantItem,
+  next: AssistantItem
+) {
+  return (
+    Boolean(previous.streaming) &&
+    !next.streaming &&
+    previous.blocks.every((block, index) => {
+      const nextBlock = next.blocks[index]
+      return Boolean(nextBlock) && assistantBlockContinues(block, nextBlock)
+    })
+  )
+}
+
 function reconcileAssistantBlocks(
   previousBlocks: Array<AssistantBlock>,
   nextBlocks: Array<AssistantBlock>
@@ -330,7 +374,8 @@ function reconcileAssistantBlocks(
     if (
       previousBlock?.type === nextBlock.type &&
       ((previousBlock.blockKey || "") === (nextBlock.blockKey || "") ||
-        sameAssistantBlockPayload(previousBlock, nextBlock))
+        sameAssistantBlockPayload(previousBlock, nextBlock) ||
+        assistantBlockContinues(previousBlock, nextBlock))
     ) {
       reconciled.push(withAssistantBlockRenderKey(nextBlock, previousBlock))
       continue
@@ -420,9 +465,13 @@ function reconcileConversationItems(
         conversationItemRenderKey(previousItem) ===
         conversationItemRenderKey(nextItem)
       const finalizingStreamingItem =
-        Boolean(previousItem.streaming) &&
-        !nextItem.streaming &&
-        sameAssistantBlockListPayload(previousItem.blocks, nextItem.blocks)
+        (Boolean(previousItem.streaming) &&
+          !nextItem.streaming &&
+          sameAssistantBlockListPayload(
+            previousItem.blocks,
+            nextItem.blocks
+          )) ||
+        streamingAssistantItemContinues(previousItem, nextItem)
       const itemWithStableRenderKey =
         sameLogicalItem || sameRenderItem || finalizingStreamingItem
           ? withConversationItemRenderKey(nextItem, previousItem)
@@ -1116,6 +1165,23 @@ function authoritativeItemsFromSync(sync: StateSyncPayload) {
   )
 }
 
+/**
+ * Committed assistant messages are done, except the last one while the run
+ * continues between messages. This keeps the message footer hidden between
+ * tool rounds.
+ */
+function withTrailingAssistantWorking(
+  items: Array<ConversationItem>,
+  working: boolean
+) {
+  const lastIndex = items.length - 1
+  return items.map((item, index) => {
+    if (item.kind !== "assistant") return item
+    const done = !(working && index === lastIndex)
+    return item.done === done ? item : { ...item, done }
+  })
+}
+
 export function buildItemsFromSync(
   sync: StateSyncPayload,
   previousItems: Array<ConversationItem> = []
@@ -1147,8 +1213,11 @@ export function buildItemsFromSync(
     const streamingItems = authoritativeItems.filter(
       (item) => item.kind === "assistant" && item.streaming
     )
-    const items = authoritativeItems.filter(
-      (item) => !(item.kind === "assistant" && item.streaming)
+    const items = withTrailingAssistantWorking(
+      authoritativeItems.filter(
+        (item) => !(item.kind === "assistant" && item.streaming)
+      ),
+      Boolean(sync.streaming) && streamingItems.length === 0
     )
     const preserveOptimisticItems =
       Boolean(sync.draft) ||
