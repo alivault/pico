@@ -171,6 +171,7 @@ export function createApi(api: ApiContext) {
         "extension_error",
         "extension_ui_request",
         "git_changed",
+        "session_extensions",
       ],
       endpoints: [],
       features: [
@@ -1028,6 +1029,15 @@ export function createApi(api: ApiContext) {
       Math.max(1, queryNumber(request, "limit") ?? 50)
     )
     return sessions.history(id, before, limit)
+  })
+
+  router.get("/api/session/extensions", async (request) => {
+    const id = requireSession(request)
+    return {
+      ok: true,
+      sessionId: id,
+      state: await sessions.extensionState(id),
+    }
   })
 
   router.post("/api/session/rename", async (request) => {

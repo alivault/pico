@@ -41,6 +41,8 @@ import {
   generateSessionName,
   heuristicSessionName,
 } from "../extensions/auto-name.ts"
+import type { HostCreateOptions, HostSessions } from "../extensions/host.ts"
+import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
 import type { EventHub } from "../events.ts"
 import {
@@ -94,6 +96,18 @@ export type SessionMeta = {
   lastMessageAt?: number
   messageCount: number
   labels?: Record<string, { label: string; timestamp: number }>
+  /** The session that spawned this one with `spawn_session`. */
+  parent?: string
+  /** The `spawn_session` call that made this session. */
+  spawnedByCall?: string
+  /** How many `spawn_session` levels are above this session. */
+  depth?: number
+  /** Tool profile name; absent uses the default profile. */
+  profile?: string
+  /** The sidebar directory, when it is not `cwd` (worktree sessions). */
+  group?: string
+  /** The git worktree that this session made and works in. */
+  worktree?: { repoRoot: string; path: string; branch: string }
 }
 
 export const SessionDoc = defineDoc<SessionMeta>({
@@ -124,6 +138,10 @@ export type SessionListEntry = {
   messageCount: number
   streaming: boolean
   unread: boolean
+  parent?: string
+  worktreeBranch?: string
+  /** The agent waits for an answer from the user. */
+  needsInput?: boolean
 }
 
 export type PendingMessage = {
@@ -150,6 +168,8 @@ type Dirty = {
   inbox?: boolean
   agent?: boolean
   usage?: boolean
+  /** Documents that the Agent panel shows. */
+  extensions?: boolean
 }
 
 type PromptImageInput = { mimeType?: string; data?: string }
@@ -250,7 +270,7 @@ function submissionIdFromPending(pendingId: string): SubmissionId {
   return id as unknown as SubmissionId
 }
 
-export class Sessions {
+export class Sessions implements HostSessions {
   readonly #runtime: Runtime
   readonly #hub: EventHub
   readonly #viewers: Viewers
@@ -266,6 +286,9 @@ export class Sessions {
   readonly #dirty = new Map<string, Dirty>()
   readonly #metaWrites = new Map<string, NodeJS.Timeout>()
   readonly #naming = new Set<string>()
+  /** Sessions whose agent waits for the user. */
+  readonly #needsInput = new Set<string>()
+  #stateKinds: Set<string> | undefined
   #flushScheduled = false
   #sessionsTimer: NodeJS.Timeout | undefined
 
@@ -488,6 +511,8 @@ export class Sessions {
           this.#markDirty(id, { agent: true })
         } else if (kind === "pi.usage") {
           this.#markDirty(id, { usage: true })
+        } else if (this.#isStateKind(kind)) {
+          this.#markDirty(id, { extensions: true })
         }
       }
     }
@@ -513,6 +538,69 @@ export class Sessions {
     }
     if (text.trim()) change.lastMessagePreview = preview(text)
     this.#updateMeta(id, change, { persistAfterMs: 1500 })
+  }
+
+  #isStateKind(kind: string) {
+    this.#stateKinds ??= stateKinds()
+    return this.#stateKinds.has(kind)
+  }
+
+  /** Tell clients to read a session's Agent panel state again. */
+  extensionStateChanged(id: string, kind: string) {
+    this.#hub.push(
+      { type: "session_extensions", sessionId: id, ...(kind ? { kind } : {}) },
+      { sessionId: id }
+    )
+  }
+
+  /** The state that the Agent panel shows, one value for each provider. */
+  async extensionState(id: string) {
+    this.meta(id)
+    const conversationId = conversationIdOf(id)
+    const state: Record<string, unknown> = {}
+    for (const provider of stateProviders()) {
+      try {
+        const value = await provider.read(this.#harness, conversationId, ctx)
+        if (value !== undefined) state[provider.key] = value
+      } catch (error) {
+        console.warn(`[pico] could not read ${provider.key} state:`, error)
+      }
+    }
+    return state
+  }
+
+  /** Mark that the agent of a session waits, or no longer waits, for the user. */
+  setNeedsInput(id: string, waiting: boolean) {
+    if (!this.#metas.has(id)) return
+    if (waiting === this.#needsInput.has(id)) return
+    if (waiting) this.#needsInput.add(id)
+    else this.#needsInput.delete(id)
+    this.#scheduleSessionsBroadcast()
+    this.#hub.push(
+      {
+        type: "session_status",
+        sessionId: id,
+        sessionKey: sessionKey(id),
+        sessionPath: sessionPath(id),
+        streaming: this.isBusy(id),
+        needsInput: waiting,
+      },
+      { sessionId: id }
+    )
+  }
+
+  needsInput(id: string) {
+    return this.#needsInput.has(id)
+  }
+
+  /** Visible sessions that `spawn_session` made for a session, oldest first. */
+  children(id: string): string[] {
+    return [...this.#metas.entries()]
+      .filter(
+        ([childId, meta]) => meta.parent === id && this.isVisible(childId)
+      )
+      .sort((left, right) => left[1].createdAt - right[1].createdAt)
+      .map(([childId]) => childId)
   }
 
   #markDirty(id: string, dirty: Dirty) {
@@ -564,6 +652,7 @@ export class Sessions {
       await this.#finished(id, wasBusy && !busy ? "agent" : "manual_compaction")
     }
     if (changes.entries) this.#scheduleSessionsBroadcast()
+    if (changes.extensions) this.extensionStateChanged(id, "")
 
     if (!this.#watched(id)) return
     const structural =
@@ -740,13 +829,25 @@ export class Sessions {
       messageCount: meta.messageCount,
       streaming: this.isBusy(id),
       unread: unread.has(id),
+      ...(meta.parent ? { parent: meta.parent } : {}),
+      ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
+      ...(this.#needsInput.has(id) ? { needsInput: true } : {}),
     }
+  }
+
+  /** The sidebar directory of a session. */
+  directoryOf(id: string) {
+    const meta = this.meta(id)
+    return meta.group ?? meta.cwd
   }
 
   /** Visible sessions of a directory, most recently active first. */
   directorySessions(directory: string): string[] {
     return [...this.#metas.entries()]
-      .filter(([id, meta]) => meta.cwd === directory && this.isVisible(id))
+      .filter(
+        ([id, meta]) =>
+          (meta.group ?? meta.cwd) === directory && this.isVisible(id)
+      )
       .sort((left, right) => activity(right[1]) - activity(left[1]))
       .map(([id]) => id)
   }
@@ -754,7 +855,7 @@ export class Sessions {
   directories(): string[] {
     const directories = new Set<string>()
     for (const [id, meta] of this.#metas)
-      if (this.isVisible(id)) directories.add(meta.cwd)
+      if (this.isVisible(id)) directories.add(meta.group ?? meta.cwd)
     return [...directories].sort()
   }
 
@@ -770,6 +871,7 @@ export class Sessions {
           String(meta.messageCount),
           this.isBusy(id) ? "1" : "0",
           unread.has(id) ? "1" : "0",
+          this.#needsInput.has(id) ? "1" : "0",
         ]
       }),
     ])
@@ -794,7 +896,7 @@ export class Sessions {
     const directories = this.directories()
     const indexDirectories = new Set(options.directories ?? [])
     if (options.activeSessionId && this.#metas.has(options.activeSessionId)) {
-      indexDirectories.add(this.meta(options.activeSessionId).cwd)
+      indexDirectories.add(this.directoryOf(options.activeSessionId))
     }
     const directoryIndexes: Record<
       string,
@@ -1051,13 +1153,7 @@ export class Sessions {
   // ---------------------------------------------------------------------------
   // Creation and prompts
 
-  async create(
-    cwd: string,
-    options: {
-      model?: { provider: string; modelId: string }
-      thinkingLevel?: string
-    } = {}
-  ) {
+  async create(cwd: string, options: HostCreateOptions = {}) {
     const model = options.model ?? this.defaultModel()
     if (!model)
       throw badRequest("No model is available. Sign in to a provider first.")
@@ -1065,12 +1161,27 @@ export class Sessions {
       ? this.validateThinkingLevel(options.thinkingLevel)
       : this.defaultThinkingLevel()
     const now = Date.now()
+    const parent = options.parent ? this.#metas.get(options.parent) : undefined
     const meta: SessionMeta = {
       cwd,
       createdAt: now,
       modifiedAt: now,
       firstMessage: "",
       messageCount: 0,
+      ...(options.name
+        ? { name: options.name.slice(0, 48), nameSource: "user" as const }
+        : {}),
+      ...(options.parent
+        ? { parent: options.parent, depth: (parent?.depth ?? 0) + 1 }
+        : {}),
+      ...(options.spawnedByCall
+        ? { spawnedByCall: options.spawnedByCall }
+        : {}),
+      ...(options.profile ? { profile: options.profile } : {}),
+      ...(options.group && options.group !== cwd
+        ? { group: options.group }
+        : {}),
+      ...(options.worktree ? { worktree: options.worktree } : {}),
     }
     const conversation = await this.#harness.createConversation(
       {

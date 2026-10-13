@@ -33,6 +33,8 @@ import {
   toolCouldBecomeExploreFromTool,
 } from "@/lib/pico/tool-classification"
 import { cn } from "@/lib/utils"
+import "@/features/pico/agent/register"
+import { toolRenderer } from "@/features/pico/tool-renderers/registry"
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -1181,7 +1183,7 @@ function buildToolBlockHeaderSnapshot(
     name: block.name,
     running: block.running,
     isError: block.isError,
-    summary: toolSummary(block),
+    summary: toolRenderer(block.name)?.summary?.(block) ?? toolSummary(block),
     editStats:
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolPatchText(block))
@@ -2055,6 +2057,18 @@ function EditToolOutput({
 }
 
 function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
+  const CustomBody = toolRenderer(block.name)?.Body
+  if (CustomBody) {
+    return (
+      <div className="border-t pt-3">
+        <CustomBody block={block} />
+      </div>
+    )
+  }
+  return <DefaultToolBlockCardBody block={block} />
+}
+
+function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
   const callText = toolCallText(block)
   const outputText = toolOutputText(block)
   const shellBodyText =
@@ -2170,10 +2184,36 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
 
   if (!header) return null
 
+  const CustomCard = toolRenderer(header.name)?.Card
+  if (CustomCard) {
+    return (
+      <CustomToolBlockCard
+        blockKey={blockKey}
+        Card={CustomCard}
+        store={store}
+      />
+    )
+  }
+
   return (
     <ToolBlockCardContent blockKey={blockKey} header={header} store={store} />
   )
 })
+
+/** A tool card that a registered renderer draws, always open. */
+function CustomToolBlockCard({
+  blockKey,
+  Card,
+  store,
+}: {
+  blockKey: string
+  Card: NonNullable<ReturnType<typeof toolRenderer>>["Card"] & {}
+  store: AssistantBlockStore
+}) {
+  const block = useAssistantToolBlockBody(store, blockKey, true)
+  if (!block) return null
+  return <Card block={block} />
+}
 
 function ToolBlockCardContent({
   blockKey,

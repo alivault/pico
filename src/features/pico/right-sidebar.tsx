@@ -68,6 +68,8 @@ import {
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+import "@/features/pico/agent/register"
+import { AgentPanel } from "@/features/pico/agent/agent-panel"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 
@@ -1006,6 +1008,7 @@ function CommitDiffContent({
 export function RightSidebar({
   viewerContextId,
   cwd,
+  sessionId,
   active,
   activeFilePath = "",
   activeTab: controlledActiveTab,
@@ -1181,10 +1184,23 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
+          showAgent
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab}
           showReview
         />
+        <div
+          className={
+            activeTab === "agent" ? "min-h-0 flex-1 overflow-hidden" : "hidden"
+          }
+        >
+          <AgentPanel
+            active={active && activeTab === "agent"}
+            cwd={normalizedCwd}
+            sessionId={sessionId}
+            viewerContextId={viewerContextId}
+          />
+        </div>
         <div
           className={
             activeTab === "review" ? "min-h-0 flex-1 overflow-hidden" : "hidden"

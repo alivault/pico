@@ -14,6 +14,7 @@ import { openRuntime, type Runtime } from "./core/runtime.ts"
 import { parseSessionId, Sessions } from "./core/sessions.ts"
 import { Viewers } from "./core/viewers.ts"
 import { EventHub } from "./events.ts"
+import { HostBridge } from "./extensions/host.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
@@ -41,10 +42,12 @@ export async function startServer(options: {
   onShutdownRequest?: () => void
 }): Promise<PicoServer> {
   const security = new Security(options.host)
-  const runtime = await openRuntime(options.paths)
+  const host = new HostBridge()
+  const runtime = await openRuntime(options.paths, host)
   const hub = new EventHub()
   const viewers = new Viewers(options.paths.viewersFile)
   const sessions = new Sessions(runtime, hub, viewers)
+  host.bind({ sessions, events: hub, dataDir: options.paths.dataDir })
   await sessions.load()
   const ui = new UiRequests(hub)
   const auth = new Auth(runtime.models, ui, runtime.agentDir)

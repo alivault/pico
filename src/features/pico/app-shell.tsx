@@ -1,4 +1,5 @@
 import * as React from "react"
+import { usePicoEvent } from "@/features/pico/agent/events"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -1231,6 +1232,14 @@ function useAppShellSessionWorkspaceView({
     reorderRightSidebarFiles(rightSidebarStore, paths)
   }
 
+  usePicoEvent("pico:open-sidebar-tab", (detail) => {
+    batch(() => {
+      setRightSidebarActiveTab(rightSidebarStore, detail.tab)
+      setGitPanelOpen(true)
+      if (isMobile) setCurrentTab("git")
+    })
+  })
+
   const toggleReviewPane = () => {
     const activeTab = rightSidebarStore.state.activeTab
     if (isMobile) {
@@ -2019,6 +2028,9 @@ function useAppShellSessionWorkspaceView({
     ]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
+  usePicoEvent("pico:open-session", (detail) => {
+    handleSelectSession(detail.sessionId)
+  })
 
   useAppShellSessionSync({
     viewerContextId,

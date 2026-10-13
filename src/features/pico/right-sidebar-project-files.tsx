@@ -1196,6 +1196,7 @@ export function RightSidebarTabStrip({
   onOpenFileDialog,
   onReorderCommitDiffs,
   onReorderFiles,
+  showAgent = false,
   showFiles = false,
   showHistory = false,
   showReview = false,
@@ -1220,6 +1221,7 @@ export function RightSidebarTabStrip({
   onOpenFileDialog?: () => void
   onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
+  showAgent?: boolean
   showFiles?: boolean
   showHistory?: boolean
   showReview?: boolean
@@ -1331,6 +1333,7 @@ export function RightSidebarTabStrip({
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
+      {showAgent ? renderTab({ label: "Agent", value: "agent" }) : null}
       {!hasOpenFiles || showFiles
         ? renderTab({
             active: activeTab === "files" && (!hasOpenFiles || !activeFilePath),

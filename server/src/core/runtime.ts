@@ -27,6 +27,8 @@ import { createToolSearchExtension } from "@earendil-works/pi-durable/tool-searc
 import { createCodingTools } from "@earendil-works/pi-durable/tools"
 
 import type { ServerPaths } from "../config.ts"
+import type { HostBridge } from "../extensions/host.ts"
+import { createPicoExtensions } from "../extensions/index.ts"
 import { createMcpExtension, type McpExtension } from "../extensions/mcp.ts"
 import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
@@ -46,7 +48,10 @@ export type Runtime = {
   close(): Promise<void>
 }
 
-export async function openRuntime(paths: ServerPaths): Promise<Runtime> {
+export async function openRuntime(
+  paths: ServerPaths,
+  host: HostBridge
+): Promise<Runtime> {
   mkdirSync(paths.dataDir, { recursive: true })
   const agentDir = getAgentDir()
   const settings = new PicoSettings(paths.settingsFile)
@@ -87,6 +92,11 @@ export async function openRuntime(paths: ServerPaths): Promise<Runtime> {
     })
   )
   registry.install(createPromptExtension(resources))
+  for (const extension of createPicoExtensions({
+    host,
+    dataDir: paths.dataDir,
+  }))
+    registry.install(extension)
   mcp.onChange(() => {
     registry.install(mcp.extension)
     registry.install(

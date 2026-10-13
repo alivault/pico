@@ -26,6 +26,7 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
+import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
 
 export type AppShellSessionContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
@@ -81,10 +82,24 @@ export function AppShellSessionContent({
     (currentSessionState) => ({
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
+      sessionId: currentSessionState.sessionId,
     }),
     { compare: shallowRecordEqual }
   )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const toolRenderContext = React.useMemo(
+    () => ({
+      viewerContextId,
+      sessionId: sessionState.draft ? undefined : sessionState.sessionId,
+      cwd: sessionState.cwd,
+    }),
+    [
+      sessionState.cwd,
+      sessionState.draft,
+      sessionState.sessionId,
+      viewerContextId,
+    ]
+  )
   const showNewSessionComposer =
     sessionState.draft && !hasMessages && !isSessionViewLoading
 
@@ -115,7 +130,7 @@ export function AppShellSessionContent({
   }
 
   return (
-    <>
+    <ToolRenderContext.Provider value={toolRenderContext}>
       <AppShellSessionConversation
         awaitingFirstTurn={awaitingFirstTurn}
         conversationFrameRef={conversationFrameRef}
@@ -142,6 +157,6 @@ export function AppShellSessionContent({
         sessionStore={sessionStore}
         store={store}
       />
-    </>
+    </ToolRenderContext.Provider>
   )
 }

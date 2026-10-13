@@ -33,10 +33,14 @@ export type RightSidebarTabValue =
   | "review"
   | "history"
   | "commit-diff"
+  | "agent"
+  | "preview"
 
 export type RightSidebarProps = {
   viewerContextId: string
   cwd?: string
+  /** The selected session; absent for a draft. */
+  sessionId?: string
   active: boolean
   activeFilePath?: string
   activeTab?: RightSidebarTabValue

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { emitPicoEvent } from "@/features/pico/agent/events"
 import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -1012,6 +1013,16 @@ export function useAppShellSessionSync({
           gitInvalidationBatcher.addItem({
             cwd,
             scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
+          })
+        }
+        return
+      }
+
+      if (payload.type === "session_extensions") {
+        if (typeof payload.sessionId === "string") {
+          emitPicoEvent("pico:session-extensions", {
+            sessionId: payload.sessionId,
+            ...(typeof payload.kind === "string" ? { kind: payload.kind } : {}),
           })
         }
         return

@@ -130,6 +130,9 @@ const AppShellGitPanelController = React.memo(
     viewerContextId: string
   }) {
     const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
+    const sessionId = useSelector(sessionStore, (sessionState) =>
+      sessionState.draft ? undefined : sessionState.sessionId
+    )
     const activeFilePath = useSelector(
       rightSidebarStore,
       (state) => state.fileActivePath
@@ -156,6 +159,7 @@ const AppShellGitPanelController = React.memo(
         <RightSidebar
           viewerContextId={viewerContextId}
           cwd={cwd}
+          sessionId={sessionId}
           active={active}
           activeFilePath={activeFilePath}
           activeTab={activeTab}
@@ -215,6 +219,9 @@ function AppShellDesktopGitPanel({
   viewerContextId: string
 }) {
   const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
+  const sessionId = useSelector(sessionStore, (sessionState) =>
+    sessionState.draft ? undefined : sessionState.sessionId
+  )
   const activeFilePath = useSelector(
     rightSidebarStore,
     (state) => state.fileActivePath
@@ -247,6 +254,7 @@ function AppShellDesktopGitPanel({
         <RightSidebar
           viewerContextId={viewerContextId}
           cwd={cwd}
+          sessionId={sessionId}
           active={active}
           activeFilePath={activeFilePath}
           activeTab={activeTab}

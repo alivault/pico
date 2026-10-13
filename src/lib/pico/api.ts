@@ -339,6 +339,7 @@ export type SessionStatusEvent = {
   sessionPath?: string
   streaming?: boolean
   unread?: boolean
+  needsInput?: boolean
 }
 
 export type SessionReadStateResponse =
@@ -688,6 +689,12 @@ export type GitChangedEvent = {
   scopes?: Array<GitChangedScope>
 }
 
+export type SessionExtensionsEvent = {
+  type: "session_extensions"
+  sessionId: string
+  kind?: string
+}
+
 export type PicoServerEvent =
   | StateSyncPayload
   | ConversationDeltaEvent
@@ -700,6 +707,7 @@ export type PicoServerEvent =
   | UserMessageEvent
   | AutoSessionNamingErrorEvent
   | GitChangedEvent
+  | SessionExtensionsEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return Boolean(
