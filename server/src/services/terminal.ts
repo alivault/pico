@@ -59,7 +59,16 @@ type Terminal = {
   exited?: { exitCode: number; signal?: number }
   lastUsed: number
   listeners: Set<Listener>
+  /** A background job: every viewer may attach; closing a tab does not stop it. */
+  shared?: boolean
 }
+
+/** The client key of the terminal tab that shows a background job. */
+export function jobClientKey(jobId: string) {
+  return `job:${jobId}`
+}
+
+const JOB_LOOKUP_PREFIX = "job\0"
 
 function clamp(
   value: number | undefined,
@@ -146,6 +155,21 @@ export class Terminals {
   ) {
     this.#removeExpired()
     const key = clientKey?.trim().slice(0, KEY_MAX_LENGTH) || undefined
+    if (key?.startsWith("job:")) {
+      const jobTerminal = this.#terminals.get(
+        this.#lookup.get(JOB_LOOKUP_PREFIX + key.slice(4)) ?? ""
+      )
+      if (!jobTerminal)
+        throw badRequest("This job does not run in this server any more.")
+      jobTerminal.lastUsed = Date.now()
+      return {
+        id: jobTerminal.id,
+        backend: "shell" as const,
+        cwd: jobTerminal.cwd,
+        shell: basename(jobTerminal.shell),
+        reused: true,
+      }
+    }
     const lookupKey = key ? `${scopeKey}\0${key}` : undefined
     const existingId = lookupKey ? this.#lookup.get(lookupKey) : undefined
     const existing = existingId ? this.#terminals.get(existingId) : undefined
@@ -246,9 +270,106 @@ export class Terminals {
     }
   }
 
+  /**
+   * Run a command in a shared pseudo-terminal, for a background job. The
+   * user's login shell runs it, so PATH matches an interactive terminal.
+   */
+  spawnJob(
+    jobId: string,
+    command: string,
+    cwd: string,
+    handlers: {
+      onOutput: (data: string) => void
+      onExit: (exit: { exitCode: number; signal?: number }) => void
+    }
+  ) {
+    const shell = defaultShell()
+    let child: pty.IPty
+    try {
+      child = pty.spawn(shell, ["-l", "-c", command], {
+        name: "xterm-256color",
+        cols: 120,
+        rows: 30,
+        cwd,
+        env: shellEnvironment(),
+      })
+    } catch (error) {
+      throw new Error(
+        `Could not start the job: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    const id = crypto.randomUUID()
+    const lookupKey = JOB_LOOKUP_PREFIX + jobId
+    const terminal: Terminal = {
+      id,
+      scopeKey: "job",
+      lookupKey,
+      cwd,
+      shell,
+      process: child,
+      backlog: [],
+      backlogBytes: 0,
+      nextOutputSeq: 1,
+      lastInputSeq: 0,
+      cols: 120,
+      rows: 30,
+      lastUsed: Date.now(),
+      listeners: new Set(),
+      shared: true,
+    }
+    this.#terminals.set(id, terminal)
+    this.#lookup.set(lookupKey, id)
+    child.onData((data) => {
+      this.#publishOutput(terminal, data)
+      handlers.onOutput(data)
+    })
+    child.onExit(({ exitCode, signal }) => {
+      terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
+      terminal.lastUsed = Date.now()
+      this.#emit(terminal, {
+        type: "exit",
+        exitCode,
+        ...(signal ? { signal } : {}),
+      })
+      handlers.onExit(terminal.exited)
+    })
+    return { terminalId: id, pid: child.pid }
+  }
+
+  /** Whether a job still runs in this server. */
+  jobRunning(jobId: string) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    return Boolean(terminal && !terminal.exited)
+  }
+
+  /** Stop a job: SIGTERM, then SIGKILL when it is still alive after `graceMs`. */
+  stopJob(jobId: string, graceMs = 3000) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    if (!terminal || terminal.exited) return false
+    try {
+      terminal.process.kill("SIGTERM")
+    } catch {
+      return false
+    }
+    setTimeout(() => {
+      if (terminal.exited) return
+      try {
+        terminal.process.kill("SIGKILL")
+      } catch {
+        // Already gone.
+      }
+    }, graceMs).unref()
+    return true
+  }
+
   #record(scopeKey: string, id: string) {
     const terminal = this.#terminals.get(id)
     if (!terminal) throw badRequest("Terminal not found.")
+    if (terminal.shared) return terminal
     if (terminal.scopeKey !== scopeKey)
       throw badRequest("Terminal not found for this session.")
     return terminal
@@ -345,6 +466,8 @@ export class Terminals {
 
   close(scopeKey: string, id: string) {
     const terminal = this.#record(scopeKey, id)
+    // A tab that shows a job only detaches; job_stop stops the job.
+    if (terminal.shared) return
     this.#terminals.delete(id)
     if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
     if (!terminal.exited) {

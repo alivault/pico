@@ -47,12 +47,20 @@ export async function startServer(options: {
   const hub = new EventHub()
   const viewers = new Viewers(options.paths.viewersFile)
   const sessions = new Sessions(runtime, hub, viewers)
-  host.bind({ sessions, events: hub, dataDir: options.paths.dataDir })
+  const terminals = new Terminals()
+  host.bind({
+    sessions,
+    events: hub,
+    terminals,
+    harness: runtime.harness,
+    settings: () => runtime.settings.data,
+    dataDir: options.paths.dataDir,
+  })
   await sessions.load()
+  await host.started()
   const ui = new UiRequests(hub)
   const auth = new Auth(runtime.models, ui, runtime.agentDir)
   const gitWatcher = new GitWatcher(hub)
-  const terminals = new Terminals()
   const highlight = new HighlightService()
   let draining = false
   let listeningPort = options.port

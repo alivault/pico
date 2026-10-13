@@ -5,6 +5,8 @@
  */
 import { homedir } from "node:os"
 
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
+
 import type { ServerResponse } from "node:http"
 
 import {
@@ -15,12 +17,15 @@ import {
 import type { Auth, UiRequests } from "./core/auth.ts"
 import type { Runtime } from "./core/runtime.ts"
 import {
+  conversationIdOf,
   parseSessionId,
   sessionKey,
   sessionPath,
   type Sessions,
 } from "./core/sessions.ts"
 import type { Viewers } from "./core/viewers.ts"
+import { stopJob } from "./extensions/jobs.ts"
+import { TimersDoc } from "./extensions/schedule.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
@@ -1087,6 +1092,70 @@ export function createApi(api: ApiContext) {
       throw badRequest("op must be add, update, remove, or clear")
     }
     return { ok: true, items: await sessions.changeTodo(id, change) }
+  })
+
+  router.post("/api/session/timer/cancel", async (request) => {
+    const id = requireSession(request)
+    const body = await request.body<{ id?: unknown }>()
+    const timerId = stringField(body.id)
+    if (!timerId) throw badRequest("id is required")
+    const conversationId = conversationIdOf(id)
+    const timers = await runtime.harness.snapshot(
+      TimersDoc,
+      conversationId,
+      BACKGROUND_CONTEXT
+    )
+    const item = timers?.items[timerId]
+    if (!item) throw notFound(`No timer or watch ${timerId}`)
+    if (item.status === "pending")
+      await runtime.harness.abortTask(
+        Number(timerId) as never,
+        BACKGROUND_CONTEXT
+      )
+    return { ok: true }
+  })
+
+  router.post("/api/session/job/stop", async (request) => {
+    const id = requireSession(request)
+    const body = await request.body<{ jobId?: unknown }>()
+    const jobId = stringField(body.jobId)
+    if (!jobId) throw badRequest("jobId is required")
+    const result = await stopJob(
+      { terminals: api.terminals, harness: runtime.harness },
+      runtime.extensions.jobs,
+      runtime.harness,
+      conversationIdOf(id),
+      jobId,
+      BACKGROUND_CONTEXT
+    )
+    if (!result.ok) throw badRequest(result.error)
+    return { ok: true }
+  })
+
+  router.get("/api/session/job/log", async (request) => {
+    requireSession(request)
+    const jobId = stringField(request.query.get("jobId"))
+    if (!jobId) throw badRequest("jobId is required")
+    const lines = Math.min(
+      5000,
+      Math.max(1, queryNumber(request, "tail") ?? 500)
+    )
+    const text = await runtime.extensions.jobs.log(jobId).catch(() => {
+      throw badRequest("Invalid job id")
+    })
+    return { ok: true, jobId, text: text.split("\n").slice(-lines).join("\n") }
+  })
+
+  router.get("/api/session/scratch", async (request) => {
+    const id = requireSession(request)
+    const scratchId = stringField(request.query.get("id"))
+    if (!scratchId) throw badRequest("id is required")
+    const text = await runtime.extensions.scratch.get(
+      conversationIdOf(id),
+      scratchId
+    )
+    if (text === undefined) throw notFound(`No scratch entry ${scratchId}`)
+    return { ok: true, id: scratchId, text }
   })
 
   router.get("/api/session/extensions", async (request) => {

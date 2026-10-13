@@ -6,7 +6,9 @@
  * creation and wait for `bind()` when they first need a service. A tool that
  * restart recovery runs early waits here until the server is ready.
  */
-import type { ConversationId } from "@earendil-works/pi-durable"
+import type { ConversationId, Harness } from "@earendil-works/pi-durable"
+
+import type { PicoSettingsData } from "../core/settings.ts"
 
 /** Session operations that extensions use. `Sessions` implements it. */
 export type HostSessions = {
@@ -67,19 +69,55 @@ export type HostEvents = {
   ): unknown
 }
 
+export type HostTerminals = {
+  spawnJob(
+    jobId: string,
+    command: string,
+    cwd: string,
+    handlers: {
+      onOutput: (data: string) => void
+      onExit: (exit: { exitCode: number; signal?: number }) => void
+    }
+  ): { terminalId: string; pid: number }
+  jobRunning(jobId: string): boolean
+  stopJob(jobId: string, graceMs?: number): boolean
+}
+
 export type HostServices = {
   sessions: HostSessions
   events: HostEvents
+  terminals: HostTerminals
+  harness: Harness
+  settings: () => Readonly<PicoSettingsData>
   dataDir: string
 }
 
 export class HostBridge {
   #services: HostServices | undefined
   #waiters: Array<(services: HostServices) => void> = []
+  #onReady: Array<(services: HostServices) => void | Promise<void>> = []
 
   bind(services: HostServices) {
     this.#services = services
     for (const waiter of this.#waiters.splice(0)) waiter(services)
+  }
+
+  /** Run startup work once the server is ready, for example after sessions load. */
+  onReady(listener: (services: HostServices) => void | Promise<void>) {
+    this.#onReady.push(listener)
+  }
+
+  /** Called by the server after sessions load. */
+  async started() {
+    const services = this.#services
+    if (!services) return
+    for (const listener of this.#onReady) {
+      try {
+        await listener(services)
+      } catch (error) {
+        console.warn("[pico] extension startup failed:", error)
+      }
+    }
   }
 
   /** The services, when the server is ready. */

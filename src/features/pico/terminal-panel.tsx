@@ -1,4 +1,8 @@
 import * as React from "react"
+import {
+  takePendingJobTerminals,
+  usePicoEvent,
+} from "@/features/pico/agent/events"
 import type { FitAddon } from "@xterm/addon-fit"
 import type {
   IDisposable,
@@ -205,6 +209,7 @@ function terminalStatusDetail(status: TerminalStatus) {
 }
 
 function terminalTabLabel(tab: TerminalTab, index: number) {
+  if (tab.id.startsWith("job:")) return `Job ${tab.id.slice(-4)}`
   if (tab.status.type === "connected" && tab.status.shell) {
     return `${index + 1}: ${tab.status.shell}`
   }
@@ -903,6 +908,34 @@ export function TerminalPanel({
       return nextState
     })
   }
+
+  const showJobTab = (jobId: string) => {
+    const tabId = `job:${jobId}`
+    setTabsState((current) => {
+      const base =
+        current.scopeKey === scopeKey
+          ? current
+          : { activeTabId: null, scopeKey, tabs: [] }
+      const nextState = base.tabs.some((tab) => tab.id === tabId)
+        ? { ...base, activeTabId: tabId }
+        : {
+            ...base,
+            activeTabId: tabId,
+            tabs: [...base.tabs, createTerminalTab(tabId)],
+          }
+      rememberTerminalTabsState(nextState)
+      return nextState
+    })
+  }
+
+  usePicoEvent("pico:open-job-terminal", () => {
+    for (const jobId of takePendingJobTerminals()) showJobTab(jobId)
+  })
+  React.useEffect(() => {
+    for (const jobId of takePendingJobTerminals()) showJobTab(jobId)
+    // Read the queue once the panel shows a scope.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey])
 
   const closeServerTerminal = (terminalId: string | null) => {
     if (!terminalId) return

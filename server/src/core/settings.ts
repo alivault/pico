@@ -12,12 +12,15 @@ export type PicoSettingsData = {
   hideThinkingBlock: boolean
   transport: Transport
   cacheRetention: CacheRetention
+  /** Save tool output larger than this many KB to the scratchpad; 0 is off. */
+  scratchSpillKb: number
 }
 
 const DEFAULTS: PicoSettingsData = {
   hideThinkingBlock: false,
   transport: "auto",
   cacheRetention: "standard",
+  scratchSpillKb: 0,
 }
 
 export class PicoSettings {

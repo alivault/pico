@@ -1676,6 +1676,11 @@ function useAppShellSessionWorkspaceView({
     setGitPanelOpen((open) => !open)
   }
 
+  usePicoEvent("pico:open-job-terminal", () => {
+    if (isMobile) setCurrentTab("terminal")
+    else setTerminalPanelOpen(true)
+  })
+
   const toggleTerminalPanel = () => {
     if (isMobile) {
       setCurrentTab((tab) => (tab === "terminal" ? "session" : "terminal"))

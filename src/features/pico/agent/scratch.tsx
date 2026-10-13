@@ -1,0 +1,102 @@
+import * as React from "react"
+import { NotebookTextIcon } from "lucide-react"
+
+import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import { TextDialog } from "@/features/pico/agent/shared"
+import {
+  registerToolRenderer,
+  toolArgs,
+  toolDetails,
+} from "@/features/pico/tool-renderers/registry"
+
+type ScratchEntry = {
+  id: string
+  name: string
+  bytes: number
+  lines: number
+  createdAt: number
+  source?: string
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function ScratchSection({
+  sessionId,
+  state,
+  viewerContextId,
+}: {
+  sessionId: string
+  state: Record<string, unknown>
+  viewerContextId: string
+}) {
+  const entries = (state.scratch as Array<ScratchEntry> | undefined) ?? []
+  const [open, setOpen] = React.useState<ScratchEntry | null>(null)
+  return (
+    <>
+      <ul className="space-y-1">
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-sm hover:bg-muted/50"
+              onClick={() => setOpen(entry)}
+            >
+              <NotebookTextIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                {entry.lines} lines · {formatBytes(entry.bytes)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {open ? (
+        <TextDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setOpen(null)
+          }}
+          title={`${open.name} (${open.id})`}
+          path="/api/session/scratch"
+          searchParams={{ id: open.id }}
+          sessionId={sessionId}
+          viewerContextId={viewerContextId}
+        />
+      ) : null}
+    </>
+  )
+}
+
+registerAgentSection({
+  key: "scratch",
+  title: "Scratchpad",
+  order: 60,
+  visible: (state) => Array.isArray(state.scratch) && state.scratch.length > 0,
+  Component: ScratchSection,
+})
+
+registerToolRenderer("scratch_put", {
+  summary(block) {
+    const details = toolDetails<ScratchEntry>(block)
+    const name = toolArgs(block).name
+    return [details.id, typeof name === "string" ? name : ""]
+      .filter(Boolean)
+      .join(" · ")
+  },
+})
+
+registerToolRenderer("scratch_get", {
+  summary(block) {
+    const args = toolArgs(block)
+    return [
+      typeof args.id === "string" ? args.id : "",
+      typeof args.grep === "string" ? `grep ${args.grep}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  },
+})

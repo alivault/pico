@@ -11,6 +11,8 @@ export type PicoEventMap = {
   "pico:open-session": { sessionId: string }
   /** Show a right sidebar tab. */
   "pico:open-sidebar-tab": { tab: "agent" | "preview" | "review" }
+  /** Show a background job in the terminal panel. */
+  "pico:open-job-terminal": { jobId: string }
 }
 
 export function emitPicoEvent<K extends keyof PicoEventMap>(
@@ -19,6 +21,21 @@ export function emitPicoEvent<K extends keyof PicoEventMap>(
 ) {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent(name, { detail }))
+}
+
+const pendingJobTerminals: Array<string> = []
+
+/**
+ * Show a job in the terminal panel. The panel may mount after this call, so
+ * the request also waits in a queue that the panel reads when it mounts.
+ */
+export function openJobTerminal(jobId: string) {
+  if (!pendingJobTerminals.includes(jobId)) pendingJobTerminals.push(jobId)
+  emitPicoEvent("pico:open-job-terminal", { jobId })
+}
+
+export function takePendingJobTerminals() {
+  return pendingJobTerminals.splice(0)
 }
 
 export function usePicoEvent<K extends keyof PicoEventMap>(

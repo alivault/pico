@@ -28,7 +28,10 @@ import { createCodingTools } from "@earendil-works/pi-durable/tools"
 
 import type { ServerPaths } from "../config.ts"
 import type { HostBridge } from "../extensions/host.ts"
-import { createPicoExtensions } from "../extensions/index.ts"
+import {
+  createPicoExtensions,
+  type PicoExtensionServices,
+} from "../extensions/index.ts"
 import { createMcpExtension, type McpExtension } from "../extensions/mcp.ts"
 import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
@@ -43,6 +46,7 @@ export type Runtime = {
   readonly settings: PicoSettings
   readonly agentDir: string
   readonly mcp: McpExtension
+  readonly extensions: PicoExtensionServices
   /** Pi's global settings: default model, thinking level, compaction, retry. */
   piSettings(): SettingsManager
   close(): Promise<void>
@@ -92,11 +96,8 @@ export async function openRuntime(
     })
   )
   registry.install(createPromptExtension(resources))
-  for (const extension of createPicoExtensions({
-    host,
-    dataDir: paths.dataDir,
-  }))
-    registry.install(extension)
+  const pico = createPicoExtensions({ host, dataDir: paths.dataDir })
+  for (const extension of pico.extensions) registry.install(extension)
   mcp.onChange(() => {
     registry.install(mcp.extension)
     registry.install(
@@ -164,6 +165,7 @@ export async function openRuntime(
     settings,
     agentDir,
     mcp,
+    extensions: pico.services,
     piSettings: currentPiSettings,
     async close() {
       await mcp.close()
