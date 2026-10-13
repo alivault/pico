@@ -11,6 +11,8 @@
  */
 import {
   closeSync,
+  copyFileSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -19,7 +21,13 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
+import { homedir } from "node:os"
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
+import { createModels } from "@earendil-works/pi-ai"
+import { Harness, createRegistry } from "@earendil-works/pi-durable"
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
+import { importPiSessions } from "./core/import-pi.ts"
 import { fileURLToPath } from "node:url"
 
 import {
@@ -286,6 +294,51 @@ async function stopCommand(options: Map<string, string | boolean>) {
   console.log("Pico stopped.")
 }
 
+async function importCommand(options: Map<string, string | boolean>) {
+  const paths = serverPaths(
+    resolve(String(options.get("data-dir") ?? defaultDataDir()))
+  )
+  const source = resolve(
+    String(
+      options.get("source-dir") ?? join(homedir(), ".pi", "agent", "sessions")
+    )
+  )
+  const release = await acquireLock(paths)
+  let harness: Harness | undefined
+  try {
+    const backup = join(
+      paths.dataDir,
+      "backups",
+      `before-pi-import-${new Date().toISOString().replace(/[:.]/g, "-")}`
+    )
+    mkdirSync(backup, { recursive: true })
+    for (const suffix of ["", "-wal", "-shm"]) {
+      if (existsSync(paths.database + suffix))
+        copyFileSync(
+          paths.database + suffix,
+          join(backup, "pico.sqlite" + suffix)
+        )
+    }
+    console.log(`Database backup: ${backup}`)
+    harness = await Harness.open(
+      await openNodeSqliteStorage(paths.database),
+      { models: createModels(), registry: createRegistry() },
+      BACKGROUND_CONTEXT
+    )
+    const result = await importPiSessions(harness, source)
+    const report = join(backup, "import-report.json")
+    writeFileSync(report, JSON.stringify(result, null, 2))
+    console.log(JSON.stringify({ ...result, report }, null, 2))
+    if (result.failures.length) process.exitCode = 1
+  } finally {
+    try {
+      await harness?.close(BACKGROUND_CONTEXT)
+    } finally {
+      release()
+    }
+  }
+}
+
 async function main() {
   const { command, options } = parseArgs(process.argv.slice(2))
   if (options.get("version") || command === "--version") {
@@ -296,6 +349,9 @@ async function main() {
     case "serve":
       await serve(options)
       break
+    case "import-pi":
+      await importCommand(options)
+      break
     case "status":
       await status(options)
       break
@@ -305,7 +361,7 @@ async function main() {
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop [--port N] [--host H] [--data-dir D] [--web-dir D]"
+        "Usage: pico-server serve|status|stop|import-pi [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D]"
       )
       process.exitCode = 2
   }

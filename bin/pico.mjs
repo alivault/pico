@@ -10,10 +10,11 @@ const args = process.argv.slice(2)
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 if (args.includes("--help")) {
   console.log(`Pico — durable Pi sessions in your browser
-Usage: pico-app [serve|status|stop] [--port N] [--host H] [--data-dir D]
-                 [--web-dir D] [--open|--no-open] [--wait]
+Usage: pico-app [serve|status|stop|import-pi] [--port N] [--host H] [--data-dir D]
+                 [--web-dir D] [--open|--no-open] [--wait] [--source-dir D]
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
-Use a separate --data-dir for development. No old Pi sessions are imported.`)
+Use a separate --data-dir for development.
+Import old Pi sessions with import-pi while Pico is stopped.`)
   process.exit(0)
 }
 if (args.includes("--version")) {

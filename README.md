@@ -2,7 +2,7 @@
 
 A web workspace for durable Pi coding-agent sessions. The Node server hosts
 [`pi-durable`](https://www.npmjs.com/package/@earendil-works/pi-durable) directly.
-There is no Rust server, Swift app, Pi RPC subprocess, or session importer.
+There is no Rust server, Swift app, or Pi RPC subprocess.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ restart. This does not guarantee exactly-once external tool side effects.
 The default data directory is `~/.pico`. Use `--data-dir PATH` to change it.
 Each server owns one SQLite database and can run many sessions at the same
 time. A process lock prevents two servers from opening the same directory.
-Pico starts with fresh sessions; it does not import Pi session files.
+Pico starts with fresh sessions. Old Pi session files can be imported explicitly.
 If a crash leaves `server.lock.guard`, confirm that no Pico process is running,
 then move that guard directory to Trash before starting the server again.
 
@@ -56,6 +56,24 @@ in the health response. MCP OAuth setup is not implemented in Pico.
 
 The workspace includes Git changes and diffs, file browsing, syntax
 highlighting, and PTY terminals.
+
+## Import old Pi sessions
+
+Stop Pico before importing. The importer owns the same database lock and backs
+up the database to `~/.pico/backups/` before it writes anything.
+
+```sh
+pnpm start stop --wait
+pnpm start import-pi
+pnpm start
+```
+
+The default source is `~/.pi/agent/sessions`. Set `--source-dir PATH` or
+`--data-dir PATH` to use other directories. The importer preserves messages,
+images, tool results, branches, compaction, context edits, names, model settings,
+and labels. It does not run prompts or tools, and does not change source files.
+Completed imports are skipped by original session ID on rerun. This is a
+one-time snapshot, not a live sync. An import report lists any failed files.
 
 ## Remote access
 
