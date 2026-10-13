@@ -15,6 +15,9 @@ import { parseSessionId, Sessions } from "./core/sessions.ts"
 import { Viewers } from "./core/viewers.ts"
 import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
+import { BrowserManager } from "./services/browser.ts"
+import { Notifier } from "./services/notify.ts"
+import { parsePortRange, PreviewProxies } from "./services/preview.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
@@ -48,6 +51,58 @@ export async function startServer(options: {
   const viewers = new Viewers(options.paths.viewersFile)
   const sessions = new Sessions(runtime, hub, viewers)
   const terminals = new Terminals()
+  const previews = new PreviewProxies(options.host, () =>
+    parsePortRange(runtime.settings.data.previewPorts)
+  )
+  const notifier = new Notifier(
+    options.paths.dataDir,
+    () => runtime.settings.data.ntfyUrl
+  )
+  const browser = new BrowserManager(
+    options.paths.dataDir,
+    () => runtime.settings.data.browserHeadless
+  )
+  hub.subscribe((event) => notifyFromEvent(event.payload))
+  const sessionLink = (sessionId: unknown) => {
+    const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
+    const path = typeof sessionId === "string" ? `/?session=${sessionId}` : "/"
+    return base ? `${base}${path}` : path
+  }
+  const notifyFromEvent = (payload: {
+    type: string
+    [key: string]: unknown
+  }) => {
+    const settings = runtime.settings.data
+    if (payload.type === "session_done" && payload.reason === "agent") {
+      if (!settings.notifyRunDone) return
+      void notifier.send({
+        title:
+          payload.outcome === "error"
+            ? "Pico: run failed"
+            : "Pico: run finished",
+        body: typeof payload.title === "string" ? payload.title : "Session",
+        url: sessionLink(payload.sessionId),
+        tag: `done-${String(payload.sessionId)}`,
+        level: payload.outcome === "error" ? "error" : "success",
+      })
+    } else if (
+      payload.type === "session_status" &&
+      payload.needsInput === true
+    ) {
+      if (!settings.notifyNeedsInput) return
+      const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
+      void notifier.send({
+        title: "Pico: the agent asks a question",
+        body: sessions.has(id)
+          ? (sessions.list({}).find((item) => item.id === id)?.title ??
+            "Session")
+          : "Session",
+        url: sessionLink(payload.sessionId),
+        tag: `ask-${id}`,
+        level: "warning",
+      })
+    }
+  }
   host.bind({
     sessions,
     events: hub,
@@ -55,6 +110,9 @@ export async function startServer(options: {
     harness: runtime.harness,
     settings: () => runtime.settings.data,
     dataDir: options.paths.dataDir,
+    previews,
+    notifier,
+    browser,
   })
   await sessions.load()
   await host.started()
@@ -68,6 +126,8 @@ export async function startServer(options: {
   const router = createApi({
     runtime,
     dataDir: options.paths.dataDir,
+    host,
+    notifier,
     sessions,
     viewers,
     hub,
@@ -293,6 +353,8 @@ export async function startServer(options: {
         auth.cancelLogins()
         gitWatcher.stop()
         terminals.shutdown()
+        await previews.shutdown()
+        await browser.shutdown()
         for (const client of sockets.clients) client.terminate()
         server.closeAllConnections()
         await new Promise<void>((resolve) => server.close(() => resolve()))

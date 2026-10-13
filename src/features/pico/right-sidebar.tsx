@@ -70,6 +70,7 @@ import {
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import "@/features/pico/agent/register"
 import { AgentPanel } from "@/features/pico/agent/agent-panel"
+import { PreviewPanel, usePreviewState } from "@/features/pico/agent/preview"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 
@@ -1030,6 +1031,7 @@ export function RightSidebar({
 }: RightSidebarProps) {
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
+  const preview = usePreviewState(viewerContextId, sessionId)
   const [localState, dispatchLocal] = React.useReducer(
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
@@ -1185,6 +1187,7 @@ export function RightSidebar({
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
           showAgent
+          showPreview={Boolean(preview?.target) || activeTab === "preview"}
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab}
           showReview
@@ -1200,6 +1203,21 @@ export function RightSidebar({
             sessionId={sessionId}
             viewerContextId={viewerContextId}
           />
+        </div>
+        <div
+          className={
+            activeTab === "preview"
+              ? "min-h-0 flex-1 overflow-hidden"
+              : "hidden"
+          }
+        >
+          {activeTab === "preview" ? (
+            <PreviewPanel
+              active={active}
+              sessionId={sessionId}
+              viewerContextId={viewerContextId}
+            />
+          ) : null}
         </div>
         <div
           className={

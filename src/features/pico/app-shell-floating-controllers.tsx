@@ -1,4 +1,6 @@
 import * as React from "react"
+import { AgentSettingsDialogController } from "@/features/pico/agent/agent-settings-dialog"
+import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "sonner"
 
 import {
@@ -567,6 +569,10 @@ const AppShellSettingsDialogHost = React.memo(
       { compare: shallowRecordEqual }
     )
 
+    usePicoEvent("pico:open-agent-settings", () => {
+      settingsDialogRef.current?.close()
+    })
+
     const openAuthFromSettings = (mode: "login" | "logout") => {
       settingsDialogRef.current?.close()
       authDialogRef.current?.open(mode, {
@@ -575,36 +581,39 @@ const AppShellSettingsDialogHost = React.memo(
     }
 
     return (
-      <AppShellSettingsDialogController
-        ref={settingsDialogRef}
-        openStateRef={settingsOpenRef}
-        viewerContextId={viewerContextId}
-        currentTheme={currentTheme}
-        currentThemeColorMode={currentThemeColorMode}
-        onThemeChange={onThemeChange}
-        onThemeColorModeChange={onThemeColorModeChange}
-        onThemePreviewChange={onThemePreviewChange}
-        systemTheme={systemTheme}
-        hideThinkingBlocks={hideThinkingBlocks}
-        onHideThinkingBlocksChange={onHideThinkingBlocksChange}
-        hideToolBlocks={hideToolBlocks}
-        onHideToolBlocksChange={onHideToolBlocksChange}
-        centerMessages={centerMessages}
-        onCenterMessagesChange={onCenterMessagesChange}
-        autoScrollEnabled={autoScrollEnabled}
-        onAutoScrollEnabledChange={onAutoScrollEnabledChange}
-        sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-        onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
-        sessionDoneDesktopNotificationsEnabled={
-          sessionDoneDesktopNotificationsEnabled
-        }
-        onSessionDoneDesktopNotificationsEnabledChange={
-          onSessionDoneDesktopNotificationsEnabledChange
-        }
-        desktopNotificationPermission={desktopNotificationPermission}
-        onLoginProviders={() => openAuthFromSettings("login")}
-        onLogoutProviders={() => openAuthFromSettings("logout")}
-      />
+      <>
+        <AgentSettingsDialogController viewerContextId={viewerContextId} />
+        <AppShellSettingsDialogController
+          ref={settingsDialogRef}
+          openStateRef={settingsOpenRef}
+          viewerContextId={viewerContextId}
+          currentTheme={currentTheme}
+          currentThemeColorMode={currentThemeColorMode}
+          onThemeChange={onThemeChange}
+          onThemeColorModeChange={onThemeColorModeChange}
+          onThemePreviewChange={onThemePreviewChange}
+          systemTheme={systemTheme}
+          hideThinkingBlocks={hideThinkingBlocks}
+          onHideThinkingBlocksChange={onHideThinkingBlocksChange}
+          hideToolBlocks={hideToolBlocks}
+          onHideToolBlocksChange={onHideToolBlocksChange}
+          centerMessages={centerMessages}
+          onCenterMessagesChange={onCenterMessagesChange}
+          autoScrollEnabled={autoScrollEnabled}
+          onAutoScrollEnabledChange={onAutoScrollEnabledChange}
+          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
+          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+          sessionDoneDesktopNotificationsEnabled={
+            sessionDoneDesktopNotificationsEnabled
+          }
+          onSessionDoneDesktopNotificationsEnabledChange={
+            onSessionDoneDesktopNotificationsEnabledChange
+          }
+          desktopNotificationPermission={desktopNotificationPermission}
+          onLoginProviders={() => openAuthFromSettings("login")}
+          onLogoutProviders={() => openAuthFromSettings("logout")}
+        />
+      </>
     )
   }
 )

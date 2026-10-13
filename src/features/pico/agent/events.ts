@@ -13,6 +13,8 @@ export type PicoEventMap = {
   "pico:open-sidebar-tab": { tab: "agent" | "preview" | "review" }
   /** Show a background job in the terminal panel. */
   "pico:open-job-terminal": { jobId: string }
+  /** Open the agent settings dialog. */
+  "pico:open-agent-settings": Record<string, never>
 }
 
 export function emitPicoEvent<K extends keyof PicoEventMap>(

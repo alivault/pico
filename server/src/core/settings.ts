@@ -22,6 +22,18 @@ export type PicoSettingsData = {
   maxSpawnDepth: number
   /** Add language server errors to the results of edit and write. */
   lspAfterEdit: boolean
+  /** Notify devices when a run finishes. */
+  notifyRunDone: boolean
+  /** Notify devices when the agent asks a question. */
+  notifyNeedsInput: boolean
+  /** An ntfy topic URL that gets the same notifications; empty is off. */
+  ntfyUrl: string
+  /** The address of Pico for links in notifications, for example a Tailscale URL. */
+  publicUrl: string
+  /** Ports for preview proxies, as "start-end". */
+  previewPorts: string
+  /** Run the durable browser without a window. */
+  browserHeadless: boolean
 }
 
 export const DEFAULT_SETTINGS: PicoSettingsData = {
@@ -33,6 +45,12 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   maxChildSessions: 6,
   maxSpawnDepth: 3,
   lspAfterEdit: false,
+  notifyRunDone: true,
+  notifyNeedsInput: true,
+  ntfyUrl: "",
+  publicUrl: "",
+  previewPorts: "4100-4199",
+  browserHeadless: true,
 }
 
 export class PicoSettings {

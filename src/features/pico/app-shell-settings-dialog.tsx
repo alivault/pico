@@ -1,4 +1,5 @@
 import * as React from "react"
+import { emitPicoEvent } from "@/features/pico/agent/events"
 import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -497,6 +498,30 @@ function getSettingsCommandGroups({
             onPiCacheRetentionChange(
               piCacheRetention === "long" ? "standard" : "long"
             ),
+        },
+      ],
+    },
+    {
+      heading: "Agent",
+      commands: [
+        {
+          id: "agent-settings",
+          title: "Agent settings",
+          description:
+            "Push notifications, child sessions, worktrees, previews, tool profiles, and MCP servers.",
+          valueLabel: "Open",
+          keywords: [
+            "agent",
+            "push",
+            "notifications",
+            "ntfy",
+            "worktree",
+            "preview",
+            "profile",
+            "mcp",
+            "tools",
+          ],
+          onSelect: () => emitPicoEvent("pico:open-agent-settings", {}),
         },
       ],
     },

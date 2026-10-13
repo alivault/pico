@@ -6,11 +6,14 @@
 import type { Extension } from "@earendil-works/pi-durable"
 
 import { createAskExtension } from "./ask.ts"
+import { createBrowserExtension } from "./browser.ts"
 import { createGitExtension } from "./git.ts"
 import { createGithubExtension } from "./github.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
 import { createLspExtension } from "./lsp.ts"
+import { createNotifyExtension } from "./notify.ts"
+import { createPreviewExtension } from "./preview.ts"
 import { createRenderExtension } from "./render.ts"
 import { createScheduleExtension } from "./schedule.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
@@ -53,6 +56,9 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
       createGithubExtension(),
       createTestsExtension(),
       lsp.extension,
+      createPreviewExtension(host),
+      createNotifyExtension(host),
+      createBrowserExtension(host),
       createTodoExtension(),
     ],
     services: {

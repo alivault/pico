@@ -1197,6 +1197,7 @@ export function RightSidebarTabStrip({
   onReorderCommitDiffs,
   onReorderFiles,
   showAgent = false,
+  showPreview = false,
   showFiles = false,
   showHistory = false,
   showReview = false,
@@ -1222,6 +1223,7 @@ export function RightSidebarTabStrip({
   onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
   showAgent?: boolean
+  showPreview?: boolean
   showFiles?: boolean
   showHistory?: boolean
   showReview?: boolean
@@ -1334,6 +1336,7 @@ export function RightSidebarTabStrip({
       {showReview ? renderTab({ label: "Changes", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
       {showAgent ? renderTab({ label: "Agent", value: "agent" }) : null}
+      {showPreview ? renderTab({ label: "Preview", value: "preview" }) : null}
       {!hasOpenFiles || showFiles
         ? renderTab({
             active: activeTab === "files" && (!hasOpenFiles || !activeFilePath),

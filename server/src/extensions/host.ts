@@ -9,6 +9,9 @@
 import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 
 import type { PicoSettingsData } from "../core/settings.ts"
+import type { BrowserManager } from "../services/browser.ts"
+import type { Notifier } from "../services/notify.ts"
+import type { PreviewProxies } from "../services/preview.ts"
 
 /** Session operations that extensions use. `Sessions` implements it. */
 export type HostSessions = {
@@ -107,6 +110,9 @@ export type HostServices = {
   harness: Harness
   settings: () => Readonly<PicoSettingsData>
   dataDir: string
+  previews?: PreviewProxies
+  notifier?: Notifier
+  browser?: BrowserManager
 }
 
 export class HostBridge {

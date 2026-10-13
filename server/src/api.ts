@@ -24,7 +24,9 @@ import {
   type Sessions,
 } from "./core/sessions.ts"
 import type { Viewers } from "./core/viewers.ts"
+import type { HostBridge } from "./extensions/host.ts"
 import { stopJob } from "./extensions/jobs.ts"
+import { ensurePreview } from "./extensions/preview.ts"
 import { TimersDoc } from "./extensions/schedule.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
@@ -40,6 +42,7 @@ import {
 } from "./http.ts"
 import * as files from "./services/files.ts"
 import * as git from "./services/git.ts"
+import type { Notifier } from "./services/notify.ts"
 import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
 import { looseNumber, type Terminals } from "./services/terminal.ts"
@@ -47,6 +50,8 @@ import { looseNumber, type Terminals } from "./services/terminal.ts"
 export type ApiContext = {
   runtime: Runtime
   dataDir: string
+  host: HostBridge
+  notifier: Notifier
   sessions: Sessions
   viewers: Viewers
   hub: EventHub
@@ -1190,6 +1195,111 @@ export function createApi(api: ApiContext) {
     return { ok: true, id: scratchId, text }
   })
 
+  router.post("/api/session/preview/ensure", async (request) => {
+    const id = requireSession(request)
+    try {
+      return {
+        ok: true,
+        ...(await ensurePreview(api.host, conversationIdOf(id))),
+      }
+    } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Notifications
+
+  router.get("/api/push/key", (request) => {
+    const endpoint = stringField(request.query.get("endpoint"))
+    return {
+      ok: true,
+      publicKey: api.notifier.publicKey,
+      devices: api.notifier.subscriptionCount,
+      ...(endpoint ? { subscribed: api.notifier.has(endpoint) } : {}),
+    }
+  })
+
+  router.post("/api/push/subscribe", async (request) => {
+    const body = await request.body<{
+      subscription?: unknown
+      label?: unknown
+    }>()
+    try {
+      api.notifier.subscribe(
+        body.subscription as never,
+        stringField(body.label)?.slice(0, 80)
+      )
+    } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    }
+    return { ok: true, devices: api.notifier.subscriptionCount }
+  })
+
+  router.post("/api/push/unsubscribe", async (request) => {
+    const body = await request.body<{ endpoint?: unknown }>()
+    const endpoint = stringField(body.endpoint)
+    if (!endpoint) throw badRequest("endpoint is required")
+    api.notifier.unsubscribe(endpoint)
+    return { ok: true, devices: api.notifier.subscriptionCount }
+  })
+
+  router.post("/api/push/test", async () => {
+    const delivered = await api.notifier.send({
+      title: "Pico",
+      body: "Notifications work on this device.",
+      url: "/",
+      tag: "test",
+    })
+    return { ok: true, delivered }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Agent settings
+
+  router.get("/api/settings/agent", () => ({
+    ok: true,
+    ...agentSettings(runtime),
+  }))
+
+  router.post("/api/settings/agent", async (request) => {
+    const body = await request.body<Record<string, unknown>>()
+    const change: Record<string, unknown> = {}
+    const flag = (key: string) => {
+      if (typeof body[key] === "boolean") change[key] = body[key]
+    }
+    const number = (key: string, min: number, max: number) => {
+      if (body[key] === undefined) return
+      const value = Number(body[key])
+      if (!Number.isInteger(value) || value < min || value > max)
+        throw badRequest(`${key} must be a whole number from ${min} to ${max}`)
+      change[key] = value
+    }
+    const text = (key: string, test?: (value: string) => boolean) => {
+      if (typeof body[key] !== "string") return
+      const value = (body[key] as string).trim()
+      if (value && test && !test(value)) throw badRequest(`Invalid ${key}`)
+      change[key] = value
+    }
+    flag("notifyRunDone")
+    flag("notifyNeedsInput")
+    flag("lspAfterEdit")
+    flag("browserHeadless")
+    number("scratchSpillKb", 0, 10_000)
+    number("maxChildSessions", 0, 50)
+    number("maxSpawnDepth", 0, 10)
+    text("ntfyUrl", (value) => /^https?:\/\//.test(value))
+    text("publicUrl", (value) => /^https?:\/\//.test(value))
+    text("previewPorts", (value) => /^\d+\s*-\s*\d+$/.test(value))
+    if (Array.isArray(body.worktreeCopy))
+      change.worktreeCopy = body.worktreeCopy
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    runtime.settings.update(change as never)
+    return { ok: true, ...agentSettings(runtime) }
+  })
+
   router.get("/api/session/extensions", async (request) => {
     const id = requireSession(request)
     return {
@@ -1384,6 +1494,23 @@ export function createApi(api: ApiContext) {
   })
 
   return router
+}
+
+function agentSettings(runtime: Runtime) {
+  const data = runtime.settings.data
+  return {
+    notifyRunDone: data.notifyRunDone,
+    notifyNeedsInput: data.notifyNeedsInput,
+    ntfyUrl: data.ntfyUrl,
+    publicUrl: data.publicUrl,
+    lspAfterEdit: data.lspAfterEdit,
+    browserHeadless: data.browserHeadless,
+    scratchSpillKb: data.scratchSpillKb,
+    maxChildSessions: data.maxChildSessions,
+    maxSpawnDepth: data.maxSpawnDepth,
+    previewPorts: data.previewPorts,
+    worktreeCopy: data.worktreeCopy,
+  }
 }
 
 function ensureDraft(api: ApiContext, contextId: string, cwd: string) {
