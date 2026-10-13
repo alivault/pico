@@ -5,7 +5,10 @@
  */
 import type { Extension } from "@earendil-works/pi-durable"
 
+import { createAskExtension } from "./ask.ts"
 import type { HostBridge } from "./host.ts"
+import { createRenderExtension } from "./render.ts"
+import { createTodoExtension } from "./todo.ts"
 
 export type PicoExtensionOptions = {
   host: HostBridge
@@ -15,5 +18,5 @@ export type PicoExtensionOptions = {
 export function createPicoExtensions(
   _options: PicoExtensionOptions
 ): Extension[] {
-  return []
+  return [createAskExtension(), createRenderExtension(), createTodoExtension()]
 }

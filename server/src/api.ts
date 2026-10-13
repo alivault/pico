@@ -21,6 +21,7 @@ import {
   type Sessions,
 } from "./core/sessions.ts"
 import type { Viewers } from "./core/viewers.ts"
+import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
   badRequest,
@@ -1029,6 +1030,63 @@ export function createApi(api: ApiContext) {
       Math.max(1, queryNumber(request, "limit") ?? 50)
     )
     return sessions.history(id, before, limit)
+  })
+
+  router.post("/api/session/answer", async (request) => {
+    const id = requireSession(request)
+    const body = await request.body<{ questionId?: unknown; value?: unknown }>()
+    const value = body.value
+    const valid =
+      typeof value === "string" ||
+      (Array.isArray(value) &&
+        value.every((part) => typeof part === "string")) ||
+      (value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.values(value).every((part) => typeof part === "string"))
+    if (!valid) throw badRequest("value must be text, a list, or form values")
+    await sessions.answer(
+      id,
+      stringField(body.questionId),
+      value as string | string[] | Record<string, string>
+    )
+    return { ok: true }
+  })
+
+  router.post("/api/session/todo", async (request) => {
+    const id = requireSession(request)
+    const body = await request.body<Record<string, unknown>>()
+    const op = stringField(body.op)
+    const status =
+      typeof body.status === "string" &&
+      ["pending", "active", "done", "blocked"].includes(body.status)
+        ? (body.status as "pending")
+        : undefined
+    let change: TodoChange
+    if (op === "add") {
+      const text = stringField(body.text)
+      if (!text) throw badRequest("text is required")
+      change = { op, items: [{ text, ...(status ? { status } : {}) }] }
+    } else if (op === "update") {
+      const itemId = stringField(body.id)
+      if (!itemId) throw badRequest("id is required")
+      change = {
+        op,
+        id: itemId,
+        ...(status ? { status } : {}),
+        ...(typeof body.text === "string" ? { text: body.text } : {}),
+        ...(typeof body.note === "string" ? { note: body.note } : {}),
+      }
+    } else if (op === "remove") {
+      const itemId = stringField(body.id)
+      if (!itemId) throw badRequest("id is required")
+      change = { op, id: itemId }
+    } else if (op === "clear") {
+      change = { op, scope: body.scope === "all" ? "all" : "done" }
+    } else {
+      throw badRequest("op must be add, update, remove, or clear")
+    }
+    return { ok: true, items: await sessions.changeTodo(id, change) }
   })
 
   router.get("/api/session/extensions", async (request) => {

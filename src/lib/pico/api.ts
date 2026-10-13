@@ -321,6 +321,12 @@ export type SessionListEntry = {
   streaming?: boolean
   unread?: boolean
   optimistic?: boolean
+  /** The agent waits for an answer from the user. */
+  needsInput?: boolean
+  /** The session that spawned this one. */
+  parent?: string
+  /** The git branch of the session's own worktree. */
+  worktreeBranch?: string
 }
 
 export type SessionsEvent = SessionsPayload & {

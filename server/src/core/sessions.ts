@@ -41,7 +41,16 @@ import {
   generateSessionName,
   heuristicSessionName,
 } from "../extensions/auto-name.ts"
+import {
+  answerQuestion,
+  cancelQuestions,
+  pendingQuestions,
+  QuestionsDoc,
+  type QuestionAnswer,
+  type QuestionsState,
+} from "../extensions/ask.ts"
 import type { HostCreateOptions, HostSessions } from "../extensions/host.ts"
+import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
 import type { EventHub } from "../events.ts"
@@ -328,6 +337,13 @@ export class Sessions implements HostSessions {
         const live = await this.#harness.snapshot(LiveDoc, conversationId, ctx)
         this.#docs.set(id, live ? { live: live as LiveState } : {})
         this.#busy.set(id, live?.run !== undefined)
+        const questions = await this.#harness.snapshot(
+          QuestionsDoc,
+          conversationId,
+          ctx
+        )
+        if (pendingQuestions(questions as QuestionsState | undefined).length)
+          this.#needsInput.add(id)
       })
     )
     this.#harness.subscribeCommits((publication) => this.#observe(publication))
@@ -512,6 +528,11 @@ export class Sessions implements HostSessions {
         } else if (kind === "pi.usage") {
           this.#markDirty(id, { usage: true })
         } else if (this.#isStateKind(kind)) {
+          if (kind === "pico.questions") {
+            const waiting =
+              pendingQuestions(value as QuestionsState | undefined).length > 0
+            this.setNeedsInput(id, waiting)
+          }
           this.#markDirty(id, { extensions: true })
         }
       }
@@ -1228,6 +1249,17 @@ export class Sessions implements HostSessions {
       resources.prompts
     )
     const busy = this.isBusy(id)
+    // A chat message answers an open question; it still reaches the model as a steer.
+    if (busy && this.#needsInput.has(id) && expanded.trim()) {
+      await answerQuestion(
+        this.#harness,
+        conversationIdOf(id),
+        undefined,
+        expanded.trim(),
+        "chat",
+        ctx
+      )
+    }
     const submission = await conversation.submit(
       {
         type: "input",
@@ -1294,12 +1326,42 @@ export class Sessions implements HostSessions {
   }
 
   async abort(id: string) {
+    if (this.#needsInput.has(id))
+      await cancelQuestions(this.#harness, conversationIdOf(id), ctx)
     const conversation = await this.conversation(id)
     const done = conversation.abort(ctx)
     await Promise.race([
       done,
       new Promise((resolve) => setTimeout(resolve, 5000)),
     ])
+  }
+
+  /** Answer an open `ask_user` question from the web client. */
+  async answer(
+    id: string,
+    questionId: string | undefined,
+    value: QuestionAnswer["value"]
+  ) {
+    this.meta(id)
+    const answered = await answerQuestion(
+      this.#harness,
+      conversationIdOf(id),
+      questionId,
+      value,
+      "ui",
+      ctx
+    )
+    if (!answered) throw conflict("The question is already closed")
+  }
+
+  /** Change the todo list of a session from the web client. */
+  async changeTodo(id: string, change: TodoChange) {
+    this.meta(id)
+    try {
+      return await updateTodo(this.#harness, conversationIdOf(id), change, ctx)
+    } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    }
   }
 
   async compact(id: string, instructions: string | undefined) {

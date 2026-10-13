@@ -508,6 +508,10 @@ export function mergeSidebarSessionStatusMap(
           : previous?.streaming,
       unread:
         typeof event.unread === "boolean" ? event.unread : previous?.unread,
+      needsInput:
+        typeof event.needsInput === "boolean"
+          ? event.needsInput
+          : previous?.needsInput,
     }
 
     if (sameSidebarSessionStatus(previous, status)) continue
@@ -540,10 +544,15 @@ function applySidebarSessionStatus(
     typeof status.streaming === "boolean" ? status.streaming : entry.streaming
   const nextUnread =
     typeof status.unread === "boolean" ? status.unread : entry.unread
+  const nextNeedsInput =
+    typeof status.needsInput === "boolean"
+      ? status.needsInput
+      : entry.needsInput
 
   if (
     Boolean(entry.streaming) === Boolean(nextStreaming) &&
-    Boolean(entry.unread) === Boolean(nextUnread)
+    Boolean(entry.unread) === Boolean(nextUnread) &&
+    Boolean(entry.needsInput) === Boolean(nextNeedsInput)
   ) {
     return entry
   }
@@ -552,6 +561,7 @@ function applySidebarSessionStatus(
     ...entry,
     streaming: nextStreaming,
     unread: nextUnread,
+    needsInput: nextNeedsInput,
   }
 }
 

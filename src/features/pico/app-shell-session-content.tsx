@@ -27,6 +27,7 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
 import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
+import { TodoProgressChip } from "@/features/pico/agent/todo"
 
 export type AppShellSessionContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
@@ -147,6 +148,15 @@ export function AppShellSessionContent({
         viewerContextId={viewerContextId}
         workingStateStore={workingStateStore}
       />
+
+      {toolRenderContext.sessionId ? (
+        <div className="flex shrink-0 justify-center px-4">
+          <TodoProgressChip
+            sessionId={toolRenderContext.sessionId}
+            viewerContextId={viewerContextId}
+          />
+        </div>
+      ) : null}
 
       <AppShellComposerController
         actionsRef={actionsRef}

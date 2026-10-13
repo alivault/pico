@@ -28,6 +28,7 @@ import {
   EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
+  MessageCircleQuestionIcon,
   SearchIcon,
   SquarePenIcon,
   Settings2Icon,
@@ -700,7 +701,17 @@ function SidebarSessionItem({
         }
       }}
     >
-      {entry.streaming ? (
+      {entry.needsInput ? (
+        <span
+          className="absolute top-2.5 left-2 flex size-4 items-center justify-center"
+          title="Waiting for your answer"
+        >
+          <MessageCircleQuestionIcon
+            className="size-3.5 text-amber-500"
+            aria-label="Session needs input"
+          />
+        </span>
+      ) : entry.streaming ? (
         <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
           <Spinner size="xs" aria-label="Session streaming" />
         </span>
@@ -871,6 +882,9 @@ function sameDirectorySessionEntry(
       JSON.stringify(right.contextUsage ?? null) &&
     Boolean(left.streaming) === Boolean(right.streaming) &&
     Boolean(left.unread) === Boolean(right.unread) &&
+    Boolean(left.needsInput) === Boolean(right.needsInput) &&
+    left.parent === right.parent &&
+    left.worktreeBranch === right.worktreeBranch &&
     Boolean(left.optimistic) === Boolean(right.optimistic)
   )
 }
