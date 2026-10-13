@@ -20,8 +20,9 @@ if (args.includes("--version")) {
   console.log(pkg.version)
   process.exit(0)
 }
-const major = Number(process.versions.node.split(".")[0])
-if (major < 22) throw new Error("Pico requires Node.js 22.19 or later")
+const [major, minor] = process.versions.node.split(".").map(Number)
+if (major < 22 || (major === 22 && minor < 19))
+  throw new Error("Pico requires Node.js 22.19 or later")
 const command = args[0] && !args[0].startsWith("-") ? args.shift() : "serve"
 const open =
   !args.includes("--no-open") &&
