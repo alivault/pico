@@ -457,7 +457,7 @@ function DeleteSessionsDialog({
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Delete
+            <FooterKbd>Enter</FooterKbd> Archive
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Esc</FooterKbd> Cancel
@@ -855,11 +855,11 @@ export function DeleteSessionsDialogController({
     [targets]
   )
 
-  const title = targets.length === 1 ? "Delete session" : "Delete sessions"
+  const title = targets.length === 1 ? "Archive session" : "Archive sessions"
   const description =
     targets.length === 1
-      ? `Delete "${targets[0]?.title || "New session"}" from disk?`
-      : `Delete ${targets.length} selected sessions from disk?`
+      ? `Archive "${targets[0]?.title || "New session"}"? (History is kept.)`
+      : `Archive ${targets.length} selected sessions? (History is kept.)`
 
   return (
     <DeleteSessionsDialog

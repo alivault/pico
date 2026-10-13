@@ -28,7 +28,9 @@ export class PicoSettings {
     this.#file = file
     let stored: Partial<PicoSettingsData> = {}
     try {
-      stored = JSON.parse(readFileSync(file, "utf8")) as Partial<PicoSettingsData>
+      stored = JSON.parse(
+        readFileSync(file, "utf8")
+      ) as Partial<PicoSettingsData>
     } catch {
       // No settings yet.
     }

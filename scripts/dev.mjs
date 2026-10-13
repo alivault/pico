@@ -1,130 +1,94 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process"
+import { homedir } from "node:os"
+import { join } from "node:path"
 
-import { spawn, spawnSync } from "node:child_process"
-import { chmodSync, existsSync, statSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const backendPort = process.env.PICO_DEV_SERVER_PORT ?? "3142"
-const backendUrl = `http://127.0.0.1:${backendPort}`
-const serverBinary = join(
-  root,
-  "target",
-  "debug",
-  process.platform === "win32" ? "pico-server.exe" : "pico-server"
-)
-const bridgeBinary = join(
-  root,
-  "target",
-  process.platform === "win32" ? "pico-pi-bridge.exe" : "pico-pi-bridge"
-)
-const bridgeSource = join(root, "native", "pi-bridge.ts")
-
-function run(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: root,
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  })
-  if (result.error) throw result.error
-  if (result.status !== 0) process.exit(result.status ?? 1)
-}
-
-run("cargo", ["build", "-p", "pico-server"])
-if (
-  !existsSync(bridgeBinary) ||
-  statSync(bridgeBinary).mtimeMs < statSync(bridgeSource).mtimeMs
-) {
-  run("pnpm", ["build:pi-bridge"])
-}
-if (process.platform !== "win32") chmodSync(bridgeBinary, 0o755)
-
+const port = process.env.PICO_DEV_PORT ?? "3142"
+const host = "127.0.0.1"
+const backendUrl = `http://${host}:${port}`
 const server = spawn(
-  serverBinary,
+  process.execPath,
   [
+    "server/build.mjs",
+    "--watch",
+    "--",
     "serve",
     "--port",
-    backendPort,
+    port,
+    "--host",
+    host,
     "--data-dir",
-    join(root, ".pico-dev"),
-    "--pi-bridge-bin",
-    bridgeBinary,
+    process.env.PICO_DEV_DATA_DIR ?? join(homedir(), ".pico-dev"),
+    "--web-dir",
+    "none",
   ],
-  {
-    cwd: root,
-    stdio: "inherit",
-    env: process.env,
-  }
+  { stdio: "inherit" }
 )
-async function waitForBackend() {
-  const deadline = Date.now() + 15_000
-  while (Date.now() < deadline) {
-    if (server.exitCode !== null) {
-      throw new Error(`Native Pico dev server exited with ${server.exitCode}`)
-    }
-    try {
-      const response = await fetch(`${backendUrl}/api/system/health`)
-      if (response.ok) return
-    } catch {
-      // The native server is still starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  throw new Error("Native Pico dev server did not become ready")
-}
-
-try {
-  await waitForBackend()
-} catch (error) {
-  if (!server.killed) server.kill("SIGTERM")
-  throw error
-}
-
-const vite = spawn("vp", ["dev"], {
-  cwd: root,
-  stdio: "inherit",
-  detached: process.platform !== "win32",
-  shell: process.platform === "win32",
-  env: {
-    ...process.env,
-    PICO_DEV_BACKEND_URL: backendUrl,
-  },
-})
-
+let vite
 let stopping = false
-function stop(signal = "SIGTERM") {
+function stop() {
   if (stopping) return
   stopping = true
-  if (!vite.killed) {
+  if (vite?.pid) {
     if (process.platform === "win32") vite.kill("SIGTERM")
     else {
       try {
         process.kill(-vite.pid, "SIGTERM")
       } catch {
-        // The Vite process group already exited.
+        /* Already stopped. */
       }
     }
   }
-  if (!server.killed) server.kill(signal)
+  server.kill("SIGTERM")
 }
-
-process.once("SIGINT", () => stop("SIGINT"))
-process.once("SIGTERM", () => stop("SIGTERM"))
-
-function childResult(child, label) {
-  return new Promise((resolve) => {
-    child.once("error", (error) => {
-      console.error(`${label} failed: ${error.message}`)
-      resolve(1)
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, stop)
+server.on("error", (error) => {
+  console.error(error)
+  stop()
+  process.exitCode = 1
+})
+server.on("exit", (code) => {
+  stop()
+  process.exitCode = code ?? 1
+})
+const deadline = Date.now() + 30_000
+let ready = false
+while (!stopping && Date.now() < deadline) {
+  try {
+    const result = await fetch(`${backendUrl}/api/system/health`, {
+      signal: AbortSignal.timeout(1000),
     })
-    child.once("exit", (code) => resolve(code ?? 0))
+    if (result.ok) {
+      ready = true
+      break
+    }
+  } catch {
+    /* Wait for the build and server. */
+  }
+  await new Promise((done) => setTimeout(done, 200))
+}
+if (!ready) {
+  console.error("Pico development server did not become ready")
+  stop()
+  process.exitCode = 1
+} else {
+  vite = spawn(
+    "vp",
+    ["dev", "--port", process.env.PICO_DEV_WEB_PORT ?? "5173"],
+    {
+      stdio: "inherit",
+      detached: process.platform !== "win32",
+      shell: process.platform === "win32",
+      env: { ...process.env, PICO_DEV_BACKEND_URL: backendUrl },
+    }
+  )
+  vite.on("error", (error) => {
+    console.error(error)
+    stop()
+    process.exitCode = 1
+  })
+  vite.on("exit", (code) => {
+    stop()
+    process.exitCode = code ?? 1
   })
 }
-
-const serverResult = childResult(server, "Native Pico dev server")
-const viteResult = childResult(vite, "Vite dev server")
-const exitCode = await Promise.race([serverResult, viteResult])
-stop()
-await Promise.allSettled([serverResult, viteResult])
-process.exitCode = exitCode

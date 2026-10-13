@@ -33,16 +33,22 @@ export class Viewers {
   constructor(file: string) {
     this.#file = file
     try {
-      const stored = JSON.parse(readFileSync(file, "utf8")) as Record<string, ViewerContext>
+      const stored = JSON.parse(readFileSync(file, "utf8")) as Record<
+        string,
+        ViewerContext
+      >
       for (const [id, context] of Object.entries(stored)) {
         this.#contexts.set(id, {
-          ...(context.selectedSession ? { selectedSession: context.selectedSession } : {}),
+          ...(context.selectedSession
+            ? { selectedSession: context.selectedSession }
+            : {}),
           ...(context.activeDraft ? { activeDraft: context.activeDraft } : {}),
           sidebarDirectories: Array.isArray(context.sidebarDirectories)
             ? context.sidebarDirectories
             : [],
           unread: Array.isArray(context.unread) ? context.unread : [],
-          updatedAt: typeof context.updatedAt === "number" ? context.updatedAt : 0,
+          updatedAt:
+            typeof context.updatedAt === "number" ? context.updatedAt : 0,
         })
       }
     } catch {
@@ -69,14 +75,21 @@ export class Viewers {
   }
 
   /** A connecting event stream: remember the requested session and sidebar. */
-  connect(id: string, selectedSession: string | undefined, sidebarDirectories: string[]) {
+  connect(
+    id: string,
+    selectedSession: string | undefined,
+    sidebarDirectories: string[]
+  ) {
     const context = this.#ensure(id)
     if (selectedSession) {
-      context.unread = context.unread.filter((sessionId) => sessionId !== selectedSession)
+      context.unread = context.unread.filter(
+        (sessionId) => sessionId !== selectedSession
+      )
       context.selectedSession = selectedSession
       delete context.activeDraft
     }
-    if (sidebarDirectories.length > 0) context.sidebarDirectories = sidebarDirectories
+    if (sidebarDirectories.length > 0)
+      context.sidebarDirectories = sidebarDirectories
     this.#save()
     return context
   }
@@ -152,7 +165,10 @@ export class Viewers {
     try {
       mkdirSync(dirname(this.#file), { recursive: true })
       const temporary = `${this.#file}.tmp`
-      writeFileSync(temporary, JSON.stringify(Object.fromEntries(entries), null, 2))
+      writeFileSync(
+        temporary,
+        JSON.stringify(Object.fromEntries(entries), null, 2)
+      )
       renameSync(temporary, this.#file)
     } catch (error) {
       console.error("[pico] could not save viewer contexts:", error)

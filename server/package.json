@@ -10,7 +10,7 @@
     "build": "node ./build.mjs",
     "dev": "node ./build.mjs --watch",
     "start": "node ./dist/pico-server.mjs serve",
-    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "test": "node build.mjs && node --test --experimental-strip-types test/*.test.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
@@ -23,7 +23,7 @@
     "node-pty": "1.1.0",
     "pi-web-access": "0.40.0",
     "shiki": "4.5.0",
-    "ws": "^8.21.3"
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.19.15",

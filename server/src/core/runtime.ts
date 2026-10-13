@@ -102,7 +102,10 @@ export async function openRuntime(paths: ServerPaths): Promise<Runtime> {
       const data = settings.data
       return {
         ...(data.transport !== "auto" ? { transport: data.transport } : {}),
-        cacheRetention: data.cacheRetention === "long" ? ("long" as const) : ("short" as const),
+        cacheRetention:
+          data.cacheRetention === "long"
+            ? ("long" as const)
+            : ("short" as const),
       }
     },
     get retry() {

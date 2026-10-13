@@ -14,7 +14,10 @@ import {
 } from "@earendil-works/pi-durable"
 import { MCP_TOOL_DEFINITIONS } from "pi-web-access/mcp-tool-definitions.ts"
 import { createStandaloneWebToolCore } from "pi-web-access/web-tool-core.ts"
-import type { WebToolCore, WebToolResult } from "pi-web-access/web-tool-contract.ts"
+import type {
+  WebToolCore,
+  WebToolResult,
+} from "pi-web-access/web-tool-contract.ts"
 
 type Runner = (
   core: WebToolCore,
@@ -24,8 +27,10 @@ type Runner = (
 
 const RUNNERS: Record<string, Runner> = {
   web_search: (core, args, signal) => core.webSearch(args as never, signal),
-  fetch_content: (core, args, signal) => core.fetchContent(args as never, signal),
-  get_search_content: (core, args, signal) => core.getSearchContent(args as never, signal),
+  fetch_content: (core, args, signal) =>
+    core.fetchContent(args as never, signal),
+  get_search_content: (core, args, signal) =>
+    core.getSearchContent(args as never, signal),
   source_check: (core, args, signal) => core.sourceCheck(args as never, signal),
 }
 
@@ -36,7 +41,9 @@ function core() {
   return sharedCore
 }
 
-function webTool(definition: (typeof MCP_TOOL_DEFINITIONS)[number]): ToolRegistration {
+function webTool(
+  definition: (typeof MCP_TOOL_DEFINITIONS)[number]
+): ToolRegistration {
   const run = RUNNERS[definition.name]!
   return {
     name: definition.name,
@@ -67,6 +74,8 @@ export function createWebAccessExtension(): Extension {
   }
   return defineExtension({
     name: "web-access",
-    tools: MCP_TOOL_DEFINITIONS.filter((tool) => enabled.includes(tool.name)).map(webTool),
+    tools: MCP_TOOL_DEFINITIONS.filter((tool) =>
+      enabled.includes(tool.name)
+    ).map(webTool),
   })
 }

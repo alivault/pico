@@ -63,8 +63,10 @@ function rules(names: readonly string[]) {
     const normalized = rule.trim()
     if (normalized && !result.includes(normalized)) result.push(normalized)
   }
-  if (names.includes("bash")) add("Use bash for file operations like ls, rg, find")
-  for (const name of names) for (const rule of TOOL_GUIDELINES[name] ?? []) add(rule)
+  if (names.includes("bash"))
+    add("Use bash for file operations like ls, rg, find")
+  for (const name of names)
+    for (const rule of TOOL_GUIDELINES[name] ?? []) add(rule)
   add("Be concise in your responses")
   add("Show file paths clearly when working with files")
   return result.map((rule) => `- ${rule}`).join("\n")
@@ -76,12 +78,15 @@ export function createPromptExtension(resources: ResourceCache) {
     sections: [
       section(
         "preamble",
-        async (input) => (await resources.get(cwdOf(input))).customSystemPrompt ?? DEFAULT_PREAMBLE,
+        async (input) =>
+          (await resources.get(cwdOf(input))).customSystemPrompt ??
+          DEFAULT_PREAMBLE,
         { tag: false }
       ),
       section("tools", (input) => {
         const lines = input.agent.tools.map(
-          (tool) => `- ${tool.name}: ${TOOL_SNIPPETS[tool.name] ?? firstSentence(tool.description)}`
+          (tool) =>
+            `- ${tool.name}: ${TOOL_SNIPPETS[tool.name] ?? firstSentence(tool.description)}`
         )
         const list = lines.length > 0 ? lines.join("\n") : "(none)"
         return `${list}\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.`
@@ -104,7 +109,11 @@ export function createPromptExtension(resources: ResourceCache) {
       }),
       section("skills", async (input) => {
         const names = toolNames(input)
-        const reader = names.includes("read") ? "read" : names.includes("bash") ? "bash" : undefined
+        const reader = names.includes("read")
+          ? "read"
+          : names.includes("bash")
+            ? "bash"
+            : undefined
         if (!reader) return undefined
         const skills = (await resources.get(cwdOf(input))).skills
         if (skills.length === 0) return undefined

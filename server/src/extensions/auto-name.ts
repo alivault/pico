@@ -67,11 +67,15 @@ function stripLeadingFiller(text: string) {
   return current
 }
 
-function truncateSessionName(text: string, maxLength = MAX_SESSION_NAME_LENGTH) {
+function truncateSessionName(
+  text: string,
+  maxLength = MAX_SESSION_NAME_LENGTH
+) {
   if (text.length <= maxLength) return text
   const slice = text.slice(0, Math.max(0, maxLength - 1))
   const lastSpace = slice.lastIndexOf(" ")
-  const cutoff = lastSpace >= Math.floor(maxLength * 0.6) ? slice.slice(0, lastSpace) : slice
+  const cutoff =
+    lastSpace >= Math.floor(maxLength * 0.6) ? slice.slice(0, lastSpace) : slice
   return `${cutoff.trimEnd()}…`
 }
 
@@ -81,12 +85,14 @@ export function cleanupCandidate(raw: string | undefined): string | undefined {
   let text = raw.split(/\r?\n/).find((line) => line.trim()) ?? raw
   text = text.replace(/^[\s>*`"'#[\]-]+/, "")
   text = text.replace(/^(title|session title|name)\s*:\s*/i, "")
+  text = text.replace(/^[\s`"'*]+|[\s`"'*]+$/g, "")
   text = normalizeWhitespace(text)
   text = stripLeadingFiller(text)
   text = trimTrailingPunctuation(text)
   if (!text) return undefined
   const words = text.split(" ")
-  if (words.length > MAX_SESSION_NAME_WORDS) text = words.slice(0, MAX_SESSION_NAME_WORDS).join(" ")
+  if (words.length > MAX_SESSION_NAME_WORDS)
+    text = words.slice(0, MAX_SESSION_NAME_WORDS).join(" ")
   text = truncateSessionName(text)
   return text || undefined
 }
@@ -102,12 +108,17 @@ function simplifyPromptForHeuristic(text: string) {
 }
 
 /** A name from the prompt text alone, available at once. */
-export function heuristicSessionName(text: string, imageCount: number): string | undefined {
+export function heuristicSessionName(
+  text: string,
+  imageCount: number
+): string | undefined {
   const simplified = simplifyPromptForHeuristic(text)
   if (!simplified) return imageCount > 0 ? IMAGE_ONLY_NAME : undefined
   const firstClause = simplified.split(/[\n.!?]/, 1)[0] ?? simplified
   const stripped = stripLeadingFiller(firstClause) || simplified
-  return cleanupCandidate(stripped) ?? (imageCount > 0 ? IMAGE_ONLY_NAME : undefined)
+  return (
+    cleanupCandidate(stripped) ?? (imageCount > 0 ? IMAGE_ONLY_NAME : undefined)
+  )
 }
 
 function buildTitlePrompt(prompt: string, cwd: string, imageCount: number) {
@@ -142,7 +153,10 @@ export async function generateSessionName(
         {
           role: "user",
           content: [
-            { type: "text", text: buildTitlePrompt(input.text, input.cwd, input.imageCount) },
+            {
+              type: "text",
+              text: buildTitlePrompt(input.text, input.cwd, input.imageCount),
+            },
           ],
           timestamp: Date.now(),
         },
@@ -152,10 +166,14 @@ export async function generateSessionName(
   )
   // Provider failures usually come back as messages, not as thrown errors.
   if (response.stopReason === "error" || response.stopReason === "aborted") {
-    throw new Error(response.errorMessage || `Title generation ${response.stopReason}`)
+    throw new Error(
+      response.errorMessage || `Title generation ${response.stopReason}`
+    )
   }
   const raw = response.content
-    .filter((block): block is { type: "text"; text: string } => block.type === "text")
+    .filter(
+      (block): block is { type: "text"; text: string } => block.type === "text"
+    )
     .map((block) => block.text)
     .join(" ")
   const name = cleanupCandidate(raw)

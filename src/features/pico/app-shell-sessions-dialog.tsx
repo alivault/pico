@@ -841,7 +841,7 @@ function useAppShellSessionsDialogView({
             <FooterKbd>{formatShortcutLabel("Control+R")}</FooterKbd> Rename
           </span>
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel("Control+D")}</FooterKbd> Delete
+            <FooterKbd>{formatShortcutLabel("Control+D")}</FooterKbd> Archive
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Esc</FooterKbd> Close
@@ -962,7 +962,7 @@ function useAppShellSessionsDialogView({
           <ArrowLeftIcon />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Delete session</div>
+          <div className="truncate text-sm font-medium">Archive session</div>
           <div className="truncate text-xs text-muted-foreground">
             {selectedSession?.title || "Selected session"}
           </div>
@@ -970,13 +970,14 @@ function useAppShellSessionsDialogView({
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-          Delete "{selectedSession?.title || "New session"}" from disk?
+          Archive "{selectedSession?.title || "New session"}"? (History is
+          kept.)
         </p>
       </div>
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Delete
+            <FooterKbd>Enter</FooterKbd> Archive
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Esc</FooterKbd> Back

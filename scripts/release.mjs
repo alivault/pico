@@ -1,204 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process"
-import fs from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 
-const allowedReleaseTypes = new Set(["patch", "minor", "major"])
-const releaseType = process.argv[2]
-const releaseBranch = process.env.RELEASE_BRANCH ?? "main"
-
-function usage() {
-  console.error(`Usage: pnpm release <patch|minor|major>
-
-Runs local release checks, keeps npm and Rust versions aligned, creates the git tag, and atomically pushes the branch and release tag. The GitHub release workflow publishes native assets and npm from the pushed tag.
-
-Set RELEASE_BRANCH=<branch> to release from a branch other than main.`)
-}
-
-if (!releaseType || !allowedReleaseTypes.has(releaseType)) {
-  usage()
+// Prepare a local release. Publishing and pushing require explicit commands.
+const version = process.argv[2]
+if (!/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(version ?? "")) {
+  console.error("Usage: pnpm release <version> (for example 3.0.0-alpha.2)")
   process.exit(1)
 }
-
-function run(command, args, options = {}) {
+function run(command, args, capture = false) {
   const result = spawnSync(command, args, {
+    stdio: capture ? "pipe" : "inherit",
     encoding: "utf8",
-    stdio: options.capture ? "pipe" : "inherit",
   })
-
-  if (result.error) {
-    throw result.error
-  }
-
-  if (result.status !== 0 && !options.allowFailure) {
-    const detail = options.capture
-      ? `\n${result.stderr || result.stdout || ""}`.trimEnd()
-      : ""
-    throw new Error(
-      `Command failed: ${[command, ...args].join(" ")}${detail ? `\n${detail}` : ""}`
-    )
-  }
-
-  return {
-    status: result.status ?? 0,
-    stdout: result.stdout?.trim() ?? "",
-    stderr: result.stderr?.trim() ?? "",
-  }
+  if (result.error || result.status !== 0)
+    throw result.error ?? new Error(`${command} failed: ${result.stderr ?? ""}`)
+  return result.stdout?.trim()
 }
-
-function readPackageJson() {
-  return JSON.parse(fs.readFileSync("package.json", "utf8"))
+if (run("git", ["status", "--porcelain"], true))
+  throw new Error("Commit or stash changes before preparing a release")
+run("pnpm", ["check"])
+for (const path of ["package.json", "server/package.json"]) {
+  const pkg = JSON.parse(readFileSync(path, "utf8"))
+  pkg.version = version
+  writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
 }
-
-function updateRustServerVersion(version) {
-  const path = "crates/pico-server/Cargo.toml"
-  const source = fs.readFileSync(path, "utf8")
-  const updated = source.replace(
-    /^(\[package\]\nname = "pico-server"\nversion = ")[^"]+("$)/m,
-    `$1${version}$2`
-  )
-  if (updated === source) {
-    throw new Error(`Could not update pico-server version in ${path}`)
-  }
-  fs.writeFileSync(path, updated)
-}
-
-function ensureCleanWorkingTree() {
-  const status = run("git", ["status", "--porcelain"], { capture: true }).stdout
-  if (status) {
-    throw new Error(
-      `Working tree is not clean. Commit or stash changes before releasing.\n${status}`
-    )
-  }
-}
-
-function getNextVersion(version, type) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
-  if (!match) {
-    throw new Error(`Unsupported package version: ${version}`)
-  }
-
-  let major = Number(match[1])
-  let minor = Number(match[2])
-  let patch = Number(match[3])
-
-  if (type === "major") {
-    major += 1
-    minor = 0
-    patch = 0
-  } else if (type === "minor") {
-    minor += 1
-    patch = 0
-  } else {
-    patch += 1
-  }
-
-  return `${major}.${minor}.${patch}`
-}
-
-function ensureOnReleaseBranch() {
-  const branch = run("git", ["branch", "--show-current"], {
-    capture: true,
-  }).stdout
-
-  if (branch !== releaseBranch) {
-    throw new Error(
-      `Releases must run from ${releaseBranch}. Current branch: ${branch || "detached HEAD"}`
-    )
-  }
-
-  return branch
-}
-
-function ensureBasedOnRemote(branch) {
-  run("git", ["fetch", "origin", branch, "--tags"])
-
-  const result = run(
-    "git",
-    ["merge-base", "--is-ancestor", `origin/${branch}`, "HEAD"],
-    {
-      allowFailure: true,
-      capture: true,
-    }
-  )
-
-  if (result.status !== 0) {
-    throw new Error(
-      `Local ${branch} is not based on origin/${branch}. Pull/rebase before releasing.`
-    )
-  }
-}
-
-function ensureTagAvailable(tag) {
-  const result = run(
-    "git",
-    ["rev-parse", "-q", "--verify", `refs/tags/${tag}`],
-    {
-      allowFailure: true,
-      capture: true,
-    }
-  )
-
-  if (result.status === 0) {
-    throw new Error(`Tag already exists: ${tag}`)
-  }
-}
-
-function ensureNpmVersionAvailable(name, version) {
-  const result = run("npm", ["view", `${name}@${version}`, "version"], {
-    allowFailure: true,
-    capture: true,
-  })
-
-  if (result.status === 0) {
-    throw new Error(`${name}@${version} is already published on npm.`)
-  }
-}
-
-try {
-  const branch = ensureOnReleaseBranch()
-  ensureCleanWorkingTree()
-  ensureBasedOnRemote(branch)
-  ensureCleanWorkingTree()
-
-  const packageJson = readPackageJson()
-  const nextVersion = getNextVersion(packageJson.version, releaseType)
-  const nextTag = `v${nextVersion}`
-
-  ensureTagAvailable(nextTag)
-  ensureNpmVersionAvailable(packageJson.name, nextVersion)
-
-  console.log(
-    `Releasing ${packageJson.name} ${packageJson.version} → ${nextVersion}`
-  )
-  run("pnpm", ["check"])
-  run("pnpm", ["build"])
-  ensureCleanWorkingTree()
-
-  run("pnpm", ["version", nextVersion, "--no-git-tag-version"])
-  updateRustServerVersion(nextVersion)
-  run("cargo", ["check", "-p", "pico-server"])
-  run("git", [
-    "add",
-    "package.json",
-    "crates/pico-server/Cargo.toml",
-    "Cargo.lock",
-  ])
-  run("git", ["diff", "--cached", "--check"])
-  run("git", ["commit", "-m", `release ${nextTag}`])
-  run("git", ["tag", nextTag])
-  // --follow-tags skips lightweight tags, so name the release tag explicitly.
-  run("git", [
-    "push",
-    "--atomic",
-    "origin",
-    `refs/heads/${branch}`,
-    `refs/tags/${nextTag}`,
-  ])
-
-  console.log(
-    `Released ${nextTag}. GitHub Actions will publish native assets and ${packageJson.name}@${nextVersion}.`
-  )
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
-}
+run("pnpm", ["install", "--lockfile-only"])
+run("pnpm", ["build"])
+run("npm", ["pack", "--dry-run", "--ignore-scripts"])
+console.log(
+  `Release ${version} is prepared. Review and commit the changes before tagging or publishing.`
+)

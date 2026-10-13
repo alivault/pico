@@ -9,7 +9,6 @@
  */
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 
 import type { ImageContent, TextContent, TSchema } from "@earendil-works/pi-ai"
@@ -36,7 +35,7 @@ type ServerConfig = {
   cwd?: string
   url?: string
   headers?: Record<string, string>
-  exposure?: Exposure | string
+  exposure?: string
   toolExposure?: Record<string, Exposure>
   description?: string
   enabled?: boolean
@@ -54,7 +53,12 @@ export type McpExtension = {
   readonly extension: Extension
   namespaces(): { name: string; description: string; prefix: string }[]
   onChange(listener: () => void): void
-  status(): { name: string; connected: boolean; toolCount: number; error?: string }[]
+  status(): {
+    name: string
+    connected: boolean
+    toolCount: number
+    error?: string
+  }[]
   close(): Promise<void>
 }
 
@@ -69,21 +73,31 @@ function namespace(server: string) {
 function resolveValue(value: string) {
   if (value.startsWith("!")) {
     try {
-      return execSync(value.slice(1), { encoding: "utf8", timeout: 10_000 }).trim()
+      return execSync(value.slice(1), {
+        encoding: "utf8",
+        timeout: 10_000,
+      }).trim()
     } catch {
       return ""
     }
   }
-  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_match, name: string) => process.env[name] ?? "")
+  return value.replace(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
+    (_match, name: string) => process.env[name] ?? ""
+  )
 }
 
 function resolveRecord(record: Record<string, string> | undefined) {
   if (!record) return undefined
-  return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, resolveValue(value)]))
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, resolveValue(value)])
+  )
 }
 
 function normalizeExposure(value: unknown): Exposure {
-  return value === "deferred" || value === "direct" || value === "hidden" ? value : "codemode"
+  return value === "deferred" || value === "direct" || value === "hidden"
+    ? value
+    : "codemode"
 }
 
 function exposureOf(config: ServerConfig, tool: string): Exposure {
@@ -91,16 +105,23 @@ function exposureOf(config: ServerConfig, tool: string): Exposure {
   if (overrides[tool]) return normalizeExposure(overrides[tool])
   for (const [pattern, exposure] of Object.entries(overrides)) {
     if (!pattern.includes("*")) continue
-    const regex = new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`)
+    const regex = new RegExp(
+      `^${pattern
+        .split("*")
+        .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*")}$`
+    )
     if (regex.test(tool)) return normalizeExposure(exposure)
   }
   return normalizeExposure(config.exposure)
 }
 
 function readConfig(agentDir: string): Record<string, ServerConfig> {
-  for (const path of [join(agentDir, "mcp.json"), join(homedir(), ".pi", "agent", "mcp.json")]) {
+  for (const path of [join(agentDir, "mcp.json")]) {
     try {
-      const parsed = JSON.parse(readFileSync(path, "utf8")) as { mcpServers?: Record<string, ServerConfig> }
+      const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+        mcpServers?: Record<string, ServerConfig>
+      }
       return parsed.mcpServers ?? {}
     } catch {
       // Try the next location.
@@ -123,7 +144,9 @@ export function createMcpExtension(agentDir: string): McpExtension {
     if (server.config.enabled === false) continue
     void connect(server).then(changed, (error: unknown) => {
       server.error = error instanceof Error ? error.message : String(error)
-      console.warn(`[pico] MCP server ${server.name} is unavailable: ${server.error}`)
+      console.warn(
+        `[pico] MCP server ${server.name} is unavailable: ${server.error}`
+      )
     })
   }
 
@@ -136,7 +159,10 @@ export function createMcpExtension(agentDir: string): McpExtension {
         .filter((server) => server.tools.length > 0)
         .map((server) => ({
           name: namespace(server.name),
-          description: server.config.description ?? server.client?.instructions?.split("\n")[0] ?? `MCP server ${server.name}`,
+          description:
+            server.config.description ??
+            server.client?.instructions?.split("\n")[0] ??
+            `MCP server ${server.name}`,
           prefix: `${namespace(server.name)}__`,
         })),
     onChange: (listener) => {
@@ -150,18 +176,26 @@ export function createMcpExtension(agentDir: string): McpExtension {
         ...(server.error ? { error: server.error } : {}),
       })),
     async close() {
-      await Promise.allSettled(servers.map((server) => server.client?.close()))
+      for (const server of servers) await server.client?.close()
     },
   }
 }
 
 function readConfigServers(agentDir: string): Server[] {
-  return Object.entries(readConfig(agentDir)).map(([name, config]) => ({ name, config, tools: [] }))
+  return Object.entries(readConfig(agentDir)).map(([name, config]) => ({
+    name,
+    config,
+    tools: [],
+  }))
 }
 
 async function connect(server: Server) {
   const { config } = server
-  const client = new McpClient({ name: "pico", version: "3", requestTimeoutMs: 120_000 })
+  const client = new McpClient({
+    name: "pico",
+    version: "3",
+    requestTimeoutMs: 120_000,
+  })
   const transport = config.url
     ? new StreamableHttpTransport({
         url: config.url,
@@ -193,8 +227,12 @@ function build(servers: Server[]): Extension {
       if (exposure === "hidden") continue
       tools.push({
         name: toolName(server.name, tool.name),
-        description: tool.description ?? `${tool.name} from MCP server ${server.name}`,
-        parameters: (tool.inputSchema ?? { type: "object", properties: {} }) as unknown as TSchema,
+        description:
+          tool.description ?? `${tool.name} from MCP server ${server.name}`,
+        parameters: (tool.inputSchema ?? {
+          type: "object",
+          properties: {},
+        }) as unknown as TSchema,
         ...(exposure === "codemode" ? { callers: ["tools"] as const } : {}),
         ...(exposure === "deferred" ? { deferred: true as const } : {}),
         async execute(args, _api, context) {
@@ -202,16 +240,27 @@ function build(servers: Server[]): Extension {
           if (!client || client.connectionState !== "connected") {
             throw new Error(`MCP server ${server.name} is not connected`)
           }
-          const result = await client.callTool(tool.name, args as Record<string, unknown>, {
-            ...(context.abortSignal ? { signal: context.abortSignal } : {}),
-          })
+          const result = await client.callTool(
+            tool.name,
+            args as Record<string, unknown>,
+            context.abortSignal ? { signal: context.abortSignal } : {}
+          )
           const content: Array<TextContent | ImageContent> = []
           for (const part of toLlmContent(result)) {
-            if (part.type === "text") content.push({ type: "text", text: part.text })
-            else if (part.type === "image") content.push({ type: "image", data: part.data, mimeType: part.mimeType })
+            if (part.type === "text")
+              content.push({ type: "text", text: part.text })
+            else if (part.type === "image")
+              content.push({
+                type: "image",
+                data: part.data,
+                mimeType: part.mimeType,
+              })
           }
           return {
-            output: content.length > 0 ? content : [{ type: "text", text: "(no output)" }],
+            output:
+              content.length > 0
+                ? content
+                : [{ type: "text", text: "(no output)" }],
             ...(result.isError ? { isError: true } : {}),
           }
         },

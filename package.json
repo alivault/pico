@@ -102,5 +102,16 @@
     "vite-plus": "catalog:",
     "zod": "^4.3.6"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@earendil-works/chord": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-codemode": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-durable": "1.2.0",
+    "@earendil-works/pi-mcp": "1.2.0",
+    "node-pty": "1.1.0",
+    "shiki": "4.5.0",
+    "ws": "8.21.3"
+  }
 }

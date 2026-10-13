@@ -14,8 +14,21 @@ const READ_LIMIT = 1_000_000
 const SEARCH_DEPTH = 4
 const SEARCH_LIMIT = 50
 const FILE_COMPLETION_LIMIT = 20
-const IGNORE_DIRECTORIES = new Set([".git", ".next", ".output", ".tanstack", "dist", "node_modules", "target"])
-const SEARCH_IGNORE_DIRECTORIES = new Set([".cache", ".local", "Applications", "Library"])
+const IGNORE_DIRECTORIES = new Set([
+  ".git",
+  ".next",
+  ".output",
+  ".tanstack",
+  "dist",
+  "node_modules",
+  "target",
+])
+const SEARCH_IGNORE_DIRECTORIES = new Set([
+  ".cache",
+  ".local",
+  "Applications",
+  "Library",
+])
 
 export type CompletionEntry = {
   value: string
@@ -43,7 +56,8 @@ export async function resolveDirectory(input: string, baseCwd: string) {
   } catch {
     throw badRequest(`Directory not found: ${trimmed}`)
   }
-  if (!(await stat(resolved)).isDirectory()) throw badRequest(`Not a directory: ${trimmed}`)
+  if (!(await stat(resolved)).isDirectory())
+    throw badRequest(`Not a directory: ${trimmed}`)
   return resolved
 }
 
@@ -55,7 +69,10 @@ async function entriesOf(directory: string): Promise<Dirent[]> {
   }
 }
 
-export async function pathCompletions(prefix: string, baseCwd: string): Promise<CompletionEntry[]> {
+export async function pathCompletions(
+  prefix: string,
+  baseCwd: string
+): Promise<CompletionEntry[]> {
   const normalized = prefix.replace(/\\/g, "/")
   const expanded = expandHome(prefix)
   const endsWithSeparator = /[/\\]$/.test(prefix)
@@ -77,15 +94,23 @@ export async function pathCompletions(prefix: string, baseCwd: string): Promise<
     if (!entry.name.toLowerCase().startsWith(searchPrefix)) continue
     let isDirectory = entry.isDirectory()
     if (!isDirectory && entry.isSymbolicLink()) {
-      isDirectory = await stat(join(directory, entry.name)).then((info) => info.isDirectory(), () => false)
+      isDirectory = await stat(join(directory, entry.name)).then(
+        (info) => info.isDirectory(),
+        () => false
+      )
     }
     let value: string
     if (endsWithSeparator) value = `${normalized}${entry.name}`
-    else if (normalized.includes("/")) value = `${normalized.slice(0, normalized.lastIndexOf("/") + 1)}${entry.name}`
+    else if (normalized.includes("/"))
+      value = `${normalized.slice(0, normalized.lastIndexOf("/") + 1)}${entry.name}`
     else if (normalized === "~") value = `~/${entry.name}`
     else value = entry.name
     if (isDirectory) value += "/"
-    results.push({ value, label: `${entry.name}${isDirectory ? "/" : ""}`, isDirectory })
+    results.push({
+      value,
+      label: `${entry.name}${isDirectory ? "/" : ""}`,
+      isDirectory,
+    })
   }
   results.sort((left, right) =>
     left.isDirectory === right.isDirectory
@@ -136,7 +161,11 @@ function fileScore(path: string, query: string, isDirectory: boolean) {
   return score
 }
 
-export async function fileCompletions(query: string, baseCwd: string, quoted: boolean): Promise<CompletionEntry[]> {
+export async function fileCompletions(
+  query: string,
+  baseCwd: string,
+  quoted: boolean
+): Promise<CompletionEntry[]> {
   const normalized = query.replace(/\\/g, "/")
   let root = baseCwd
   let displayBase = ""
@@ -157,10 +186,18 @@ export async function fileCompletions(query: string, baseCwd: string, quoted: bo
   const scored = (await walk(root, TREE_LIMIT, true))
     .map((entry) => {
       const path = display(relative(root, entry.path))
-      return { path, isDirectory: entry.isDirectory, score: fileScore(path, searchQuery, entry.isDirectory) }
+      return {
+        path,
+        isDirectory: entry.isDirectory,
+        score: fileScore(path, searchQuery, entry.isDirectory),
+      }
     })
     .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score || left.path.toLowerCase().localeCompare(right.path.toLowerCase()))
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.path.toLowerCase().localeCompare(right.path.toLowerCase())
+    )
     .slice(0, FILE_COMPLETION_LIMIT)
   return scored.map(({ path, isDirectory }) => {
     const displayed = `${displayBase}${path}`
@@ -196,7 +233,8 @@ export async function readProjectFile(cwd: string, path: string) {
   } catch {
     throw badRequest("File not found")
   }
-  if (resolved === root || !resolved.startsWith(`${root}${sep}`)) throw badRequest("file path must stay inside the directory")
+  if (resolved === root || !resolved.startsWith(`${root}${sep}`))
+    throw badRequest("file path must stay inside the directory")
   const info = await stat(resolved)
   if (!info.isFile()) throw badRequest("Not a file")
   if (info.size > READ_LIMIT) throw badRequest("File is too large to preview")
@@ -210,7 +248,10 @@ export async function readProjectFile(cwd: string, path: string) {
   }
 }
 
-export async function searchDirectories(query: string, baseCwd: string): Promise<CompletionEntry[]> {
+export async function searchDirectories(
+  query: string,
+  baseCwd: string
+): Promise<CompletionEntry[]> {
   const needle = query.trim().toLowerCase()
   if (!needle) return []
   const home = homedir()
@@ -219,29 +260,52 @@ export async function searchDirectories(query: string, baseCwd: string): Promise
   const seen = new Set<string>()
   const matches: Array<{ score: number; entry: CompletionEntry }> = []
   for (const root of roots) {
-    const queue: Array<{ directory: string; depth: number }> = [{ directory: root, depth: 0 }]
+    const queue: Array<{ directory: string; depth: number }> = [
+      { directory: root, depth: 0 },
+    ]
     while (queue.length > 0) {
       const { directory, depth } = queue.shift()!
       if (depth >= SEARCH_DEPTH) continue
       for (const entry of await entriesOf(directory)) {
         if (!entry.isDirectory() || entry.isSymbolicLink()) continue
         const name = entry.name
-        if (IGNORE_DIRECTORIES.has(name) || SEARCH_IGNORE_DIRECTORIES.has(name)) continue
+        if (IGNORE_DIRECTORIES.has(name) || SEARCH_IGNORE_DIRECTORIES.has(name))
+          continue
         if (!needle.startsWith(".") && name.startsWith(".")) continue
         const path = join(directory, name)
         queue.push({ directory: path, depth: depth + 1 })
         const displayed = display(path)
-        if (!displayed.toLowerCase().includes(needle) || seen.has(displayed)) continue
+        if (!displayed.toLowerCase().includes(needle) || seen.has(displayed))
+          continue
         seen.add(displayed)
         const lowerName = name.toLowerCase()
         const score =
-          (lowerName === needle ? 1000 : lowerName.startsWith(needle) ? 800 : lowerName.includes(needle) ? 600 : 300) - depth * 5
-        matches.push({ score, entry: { value: displayed, label: `${name}/`, description: displayed, isDirectory: true } })
+          (lowerName === needle
+            ? 1000
+            : lowerName.startsWith(needle)
+              ? 800
+              : lowerName.includes(needle)
+                ? 600
+                : 300) -
+          depth * 5
+        matches.push({
+          score,
+          entry: {
+            value: displayed,
+            label: `${name}/`,
+            description: displayed,
+            isDirectory: true,
+          },
+        })
       }
     }
   }
   return matches
-    .sort((left, right) => right.score - left.score || left.entry.value.localeCompare(right.entry.value))
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.entry.value.localeCompare(right.entry.value)
+    )
     .slice(0, SEARCH_LIMIT)
     .map(({ entry }) => entry)
 }
@@ -251,8 +315,11 @@ export async function canonicalDirectory(path: string) {
   try {
     resolved = await realpath(expandHome(path))
   } catch (error) {
-    throw badRequest(`invalid cwd ${path}: ${error instanceof Error ? error.message : String(error)}`)
+    throw badRequest(
+      `invalid cwd ${path}: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
-  if (!(await stat(resolved)).isDirectory()) throw badRequest("cwd must be a directory")
+  if (!(await stat(resolved)).isDirectory())
+    throw badRequest("cwd must be a directory")
   return resolved
 }

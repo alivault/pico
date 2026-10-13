@@ -49,7 +49,11 @@ export type CompactionBlock = {
   estimatedTokensAfter?: number
 }
 
-export type AssistantBlock = TextBlock | ThinkingBlock | ToolBlock | CompactionBlock
+export type AssistantBlock =
+  | TextBlock
+  | ThinkingBlock
+  | ToolBlock
+  | CompactionBlock
 
 export type ModelOption = {
   id: string
@@ -145,11 +149,16 @@ export function messageImages(message: MessageLike | undefined): PromptImage[] {
 }
 
 /** Tokens a response's request occupied in the context window. */
-export function contextTokens(usage: UsageLike | undefined): number | undefined {
+export function contextTokens(
+  usage: UsageLike | undefined
+): number | undefined {
   if (!usage) return undefined
   const total =
     usage.totalTokens ||
-    (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)
+    (usage.input ?? 0) +
+      (usage.output ?? 0) +
+      (usage.cacheRead ?? 0) +
+      (usage.cacheWrite ?? 0)
   return total > 0 ? total : undefined
 }
 
@@ -165,20 +174,31 @@ function assistantModel(message: MessageLike): ModelOption | undefined {
 }
 
 function stopMessage(message: MessageLike): string {
-  const error = typeof message.errorMessage === "string" ? message.errorMessage.trim() : ""
+  const error =
+    typeof message.errorMessage === "string" ? message.errorMessage.trim() : ""
   if (message.stopReason === "aborted") {
-    return error && error !== "Request was aborted" ? error : "Operation aborted"
+    return error && error !== "Request was aborted"
+      ? error
+      : "Operation aborted"
   }
-  if (message.stopReason === "error") return `Error: ${error || "Unknown error"}`
+  if (message.stopReason === "error")
+    return `Error: ${error || "Unknown error"}`
   return ""
 }
 
-export function assistantBlocks(message: MessageLike, keyPrefix: string): AssistantBlock[] {
+export function assistantBlocks(
+  message: MessageLike,
+  keyPrefix: string
+): AssistantBlock[] {
   const blocks: AssistantBlock[] = []
   parts(message.content).forEach((part, index) => {
     const partKey = `${keyPrefix}:part:${index}`
     if (part?.type === "text") {
-      blocks.push({ type: "text", blockKey: `${partKey}:text`, text: part.text ?? "" })
+      blocks.push({
+        type: "text",
+        blockKey: `${partKey}:text`,
+        text: part.text ?? "",
+      })
     } else if (part?.type === "thinking") {
       const text = part.thinking ?? ""
       if (!text.trim()) return
@@ -186,10 +206,13 @@ export function assistantBlocks(message: MessageLike, keyPrefix: string): Assist
         type: "thinking",
         blockKey: `${partKey}:thinking`,
         text,
-        ...(typeof part.summaryLabel === "string" ? { summaryLabel: part.summaryLabel } : {}),
+        ...(typeof part.summaryLabel === "string"
+          ? { summaryLabel: part.summaryLabel }
+          : {}),
       })
     } else if (part?.type === "toolCall") {
-      const callId = typeof part.id === "string" && part.id ? part.id : undefined
+      const callId =
+        typeof part.id === "string" && part.id ? part.id : undefined
       blocks.push({
         type: "tool",
         blockKey: callId ? `${keyPrefix}:tool:${callId}` : `${partKey}:tool`,
@@ -205,7 +228,8 @@ export function assistantBlocks(message: MessageLike, keyPrefix: string): Assist
   const stop = stopMessage(message)
   if (stop) {
     const pendingTools = blocks.filter(
-      (block): block is ToolBlock => block.type === "tool" && !block.output.trim()
+      (block): block is ToolBlock =>
+        block.type === "tool" && !block.output.trim()
     )
     if (pendingTools.length > 0) {
       for (const block of pendingTools) {
@@ -231,14 +255,20 @@ function compactionSummary(entry: EntryRecord): string {
   const text = messageText(entry.model?.[0] as MessageLike | undefined)
   if (text.startsWith(SUMMARY_PREFIX)) {
     const body = text.slice(SUMMARY_PREFIX.length)
-    return body.endsWith(SUMMARY_SUFFIX) ? body.slice(0, -SUMMARY_SUFFIX.length) : body
+    return body.endsWith(SUMMARY_SUFFIX)
+      ? body.slice(0, -SUMMARY_SUFFIX.length)
+      : body
   }
   return text
 }
 
 /** Whether an entry starts an item; history pages are counted in items. */
 export function entryStartsItem(entry: EntryRecord) {
-  return isUserEntry(entry) || entry.kind === "pi.assistant" || entry.kind === "pi.compaction"
+  return (
+    isUserEntry(entry) ||
+    entry.kind === "pi.assistant" ||
+    entry.kind === "pi.compaction"
+  )
 }
 
 /**
@@ -255,7 +285,9 @@ function isUserEntry(entry: EntryRecord) {
 type ToolLocation = { item: AssistantItem; block: ToolBlock }
 
 /** Build items from history entries, oldest first. */
-export function itemsFromEntries(entries: readonly EntryRecord[]): ConversationItem[] {
+export function itemsFromEntries(
+  entries: readonly EntryRecord[]
+): ConversationItem[] {
   const items: ConversationItem[] = []
   const tools = new Map<string, ToolLocation>()
   let lastContextTokens = 0
@@ -289,14 +321,17 @@ export function itemsFromEntries(entries: readonly EntryRecord[]): ConversationI
         ...(assistantModel(message) ? { model: assistantModel(message) } : {}),
       }
       for (const block of blocks) {
-        if (block.type === "tool" && block.callId) tools.set(block.callId, { item, block })
+        if (block.type === "tool" && block.callId)
+          tools.set(block.callId, { item, block })
       }
       items.push(item)
       continue
     }
     if (entry.kind === "pi.tool-result") {
       const message = (entry.model?.[0] ?? {}) as MessageLike
-      const location = message.toolCallId ? tools.get(message.toolCallId) : undefined
+      const location = message.toolCallId
+        ? tools.get(message.toolCallId)
+        : undefined
       if (!location) continue
       location.block.output = messageText(message)
       location.block.details = message.details
@@ -355,7 +390,12 @@ export function applyLiveTools(
       if (busy) return block
       // The run ended without a result for this call.
       blocksChanged = true
-      return { ...block, running: false, isError: true, output: block.output || "Interrupted" }
+      return {
+        ...block,
+        running: false,
+        isError: true,
+        output: block.output || "Interrupted",
+      }
     })
     if (!blocksChanged) return item
     changed = true
@@ -365,7 +405,9 @@ export function applyLiveTools(
 }
 
 /** The streaming assistant item for the in-flight answer, if a generation is producing one. */
-export function streamingItem(live: LiveState | undefined): AssistantItem | undefined {
+export function streamingItem(
+  live: LiveState | undefined
+): AssistantItem | undefined {
   const message = live?.generation?.message as MessageLike | undefined
   if (!message) return undefined
   const model = assistantModel(message)
@@ -408,9 +450,14 @@ export function streamingDelta(
     if (before && JSON.stringify(before) === JSON.stringify(block)) return
     if (
       (block.type === "text" || block.type === "thinking") &&
-      (!before || (before.type === block.type && before.blockKey === block.blockKey)) &&
+      (!before ||
+        (before.type === block.type && before.blockKey === block.blockKey)) &&
       block.text.startsWith(before && "text" in before ? before.text : "") &&
-      !(block.type === "thinking" && before?.type === "thinking" && before.summaryLabel !== block.summaryLabel) &&
+      !(
+        block.type === "thinking" &&
+        before?.type === "thinking" &&
+        before.summaryLabel !== block.summaryLabel
+      ) &&
       !(block.type === "text" && block.isError)
     ) {
       const previousText = before && "text" in before ? before.text : ""
@@ -437,7 +484,8 @@ export function firstUserText(entries: readonly EntryRecord[]): string {
     if (!isUserEntry(entry)) continue
     const text = messageText(entry.model?.[0] as MessageLike | undefined).trim()
     if (text) return text
-    if (messageImages(entry.model?.[0] as MessageLike | undefined).length > 0) return "Image"
+    if (messageImages(entry.model?.[0] as MessageLike | undefined).length > 0)
+      return "Image"
   }
   return ""
 }

@@ -65,7 +65,15 @@ import type { DraftSelection, Viewers } from "./viewers.ts"
 const ctx = BACKGROUND_CONTEXT
 const INITIAL_HISTORY_ITEMS = 100
 const PREVIEW_CHARS = 160
-const ALL_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+const ALL_THINKING_LEVELS: ModelThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]
 
 export type SessionMeta = {
   cwd: string
@@ -94,7 +102,13 @@ export const SessionDoc = defineDoc<SessionMeta>({
   scope: "conversation",
   history: "latest",
   fork: "initial",
-  initial: () => ({ cwd: "", createdAt: 0, modifiedAt: 0, firstMessage: "", messageCount: 0 }),
+  initial: () => ({
+    cwd: "",
+    createdAt: 0,
+    modifiedAt: 0,
+    firstMessage: "",
+    messageCount: 0,
+  }),
 })
 
 export type SessionListEntry = {
@@ -149,7 +163,9 @@ export function publicId(conversationId: ConversationId) {
 }
 
 export function conversationIdOf(id: string): ConversationId {
-  return Number(id.startsWith("s") ? id.slice(1) : id) as unknown as ConversationId
+  return Number(
+    id.startsWith("s") ? id.slice(1) : id
+  ) as unknown as ConversationId
 }
 
 export function sessionPath(id: string) {
@@ -175,7 +191,9 @@ function iso(time: number | undefined) {
 
 function preview(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim()
-  return normalized.length > PREVIEW_CHARS ? `${normalized.slice(0, PREVIEW_CHARS - 1)}…` : normalized
+  return normalized.length > PREVIEW_CHARS
+    ? `${normalized.slice(0, PREVIEW_CHARS - 1)}…`
+    : normalized
 }
 
 function fnv1a(parts: string[]) {
@@ -189,10 +207,14 @@ function fnv1a(parts: string[]) {
   return hash.toString(16).padStart(16, "0")
 }
 
-function userContent(text: string, images: PromptImageInput[]): string | (TextContent | ImageContent)[] {
+function userContent(
+  text: string,
+  images: PromptImageInput[]
+): string | (TextContent | ImageContent)[] {
   const valid = images.flatMap((image) => {
     let data = typeof image.data === "string" ? image.data.trim() : ""
-    let mimeType = typeof image.mimeType === "string" ? image.mimeType.trim() : ""
+    let mimeType =
+      typeof image.mimeType === "string" ? image.mimeType.trim() : ""
     const match = data.match(/^data:([^;,]+);base64,(.+)$/i)
     if (match) {
       mimeType ||= match[1] ?? ""
@@ -212,7 +234,11 @@ function inboxMessage(item: InboxItem): PendingMessage | undefined {
   return {
     pendingId: `pending:${item.id}`,
     text: messageText(message),
-    images: messageImages(message).map(({ mimeType, data }) => ({ type: "image", mimeType, data })),
+    images: messageImages(message).map(({ mimeType, data }) => ({
+      type: "image",
+      mimeType,
+      data,
+    })),
     streamingBehavior: item.mode,
   }
 }
@@ -268,12 +294,16 @@ export class Sessions {
 
     await Promise.all(
       ids.map(async (conversationId) => {
-        const meta = await this.#harness.snapshot(SessionDoc, conversationId, ctx)
+        const meta = await this.#harness.snapshot(
+          SessionDoc,
+          conversationId,
+          ctx
+        )
         if (!meta || !meta.cwd) return
         const id = publicId(conversationId)
         this.#metas.set(id, { ...meta })
         const live = await this.#harness.snapshot(LiveDoc, conversationId, ctx)
-        this.#docs.set(id, { ...(live ? { live: live as LiveState } : {}) })
+        this.#docs.set(id, live ? { live: live as LiveState } : {})
         this.#busy.set(id, live?.run !== undefined)
       })
     )
@@ -321,7 +351,8 @@ export class Sessions {
       conversationIdOf(id),
       ctx
     )
-    if (!conversation || !this.#metas.has(id)) throw notFound(`Unknown session: ${id}`)
+    if (!conversation || !this.#metas.has(id))
+      throw notFound(`Unknown session: ${id}`)
     return conversation
   }
 
@@ -369,13 +400,19 @@ export class Sessions {
       const entries: EntryRecord[] = []
       let cursor: Parameters<Conversation["entries"]>[2]
       do {
-        const page = await conversation.entries({ order: "ascending" }, 1000, cursor, ctx)
+        const page = await conversation.entries(
+          { order: "ascending" },
+          1000,
+          cursor,
+          ctx
+        )
         entries.push(...page.items)
         cursor = page.next
       } while (cursor)
       const last = entries.at(-1)?.id ?? -1
       for (const entry of this.#arrivals.get(id) ?? []) {
-        if ((entry.id as unknown as number) > (last as unknown as number)) entries.push(entry)
+        if ((entry.id as unknown as number) > (last as unknown as number))
+          entries.push(entry)
       }
       const transcript: Transcript = { entries }
       this.#transcripts.set(id, transcript)
@@ -401,8 +438,13 @@ export class Sessions {
     this.#docs.set(id, docs)
     if (key in docs) return docs[key]
     const conversationId = conversationIdOf(id)
-    const token = key === "live" ? LiveDoc : key === "inbox" ? InboxDoc : AgentDoc
-    const value = (await this.#harness.snapshot(token as typeof LiveDoc, conversationId, ctx)) as Docs[K]
+    const token =
+      key === "live" ? LiveDoc : key === "inbox" ? InboxDoc : AgentDoc
+    const value = (await this.#harness.snapshot(
+      token as typeof LiveDoc,
+      conversationId,
+      ctx
+    )) as Docs[K]
     if (!(key in docs)) docs[key] = value
     return docs[key]
   }
@@ -426,7 +468,10 @@ export class Sessions {
         this.#noteEntry(id, entry)
         this.#markDirty(id, { entries: true })
       } else if (change.type === "document") {
-        const id = change.conversationId === undefined ? undefined : publicId(change.conversationId)
+        const id =
+          change.conversationId === undefined
+            ? undefined
+            : publicId(change.conversationId)
         if (!id || !this.#metas.has(id)) continue
         const kind = change.record.kind
         const docs = this.#docs.get(id) ?? {}
@@ -454,7 +499,8 @@ export class Sessions {
     const meta = this.#metas.get(id)
     if (!meta) return
     const message = entry.model?.[0] as { timestamp?: number } | undefined
-    const time = typeof message?.timestamp === "number" ? message.timestamp : Date.now()
+    const time =
+      typeof message?.timestamp === "number" ? message.timestamp : Date.now()
     const text = messageText(message as never)
     const change: Partial<SessionMeta> = {
       messageCount: meta.messageCount + 1,
@@ -503,7 +549,13 @@ export class Sessions {
 
     if (busy !== wasBusy) {
       this.#hub.push(
-        { type: "session_status", sessionId: id, sessionKey: sessionKey(id), sessionPath: sessionPath(id), streaming: busy },
+        {
+          type: "session_status",
+          sessionId: id,
+          sessionKey: sessionKey(id),
+          sessionPath: sessionPath(id),
+          streaming: busy,
+        },
         { sessionId: id }
       )
       this.#scheduleSessionsBroadcast()
@@ -515,7 +567,12 @@ export class Sessions {
 
     if (!this.#watched(id)) return
     const structural =
-      changes.entries || changes.inbox || changes.agent || changes.usage || busy !== wasBusy || compacting !== wasCompacting
+      changes.entries ||
+      changes.inbox ||
+      changes.agent ||
+      changes.usage ||
+      busy !== wasBusy ||
+      compacting !== wasCompacting
     const toolsChanged = changes.live && this.#toolsSignature(id, docs.live)
     if (structural || toolsChanged) {
       await this.publishState(id)
@@ -543,7 +600,13 @@ export class Sessions {
   /** Whether the running output of the current tool round changed. */
   #toolsSignature(id: string, live: LiveState | undefined) {
     const signature = JSON.stringify(
-      (live?.tools ?? []).map((slot) => [slot.callId, slot.status, slot.output?.length ?? 0, slot.details === undefined ? 0 : 1, slot.entry ?? 0])
+      (live?.tools ?? []).map((slot) => [
+        slot.callId,
+        slot.status,
+        slot.output?.length ?? 0,
+        slot.details === undefined ? 0 : 1,
+        slot.entry ?? 0,
+      ])
     )
     const changed = this.#toolSignatures.get(id) !== signature
     this.#toolSignatures.set(id, signature)
@@ -554,8 +617,12 @@ export class Sessions {
     this.#viewers.markDone(id)
     const meta = this.#metas.get(id)
     const transcript = this.#transcripts.get(id)
-    const lastAssistant = transcript?.entries.findLast((entry) => entry.kind === "pi.assistant")
-    const stopReason = (lastAssistant?.model?.[0] as { stopReason?: string } | undefined)?.stopReason
+    const lastAssistant = transcript?.entries.findLast(
+      (entry) => entry.kind === "pi.assistant"
+    )
+    const stopReason = (
+      lastAssistant?.model?.[0] as { stopReason?: string } | undefined
+    )?.stopReason
     this.#persistMetaNow(id)
     this.#hub.push(
       {
@@ -586,7 +653,11 @@ export class Sessions {
   // ---------------------------------------------------------------------------
   // Metadata
 
-  #updateMeta(id: string, change: Partial<SessionMeta>, options: { persistAfterMs?: number } = {}) {
+  #updateMeta(
+    id: string,
+    change: Partial<SessionMeta>,
+    options: { persistAfterMs?: number } = {}
+  ) {
     const meta = this.#metas.get(id)
     if (!meta) return
     const next: SessionMeta = { ...meta, ...change }
@@ -618,7 +689,10 @@ export class Sessions {
     const conversationId = conversationIdOf(id)
     try {
       await this.#harness.commit(async (tx) => {
-        const draft = (await tx.doc(SessionDoc, conversationId)) as unknown as Record<string, unknown>
+        const draft = (await tx.doc(
+          SessionDoc,
+          conversationId
+        )) as unknown as Record<string, unknown>
         for (const key of Object.keys(draft)) {
           if (!(key in meta)) delete draft[key]
         }
@@ -656,9 +730,13 @@ export class Sessions {
       ...(meta.name ? { name: meta.name } : {}),
       title: this.#title(id),
       modified: iso(meta.modifiedAt) ?? new Date(0).toISOString(),
-      ...(meta.lastUserMessageAt ? { lastUserMessageAt: iso(meta.lastUserMessageAt) } : {}),
+      ...(meta.lastUserMessageAt
+        ? { lastUserMessageAt: iso(meta.lastUserMessageAt) }
+        : {}),
       ...(meta.lastMessageAt ? { lastMessageAt: iso(meta.lastMessageAt) } : {}),
-      ...(meta.lastMessagePreview ? { lastMessagePreview: meta.lastMessagePreview } : {}),
+      ...(meta.lastMessagePreview
+        ? { lastMessagePreview: meta.lastMessagePreview }
+        : {}),
       messageCount: meta.messageCount,
       streaming: this.isBusy(id),
       unread: unread.has(id),
@@ -675,7 +753,8 @@ export class Sessions {
 
   directories(): string[] {
     const directories = new Set<string>()
-    for (const [id, meta] of this.#metas) if (this.isVisible(id)) directories.add(meta.cwd)
+    for (const [id, meta] of this.#metas)
+      if (this.isVisible(id)) directories.add(meta.cwd)
     return [...directories].sort()
   }
 
@@ -684,7 +763,14 @@ export class Sessions {
       directory,
       ...ids.flatMap((id) => {
         const meta = this.#metas.get(id)!
-        return [id, String(meta.modifiedAt), meta.name ?? "", String(meta.messageCount), this.isBusy(id) ? "1" : "0", unread.has(id) ? "1" : "0"]
+        return [
+          id,
+          String(meta.modifiedAt),
+          meta.name ?? "",
+          String(meta.messageCount),
+          this.isBusy(id) ? "1" : "0",
+          unread.has(id) ? "1" : "0",
+        ]
       }),
     ])
   }
@@ -699,21 +785,33 @@ export class Sessions {
     }
   }
 
-  sessionsPayload(options: { activeSessionId?: string; directories?: string[]; unread?: Set<string> }) {
+  sessionsPayload(options: {
+    activeSessionId?: string
+    directories?: string[]
+    unread?: Set<string>
+  }) {
     const unread = options.unread ?? new Set<string>()
     const directories = this.directories()
     const indexDirectories = new Set(options.directories ?? [])
     if (options.activeSessionId && this.#metas.has(options.activeSessionId)) {
       indexDirectories.add(this.meta(options.activeSessionId).cwd)
     }
-    const directoryIndexes: Record<string, ReturnType<Sessions["directoryIndex"]>> = {}
-    for (const directory of indexDirectories) directoryIndexes[directory] = this.directoryIndex(directory, unread)
+    const directoryIndexes: Record<
+      string,
+      ReturnType<Sessions["directoryIndex"]>
+    > = {}
+    for (const directory of indexDirectories)
+      directoryIndexes[directory] = this.directoryIndex(directory, unread)
     return {
       type: "sessions",
       directories,
       directoryStates: directories.map((path) => {
         const ids = this.directorySessions(path)
-        return { path, totalCount: ids.length, revision: this.#revision(path, ids, unread) }
+        return {
+          path,
+          totalCount: ids.length,
+          revision: this.#revision(path, ids, unread),
+        }
       }),
       directoryIndexes,
       ...(options.activeSessionId && this.#metas.has(options.activeSessionId)
@@ -743,9 +841,16 @@ export class Sessions {
     const available = this.#runtime.models.getAvailableSnapshot()
     const provider = settings.getDefaultProvider()
     const modelId = settings.getDefaultModel()
-    const preferred = available.find((model) => model.provider === provider && model.id === modelId)
-    const fallback = preferred ?? available.find((model) => model.provider === provider) ?? available[0]
-    return fallback ? { provider: fallback.provider, modelId: fallback.id } : undefined
+    const preferred = available.find(
+      (model) => model.provider === provider && model.id === modelId
+    )
+    const fallback =
+      preferred ??
+      available.find((model) => model.provider === provider) ??
+      available[0]
+    return fallback
+      ? { provider: fallback.provider, modelId: fallback.id }
+      : undefined
   }
 
   defaultThinkingLevel(): ModelThinkingLevel {
@@ -753,11 +858,17 @@ export class Sessions {
     return (level as ModelThinkingLevel | undefined) ?? "medium"
   }
 
-  #model(ref: { provider: string; modelId: string } | undefined): Model<Api> | undefined {
-    return ref ? this.#runtime.models.getModel(ref.provider, ref.modelId) : undefined
+  #model(
+    ref: { provider: string; modelId: string } | undefined
+  ): Model<Api> | undefined {
+    return ref
+      ? this.#runtime.models.getModel(ref.provider, ref.modelId)
+      : undefined
   }
 
-  #modelOption(ref: { provider: string; modelId: string } | undefined): ModelOption | undefined {
+  #modelOption(
+    ref: { provider: string; modelId: string } | undefined
+  ): ModelOption | undefined {
     if (!ref) return undefined
     const model = this.#model(ref)
     return {
@@ -767,7 +878,9 @@ export class Sessions {
     }
   }
 
-  thinkingLevels(ref: { provider: string; modelId: string } | undefined): string[] {
+  thinkingLevels(
+    ref: { provider: string; modelId: string } | undefined
+  ): string[] {
     const model = this.#model(ref)
     if (!model) return ALL_THINKING_LEVELS.filter((level) => level !== "max")
     return getSupportedThinkingLevels(model)
@@ -789,15 +902,22 @@ export class Sessions {
       return skills.map((skill) => ({
         name: skill.name,
         ...(skill.description ? { description: skill.description } : {}),
-        ...(skill.sourceInfo?.scope ? { scope: String(skill.sourceInfo.scope) } : {}),
-        ...(skill.sourceInfo?.source ? { source: skill.sourceInfo.source } : {}),
+        ...(skill.sourceInfo?.scope
+          ? { scope: String(skill.sourceInfo.scope) }
+          : {}),
+        ...(skill.sourceInfo?.source
+          ? { source: skill.sourceInfo.source }
+          : {}),
       }))
     } catch {
       return []
     }
   }
 
-  #contextUsage(entries: readonly EntryRecord[], ref: { provider: string; modelId: string } | undefined) {
+  #contextUsage(
+    entries: readonly EntryRecord[],
+    ref: { provider: string; modelId: string } | undefined
+  ) {
     const model = this.#model(ref)
     const contextWindow = model?.contextWindow
     let tokens: number | null = null
@@ -805,18 +925,21 @@ export class Sessions {
       const entry = entries[index]!
       if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") break
       if (entry.kind !== "pi.assistant") continue
-      const usage = (entry.model?.[0] as { usage?: UsageLike } | undefined)?.usage
+      const usage = (entry.model?.[0] as { usage?: UsageLike } | undefined)
+        ?.usage
       const value = contextTokens(usage)
       if (value) {
         tokens = value
         break
       }
     }
-    if (!contextWindow) return tokens === null ? undefined : { tokens, percent: null }
+    if (!contextWindow)
+      return tokens === null ? undefined : { tokens, percent: null }
     return {
       tokens,
       contextWindow,
-      percent: tokens === null ? null : Math.min(100, (tokens / contextWindow) * 100),
+      percent:
+        tokens === null ? null : Math.min(100, (tokens / contextWindow) * 100),
     }
   }
 
@@ -856,7 +979,9 @@ export class Sessions {
       draft: false,
       streaming: busy,
       compacting: (live?.compactions?.length ?? 0) > 0,
-      pendingUserMessages: (inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? []),
+      pendingUserMessages: (inbox?.items ?? []).flatMap(
+        (item) => inboxMessage(item) ?? []
+      ),
       items,
       historyOffset: offset,
       historyTotalCount: committed.length,
@@ -866,10 +991,14 @@ export class Sessions {
       availableThinkingLevels: this.thinkingLevels(modelRef),
       availableModels: this.availableModels(),
       availableSkills: await this.#skills(meta.cwd),
-      ...(this.#contextUsage(transcript.entries, modelRef) ? { contextUsage: this.#contextUsage(transcript.entries, modelRef) } : {}),
+      ...(this.#contextUsage(transcript.entries, modelRef)
+        ? { contextUsage: this.#contextUsage(transcript.entries, modelRef) }
+        : {}),
       uiState: {
         statuses: {},
-        ...(options.editorText !== undefined ? { editorText: options.editorText } : {}),
+        ...(options.editorText !== undefined
+          ? { editorText: options.editorText }
+          : {}),
         ...(busy ? { workingMessage: retryMessage(live) ?? "Working…" } : {}),
       },
     }
@@ -922,9 +1051,16 @@ export class Sessions {
   // ---------------------------------------------------------------------------
   // Creation and prompts
 
-  async create(cwd: string, options: { model?: { provider: string; modelId: string }; thinkingLevel?: string } = {}) {
+  async create(
+    cwd: string,
+    options: {
+      model?: { provider: string; modelId: string }
+      thinkingLevel?: string
+    } = {}
+  ) {
     const model = options.model ?? this.defaultModel()
-    if (!model) throw badRequest("No model is available. Sign in to a provider first.")
+    if (!model)
+      throw badRequest("No model is available. Sign in to a provider first.")
     const thinkingLevel = options.thinkingLevel
       ? this.validateThinkingLevel(options.thinkingLevel)
       : this.defaultThinkingLevel()
@@ -972,10 +1108,14 @@ export class Sessions {
     if (input.thinkingLevel) {
       const level = this.validateThinkingLevel(input.thinkingLevel)
       const agent = await this.#doc(id, "agent")
-      if (agent?.thinkingLevel !== level) await conversation.configure({ thinkingLevel: level }, ctx)
+      if (agent?.thinkingLevel !== level)
+        await conversation.configure({ thinkingLevel: level }, ctx)
     }
     const resources = await this.#runtime.resources.get(meta.cwd)
-    const expanded = expandPromptTemplate(expandSkillCommand(input.message, resources.skills), resources.prompts)
+    const expanded = expandPromptTemplate(
+      expandSkillCommand(input.message, resources.skills),
+      resources.prompts
+    )
     const busy = this.isBusy(id)
     const submission = await conversation.submit(
       {
@@ -989,7 +1129,10 @@ export class Sessions {
     const record = await submission.status(ctx)
     const queued = record.status === "queued"
     if (!meta.name) this.#autoName(id, input.message, input.images.length)
-    return { queued, pendingId: queued ? `pending:${submission.id}` : undefined }
+    return {
+      queued,
+      pendingId: queued ? `pending:${submission.id}` : undefined,
+    }
   }
 
   /** Name an unnamed session from its first prompt: a heuristic now, the model's name soon. */
@@ -1042,7 +1185,10 @@ export class Sessions {
   async abort(id: string) {
     const conversation = await this.conversation(id)
     const done = conversation.abort(ctx)
-    await Promise.race([done, new Promise((resolve) => setTimeout(resolve, 5000))])
+    await Promise.race([
+      done,
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ])
   }
 
   async compact(id: string, instructions: string | undefined) {
@@ -1077,20 +1223,35 @@ export class Sessions {
   async requeue(id: string, order?: string[]) {
     const inbox = await this.#doc(id, "inbox")
     const queued = (inbox?.items ?? []).filter(
-      (item): item is Extract<InboxItem, { mode: "steer" | "followUp" }> => item.mode !== "write"
+      (item): item is Extract<InboxItem, { mode: "steer" | "followUp" }> =>
+        item.mode !== "write"
     )
-    const byPending = new Map(queued.map((item) => [`pending:${item.id}`, item]))
+    const byPending = new Map(
+      queued.map((item) => [`pending:${item.id}`, item])
+    )
     if (order) {
       const unique = new Set(order)
-      if (unique.size !== order.length || order.length !== queued.length || !order.every((pendingId) => byPending.has(pendingId))) {
-        throw badRequest("pendingMessages must include every queued prompt exactly once")
+      if (
+        unique.size !== order.length ||
+        order.length !== queued.length ||
+        !order.every((pendingId) => byPending.has(pendingId))
+      ) {
+        throw badRequest(
+          "pendingMessages must include every queued prompt exactly once"
+        )
       }
     }
-    const sorted = (order ?? queued.map((item) => `pending:${item.id}`)).map((pendingId) => byPending.get(pendingId)!)
+    const sorted = (order ?? queued.map((item) => `pending:${item.id}`)).map(
+      (pendingId) => byPending.get(pendingId)!
+    )
     const conversation = await this.conversation(id)
     const withdrawn: typeof sorted = []
     for (const item of sorted) {
-      const result = await this.#harness.abortSubmission(item.id, ctx, conversationIdOf(id))
+      const result = await this.#harness.abortSubmission(
+        item.id,
+        ctx,
+        conversationIdOf(id)
+      )
       if (result === "aborted") withdrawn.push(item)
     }
     for (const item of withdrawn) {
@@ -1105,20 +1266,29 @@ export class Sessions {
   // Agent settings
 
   async setModel(id: string, provider: string, modelId: string) {
-    if (!this.#runtime.models.getModel(provider, modelId)) throw badRequest(`Unknown model: ${provider}/${modelId}`)
+    if (!this.#runtime.models.getModel(provider, modelId))
+      throw badRequest(`Unknown model: ${provider}/${modelId}`)
     const conversation = await this.conversation(id)
     await conversation.configure({ model: { provider, modelId } }, ctx)
     const agent = await conversation.agent(ctx)
     const levels = this.thinkingLevels({ provider, modelId })
     if (!levels.includes(agent.thinkingLevel)) {
-      const level = levels.includes("medium") ? "medium" : (levels.at(-1) ?? "off")
-      await conversation.configure({ thinkingLevel: level as ModelThinkingLevel }, ctx)
+      const level = levels.includes("medium")
+        ? "medium"
+        : (levels.at(-1) ?? "off")
+      await conversation.configure(
+        { thinkingLevel: level as ModelThinkingLevel },
+        ctx
+      )
     }
   }
 
   async setThinking(id: string, level: string) {
     const conversation = await this.conversation(id)
-    await conversation.configure({ thinkingLevel: this.validateThinkingLevel(level) }, ctx)
+    await conversation.configure(
+      { thinkingLevel: this.validateThinkingLevel(level) },
+      ctx
+    )
   }
 
   async agentState(id: string) {
@@ -1153,7 +1323,9 @@ export class Sessions {
     const text = message ? messageText(message) : meta.firstMessage
     const imageCount = message ? messageImages(message).length : 0
     if (!text.trim() && imageCount === 0) {
-      throw badRequest("Could not generate a session name from an empty conversation")
+      throw badRequest(
+        "Could not generate a session name from an empty conversation"
+      )
     }
     let name: string
     let source: "llm" | "heuristic" = "llm"
@@ -1162,11 +1334,16 @@ export class Sessions {
       const agent = await this.#doc(id, "agent")
       const model = this.#model(agent?.model ?? this.defaultModel())
       if (!model) throw new Error("No model selected")
-      name = await generateSessionName(this.#runtime.models, model, { text, imageCount, cwd: meta.cwd })
+      name = await generateSessionName(this.#runtime.models, model, {
+        text,
+        imageCount,
+        cwd: meta.cwd,
+      })
     } catch (error) {
       reason = error instanceof Error ? error.message : String(error)
       source = "heuristic"
-      const fallback = heuristicSessionName(text, imageCount) ?? cleanupCandidate(text)
+      const fallback =
+        heuristicSessionName(text, imageCount) ?? cleanupCandidate(text)
       if (!fallback) throw badRequest(reason)
       name = fallback
     }
@@ -1178,7 +1355,8 @@ export class Sessions {
 
   archive(id: string) {
     this.meta(id)
-    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before deleting it.")
+    if (this.isBusy(id))
+      throw badRequest("Wait for the session to finish before deleting it.")
     this.#updateMeta(id, { archived: true })
     this.#viewers.forget(id)
     this.#scheduleSessionsBroadcast()
@@ -1186,7 +1364,8 @@ export class Sessions {
 
   async move(id: string, cwd: string) {
     const meta = this.meta(id)
-    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before moving it.")
+    if (this.isBusy(id))
+      throw badRequest("Wait for the session to finish before moving it.")
     const conversation = await this.conversation(id)
     await conversation.configure({ cwd }, ctx)
     this.#updateMeta(id, { cwd, modifiedAt: Date.now() })
@@ -1196,7 +1375,11 @@ export class Sessions {
   }
 
   /** Archive sessions of a directory not active since `olderThanMs`. */
-  cleanup(directory: string, olderThanMs: number, options: { dryRun: boolean; includeActive: boolean; activeIds: Set<string> }) {
+  cleanup(
+    directory: string,
+    olderThanMs: number,
+    options: { dryRun: boolean; includeActive: boolean; activeIds: Set<string> }
+  ) {
     const cutoff = Date.now() - olderThanMs
     const matching = this.directorySessions(directory).filter((id) => {
       if (!options.includeActive && options.activeIds.has(id)) return false
@@ -1216,8 +1399,9 @@ export class Sessions {
 
   setLabel(id: string, entryId: string, label: string | undefined) {
     const meta = this.meta(id)
-    const labels = { ...(meta.labels ?? {}) }
-    if (label?.trim()) labels[entryId] = { label: label.trim(), timestamp: Date.now() }
+    const labels = { ...meta.labels }
+    if (label?.trim())
+      labels[entryId] = { label: label.trim(), timestamp: Date.now() }
     else delete labels[entryId]
     this.#updateMeta(id, { labels })
   }
@@ -1231,7 +1415,10 @@ export class Sessions {
     return [...this.#metas.entries()]
       .filter(([memberId, meta]) => (meta.family ?? memberId) === family)
       .map(([memberId]) => memberId)
-      .sort((left, right) => Number(conversationIdOf(left)) - Number(conversationIdOf(right)))
+      .sort(
+        (left, right) =>
+          Number(conversationIdOf(left)) - Number(conversationIdOf(right))
+      )
   }
 
   async tree(id: string) {
@@ -1250,11 +1437,18 @@ export class Sessions {
 
     for (const member of members) {
       const transcript = await this.transcript(member)
-      const record = await this.#harness.commit((tx) => tx.conversation(conversationIdOf(member)), ctx)
-      let parentId: string | null = record?.parent ? String(record.parent.at) : null
+      const record = await this.#harness.commit(
+        (tx) => tx.conversation(conversationIdOf(member)),
+        ctx
+      )
+      let parentId: string | null = record?.parent
+        ? String(record.parent.at)
+        : null
       while (parentId && !nodes.has(parentId)) {
         // The fork point may be an entry the tree omits; walk back to one it shows.
-        const index = transcript.entries.findIndex((entry) => String(entry.id) === parentId)
+        const index = transcript.entries.findIndex(
+          (entry) => String(entry.id) === parentId
+        )
         const previous = index > 0 ? transcript.entries[index - 1] : undefined
         parentId = previous ? String(previous.id) : null
       }
@@ -1270,7 +1464,12 @@ export class Sessions {
         const label = labels[entryId]
         const node: Node = {
           entry: projected,
-          ...(label ? { label: label.label, labelTimestamp: new Date(label.timestamp).toISOString() } : {}),
+          ...(label
+            ? {
+                label: label.label,
+                labelTimestamp: new Date(label.timestamp).toISOString(),
+              }
+            : {}),
           children: [],
         }
         nodes.set(entryId, node)
@@ -1286,28 +1485,44 @@ export class Sessions {
       const leaf = nodes.get(leafId)
       if (leaf) leaf.streaming = true
     }
-    return { ok: true, leafId, streamingEntryId: streaming ? leafId : null, tree: roots }
+    return {
+      ok: true,
+      leafId,
+      streamingEntryId: streaming ? leafId : null,
+      tree: roots,
+    }
   }
 
   /** User messages to fork from, newest last. */
   async forkMessages(id: string) {
     const transcript = await this.transcript(id)
-    return transcript.entries
-      .filter(isUserInputEntry)
-      .map((entry) => ({ entryId: String(entry.id), text: messageText(entry.model?.[0] as never) }))
+    return transcript.entries.filter(isUserInputEntry).map((entry) => ({
+      entryId: String(entry.id),
+      text: messageText(entry.model?.[0] as never),
+    }))
   }
 
   async #entry(id: string, entryId: string) {
     const transcript = await this.transcript(id)
-    const index = transcript.entries.findIndex((entry) => String(entry.id) === entryId)
-    return { transcript, index, entry: index >= 0 ? transcript.entries[index] : undefined }
+    const index = transcript.entries.findIndex(
+      (entry) => String(entry.id) === entryId
+    )
+    return {
+      transcript,
+      index,
+      entry: index >= 0 ? transcript.entries[index] : undefined,
+    }
   }
 
   /**
    * Make a new conversation from `source` up to `at` (inclusive), or an empty
    * one when `at` is undefined, with the source's agent and directory.
    */
-  async #forkConversation(source: string, at: string | undefined, meta: Partial<SessionMeta>) {
+  async #forkConversation(
+    source: string,
+    at: string | undefined,
+    meta: Partial<SessionMeta>
+  ) {
     const sourceMeta = this.meta(source)
     const now = Date.now()
     const base: SessionMeta = {
@@ -1326,18 +1541,25 @@ export class Sessions {
           ownership: { kind: "ownerless" },
           agent: {
             ...(agent?.model ? { model: agent.model } : {}),
-            ...(agent?.thinkingLevel ? { thinkingLevel: agent.thinkingLevel } : {}),
+            ...(agent?.thinkingLevel
+              ? { thinkingLevel: agent.thinkingLevel }
+              : {}),
             cwd: sourceMeta.cwd,
           },
           init: async (tx, id) => {
-            Object.assign(await tx.doc(SessionDoc, id), JSON.parse(JSON.stringify(base)))
+            Object.assign(
+              await tx.doc(SessionDoc, id),
+              JSON.parse(JSON.stringify(base))
+            )
           },
         },
         ctx
       )
       conversationId = conversation.id
     } else {
-      const owner = (await this.#entry(source, at)).entry?.conversationId ?? conversationIdOf(source)
+      const owner =
+        (await this.#entry(source, at)).entry?.conversationId ??
+        conversationIdOf(source)
       const parent = await this.#harness.conversation(owner, ctx)
       if (!parent) throw notFound("Fork source not found")
       const fork = await parent.fork(
@@ -1346,7 +1568,10 @@ export class Sessions {
           ownership: { kind: "ownerless" },
           agent: { cwd: sourceMeta.cwd },
           init: async (tx, id) => {
-            Object.assign(await tx.doc(SessionDoc, id), JSON.parse(JSON.stringify(base)))
+            Object.assign(
+              await tx.doc(SessionDoc, id),
+              JSON.parse(JSON.stringify(base))
+            )
           },
         },
         ctx
@@ -1365,11 +1590,19 @@ export class Sessions {
   /** Fork at a user message: the new session ends before it and offers its text again. */
   async fork(id: string, entryId: string, contextId: string) {
     const { transcript, index, entry } = await this.#entry(id, entryId)
-    if (!entry || !isUserInputEntry(entry)) throw notFound("Fork point not found")
+    if (!entry || !isUserInputEntry(entry))
+      throw notFound("Fork point not found")
     const previous = index > 0 ? transcript.entries[index - 1] : undefined
-    const forked = await this.#forkConversation(id, previous ? String(previous.id) : undefined, {
-      ...(this.meta(id).name ? { name: `${this.meta(id).name}`.slice(0, 48), nameSource: "auto" as const } : {}),
-    })
+    const forked = await this.#forkConversation(
+      id,
+      previous ? String(previous.id) : undefined,
+      this.meta(id).name
+        ? {
+            name: `${this.meta(id).name}`.slice(0, 48),
+            nameSource: "auto" as const,
+          }
+        : {}
+    )
     this.#viewers.selectSession(contextId, forked)
     this.#scheduleSessionsBroadcast()
     const editorText = messageText(entry.model?.[0] as never)
@@ -1381,10 +1614,16 @@ export class Sessions {
     const transcript = await this.transcript(id)
     const last = transcript.entries.at(-1)
     const meta = this.meta(id)
-    const cloned = await this.#forkConversation(id, last ? String(last.id) : undefined, {
-      ...(meta.name ? { name: meta.name, nameSource: meta.nameSource ?? "auto" } : {}),
-      ...(meta.labels ? { labels: meta.labels } : {}),
-    })
+    const cloned = await this.#forkConversation(
+      id,
+      last ? String(last.id) : undefined,
+      {
+        ...(meta.name
+          ? { name: meta.name, nameSource: meta.nameSource ?? "auto" }
+          : {}),
+        ...(meta.labels ? { labels: meta.labels } : {}),
+      }
+    )
     this.#viewers.selectSession(contextId, cloned)
     this.#scheduleSessionsBroadcast()
     this.#watchOnce(cloned)
@@ -1397,14 +1636,19 @@ export class Sessions {
    * editor), or at any other entry.
    */
   async navigate(id: string, targetId: string) {
-    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before navigating the tree.")
+    if (this.isBusy(id))
+      throw badRequest(
+        "Wait for the session to finish before navigating the tree."
+      )
     let owner: string | undefined
     let target: EntryRecord | undefined
     let targetIndex = -1
     let ownerTranscript: Transcript | undefined
     for (const member of this.#family(id)) {
       const transcript = await this.transcript(member)
-      const index = transcript.entries.findIndex((entry) => String(entry.id) === targetId)
+      const index = transcript.entries.findIndex(
+        (entry) => String(entry.id) === targetId
+      )
       if (index >= 0) {
         owner = member
         target = transcript.entries[index]
@@ -1413,7 +1657,8 @@ export class Sessions {
         if (member === id) break
       }
     }
-    if (!owner || !target || !ownerTranscript) throw notFound("tree target not found")
+    if (!owner || !target || !ownerTranscript)
+      throw notFound("tree target not found")
     const current = await this.transcript(id)
     if (String(current.entries.at(-1)?.id) === targetId) {
       return { cancelled: false, aborted: false }
@@ -1422,28 +1667,39 @@ export class Sessions {
     let editorText: string | undefined
     if (isUserInputEntry(target)) {
       editorText = messageText(target.model?.[0] as never)
-      const previous = targetIndex > 0 ? ownerTranscript.entries[targetIndex - 1] : undefined
+      const previous =
+        targetIndex > 0 ? ownerTranscript.entries[targetIndex - 1] : undefined
       at = previous ? String(previous.id) : undefined
     }
     const meta = this.meta(id)
     const replacement = await this.#forkConversation(owner, at, {
       cwd: meta.cwd,
-      ...(meta.name ? { name: meta.name, nameSource: meta.nameSource ?? "auto" } : {}),
+      ...(meta.name
+        ? { name: meta.name, nameSource: meta.nameSource ?? "auto" }
+        : {}),
       ...(meta.labels ? { labels: meta.labels } : {}),
       family: meta.family ?? id,
     })
     this.#updateMeta(id, { replacedBy: replacement })
     for (const [contextId, context] of this.#viewers.all()) {
-      if (context.selectedSession === id) this.#viewers.selectSession(contextId, replacement)
+      if (context.selectedSession === id)
+        this.#viewers.selectSession(contextId, replacement)
     }
     this.#scheduleSessionsBroadcast()
     this.#watchOnce(replacement, editorText)
-    return { cancelled: false, aborted: false, ...(editorText !== undefined ? { editorText } : {}) }
+    return {
+      cancelled: false,
+      aborted: false,
+      ...(editorText !== undefined ? { editorText } : {}),
+    }
   }
 
   /** Publish a new session's first state with optional editor text. */
   #watchOnce(id: string, editorText?: string) {
-    void this.stateSync(id, editorText !== undefined ? { editorText } : {}).then((payload) => {
+    void this.stateSync(
+      id,
+      editorText !== undefined ? { editorText } : {}
+    ).then((payload) => {
       this.#hub.push(payload, { sessionId: id })
     })
   }
@@ -1493,16 +1749,37 @@ const TREE_PREVIEW = 2000
 /** An entry as the session tree shows it, in the shape of Pi's tree. */
 function projectTreeEntry(entry: EntryRecord, parentId: string | null) {
   const message = entry.model?.[0] as
-    | { role?: string; content?: unknown; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; timestamp?: number }
+    | {
+        role?: string
+        content?: unknown
+        stopReason?: string
+        errorMessage?: string
+        toolCallId?: string
+        toolName?: string
+        timestamp?: number
+      }
     | undefined
   const base = {
     id: String(entry.id),
     parentId,
-    timestamp: message?.timestamp ? new Date(message.timestamp).toISOString() : undefined,
+    timestamp: message?.timestamp
+      ? new Date(message.timestamp).toISOString()
+      : undefined,
   }
-  if (isUserInputEntry(entry) || entry.kind === "pi.assistant" || entry.kind === "pi.tool-result") {
+  if (
+    isUserInputEntry(entry) ||
+    entry.kind === "pi.assistant" ||
+    entry.kind === "pi.tool-result"
+  ) {
     const toolCalls = Array.isArray(message?.content)
-      ? (message.content as Array<{ type?: string; id?: string; name?: string; arguments?: unknown }>)
+      ? (
+          message.content as Array<{
+            type?: string
+            id?: string
+            name?: string
+            arguments?: unknown
+          }>
+        )
           .filter((part) => part?.type === "toolCall")
           .map((part) => ({
             id: part.id,
@@ -1518,7 +1795,9 @@ function projectTreeEntry(entry: EntryRecord, parentId: string | null) {
         text: messageText(message as never).slice(0, TREE_PREVIEW),
         ...(toolCalls.length > 0 ? { toolCalls } : {}),
         ...(message?.stopReason ? { stopReason: message.stopReason } : {}),
-        ...(message?.errorMessage ? { errorMessage: message.errorMessage.slice(0, TREE_PREVIEW) } : {}),
+        ...(message?.errorMessage
+          ? { errorMessage: message.errorMessage.slice(0, TREE_PREVIEW) }
+          : {}),
         ...(message?.toolCallId ? { toolCallId: message.toolCallId } : {}),
         ...(message?.toolName ? { toolName: message.toolName } : {}),
       },

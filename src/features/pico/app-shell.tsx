@@ -3302,8 +3302,8 @@ function useAppShellSessionWorkspaceView({
       commands.push({
         id: "delete-session",
         group: "Sessions",
-        title: "Delete session",
-        description: `Delete ${getCurrentSessionTitleFromState(
+        title: "Archive session",
+        description: `Archive ${getCurrentSessionTitleFromState(
           sessionStateRef.current
         )}`,
         shortcut: formatShortcutLabel("Control+X"),
@@ -3316,8 +3316,8 @@ function useAppShellSessionWorkspaceView({
       commands.push({
         id: "delete-selected-sessions",
         group: "Sidebar",
-        title: "Delete selected sidebar sessions",
-        description: `Delete ${
+        title: "Archive selected sidebar sessions",
+        description: `Archive ${
           commandState.selectedSidebarSessions.length
         } selected sidebar ${
           commandState.selectedSidebarSessions.length === 1

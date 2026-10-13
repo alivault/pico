@@ -6,7 +6,9 @@
  * covers it. Input carries sequence numbers, so a retried send is written once.
  */
 import { userInfo } from "node:os"
-import { basename } from "node:path"
+import { accessSync, chmodSync, constants, existsSync } from "node:fs"
+import { createRequire } from "node:module"
+import { basename, dirname, join } from "node:path"
 
 import * as pty from "node-pty"
 
@@ -24,7 +26,14 @@ const DEFAULT_ROWS = 30
 const KEY_MAX_LENGTH = 256
 
 export type TerminalEvent =
-  | { type: "ready"; backend: "shell"; id: string; cwd: string; shell: string; nextInputSeq: number }
+  | {
+      type: "ready"
+      backend: "shell"
+      id: string
+      cwd: string
+      shell: string
+      nextInputSeq: number
+    }
   | { type: "output"; data: string; seq: number }
   | { type: "input_ack"; inputSeq: number }
   | { type: "pong" }
@@ -52,7 +61,12 @@ type Terminal = {
   listeners: Set<Listener>
 }
 
-function clamp(value: number | undefined, min: number, max: number, fallback: number) {
+function clamp(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number
+) {
   if (value === undefined || !Number.isFinite(value)) return fallback
   return Math.min(max, Math.max(min, Math.round(value)))
 }
@@ -99,11 +113,37 @@ export class Terminals {
   readonly #cleanup: NodeJS.Timeout
 
   constructor() {
+    // node-pty 1.1.0's prebuilt helper can lose its executable bit in npm.
+    // Repair only this known package helper, not user files.
+    if (process.platform !== "win32") {
+      const root = dirname(
+        createRequire(import.meta.url).resolve("node-pty/package.json")
+      )
+      for (const dir of [
+        "build/Release",
+        "build/Debug",
+        `prebuilds/${process.platform}-${process.arch}`,
+      ]) {
+        const helper = join(root, dir, "spawn-helper")
+        if (!existsSync(helper)) continue
+        try {
+          accessSync(helper, constants.X_OK)
+        } catch {
+          chmodSync(helper, 0o755)
+        }
+      }
+    }
     this.#cleanup = setInterval(() => this.#removeExpired(), 60_000)
     this.#cleanup.unref()
   }
 
-  create(scopeKey: string, cwd: string, clientKey: string | undefined, cols?: number, rows?: number) {
+  create(
+    scopeKey: string,
+    cwd: string,
+    clientKey: string | undefined,
+    cols?: number,
+    rows?: number
+  ) {
     this.#removeExpired()
     const key = clientKey?.trim().slice(0, KEY_MAX_LENGTH) || undefined
     const lookupKey = key ? `${scopeKey}\0${key}` : undefined
@@ -112,7 +152,13 @@ export class Terminals {
     if (existing) {
       if (!existing.exited) {
         existing.lastUsed = Date.now()
-        return { id: existing.id, backend: "shell" as const, cwd: existing.cwd, shell: basename(existing.shell), reused: true }
+        return {
+          id: existing.id,
+          backend: "shell" as const,
+          cwd: existing.cwd,
+          shell: basename(existing.shell),
+          reused: true,
+        }
       }
       this.close(scopeKey, existing.id)
     }
@@ -122,9 +168,17 @@ export class Terminals {
     const lines = clamp(rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS)
     let child: pty.IPty
     try {
-      child = pty.spawn(shell, ["-l"], { name: "xterm-256color", cols: columns, rows: lines, cwd, env: shellEnvironment() })
+      child = pty.spawn(shell, ["-l"], {
+        name: "xterm-256color",
+        cols: columns,
+        rows: lines,
+        cwd,
+        env: shellEnvironment(),
+      })
     } catch (error) {
-      throw badRequest(`Could not start a terminal: ${error instanceof Error ? error.message : String(error)}`)
+      throw badRequest(
+        `Could not start a terminal: ${error instanceof Error ? error.message : String(error)}`
+      )
     }
     const id = crypto.randomUUID()
     const terminal: Terminal = {
@@ -149,9 +203,19 @@ export class Terminals {
     child.onExit(({ exitCode, signal }) => {
       terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
       terminal.lastUsed = Date.now()
-      this.#emit(terminal, { type: "exit", exitCode, ...(signal ? { signal } : {}) })
+      this.#emit(terminal, {
+        type: "exit",
+        exitCode,
+        ...(signal ? { signal } : {}),
+      })
     })
-    return { id, backend: "shell" as const, cwd, shell: basename(shell), reused: false }
+    return {
+      id,
+      backend: "shell" as const,
+      cwd,
+      shell: basename(shell),
+      reused: false,
+    }
   }
 
   #publishOutput(terminal: Terminal, data: string) {
@@ -160,7 +224,10 @@ export class Terminals {
     terminal.nextOutputSeq += 1
     terminal.backlog.push(event)
     terminal.backlogBytes += data.length
-    while (terminal.backlog.length > BACKLOG_MAX_CHUNKS || terminal.backlogBytes > BACKLOG_MAX_BYTES) {
+    while (
+      terminal.backlog.length > BACKLOG_MAX_CHUNKS ||
+      terminal.backlogBytes > BACKLOG_MAX_BYTES
+    ) {
       const removed = terminal.backlog.shift()
       if (!removed) break
       terminal.backlogBytes -= removed.data.length
@@ -182,7 +249,8 @@ export class Terminals {
   #record(scopeKey: string, id: string) {
     const terminal = this.#terminals.get(id)
     if (!terminal) throw badRequest("Terminal not found.")
-    if (terminal.scopeKey !== scopeKey) throw badRequest("Terminal not found for this session.")
+    if (terminal.scopeKey !== scopeKey)
+      throw badRequest("Terminal not found for this session.")
     return terminal
   }
 
@@ -190,7 +258,12 @@ export class Terminals {
    * Attach to a terminal: the ready event, what the client missed after
    * `lastSeq`, and later events through `listener`.
    */
-  subscribe(scopeKey: string, id: string, lastSeq: number | undefined, listener: Listener) {
+  subscribe(
+    scopeKey: string,
+    id: string,
+    lastSeq: number | undefined,
+    listener: Listener
+  ) {
     const terminal = this.#record(scopeKey, id)
     terminal.lastUsed = Date.now()
     const initial: TerminalEvent[] = [
@@ -205,13 +278,22 @@ export class Terminals {
     ]
     const firstSeq = terminal.backlog[0]?.seq ?? terminal.nextOutputSeq
     if (lastSeq !== undefined && lastSeq + 1 < firstSeq) {
-      initial.push({ type: "reset", reason: "backlog_gap", firstSeq, nextSeq: terminal.nextOutputSeq })
+      initial.push({
+        type: "reset",
+        reason: "backlog_gap",
+        firstSeq,
+        nextSeq: terminal.nextOutputSeq,
+      })
     }
     for (const event of terminal.backlog) {
       if (lastSeq === undefined || event.seq > lastSeq) initial.push(event)
     }
     if (terminal.exited) initial.push({ type: "exit", ...terminal.exited })
-    let latest = initial.reduce((max, event) => (event.type === "output" ? Math.max(max, event.seq) : max), lastSeq ?? 0)
+    let latest = initial.reduce(
+      (max, event) =>
+        event.type === "output" ? Math.max(max, event.seq) : max,
+      lastSeq ?? 0
+    )
     const filtered: Listener = (event) => {
       if (event.type === "output") {
         if (event.seq <= latest) return
@@ -230,7 +312,12 @@ export class Terminals {
   }
 
   /** Write input; returns the sequence to acknowledge, if the client sent one. */
-  write(scopeKey: string, id: string, data: string, inputSeq: number | undefined) {
+  write(
+    scopeKey: string,
+    id: string,
+    data: string,
+    inputSeq: number | undefined
+  ) {
     const terminal = this.#record(scopeKey, id)
     if (terminal.exited) throw badRequest("Terminal has exited.")
     if (inputSeq !== undefined && inputSeq > 0) {
@@ -242,7 +329,12 @@ export class Terminals {
     return inputSeq !== undefined && inputSeq > 0 ? inputSeq : undefined
   }
 
-  resize(scopeKey: string, id: string, cols: number | undefined, rows: number | undefined) {
+  resize(
+    scopeKey: string,
+    id: string,
+    cols: number | undefined,
+    rows: number | undefined
+  ) {
     const terminal = this.#record(scopeKey, id)
     if (terminal.exited) return
     terminal.cols = clamp(cols, MIN_COLS, MAX_COLS, terminal.cols)
@@ -290,7 +382,8 @@ export class Terminals {
 
 /** Numbers clients send as numbers, strings, or booleans. */
 export function looseNumber(value: unknown): number | undefined {
-  if (typeof value === "number") return Number.isFinite(value) ? value : undefined
+  if (typeof value === "number")
+    return Number.isFinite(value) ? value : undefined
   if (typeof value === "string") {
     const parsed = Number(value.trim())
     return value.trim() && Number.isFinite(parsed) ? parsed : undefined

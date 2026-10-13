@@ -337,7 +337,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                   actionsRef.current.onDeleteCurrentSession()
                 }}
               >
-                <span>Delete session</span>
+                <span>Archive session</span>
                 <DropdownMenuShortcut>
                   {formatShortcutLabel("Control+X")}
                 </DropdownMenuShortcut>

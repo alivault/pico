@@ -35,7 +35,8 @@ export class ResourceCache {
 
   async get(cwd: string): Promise<PiResources> {
     const cached = this.#cache.get(cwd)
-    if (cached && Date.now() - cached.loadedAt < CACHE_MS) return cached.resources
+    if (cached && Date.now() - cached.loadedAt < CACHE_MS)
+      return cached.resources
     const resources = this.#load(cwd)
     this.#cache.set(cwd, { loadedAt: Date.now(), resources })
     resources.catch(() => this.#cache.delete(cwd))
@@ -72,7 +73,10 @@ function stripFrontmatter(content: string) {
 }
 
 /** Expand `/skill:name args` to the skill's content, as Pi does. */
-export function expandSkillCommand(text: string, skills: readonly Skill[]): string {
+export function expandSkillCommand(
+  text: string,
+  skills: readonly Skill[]
+): string {
   if (!text.startsWith("/skill:")) return text
   const space = text.indexOf(" ")
   const name = space === -1 ? text.slice(7) : text.slice(7, space)
@@ -133,7 +137,9 @@ function substituteArgs(content: string, args: string[]) {
       if (sliceStart) {
         const start = Math.max(0, Number.parseInt(sliceStart, 10) - 1)
         if (sliceLength) {
-          return args.slice(start, start + Number.parseInt(sliceLength, 10)).join(" ")
+          return args
+            .slice(start, start + Number.parseInt(sliceLength, 10))
+            .join(" ")
         }
         return args.slice(start).join(" ")
       }
@@ -144,7 +150,10 @@ function substituteArgs(content: string, args: string[]) {
 }
 
 /** Expand `/template args` with a prompt template, as Pi does. */
-export function expandPromptTemplate(text: string, templates: readonly PromptTemplate[]): string {
+export function expandPromptTemplate(
+  text: string,
+  templates: readonly PromptTemplate[]
+): string {
   if (!text.startsWith("/")) return text
   const match = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/)
   if (!match) return text

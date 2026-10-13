@@ -91,6 +91,7 @@ try {
         readyState: document.readyState,
         title: document.title,
         appChildren: document.querySelector("#app")?.childElementCount ?? 0,
+        composer: Boolean(document.querySelector('textarea[placeholder="Ask anything…"]')),
         bodyText: document.body?.innerText ?? ""
       })`,
       returnByValue: true,
@@ -98,9 +99,11 @@ try {
     snapshot = result.result.value
     if (
       snapshot?.readyState === "complete" &&
-      snapshot.title === "Pico" &&
+      snapshot.title &&
       snapshot.appChildren > 0 &&
-      snapshot.bodyText.length > 20
+      snapshot.composer &&
+      !snapshot.title.includes("Loading") &&
+      snapshot.bodyText.length > 150
     ) {
       break
     }
@@ -108,9 +111,12 @@ try {
   }
 
   if (
-    snapshot?.title !== "Pico" ||
+    !snapshot?.title ||
+    snapshot.bodyText.includes("Something went wrong!") ||
     snapshot.appChildren < 1 ||
-    snapshot.bodyText.length <= 20
+    !snapshot.composer ||
+    snapshot.title.includes("Loading") ||
+    snapshot.bodyText.length <= 150
   ) {
     throw new Error(
       `Pico browser shell did not render: ${JSON.stringify(snapshot)}`

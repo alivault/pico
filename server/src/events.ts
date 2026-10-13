@@ -34,7 +34,10 @@ export class EventHub {
     return this.#sequence
   }
 
-  push(payload: ServerEventPayload, target: { contextId?: string; sessionId?: string } = {}) {
+  push(
+    payload: ServerEventPayload,
+    target: { contextId?: string; sessionId?: string } = {}
+  ) {
     this.#sequence += 1
     const event: ServerEvent = {
       sequence: this.#sequence,

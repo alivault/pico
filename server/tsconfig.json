@@ -3,12 +3,8 @@
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": [
-      "ES2023"
-    ],
-    "types": [
-      "node"
-    ],
+    "lib": ["ES2023"],
+    "types": ["node"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -19,14 +15,8 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
     "paths": {
-      "pi-web-access/*.ts": [
-        "./types/pi-web-access/*.d.ts"
-      ]
+      "pi-web-access/*.ts": ["./types/pi-web-access/*.d.ts"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "test/**/*.ts",
-    "types/**/*.d.ts"
-  ]
+  "include": ["src/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"]
 }

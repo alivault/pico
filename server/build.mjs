@@ -13,7 +13,9 @@ import * as esbuild from "esbuild"
 const root = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 const bundled = new Set(["pi-web-access"])
-const external = Object.keys(pkg.dependencies).filter((name) => !bundled.has(name))
+const external = Object.keys(pkg.dependencies).filter(
+  (name) => !bundled.has(name)
+)
 
 const options = {
   absWorkingDir: root,
@@ -44,12 +46,24 @@ if (!watch) {
     ? process.argv.slice(process.argv.indexOf("--") + 1)
     : ["serve"]
   let child
+  let restarting = Promise.resolve()
   const restart = () => {
-    if (child) child.kill("SIGTERM")
-    child = spawn(process.execPath, ["--enable-source-maps", "dist/pico-server.mjs", ...serverArgs], {
-      cwd: root,
-      stdio: "inherit",
+    restarting = restarting.then(async () => {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const stopped = new Promise((done) => child.once("exit", done))
+        child.kill("SIGTERM")
+        await stopped
+      }
+      child = spawn(
+        process.execPath,
+        ["--enable-source-maps", "dist/pico-server.mjs", ...serverArgs],
+        {
+          cwd: root,
+          stdio: "inherit",
+        }
+      )
     })
+    return restarting
   }
   const context = await esbuild.context({
     ...options,
@@ -58,7 +72,7 @@ if (!watch) {
         name: "restart",
         setup(build) {
           build.onEnd((result) => {
-            if (result.errors.length === 0) restart()
+            if (result.errors.length === 0) return restart()
           })
         },
       },

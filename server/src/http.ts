@@ -28,10 +28,7 @@ export type Request = {
   body<T = Record<string, unknown>>(): Promise<T>
 }
 
-export type Handler = (
-  request: Request,
-  response: ServerResponse
-) => Promise<unknown> | unknown
+export type Handler = (request: Request, response: ServerResponse) => unknown
 
 type Route = {
   method: string
@@ -108,7 +105,11 @@ export class Router {
   }
 }
 
-export function sendJson(response: ServerResponse, status: number, value: unknown) {
+export function sendJson(
+  response: ServerResponse,
+  status: number,
+  value: unknown
+) {
   if (response.headersSent) return
   const body = JSON.stringify(value)
   response.writeHead(status, {
@@ -136,7 +137,8 @@ async function readJsonBody(raw: IncomingMessage): Promise<unknown> {
   for await (const chunk of raw) {
     const buffer = chunk as Buffer
     size += buffer.length
-    if (size > MAX_BODY_BYTES) throw new ApiError(413, "Request body is too large")
+    if (size > MAX_BODY_BYTES)
+      throw new ApiError(413, "Request body is too large")
     chunks.push(buffer)
   }
   const text = Buffer.concat(chunks).toString("utf8").trim()
@@ -252,9 +254,12 @@ export async function serveStatic(
   }
   const immutable = file.includes(`${sep}assets${sep}`)
   response.writeHead(200, {
-    "content-type": MIME_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream",
+    "content-type":
+      MIME_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream",
     "content-length": info.size,
-    "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+    "cache-control": immutable
+      ? "public, max-age=31536000, immutable"
+      : "no-cache",
   })
   if (raw.method === "HEAD") {
     response.end()

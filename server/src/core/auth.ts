@@ -8,7 +8,10 @@ import { existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { readStoredCredential, type ModelRuntime } from "@earendil-works/pi-coding-agent"
+import {
+  readStoredCredential,
+  type ModelRuntime,
+} from "@earendil-works/pi-coding-agent"
 
 import type { EventHub } from "../events.ts"
 import { badRequest, notFound } from "../http.ts"
@@ -39,12 +42,19 @@ const API_KEY_PROVIDER_NAMES: Record<string, string> = {
   zai: "ZAI",
 }
 
-export type UiResponse = { value?: string; confirmed?: boolean; cancelled?: boolean }
+export type UiResponse = {
+  value?: string
+  confirmed?: boolean
+  cancelled?: boolean
+}
 
 /** Requests the browser answers with `/api/ui/:id`. */
 export class UiRequests {
   readonly #hub: EventHub
-  readonly #pending = new Map<string, { resolve: (response: UiResponse) => void; timeout: NodeJS.Timeout }>()
+  readonly #pending = new Map<
+    string,
+    { resolve: (response: UiResponse) => void; timeout: NodeJS.Timeout }
+  >()
 
   constructor(hub: EventHub) {
     this.#hub = hub
@@ -54,7 +64,11 @@ export class UiRequests {
     return this.#pending.has(id)
   }
 
-  request(contextId: string | undefined, payload: Record<string, unknown>, waitForResponse = true) {
+  request(
+    contextId: string | undefined,
+    payload: Record<string, unknown>,
+    waitForResponse = true
+  ) {
     const id = crypto.randomUUID()
     this.#hub.push(
       { type: "extension_ui_request", id, ...payload },
@@ -136,17 +150,31 @@ export class Auth {
       .filter((provider) => provider.auth.apiKey)
       .map((provider) => ({
         id: provider.id,
-        name: provider.auth.apiKey?.name ?? API_KEY_PROVIDER_NAMES[provider.id] ?? provider.id,
+        name:
+          provider.auth.apiKey?.name ??
+          API_KEY_PROVIDER_NAMES[provider.id] ??
+          provider.id,
         authType: "api_key" as const,
         ...this.#status(provider.id),
       }))
       .sort((left, right) => left.name.localeCompare(right.name))
-    const names = new Map([...oauthProviders, ...apiKeyProviders].map((provider) => [provider.id, provider.name]))
+    const names = new Map(
+      [...oauthProviders, ...apiKeyProviders].map((provider) => [
+        provider.id,
+        provider.name,
+      ])
+    )
     const loggedInProviders = (await this.#models.listCredentials())
       .map((credential) => ({
         id: credential.providerId,
-        name: names.get(credential.providerId) ?? API_KEY_PROVIDER_NAMES[credential.providerId] ?? credential.providerId,
-        authType: credential.type === "oauth" ? ("oauth" as const) : ("api_key" as const),
+        name:
+          names.get(credential.providerId) ??
+          API_KEY_PROVIDER_NAMES[credential.providerId] ??
+          credential.providerId,
+        authType:
+          credential.type === "oauth"
+            ? ("oauth" as const)
+            : ("api_key" as const),
         ...this.#status(credential.providerId),
         configured: true,
       }))
@@ -167,7 +195,9 @@ export class Auth {
       prompt: async (prompt) => {
         if (prompt.type !== "select") return key
         return (
-          prompt.options.find((option) => /api.?key|bearer.?token/i.test(option.id))?.id ??
+          prompt.options.find((option) =>
+            /api.?key|bearer.?token/i.test(option.id)
+          )?.id ??
           prompt.options[0]?.id ??
           key
         )
@@ -190,7 +220,9 @@ export class Auth {
     const existing = this.#activeLogins.get(provider)
     if (existing) {
       existing.abort()
-      throw badRequest(`Cancelled the existing ${oauth.name} login. Try login again.`)
+      throw badRequest(
+        `Cancelled the existing ${oauth.name} login. Try login again.`
+      )
     }
     const abort = new AbortController()
     this.#activeLogins.set(provider, abort)
@@ -204,15 +236,22 @@ export class Auth {
             prompt.type === "manual_code" && manualInput
               ? manualInput
               : this.#ui.request(contextId, {
-                  method: prompt.type === "select" ? "auth_select" : "auth_input",
+                  method:
+                    prompt.type === "select" ? "auth_select" : "auth_input",
                   title,
                   message: prompt.message,
                   ...(prompt.type === "select"
-                    ? { options: prompt.options.map((option) => ({ value: option.id, label: option.label })) }
+                    ? {
+                        options: prompt.options.map((option) => ({
+                          value: option.id,
+                          label: option.label,
+                        })),
+                      }
                     : { placeholder: prompt.placeholder }),
                 })
           const response = await request
-          if (response.cancelled || typeof response.value !== "string") throw new Error("Login cancelled")
+          if (response.cancelled || typeof response.value !== "string")
+            throw new Error("Login cancelled")
           return response.value
         },
         notify: (event) => {
@@ -220,7 +259,9 @@ export class Auth {
             manualInput = this.#ui.request(contextId, {
               method: "auth",
               title,
-              message: event.instructions ?? "Open the login page in your browser to continue.",
+              message:
+                event.instructions ??
+                "Open the login page in your browser to continue.",
               authUrl: event.url,
               authManualAllowed: true,
             })
@@ -246,7 +287,12 @@ export class Auth {
           const link = event.type === "info" ? event.links?.[0] : undefined
           void this.#ui.request(
             contextId,
-            { method: "notify", message: event.message, notifyType: "info", ...(link ? { authUrl: link.url } : {}) },
+            {
+              method: "notify",
+              message: event.message,
+              notifyType: "info",
+              ...(link ? { authUrl: link.url } : {}),
+            },
             false
           )
         },
@@ -269,25 +315,41 @@ export class Auth {
     const stored = await this.#oauthToken("anthropic")
     if (stored?.access) return stored.access
     if (process.platform !== "darwin") return undefined
-    const keychain = spawnSync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], {
-      encoding: "utf8",
-    })
+    const keychain = spawnSync(
+      "security",
+      ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+      {
+        encoding: "utf8",
+      }
+    )
     if (keychain.status !== 0 || !keychain.stdout.trim()) return undefined
     try {
-      const value = JSON.parse(keychain.stdout) as { claudeAiOauth?: { accessToken?: unknown } }
-      return typeof value.claudeAiOauth?.accessToken === "string" ? value.claudeAiOauth.accessToken : undefined
+      const value = JSON.parse(keychain.stdout) as {
+        claudeAiOauth?: { accessToken?: unknown }
+      }
+      return typeof value.claudeAiOauth?.accessToken === "string"
+        ? value.claudeAiOauth.accessToken
+        : undefined
     } catch {
       return undefined
     }
   }
 
-  async #codexCredential(): Promise<{ token: string; accountId?: string } | undefined> {
+  async #codexCredential(): Promise<
+    { token: string; accountId?: string } | undefined
+  > {
     const stored = await this.#oauthToken("openai-codex")
     if (stored?.access) {
       const accountId = (stored as { accountId?: unknown }).accountId
-      return { token: stored.access, ...(typeof accountId === "string" ? { accountId } : {}) }
+      return {
+        token: stored.access,
+        ...(typeof accountId === "string" ? { accountId } : {}),
+      }
     }
-    const path = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json")
+    const path = join(
+      process.env.CODEX_HOME ?? join(homedir(), ".codex"),
+      "auth.json"
+    )
     if (!existsSync(path)) return undefined
     try {
       const value = JSON.parse(readFileSync(path, "utf8")) as {
@@ -298,7 +360,9 @@ export class Auth {
       if (value.tokens?.access_token) {
         return {
           token: String(value.tokens.access_token),
-          ...(value.tokens.account_id ? { accountId: String(value.tokens.account_id) } : {}),
+          ...(value.tokens.account_id
+            ? { accountId: String(value.tokens.account_id) }
+            : {}),
         }
       }
     } catch {
@@ -312,12 +376,21 @@ export class Auth {
     if (provider === "anthropic") {
       const token = await this.#claudeToken()
       if (!token) return { ok: true, windows }
-      const response = await fetch("https://api.anthropic.com/api/oauth/usage", {
-        headers: { Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20" },
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => undefined)
+      const response = await fetch(
+        "https://api.anthropic.com/api/oauth/usage",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "anthropic-beta": "oauth-2025-04-20",
+          },
+          signal: AbortSignal.timeout(5000),
+        }
+      ).catch(() => undefined)
       if (!response?.ok) return { ok: true, windows }
-      const value = (await response.json()) as Record<string, { utilization?: number; resets_at?: string }>
+      const value = (await response.json()) as Record<
+        string,
+        { utilization?: number; resets_at?: string }
+      >
       for (const [key, label] of [
         ["five_hour", "5h"],
         ["seven_day", "Week"],
@@ -327,7 +400,9 @@ export class Auth {
         windows.push({
           label,
           usedPercent: normalizePercent(usage.utilization),
-          ...(usage.resets_at ? { resetsIn: formatResetTime(usage.resets_at) } : {}),
+          ...(usage.resets_at
+            ? { resetsIn: formatResetTime(usage.resets_at) }
+            : {}),
         })
       }
     } else if (provider === "openai-codex") {
@@ -338,14 +413,21 @@ export class Auth {
         "User-Agent": "pico",
         Accept: "application/json",
       }
-      if (credential.accountId) headers["ChatGPT-Account-Id"] = credential.accountId
-      const response = await fetch("https://chatgpt.com/backend-api/wham/usage", {
-        headers,
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => undefined)
+      if (credential.accountId)
+        headers["ChatGPT-Account-Id"] = credential.accountId
+      const response = await fetch(
+        "https://chatgpt.com/backend-api/wham/usage",
+        {
+          headers,
+          signal: AbortSignal.timeout(5000),
+        }
+      ).catch(() => undefined)
       if (!response?.ok) return { ok: true, windows }
       const value = (await response.json()) as {
-        rate_limit?: { primary_window?: CodexWindow; secondary_window?: CodexWindow }
+        rate_limit?: {
+          primary_window?: CodexWindow
+          secondary_window?: CodexWindow
+        }
       }
       for (const [window, fallback] of [
         [value.rate_limit?.primary_window, "5h"],
@@ -355,7 +437,9 @@ export class Auth {
         windows.push({
           label: usageWindowLabel(window.limit_window_seconds, fallback),
           usedPercent: clampPercent(window.used_percent ?? 0),
-          ...(window.reset_at ? { resetsIn: formatResetTime(window.reset_at) } : {}),
+          ...(window.reset_at
+            ? { resetsIn: formatResetTime(window.reset_at) }
+            : {}),
         })
       }
     }
@@ -367,7 +451,11 @@ export class Auth {
   }
 }
 
-type CodexWindow = { used_percent?: number; reset_at?: number; limit_window_seconds?: number }
+type CodexWindow = {
+  used_percent?: number
+  reset_at?: number
+  limit_window_seconds?: number
+}
 
 function clampPercent(value: number) {
   return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0
@@ -385,7 +473,8 @@ function formatResetTime(value: string | number) {
   if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
-  if (hours < 24) return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  if (hours < 24)
+    return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
   const days = Math.floor(hours / 24)
   const remainingHours = hours % 24
   return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`

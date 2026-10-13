@@ -15,7 +15,11 @@ const MAX_CODE_UTF16_UNITS = 100_000
 const MAX_CODE_LINES = 1500
 const CACHE_MAX_ENTRIES = 512
 
-const theme = createCssVariablesTheme({ name: "pico-variables", variablePrefix: "--sh-", fontStyle: true })
+const theme = createCssVariablesTheme({
+  name: "pico-variables",
+  variablePrefix: "--sh-",
+  fontStyle: true,
+})
 
 const ALIASES: Record<string, string> = {
   mjs: "javascript",
@@ -38,7 +42,10 @@ const ALIASES: Record<string, string> = {
 }
 
 function normalizeLanguage(language: string) {
-  const lower = language.trim().toLowerCase().replace(/^language-/, "")
+  const lower = language
+    .trim()
+    .toLowerCase()
+    .replace(/^language-/, "")
   return ALIASES[lower] ?? lower
 }
 
@@ -59,9 +66,17 @@ export class HighlightService {
 
   async highlight(code: unknown, language: unknown): Promise<HighlightOutcome> {
     const text = typeof code === "string" ? code : ""
-    const normalized = normalizeLanguage(typeof language === "string" ? language : "")
-    if (!text || !normalized) return { skipped: true, ...(normalized ? { language: normalized } : {}) }
-    if (normalized === "text" || normalized === "plaintext" || text.length > MAX_CODE_UTF16_UNITS || text.split("\n").length > MAX_CODE_LINES) {
+    const normalized = normalizeLanguage(
+      typeof language === "string" ? language : ""
+    )
+    if (!text || !normalized)
+      return { skipped: true, ...(normalized ? { language: normalized } : {}) }
+    if (
+      normalized === "text" ||
+      normalized === "plaintext" ||
+      text.length > MAX_CODE_UTF16_UNITS ||
+      text.split("\n").length > MAX_CODE_LINES
+    ) {
       return { skipped: true, language: normalized }
     }
     const key = `${normalized}\0${text}`
@@ -71,14 +86,18 @@ export class HighlightService {
       this.#cache.set(key, cached)
       return cached
     }
-    if (!(normalized in bundledLanguages)) return { unsupported: true, language: normalized }
+    if (!(normalized in bundledLanguages))
+      return { unsupported: true, language: normalized }
     let outcome: HighlightOutcome
     try {
       const highlighter = await this.#instance()
       if (!highlighter.getLoadedLanguages().includes(normalized)) {
         await highlighter.loadLanguage(normalized as BundledLanguage)
       }
-      const html = highlighter.codeToHtml(text, { lang: normalized, theme: "pico-variables" })
+      const html = highlighter.codeToHtml(text, {
+        lang: normalized,
+        theme: "pico-variables",
+      })
       outcome = { language: normalized, html: lines(html) }
     } catch (error) {
       console.warn("[pico] highlighting failed:", error)
@@ -98,5 +117,7 @@ export class HighlightService {
 function lines(html: string) {
   const start = html.indexOf("<code>")
   const end = html.lastIndexOf("</code>")
-  return start >= 0 && end > start ? html.slice(start + "<code>".length, end) : html
+  return start >= 0 && end > start
+    ? html.slice(start + "<code>".length, end)
+    : html
 }

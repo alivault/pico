@@ -26,7 +26,8 @@ const allowedHosts = Array.from(
 const backendUrl = process.env.PICO_DEV_BACKEND_URL ?? "http://127.0.0.1:3142"
 const backendProxy = {
   target: backendUrl,
-  changeOrigin: true,
+  // Preserve Host so the backend's same-origin check also works through Vite.
+  changeOrigin: false,
   ws: true,
 }
 
