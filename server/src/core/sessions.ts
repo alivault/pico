@@ -1,0 +1,1535 @@
+/**
+ * Sessions on durable conversations.
+ *
+ * A Pico session is an ownerless durable conversation with a `pico.session`
+ * document: its directory, name, summary, and labels. Navigating the session
+ * tree forks the conversation and the fork takes the session's place, so a
+ * session is a family of conversations of which one is visible. Deleting a
+ * session archives it; durable conversations are never removed.
+ *
+ * Every commit is observed: new entries, `pi.live`, `pi.inbox`, and `pi.agent`
+ * changes become state syncs, streaming deltas, sidebar updates, and
+ * completion events for the clients that watch them.
+ */
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
+import {
+  getSupportedThinkingLevels,
+  type Api,
+  type ImageContent,
+  type Model,
+  type ModelThinkingLevel,
+  type TextContent,
+} from "@earendil-works/pi-ai"
+import {
+  AgentDoc,
+  defineDoc,
+  InboxDoc,
+  LiveDoc,
+  type AgentState,
+  type CommitPublication,
+  type Conversation,
+  type ConversationId,
+  type EntryRecord,
+  type InboxItem,
+  type InboxState,
+  type LiveState,
+  type SubmissionId,
+} from "@earendil-works/pi-durable"
+
+import {
+  cleanupCandidate,
+  generateSessionName,
+  heuristicSessionName,
+} from "../extensions/auto-name.ts"
+import { badRequest, conflict, notFound } from "../http.ts"
+import type { EventHub } from "../events.ts"
+import {
+  applyLiveTools,
+  contextTokens,
+  entryStartsItem,
+  isUserInputEntry,
+  itemsFromEntries,
+  messageImages,
+  messageText,
+  streamingDelta,
+  streamingItem,
+  type AssistantItem,
+  type ConversationItem,
+  type ModelOption,
+  type UsageLike,
+} from "./items.ts"
+import { expandPromptTemplate, expandSkillCommand } from "./resources.ts"
+import type { Runtime } from "./runtime.ts"
+import type { DraftSelection, Viewers } from "./viewers.ts"
+
+const ctx = BACKGROUND_CONTEXT
+const INITIAL_HISTORY_ITEMS = 100
+const PREVIEW_CHARS = 160
+const ALL_THINKING_LEVELS: ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+export type SessionMeta = {
+  cwd: string
+  name?: string
+  /** `auto` names may be refined; `user` names are never replaced. */
+  nameSource?: "user" | "auto"
+  createdAt: number
+  modifiedAt: number
+  /** Deleted by the user. */
+  archived?: boolean
+  /** Replaced by a tree navigation fork, which is the session now. */
+  replacedBy?: string
+  /** First conversation of the session's family. */
+  family?: string
+  firstMessage: string
+  lastMessagePreview?: string
+  lastUserMessageAt?: number
+  lastMessageAt?: number
+  messageCount: number
+  labels?: Record<string, { label: string; timestamp: number }>
+}
+
+export const SessionDoc = defineDoc<SessionMeta>({
+  kind: "pico.session",
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "initial",
+  initial: () => ({ cwd: "", createdAt: 0, modifiedAt: 0, firstMessage: "", messageCount: 0 }),
+})
+
+export type SessionListEntry = {
+  path: string
+  id: string
+  cwd: string
+  name?: string
+  title: string
+  modified: string
+  lastUserMessageAt?: string
+  lastMessageAt?: string
+  lastMessagePreview?: string
+  messageCount: number
+  streaming: boolean
+  unread: boolean
+}
+
+export type PendingMessage = {
+  pendingId: string
+  text: string
+  images: Array<{ type: "image"; mimeType: string; data: string }>
+  streamingBehavior: "steer" | "followUp"
+}
+
+type Transcript = {
+  entries: EntryRecord[]
+  items?: ConversationItem[]
+}
+
+type Docs = {
+  live?: LiveState
+  inbox?: InboxState
+  agent?: AgentState
+}
+
+type Dirty = {
+  entries?: boolean
+  live?: boolean
+  inbox?: boolean
+  agent?: boolean
+  usage?: boolean
+}
+
+type PromptImageInput = { mimeType?: string; data?: string }
+
+/**
+ * Public session IDs are `s<conversation id>`: the client's router reads a
+ * numeric search value as a number, not a session ID.
+ */
+export function publicId(conversationId: ConversationId) {
+  return `s${conversationId}`
+}
+
+export function conversationIdOf(id: string): ConversationId {
+  return Number(id.startsWith("s") ? id.slice(1) : id) as unknown as ConversationId
+}
+
+export function sessionPath(id: string) {
+  return `pico:${id}`
+}
+
+export function sessionKey(id: string) {
+  return `session:${id}`
+}
+
+/** A session ID from a session ID, key, or path. */
+export function parseSessionId(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  if (trimmed.startsWith("pico:")) return trimmed.slice(5)
+  if (trimmed.startsWith("session:")) return trimmed.slice(8)
+  return trimmed
+}
+
+function iso(time: number | undefined) {
+  return time ? new Date(time).toISOString() : undefined
+}
+
+function preview(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim()
+  return normalized.length > PREVIEW_CHARS ? `${normalized.slice(0, PREVIEW_CHARS - 1)}…` : normalized
+}
+
+function fnv1a(parts: string[]) {
+  let hash = 0xcbf29ce484222325n
+  for (const part of parts) {
+    for (const byte of Buffer.from(part)) {
+      hash ^= BigInt(byte)
+      hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn
+    }
+  }
+  return hash.toString(16).padStart(16, "0")
+}
+
+function userContent(text: string, images: PromptImageInput[]): string | (TextContent | ImageContent)[] {
+  const valid = images.flatMap((image) => {
+    let data = typeof image.data === "string" ? image.data.trim() : ""
+    let mimeType = typeof image.mimeType === "string" ? image.mimeType.trim() : ""
+    const match = data.match(/^data:([^;,]+);base64,(.+)$/i)
+    if (match) {
+      mimeType ||= match[1] ?? ""
+      data = match[2] ?? ""
+    }
+    if (!data || !/^image\//i.test(mimeType)) return []
+    return [{ type: "image" as const, mimeType, data }]
+  })
+  if (valid.length === 0) return text
+  return [...(text ? [{ type: "text" as const, text }] : []), ...valid]
+}
+
+function inboxMessage(item: InboxItem): PendingMessage | undefined {
+  if (item.mode === "write") return undefined
+  const content = item.content as unknown
+  const message = { content }
+  return {
+    pendingId: `pending:${item.id}`,
+    text: messageText(message),
+    images: messageImages(message).map(({ mimeType, data }) => ({ type: "image", mimeType, data })),
+    streamingBehavior: item.mode,
+  }
+}
+
+function submissionIdFromPending(pendingId: string): SubmissionId {
+  const raw = pendingId.startsWith("pending:") ? pendingId.slice(8) : pendingId
+  const id = Number(raw)
+  if (!Number.isFinite(id)) throw badRequest("Unknown pending prompt")
+  return id as unknown as SubmissionId
+}
+
+export class Sessions {
+  readonly #runtime: Runtime
+  readonly #hub: EventHub
+  readonly #viewers: Viewers
+  readonly #metas = new Map<string, SessionMeta>()
+  readonly #docs = new Map<string, Docs>()
+  readonly #transcripts = new Map<string, Transcript>()
+  readonly #loading = new Map<string, Promise<Transcript>>()
+  readonly #arrivals = new Map<string, EntryRecord[]>()
+  readonly #watchers = new Map<string, number>()
+  readonly #streaming = new Map<string, AssistantItem | undefined>()
+  readonly #busy = new Map<string, boolean>()
+  readonly #compacting = new Map<string, boolean>()
+  readonly #dirty = new Map<string, Dirty>()
+  readonly #metaWrites = new Map<string, NodeJS.Timeout>()
+  readonly #naming = new Set<string>()
+  #flushScheduled = false
+  #sessionsTimer: NodeJS.Timeout | undefined
+
+  constructor(runtime: Runtime, hub: EventHub, viewers: Viewers) {
+    this.#runtime = runtime
+    this.#hub = hub
+    this.#viewers = viewers
+  }
+
+  get #harness() {
+    return this.#runtime.harness
+  }
+
+  /** Read every session and start observing commits. */
+  async load() {
+    let cursor: Parameters<Conversation["entries"]>[2]
+    const ids: ConversationId[] = []
+    do {
+      const page = await this.#harness.commit(
+        (tx) => tx.scanConversations({}, 500, cursor),
+        ctx
+      )
+      for (const record of page.items) if (!record.owner) ids.push(record.id)
+      cursor = page.next
+    } while (cursor)
+
+    await Promise.all(
+      ids.map(async (conversationId) => {
+        const meta = await this.#harness.snapshot(SessionDoc, conversationId, ctx)
+        if (!meta || !meta.cwd) return
+        const id = publicId(conversationId)
+        this.#metas.set(id, { ...meta })
+        const live = await this.#harness.snapshot(LiveDoc, conversationId, ctx)
+        this.#docs.set(id, { ...(live ? { live: live as LiveState } : {}) })
+        this.#busy.set(id, live?.run !== undefined)
+      })
+    )
+    this.#harness.subscribeCommits((publication) => this.#observe(publication))
+    // Continue runs an earlier process left unfinished.
+    this.#harness.resume()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lookup
+
+  has(id: string | undefined): id is string {
+    return id !== undefined && this.#metas.has(id)
+  }
+
+  meta(id: string): SessionMeta {
+    const meta = this.#metas.get(id)
+    if (!meta) throw notFound(`Unknown session: ${id}`)
+    return meta
+  }
+
+  /** The visible session for an ID, following tree navigation replacements. */
+  current(id: string | undefined): string | undefined {
+    let current = parseSessionId(id)
+    for (let hops = 0; current && hops < 100; hops += 1) {
+      const meta = this.#metas.get(current)
+      if (!meta) return undefined
+      if (!meta.replacedBy) return current
+      current = meta.replacedBy
+    }
+    return current
+  }
+
+  isVisible(id: string) {
+    const meta = this.#metas.get(id)
+    return Boolean(meta && !meta.archived && !meta.replacedBy)
+  }
+
+  isBusy(id: string) {
+    return this.#busy.get(id) === true
+  }
+
+  async conversation(id: string): Promise<Conversation> {
+    const conversation = await this.#harness.conversation(
+      conversationIdOf(id),
+      ctx
+    )
+    if (!conversation || !this.#metas.has(id)) throw notFound(`Unknown session: ${id}`)
+    return conversation
+  }
+
+  activeRunCount() {
+    let count = 0
+    for (const busy of this.#busy.values()) if (busy) count += 1
+    return count
+  }
+
+  // ---------------------------------------------------------------------------
+  // Watching
+
+  /** An event stream shows this session; keep its transcript and send its updates. */
+  watch(id: string) {
+    this.#watchers.set(id, (this.#watchers.get(id) ?? 0) + 1)
+    return () => {
+      const count = (this.#watchers.get(id) ?? 1) - 1
+      if (count <= 0) this.#watchers.delete(id)
+      else this.#watchers.set(id, count)
+    }
+  }
+
+  #watched(id: string) {
+    return (this.#watchers.get(id) ?? 0) > 0
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transcripts and documents
+
+  async transcript(id: string): Promise<Transcript> {
+    const loaded = this.#transcripts.get(id)
+    if (loaded) return loaded
+    let loading = this.#loading.get(id)
+    if (!loading) {
+      loading = this.#loadTranscript(id)
+      this.#loading.set(id, loading)
+    }
+    return loading
+  }
+
+  async #loadTranscript(id: string): Promise<Transcript> {
+    this.#arrivals.set(id, [])
+    try {
+      const conversation = await this.conversation(id)
+      const entries: EntryRecord[] = []
+      let cursor: Parameters<Conversation["entries"]>[2]
+      do {
+        const page = await conversation.entries({ order: "ascending" }, 1000, cursor, ctx)
+        entries.push(...page.items)
+        cursor = page.next
+      } while (cursor)
+      const last = entries.at(-1)?.id ?? -1
+      for (const entry of this.#arrivals.get(id) ?? []) {
+        if ((entry.id as unknown as number) > (last as unknown as number)) entries.push(entry)
+      }
+      const transcript: Transcript = { entries }
+      this.#transcripts.set(id, transcript)
+      this.#evictTranscripts()
+      return transcript
+    } finally {
+      this.#arrivals.delete(id)
+      this.#loading.delete(id)
+    }
+  }
+
+  #evictTranscripts() {
+    if (this.#transcripts.size <= 24) return
+    for (const id of this.#transcripts.keys()) {
+      if (this.#transcripts.size <= 24) break
+      if (this.#watched(id) || this.isBusy(id)) continue
+      this.#transcripts.delete(id)
+    }
+  }
+
+  async #doc<K extends keyof Docs>(id: string, key: K): Promise<Docs[K]> {
+    const docs = this.#docs.get(id) ?? {}
+    this.#docs.set(id, docs)
+    if (key in docs) return docs[key]
+    const conversationId = conversationIdOf(id)
+    const token = key === "live" ? LiveDoc : key === "inbox" ? InboxDoc : AgentDoc
+    const value = (await this.#harness.snapshot(token as typeof LiveDoc, conversationId, ctx)) as Docs[K]
+    if (!(key in docs)) docs[key] = value
+    return docs[key]
+  }
+
+  // ---------------------------------------------------------------------------
+  // Observation
+
+  #observe(publication: CommitPublication) {
+    for (const change of publication.changes) {
+      if (change.type === "entry") {
+        const entry = change.value
+        const id = publicId(entry.conversationId)
+        if (!this.#metas.has(id)) continue
+        const transcript = this.#transcripts.get(id)
+        if (transcript) {
+          transcript.entries.push(entry)
+          delete transcript.items
+        } else {
+          this.#arrivals.get(id)?.push(entry)
+        }
+        this.#noteEntry(id, entry)
+        this.#markDirty(id, { entries: true })
+      } else if (change.type === "document") {
+        const id = change.conversationId === undefined ? undefined : publicId(change.conversationId)
+        if (!id || !this.#metas.has(id)) continue
+        const kind = change.record.kind
+        const docs = this.#docs.get(id) ?? {}
+        this.#docs.set(id, docs)
+        const value = change.value ?? undefined
+        if (kind === "pi.live") {
+          docs.live = value as LiveState | undefined
+          this.#markDirty(id, { live: true })
+        } else if (kind === "pi.inbox") {
+          docs.inbox = value as InboxState | undefined
+          this.#markDirty(id, { inbox: true })
+        } else if (kind === "pi.agent") {
+          docs.agent = value as AgentState | undefined
+          this.#markDirty(id, { agent: true })
+        } else if (kind === "pi.usage") {
+          this.#markDirty(id, { usage: true })
+        }
+      }
+    }
+  }
+
+  /** Keep the sidebar summary current as entries arrive. */
+  #noteEntry(id: string, entry: EntryRecord) {
+    if (!entryStartsItem(entry) || entry.kind === "pi.compaction") return
+    const meta = this.#metas.get(id)
+    if (!meta) return
+    const message = entry.model?.[0] as { timestamp?: number } | undefined
+    const time = typeof message?.timestamp === "number" ? message.timestamp : Date.now()
+    const text = messageText(message as never)
+    const change: Partial<SessionMeta> = {
+      messageCount: meta.messageCount + 1,
+      lastMessageAt: time,
+      modifiedAt: Date.now(),
+    }
+    if (isUserInputEntry(entry)) {
+      change.lastUserMessageAt = time
+      if (!meta.firstMessage) change.firstMessage = preview(text) || "Image"
+    }
+    if (text.trim()) change.lastMessagePreview = preview(text)
+    this.#updateMeta(id, change, { persistAfterMs: 1500 })
+  }
+
+  #markDirty(id: string, dirty: Dirty) {
+    const current = this.#dirty.get(id) ?? {}
+    this.#dirty.set(id, { ...current, ...dirty })
+    if (this.#flushScheduled) return
+    this.#flushScheduled = true
+    setImmediate(() => {
+      this.#flushScheduled = false
+      void this.#flush()
+    })
+  }
+
+  async #flush() {
+    const dirty = [...this.#dirty.entries()]
+    this.#dirty.clear()
+    for (const [id, changes] of dirty) {
+      try {
+        await this.#flushSession(id, changes)
+      } catch (error) {
+        console.error(`[pico] could not publish session ${id}:`, error)
+      }
+    }
+  }
+
+  async #flushSession(id: string, changes: Dirty) {
+    const docs = this.#docs.get(id) ?? {}
+    const busy = docs.live?.run !== undefined
+    const wasBusy = this.#busy.get(id) === true
+    const compacting = (docs.live?.compactions?.length ?? 0) > 0
+    const wasCompacting = this.#compacting.get(id) === true
+    this.#busy.set(id, busy)
+    this.#compacting.set(id, compacting)
+
+    if (busy !== wasBusy) {
+      this.#hub.push(
+        { type: "session_status", sessionId: id, sessionKey: sessionKey(id), sessionPath: sessionPath(id), streaming: busy },
+        { sessionId: id }
+      )
+      this.#scheduleSessionsBroadcast()
+    }
+    if ((wasBusy && !busy) || (wasCompacting && !compacting && !busy)) {
+      await this.#finished(id, wasBusy && !busy ? "agent" : "manual_compaction")
+    }
+    if (changes.entries) this.#scheduleSessionsBroadcast()
+
+    if (!this.#watched(id)) return
+    const structural =
+      changes.entries || changes.inbox || changes.agent || changes.usage || busy !== wasBusy || compacting !== wasCompacting
+    const toolsChanged = changes.live && this.#toolsSignature(id, docs.live)
+    if (structural || toolsChanged) {
+      await this.publishState(id)
+      return
+    }
+    if (changes.live) {
+      const next = streamingItem(docs.live)
+      const previous = this.#streaming.get(id)
+      if (!next) {
+        if (previous) await this.publishState(id)
+        return
+      }
+      const operations = streamingDelta(previous, next)
+      this.#streaming.set(id, next)
+      if (operations.length === 0) return
+      this.#hub.push(
+        { type: "conversation_delta", sessionId: id, operations },
+        { sessionId: id }
+      )
+    }
+  }
+
+  readonly #toolSignatures = new Map<string, string>()
+
+  /** Whether the running output of the current tool round changed. */
+  #toolsSignature(id: string, live: LiveState | undefined) {
+    const signature = JSON.stringify(
+      (live?.tools ?? []).map((slot) => [slot.callId, slot.status, slot.output?.length ?? 0, slot.details === undefined ? 0 : 1, slot.entry ?? 0])
+    )
+    const changed = this.#toolSignatures.get(id) !== signature
+    this.#toolSignatures.set(id, signature)
+    return changed
+  }
+
+  async #finished(id: string, reason: "agent" | "manual_compaction") {
+    this.#viewers.markDone(id)
+    const meta = this.#metas.get(id)
+    const transcript = this.#transcripts.get(id)
+    const lastAssistant = transcript?.entries.findLast((entry) => entry.kind === "pi.assistant")
+    const stopReason = (lastAssistant?.model?.[0] as { stopReason?: string } | undefined)?.stopReason
+    this.#persistMetaNow(id)
+    this.#hub.push(
+      {
+        type: "session_done",
+        id: `done:${id}:${this.#hub.currentSequence + 1}`,
+        sessionId: id,
+        sessionKey: sessionKey(id),
+        sessionPath: sessionPath(id),
+        cwd: meta?.cwd,
+        title: this.#title(id),
+        reason,
+        outcome: stopReason === "error" ? "error" : "success",
+        completedAt: new Date().toISOString(),
+      },
+      { sessionId: id }
+    )
+    this.#scheduleSessionsBroadcast()
+  }
+
+  #scheduleSessionsBroadcast() {
+    if (this.#sessionsTimer) return
+    this.#sessionsTimer = setTimeout(() => {
+      this.#sessionsTimer = undefined
+      this.#hub.push(this.sessionsPayload({}))
+    }, 200)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Metadata
+
+  #updateMeta(id: string, change: Partial<SessionMeta>, options: { persistAfterMs?: number } = {}) {
+    const meta = this.#metas.get(id)
+    if (!meta) return
+    const next: SessionMeta = { ...meta, ...change }
+    for (const [key, value] of Object.entries(change)) {
+      if (value === undefined) delete (next as Record<string, unknown>)[key]
+    }
+    this.#metas.set(id, next)
+    const delay = options.persistAfterMs ?? 0
+    const pending = this.#metaWrites.get(id)
+    if (pending) clearTimeout(pending)
+    const timer = setTimeout(() => {
+      this.#metaWrites.delete(id)
+      void this.#writeMeta(id)
+    }, delay)
+    this.#metaWrites.set(id, timer)
+  }
+
+  #persistMetaNow(id: string) {
+    const pending = this.#metaWrites.get(id)
+    if (!pending) return
+    clearTimeout(pending)
+    this.#metaWrites.delete(id)
+    void this.#writeMeta(id)
+  }
+
+  async #writeMeta(id: string) {
+    const meta = this.#metas.get(id)
+    if (!meta) return
+    const conversationId = conversationIdOf(id)
+    try {
+      await this.#harness.commit(async (tx) => {
+        const draft = (await tx.doc(SessionDoc, conversationId)) as unknown as Record<string, unknown>
+        for (const key of Object.keys(draft)) {
+          if (!(key in meta)) delete draft[key]
+        }
+        Object.assign(draft, JSON.parse(JSON.stringify(meta)))
+      }, ctx)
+    } catch (error) {
+      console.error(`[pico] could not save session ${id}:`, error)
+    }
+  }
+
+  /** Save every pending metadata change, for shutdown. */
+  async flushMeta() {
+    const ids = [...this.#metaWrites.keys()]
+    for (const id of ids) {
+      clearTimeout(this.#metaWrites.get(id))
+      this.#metaWrites.delete(id)
+    }
+    await Promise.all(ids.map((id) => this.#writeMeta(id)))
+  }
+
+  #title(id: string) {
+    const meta = this.#metas.get(id)
+    return meta?.name?.trim() || meta?.firstMessage?.trim() || "New session"
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lists
+
+  summary(id: string, unread: Set<string>): SessionListEntry {
+    const meta = this.meta(id)
+    return {
+      path: sessionPath(id),
+      id,
+      cwd: meta.cwd,
+      ...(meta.name ? { name: meta.name } : {}),
+      title: this.#title(id),
+      modified: iso(meta.modifiedAt) ?? new Date(0).toISOString(),
+      ...(meta.lastUserMessageAt ? { lastUserMessageAt: iso(meta.lastUserMessageAt) } : {}),
+      ...(meta.lastMessageAt ? { lastMessageAt: iso(meta.lastMessageAt) } : {}),
+      ...(meta.lastMessagePreview ? { lastMessagePreview: meta.lastMessagePreview } : {}),
+      messageCount: meta.messageCount,
+      streaming: this.isBusy(id),
+      unread: unread.has(id),
+    }
+  }
+
+  /** Visible sessions of a directory, most recently active first. */
+  directorySessions(directory: string): string[] {
+    return [...this.#metas.entries()]
+      .filter(([id, meta]) => meta.cwd === directory && this.isVisible(id))
+      .sort((left, right) => activity(right[1]) - activity(left[1]))
+      .map(([id]) => id)
+  }
+
+  directories(): string[] {
+    const directories = new Set<string>()
+    for (const [id, meta] of this.#metas) if (this.isVisible(id)) directories.add(meta.cwd)
+    return [...directories].sort()
+  }
+
+  #revision(directory: string, ids: string[], unread: Set<string>) {
+    return fnv1a([
+      directory,
+      ...ids.flatMap((id) => {
+        const meta = this.#metas.get(id)!
+        return [id, String(meta.modifiedAt), meta.name ?? "", String(meta.messageCount), this.isBusy(id) ? "1" : "0", unread.has(id) ? "1" : "0"]
+      }),
+    ])
+  }
+
+  directoryIndex(directory: string, unread: Set<string>) {
+    const ids = this.directorySessions(directory)
+    return {
+      directory,
+      totalCount: ids.length,
+      revision: this.#revision(directory, ids, unread),
+      sessions: ids.map((id) => this.summary(id, unread)),
+    }
+  }
+
+  sessionsPayload(options: { activeSessionId?: string; directories?: string[]; unread?: Set<string> }) {
+    const unread = options.unread ?? new Set<string>()
+    const directories = this.directories()
+    const indexDirectories = new Set(options.directories ?? [])
+    if (options.activeSessionId && this.#metas.has(options.activeSessionId)) {
+      indexDirectories.add(this.meta(options.activeSessionId).cwd)
+    }
+    const directoryIndexes: Record<string, ReturnType<Sessions["directoryIndex"]>> = {}
+    for (const directory of indexDirectories) directoryIndexes[directory] = this.directoryIndex(directory, unread)
+    return {
+      type: "sessions",
+      directories,
+      directoryStates: directories.map((path) => {
+        const ids = this.directorySessions(path)
+        return { path, totalCount: ids.length, revision: this.#revision(path, ids, unread) }
+      }),
+      directoryIndexes,
+      ...(options.activeSessionId && this.#metas.has(options.activeSessionId)
+        ? {
+            activeSessionPath: sessionPath(options.activeSessionId),
+            activeSessionId: options.activeSessionId,
+            activeSessionKey: sessionKey(options.activeSessionId),
+          }
+        : {}),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Models
+
+  availableModels(): ModelOption[] {
+    return this.#runtime.models.getAvailableSnapshot().map((model) => ({
+      id: model.id,
+      provider: model.provider,
+      name: model.name,
+      reasoning: model.reasoning,
+    }))
+  }
+
+  defaultModel(): { provider: string; modelId: string } | undefined {
+    const settings = this.#runtime.piSettings()
+    const available = this.#runtime.models.getAvailableSnapshot()
+    const provider = settings.getDefaultProvider()
+    const modelId = settings.getDefaultModel()
+    const preferred = available.find((model) => model.provider === provider && model.id === modelId)
+    const fallback = preferred ?? available.find((model) => model.provider === provider) ?? available[0]
+    return fallback ? { provider: fallback.provider, modelId: fallback.id } : undefined
+  }
+
+  defaultThinkingLevel(): ModelThinkingLevel {
+    const level = this.#runtime.piSettings().getDefaultThinkingLevel()
+    return (level as ModelThinkingLevel | undefined) ?? "medium"
+  }
+
+  #model(ref: { provider: string; modelId: string } | undefined): Model<Api> | undefined {
+    return ref ? this.#runtime.models.getModel(ref.provider, ref.modelId) : undefined
+  }
+
+  #modelOption(ref: { provider: string; modelId: string } | undefined): ModelOption | undefined {
+    if (!ref) return undefined
+    const model = this.#model(ref)
+    return {
+      id: ref.modelId,
+      provider: ref.provider,
+      ...(model ? { name: model.name, reasoning: model.reasoning } : {}),
+    }
+  }
+
+  thinkingLevels(ref: { provider: string; modelId: string } | undefined): string[] {
+    const model = this.#model(ref)
+    if (!model) return ALL_THINKING_LEVELS.filter((level) => level !== "max")
+    return getSupportedThinkingLevels(model)
+  }
+
+  validateThinkingLevel(level: string) {
+    if (!ALL_THINKING_LEVELS.includes(level as ModelThinkingLevel)) {
+      throw badRequest(`Invalid thinking level: ${level}`)
+    }
+    return level as ModelThinkingLevel
+  }
+
+  // ---------------------------------------------------------------------------
+  // State sync
+
+  async #skills(cwd: string) {
+    try {
+      const skills = (await this.#runtime.resources.get(cwd)).skills
+      return skills.map((skill) => ({
+        name: skill.name,
+        ...(skill.description ? { description: skill.description } : {}),
+        ...(skill.sourceInfo?.scope ? { scope: String(skill.sourceInfo.scope) } : {}),
+        ...(skill.sourceInfo?.source ? { source: skill.sourceInfo.source } : {}),
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  #contextUsage(entries: readonly EntryRecord[], ref: { provider: string; modelId: string } | undefined) {
+    const model = this.#model(ref)
+    const contextWindow = model?.contextWindow
+    let tokens: number | null = null
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]!
+      if (entry.kind === "pi.compaction" || entry.kind === "pi.reset") break
+      if (entry.kind !== "pi.assistant") continue
+      const usage = (entry.model?.[0] as { usage?: UsageLike } | undefined)?.usage
+      const value = contextTokens(usage)
+      if (value) {
+        tokens = value
+        break
+      }
+    }
+    if (!contextWindow) return tokens === null ? undefined : { tokens, percent: null }
+    return {
+      tokens,
+      contextWindow,
+      percent: tokens === null ? null : Math.min(100, (tokens / contextWindow) * 100),
+    }
+  }
+
+  /** Items with the current tool round and the in-flight answer applied. */
+  async items(id: string) {
+    const transcript = await this.transcript(id)
+    transcript.items ??= itemsFromEntries(transcript.entries)
+    const live = await this.#doc(id, "live")
+    const busy = live?.run !== undefined
+    const withTools = applyLiveTools(transcript.items, live, busy)
+    const streaming = streamingItem(live)
+    this.#streaming.set(id, streaming)
+    return { committed: withTools, streaming }
+  }
+
+  async stateSync(id: string, options: { editorText?: string } = {}) {
+    const meta = this.meta(id)
+    const transcript = await this.transcript(id)
+    const { committed, streaming } = await this.items(id)
+    const live = await this.#doc(id, "live")
+    const inbox = await this.#doc(id, "inbox")
+    const agent = await this.#doc(id, "agent")
+    const busy = live?.run !== undefined
+    const offset = Math.max(0, committed.length - INITIAL_HISTORY_ITEMS)
+    const items = committed.slice(offset)
+    if (streaming) items.push(streaming)
+    const modelRef = agent?.model ?? this.defaultModel()
+    return {
+      type: "state_sync",
+      sessionKey: sessionKey(id),
+      sessionId: id,
+      sessionFile: sessionPath(id),
+      ...(meta.name ? { sessionName: meta.name } : {}),
+      firstMessage: meta.firstMessage,
+      cwd: meta.cwd,
+      modified: iso(meta.modifiedAt),
+      draft: false,
+      streaming: busy,
+      compacting: (live?.compactions?.length ?? 0) > 0,
+      pendingUserMessages: (inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? []),
+      items,
+      historyOffset: offset,
+      historyTotalCount: committed.length,
+      hideThinkingBlock: this.#runtime.settings.data.hideThinkingBlock,
+      ...(modelRef ? { model: this.#modelOption(modelRef) } : {}),
+      thinkingLevel: agent?.thinkingLevel ?? this.defaultThinkingLevel(),
+      availableThinkingLevels: this.thinkingLevels(modelRef),
+      availableModels: this.availableModels(),
+      availableSkills: await this.#skills(meta.cwd),
+      ...(this.#contextUsage(transcript.entries, modelRef) ? { contextUsage: this.#contextUsage(transcript.entries, modelRef) } : {}),
+      uiState: {
+        statuses: {},
+        ...(options.editorText !== undefined ? { editorText: options.editorText } : {}),
+        ...(busy ? { workingMessage: retryMessage(live) ?? "Working…" } : {}),
+      },
+    }
+  }
+
+  async draftStateSync(draft: DraftSelection) {
+    const modelRef = draft.model ?? this.defaultModel()
+    return {
+      type: "state_sync",
+      sessionKey: draft.sessionKey,
+      cwd: draft.cwd,
+      draft: true,
+      streaming: false,
+      compacting: false,
+      pendingUserMessages: [],
+      items: [],
+      historyOffset: 0,
+      historyTotalCount: 0,
+      hideThinkingBlock: this.#runtime.settings.data.hideThinkingBlock,
+      ...(modelRef ? { model: this.#modelOption(modelRef) } : {}),
+      thinkingLevel: draft.thinkingLevel ?? this.defaultThinkingLevel(),
+      availableThinkingLevels: this.thinkingLevels(modelRef),
+      availableModels: this.availableModels(),
+      availableSkills: await this.#skills(draft.cwd),
+      firstMessage: "",
+      uiState: { statuses: {} },
+    }
+  }
+
+  /** Send the session's state to the clients that show it. */
+  async publishState(id: string, options: { editorText?: string } = {}) {
+    if (!this.#metas.has(id)) return
+    this.#hub.push(await this.stateSync(id, options), { sessionId: id })
+  }
+
+  async history(id: string, before: number | undefined, limit: number) {
+    const { committed } = await this.items(id)
+    const end = Math.min(before ?? committed.length, committed.length)
+    const offset = Math.max(0, end - limit)
+    return {
+      ok: true,
+      offset,
+      limit,
+      totalCount: committed.length,
+      hasMoreBefore: offset > 0,
+      items: committed.slice(offset, end),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Creation and prompts
+
+  async create(cwd: string, options: { model?: { provider: string; modelId: string }; thinkingLevel?: string } = {}) {
+    const model = options.model ?? this.defaultModel()
+    if (!model) throw badRequest("No model is available. Sign in to a provider first.")
+    const thinkingLevel = options.thinkingLevel
+      ? this.validateThinkingLevel(options.thinkingLevel)
+      : this.defaultThinkingLevel()
+    const now = Date.now()
+    const meta: SessionMeta = {
+      cwd,
+      createdAt: now,
+      modifiedAt: now,
+      firstMessage: "",
+      messageCount: 0,
+    }
+    const conversation = await this.#harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model, thinkingLevel, cwd },
+        init: async (tx, conversationId) => {
+          Object.assign(await tx.doc(SessionDoc, conversationId), meta)
+        },
+      },
+      ctx
+    )
+    const id = publicId(conversation.id)
+    meta.family = id
+    this.#metas.set(id, meta)
+    this.#docs.set(id, {})
+    this.#transcripts.set(id, { entries: [] })
+    this.#updateMeta(id, { family: id })
+    this.#scheduleSessionsBroadcast()
+    return id
+  }
+
+  async prompt(
+    id: string,
+    input: {
+      message: string
+      images: PromptImageInput[]
+      streamingBehavior?: "steer" | "followUp"
+      thinkingLevel?: string
+      requestId?: string
+    }
+  ) {
+    const meta = this.meta(id)
+    if (meta.archived) throw badRequest("This session was deleted")
+    const conversation = await this.conversation(id)
+    if (input.thinkingLevel) {
+      const level = this.validateThinkingLevel(input.thinkingLevel)
+      const agent = await this.#doc(id, "agent")
+      if (agent?.thinkingLevel !== level) await conversation.configure({ thinkingLevel: level }, ctx)
+    }
+    const resources = await this.#runtime.resources.get(meta.cwd)
+    const expanded = expandPromptTemplate(expandSkillCommand(input.message, resources.skills), resources.prompts)
+    const busy = this.isBusy(id)
+    const submission = await conversation.submit(
+      {
+        type: "input",
+        content: userContent(expanded, input.images),
+        whenBusy: input.streamingBehavior ?? (busy ? "steer" : "followUp"),
+        ...(input.requestId ? { requestId: input.requestId } : {}),
+      },
+      ctx
+    )
+    const record = await submission.status(ctx)
+    const queued = record.status === "queued"
+    if (!meta.name) this.#autoName(id, input.message, input.images.length)
+    return { queued, pendingId: queued ? `pending:${submission.id}` : undefined }
+  }
+
+  /** Name an unnamed session from its first prompt: a heuristic now, the model's name soon. */
+  #autoName(id: string, text: string, imageCount: number) {
+    const heuristic = heuristicSessionName(text, imageCount)
+    if (heuristic) {
+      this.#updateMeta(id, { name: heuristic, nameSource: "auto" })
+      this.#scheduleSessionsBroadcast()
+      void this.publishStateIfWatched(id)
+    }
+    if (this.#naming.has(id)) return
+    this.#naming.add(id)
+    void this.#refineName(id, text, imageCount)
+      .catch((error: unknown) => {
+        this.#hub.push(
+          {
+            type: "auto_session_naming_error",
+            sessionId: id,
+            cwd: this.#metas.get(id)?.cwd,
+            promptPreview: preview(text),
+            imageCount,
+            refinementReason: `${error instanceof Error ? error.message : String(error)}. Kept the current title.`,
+          },
+          { sessionId: id }
+        )
+      })
+      .finally(() => this.#naming.delete(id))
+  }
+
+  async #refineName(id: string, text: string, imageCount: number) {
+    const agent = await this.#doc(id, "agent")
+    const model = this.#model(agent?.model ?? this.defaultModel())
+    if (!model) throw new Error("No model selected")
+    const name = await generateSessionName(this.#runtime.models, model, {
+      text,
+      imageCount,
+      cwd: this.meta(id).cwd,
+    })
+    const meta = this.#metas.get(id)
+    if (!meta || (meta.name && meta.nameSource === "user")) return
+    this.#updateMeta(id, { name, nameSource: "auto" })
+    this.#scheduleSessionsBroadcast()
+    await this.publishStateIfWatched(id)
+  }
+
+  async publishStateIfWatched(id: string) {
+    if (this.#watched(id)) await this.publishState(id)
+  }
+
+  async abort(id: string) {
+    const conversation = await this.conversation(id)
+    const done = conversation.abort(ctx)
+    await Promise.race([done, new Promise((resolve) => setTimeout(resolve, 5000))])
+  }
+
+  async compact(id: string, instructions: string | undefined) {
+    const conversation = await this.conversation(id)
+    const taskId = await conversation.compact(instructions, ctx)
+    this.#markDirty(id, { live: true })
+    return taskId
+  }
+
+  // ---------------------------------------------------------------------------
+  // Queued prompts
+
+  async pendingMessages(id: string): Promise<PendingMessage[]> {
+    const inbox = await this.#doc(id, "inbox")
+    return (inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? [])
+  }
+
+  async removePending(id: string, pendingId: string) {
+    const result = await this.#harness.abortSubmission(
+      submissionIdFromPending(pendingId),
+      ctx,
+      conversationIdOf(id)
+    )
+    if (result === "not_found") throw notFound("Pending prompt not found")
+    if (result !== "aborted") throw conflict("The prompt was already sent")
+  }
+
+  /**
+   * Put the queued prompts in a new order: withdraw them all and submit them
+   * again. On an idle conversation the first one starts a run.
+   */
+  async requeue(id: string, order?: string[]) {
+    const inbox = await this.#doc(id, "inbox")
+    const queued = (inbox?.items ?? []).filter(
+      (item): item is Extract<InboxItem, { mode: "steer" | "followUp" }> => item.mode !== "write"
+    )
+    const byPending = new Map(queued.map((item) => [`pending:${item.id}`, item]))
+    if (order) {
+      const unique = new Set(order)
+      if (unique.size !== order.length || order.length !== queued.length || !order.every((pendingId) => byPending.has(pendingId))) {
+        throw badRequest("pendingMessages must include every queued prompt exactly once")
+      }
+    }
+    const sorted = (order ?? queued.map((item) => `pending:${item.id}`)).map((pendingId) => byPending.get(pendingId)!)
+    const conversation = await this.conversation(id)
+    const withdrawn: typeof sorted = []
+    for (const item of sorted) {
+      const result = await this.#harness.abortSubmission(item.id, ctx, conversationIdOf(id))
+      if (result === "aborted") withdrawn.push(item)
+    }
+    for (const item of withdrawn) {
+      await conversation.submit(
+        { type: "input", content: item.content as never, whenBusy: item.mode },
+        ctx
+      )
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent settings
+
+  async setModel(id: string, provider: string, modelId: string) {
+    if (!this.#runtime.models.getModel(provider, modelId)) throw badRequest(`Unknown model: ${provider}/${modelId}`)
+    const conversation = await this.conversation(id)
+    await conversation.configure({ model: { provider, modelId } }, ctx)
+    const agent = await conversation.agent(ctx)
+    const levels = this.thinkingLevels({ provider, modelId })
+    if (!levels.includes(agent.thinkingLevel)) {
+      const level = levels.includes("medium") ? "medium" : (levels.at(-1) ?? "off")
+      await conversation.configure({ thinkingLevel: level as ModelThinkingLevel }, ctx)
+    }
+  }
+
+  async setThinking(id: string, level: string) {
+    const conversation = await this.conversation(id)
+    await conversation.configure({ thinkingLevel: this.validateThinkingLevel(level) }, ctx)
+  }
+
+  async agentState(id: string) {
+    const agent = await this.#doc(id, "agent")
+    const model = agent?.model ?? this.defaultModel()
+    return {
+      model: this.#modelOption(model),
+      thinkingLevel: agent?.thinkingLevel ?? this.defaultThinkingLevel(),
+      availableThinkingLevels: this.thinkingLevels(model),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session mutations
+
+  rename(id: string, name: string) {
+    const trimmed = name.trim().slice(0, 48)
+    if (!trimmed) throw badRequest("name is required")
+    this.meta(id)
+    this.#updateMeta(id, { name: trimmed, nameSource: "user" })
+    this.#scheduleSessionsBroadcast()
+    void this.publishStateIfWatched(id)
+    return trimmed
+  }
+
+  /** Generate a name with the session's model, as Pi's `/auto-name` does. */
+  async generateName(id: string) {
+    const meta = this.meta(id)
+    const transcript = await this.transcript(id)
+    const first = transcript.entries.find(isUserInputEntry)
+    const message = first?.model?.[0] as never
+    const text = message ? messageText(message) : meta.firstMessage
+    const imageCount = message ? messageImages(message).length : 0
+    if (!text.trim() && imageCount === 0) {
+      throw badRequest("Could not generate a session name from an empty conversation")
+    }
+    let name: string
+    let source: "llm" | "heuristic" = "llm"
+    let reason: string | undefined
+    try {
+      const agent = await this.#doc(id, "agent")
+      const model = this.#model(agent?.model ?? this.defaultModel())
+      if (!model) throw new Error("No model selected")
+      name = await generateSessionName(this.#runtime.models, model, { text, imageCount, cwd: meta.cwd })
+    } catch (error) {
+      reason = error instanceof Error ? error.message : String(error)
+      source = "heuristic"
+      const fallback = heuristicSessionName(text, imageCount) ?? cleanupCandidate(text)
+      if (!fallback) throw badRequest(reason)
+      name = fallback
+    }
+    this.#updateMeta(id, { name, nameSource: "auto" })
+    this.#scheduleSessionsBroadcast()
+    void this.publishStateIfWatched(id)
+    return { name, source, ...(reason ? { reason } : {}) }
+  }
+
+  archive(id: string) {
+    this.meta(id)
+    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before deleting it.")
+    this.#updateMeta(id, { archived: true })
+    this.#viewers.forget(id)
+    this.#scheduleSessionsBroadcast()
+  }
+
+  async move(id: string, cwd: string) {
+    const meta = this.meta(id)
+    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before moving it.")
+    const conversation = await this.conversation(id)
+    await conversation.configure({ cwd }, ctx)
+    this.#updateMeta(id, { cwd, modifiedAt: Date.now() })
+    this.#scheduleSessionsBroadcast()
+    void this.publishStateIfWatched(id)
+    return { previousCwd: meta.cwd }
+  }
+
+  /** Archive sessions of a directory not active since `olderThanMs`. */
+  cleanup(directory: string, olderThanMs: number, options: { dryRun: boolean; includeActive: boolean; activeIds: Set<string> }) {
+    const cutoff = Date.now() - olderThanMs
+    const matching = this.directorySessions(directory).filter((id) => {
+      if (!options.includeActive && options.activeIds.has(id)) return false
+      if (this.isBusy(id)) return false
+      return activity(this.meta(id)) < cutoff
+    })
+    if (!options.dryRun) for (const id of matching) this.archive(id)
+    return {
+      cutoff: new Date(cutoff).toISOString(),
+      deleted: options.dryRun ? [] : matching,
+      matching: matching.map((id) => ({
+        ...this.summary(id, new Set()),
+        activityAt: iso(activity(this.meta(id))),
+      })),
+    }
+  }
+
+  setLabel(id: string, entryId: string, label: string | undefined) {
+    const meta = this.meta(id)
+    const labels = { ...(meta.labels ?? {}) }
+    if (label?.trim()) labels[entryId] = { label: label.trim(), timestamp: Date.now() }
+    else delete labels[entryId]
+    this.#updateMeta(id, { labels })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tree, fork, and clone
+
+  /** Conversations of a session's family, the visible one last. */
+  #family(id: string) {
+    const family = this.meta(id).family ?? id
+    return [...this.#metas.entries()]
+      .filter(([memberId, meta]) => (meta.family ?? memberId) === family)
+      .map(([memberId]) => memberId)
+      .sort((left, right) => Number(conversationIdOf(left)) - Number(conversationIdOf(right)))
+  }
+
+  async tree(id: string) {
+    const members = this.#family(id)
+    type Node = {
+      entry: Record<string, unknown>
+      label?: string
+      labelTimestamp?: string
+      streaming?: boolean
+      children: Node[]
+    }
+    const nodes = new Map<string, Node>()
+    const roots: Node[] = []
+    const labels = this.meta(id).labels ?? {}
+    let leafId: string | null = null
+
+    for (const member of members) {
+      const transcript = await this.transcript(member)
+      const record = await this.#harness.commit((tx) => tx.conversation(conversationIdOf(member)), ctx)
+      let parentId: string | null = record?.parent ? String(record.parent.at) : null
+      while (parentId && !nodes.has(parentId)) {
+        // The fork point may be an entry the tree omits; walk back to one it shows.
+        const index = transcript.entries.findIndex((entry) => String(entry.id) === parentId)
+        const previous = index > 0 ? transcript.entries[index - 1] : undefined
+        parentId = previous ? String(previous.id) : null
+      }
+      for (const entry of transcript.entries) {
+        const entryId = String(entry.id)
+        if (nodes.has(entryId)) {
+          parentId = entryId
+          continue
+        }
+        if (publicId(entry.conversationId) !== member) continue
+        const projected = projectTreeEntry(entry, parentId)
+        if (!projected) continue
+        const label = labels[entryId]
+        const node: Node = {
+          entry: projected,
+          ...(label ? { label: label.label, labelTimestamp: new Date(label.timestamp).toISOString() } : {}),
+          children: [],
+        }
+        nodes.set(entryId, node)
+        const parent = parentId ? nodes.get(parentId) : undefined
+        if (parent) parent.children.push(node)
+        else roots.push(node)
+        parentId = entryId
+      }
+      if (member === id) leafId = parentId
+    }
+    const streaming = this.isBusy(id)
+    if (streaming && leafId) {
+      const leaf = nodes.get(leafId)
+      if (leaf) leaf.streaming = true
+    }
+    return { ok: true, leafId, streamingEntryId: streaming ? leafId : null, tree: roots }
+  }
+
+  /** User messages to fork from, newest last. */
+  async forkMessages(id: string) {
+    const transcript = await this.transcript(id)
+    return transcript.entries
+      .filter(isUserInputEntry)
+      .map((entry) => ({ entryId: String(entry.id), text: messageText(entry.model?.[0] as never) }))
+  }
+
+  async #entry(id: string, entryId: string) {
+    const transcript = await this.transcript(id)
+    const index = transcript.entries.findIndex((entry) => String(entry.id) === entryId)
+    return { transcript, index, entry: index >= 0 ? transcript.entries[index] : undefined }
+  }
+
+  /**
+   * Make a new conversation from `source` up to `at` (inclusive), or an empty
+   * one when `at` is undefined, with the source's agent and directory.
+   */
+  async #forkConversation(source: string, at: string | undefined, meta: Partial<SessionMeta>) {
+    const sourceMeta = this.meta(source)
+    const now = Date.now()
+    const base: SessionMeta = {
+      cwd: sourceMeta.cwd,
+      createdAt: now,
+      modifiedAt: now,
+      firstMessage: "",
+      messageCount: 0,
+      ...meta,
+    }
+    let conversationId: ConversationId
+    if (at === undefined) {
+      const agent = await this.#doc(source, "agent")
+      const conversation = await this.#harness.createConversation(
+        {
+          ownership: { kind: "ownerless" },
+          agent: {
+            ...(agent?.model ? { model: agent.model } : {}),
+            ...(agent?.thinkingLevel ? { thinkingLevel: agent.thinkingLevel } : {}),
+            cwd: sourceMeta.cwd,
+          },
+          init: async (tx, id) => {
+            Object.assign(await tx.doc(SessionDoc, id), JSON.parse(JSON.stringify(base)))
+          },
+        },
+        ctx
+      )
+      conversationId = conversation.id
+    } else {
+      const owner = (await this.#entry(source, at)).entry?.conversationId ?? conversationIdOf(source)
+      const parent = await this.#harness.conversation(owner, ctx)
+      if (!parent) throw notFound("Fork source not found")
+      const fork = await parent.fork(
+        Number(at) as never,
+        {
+          ownership: { kind: "ownerless" },
+          agent: { cwd: sourceMeta.cwd },
+          init: async (tx, id) => {
+            Object.assign(await tx.doc(SessionDoc, id), JSON.parse(JSON.stringify(base)))
+          },
+        },
+        ctx
+      )
+      conversationId = fork.id
+    }
+    const id = publicId(conversationId)
+    this.#metas.set(id, base)
+    this.#docs.set(id, {})
+    const transcript = await this.transcript(id)
+    const summary = summarize(transcript.entries)
+    this.#updateMeta(id, { ...summary, ...(meta.family ? {} : { family: id }) })
+    return id
+  }
+
+  /** Fork at a user message: the new session ends before it and offers its text again. */
+  async fork(id: string, entryId: string, contextId: string) {
+    const { transcript, index, entry } = await this.#entry(id, entryId)
+    if (!entry || !isUserInputEntry(entry)) throw notFound("Fork point not found")
+    const previous = index > 0 ? transcript.entries[index - 1] : undefined
+    const forked = await this.#forkConversation(id, previous ? String(previous.id) : undefined, {
+      ...(this.meta(id).name ? { name: `${this.meta(id).name}`.slice(0, 48), nameSource: "auto" as const } : {}),
+    })
+    this.#viewers.selectSession(contextId, forked)
+    this.#scheduleSessionsBroadcast()
+    const editorText = messageText(entry.model?.[0] as never)
+    this.#watchOnce(forked, editorText)
+    return forked
+  }
+
+  async clone(id: string, contextId: string) {
+    const transcript = await this.transcript(id)
+    const last = transcript.entries.at(-1)
+    const meta = this.meta(id)
+    const cloned = await this.#forkConversation(id, last ? String(last.id) : undefined, {
+      ...(meta.name ? { name: meta.name, nameSource: meta.nameSource ?? "auto" } : {}),
+      ...(meta.labels ? { labels: meta.labels } : {}),
+    })
+    this.#viewers.selectSession(contextId, cloned)
+    this.#scheduleSessionsBroadcast()
+    this.#watchOnce(cloned)
+    return cloned
+  }
+
+  /**
+   * Move a session to another point of its tree. The session continues in a
+   * fork at that point: after a user message's parent (its text returns to the
+   * editor), or at any other entry.
+   */
+  async navigate(id: string, targetId: string) {
+    if (this.isBusy(id)) throw badRequest("Wait for the session to finish before navigating the tree.")
+    let owner: string | undefined
+    let target: EntryRecord | undefined
+    let targetIndex = -1
+    let ownerTranscript: Transcript | undefined
+    for (const member of this.#family(id)) {
+      const transcript = await this.transcript(member)
+      const index = transcript.entries.findIndex((entry) => String(entry.id) === targetId)
+      if (index >= 0) {
+        owner = member
+        target = transcript.entries[index]
+        targetIndex = index
+        ownerTranscript = transcript
+        if (member === id) break
+      }
+    }
+    if (!owner || !target || !ownerTranscript) throw notFound("tree target not found")
+    const current = await this.transcript(id)
+    if (String(current.entries.at(-1)?.id) === targetId) {
+      return { cancelled: false, aborted: false }
+    }
+    let at: string | undefined = targetId
+    let editorText: string | undefined
+    if (isUserInputEntry(target)) {
+      editorText = messageText(target.model?.[0] as never)
+      const previous = targetIndex > 0 ? ownerTranscript.entries[targetIndex - 1] : undefined
+      at = previous ? String(previous.id) : undefined
+    }
+    const meta = this.meta(id)
+    const replacement = await this.#forkConversation(owner, at, {
+      cwd: meta.cwd,
+      ...(meta.name ? { name: meta.name, nameSource: meta.nameSource ?? "auto" } : {}),
+      ...(meta.labels ? { labels: meta.labels } : {}),
+      family: meta.family ?? id,
+    })
+    this.#updateMeta(id, { replacedBy: replacement })
+    for (const [contextId, context] of this.#viewers.all()) {
+      if (context.selectedSession === id) this.#viewers.selectSession(contextId, replacement)
+    }
+    this.#scheduleSessionsBroadcast()
+    this.#watchOnce(replacement, editorText)
+    return { cancelled: false, aborted: false, ...(editorText !== undefined ? { editorText } : {}) }
+  }
+
+  /** Publish a new session's first state with optional editor text. */
+  #watchOnce(id: string, editorText?: string) {
+    void this.stateSync(id, editorText !== undefined ? { editorText } : {}).then((payload) => {
+      this.#hub.push(payload, { sessionId: id })
+    })
+  }
+}
+
+function activity(meta: SessionMeta) {
+  return meta.lastMessageAt ?? meta.modifiedAt ?? meta.createdAt
+}
+
+function retryMessage(live: LiveState | undefined) {
+  const retry = live?.generation?.retry
+  if (!retry) return undefined
+  const seconds = Math.max(0, Math.round((retry.at - Date.now()) / 1000))
+  return `Retrying in ${seconds}s: ${retry.error}`
+}
+
+function summarize(entries: readonly EntryRecord[]): Partial<SessionMeta> {
+  let messageCount = 0
+  let firstMessage = ""
+  let lastMessageAt: number | undefined
+  let lastUserMessageAt: number | undefined
+  let lastMessagePreview: string | undefined
+  for (const entry of entries) {
+    if (!entryStartsItem(entry) || entry.kind === "pi.compaction") continue
+    messageCount += 1
+    const message = entry.model?.[0] as { timestamp?: number } | undefined
+    const text = messageText(message as never)
+    const time = message?.timestamp
+    if (time) lastMessageAt = time
+    if (isUserInputEntry(entry)) {
+      if (time) lastUserMessageAt = time
+      if (!firstMessage) firstMessage = preview(text) || "Image"
+    }
+    if (text.trim()) lastMessagePreview = preview(text)
+  }
+  return {
+    messageCount,
+    firstMessage,
+    ...(lastMessageAt ? { lastMessageAt } : {}),
+    ...(lastUserMessageAt ? { lastUserMessageAt } : {}),
+    ...(lastMessagePreview ? { lastMessagePreview } : {}),
+  }
+}
+
+const TREE_PREVIEW = 2000
+
+/** An entry as the session tree shows it, in the shape of Pi's tree. */
+function projectTreeEntry(entry: EntryRecord, parentId: string | null) {
+  const message = entry.model?.[0] as
+    | { role?: string; content?: unknown; stopReason?: string; errorMessage?: string; toolCallId?: string; toolName?: string; timestamp?: number }
+    | undefined
+  const base = {
+    id: String(entry.id),
+    parentId,
+    timestamp: message?.timestamp ? new Date(message.timestamp).toISOString() : undefined,
+  }
+  if (isUserInputEntry(entry) || entry.kind === "pi.assistant" || entry.kind === "pi.tool-result") {
+    const toolCalls = Array.isArray(message?.content)
+      ? (message.content as Array<{ type?: string; id?: string; name?: string; arguments?: unknown }>)
+          .filter((part) => part?.type === "toolCall")
+          .map((part) => ({
+            id: part.id,
+            name: part.name,
+            preview: JSON.stringify(part.arguments ?? {}).slice(0, 200),
+          }))
+      : []
+    return {
+      ...base,
+      type: "message",
+      message: {
+        role: isUserInputEntry(entry) ? "user" : (message?.role ?? "assistant"),
+        text: messageText(message as never).slice(0, TREE_PREVIEW),
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+        ...(message?.stopReason ? { stopReason: message.stopReason } : {}),
+        ...(message?.errorMessage ? { errorMessage: message.errorMessage.slice(0, TREE_PREVIEW) } : {}),
+        ...(message?.toolCallId ? { toolCallId: message.toolCallId } : {}),
+        ...(message?.toolName ? { toolName: message.toolName } : {}),
+      },
+    }
+  }
+  if (entry.kind === "pi.compaction") {
+    return {
+      ...base,
+      type: "compaction",
+      summary: messageText(message as never).slice(0, TREE_PREVIEW),
+    }
+  }
+  return undefined
+}
