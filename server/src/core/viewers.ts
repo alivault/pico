@@ -13,6 +13,8 @@ export type DraftSelection = {
   /** Model and thinking chosen before the first prompt. */
   model?: { provider: string; modelId: string }
   thinkingLevel?: string
+  /** Make a git worktree for the session when the first prompt creates it. */
+  worktree?: { branch?: string; base?: string }
 }
 
 export type ViewerContext = {
@@ -112,7 +114,10 @@ export class Viewers {
   updateDraft(id: string, change: Partial<DraftSelection>) {
     const context = this.#ensure(id)
     if (!context.activeDraft) return
-    context.activeDraft = { ...context.activeDraft, ...change }
+    const next: DraftSelection = { ...context.activeDraft, ...change }
+    for (const [key, value] of Object.entries(change))
+      if (value === undefined) delete (next as Record<string, unknown>)[key]
+    context.activeDraft = next
     this.#save()
   }
 

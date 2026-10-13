@@ -11,6 +11,7 @@ import { createJobsExtension, type JobsExtension } from "./jobs.ts"
 import { createRenderExtension } from "./render.ts"
 import { createScheduleExtension } from "./schedule.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
+import { createSessionsExtension } from "./sessions.ts"
 import { createTodoExtension } from "./todo.ts"
 import { createWatchExtension } from "./watch.ts"
 
@@ -40,6 +41,7 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
       createWatchExtension(host),
       jobs.extension,
       scratchpad.extension,
+      createSessionsExtension(host),
       createTodoExtension(),
     ],
     services: { jobs: jobs.runner, scratch: scratchpad.scratch },

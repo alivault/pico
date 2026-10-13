@@ -30,7 +30,10 @@ export type HostSessions = {
   abort(id: string): Promise<void>
   /** Children that `spawn_session` made for a session. */
   children(id: string): string[]
+  /** Sessions for tools, newest activity first. */
+  list(filter: { parent?: string; directory?: string }): HostSessionSummary[]
   rename(id: string, name: string): string
+  availableModels(): Array<{ id: string; provider?: string }>
   publishStateIfWatched(id: string): Promise<void>
   /** Tell clients that a session's extension state changed. */
   extensionStateChanged(id: string, kind: string): void
@@ -40,6 +43,7 @@ export type HostSessionMeta = {
   cwd: string
   name?: string
   parent?: string
+  spawnedByCall?: string
   depth?: number
   profile?: string
   group?: string
@@ -48,6 +52,19 @@ export type HostSessionMeta = {
   firstMessage: string
   lastMessagePreview?: string
   messageCount: number
+}
+
+export type HostSessionSummary = {
+  id: string
+  title: string
+  cwd: string
+  busy: boolean
+  needsInput: boolean
+  parent?: string
+  worktreeBranch?: string
+  messageCount: number
+  lastMessagePreview?: string
+  lastMessageAt?: number
 }
 
 export type HostCreateOptions = {

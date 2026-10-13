@@ -35,6 +35,7 @@ import {
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
 import {
   ComposerPanel,
   type ComposerPanelHandle,
@@ -372,6 +373,13 @@ export function NewSessionComposerSelectors({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+
+      {gitStatus ? (
+        <NewSessionWorktreeToggle
+          cwd={selectedDirectory}
+          viewerContextId={viewerContextId}
+        />
       ) : null}
 
       <Dialog

@@ -78,6 +78,9 @@ function bindHost(host: HostBridge, harness: Harness, dataDir: string) {
       transport: "auto",
       cacheRetention: "standard",
       scratchSpillKb: 1,
+      worktreeCopy: [],
+      maxChildSessions: 6,
+      maxSpawnDepth: 3,
     }),
     dataDir,
   })

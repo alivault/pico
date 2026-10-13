@@ -1,0 +1,305 @@
+import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { writeFile } from "node:fs/promises"
+import { join } from "node:path"
+import { test } from "node:test"
+
+import type { Message } from "@earendil-works/pi-ai"
+import type { Harness } from "@earendil-works/pi-durable"
+
+import {
+  HostBridge,
+  sessionIdOf,
+  conversationOf,
+  type HostServices,
+  type HostSessionMeta,
+} from "../src/extensions/host.ts"
+import {
+  createSessionsExtension,
+  normalizeSessionId,
+} from "../src/extensions/sessions.ts"
+import {
+  createWorktree,
+  removeWorktree,
+  repoRoot,
+} from "../src/services/worktree.ts"
+import {
+  ctx,
+  lastToolResult,
+  openHarness,
+  tempDir,
+  TEST_MODEL,
+  type Script,
+} from "./support.ts"
+
+function lastUser(messages: readonly Message[]) {
+  const message = [...messages].reverse().find((item) => item.role === "user")
+  if (!message) return ""
+  return typeof message.content === "string"
+    ? message.content
+    : message.content
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("")
+}
+
+/** A small session store on the Harness, in place of Pico's `Sessions`. */
+function fakeSessions(harness: Harness) {
+  const metas = new Map<string, HostSessionMeta & { createdAt: number }>()
+  const sessions = {
+    has: (id: string | undefined): id is string => Boolean(id && metas.has(id)),
+    current: (id: string | undefined) => id,
+    meta: (id: string) => metas.get(id)!,
+    isBusy: () => false,
+    children: (id: string) =>
+      [...metas.entries()]
+        .filter(([, meta]) => meta.parent === id)
+        .map(([key]) => key),
+    list: (filter: { parent?: string }) =>
+      [...metas.entries()]
+        .filter(
+          ([, meta]) =>
+            filter.parent === undefined || meta.parent === filter.parent
+        )
+        .map(([id, meta]) => ({
+          id,
+          title: meta.name ?? id,
+          cwd: meta.cwd,
+          busy: false,
+          needsInput: false,
+          ...(meta.parent ? { parent: meta.parent } : {}),
+          messageCount: 0,
+        })),
+    async create(
+      cwd: string,
+      options: {
+        parent?: string
+        spawnedByCall?: string
+        name?: string
+        worktree?: HostSessionMeta["worktree"]
+      } = {}
+    ) {
+      const conversation = await harness.createConversation(
+        {
+          ownership: { kind: "ownerless" },
+          agent: { model: TEST_MODEL, cwd },
+        },
+        ctx
+      )
+      const id = sessionIdOf(conversation.id)
+      metas.set(id, {
+        cwd,
+        firstMessage: "",
+        messageCount: 0,
+        createdAt: Date.now(),
+        ...(options.parent ? { parent: options.parent, depth: 1 } : {}),
+        ...(options.spawnedByCall
+          ? { spawnedByCall: options.spawnedByCall }
+          : {}),
+        ...(options.name ? { name: options.name } : {}),
+        ...(options.worktree ? { worktree: options.worktree } : {}),
+      })
+      return id
+    },
+    async prompt(
+      id: string,
+      input: {
+        message: string
+        requestId?: string
+        streamingBehavior?: "steer" | "followUp"
+      }
+    ) {
+      const conversation = await harness.conversation(conversationOf(id), ctx)
+      await conversation!.submit(
+        {
+          type: "input",
+          content: input.message,
+          ...(input.requestId ? { requestId: input.requestId } : {}),
+          whenBusy: input.streamingBehavior ?? "followUp",
+        },
+        ctx
+      )
+      return { queued: false }
+    },
+    abort: async () => undefined,
+    rename: (_id: string, name: string) => name,
+    publishStateIfWatched: async () => undefined,
+    extensionStateChanged: () => undefined,
+    availableModels: () => [{ id: "test", provider: "test" }],
+  }
+  return { sessions, metas }
+}
+
+function bind(host: HostBridge, harness: Harness, dataDir: string) {
+  const fake = fakeSessions(harness)
+  host.bind({
+    sessions: fake.sessions as unknown as HostServices["sessions"],
+    events: { push: () => undefined },
+    terminals: {} as HostServices["terminals"],
+    harness,
+    settings: () => ({
+      hideThinkingBlock: false,
+      transport: "auto",
+      cacheRetention: "standard",
+      scratchSpillKb: 0,
+      worktreeCopy: [".env*"],
+      maxChildSessions: 6,
+      maxSpawnDepth: 3,
+    }),
+    dataDir,
+  })
+  return fake
+}
+
+async function eventually<T>(read: () => Promise<T | undefined>, ms = 8000) {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    const value = await read()
+    if (value !== undefined) return value
+    await new Promise((done) => setTimeout(done, 25))
+  }
+  throw new Error("Timed out")
+}
+
+void test("session ids normalize", () => {
+  assert.equal(normalizeSessionId("12"), "s12")
+  assert.equal(normalizeSessionId("pico:s12"), "s12")
+  assert.equal(normalizeSessionId(" s3 "), "s3")
+})
+
+void test("spawn_session starts a child and reports its answer back", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Compute the answer"))
+      return { text: "The answer is 42." }
+    if (user.startsWith("[Child session")) return { text: "Thanks, child." }
+    if (lastToolResult(messages)) return { text: "spawned" }
+    return {
+      tools: [
+        {
+          name: "spawn_session",
+          arguments: { goal: "Compute the answer", name: "Helper" },
+        },
+      ],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    await conversation.submit({ type: "input", content: "delegate" }, ctx)
+    const report = await eventually(async () => {
+      const view = await conversation.context(ctx)
+      const found = view.entries.find(
+        (entry) =>
+          entry.kind === "pi.user" &&
+          JSON.stringify(entry.model).includes("[Child session")
+      )
+      return found ? JSON.stringify(found.model) : undefined
+    })
+    assert.match(report, /The answer is 42\./)
+    const children = fake.sessions.children(parent)
+    assert.equal(children.length, 1)
+    assert.equal(fake.metas.get(children[0]!)?.name, "Helper")
+    await conversation.waitForIdle(ctx)
+    const view = await conversation.context(ctx)
+    assert.equal(
+      view.entries.filter(
+        (entry) =>
+          entry.kind === "pi.user" &&
+          JSON.stringify(entry.model).includes("[Child session")
+      ).length,
+      1
+    )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("spawn_session with wait returns the answer, and read_session reads it", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let childId = ""
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Name a color")) return { text: "Blue." }
+    const result = lastToolResult(messages)
+    if (result?.includes("finished")) {
+      childId = /session (s\d+)/.exec(result)?.[1] ?? ""
+      return { tools: [{ name: "read_session", arguments: { id: childId } }] }
+    }
+    if (result) return { text: `read: ${result}` }
+    return {
+      tools: [
+        {
+          name: "spawn_session",
+          arguments: { goal: "Name a color", wait: true },
+        },
+      ],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    await (
+      await conversation.submit({ type: "input", content: "go" }, ctx)
+    ).wait(ctx)
+    const view = await conversation.context(ctx)
+    const results = view.entries
+      .filter((entry) => entry.kind === "pi.tool-result")
+      .map((entry) => JSON.stringify(entry.model))
+    assert.match(results[0]!, /finished.*Blue\./s)
+    assert.match(results[1]!, /## User\\nName a color/)
+    assert.match(results[1]!, /## Assistant\\nBlue\./)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("a worktree is made outside the repository and removed when clean", async () => {
+  const dir = await tempDir()
+  const repo = join(dir, "repo")
+  execFileSync("git", ["init", "-q", "-b", "main", repo])
+  execFileSync("git", ["-C", repo, "config", "user.email", "t@example.com"])
+  execFileSync("git", ["-C", repo, "config", "user.name", "Test"])
+  await writeFile(join(repo, "README.md"), "hi\n")
+  await writeFile(join(repo, ".env"), "SECRET=1\n")
+  await writeFile(join(repo, ".gitignore"), ".env\n")
+  execFileSync("git", ["-C", repo, "add", "."])
+  execFileSync("git", ["-C", repo, "commit", "-qm", "init"])
+  const worktree = await createWorktree(repo, {
+    dataDir: join(dir, "data"),
+    copy: [".env*"],
+    name: "Fix login bug",
+  })
+  assert.ok(worktree.path.startsWith(join(dir, "data", "worktrees", "repo")))
+  assert.match(worktree.branch, /^pico\/fix-login-bug-/)
+  assert.ok(existsSync(join(worktree.path, "README.md")))
+  assert.deepEqual(worktree.copied, [".env"])
+  assert.equal(await repoRoot(worktree.path), await repoRoot(repo))
+  await writeFile(join(worktree.path, "new.txt"), "x")
+  await assert.rejects(removeWorktree(worktree), /uncommitted changes/)
+  await removeWorktree(worktree, { force: true })
+  assert.equal(existsSync(worktree.path), false)
+})

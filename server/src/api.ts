@@ -40,11 +40,13 @@ import {
 } from "./http.ts"
 import * as files from "./services/files.ts"
 import * as git from "./services/git.ts"
+import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
 import { looseNumber, type Terminals } from "./services/terminal.ts"
 
 export type ApiContext = {
   runtime: Runtime
+  dataDir: string
   sessions: Sessions
   viewers: Viewers
   hub: EventHub
@@ -404,7 +406,37 @@ export function createApi(api: ApiContext) {
           draft?.cwd ??
           baseCwd(request)
         const cwd = await files.canonicalDirectory(requestedCwd)
-        id = await sessions.create(cwd, {
+        let sessionCwd = cwd
+        let worktree: Awaited<ReturnType<typeof createWorktree>> | undefined
+        if (draft?.worktree && draft.cwd === cwd) {
+          try {
+            worktree = await createWorktree(cwd, {
+              dataDir: api.dataDir,
+              copy: runtime.settings.data.worktreeCopy,
+              name: message.slice(0, 40),
+              ...(draft.worktree.branch
+                ? { branch: draft.worktree.branch }
+                : {}),
+              ...(draft.worktree.base ? { base: draft.worktree.base } : {}),
+            })
+          } catch (error) {
+            throw badRequest(
+              `Could not create the worktree: ${error instanceof Error ? error.message : String(error)}`
+            )
+          }
+          sessionCwd = worktree.cwd
+        }
+        id = await sessions.create(sessionCwd, {
+          ...(worktree
+            ? {
+                group: cwd,
+                worktree: {
+                  repoRoot: worktree.repoRoot,
+                  path: worktree.path,
+                  branch: worktree.branch,
+                },
+              }
+            : {}),
           ...(draft?.model ? { model: draft.model } : {}),
           ...((stringField(body.thinkingLevel) ?? draft?.thinkingLevel)
             ? {
@@ -1185,19 +1217,67 @@ export function createApi(api: ApiContext) {
   })
 
   router.post("/api/session/delete", async (request) => {
-    const body = await request.body<{ path?: string }>()
-    sessions.archive(sessionFromPath(body.path))
+    const body = await request.body<{
+      path?: string
+      removeWorktree?: boolean
+      force?: boolean
+    }>()
+    const id = sessionFromPath(body.path)
+    if (body.removeWorktree)
+      await sessions.removeWorktree(id, Boolean(body.force))
+    sessions.archive(id)
     return { ok: true }
   })
 
+  router.get("/api/session/draft-worktree", async (request) => {
+    const { contextId } = target(request)
+    const draft = viewers.get(contextId)?.activeDraft
+    const cwd = stringField(request.query.get("cwd")) ?? draft?.cwd
+    return {
+      ok: true,
+      enabled: Boolean(draft?.worktree && draft.cwd === cwd),
+      ...(draft?.worktree?.branch ? { branch: draft.worktree.branch } : {}),
+      gitRepository: cwd ? Boolean(await repoRoot(cwd)) : false,
+    }
+  })
+
+  router.post("/api/session/draft-worktree", async (request) => {
+    const body = await request.body<{
+      cwd?: string
+      enabled?: boolean
+      branch?: string
+    }>()
+    const { contextId } = target(request)
+    const cwd = body.cwd
+      ? await files.canonicalDirectory(body.cwd)
+      : baseCwd(request)
+    ensureDraft(api, contextId, cwd)
+    const branch = stringField(body.branch)
+    viewers.updateDraft(contextId, {
+      worktree: body.enabled ? (branch ? { branch } : {}) : undefined,
+    })
+    return {
+      ok: true,
+      enabled: Boolean(body.enabled),
+      ...(branch ? { branch } : {}),
+    }
+  })
+
   router.post("/api/sessions/delete", async (request) => {
-    const body = await request.body<{ paths?: string[] }>()
+    const body = await request.body<{
+      paths?: string[]
+      removeWorktree?: boolean
+    }>()
     if (!Array.isArray(body.paths) || body.paths.length === 0)
       throw badRequest("paths must not be empty")
+    const ids = body.paths.map((path) => sessionFromPath(path))
+    // Remove worktrees first: one with changes stops the request before archiving.
+    if (body.removeWorktree)
+      for (const id of ids) await sessions.removeWorktree(id, false)
     const deletedPaths: string[] = []
-    for (const path of body.paths) {
-      sessions.archive(sessionFromPath(path))
-      deletedPaths.push(path)
+    for (const [index, id] of ids.entries()) {
+      sessions.archive(id)
+      deletedPaths.push(body.paths[index]!)
     }
     return { ok: true, deletedPaths }
   })

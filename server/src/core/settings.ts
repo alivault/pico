@@ -14,6 +14,12 @@ export type PicoSettingsData = {
   cacheRetention: CacheRetention
   /** Save tool output larger than this many KB to the scratchpad; 0 is off. */
   scratchSpillKb: number
+  /** Files that git ignores which a new worktree gets a copy of, such as `.env*`. */
+  worktreeCopy: string[]
+  /** Live child sessions that one session may have. */
+  maxChildSessions: number
+  /** How deep `spawn_session` may nest. */
+  maxSpawnDepth: number
 }
 
 const DEFAULTS: PicoSettingsData = {
@@ -21,6 +27,9 @@ const DEFAULTS: PicoSettingsData = {
   transport: "auto",
   cacheRetention: "standard",
   scratchSpillKb: 0,
+  worktreeCopy: [".env*"],
+  maxChildSessions: 6,
+  maxSpawnDepth: 3,
 }
 
 export class PicoSettings {

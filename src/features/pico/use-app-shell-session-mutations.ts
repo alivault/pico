@@ -971,7 +971,13 @@ export function useAppShellSessionMutations({
   )
 
   const deleteSessionMutation = useMutation({
-    mutationFn: async (paths: Array<string>) => {
+    mutationFn: async ({
+      paths,
+      removeWorktree,
+    }: {
+      paths: Array<string>
+      removeWorktree?: boolean
+    }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
@@ -984,7 +990,7 @@ export function useAppShellSessionMutations({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ paths }),
+          body: JSON.stringify({ paths, removeWorktree }),
         }
       )
     },
@@ -997,7 +1003,10 @@ export function useAppShellSessionMutations({
   })
 
   const deleteSessions = React.useCallback(
-    (targets: Array<SessionListEntry>) => {
+    (
+      targets: Array<SessionListEntry>,
+      options: { removeWorktree?: boolean } = {}
+    ) => {
       if (!viewerContextId || targets.length === 0) return false
 
       const orderedTargets = [
@@ -1064,7 +1073,10 @@ export function useAppShellSessionMutations({
 
       void (async () => {
         try {
-          await deleteSessionMutation.mutateAsync(orderedPaths)
+          await deleteSessionMutation.mutateAsync({
+            paths: orderedPaths,
+            removeWorktree: Boolean(options.removeWorktree),
+          })
           toast.success(
             orderedPaths.length === 1
               ? "Deleted session"

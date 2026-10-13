@@ -1,4 +1,5 @@
 import * as React from "react"
+import { SessionLineage } from "@/features/pico/agent/session-lineage"
 import {
   EllipsisIcon,
   PanelRightIcon,
@@ -94,6 +95,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
       sessionHasFile: Boolean(sessionState.sessionFile),
       sessionName: sessionState.sessionName,
       sessionStreaming: sessionState.streaming,
+      sessionId: sessionState.draft ? undefined : sessionState.sessionId,
     }),
     { compare: shallowRecordEqual }
   )
@@ -160,6 +162,10 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <HeaderGitStatusText
               viewerContextId={viewerContextId}
               cwd={displaySessionCwd}
+            />
+            <SessionLineage
+              sessionId={sessionHeaderState.sessionId}
+              viewerContextId={viewerContextId}
             />
           </div>
         </div>

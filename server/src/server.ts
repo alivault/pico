@@ -67,6 +67,7 @@ export async function startServer(options: {
 
   const router = createApi({
     runtime,
+    dataDir: options.paths.dataDir,
     sessions,
     viewers,
     hub,

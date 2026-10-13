@@ -28,6 +28,7 @@ import {
   EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
+  GitForkIcon,
   MessageCircleQuestionIcon,
   SearchIcon,
   SquarePenIcon,
@@ -630,6 +631,9 @@ function SidebarSessionItem({
   onTogglePinnedSession,
 }: SidebarSessionItemProps) {
   const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
+  const nestingDepth = useSelector(directorySessionsStore, (state) =>
+    sessionNestingDepth(state.entriesByKey.get(entryKey), state.entriesByKey)
+  )
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
     entryKey
@@ -686,6 +690,14 @@ function SidebarSessionItem({
       data-sidebar-session-item
       data-session-key={entryKey}
       isActive={isActive || isSelected}
+      style={
+        nestingDepth > 0
+          ? ({
+              paddingLeft: `${2 + nestingDepth * 0.875}rem`,
+              "--pico-session-indent": `${nestingDepth * 0.875}rem`,
+            } as React.CSSProperties)
+          : undefined
+      }
       className={cn(
         "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-8 not-data-active:hover:bg-transparent! not-data-active:hover:text-sidebar-foreground! not-data-active:data-open:hover:bg-transparent! not-data-active:data-open:hover:text-sidebar-foreground!",
         (isActive || isSelected) &&
@@ -703,7 +715,7 @@ function SidebarSessionItem({
     >
       {entry.needsInput ? (
         <span
-          className="absolute top-2.5 left-2 flex size-4 items-center justify-center"
+          className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center"
           title="Waiting for your answer"
         >
           <MessageCircleQuestionIcon
@@ -712,11 +724,11 @@ function SidebarSessionItem({
           />
         </span>
       ) : entry.streaming ? (
-        <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
+        <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
           <Spinner size="xs" aria-label="Session streaming" />
         </span>
       ) : showUnread ? (
-        <span className="absolute top-2.5 left-2 flex size-4 items-center justify-center">
+        <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
           <span
             className="size-2 rounded-full bg-primary"
             aria-label="Session done"
@@ -730,6 +742,12 @@ function SidebarSessionItem({
               {entry.title}
             </span>
           </span>
+          {entry.worktreeBranch ? (
+            <span className="flex min-w-0 items-center gap-1 text-[11px] font-normal text-sidebar-foreground/50">
+              <GitForkIcon className="size-3 shrink-0" aria-label="Worktree" />
+              <span className="truncate">{entry.worktreeBranch}</span>
+            </span>
+          ) : null}
           {lastMessagePreview ? (
             <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
               {lastMessagePreview}
@@ -905,16 +923,68 @@ function buildDirectorySessionEntryMap(
   return entriesByKey
 }
 
+/** Sessions with each child session after its parent, in list order. */
+function nestChildSessions(sessions: Array<SessionListEntry>) {
+  const ids = new Set(sessions.flatMap((entry) => (entry.id ? [entry.id] : [])))
+  const childrenOf = new Map<string, Array<SessionListEntry>>()
+  const roots: Array<SessionListEntry> = []
+  for (const entry of sessions) {
+    if (entry.parent && entry.parent !== entry.id && ids.has(entry.parent)) {
+      const siblings = childrenOf.get(entry.parent) ?? []
+      siblings.push(entry)
+      childrenOf.set(entry.parent, siblings)
+    } else {
+      roots.push(entry)
+    }
+  }
+  if (childrenOf.size === 0) return sessions
+  const ordered: Array<SessionListEntry> = []
+  const seen = new Set<SessionListEntry>()
+  const visit = (entry: SessionListEntry) => {
+    if (seen.has(entry)) return
+    seen.add(entry)
+    ordered.push(entry)
+    for (const child of childrenOf.get(entry.id ?? "") ?? []) visit(child)
+  }
+  for (const root of roots) visit(root)
+  for (const entry of sessions) visit(entry)
+  return ordered
+}
+
+/** How many parents of a session are in the sidebar, for indentation. */
+function sessionNestingDepth(
+  entry: SessionListEntry | undefined,
+  entriesByKey: Map<string, SessionListEntry>
+) {
+  let depth = 0
+  let parent = entry?.parent
+  while (parent && depth < 4) {
+    let found: SessionListEntry | undefined
+    for (const candidate of entriesByKey.values()) {
+      if (candidate.id === parent) {
+        found = candidate
+        break
+      }
+    }
+    if (!found) break
+    depth += 1
+    parent = found.parent
+  }
+  return depth
+}
+
 function buildDirectorySessionKeys(
   sessionsByDirectory: Record<string, Array<SessionListEntry>>
 ) {
   const sessionKeysByDirectory: Record<string, Array<string>> = {}
 
   for (const [directory, sessions] of Object.entries(sessionsByDirectory)) {
-    sessionKeysByDirectory[directory] = sessions.flatMap((entry) => {
-      const key = sessionListEntryKey(entry)
-      return key ? [key] : []
-    })
+    sessionKeysByDirectory[directory] = nestChildSessions(sessions).flatMap(
+      (entry) => {
+        const key = sessionListEntryKey(entry)
+        return key ? [key] : []
+      }
+    )
   }
 
   return sessionKeysByDirectory

@@ -49,8 +49,13 @@ import {
   type QuestionAnswer,
   type QuestionsState,
 } from "../extensions/ask.ts"
-import type { HostCreateOptions, HostSessions } from "../extensions/host.ts"
+import type {
+  HostCreateOptions,
+  HostSessions,
+  HostSessionSummary,
+} from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
+import { removeWorktree } from "../services/worktree.ts"
 import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
 import type { EventHub } from "../events.ts"
@@ -587,6 +592,17 @@ export class Sessions implements HostSessions {
         console.warn(`[pico] could not read ${provider.key} state:`, error)
       }
     }
+    const children = this.list({ parent: id })
+    if (children.length > 0) state.children = children
+    const meta = this.meta(id)
+    if (meta.parent || meta.worktree) {
+      state.session = {
+        ...(meta.parent && this.#metas.has(meta.parent)
+          ? { parent: { id: meta.parent, title: this.#title(meta.parent) } }
+          : {}),
+        ...(meta.worktree ? { worktree: meta.worktree } : {}),
+      }
+    }
     return state
   }
 
@@ -612,6 +628,33 @@ export class Sessions implements HostSessions {
 
   needsInput(id: string) {
     return this.#needsInput.has(id)
+  }
+
+  list(filter: { parent?: string; directory?: string }): HostSessionSummary[] {
+    return [...this.#metas.entries()]
+      .filter(
+        ([id, meta]) =>
+          this.isVisible(id) &&
+          (filter.parent === undefined || meta.parent === filter.parent) &&
+          (filter.directory === undefined ||
+            (meta.group ?? meta.cwd) === filter.directory ||
+            meta.cwd === filter.directory)
+      )
+      .sort((left, right) => activity(right[1]) - activity(left[1]))
+      .map(([id, meta]) => ({
+        id,
+        title: this.#title(id),
+        cwd: meta.cwd,
+        busy: this.isBusy(id),
+        needsInput: this.#needsInput.has(id),
+        ...(meta.parent ? { parent: meta.parent } : {}),
+        ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
+        messageCount: meta.messageCount,
+        ...(meta.lastMessagePreview
+          ? { lastMessagePreview: meta.lastMessagePreview }
+          : {}),
+        ...(meta.lastMessageAt ? { lastMessageAt: meta.lastMessageAt } : {}),
+      }))
   }
 
   /** Visible sessions that `spawn_session` made for a session, oldest first. */
@@ -657,6 +700,9 @@ export class Sessions implements HostSessions {
     this.#compacting.set(id, compacting)
 
     if (busy !== wasBusy) {
+      const parent = this.#metas.get(id)?.parent
+      if (parent && this.#metas.has(parent))
+        this.extensionStateChanged(parent, "children")
       this.#hub.push(
         {
           type: "session_status",
@@ -1096,6 +1142,12 @@ export class Sessions implements HostSessions {
       sessionId: id,
       sessionFile: sessionPath(id),
       ...(meta.name ? { sessionName: meta.name } : {}),
+      ...(meta.parent && this.#metas.has(meta.parent)
+        ? {
+            parentSession: { id: meta.parent, title: this.#title(meta.parent) },
+          }
+        : {}),
+      ...(meta.worktree ? { worktree: meta.worktree } : {}),
       firstMessage: meta.firstMessage,
       cwd: meta.cwd,
       modified: iso(meta.modifiedAt),
@@ -1221,7 +1273,22 @@ export class Sessions implements HostSessions {
     this.#transcripts.set(id, { entries: [] })
     this.#updateMeta(id, { family: id })
     this.#scheduleSessionsBroadcast()
+    if (options.parent) this.extensionStateChanged(options.parent, "children")
     return id
+  }
+
+  /** Remove the worktree that a session made. The session keeps its history. */
+  async removeWorktree(id: string, force: boolean) {
+    const meta = this.meta(id)
+    if (!meta.worktree) return false
+    if (this.isBusy(id))
+      throw badRequest("Wait for the session to finish first.")
+    try {
+      await removeWorktree(meta.worktree, { force })
+    } catch (error) {
+      throw conflict(error instanceof Error ? error.message : String(error))
+    }
+    return true
   }
 
   async prompt(

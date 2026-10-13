@@ -359,6 +359,8 @@ type DeleteSessionsDialogProps = {
   description: string
   targets: Array<SessionListEntry>
   onDeleteSession: () => void
+  removeWorktree: boolean
+  onRemoveWorktreeChange: (remove: boolean) => void
 }
 
 function DeleteSessionsDialog({
@@ -368,7 +370,10 @@ function DeleteSessionsDialog({
   description,
   targets,
   onDeleteSession,
+  removeWorktree,
+  onRemoveWorktreeChange,
 }: DeleteSessionsDialogProps) {
+  const worktreeTargets = targets.filter((target) => target.worktreeBranch)
   const isMobile = useIsMobile()
   const deletePanelRef = React.useRef<HTMLDivElement>(null)
 
@@ -439,6 +444,26 @@ function DeleteSessionsDialog({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
         <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+        {worktreeTargets.length > 0 ? (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={removeWorktree}
+              onChange={(event) => onRemoveWorktreeChange(event.target.checked)}
+            />
+            <span>
+              Also remove{" "}
+              {worktreeTargets.length === 1
+                ? `the worktree (branch ${worktreeTargets[0]?.worktreeBranch})`
+                : `${worktreeTargets.length} worktrees`}
+              <span className="block text-xs text-muted-foreground">
+                Only a worktree without uncommitted changes is removed. The
+                branch stays.
+              </span>
+            </span>
+          </label>
+        ) : null}
         {targets.length > 1 ? (
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
             {previewTargets.map((target) => (
@@ -789,7 +814,8 @@ type DeleteSessionsDialogControllerProps = {
   ref?: React.Ref<DeleteSessionsDialogHandle>
   openStateRef?: React.RefObject<boolean>
   onDeleteSession: (
-    targets: Array<SessionListEntry>
+    targets: Array<SessionListEntry>,
+    options?: { removeWorktree?: boolean }
   ) => Promise<boolean> | boolean | void
 }
 
@@ -815,6 +841,7 @@ export function DeleteSessionsDialogController({
 }: DeleteSessionsDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [targets, setTargets] = React.useState<Array<SessionListEntry>>([])
+  const [removeWorktree, setRemoveWorktree] = React.useState(false)
   const openRef = React.useRef(open)
 
   const setOpenState = (nextOpen: boolean) => {
@@ -825,6 +852,7 @@ export function DeleteSessionsDialogController({
     setOpen(nextOpen)
     if (!nextOpen) {
       setTargets([])
+      setRemoveWorktree(false)
     }
   }
 
@@ -837,7 +865,7 @@ export function DeleteSessionsDialogController({
   }
 
   const submitDelete = async () => {
-    const success = await onDeleteSession(targets)
+    const success = await onDeleteSession(targets, { removeWorktree })
     if (success === false) return
 
     setOpenState(false)
@@ -868,6 +896,8 @@ export function DeleteSessionsDialogController({
       title={title}
       description={description}
       targets={targets}
+      removeWorktree={removeWorktree}
+      onRemoveWorktreeChange={setRemoveWorktree}
       onDeleteSession={() => {
         void submitDelete()
       }}
