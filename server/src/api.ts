@@ -1245,18 +1245,21 @@ function streamEvents(
   let stream: SseStream | undefined
   let liveSession: string | undefined
   let releaseWatch: (() => void) | undefined
+  let watchedSession: string | undefined
   let previousItems: Item[] = []
   let itemsChangedByDelta = false
 
-  const follow = !pinned
+  // The URL session initializes this viewer. Later selections must follow
+  // the viewer too: the client keeps the same EventSource when switching.
   const currentSession = () => {
-    const selected = follow ? viewers.get(contextId)?.selectedSession : pinned
+    const selected = viewers.get(contextId)?.selectedSession
     const current = sessions.current(selected)
     return current && sessions.has(current) ? current : undefined
   }
   const bindWatch = (id: string | undefined) => {
-    if (id === liveSession && releaseWatch) return
+    if (id === watchedSession && releaseWatch) return
     releaseWatch?.()
+    watchedSession = id
     releaseWatch = id ? sessions.watch(id) : undefined
   }
 
