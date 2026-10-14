@@ -1,56 +1,72 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process"
+// Runs the backend, the production web build, and the Vite dev server.
+//
+//   backend + production web  http://HOST:3141  (rebuild with `pnpm build:web`)
+//   Vite dev web              http://HOST:3142  (hot reload)
+import { spawn, spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const port = process.env.PICO_DEV_PORT ?? "3142"
-const host = "127.0.0.1"
-const backendUrl = `http://${host}:${port}`
-const server = spawn(
-  process.execPath,
-  [
-    "server/build.mjs",
-    "--watch",
-    "--",
-    "serve",
-    "--port",
-    port,
-    "--host",
-    host,
-    "--data-dir",
-    process.env.PICO_DEV_DATA_DIR ?? join(homedir(), ".pico-dev"),
-    "--web-dir",
-    "none",
-  ],
-  { stdio: "inherit" }
-)
-let vite
+const host = process.env.PICO_DEV_HOST ?? "127.0.0.1"
+const port = process.env.PICO_DEV_PORT ?? "3141"
+const webPort = process.env.PICO_DEV_WEB_PORT ?? "3142"
+const dataDir = process.env.PICO_DEV_DATA_DIR ?? join(homedir(), ".pico")
+const webDir = join(process.cwd(), ".output/public")
+const localHost = ["0.0.0.0", "::"].includes(host) ? "127.0.0.1" : host
+const backendUrl = `http://${localHost}:${port}`
+
+const build = spawnSync("vp", ["build"], {
+  stdio: "inherit",
+  shell: process.platform === "win32",
+})
+if (build.status !== 0) process.exit(build.status ?? 1)
+
+const children = []
 let stopping = false
-function stop() {
+function stop(code = 0) {
   if (stopping) return
   stopping = true
-  if (vite?.pid) {
-    if (process.platform === "win32") vite.kill("SIGTERM")
+  process.exitCode = code
+  for (const child of children) {
+    if (child.exitCode !== null || child.signalCode !== null) continue
+    if (process.platform === "win32" || !child.detached) child.kill("SIGTERM")
     else {
       try {
-        process.kill(-vite.pid, "SIGTERM")
+        process.kill(-child.pid, "SIGTERM")
       } catch {
         /* Already stopped. */
       }
     }
   }
-  server.kill("SIGTERM")
 }
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, stop)
-server.on("error", (error) => {
-  console.error(error)
-  stop()
-  process.exitCode = 1
-})
-server.on("exit", (code) => {
-  stop()
-  process.exitCode = code ?? 1
-})
+function start(command, args, options = {}) {
+  const child = spawn(command, args, { stdio: "inherit", ...options })
+  child.detached = Boolean(options.detached)
+  child.on("error", (error) => {
+    console.error(error)
+    stop(1)
+  })
+  child.on("exit", (code) => stop(code ?? 1))
+  children.push(child)
+  return child
+}
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => stop())
+
+start(process.execPath, [
+  "server/build.mjs",
+  "--watch",
+  "--",
+  "serve",
+  "--host",
+  host,
+  "--port",
+  port,
+  "--data-dir",
+  dataDir,
+  "--web-dir",
+  webDir,
+])
+
 const deadline = Date.now() + 30_000
 let ready = false
 while (!stopping && Date.now() < deadline) {
@@ -68,27 +84,12 @@ while (!stopping && Date.now() < deadline) {
   await new Promise((done) => setTimeout(done, 200))
 }
 if (!ready) {
-  console.error("Pico development server did not become ready")
-  stop()
-  process.exitCode = 1
+  if (!stopping) console.error("Pico backend did not become ready")
+  stop(1)
 } else {
-  vite = spawn(
-    "vp",
-    ["dev", "--port", process.env.PICO_DEV_WEB_PORT ?? "5173"],
-    {
-      stdio: "inherit",
-      detached: process.platform !== "win32",
-      shell: process.platform === "win32",
-      env: { ...process.env, PICO_DEV_BACKEND_URL: backendUrl },
-    }
-  )
-  vite.on("error", (error) => {
-    console.error(error)
-    stop()
-    process.exitCode = 1
-  })
-  vite.on("exit", (code) => {
-    stop()
-    process.exitCode = code ?? 1
+  start("vp", ["dev", "--host", host, "--port", webPort], {
+    detached: process.platform !== "win32",
+    shell: process.platform === "win32",
+    env: { ...process.env, PICO_DEV_BACKEND_URL: backendUrl },
   })
 }

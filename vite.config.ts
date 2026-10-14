@@ -23,7 +23,7 @@ const allowedHosts = Array.from(
     `${localHostnameWithoutSuffix.toLowerCase()}.local`,
   ])
 )
-const backendUrl = process.env.PICO_DEV_BACKEND_URL ?? "http://127.0.0.1:3142"
+const backendUrl = process.env.PICO_DEV_BACKEND_URL ?? "http://127.0.0.1:3141"
 const backendProxy = {
   target: backendUrl,
   // Preserve Host so the backend's same-origin check also works through Vite.
@@ -96,7 +96,7 @@ const config = {
   },
   server: {
     host: "127.0.0.1",
-    port: 3141,
+    port: 3142,
     strictPort: true,
     allowedHosts,
     fs: {

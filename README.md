@@ -169,10 +169,17 @@ pnpm build
 PICO_SMOKE_URL=http://127.0.0.1:3141/ pnpm check:smoke
 ```
 
-Development uses `~/.pico-dev` and backend port 3142, separate from normal data.
-The web development server uses port 5173. Set `PICO_DEV_DATA_DIR`,
-`PICO_DEV_PORT`, or `PICO_DEV_WEB_PORT` to change these defaults. Server changes rebuild
-and restart the Node process; Vite reloads the web client.
+`pnpm dev` builds the web client and starts two servers on `127.0.0.1`:
+
+- Port 3141: the backend and the production web client. Run `pnpm build:web`
+  to update the production client.
+- Port 3142: the Vite development web client. It uses the backend on 3141.
+
+Server changes rebuild and restart the backend; Vite reloads the development
+client. Development uses your normal data in `~/.pico`, so stop `pnpm start`
+first. Set `PICO_DEV_HOST`, `PICO_DEV_PORT`, `PICO_DEV_WEB_PORT`, or
+`PICO_DEV_DATA_DIR` to change these defaults. For example,
+`PICO_DEV_HOST=0.0.0.0 pnpm dev` allows access from other devices.
 
 The server lives in `server/src`; the React client lives in `src`. Runtime Pi
 dependencies are pinned to 1.2.0. Durable is experimental: review its storage
