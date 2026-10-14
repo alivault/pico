@@ -1079,8 +1079,8 @@ export function useAppShellSessionMutations({
           })
           toast.success(
             orderedPaths.length === 1
-              ? "Deleted session"
-              : `Deleted ${orderedPaths.length} sessions`
+              ? "Archived session"
+              : `Archived ${orderedPaths.length} sessions`
           )
         } catch (error) {
           setSessionsEvent((current) =>
@@ -1120,7 +1120,7 @@ export function useAppShellSessionMutations({
           }
 
           toast.error(
-            error instanceof Error ? error.message : "Failed to delete session"
+            error instanceof Error ? error.message : "Failed to archive session"
           )
         }
       })()

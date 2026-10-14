@@ -2923,9 +2923,10 @@ function useAppShellSessionWorkspaceView({
         await renameSessionPath(sessionState.sessionFile, trimmedArgs)
         return
       }
+      case "archive":
       case "delete": {
         if (!sessionState.sessionFile) {
-          toast.error("Start the session before deleting it.")
+          toast.error("Start the session before archiving it.")
           return
         }
         clearComposerDraft()
@@ -3330,7 +3331,7 @@ function useAppShellSessionWorkspaceView({
           sessionStateRef.current
         )}`,
         shortcut: formatShortcutLabel("Control+X"),
-        keywords: ["delete", "remove", "session"],
+        keywords: ["archive", "delete", "remove", "session"],
         onSelect: openDeleteDialogForCurrentSession,
       })
     }
@@ -3347,7 +3348,7 @@ function useAppShellSessionWorkspaceView({
             ? "session"
             : "sessions"
         }`,
-        keywords: ["delete", "selected", "sidebar", "sessions"],
+        keywords: ["archive", "delete", "selected", "sidebar", "sessions"],
         onSelect: () => {
           openDeleteDialog(
             commandPaletteStateRef.current.selectedSidebarSessions

@@ -181,8 +181,8 @@ function buildComposerSlashCommands({
     },
     {
       kind: "builtin" as const,
-      name: "delete",
-      description: "Delete the current session",
+      name: "archive",
+      description: "Archive the current session",
     },
     {
       kind: "builtin" as const,

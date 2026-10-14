@@ -1339,7 +1339,7 @@ export class Sessions implements HostSessions {
     }
   ) {
     const meta = this.meta(id)
-    if (meta.archived) throw badRequest("This session was deleted")
+    if (meta.archived) throw badRequest("This session was archived")
     const conversation = await this.conversation(id)
     if (input.thinkingLevel) {
       const level = this.validateThinkingLevel(input.thinkingLevel)
@@ -1680,7 +1680,7 @@ export class Sessions implements HostSessions {
   archive(id: string) {
     this.meta(id)
     if (this.isBusy(id))
-      throw badRequest("Wait for the session to finish before deleting it.")
+      throw badRequest("Wait for the session to finish before archiving it.")
     this.#updateMeta(id, { archived: true })
     this.#viewers.forget(id)
     this.#scheduleSessionsBroadcast()

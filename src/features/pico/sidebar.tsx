@@ -1361,7 +1361,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               <DropdownMenuItem
                 onClick={() => onDeleteOldSessionsInDirectory(directory)}
               >
-                Delete old sessions…
+                Archive old sessions…
               </DropdownMenuItem>
             ) : null}
             {onRemoveDirectory ? (
@@ -1410,7 +1410,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 <ContextMenuItem
                   onClick={() => onDeleteOldSessionsInDirectory(directory)}
                 >
-                  Delete old sessions…
+                  Archive old sessions…
                 </ContextMenuItem>
               ) : null}
               {onRemoveDirectory ? (

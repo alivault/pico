@@ -513,9 +513,9 @@ export function useAppShellShortcuts({
       callback: handleSidebarBackspaceDelete,
       options: {
         meta: {
-          name: "Delete selected sidebar sessions",
+          name: "Archive selected sidebar sessions",
           description:
-            "Open the delete dialog for multiple selected sidebar sessions.",
+            "Open the archive dialog for multiple selected sidebar sessions.",
         },
       },
     },

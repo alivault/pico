@@ -591,7 +591,7 @@ function DeleteOldDirectorySessionsDialog({
       {matchCount > 0 ? (
         <div className="space-y-2">
           <p className="font-medium">
-            {matchCount} session{matchCount === 1 ? "" : "s"} will be deleted.
+            {matchCount} session{matchCount === 1 ? "" : "s"} will be archived.
           </p>
           <div className="max-h-48 space-y-1 overflow-y-auto text-muted-foreground">
             {preview.matchingSessions.slice(0, 20).map((session) => (
@@ -629,7 +629,7 @@ function DeleteOldDirectorySessionsDialog({
       </Button>
       <Button variant="destructive" onClick={onDelete} disabled={!canDelete}>
         {deleteLoading ? <Spinner /> : null}
-        Delete
+        Archive
       </Button>
     </>
   )
@@ -639,9 +639,9 @@ function DeleteOldDirectorySessionsDialog({
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Delete old sessions</DrawerTitle>
+            <DrawerTitle>Archive old sessions</DrawerTitle>
             <DrawerDescription>
-              Preview and delete inactive sessions in this directory.
+              Preview and archive inactive sessions in this directory.
             </DrawerDescription>
           </DrawerHeader>
           <div className="px-4 pb-2">{body}</div>
@@ -657,9 +657,9 @@ function DeleteOldDirectorySessionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete old sessions</DialogTitle>
+          <DialogTitle>Archive old sessions</DialogTitle>
           <DialogDescription>
-            Preview and delete inactive sessions in this directory.
+            Preview and archive inactive sessions in this directory.
           </DialogDescription>
         </DialogHeader>
         {body}
@@ -762,14 +762,14 @@ export function DeleteOldDirectorySessionsDialogController({
         ),
       })
       toast.success(
-        `Deleted ${result.deletedSessionIds.length} old session${
+        `Archived ${result.deletedSessionIds.length} old session${
           result.deletedSessionIds.length === 1 ? "" : "s"
         }`
       )
       setOpenState(false)
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete sessions"
+        error instanceof Error ? error.message : "Failed to archive sessions"
       )
     }
   }
