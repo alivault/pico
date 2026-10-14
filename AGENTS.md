@@ -7,7 +7,7 @@
 - This is a pnpm monorepo.
   - `apps/pico`: the Pico app (`@alivault/pico`). Web client in `apps/pico/src`, server in `apps/pico/server` (`@pico/server`).
   - `apps/website`: the static website for pico.aliabbas.net. Plain HTML and CSS in `apps/website/site`. No build step.
-- Deploy the website with `pnpm website:deploy` (runs `wrangler deploy`).
+- Deploy the website with `pnpm website:deploy` (runs `pnpm dlx wrangler@4 deploy`, so wrangler is not a project dependency).
 
 ## Tooling
 

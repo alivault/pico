@@ -10,8 +10,6 @@ onlyBuiltDependencies:
   - esbuild
   - node-pty
   - protobufjs
-  - sharp
-  - workerd
 overrides:
   vite: "catalog:"
   vitest: "catalog:"
