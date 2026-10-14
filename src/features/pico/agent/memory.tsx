@@ -1,5 +1,5 @@
 import * as React from "react"
-import { PencilIcon, XIcon } from "lucide-react"
+import { PencilIcon, PlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -42,6 +41,111 @@ type Fact = {
 type MemoryState = { project: string; facts: Array<Fact>; global: Array<Fact> }
 type Scope = "project" | "global"
 
+function scopeDescription(scope: Scope) {
+  return scope === "global"
+    ? "The agent sees this fact in every project."
+    : "The agent sees this fact in every session of this project."
+}
+
+function FactDialog({
+  open,
+  onOpenChange,
+  title,
+  submitLabel,
+  initialText,
+  initialScope,
+  chooseScope = false,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  submitLabel: string
+  initialText: string
+  initialScope: Scope
+  chooseScope?: boolean
+  onSubmit: (text: string, scope: Scope) => void
+}) {
+  const [text, setText] = React.useState(initialText)
+  const [scope, setScope] = React.useState(initialScope)
+  const [wasOpen, setWasOpen] = React.useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setText(initialText)
+      setScope(initialScope)
+    }
+  }
+  return (
+    <Dialog open={open} focusPromptOnClose={false} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const next = text.trim()
+            if (!next) return
+            onSubmit(next, scope)
+            onOpenChange(false)
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{scopeDescription(scope)}</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            autoFocus
+            aria-label="Fact"
+            placeholder="A fact that stays true, such as a command or a convention"
+            rows={4}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault()
+                event.currentTarget.form?.requestSubmit()
+              }
+            }}
+          />
+          {chooseScope ? (
+            <Select
+              value={scope}
+              onValueChange={(value) => setScope(value as Scope)}
+            >
+              <SelectTrigger
+                className="w-40"
+                aria-label="Where the fact applies"
+              >
+                <SelectValue>
+                  {(value: Scope) =>
+                    value === "global" ? "All projects" : "This project"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="project">This project</SelectItem>
+                <SelectItem value="global">All projects</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!text.trim()}>
+              {submitLabel}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function FactRow({
   fact,
   scope,
@@ -52,7 +156,6 @@ function FactRow({
   onChange: (body: Record<string, unknown>) => void
 }) {
   const [editing, setEditing] = React.useState(false)
-  const [text, setText] = React.useState(fact.text)
   return (
     <li className="group/row flex items-start gap-1 rounded-md px-1 py-1 text-sm hover:bg-muted/50">
       <span className="min-w-0 flex-1 pt-0.5">
@@ -68,10 +171,7 @@ function FactRow({
         <IconAction
           label="Edit fact"
           icon={<PencilIcon />}
-          onClick={() => {
-            setText(fact.text)
-            setEditing(true)
-          }}
+          onClick={() => setEditing(true)}
         />
         <IconAction
           label="Remove fact"
@@ -80,59 +180,17 @@ function FactRow({
           onClick={() => onChange({ op: "remove", id: fact.id })}
         />
       </span>
-      <Dialog
+      <FactDialog
         open={editing}
-        focusPromptOnClose={false}
         onOpenChange={setEditing}
-      >
-        <DialogContent className="sm:max-w-md">
-          <form
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const next = text.trim()
-              if (!next) return
-              if (next !== fact.text)
-                onChange({ op: "update", id: fact.id, text: next })
-              setEditing(false)
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Edit fact</DialogTitle>
-              <DialogDescription>
-                {scope === "global"
-                  ? "The agent sees this fact in every project."
-                  : "The agent sees this fact in every session of this project."}
-              </DialogDescription>
-            </DialogHeader>
-            <Textarea
-              autoFocus
-              aria-label="Fact"
-              rows={4}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault()
-                  event.currentTarget.form?.requestSubmit()
-                }
-              }}
-            />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditing(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!text.trim()}>
-                Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        title="Edit fact"
+        submitLabel="Save"
+        initialText={fact.text}
+        initialScope={scope}
+        onSubmit={(text) => {
+          if (text !== fact.text) onChange({ op: "update", id: fact.id, text })
+        }}
+      />
     </li>
   )
 }
@@ -165,8 +223,7 @@ function MemorySection({
   viewerContextId: string
 }) {
   const memory = state.memory as MemoryState | undefined
-  const [text, setText] = React.useState("")
-  const [scope, setScope] = React.useState<Scope>("project")
+  const [adding, setAdding] = React.useState(false)
   if (!memory) return null
   const change = (target: Scope) => (body: Record<string, unknown>) => {
     void postSessionJson(viewerContextId, sessionId, "/api/session/memory", {
@@ -209,45 +266,25 @@ function MemorySection({
           />
         </div>
       ) : null}
-      <form
-        className="flex gap-1.5"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (!text.trim()) return
-          change(scope)({ op: "add", text })
-          setText("")
-        }}
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-1"
+        onClick={() => setAdding(true)}
       >
-        <Input
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="New fact"
-          aria-label="New fact"
-          className="h-8"
-        />
-        <Select
-          value={scope}
-          onValueChange={(value) => setScope(value as Scope)}
-        >
-          <SelectTrigger
-            className="w-32 shrink-0"
-            aria-label="Where the fact applies"
-          >
-            <SelectValue>
-              {(value: Scope) =>
-                value === "global" ? "All projects" : "This project"
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="project">This project</SelectItem>
-            <SelectItem value="global">All projects</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button type="submit" variant="outline" disabled={!text.trim()}>
-          Add
-        </Button>
-      </form>
+        <PlusIcon />
+        Add fact
+      </Button>
+      <FactDialog
+        open={adding}
+        onOpenChange={setAdding}
+        title="Add fact"
+        submitLabel="Add"
+        initialText=""
+        initialScope="project"
+        chooseScope
+        onSubmit={(text, scope) => change(scope)({ op: "add", text })}
+      />
     </div>
   )
 }
