@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pico-website",
+  "account_id": "bf718ef53febc0e26a0d63955b33c25d",
   "compatibility_date": "2025-10-01",
   "assets": {
     "directory": "./site",

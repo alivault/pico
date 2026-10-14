@@ -10,8 +10,8 @@
     "test": "pnpm --filter @alivault/pico test",
     "check": "pnpm --filter @alivault/pico check",
     "release": "pnpm --filter @alivault/pico release",
-    "website:dev": "pnpm --filter @pico/website dev",
-    "website:deploy": "pnpm --filter @pico/website deploy"
+    "website:dev": "pnpm --filter @pico/website run dev",
+    "website:deploy": "pnpm --filter @pico/website run deploy"
   },
   "devDependencies": {
     "vite-plus": "catalog:"
