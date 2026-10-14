@@ -3,6 +3,14 @@ import { PencilIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -11,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
@@ -35,49 +44,15 @@ type Scope = "project" | "global"
 
 function FactRow({
   fact,
+  scope,
   onChange,
 }: {
   fact: Fact
+  scope: Scope
   onChange: (body: Record<string, unknown>) => void
 }) {
   const [editing, setEditing] = React.useState(false)
   const [text, setText] = React.useState(fact.text)
-  if (editing)
-    return (
-      <li>
-        <form
-          className="flex gap-1.5 py-1"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (text.trim() && text.trim() !== fact.text)
-              onChange({ op: "update", id: fact.id, text })
-            setEditing(false)
-          }}
-        >
-          <Input
-            autoFocus
-            aria-label="Fact"
-            className="h-8"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setEditing(false)
-            }}
-          />
-          <Button type="submit" size="sm" disabled={!text.trim()}>
-            Save
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => setEditing(false)}
-          >
-            Cancel
-          </Button>
-        </form>
-      </li>
-    )
   return (
     <li className="group/row flex items-start gap-1 rounded-md px-1 py-1 text-sm hover:bg-muted/50">
       <span className="min-w-0 flex-1 pt-0.5">
@@ -105,21 +80,76 @@ function FactRow({
           onClick={() => onChange({ op: "remove", id: fact.id })}
         />
       </span>
+      <Dialog
+        open={editing}
+        focusPromptOnClose={false}
+        onOpenChange={setEditing}
+      >
+        <DialogContent className="sm:max-w-md">
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const next = text.trim()
+              if (!next) return
+              if (next !== fact.text)
+                onChange({ op: "update", id: fact.id, text: next })
+              setEditing(false)
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit fact</DialogTitle>
+              <DialogDescription>
+                {scope === "global"
+                  ? "The agent sees this fact in every project."
+                  : "The agent sees this fact in every session of this project."}
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              autoFocus
+              aria-label="Fact"
+              rows={4}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }
+              }}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditing(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!text.trim()}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </li>
   )
 }
 
 function FactList({
   facts,
+  scope,
   onChange,
 }: {
   facts: Array<Fact>
+  scope: Scope
   onChange: (body: Record<string, unknown>) => void
 }) {
   return (
     <ul className="space-y-0.5">
       {facts.map((fact) => (
-        <FactRow key={fact.id} fact={fact} onChange={onChange} />
+        <FactRow key={fact.id} fact={fact} scope={scope} onChange={onChange} />
       ))}
     </ul>
   )
@@ -155,7 +185,11 @@ function MemorySection({
           </div>
         </TitleTooltip>
         {memory.facts.length ? (
-          <FactList facts={memory.facts} onChange={change("project")} />
+          <FactList
+            facts={memory.facts}
+            scope="project"
+            onChange={change("project")}
+          />
         ) : (
           <p className="px-1 text-xs text-muted-foreground">
             No facts yet. The agent saves facts here that stay true, such as
@@ -168,7 +202,11 @@ function MemorySection({
           <div className="px-1 text-xs font-medium text-muted-foreground">
             All projects
           </div>
-          <FactList facts={memory.global} onChange={change("global")} />
+          <FactList
+            facts={memory.global}
+            scope="global"
+            onChange={change("global")}
+          />
         </div>
       ) : null}
       <form
