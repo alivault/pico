@@ -1,5 +1,8 @@
 import * as React from "react"
-import { SessionLineage } from "@/features/pico/agent/session-lineage"
+import {
+  SessionLineage,
+  useSessionInfo,
+} from "@/features/pico/agent/session-lineage"
 import {
   EllipsisIcon,
   PanelRightIcon,
@@ -108,6 +111,12 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   const displaySessionTitle = isSessionViewLoading
     ? loadingDisplaySessionTitle
     : getCurrentSessionTitleFromState(sessionHeaderState)
+  const sessionInfo = useSessionInfo(
+    viewerContextId,
+    sessionHeaderState.sessionId
+  )
+  // A worktree folder has the branch name, so the branch text covers it.
+  const showFolderName = Boolean(displaySessionCwd && !sessionInfo?.worktree)
   const moveSessionDirectoryOptions = newSessionDirectoryOptions.filter(
     (option) => option.path !== displaySessionCwd
   )
@@ -154,7 +163,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             </TitleTooltip>
           </div>
           <div className="flex max-w-full min-w-0 items-center justify-center gap-x-2">
-            {displaySessionCwd ? (
+            {showFolderName && displaySessionCwd ? (
               <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
                 <span className="truncate">
                   {formatFolderName(displaySessionCwd)}
@@ -163,6 +172,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             ) : null}
             <HeaderGitStatusText
               viewerContextId={viewerContextId}
+              className="min-w-0"
               cwd={displaySessionCwd}
             />
             <SessionLineage

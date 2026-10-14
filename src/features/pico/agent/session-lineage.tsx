@@ -9,7 +9,16 @@ type SessionInfo = {
   worktree?: { path: string; branch: string }
 }
 
-/** The parent session and the worktree branch, for the session header. */
+export function useSessionInfo(viewerContextId: string, sessionId?: string) {
+  const query = useSessionExtensions(viewerContextId, sessionId)
+  return query.data?.session as SessionInfo | undefined
+}
+
+/**
+ * Compact markers for the parent session and the worktree, for the session
+ * header. They are icons only; the tooltips hold the full text, because the
+ * header already shows the branch name.
+ */
 export function SessionLineage({
   sessionId,
   viewerContextId,
@@ -17,8 +26,7 @@ export function SessionLineage({
   sessionId?: string
   viewerContextId: string
 }) {
-  const query = useSessionExtensions(viewerContextId, sessionId)
-  const info = query.data?.session as SessionInfo | undefined
+  const info = useSessionInfo(viewerContextId, sessionId)
   if (!info) return null
   const parent = info.parent
   return (
@@ -27,21 +35,25 @@ export function SessionLineage({
         <TitleTooltip title={`Open the parent session, ${parent.title}`}>
           <button
             type="button"
-            className="inline-flex max-w-40 min-w-0 items-center gap-0.5 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-label={`Open the parent session, ${parent.title}`}
+            className="inline-flex shrink-0 items-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
             onClick={() =>
               emitPicoEvent("pico:open-session", { sessionId: parent.id })
             }
           >
-            <CornerLeftUpIcon className="size-3 shrink-0" />
-            <span className="truncate">{parent.title}</span>
+            <CornerLeftUpIcon className="size-3" />
           </button>
         </TitleTooltip>
       ) : null}
       {info.worktree ? (
-        <TitleTooltip title={`Own worktree: ${info.worktree.path}`}>
-          <span className="inline-flex max-w-40 min-w-0 items-center gap-0.5 text-xs text-muted-foreground">
-            <GitForkIcon className="size-3 shrink-0" />
-            <span className="truncate">{info.worktree.branch}</span>
+        <TitleTooltip
+          title={`Own worktree on ${info.worktree.branch}: ${info.worktree.path}`}
+        >
+          <span
+            aria-label="Own worktree"
+            className="inline-flex shrink-0 items-center text-muted-foreground"
+          >
+            <GitForkIcon className="size-3" />
           </span>
         </TitleTooltip>
       ) : null}

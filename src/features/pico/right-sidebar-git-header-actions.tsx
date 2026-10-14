@@ -60,9 +60,11 @@ export function GitTabStatusText({
 export function HeaderGitStatusText({
   viewerContextId,
   cwd,
+  className,
 }: {
   viewerContextId: string
   cwd?: string
+  className?: string
 }) {
   const normalizedCwd = normalizeCwd(cwd)
   const statusQuery = useQuery({
@@ -77,10 +79,10 @@ export function HeaderGitStatusText({
 
   return (
     <span
-      className="inline-flex items-center text-xs text-muted-foreground"
+      className={`inline-flex items-center text-xs text-muted-foreground ${className ?? ""}`}
       title={statusQuery.data?.title || text}
     >
-      <span>{text}</span>
+      <span className="truncate">{text}</span>
     </span>
   )
 }
