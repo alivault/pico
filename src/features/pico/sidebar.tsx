@@ -1687,7 +1687,9 @@ function AppSidebarDirectoriesHeader({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    <SidebarGroupLabel className="justify-between gap-3">
+    // pr-0: the size-8 icon buttons hold their own 8px inset, so their icons
+    // end on the right content edge, with the search Kbd.
+    <SidebarGroupLabel className="justify-between gap-3 pr-0">
       <CollapsibleTrigger
         type="button"
         className="group/directories-label flex min-w-0 flex-1 items-center gap-2 text-left outline-hidden"
