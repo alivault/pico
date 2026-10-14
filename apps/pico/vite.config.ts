@@ -62,7 +62,13 @@ const plugins = [
 
 const config = {
   lint: {
-    ignorePatterns: ["src/routeTree.gen.ts"],
+    ignorePatterns: [
+      "src/routeTree.gen.ts",
+      ".output/**",
+      ".tanstack/**",
+      ".pico-dev/**",
+      "server/dist/**",
+    ],
     options: { typeAware: true, typeCheck: true },
   },
   fmt: {
@@ -82,6 +88,10 @@ const config = {
       "pnpm-lock.yaml",
       "src/routeTree.gen.ts",
       "yarn.lock",
+      ".output/**",
+      ".tanstack/**",
+      ".pico-dev/**",
+      "server/dist/**",
     ],
   },
   resolve: {

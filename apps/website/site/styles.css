@@ -1,0 +1,284 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #5c5c5c;
+  --line: #e6e6e6;
+  --card: #fafafa;
+  --code: #f4f4f4;
+  --accent: #0a0a0a;
+  --accent-fg: #ffffff;
+  --max: 1120px;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --fg: #f5f5f5;
+    --muted: #a3a3a3;
+    --line: #262626;
+    --card: #141414;
+    --code: #171717;
+    --accent: #f5f5f5;
+    --accent-fg: #0a0a0a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: inherit;
+}
+
+code,
+pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+:not(pre) > code {
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.nav,
+main,
+footer {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nav nav {
+  display: flex;
+  gap: 20px;
+  font-size: 0.95rem;
+}
+
+.nav nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav nav a:hover {
+  color: var(--fg);
+}
+
+.hero {
+  max-width: 760px;
+  margin: 72px auto 48px;
+  text-align: center;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0 0 20px;
+}
+
+h2 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 0 0 8px;
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 1.2rem;
+  margin: 0 auto 32px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.button {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.button:hover {
+  border-color: var(--muted);
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.shot {
+  margin: 0 0 96px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.35);
+}
+
+.features {
+  margin-bottom: 96px;
+}
+
+.features > h2 {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.grid article {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.grid p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  margin-bottom: 96px;
+}
+
+.split p {
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.split .note {
+  font-size: 0.95rem;
+  border-left: 3px solid var(--line);
+  padding-left: 16px;
+}
+
+.phones {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.phones img {
+  width: 45%;
+  max-width: 240px;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+}
+
+.start {
+  max-width: 720px;
+  margin: 0 auto 96px;
+}
+
+.start p {
+  color: var(--muted);
+}
+
+.code {
+  background: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 20px 0;
+}
+
+.code pre {
+  margin: 0;
+  padding: 20px 24px;
+  overflow-x: auto;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 24px;
+  padding-bottom: 48px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .nav nav a:not(:last-child) {
+    display: none;
+  }
+
+  .hero {
+    margin-top: 40px;
+  }
+
+  .split {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pico-website",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./site",
+    "not_found_handling": "404-page",
+  },
+  "routes": [{ "pattern": "pico.aliabbas.net", "custom_domain": true }],
+  "workers_dev": false,
+}

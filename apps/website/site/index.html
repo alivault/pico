@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pico — a web workspace for Pi coding agents</title>
+    <meta
+      name="description"
+      content="Pico is a local web workspace for durable Pi coding-agent sessions. Runs survive restarts. Git, files, terminals, and agent tools in one app."
+    />
+    <meta property="og:title" content="Pico" />
+    <meta
+      property="og:description"
+      content="A local web workspace for durable Pi coding-agent sessions."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://pico.aliabbas.net/" />
+    <meta
+      property="og:image"
+      content="https://pico.aliabbas.net/screenshots/pico-workspace.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/">
+        <img src="/favicon.svg" alt="" width="24" height="24" />
+        <span>Pico</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#start">Get started</a>
+        <a href="https://github.com/alivault/pico">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Open source · AGPL-3.0</p>
+        <h1>A web workspace for your Pi coding agents.</h1>
+        <p class="lede">
+          Pico runs on your machine and keeps every
+          <a href="https://www.npmjs.com/package/@earendil-works/pi-durable"
+            >Pi</a
+          >
+          session safe. Runs continue after a crash or restart. Git, files,
+          terminals, and agent tools are all in one app.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="#start">Get started</a>
+          <a class="button" href="https://github.com/alivault/pico"
+            >View on GitHub</a
+          >
+        </div>
+      </section>
+
+      <figure class="shot">
+        <img
+          src="/screenshots/pico-workspace.png"
+          alt="Pico workspace with the session list, conversation, composer, and Git tools"
+          width="2898"
+          height="1916"
+        />
+      </figure>
+
+      <section id="features" class="features">
+        <h2>What Pico does</h2>
+        <div class="grid">
+          <article>
+            <h3>Durable sessions</h3>
+            <p>
+              All sessions live in one SQLite database. Runs continue after a
+              crash or restart. Tools with side effects do not run twice.
+            </p>
+          </article>
+          <article>
+            <h3>A full workspace</h3>
+            <p>
+              See Git changes and diffs, browse files with syntax highlighting,
+              and open terminals next to the agent.
+            </p>
+          </article>
+          <article>
+            <h3>Rich agent tools</h3>
+            <p>
+              Todo lists, questions, charts and diagrams, timers, background
+              jobs, child sessions in Git worktrees, LSP, browser automation,
+              memory, web access, and MCP.
+            </p>
+          </article>
+          <article>
+            <h3>Tool profiles</h3>
+            <p>
+              Pick <code>full</code>, <code>research</code>,
+              <code>read-only</code>, or <code>review</code>, or make your own.
+            </p>
+          </article>
+          <article>
+            <h3>Notifications</h3>
+            <p>
+              Get Web Push or ntfy alerts when a run ends or the agent has a
+              question for you.
+            </p>
+          </article>
+          <article>
+            <h3>Works with Pi</h3>
+            <p>
+              Pico uses your Pi skills, prompt templates, project instructions,
+              and credentials.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="split">
+        <div>
+          <h2>On your phone, too</h2>
+          <p>
+            Pico works well on small screens. Connect over
+            <a href="https://tailscale.com">Tailscale</a> and check on your
+            agents from anywhere.
+          </p>
+          <p class="note">
+            Pico has no login. Anyone who can reach it can run commands as your
+            user. Keep it on a private network. Never expose it to the public
+            internet.
+          </p>
+        </div>
+        <div class="phones">
+          <img
+            src="/screenshots/pico-mobile.png"
+            alt="Pico on a phone in dark mode"
+            width="1170"
+            height="2532"
+            loading="lazy"
+          />
+          <img
+            src="/screenshots/pico-mobile-alt.png"
+            alt="Pico on a phone in light mode"
+            width="1170"
+            height="2532"
+            loading="lazy"
+          />
+        </div>
+      </section>
+
+      <figure class="shot">
+        <img
+          src="/screenshots/pico-workspace-alt.png"
+          alt="Pico workspace with project context and an agent at work"
+          width="2898"
+          height="1916"
+          loading="lazy"
+        />
+      </figure>
+
+      <section id="start" class="start">
+        <h2>Get started</h2>
+        <p>You need Node.js 22.19 or later, pnpm, Git, and a shell.</p>
+        <div class="code">
+          <pre><code>git clone https://github.com/alivault/pico.git
+cd pico
+pnpm install
+pnpm build
+pnpm start</code></pre>
+        </div>
+        <p>
+          Then open <code>http://127.0.0.1:3141</code>. Add provider credentials
+          in Pico, or use the ones in <code>~/.pi/agent/auth.json</code>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <span>Pico · AGPL-3.0</span>
+      <a href="https://github.com/alivault/pico">github.com/alivault/pico</a>
+    </footer>
+  </body>
+</html>

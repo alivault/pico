@@ -4,13 +4,13 @@ A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/p
 coding-agent sessions. One Node server hosts the agent runtime and serves the
 React web app.
 
-![Pico workspace showing the session browser, conversation shell, composer, and git tools](public/screenshots/pico-workspace.png)
+![Pico workspace showing the session browser, conversation shell, composer, and git tools](apps/pico/public/screenshots/pico-workspace.png)
 
-![Pico workspace showing project-aware context and coding-agent workflow](public/screenshots/pico-workspace-alt.png)
+![Pico workspace showing project-aware context and coding-agent workflow](apps/pico/public/screenshots/pico-workspace-alt.png)
 
-| Dark mobile browser                                                     | Light mobile browser                                                         |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| ![Pico mobile browser in dark mode](public/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](public/screenshots/pico-mobile-alt.png) |
+| Dark mobile browser                                                               | Light mobile browser                                                                   |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| ![Pico mobile browser in dark mode](apps/pico/public/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](apps/pico/public/screenshots/pico-mobile-alt.png) |
 
 ## Requirements
 
@@ -73,7 +73,13 @@ pnpm check
 pnpm build
 ```
 
-Server code is in `server/src`. Client code is in `src`.
+This is a pnpm monorepo:
+
+- `apps/pico`: the Pico app. Client code is in `apps/pico/src`. Server code
+  is in `apps/pico/server/src`.
+- `apps/website`: the static site at
+  [pico.aliabbas.net](https://pico.aliabbas.net). Deploy it with
+  `pnpm website:deploy`.
 
 ## License
 

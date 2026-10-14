@@ -20,4 +20,9 @@ todos.json
 xcuserdata/
 
 # Server build output
-server/dist
+apps/pico/server/dist
+
+# Copied into the npm package by prepack
+apps/pico/README.md
+apps/pico/LICENSE
+.vite

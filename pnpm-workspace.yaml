@@ -1,5 +1,6 @@
 packages:
-  - server
+  - apps/*
+  - apps/pico/server
 
 catalog:
   vite: 8.0.8
@@ -9,6 +10,8 @@ onlyBuiltDependencies:
   - esbuild
   - node-pty
   - protobufjs
+  - sharp
+  - workerd
 overrides:
   vite: "catalog:"
   vitest: "catalog:"
