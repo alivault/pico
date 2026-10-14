@@ -244,7 +244,7 @@ function AppShellConversationFrame(props: AppShellConversationFrameProps) {
     <MessageScrollerProvider
       key={sessionScrollKey}
       autoScroll={props.autoScrollEnabled}
-      defaultScrollPosition="last-anchor"
+      defaultScrollPosition="end"
       scrollPreviousItemPeek={64}
     >
       <AppShellConversationScroller {...props} />
