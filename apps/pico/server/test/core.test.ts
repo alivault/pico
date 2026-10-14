@@ -98,6 +98,12 @@ void test("remote requests need no token but reject foreign origins", () => {
 void test("local requests reject foreign hosts and origins", () => {
   const security = new Security("127.0.0.1")
   security.check(request({ host: "127.0.0.1:3141" }))
+  security.check(
+    request({
+      host: "pico.tail1234.ts.net:3141",
+      origin: "https://pico.tail1234.ts.net:3141",
+    })
+  )
   assert.throws(
     () => security.check(request({ host: "evil.example:3141" })),
     /Host/

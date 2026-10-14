@@ -6,6 +6,11 @@ export function isLoopback(host: string) {
   return ["127.0.0.1", "::1", "localhost"].includes(host)
 }
 
+/** Tailscale Serve keeps the MagicDNS host when it proxies to loopback. */
+function isTailscaleHost(host: string) {
+  return host.toLowerCase().endsWith(".ts.net")
+}
+
 /** Network access is controlled by Tailscale/firewall rules, not an app token. */
 export class Security {
   readonly host: string
@@ -19,9 +24,11 @@ export class Security {
     const authority = request.headers.host
     if (!authority) throw new ApiError(400, "Host is required")
     const url = new URL(`http://${authority}`)
+    const hostname = url.hostname.replace(/^\[|\]$/g, "")
     if (
       isLoopback(this.host) &&
-      !isLoopback(url.hostname.replace(/^\[|\]$/g, ""))
+      !isLoopback(hostname) &&
+      !isTailscaleHost(hostname)
     ) {
       throw new ApiError(403, "Host is not allowed")
     }
