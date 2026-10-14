@@ -45,6 +45,11 @@ const RightSidebar = React.lazy(async () => {
   return { default: module.RightSidebar }
 })
 
+const AgentPanel = React.lazy(async () => {
+  const module = await import("@/features/pico/agent/agent-panel")
+  return { default: module.AgentPanel }
+})
+
 const TerminalPanel = React.lazy(async () => {
   const module = await import("@/features/pico/terminal-panel")
   return { default: module.TerminalPanel }
@@ -66,6 +71,9 @@ function shallowTerminalSession(
   return left.cwd === right.cwd && left.sessionId === right.sessionId
 }
 
+const mobileTabTriggerClassName =
+  "h-8 shrink-0 px-3 data-active:bg-muted dark:data-active:bg-muted"
+
 function AppShellTabsList({
   sessionStore,
   viewerContextId,
@@ -76,23 +84,17 @@ function AppShellTabsList({
   const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
 
   return (
-    <TabsList className="w-full gap-2 rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
-      <TabsTrigger
-        value="session"
-        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
-      >
+    <TabsList className="no-scrollbar w-full justify-start gap-2 overflow-x-auto rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
+      <TabsTrigger value="session" className={mobileTabTriggerClassName}>
         Session
       </TabsTrigger>
-      <TabsTrigger
-        value="git"
-        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
-      >
+      <TabsTrigger value="git" className={mobileTabTriggerClassName}>
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
       </TabsTrigger>
-      <TabsTrigger
-        value="terminal"
-        className="h-8 data-active:bg-muted dark:data-active:bg-muted"
-      >
+      <TabsTrigger value="agent" className={mobileTabTriggerClassName}>
+        Agent
+      </TabsTrigger>
+      <TabsTrigger value="terminal" className={mobileTabTriggerClassName}>
         Terminal
       </TabsTrigger>
     </TabsList>
@@ -762,11 +764,15 @@ function useAppShellTabsControllerView({
   const [mobileGitMounted, setMobileGitMounted] = React.useState(
     currentTab === "git"
   )
+  const [mobileAgentMounted, setMobileAgentMounted] = React.useState(
+    currentTab === "agent"
+  )
   const [mobileTerminalMounted, setMobileTerminalMounted] = React.useState(
     currentTab === "terminal"
   )
   React.useEffect(() => {
     if (currentTab === "git") setMobileGitMounted(true)
+    if (currentTab === "agent") setMobileAgentMounted(true)
     if (currentTab === "terminal") setMobileTerminalMounted(true)
   }, [currentTab])
   const isDraftSession = useSelector(
@@ -781,6 +787,9 @@ function useAppShellTabsControllerView({
     }),
     { compare: shallowTerminalSession }
   )
+  const agentSessionId = useSelector(sessionStore, (sessionState) =>
+    sessionState.draft ? undefined : sessionState.sessionId
+  )
   const showTabsList = isMobile || !isDraftSession || isSessionViewLoading
   const sessionVisibleClassName =
     currentTab === "session"
@@ -788,6 +797,10 @@ function useAppShellTabsControllerView({
       : "hidden min-h-0 flex-1 flex-col md:flex"
   const mobileGitClassName =
     currentTab === "git" ? "min-h-0 flex-1 overflow-hidden md:hidden" : "hidden"
+  const mobileAgentClassName =
+    currentTab === "agent"
+      ? "min-h-0 flex-1 overflow-hidden bg-background md:hidden"
+      : "hidden"
   const mobileTerminalClassName =
     currentTab === "terminal"
       ? "min-h-0 flex-1 overflow-hidden md:hidden"
@@ -938,6 +951,20 @@ function useAppShellTabsControllerView({
                 onOpenFile={onOpenFileViewTab}
                 onReorderFiles={onReorderFileViewTabs}
               />
+            </div>
+          ) : null}
+          {mobileAgentMounted ? (
+            <div className={mobileAgentClassName}>
+              <React.Suspense
+                fallback={<PanelLoadingFallback label="Loading agent…" />}
+              >
+                <AgentPanel
+                  active={currentTab === "agent"}
+                  cwd={terminalSession.cwd}
+                  sessionId={agentSessionId}
+                  viewerContextId={viewerContextId}
+                />
+              </React.Suspense>
             </div>
           ) : null}
           {mobileTerminalMounted ? (

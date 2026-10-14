@@ -362,6 +362,15 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
+                className="md:hidden"
+                onClick={onToggleTerminalPanel}
+              >
+                <span>Terminal</span>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+`")}
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={() => {
                   actionsRef.current.onOpenCommandPalette()
                 }}

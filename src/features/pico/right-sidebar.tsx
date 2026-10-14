@@ -1136,6 +1136,14 @@ export function RightSidebar({
     setActiveTab(tab)
   }
 
+  // On mobile, the Agent panel has its own top-level tab.
+  const leaveAgentTabEffectEvent = React.useEffectEvent(() => {
+    setActiveTab("review")
+  })
+  React.useEffect(() => {
+    if (isMobile && activeTab === "agent") leaveAgentTabEffectEvent()
+  }, [activeTab, isMobile])
+
   React.useEffect(() => {
     dispatchLocal({
       type: "reset-navigation",
@@ -1186,7 +1194,7 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
-          showAgent
+          showAgent={!isMobile}
           showPreview={Boolean(preview?.target) || activeTab === "preview"}
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab}

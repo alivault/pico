@@ -1233,6 +1233,10 @@ function useAppShellSessionWorkspaceView({
   }
 
   usePicoEvent("pico:open-sidebar-tab", (detail) => {
+    if (isMobile && detail.tab === "agent") {
+      setCurrentTab("agent")
+      return
+    }
     batch(() => {
       setRightSidebarActiveTab(rightSidebarStore, detail.tab)
       setGitPanelOpen(true)
@@ -1372,7 +1376,9 @@ function useAppShellSessionWorkspaceView({
     setStoreState(appUiStore, (current) => ({
       ...current,
       currentTab:
-        current.currentTab === "git" || current.currentTab === "terminal"
+        current.currentTab === "git" ||
+        current.currentTab === "agent" ||
+        current.currentTab === "terminal"
           ? "session"
           : current.currentTab,
       initialLoadingSessionId: sessionId
@@ -1388,7 +1394,7 @@ function useAppShellSessionWorkspaceView({
   React.useEffect(() => {
     if (isMobile) return
     setCurrentTab((tab) =>
-      tab === "git" || tab === "terminal" ? "session" : tab
+      tab === "git" || tab === "agent" || tab === "terminal" ? "session" : tab
     )
   }, [isMobile, setCurrentTab])
 
