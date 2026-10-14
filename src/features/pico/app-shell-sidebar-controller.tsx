@@ -803,11 +803,6 @@ function useAppShellSidebarControllerView({
       activeSessionKey={activeSidebarSessionKey || undefined}
       pinnedSessionKeys={pinnedSidebarSessionKeys}
       emptyStateText={emptySidebarStateText}
-      onCreateSession={() => {
-        void sessionWorkspaceRef.current?.createSession(undefined, {
-          closeMobileSidebar: true,
-        })
-      }}
       onOpenAddDirectoryDialog={() => {
         sessionWorkspaceRef.current?.openAddDirectoryDialog()
       }}

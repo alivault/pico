@@ -127,7 +127,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           <Button
             size="icon"
             variant="ghost"
-            className="shrink-0 md:group-data-[sidebar-state=expanded]/sidebar-wrapper:hidden"
+            className="shrink-0"
             aria-label="Create a new session"
             onClick={() => {
               void actionsRef.current.createSession()

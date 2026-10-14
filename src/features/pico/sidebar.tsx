@@ -71,7 +71,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -422,7 +421,6 @@ type AppSidebarProps = {
   activeSessionKey?: string
   pinnedSessionKeys: Array<string>
   emptyStateText: string
-  onCreateSession: () => void
   onOpenAddDirectoryDialog: () => void
   onOpenCommandPalette: () => void
   onOpenSettings: () => void
@@ -1550,18 +1548,16 @@ function DirectoryCollapseAllButton({
   )
 }
 
-type AppSidebarHeaderProps = {
+type AppSidebarSearchButtonProps = {
   onOpenSessionsDialog: () => void
-  onCreateSession: () => void
 }
 
-function AppSidebarHeader({
+function AppSidebarSearchButton({
   onOpenSessionsDialog,
-  onCreateSession,
-}: AppSidebarHeaderProps) {
+}: AppSidebarSearchButtonProps) {
   return (
-    <SidebarHeader className="gap-2 border-b border-sidebar-border/70">
-      <SidebarMenu className="gap-1">
+    <SidebarGroup className="pb-0">
+      <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
             <SearchIcon />
@@ -1571,17 +1567,8 @@ function AppSidebarHeader({
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton type="button" onClick={onCreateSession}>
-            <SquarePenIcon />
-            <span>New session</span>
-            <span className="ml-auto hidden items-center md:flex">
-              <Kbd>{formatShortcutLabel("Control+N")}</Kbd>
-            </span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
       </SidebarMenu>
-    </SidebarHeader>
+    </SidebarGroup>
   )
 }
 
@@ -1665,7 +1652,6 @@ function useAppSidebarView({
   activeSessionKey,
   pinnedSessionKeys,
   emptyStateText,
-  onCreateSession,
   onOpenAddDirectoryDialog,
   onOpenCommandPalette,
   onOpenSettings,
@@ -1898,12 +1884,8 @@ function useAppSidebarView({
       collapsible="offcanvas"
       className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
     >
-      <AppSidebarHeader
-        onOpenSessionsDialog={onOpenSessionsDialog}
-        onCreateSession={onCreateSession}
-      />
-
       <SidebarContent>
+        <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
