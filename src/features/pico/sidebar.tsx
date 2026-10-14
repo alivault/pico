@@ -695,8 +695,12 @@ function SidebarSessionItem({
       }
       className={cn(
         "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-8 not-data-active:hover:bg-transparent! not-data-active:hover:text-sidebar-foreground! not-data-active:data-open:hover:bg-transparent! not-data-active:data-open:hover:text-sidebar-foreground!",
-        (isActive || isSelected) &&
-          "bg-sidebar-accent text-sidebar-accent-foreground"
+        (isActive || isSelected) && "text-sidebar-accent-foreground",
+        (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
+        // A child row draws its highlight in an inset layer, so the tree
+        // lines stay clear. The click area stays the full row width.
+        nestingDepth > 0 &&
+          "isolate data-active:bg-transparent! active:bg-transparent!"
       )}
       onClick={(event) => {
         onSessionClick?.(entry, {
@@ -708,6 +712,15 @@ function SidebarSessionItem({
         }
       }}
     >
+      {nestingDepth > 0 && (isActive || isSelected) ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 -z-10 rounded-md bg-sidebar-accent"
+          style={{
+            left: `${0.625 + nestingDepth * SESSION_TREE_STEP_REM}rem`,
+          }}
+        />
+      ) : null}
       {entry.needsInput ? (
         <TitleTooltip title="The agent waits for your answer" side="right">
           <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
