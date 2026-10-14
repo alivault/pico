@@ -624,9 +624,11 @@ function SidebarSessionItem({
   onTogglePinnedSession,
 }: SidebarSessionItemProps) {
   const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
-  const nestingDepth = useSelector(directorySessionsStore, (state) =>
-    sessionNestingDepth(state.entriesByKey.get(entryKey), state.entriesByKey)
+  const treeGuides = useSelector(
+    directorySessionsStore,
+    (state) => state.treeGuidesByKey.get(entryKey) ?? ""
   )
+  const nestingDepth = treeGuides.length
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
     entryKey
@@ -784,6 +786,7 @@ function SidebarSessionItem({
       {...draggable.listeners}
     >
       {sessionButton}
+      {treeGuides ? <SidebarSessionTreeGuides guides={treeGuides} /> : null}
       {sessionTrailingControls}
     </div>
   )
@@ -860,6 +863,8 @@ type DirectorySessionsSnapshot = {
 type DirectorySessionsState = {
   sessionKeysByDirectory: Record<string, Array<string>>
   entriesByKey: Map<string, SessionListEntry>
+  /** Tree line codes per child session; see `buildSessionTreeGuides`. */
+  treeGuidesByKey: Map<string, string>
   loadingByDirectory: Record<string, boolean>
 }
 
@@ -943,26 +948,104 @@ function nestChildSessions(sessions: Array<SessionListEntry>) {
   return ordered
 }
 
-/** How many parents of a session are in the sidebar, for indentation. */
-function sessionNestingDepth(
-  entry: SessionListEntry | undefined,
-  entriesByKey: Map<string, SessionListEntry>
+const MAX_SESSION_NESTING_DEPTH = 4
+
+/**
+ * Tree line codes for each child session, in nested list order. The string
+ * has one character for each nesting level. "1" means the line at that level
+ * continues below the row, because a later sibling follows. "0" means it
+ * stops. The last character is the row's own connector.
+ */
+function buildSessionTreeGuides(
+  sessionsByDirectory: Record<string, Array<SessionListEntry>>
 ) {
-  let depth = 0
-  let parent = entry?.parent
-  while (parent && depth < 4) {
-    let found: SessionListEntry | undefined
-    for (const candidate of entriesByKey.values()) {
-      if (candidate.id === parent) {
-        found = candidate
-        break
+  const guidesByKey = new Map<string, string>()
+
+  for (const sessions of Object.values(sessionsByDirectory)) {
+    const ordered = nestChildSessions(sessions)
+    const ids = new Set(
+      ordered.flatMap((entry) => (entry.id ? [entry.id] : []))
+    )
+    const parentOf = (entry: SessionListEntry) =>
+      entry.parent && entry.parent !== entry.id && ids.has(entry.parent)
+        ? entry.parent
+        : undefined
+    const lastChildIndex = new Map<string, number>()
+    ordered.forEach((entry, index) => {
+      const parent = parentOf(entry)
+      if (parent) lastChildIndex.set(parent, index)
+    })
+    const indexById = new Map<string, number>()
+    const byId = new Map<string, SessionListEntry>()
+    ordered.forEach((entry, index) => {
+      if (entry.id && !indexById.has(entry.id)) {
+        indexById.set(entry.id, index)
+        byId.set(entry.id, entry)
       }
-    }
-    if (!found) break
-    depth += 1
-    parent = found.parent
+    })
+
+    ordered.forEach((entry, index) => {
+      const key = sessionListEntryKey(entry)
+      if (!key || guidesByKey.has(key)) return
+      let guides = ""
+      let current: SessionListEntry | undefined = entry
+      let currentIndex = index
+      const seen = new Set<SessionListEntry>()
+      while (current && guides.length < MAX_SESSION_NESTING_DEPTH) {
+        if (seen.has(current)) break
+        seen.add(current)
+        const parent = parentOf(current)
+        if (!parent) break
+        const hasLaterSibling = (lastChildIndex.get(parent) ?? -1) > currentIndex
+        guides = (hasLaterSibling ? "1" : "0") + guides
+        current = byId.get(parent)
+        currentIndex = indexById.get(parent) ?? -1
+      }
+      if (guides) guidesByKey.set(key, guides)
+    })
   }
-  return depth
+
+  return guidesByKey
+}
+
+const SESSION_TREE_STEP_REM = 0.875
+
+/** Hierarchy lines that join a child session row to its parent. */
+function SidebarSessionTreeGuides({ guides }: { guides: string }) {
+  const depth = guides.length
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+      {Array.from(guides).map((code, index) => {
+        const level = index + 1
+        const left = `${1 + (level - 1) * SESSION_TREE_STEP_REM}rem`
+        const continues = code === "1"
+        if (level < depth) {
+          // A line for an ancestor level, only when more siblings follow.
+          return continues ? (
+            <span
+              key={level}
+              className="absolute inset-y-0 w-px bg-sidebar-foreground/15"
+              style={{ left }}
+            />
+          ) : null
+        }
+        return (
+          <React.Fragment key={level}>
+            <span
+              className="absolute top-0 h-[1.125rem] w-2 rounded-bl-md border-b border-l border-sidebar-foreground/15"
+              style={{ left }}
+            />
+            {continues ? (
+              <span
+                className="absolute top-[1.125rem] bottom-0 w-px bg-sidebar-foreground/15"
+                style={{ left }}
+              />
+            ) : null}
+          </React.Fragment>
+        )
+      })}
+    </span>
+  )
 }
 
 function buildDirectorySessionKeys(
@@ -1043,6 +1126,7 @@ export function createDirectorySessionsStore(
     {
       sessionKeysByDirectory: buildDirectorySessionKeys(sessionsByDirectory),
       entriesByKey: buildDirectorySessionEntryMap(sessionsByDirectory),
+      treeGuidesByKey: buildSessionTreeGuides(sessionsByDirectory),
       loadingByDirectory,
     },
     sameDirectorySessionsState
@@ -1055,6 +1139,7 @@ export function createDirectorySessionsStore(
           nextSessionsByDirectory
         ),
         entriesByKey: buildDirectorySessionEntryMap(nextSessionsByDirectory),
+        treeGuidesByKey: buildSessionTreeGuides(nextSessionsByDirectory),
         loadingByDirectory: nextLoadingByDirectory,
       })
     },
