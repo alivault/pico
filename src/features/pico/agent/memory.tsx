@@ -192,7 +192,6 @@ function MemorySection({
           onValueChange={(value) => setScope(value as Scope)}
         >
           <SelectTrigger
-            size="sm"
             className="w-32 shrink-0"
             aria-label="Where the fact applies"
           >
@@ -207,12 +206,7 @@ function MemorySection({
             <SelectItem value="global">All projects</SelectItem>
           </SelectContent>
         </Select>
-        <Button
-          type="submit"
-          size="sm"
-          variant="outline"
-          disabled={!text.trim()}
-        >
+        <Button type="submit" variant="outline" disabled={!text.trim()}>
           Add
         </Button>
       </form>

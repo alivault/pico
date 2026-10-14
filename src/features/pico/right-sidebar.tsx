@@ -1194,7 +1194,9 @@ export function RightSidebar({
         />
         <div
           className={
-            activeTab === "agent" ? "min-h-0 flex-1 overflow-hidden" : "hidden"
+            activeTab === "agent"
+              ? "min-h-0 flex-1 overflow-hidden bg-background"
+              : "hidden"
           }
         >
           <AgentPanel
