@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useWaitingForAnswer } from "@/features/pico/agent/session-extensions"
 import {
   ArrowUpIcon,
   GitPullRequestArrowIcon,
@@ -557,6 +558,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   requestPathCompletions,
   requestFileCompletions,
 }: ComposerPromptEditorProps) {
+  const waitingForAnswer = useWaitingForAnswer()
   const slashCommands = useComposerSlashCommands({
     displaySettingsStore,
     sessionStore,
@@ -1013,11 +1015,13 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               onPaste={handlePaste}
               disabled={disabled}
               placeholder={
-                acceptFollowUps
-                  ? "Add a message to the queue..."
-                  : draftSkill
-                    ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                    : "Ask anything…"
+                waitingForAnswer
+                  ? "Type your answer…"
+                  : acceptFollowUps
+                    ? "Add a message to the queue…"
+                    : draftSkill
+                      ? `Ask with ${formatComposerSkillName(draftSkill)}…`
+                      : "Ask anything…"
               }
               className="max-h-[min(40dvh,18rem)] min-h-[22px] max-w-full min-w-0 flex-1 basis-[min(240px,100%)] resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
             />

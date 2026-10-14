@@ -644,6 +644,7 @@ export class Sessions implements HostSessions {
       },
       { sessionId: id }
     )
+    void this.publishStateIfWatched(id)
   }
 
   needsInput(id: string) {
@@ -1194,7 +1195,15 @@ export class Sessions implements HostSessions {
         ...(options.editorText !== undefined
           ? { editorText: options.editorText }
           : {}),
-        ...(busy ? { workingMessage: retryMessage(live) ?? "Working…" } : {}),
+        ...(busy
+          ? {
+              workingMessage:
+                retryMessage(live) ??
+                (this.#needsInput.has(id)
+                  ? "Waiting for your answer…"
+                  : "Working…"),
+            }
+          : {}),
       },
     }
   }

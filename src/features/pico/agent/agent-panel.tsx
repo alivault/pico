@@ -1,6 +1,13 @@
 import * as React from "react"
-import { BotIcon } from "lucide-react"
+import { BotIcon, CircleAlertIcon } from "lucide-react"
 
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import {
   useSessionExtensions,
@@ -25,6 +32,8 @@ export type AgentSection = {
   order: number
   /** Whether the section has something to show. */
   visible(state: SessionExtensionState): boolean
+  /** A short count or status next to the title, such as "2 of 5 done". */
+  summary?(state: SessionExtensionState): string | undefined
   Component: React.ComponentType<AgentSectionProps>
 }
 
@@ -55,7 +64,10 @@ export function AgentPanel({
 
   if (!sessionId) {
     return (
-      <AgentPanelEmpty text="Start a session to see its tasks, jobs, and helpers here." />
+      <AgentPanelEmpty
+        title="No session"
+        text="Start a session to see its plan, questions, jobs, and helpers here."
+      />
     )
   }
   if (query.isPending) {
@@ -66,41 +78,76 @@ export function AgentPanel({
       </div>
     )
   }
-  if (query.isError) {
-    return <AgentPanelEmpty text={query.error.message} />
-  }
-  if (visible.length === 0 || !state) {
+  if (query.isError || !state) {
     return (
-      <AgentPanelEmpty text="The agent has no plans, timers, jobs, or child sessions yet." />
+      <AgentPanelEmpty
+        icon={<CircleAlertIcon />}
+        title="Could not load the agent state"
+        text={query.error?.message ?? "Try again in a moment."}
+      />
     )
   }
 
   return (
     <div className="h-full min-h-0 overflow-y-auto">
-      <div className="space-y-5 p-3">
-        {visible.map((section) => (
-          <section key={section.key} className="space-y-2">
-            <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              {section.title}
-            </h3>
-            <section.Component
-              cwd={cwd}
-              sessionId={sessionId}
-              state={state}
-              viewerContextId={viewerContextId}
-            />
-          </section>
-        ))}
+      <div className="space-y-6 p-3">
+        {visible.map((section) => {
+          const summary = section.summary?.(state)
+          return (
+            <section
+              key={section.key}
+              aria-labelledby={`agent-section-${section.key}`}
+              className="space-y-2"
+            >
+              <div className="flex items-baseline justify-between gap-2 px-1">
+                <h3
+                  id={`agent-section-${section.key}`}
+                  className="text-sm font-semibold"
+                >
+                  {section.title}
+                </h3>
+                {summary ? (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {summary}
+                  </span>
+                ) : null}
+              </div>
+              <section.Component
+                cwd={cwd}
+                sessionId={sessionId}
+                state={state}
+                viewerContextId={viewerContextId}
+              />
+            </section>
+          )
+        })}
+        {visible.length <= 1 ? (
+          <p className="px-1 text-xs text-muted-foreground">
+            The agent&apos;s plan, questions, timers, jobs, child sessions, and
+            memory show here when it uses them.
+          </p>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function AgentPanelEmpty({ text }: { text: string }) {
+function AgentPanelEmpty({
+  icon = <BotIcon />,
+  text,
+  title,
+}: {
+  icon?: React.ReactNode
+  text: string
+  title: string
+}) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-      <BotIcon className="size-5" />
-      <p className="max-w-64">{text}</p>
-    </div>
+    <Empty className="h-full">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{text}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   )
 }

@@ -1,4 +1,11 @@
 import * as React from "react"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field"
 import { WandSparklesIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -445,24 +452,25 @@ function DeleteSessionsDialog({
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
         <p className="text-sm text-muted-foreground">This cannot be undone.</p>
         {worktreeTargets.length > 0 ? (
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
+          <Field orientation="horizontal">
+            <Checkbox
+              id="archive-remove-worktree"
               checked={removeWorktree}
-              onChange={(event) => onRemoveWorktreeChange(event.target.checked)}
+              onCheckedChange={(checked) => onRemoveWorktreeChange(checked)}
             />
-            <span>
-              Also remove{" "}
-              {worktreeTargets.length === 1
-                ? `the worktree (branch ${worktreeTargets[0]?.worktreeBranch})`
-                : `${worktreeTargets.length} worktrees`}
-              <span className="block text-xs text-muted-foreground">
-                Only a worktree without uncommitted changes is removed. The
-                branch stays.
-              </span>
-            </span>
-          </label>
+            <FieldContent>
+              <FieldLabel htmlFor="archive-remove-worktree">
+                Also remove{" "}
+                {worktreeTargets.length === 1
+                  ? `the worktree of branch ${worktreeTargets[0]?.worktreeBranch}`
+                  : `${worktreeTargets.length} worktrees`}
+              </FieldLabel>
+              <FieldDescription>
+                Pico removes a worktree only when it has no uncommitted changes.
+                The branch stays.
+              </FieldDescription>
+            </FieldContent>
+          </Field>
         ) : null}
         {targets.length > 1 ? (
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">

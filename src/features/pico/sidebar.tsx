@@ -714,15 +714,14 @@ function SidebarSessionItem({
       }}
     >
       {entry.needsInput ? (
-        <span
-          className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center"
-          title="Waiting for your answer"
-        >
-          <MessageCircleQuestionIcon
-            className="size-3.5 text-amber-500"
-            aria-label="Session needs input"
-          />
-        </span>
+        <TitleTooltip title="The agent waits for your answer" side="right">
+          <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
+            <MessageCircleQuestionIcon
+              className="size-3.5 text-amber-500"
+              aria-label="The agent waits for your answer"
+            />
+          </span>
+        </TitleTooltip>
       ) : entry.streaming ? (
         <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
           <Spinner size="xs" aria-label="Session streaming" />

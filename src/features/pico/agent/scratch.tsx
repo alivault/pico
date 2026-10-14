@@ -1,6 +1,15 @@
 import * as React from "react"
-import { NotebookTextIcon } from "lucide-react"
+import { ChevronRightIcon, NotebookTextIcon } from "lucide-react"
 
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { TextDialog } from "@/features/pico/agent/shared"
 import {
@@ -37,30 +46,43 @@ function ScratchSection({
   const [open, setOpen] = React.useState<ScratchEntry | null>(null)
   return (
     <>
-      <ul className="space-y-1">
+      <ItemGroup className="gap-1">
         {entries.map((entry) => (
-          <li key={entry.id}>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-sm hover:bg-muted/50"
-              onClick={() => setOpen(entry)}
-            >
-              <NotebookTextIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          <Item
+            key={entry.id}
+            size="sm"
+            className="py-1.5 hover:bg-muted/60"
+            render={
+              <button
+                type="button"
+                aria-label={`Show ${entry.name}`}
+                onClick={() => setOpen(entry)}
+              />
+            }
+          >
+            <ItemMedia variant="icon">
+              <NotebookTextIcon />
+            </ItemMedia>
+            <ItemContent className="min-w-0">
+              <ItemTitle className="block truncate">{entry.name}</ItemTitle>
+              <ItemDescription className="tabular-nums">
                 {entry.lines} lines · {formatBytes(entry.bytes)}
-              </span>
-            </button>
-          </li>
+                {entry.source ? ` · from ${entry.source}` : ""}
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <ChevronRightIcon className="size-4 text-muted-foreground" />
+            </ItemActions>
+          </Item>
         ))}
-      </ul>
+      </ItemGroup>
       {open ? (
         <TextDialog
           open
           onOpenChange={(next) => {
             if (!next) setOpen(null)
           }}
-          title={`${open.name} (${open.id})`}
+          title={open.name}
           path="/api/session/scratch"
           searchParams={{ id: open.id }}
           sessionId={sessionId}
@@ -76,6 +98,10 @@ registerAgentSection({
   title: "Scratchpad",
   order: 60,
   visible: (state) => Array.isArray(state.scratch) && state.scratch.length > 0,
+  summary(state) {
+    const count = (state.scratch as Array<unknown> | undefined)?.length ?? 0
+    return `${count} ${count === 1 ? "entry" : "entries"}`
+  },
   Component: ScratchSection,
 })
 

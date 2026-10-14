@@ -3,8 +3,25 @@ import { CheckIcon, MessageCircleQuestionIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
@@ -73,6 +90,23 @@ function questionFromArgs(args: Record<string, unknown>, id: string): Question {
   }
 }
 
+function SendHint() {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <Kbd>⌘</Kbd>
+      <Kbd>↩</Kbd>
+      to send
+    </span>
+  )
+}
+
+function submitOnCommandEnter(event: React.KeyboardEvent, send: () => void) {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault()
+    send()
+  }
+}
+
 export function QuestionForm({
   disabled,
   onAnswer,
@@ -86,17 +120,17 @@ export function QuestionForm({
   const [selected, setSelected] = React.useState<Array<string>>([])
   const [form, setForm] = React.useState<Record<string, string>>({})
   const options = question.options ?? []
+  const id = React.useId()
 
   if (question.kind === "confirm") {
     return (
       <div className="flex gap-2">
-        <Button disabled={disabled} onClick={() => onAnswer("yes")} size="sm">
+        <Button disabled={disabled} onClick={() => onAnswer("yes")}>
           <CheckIcon /> Yes
         </Button>
         <Button
           disabled={disabled}
           onClick={() => onAnswer("no")}
-          size="sm"
           variant="outline"
         >
           <XIcon /> No
@@ -108,48 +142,66 @@ export function QuestionForm({
   if (question.kind === "choice" || question.kind === "multi") {
     const multi = question.kind === "multi"
     return (
-      <div className="space-y-2">
-        <div className="flex flex-col gap-1.5">
-          {options.map((option) => {
-            const isSelected = selected.includes(option.label)
-            return (
-              <button
+      <div className="space-y-3">
+        {multi ? (
+          <FieldGroup className="gap-2">
+            {options.map((option, index) => {
+              const optionId = `${id}-option-${index}`
+              return (
+                <Field key={option.label} orientation="horizontal">
+                  <Checkbox
+                    id={optionId}
+                    disabled={disabled}
+                    checked={selected.includes(option.label)}
+                    onCheckedChange={(checked) =>
+                      setSelected((current) =>
+                        checked
+                          ? [...current, option.label]
+                          : current.filter((label) => label !== option.label)
+                      )
+                    }
+                  />
+                  <FieldContent>
+                    <FieldLabel htmlFor={optionId}>{option.label}</FieldLabel>
+                    {option.description ? (
+                      <FieldDescription>{option.description}</FieldDescription>
+                    ) : null}
+                  </FieldContent>
+                </Field>
+              )
+            })}
+          </FieldGroup>
+        ) : (
+          <div
+            className="flex flex-col gap-1.5"
+            role="group"
+            aria-label="Choices"
+          >
+            {options.map((option) => (
+              <Button
                 key={option.label}
                 type="button"
+                variant="outline"
                 disabled={disabled}
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:opacity-60",
-                  isSelected && "border-primary bg-primary/5"
-                )}
-                onClick={() => {
-                  if (!multi) {
-                    onAnswer(option.label)
-                    return
-                  }
-                  setSelected((current) =>
-                    current.includes(option.label)
-                      ? current.filter((label) => label !== option.label)
-                      : [...current, option.label]
-                  )
-                }}
+                className="h-auto w-full flex-col items-start gap-0.5 py-2 text-left whitespace-normal"
+                onClick={() => onAnswer(option.label)}
               >
                 <span className="font-medium">{option.label}</span>
                 {option.description ? (
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="text-xs font-normal text-muted-foreground">
                     {option.description}
                   </span>
                 ) : null}
-              </button>
-            )
-          })}
-        </div>
+              </Button>
+            ))}
+          </div>
+        )}
         {multi ? (
           <Button
-            disabled={disabled}
-            size="sm"
+            disabled={disabled || selected.length === 0}
             onClick={() => onAnswer(selected)}
           >
-            Send {selected.length > 0 ? `(${selected.length})` : ""}
+            {selected.length > 0 ? `Send ${selected.length} choices` : "Send"}
           </Button>
         ) : null}
         {question.allowOther ? (
@@ -164,12 +216,11 @@ export function QuestionForm({
               disabled={disabled}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="Another answer"
-              className="h-8"
+              placeholder="Or type another answer"
+              aria-label="Another answer"
             />
             <Button
               disabled={disabled || !text.trim()}
-              size="sm"
               type="submit"
               variant="outline"
             >
@@ -184,99 +235,121 @@ export function QuestionForm({
   if (question.kind === "form") {
     const fields = question.fields ?? []
     const missing = fields.some(
-      (field) => field.required && !form[field.name]?.trim()
+      (field) =>
+        field.required && field.type !== "boolean" && !form[field.name]?.trim()
     )
     return (
       <form
-        className="space-y-2"
+        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault()
           if (!missing) onAnswer(form)
         }}
       >
-        {fields.map((field) => {
-          const value = form[field.name] ?? ""
-          const set = (next: string) =>
-            setForm((current) => ({ ...current, [field.name]: next }))
-          return (
-            <label key={field.name} className="block space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">
+        <FieldGroup className="gap-4">
+          {fields.map((field) => {
+            const fieldId = `${id}-${field.name}`
+            const value = form[field.name] ?? ""
+            const set = (next: string) =>
+              setForm((current) => ({ ...current, [field.name]: next }))
+            const label = (
+              <FieldLabel htmlFor={fieldId}>
                 {field.label ?? field.name}
-                {field.required ? " *" : ""}
-              </span>
-              {field.type === "textarea" ? (
-                <Textarea
-                  disabled={disabled}
-                  value={value}
-                  placeholder={field.placeholder}
-                  onChange={(event) => set(event.target.value)}
-                />
-              ) : field.type === "boolean" ? (
-                <input
-                  type="checkbox"
-                  disabled={disabled}
-                  checked={value === "true"}
-                  onChange={(event) =>
-                    set(event.target.checked ? "true" : "false")
-                  }
-                />
-              ) : field.type === "select" ? (
-                <select
-                  disabled={disabled}
-                  value={value}
-                  onChange={(event) => set(event.target.value)}
-                  className="h-8 w-full rounded-md border bg-background px-2 text-sm"
-                >
-                  <option value="">Choose…</option>
-                  {(field.options ?? []).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  disabled={disabled}
-                  type={field.type === "number" ? "number" : "text"}
-                  value={value}
-                  placeholder={field.placeholder}
-                  onChange={(event) => set(event.target.value)}
-                  className="h-8"
-                />
-              )}
-            </label>
-          )
-        })}
-        <Button disabled={disabled || missing} size="sm" type="submit">
+                {field.required ? (
+                  <span className="text-muted-foreground"> (required)</span>
+                ) : null}
+              </FieldLabel>
+            )
+            if (field.type === "boolean")
+              return (
+                <Field key={field.name} orientation="horizontal">
+                  <Switch
+                    id={fieldId}
+                    disabled={disabled}
+                    checked={value === "true"}
+                    onCheckedChange={(checked) =>
+                      set(checked ? "true" : "false")
+                    }
+                  />
+                  {label}
+                </Field>
+              )
+            return (
+              <Field key={field.name}>
+                {label}
+                {field.type === "textarea" ? (
+                  <Textarea
+                    id={fieldId}
+                    disabled={disabled}
+                    value={value}
+                    placeholder={field.placeholder}
+                    onChange={(event) => set(event.target.value)}
+                  />
+                ) : field.type === "select" ? (
+                  <Select
+                    value={value || null}
+                    onValueChange={(next) => set(String(next ?? ""))}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger id={fieldId} className="w-full">
+                      <SelectValue
+                        placeholder={`Choose ${(field.label ?? field.name).toLowerCase()}`}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(field.options ?? []).map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id={fieldId}
+                    disabled={disabled}
+                    type={field.type === "number" ? "number" : "text"}
+                    value={value}
+                    placeholder={field.placeholder}
+                    onChange={(event) => set(event.target.value)}
+                  />
+                )}
+              </Field>
+            )
+          })}
+        </FieldGroup>
+        <Button disabled={disabled || missing} type="submit">
           Send
         </Button>
       </form>
     )
   }
 
+  const send = () => {
+    if (text.trim()) onAnswer(text.trim())
+  }
   return (
     <form
       className="space-y-2"
       onSubmit={(event) => {
         event.preventDefault()
-        if (text.trim()) onAnswer(text.trim())
+        send()
       }}
     >
       <Textarea
         disabled={disabled}
         value={text}
+        aria-label="Your answer"
         placeholder={question.placeholder ?? "Your answer"}
         onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault()
-            if (text.trim()) onAnswer(text.trim())
-          }
-        }}
+        onKeyDown={(event) => submitOnCommandEnter(event, send)}
       />
-      <Button disabled={disabled || !text.trim()} size="sm" type="submit">
-        Send
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button disabled={disabled || !text.trim()} type="submit">
+          Send
+        </Button>
+        <SendHint />
+      </div>
     </form>
   )
 }
@@ -314,9 +387,14 @@ function QuestionCard({ block }: ToolRendererProps) {
         waiting ? "border-primary/40 bg-primary/5" : "bg-muted/20"
       )}
     >
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center gap-2 text-xs font-medium",
+          waiting ? "text-primary" : "text-muted-foreground"
+        )}
+      >
         <MessageCircleQuestionIcon className="size-4" />
-        {waiting ? "Waiting for your answer" : "Question"}
+        {waiting ? "The agent waits for your answer" : "Question"}
         {sending ? <Spinner size="xs" /> : null}
       </div>
       {question.prompt ? <MarkdownBlock text={question.prompt} /> : null}
@@ -327,9 +405,11 @@ function QuestionCard({ block }: ToolRendererProps) {
           onAnswer={(value) => answer(questionId, value)}
         />
       ) : answered ? (
-        <div className="rounded-md border bg-background px-3 py-2">
-          <span className="text-xs text-muted-foreground">
-            {details.answer?.via === "chat" ? "Answered in chat: " : "Answer: "}
+        <div className="rounded-lg bg-muted/60 px-3 py-2">
+          <span className="block text-xs text-muted-foreground">
+            {details.answer?.via === "chat"
+              ? "You answered in chat"
+              : "Your answer"}
           </span>
           <span className="whitespace-pre-wrap">
             {details.answer?.text ??
@@ -338,7 +418,7 @@ function QuestionCard({ block }: ToolRendererProps) {
         </div>
       ) : (
         <div className="text-xs text-muted-foreground">
-          {block.isError ? "Closed without an answer." : null}
+          {block.isError ? "The question was closed without an answer." : null}
         </div>
       )}
     </div>

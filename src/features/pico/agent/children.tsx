@@ -1,5 +1,5 @@
 import {
-  ExternalLinkIcon,
+  ChevronRightIcon,
   GitForkIcon,
   MessageCircleQuestionIcon,
   SquareIcon,
@@ -8,6 +8,14 @@ import {
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { emitPicoEvent } from "@/features/pico/agent/events"
@@ -15,7 +23,12 @@ import {
   postSessionJson,
   useSessionExtensions,
 } from "@/features/pico/agent/session-extensions"
-import { errorText, relativeTime, useNow } from "@/features/pico/agent/shared"
+import {
+  errorText,
+  IconAction,
+  relativeTime,
+  useNow,
+} from "@/features/pico/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
@@ -51,7 +64,20 @@ function ChildStatus({ child }: { child: ChildSession }) {
       />
     )
   if (child.busy) return <Spinner size="xs" aria-label="Working" />
-  return <span className="size-2 shrink-0 rounded-full bg-emerald-500" />
+  return (
+    <span
+      className="size-2 shrink-0 rounded-full bg-emerald-500"
+      aria-label="Idle"
+    />
+  )
+}
+
+function childStatusText(child: ChildSession, now: number) {
+  if (child.needsInput) return "Waiting for your answer"
+  if (child.busy) return "Working"
+  return child.lastMessageAt
+    ? `Done ${relativeTime(child.lastMessageAt, now)}`
+    : "Idle"
 }
 
 function ChildRow({
@@ -64,57 +90,49 @@ function ChildRow({
   viewerContextId: string
 }) {
   return (
-    <li className="flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm">
-      <span className="mt-1 flex size-4 items-center justify-center">
-        <ChildStatus child={child} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{child.title}</div>
-        <div className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+    <Item variant="outline" size="sm" className="items-start gap-2 p-0 pr-1">
+      <button
+        type="button"
+        aria-label={`Open ${child.title}`}
+        className="flex min-w-0 flex-1 items-start gap-2.5 rounded-lg px-3 py-2 text-left outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={() =>
+          emitPicoEvent("pico:open-session", { sessionId: child.id })
+        }
+      >
+        <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
+          <ChildStatus child={child} />
+        </span>
+        <ItemContent className="min-w-0">
+          <ItemTitle className="block truncate">{child.title}</ItemTitle>
+          <ItemDescription className="truncate">
+            {childStatusText(child, now)}
+          </ItemDescription>
           {child.worktreeBranch ? (
-            <>
-              <GitForkIcon className="size-3 shrink-0" />
+            <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <GitForkIcon
+                className="size-3 shrink-0"
+                aria-label="Worktree branch"
+              />
               <span className="truncate">{child.worktreeBranch}</span>
-              <span>·</span>
-            </>
+            </span>
           ) : null}
-          <span>
-            {child.needsInput
-              ? "waiting for you"
-              : child.busy
-                ? "working"
-                : `idle ${relativeTime(child.lastMessageAt, now)}`}
-          </span>
-        </div>
-        {child.lastMessagePreview ? (
-          <div className="line-clamp-2 text-xs text-muted-foreground">
-            {child.lastMessagePreview}
-          </div>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 gap-0.5">
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          title="Open"
-          onClick={() =>
-            emitPicoEvent("pico:open-session", { sessionId: child.id })
-          }
-        >
-          <ExternalLinkIcon />
-        </Button>
-        {child.busy ? (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            title="Stop"
+        </ItemContent>
+        <ChevronRightIcon
+          className="mt-1 size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+      </button>
+      {child.busy ? (
+        <ItemActions className="self-center">
+          <IconAction
+            label="Stop the child session"
+            icon={<SquareIcon />}
+            tone="destructive"
             onClick={() => stopSession(viewerContextId, child.id)}
-          >
-            <SquareIcon />
-          </Button>
-        ) : null}
-      </div>
-    </li>
+          />
+        </ItemActions>
+      ) : null}
+    </Item>
   )
 }
 
@@ -130,7 +148,7 @@ function ChildrenSection({
   const busy = children.filter((child) => child.busy)
   return (
     <div className="space-y-2">
-      <ul className="space-y-1.5">
+      <ItemGroup className="gap-1.5">
         {children.map((child) => (
           <ChildRow
             key={child.id}
@@ -139,16 +157,17 @@ function ChildrenSection({
             viewerContextId={viewerContextId}
           />
         ))}
-      </ul>
+      </ItemGroup>
       {busy.length > 1 ? (
         <Button
           size="sm"
           variant="outline"
+          className="text-destructive"
           onClick={() => {
             for (const child of busy) stopSession(viewerContextId, child.id)
           }}
         >
-          <SquareIcon /> Stop all children
+          <SquareIcon /> Stop all {busy.length} child sessions
         </Button>
       ) : null}
     </div>
@@ -159,6 +178,11 @@ registerAgentSection({
   key: "children",
   title: "Child sessions",
   order: 15,
+  summary(state) {
+    const children = (state.children as Array<ChildSession> | undefined) ?? []
+    const working = children.filter((child) => child.busy).length
+    return working ? `${working} working` : undefined
+  },
   visible: (state) =>
     Array.isArray(state.children) && state.children.length > 0,
   Component: ChildrenSection,
@@ -197,7 +221,7 @@ function SpawnCard({ block }: ToolRendererProps) {
         ) : null}
         {details.sessionId ? (
           <Button
-            size="xs"
+            size="sm"
             variant="outline"
             onClick={() =>
               emitPicoEvent("pico:open-session", {

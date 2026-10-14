@@ -56,17 +56,29 @@ function TableView({ table }: { table: Table }) {
             {table.columns.map((column, index) => (
               <th
                 key={`${column}:${index}`}
-                className="cursor-pointer px-2 py-1.5 text-left font-medium whitespace-nowrap select-none"
-                onClick={() =>
-                  setSort((current) =>
-                    current?.column === index
-                      ? { column: index, asc: !current.asc }
-                      : { column: index, asc: true }
-                  )
+                aria-sort={
+                  sort?.column === index
+                    ? sort.asc
+                      ? "ascending"
+                      : "descending"
+                    : "none"
                 }
+                className="px-1 py-1 text-left font-medium whitespace-nowrap"
               >
-                {column}
-                {sort?.column === index ? (sort.asc ? " ▲" : " ▼") : ""}
+                <button
+                  type="button"
+                  className="rounded px-1 py-0.5 outline-none hover:bg-background/60 focus-visible:ring-2 focus-visible:ring-ring/50"
+                  onClick={() =>
+                    setSort((current) =>
+                      current?.column === index
+                        ? { column: index, asc: !current.asc }
+                        : { column: index, asc: true }
+                    )
+                  }
+                >
+                  {column}
+                  {sort?.column === index ? (sort.asc ? " ▲" : " ▼") : ""}
+                </button>
               </th>
             ))}
           </tr>
@@ -143,7 +155,12 @@ function ImageView({ src, title }: { src: string; title?: string }) {
   const [open, setOpen] = React.useState(false)
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        aria-label={`Show ${title ?? "the image"} larger`}
+        className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={() => setOpen(true)}
+      >
         <img
           src={src}
           alt={title ?? "Image"}

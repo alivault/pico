@@ -2,12 +2,23 @@ import * as React from "react"
 import { FileTextIcon, SquareIcon, SquareTerminalIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
   errorText,
+  FinishedGroup,
+  IconAction,
   relativeTime,
   TextDialog,
   useNow,
@@ -32,17 +43,22 @@ type Job = {
 function statusClass(job: Job) {
   if (job.status === "running") return "bg-amber-500 animate-pulse"
   if (job.status === "exited" && job.exitCode === 0) return "bg-emerald-500"
+  if (job.status === "stopped") return "bg-muted-foreground"
   return "bg-destructive"
 }
 
 function statusText(job: Job, now: number) {
   switch (job.status) {
     case "running":
-      return `running, started ${relativeTime(job.startedAt, now)}`
+      return `Running, started ${relativeTime(job.startedAt, now)}`
     case "exited":
-      return `exit ${job.exitCode} · ${relativeTime(job.endedAt, now)}`
+      return `${job.exitCode === 0 ? "Finished" : `Failed with code ${job.exitCode}`} ${relativeTime(job.endedAt, now)}`
+    case "stopped":
+      return `Stopped ${relativeTime(job.endedAt, now)}`
+    case "lost":
+      return `Lost in a server restart ${relativeTime(job.endedAt, now)}`
     default:
-      return `${job.status} · ${relativeTime(job.endedAt, now)}`
+      return `Could not start ${relativeTime(job.endedAt, now)}`
   }
 }
 
@@ -63,68 +79,73 @@ function JobsSection({
       jobId,
     }).catch((error: unknown) => toast.error(errorText(error)))
   }
+  const row = (job: Job) => {
+    const running = job.status === "running"
+    return (
+      <Item
+        key={job.id}
+        variant={running ? "outline" : "muted"}
+        size="sm"
+        className="py-2"
+      >
+        <ItemMedia>
+          <span
+            className={cn("size-2 rounded-full", statusClass(job))}
+            aria-hidden="true"
+          />
+        </ItemMedia>
+        <ItemContent className="min-w-0">
+          <TitleTooltip title={job.command}>
+            <ItemTitle className="block truncate">{job.name}</ItemTitle>
+          </TitleTooltip>
+          <ItemDescription>{statusText(job, now)}</ItemDescription>
+        </ItemContent>
+        <ItemActions className="gap-0.5">
+          {running ? (
+            <IconAction
+              label="Show in the terminal panel"
+              icon={<SquareTerminalIcon />}
+              onClick={() => openJobTerminal(job.id)}
+            />
+          ) : null}
+          <IconAction
+            label="Show the output"
+            icon={<FileTextIcon />}
+            onClick={() => setLogJob(job)}
+          />
+          {running ? (
+            <IconAction
+              label="Stop the job"
+              icon={<SquareIcon />}
+              tone="destructive"
+              onClick={() => stop(job.id)}
+            />
+          ) : null}
+        </ItemActions>
+      </Item>
+    )
+  }
+  const active = jobs.filter((job) => job.status === "running")
+  const finished = jobs.filter((job) => job.status !== "running")
   return (
     <>
-      <ul className="space-y-1.5">
-        {jobs.map((job) => (
-          <li
-            key={job.id}
-            className="flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm"
-          >
-            <span
-              className={cn(
-                "mt-1.5 size-2 shrink-0 rounded-full",
-                statusClass(job)
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium" title={job.command}>
-                {job.name}
-              </div>
-              <div className="truncate text-xs text-muted-foreground">
-                {statusText(job, now)}
-              </div>
-            </div>
-            <div className="flex shrink-0 gap-0.5">
-              {job.status === "running" ? (
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  title="Open in the terminal panel"
-                  onClick={() => openJobTerminal(job.id)}
-                >
-                  <SquareTerminalIcon />
-                </Button>
-              ) : null}
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                title="Show the log"
-                onClick={() => setLogJob(job)}
-              >
-                <FileTextIcon />
-              </Button>
-              {job.status === "running" ? (
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  title="Stop"
-                  onClick={() => stop(job.id)}
-                >
-                  <SquareIcon />
-                </Button>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="space-y-1.5">
+        {active.length ? (
+          <ItemGroup className="gap-1.5">{active.map(row)}</ItemGroup>
+        ) : (
+          <p className="px-1 text-xs text-muted-foreground">No job runs now.</p>
+        )}
+        <FinishedGroup count={finished.length}>
+          <ItemGroup className="gap-1.5">{finished.map(row)}</ItemGroup>
+        </FinishedGroup>
+      </div>
       {logJob ? (
         <TextDialog
           open
           onOpenChange={(open) => {
             if (!open) setLogJob(null)
           }}
-          title={`${logJob.name} (${logJob.id})`}
+          title={`Output of ${logJob.name}`}
           path="/api/session/job/log"
           searchParams={{ jobId: logJob.id, tail: 2000 }}
           refreshMs={logJob.status === "running" ? 2000 : undefined}
@@ -138,9 +159,14 @@ function JobsSection({
 
 registerAgentSection({
   key: "jobs",
-  title: "Jobs",
+  title: "Background jobs",
   order: 40,
   visible: (state) => Array.isArray(state.jobs) && state.jobs.length > 0,
+  summary(state) {
+    const jobs = (state.jobs as Array<Job> | undefined) ?? []
+    const running = jobs.filter((job) => job.status === "running").length
+    return running ? `${running} running` : undefined
+  },
   Component: JobsSection,
 })
 

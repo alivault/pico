@@ -1,8 +1,13 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { RefreshCwIcon } from "lucide-react"
+import { ChevronRightIcon, RefreshCwIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -10,7 +15,68 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { cn } from "@/lib/utils"
+
+/**
+ * An icon-only action with a tooltip and an accessible name. The default size
+ * gives a 28 px hit target, the smallest that the Apple HIG suggests for
+ * controls on a Mac.
+ */
+export function IconAction({
+  className,
+  disabled,
+  icon,
+  label,
+  onClick,
+  size = "icon-sm",
+  tone = "default",
+}: {
+  className?: string
+  disabled?: boolean
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  size?: "icon-xs" | "icon-sm"
+  tone?: "default" | "destructive"
+}) {
+  return (
+    <TitleTooltip title={label}>
+      <Button
+        type="button"
+        size={size}
+        variant="ghost"
+        aria-label={label}
+        disabled={disabled}
+        className={cn(
+          "text-muted-foreground hover:text-foreground",
+          tone === "destructive" && "hover:text-destructive",
+          className
+        )}
+        onClick={onClick}
+      >
+        {icon}
+      </Button>
+    </TitleTooltip>
+  )
+}
+
+/** A short hint that clarifies a control, with a tooltip on hover. */
+export function HintText({
+  children,
+  hint,
+  className,
+}: {
+  children: React.ReactNode
+  hint?: string
+  className?: string
+}) {
+  const text = (
+    <span className={cn("min-w-0 truncate", className)}>{children}</span>
+  )
+  return hint ? <TitleTooltip title={hint}>{text}</TitleTooltip> : text
+}
 
 /** "in 5m", "3h ago": a short time relative to now. */
 export function relativeTime(time: number | undefined, now = Date.now()) {
@@ -89,18 +155,17 @@ export function TextDialog({
   }, [query.data?.text])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{title}</span>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              title="Refresh"
+            <IconAction
+              label="Refresh"
+              icon={
+                query.isFetching ? <Spinner size="xs" /> : <RefreshCwIcon />
+              }
               onClick={() => void query.refetch()}
-            >
-              {query.isFetching ? <Spinner size="xs" /> : <RefreshCwIcon />}
-            </Button>
+            />
           </DialogTitle>
         </DialogHeader>
         <pre
@@ -113,5 +178,37 @@ export function TextDialog({
         </pre>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Finished items under a "Show N finished" line, closed at first, so active
+ * items stay at the top of a section.
+ */
+export function FinishedGroup({
+  children,
+  count,
+}: {
+  children: React.ReactNode
+  count: number
+}) {
+  if (count === 0) return null
+  return (
+    <Collapsible className="group/finished">
+      <CollapsibleTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="-ml-1 text-muted-foreground"
+          />
+        }
+      >
+        <ChevronRightIcon className="transition-transform group-data-[open]/finished:rotate-90" />
+        {count} finished
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-1.5">{children}</CollapsibleContent>
+    </Collapsible>
   )
 }

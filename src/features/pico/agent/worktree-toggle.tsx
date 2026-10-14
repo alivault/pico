@@ -1,15 +1,24 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckIcon, GitForkIcon } from "lucide-react"
+import { ChevronDownIcon, GitForkIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { cn } from "@/lib/utils"
@@ -72,71 +81,89 @@ export function NewSessionWorktreeToggle({
   const enabled = query.data.enabled
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            aria-label="Worktree for the new session"
-            className={cn(enabled && "text-foreground")}
-          />
+      <TitleTooltip
+        title={
+          enabled
+            ? "The new session gets its own git worktree"
+            : "The new session works in this directory"
         }
       >
-        <GitForkIcon className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">
-          {enabled
-            ? `Worktree${query.data.branch ? `: ${query.data.branch}` : ""}`
-            : "No worktree"}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 space-y-3">
-        <button
-          type="button"
-          className="flex w-full items-start gap-2 text-left text-sm"
-          onClick={() =>
-            mutation.mutate(
-              enabled
-                ? { enabled: false }
-                : { enabled: true, ...(branch.trim() ? { branch } : {}) }
-            )
+        <PopoverTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label="Worktree for the new session"
+              className={cn(enabled && "text-foreground")}
+            />
           }
         >
-          <span
-            className={cn(
-              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
-              enabled && "border-primary bg-primary text-primary-foreground"
-            )}
-          >
-            {enabled ? <CheckIcon className="size-3" /> : null}
+          <GitForkIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {enabled
+              ? `New worktree${query.data.branch ? `: ${query.data.branch}` : ""}`
+              : "No worktree"}
           </span>
-          <span>
-            <span className="font-medium">New worktree</span>
-            <span className="block text-xs text-muted-foreground">
-              The session works in its own git worktree and branch, so it does
-              not change files that other sessions use.
-            </span>
-          </span>
-        </button>
-        <form
-          className="flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            mutation.mutate({
-              enabled: true,
-              ...(branch.trim() ? { branch: branch.trim() } : {}),
-            })
-          }}
-        >
-          <Input
-            value={branch}
-            onChange={(event) => setBranch(event.target.value)}
-            placeholder="Branch name (optional)"
-            className="h-8"
-          />
-          <Button size="sm" type="submit" variant="outline">
-            Use
-          </Button>
-        </form>
+          <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
+        </PopoverTrigger>
+      </TitleTooltip>
+      <PopoverContent align="start" className="w-80">
+        <FieldGroup className="gap-4">
+          <Field orientation="horizontal">
+            <FieldContent>
+              <FieldLabel htmlFor="new-session-worktree">
+                New worktree
+              </FieldLabel>
+              <FieldDescription>
+                The session works in its own git worktree and branch, so it does
+                not change the files that other sessions use.
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="new-session-worktree"
+              checked={enabled}
+              disabled={mutation.isPending}
+              onCheckedChange={(checked) =>
+                mutation.mutate(
+                  checked
+                    ? { enabled: true, ...(branch.trim() ? { branch } : {}) }
+                    : { enabled: false }
+                )
+              }
+            />
+          </Field>
+          {enabled ? (
+            <Field>
+              <FieldLabel htmlFor="new-session-branch">Branch name</FieldLabel>
+              <form
+                className="flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  mutation.mutate({
+                    enabled: true,
+                    ...(branch.trim() ? { branch: branch.trim() } : {}),
+                  })
+                }}
+              >
+                <Input
+                  id="new-session-branch"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder="Made from the first prompt"
+                  className="h-8"
+                />
+                <Button
+                  size="sm"
+                  type="submit"
+                  variant="outline"
+                  disabled={(query.data.branch ?? "") === branch.trim()}
+                >
+                  Save
+                </Button>
+              </form>
+            </Field>
+          ) : null}
+        </FieldGroup>
       </PopoverContent>
     </Popover>
   )

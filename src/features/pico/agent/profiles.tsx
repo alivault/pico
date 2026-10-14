@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   registerAgentSection,
   type AgentSectionProps,
@@ -30,6 +31,11 @@ type Profile = {
   extensions?: Array<string>
   removeTools?: Array<string>
   instructions?: string
+}
+
+/** A profile name for display: "read-only" shows as "Read-only". */
+export function profileLabel(name: string) {
+  return name ? name[0]!.toUpperCase() + name.slice(1) : name
 }
 
 type ProfilesResponse = { ok: true; profiles: Array<Profile>; current: string }
@@ -93,21 +99,23 @@ export function ProfilePicker({
   const current = data.current
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            type="button"
-            variant={variant}
-            size={variant === "outline" ? "sm" : "default"}
-            aria-label="Tool profile"
-            disabled={mutation.isPending}
-          />
-        }
-      >
-        <LayersIcon className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">{current}</span>
-        <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
-      </DropdownMenuTrigger>
+      <TitleTooltip title="Tool profile: which tools the agent can use">
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant={variant}
+              size={variant === "outline" ? "sm" : "default"}
+              aria-label="Tool profile"
+              disabled={mutation.isPending}
+            />
+          }
+        >
+          <LayersIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{profileLabel(current)}</span>
+          <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
+        </DropdownMenuTrigger>
+      </TitleTooltip>
       <DropdownMenuContent align="start" className="w-80">
         {data.profiles.map((profile) => (
           <DropdownMenuItem
@@ -115,7 +123,7 @@ export function ProfilePicker({
             onClick={() => mutation.mutate(profile.name)}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="font-medium">{profile.name}</span>
+              <span className="font-medium">{profileLabel(profile.name)}</span>
               <span className="text-xs text-muted-foreground">
                 {profile.description}
               </span>
@@ -136,8 +144,8 @@ function SessionProfileSection({
   viewerContextId,
 }: AgentSectionProps) {
   return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-muted-foreground">Tool profile</span>
+    <div className="flex items-center justify-between gap-2 px-1 text-sm">
+      <span className="text-muted-foreground">Tools the agent can use</span>
       <ProfilePicker
         cwd={cwd}
         sessionId={sessionId}
@@ -202,7 +210,7 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
         <ul className="space-y-1">
           {(query.data?.profiles ?? []).map((profile) => (
             <li key={profile.name} className="text-xs">
-              <span className="font-medium">{profile.name}</span>
+              <span className="font-medium">{profileLabel(profile.name)}</span>
               <span className="text-muted-foreground">
                 {" "}
                 — {profile.description}

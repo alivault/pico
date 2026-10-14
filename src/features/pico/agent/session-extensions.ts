@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useToolRenderContext } from "@/features/pico/tool-renderers/registry"
 
 /** One value for each Agent panel state provider on the server. */
 export type SessionExtensionState = Record<string, unknown>
@@ -50,6 +51,14 @@ export function useSessionExtensions(
     enabled: Boolean(enabled && viewerContextId && sessionId),
     staleTime: 30_000,
   })
+}
+
+/** Whether the agent of the shown session waits for an answer from the user. */
+export function useWaitingForAnswer() {
+  const { viewerContextId, sessionId } = useToolRenderContext()
+  const query = useSessionExtensions(viewerContextId, sessionId)
+  const questions = query.data?.questions
+  return Array.isArray(questions) && questions.length > 0
 }
 
 /** Send a JSON request to a session route. */

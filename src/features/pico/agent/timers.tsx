@@ -1,16 +1,29 @@
 import { AlarmClockIcon, EyeIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
-import { errorText, relativeTime, useNow } from "@/features/pico/agent/shared"
+import {
+  errorText,
+  FinishedGroup,
+  IconAction,
+  relativeTime,
+  useNow,
+} from "@/features/pico/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
 } from "@/features/pico/tool-renderers/registry"
-import { cn } from "@/lib/utils"
 
 type TimerItem = {
   id: string
@@ -25,6 +38,33 @@ type TimerItem = {
   lastAt?: number
   lastOutput?: string
   endedAt?: number
+}
+
+const STATUS_TEXT: Record<TimerItem["status"], string> = {
+  pending: "Waiting",
+  done: "Done",
+  cancelled: "Cancelled",
+  failed: "Timed out",
+}
+
+function describe(item: TimerItem, now: number) {
+  const parts: Array<string> = []
+  if (item.status === "pending") {
+    parts.push(
+      item.nextAt && item.nextAt > now
+        ? `${item.kind === "watch" ? "Next check" : "Fires"} ${relativeTime(item.nextAt, now)}`
+        : "Due now"
+    )
+  } else {
+    parts.push(STATUS_TEXT[item.status])
+  }
+  if (item.every) parts.push(`every ${item.every}`)
+  if (item.cron) parts.push(`cron ${item.cron}`)
+  if (item.runs)
+    parts.push(
+      `${item.runs} ${item.kind === "watch" ? "check" : "run"}${item.runs === 1 ? "" : "s"}`
+    )
+  return parts.join(" · ")
 }
 
 function TimersSection({
@@ -43,70 +83,59 @@ function TimersSection({
       viewerContextId,
       sessionId,
       "/api/session/timer/cancel",
-      {
-        id,
-      }
+      { id }
     ).catch((error: unknown) => toast.error(errorText(error)))
   }
+  const row = (item: TimerItem) => {
+    const Icon = item.kind === "watch" ? EyeIcon : AlarmClockIcon
+    const pending = item.status === "pending"
+    return (
+      <Item
+        key={item.id}
+        variant={pending ? "outline" : "muted"}
+        size="sm"
+        className="py-2"
+      >
+        <ItemMedia variant="icon">
+          <Icon aria-label={item.kind === "watch" ? "Watch" : "Timer"} />
+        </ItemMedia>
+        <ItemContent className="min-w-0">
+          <TitleTooltip title={`Message: ${item.message}`}>
+            <ItemTitle className="block truncate">{item.label}</ItemTitle>
+          </TitleTooltip>
+          <ItemDescription>{describe(item, now)}</ItemDescription>
+          {item.lastOutput && item.kind === "watch" && pending ? (
+            <pre className="mt-1 line-clamp-3 font-mono text-[11px] whitespace-pre-wrap text-muted-foreground">
+              {item.lastOutput}
+            </pre>
+          ) : null}
+        </ItemContent>
+        {pending ? (
+          <ItemActions>
+            <IconAction
+              label={item.kind === "watch" ? "Stop watching" : "Cancel timer"}
+              icon={<XIcon />}
+              tone="destructive"
+              onClick={() => cancel(item.id)}
+            />
+          </ItemActions>
+        ) : null}
+      </Item>
+    )
+  }
+  const active = items.filter((item) => item.status === "pending")
+  const finished = items.filter((item) => item.status !== "pending")
   return (
-    <ul className="space-y-1.5">
-      {items.map((item) => {
-        const Icon = item.kind === "watch" ? EyeIcon : AlarmClockIcon
-        const pending = item.status === "pending"
-        return (
-          <li
-            key={item.id}
-            className={cn(
-              "group/timer flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm",
-              !pending && "opacity-60"
-            )}
-          >
-            <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate" title={item.message}>
-                {item.label}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                {pending ? (
-                  <span>
-                    {item.nextAt && item.nextAt > now
-                      ? `${item.kind === "watch" ? "checks" : "fires"} ${relativeTime(item.nextAt, now)}`
-                      : "due now"}
-                  </span>
-                ) : (
-                  <Badge variant="outline" className="h-4 px-1 text-[10px]">
-                    {item.status}
-                  </Badge>
-                )}
-                {item.every ? <span>· every {item.every}</span> : null}
-                {item.cron ? <span>· cron {item.cron}</span> : null}
-                {item.runs ? (
-                  <span>
-                    · {item.runs} {item.kind === "watch" ? "check" : "run"}
-                    {item.runs === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-              </div>
-              {item.lastOutput && item.kind === "watch" ? (
-                <pre className="mt-1 max-h-16 overflow-hidden text-[11px] whitespace-pre-wrap text-muted-foreground">
-                  {item.lastOutput}
-                </pre>
-              ) : null}
-            </div>
-            {pending ? (
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                title="Cancel"
-                onClick={() => cancel(item.id)}
-              >
-                <XIcon />
-              </Button>
-            ) : null}
-          </li>
-        )
-      })}
-    </ul>
+    <div className="space-y-1.5">
+      {active.length ? (
+        <ItemGroup className="gap-1.5">{active.map(row)}</ItemGroup>
+      ) : (
+        <p className="px-1 text-xs text-muted-foreground">Nothing waits now.</p>
+      )}
+      <FinishedGroup count={finished.length}>
+        <ItemGroup className="gap-1.5">{finished.map(row)}</ItemGroup>
+      </FinishedGroup>
+    </div>
   )
 }
 
@@ -115,6 +144,11 @@ registerAgentSection({
   title: "Timers and watches",
   order: 30,
   visible: (state) => Array.isArray(state.timers) && state.timers.length > 0,
+  summary(state) {
+    const items = (state.timers as Array<TimerItem> | undefined) ?? []
+    const waiting = items.filter((item) => item.status === "pending").length
+    return waiting ? `${waiting} waiting` : undefined
+  },
   Component: TimersSection,
 })
 

@@ -73,7 +73,7 @@ registerToolRenderer("git_diff", {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {details.truncated ? <span>The diff is cut.</span> : null}
           <Button
-            size="xs"
+            size="sm"
             variant="ghost"
             onClick={() =>
               emitPicoEvent("pico:open-sidebar-tab", { tab: "review" })

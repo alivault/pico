@@ -11,12 +11,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
   postSessionJson,
   useSessionExtensions,
 } from "@/features/pico/agent/session-extensions"
-import { errorText } from "@/features/pico/agent/shared"
+import { errorText, IconAction } from "@/features/pico/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
@@ -92,7 +94,7 @@ export function PreviewPanel({
   if (!sessionId || !preview?.target)
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-        No preview. Ask the agent to start the app and call preview_url.
+        No preview yet. Ask the agent to start the app and show it here.
       </div>
     )
   const port = ensured.data?.port ?? preview.port
@@ -101,7 +103,7 @@ export function PreviewPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-2">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border/70 p-2">
         <form
           className="min-w-0 flex-1"
           onSubmit={(event) => {
@@ -109,49 +111,56 @@ export function PreviewPanel({
             setReloadKey((key) => key + 1)
           }}
         >
-          <Input
-            value={path}
-            onChange={(event) => setPath(event.target.value)}
-            className="h-7 font-mono text-xs"
-            aria-label="Preview path"
-          />
+          <TitleTooltip title="The page of the app. Press Return to open it.">
+            <Input
+              value={path}
+              onChange={(event) => setPath(event.target.value)}
+              className="h-8 font-mono text-xs"
+              aria-label="Page path"
+            />
+          </TitleTooltip>
         </form>
-        {(Object.keys(WIDTHS) as Array<keyof typeof WIDTHS>).map((key) => {
-          const Icon =
-            key === "full"
-              ? MonitorIcon
-              : key === "tablet"
-                ? TabletIcon
-                : SmartphoneIcon
-          return (
-            <Button
-              key={key}
-              size="icon-xs"
-              variant={width === key ? "secondary" : "ghost"}
-              title={key === "full" ? "Full width" : `${WIDTHS[key]}px`}
-              onClick={() => setWidth(key)}
-            >
-              <Icon />
-            </Button>
-          )
-        })}
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          title="Reload"
-          onClick={() => setReloadKey((key) => key + 1)}
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          value={[width]}
+          onValueChange={(values) => {
+            const next = values[0] as keyof typeof WIDTHS | undefined
+            if (next) setWidth(next)
+          }}
+          aria-label="Page width"
         >
-          <RefreshCwIcon />
-        </Button>
+          {(Object.keys(WIDTHS) as Array<keyof typeof WIDTHS>).map((key) => {
+            const Icon =
+              key === "full"
+                ? MonitorIcon
+                : key === "tablet"
+                  ? TabletIcon
+                  : SmartphoneIcon
+            const label =
+              key === "full"
+                ? "Full width"
+                : `${key === "tablet" ? "Tablet" : "Phone"} width (${WIDTHS[key]} px)`
+            return (
+              <TitleTooltip key={key} title={label}>
+                <ToggleGroupItem value={key} aria-label={label}>
+                  <Icon />
+                </ToggleGroupItem>
+              </TitleTooltip>
+            )
+          })}
+        </ToggleGroup>
+        <IconAction
+          label="Reload"
+          icon={<RefreshCwIcon />}
+          onClick={() => setReloadKey((key) => key + 1)}
+        />
         {src ? (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            title="Open in a new tab"
-            render={<a href={src} target="_blank" rel="noreferrer" />}
-          >
-            <ExternalLinkIcon />
-          </Button>
+          <IconAction
+            label="Open in a new tab"
+            icon={<ExternalLinkIcon />}
+            onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
+          />
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 justify-center overflow-auto bg-muted/30">
@@ -218,7 +227,7 @@ function PreviewCard({ block }: ToolRendererProps) {
         </span>
       ) : details.port ? (
         <Button
-          size="xs"
+          size="sm"
           variant="outline"
           onClick={() =>
             emitPicoEvent("pico:open-sidebar-tab", { tab: "preview" })
