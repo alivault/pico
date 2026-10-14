@@ -52,6 +52,12 @@ const ROOT_MARKERS: Record<ServerKind, string[]> = {
   go: ["go.mod"],
 }
 
+const INSTALL_HINTS: Partial<Record<ServerKind, string>> = {
+  rust: "To install it, run `rustup component add rust-analyzer`.",
+  go: "To install it, run `go install golang.org/x/tools/gopls@latest`.",
+  python: "To install one, run `npm i -g pyright`.",
+}
+
 export function languageOf(path: string) {
   return LANGUAGES[extname(path).toLowerCase()]
 }
@@ -184,7 +190,7 @@ export class LspClient {
       })
       this.#process.once("exit", (code) => {
         const error = new Error(
-          `The ${kind} language server exited (code ${code}). ${this.stderr.trim()}`
+          `The ${kind} language server exited (code ${code}). ${this.stderr.trim()}${INSTALL_HINTS[kind] ? ` ${INSTALL_HINTS[kind]}` : ""}`
         )
         this.#fail(error)
         reject(error)
