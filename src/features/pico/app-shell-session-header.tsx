@@ -46,6 +46,8 @@ export type AppShellSessionHeaderActions = {
   onForkSession: () => void | Promise<unknown>
   onMoveCurrentSession: (directory: string) => void | Promise<unknown>
   onMoveCurrentSessionToAnyDirectory: () => void
+  onOpenCommandPalette: () => void
+  onOpenSettings: () => void
   onRenameSession: () => void
   onRunCompact: () => void | Promise<unknown>
   onToggleCurrentSessionPinned: () => void
@@ -346,6 +348,27 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 <span>Archive session</span>
                 <DropdownMenuShortcut>
                   {formatShortcutLabel("Control+X")}
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  actionsRef.current.onOpenCommandPalette()
+                }}
+              >
+                <span>Commands</span>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+K")}
+                </DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  actionsRef.current.onOpenSettings()
+                }}
+              >
+                <span>Settings</span>
+                <DropdownMenuShortcut>
+                  {formatShortcutLabel("Control+,")}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -806,12 +806,6 @@ function useAppShellSidebarControllerView({
       onOpenAddDirectoryDialog={() => {
         sessionWorkspaceRef.current?.openAddDirectoryDialog()
       }}
-      onOpenCommandPalette={() => {
-        sessionWorkspaceRef.current?.openCommandPalette()
-      }}
-      onOpenSettings={() => {
-        sessionWorkspaceRef.current?.openSettingsDialog()
-      }}
       onSessionClick={handleSidebarSessionClick}
       onRenameSession={(entry) => {
         sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)

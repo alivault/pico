@@ -24,7 +24,6 @@ import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDown,
-  CommandIcon,
   EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -32,7 +31,6 @@ import {
   MessageCircleQuestionIcon,
   SearchIcon,
   SquarePenIcon,
-  Settings2Icon,
 } from "lucide-react"
 
 import type { SessionListEntry } from "@/lib/pico/api"
@@ -67,7 +65,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -422,8 +419,6 @@ type AppSidebarProps = {
   pinnedSessionKeys: Array<string>
   emptyStateText: string
   onOpenAddDirectoryDialog: () => void
-  onOpenCommandPalette: () => void
-  onOpenSettings: () => void
   onSessionClick?: (
     entry: SessionListEntry,
     modifiers: SessionClickModifiers
@@ -1653,8 +1648,6 @@ function useAppSidebarView({
   pinnedSessionKeys,
   emptyStateText,
   onOpenAddDirectoryDialog,
-  onOpenCommandPalette,
-  onOpenSettings,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -2063,29 +2056,6 @@ function useAppSidebarView({
           </DragOverlay>
         </DndContext>
       </SidebarContent>
-
-      <SidebarFooter className="gap-2 border-t border-sidebar-border/70">
-        <SidebarMenu className="gap-1">
-          <SidebarMenuItem>
-            <SidebarMenuButton type="button" onClick={onOpenCommandPalette}>
-              <CommandIcon />
-              <span>Commands</span>
-              <span className="ml-auto hidden items-center md:flex">
-                <Kbd>{formatShortcutLabel("Control+K")}</Kbd>
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton type="button" onClick={onOpenSettings}>
-              <Settings2Icon />
-              <span>Settings</span>
-              <span className="ml-auto hidden items-center md:flex">
-                <Kbd>{formatShortcutLabel("Control+,")}</Kbd>
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
 
       <SidebarRail />
     </Sidebar>

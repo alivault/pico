@@ -3438,6 +3438,8 @@ function useAppShellSessionWorkspaceView({
     onMoveCurrentSession: moveCurrentSessionToDirectory,
     onMoveCurrentSessionToAnyDirectory:
       openMoveSessionDirectoryDialogForCurrentSession,
+    onOpenCommandPalette: openCommandPalette,
+    onOpenSettings: openSettingsDialog,
     onRenameSession: openRenameDialog,
     onRunCompact: runCompact,
     onToggleCurrentSessionPinned: toggleCurrentSessionPinned,
