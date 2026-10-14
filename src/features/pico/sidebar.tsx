@@ -685,16 +685,8 @@ function SidebarSessionItem({
       data-sidebar-session-item
       data-session-key={entryKey}
       isActive={isActive || isSelected}
-      style={
-        nestingDepth > 0
-          ? ({
-              paddingLeft: `${2 + nestingDepth * 0.875}rem`,
-              "--pico-session-indent": `${nestingDepth * 0.875}rem`,
-            } as React.CSSProperties)
-          : undefined
-      }
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-2 pl-8 not-data-active:hover:bg-transparent! not-data-active:hover:text-sidebar-foreground! not-data-active:data-open:hover:bg-transparent! not-data-active:data-open:hover:text-sidebar-foreground!",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] not-data-active:hover:bg-transparent! not-data-active:hover:text-sidebar-foreground! not-data-active:data-open:hover:bg-transparent! not-data-active:data-open:hover:text-sidebar-foreground!",
         (isActive || isSelected) && "text-sidebar-accent-foreground",
         (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
         // A child row draws its highlight in an inset layer, so the tree
@@ -715,15 +707,12 @@ function SidebarSessionItem({
       {nestingDepth > 0 && (isActive || isSelected) ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 -z-10 rounded-md bg-sidebar-accent"
-          style={{
-            left: `${0.625 + nestingDepth * SESSION_TREE_STEP_REM}rem`,
-          }}
+          className="pointer-events-none absolute inset-y-0 right-0 left-(--session-highlight-start) -z-10 rounded-md bg-sidebar-accent"
         />
       ) : null}
       {entry.needsInput ? (
         <TitleTooltip title="The agent waits for your answer" side="right">
-          <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
+          <span className={SESSION_STATUS_ICON_CLASS}>
             <MessageCircleQuestionIcon
               className="size-3.5 text-amber-500"
               aria-label="The agent waits for your answer"
@@ -731,11 +720,11 @@ function SidebarSessionItem({
           </span>
         </TitleTooltip>
       ) : entry.streaming ? (
-        <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
+        <span className={SESSION_STATUS_ICON_CLASS}>
           <Spinner size="xs" aria-label="Session streaming" />
         </span>
       ) : showUnread ? (
-        <span className="absolute top-2.5 left-[calc(0.5rem+var(--pico-session-indent,0rem))] flex size-4 items-center justify-center">
+        <span className={SESSION_STATUS_ICON_CLASS}>
           <span
             className="size-2 rounded-full bg-primary"
             aria-label="Session done"
@@ -771,7 +760,7 @@ function SidebarSessionItem({
   )
 
   const sessionTrailingControls = hasTimestamp ? (
-    <span className="absolute top-2.5 right-2 z-10 flex min-w-4 items-center justify-end">
+    <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
       <TitleTooltip
         title={isMobile ? undefined : exactTimestamp}
         side="right"
@@ -792,9 +781,12 @@ function SidebarSessionItem({
         "group/session relative",
         draggable.isDragging && !overlay && "opacity-40"
       )}
-      style={{
-        transform: CSS.Translate.toString(draggable.transform),
-      }}
+      style={
+        {
+          transform: CSS.Translate.toString(draggable.transform),
+          ...sessionTreeStyle(nestingDepth),
+        } as React.CSSProperties
+      }
       {...draggable.attributes}
       {...draggable.listeners}
     >
@@ -1021,7 +1013,32 @@ function buildSessionTreeGuides(
   return guidesByKey
 }
 
-const SESSION_TREE_STEP_REM = 0.875
+/** Status icon slot of a session row, on the sidebar icon column. */
+const SESSION_STATUS_ICON_CLASS =
+  "absolute top-(--sidebar-row-icon-top) left-[calc(var(--sidebar-item-pad)+var(--session-indent))] flex size-(--sidebar-icon) items-center justify-center"
+
+/**
+ * CSS variables for a session row at a nesting depth. The row padding, status
+ * icon, tree lines, and indented highlight all read them.
+ *
+ *   --session-indent           extra inset for the depth
+ *   --session-tree-line        x of the row's own tree line: the center of the
+ *                              parent's status icon
+ *   --session-highlight-start  x where the elbow ends and the highlight starts
+ */
+function sessionTreeStyle(depth: number) {
+  return {
+    "--session-indent": `calc(${depth} * var(--sidebar-tree-step))`,
+    "--session-tree-line": `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${Math.max(depth - 1, 0)} * var(--sidebar-tree-step))`,
+    "--session-highlight-start":
+      "calc(var(--session-tree-line) + var(--sidebar-tree-elbow))",
+  }
+}
+
+/** x of the tree line at a level, from 0 for the top level. */
+function sessionTreeLineLeft(level: number) {
+  return `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${level} * var(--sidebar-tree-step))`
+}
 
 /** Hierarchy lines that join a child session row to its parent. */
 function SidebarSessionTreeGuides({ guides }: { guides: string }) {
@@ -1029,30 +1046,23 @@ function SidebarSessionTreeGuides({ guides }: { guides: string }) {
   return (
     <span aria-hidden="true" className="pointer-events-none absolute inset-0">
       {Array.from(guides).map((code, index) => {
-        const level = index + 1
-        const left = `${1 + (level - 1) * SESSION_TREE_STEP_REM}rem`
         const continues = code === "1"
-        if (level < depth) {
+        if (index < depth - 1) {
           // A line for an ancestor level, only when more siblings follow.
           return continues ? (
             <span
-              key={level}
+              key={index}
               className="absolute inset-y-0 w-px bg-sidebar-foreground/15"
-              style={{ left }}
+              style={{ left: sessionTreeLineLeft(index) }}
             />
           ) : null
         }
+        // The row's own elbow ends at the status icon's vertical center.
         return (
-          <React.Fragment key={level}>
-            <span
-              className="absolute top-0 h-[1.125rem] w-2 rounded-bl-md border-b border-l border-sidebar-foreground/15"
-              style={{ left }}
-            />
+          <React.Fragment key={index}>
+            <span className="absolute top-0 left-(--session-tree-line) h-[calc(var(--sidebar-row-icon-top)+var(--sidebar-icon)/2)] w-(--sidebar-tree-elbow) rounded-bl-md border-b border-l border-sidebar-foreground/15" />
             {continues ? (
-              <span
-                className="absolute top-[1.125rem] bottom-0 w-px bg-sidebar-foreground/15"
-                style={{ left }}
-              />
+              <span className="absolute top-[calc(var(--sidebar-row-icon-top)+var(--sidebar-icon)/2)] bottom-0 left-(--session-tree-line) w-px bg-sidebar-foreground/15" />
             ) : null}
           </React.Fragment>
         )
@@ -1283,9 +1293,10 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     )
 
   const directoryHeader = (
-    // pl-2 puts the folder icon on the sidebar's icon column. The new-session
-    // button stays flush right, so its icon ends on the right content edge.
-    <div className="flex items-center gap-2 rounded-lg pl-2">
+    // Left item-pad puts the folder icon on the sidebar icon column. The
+    // new-session button stays flush right: its item-size box already holds
+    // the item-pad, so its icon ends on the right content edge.
+    <div className="flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
       <CollapsibleTrigger
         type="button"
         className={cn(
@@ -1457,7 +1468,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   {hasMoreSessions ? (
                     <Button
                       variant="ghost"
-                      className="h-8 justify-start pl-8 text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                      className="h-8 justify-start pl-(--sidebar-text-inset) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                       onClick={() => {
                         setRenderCount((current) =>
                           Math.min(
@@ -1687,8 +1698,8 @@ function AppSidebarDirectoriesHeader({
   const searchActive = sessionSearch.trim().length > 0
 
   return (
-    // pr-0: the size-8 icon buttons hold their own 8px inset, so their icons
-    // end on the right content edge, with the search Kbd.
+    // pr-0: the item-size icon buttons already hold the item-pad, so their
+    // icons end on the right content edge, with the search Kbd.
     <SidebarGroupLabel className="justify-between gap-3 pr-0">
       <CollapsibleTrigger
         type="button"

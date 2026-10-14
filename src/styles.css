@@ -60,6 +60,34 @@
 }
 
 @layer base {
+  /*
+   * Sidebar spacing grid. The header toggle, sidebar icons, sidebar text, and
+   * the right content edge all come from these values.
+   *
+   *   icon column  = gutter + item-pad        (sidebar edge to row icon)
+   *   text inset   = item-pad + icon + gap    (row edge to row text)
+   *   right edge   = gutter + item-pad        (sidebar edge to row end)
+   *
+   * item-pad centers an icon in an item-size box. This is why a size-8 icon
+   * button needs no extra padding to put its icon on the grid.
+   */
+  :root {
+    --sidebar-gutter: 0.5rem;
+    --sidebar-item-size: 2rem;
+    --sidebar-icon: 1rem;
+    --sidebar-gap: 0.5rem;
+    --sidebar-item-pad: calc(
+      (var(--sidebar-item-size) - var(--sidebar-icon)) / 2
+    );
+    --sidebar-text-inset: calc(
+      var(--sidebar-item-pad) + var(--sidebar-icon) + var(--sidebar-gap)
+    );
+    /* Session rows: status icon offset from the row top, and tree lines. */
+    --sidebar-row-icon-top: 0.625rem;
+    --sidebar-tree-step: 0.875rem;
+    --sidebar-tree-elbow: 0.5rem;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
