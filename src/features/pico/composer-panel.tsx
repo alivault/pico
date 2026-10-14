@@ -498,7 +498,7 @@ export function ComposerPanel({
 
   if (flush) return content
 
-  return <div className="p-4">{content}</div>
+  return <div className="border-t p-4">{content}</div>
 }
 
 const ComposerAttachments = React.memo(function ComposerAttachments({
