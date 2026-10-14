@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Publish npm package and GitHub release
+    runs-on: ubuntu-latest
+    environment: npm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Read package metadata
+        id: package
+        working-directory: apps/pico
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        run: |
+          expected="v${{ steps.package.outputs.version }}"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $expected."
+            exit 1
+          fi
+
+      - name: Check
+        run: pnpm check
+
+      - name: Pack
+        working-directory: apps/pico
+        # pnpm replaces catalog: versions; npm publishes with trusted publishing.
+        run: pnpm pack --pack-destination "$RUNNER_TEMP"
+
+      - name: Publish to npm
+        working-directory: apps/pico
+        run: |
+          spec="${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}"
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "$spec is already published."
+            exit 0
+          fi
+          version="${{ steps.package.outputs.version }}"
+          tag=latest
+          if [[ "$version" == *-* ]]; then tag=next; fi
+          npx --yes npm@latest publish "$RUNNER_TEMP"/*.tgz --access public --provenance --tag "$tag"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists."
+            exit 0
+          fi
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${flags[@]}"

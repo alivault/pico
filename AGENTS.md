@@ -21,13 +21,11 @@
 
 ## Releases
 
-When the user says "release a new patch, minor, or major version", do all of these steps from `apps/pico`:
+When the user says "release a new patch, minor, or major version":
 
-1. Read the current version in `apps/pico/package.json` and increase the patch, minor, or major number (for example, patch `1.0.1` -> `1.0.2`, minor -> `1.1.0`, major -> `2.0.0`).
-2. Make sure the working tree is clean. Commit or ask about uncommitted changes first.
-3. Run `pnpm build:web` so the local production web (port 3141) uses the latest client.
-4. Run `pnpm release <version>`. It runs `pnpm check`, sets the version in `package.json` and `server/package.json`, builds, and does an `npm pack` dry run. It does not commit, tag, push, or publish.
-5. Commit the two `package.json` files with the message `release v<version>`.
-6. Make a lightweight tag `v<version>` and push the branch and the tag together: `git push --atomic origin main v<version>`.
-7. Publish with `pnpm publish --no-git-checks` in a terminal that the user can see (for example, a Herdr pane). npm asks for web authentication. Press Enter to open the sign-in page, and wait for the user to approve it. A non-interactive shell fails with `EOTP`.
-8. Look for `+ @alivault/pico@<version>` in the output. `npm view @alivault/pico version` can show the old version for a few minutes.
+1. Make sure the working tree is clean. Commit or ask about uncommitted changes first.
+2. From the repo root, run `pnpm release patch` (or `minor` or `major`). `pnpm release <version>` sets an exact version, for example a prerelease such as `1.2.0-beta.1`.
+   - The script (`apps/pico/scripts/release.mjs`) checks that you are on an up-to-date `main`, runs `pnpm check`, sets the version in `apps/pico/package.json` and `apps/pico/server/package.json`, builds (this also updates the local production web on port 3141), commits `release v<version>`, tags `v<version>`, and pushes the branch and the tag together.
+   - Use `--no-push` to stop before the push.
+3. The tag push starts `.github/workflows/release.yml`. It checks the code, publishes to npm with trusted publishing (no OTP), and creates the GitHub release with generated notes. Prerelease versions get the npm `next` tag.
+4. Watch the run with `gh run watch $(gh run list -w release.yml -L 1 --json databaseId -q '.[0].databaseId')`. Report the result. If a step fails, fix the cause and run `gh run rerun --failed <id>`. The publish and release steps skip work that is already done.
