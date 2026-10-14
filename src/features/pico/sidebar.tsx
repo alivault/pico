@@ -1381,7 +1381,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         isDragging && !overlay && "opacity-0"
       )}
     >
-      <SidebarGroup className="py-0">
+      <SidebarGroup className="px-0 py-0">
         {hasDirectoryActions && !isMobile ? (
           <ContextMenu>
             <ContextMenuTrigger render={directoryHeader} />
