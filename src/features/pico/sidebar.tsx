@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
+  ArchiveIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronsDownUpIcon,
@@ -433,6 +434,7 @@ type AppSidebarProps = {
   onDeleteOldSessionsInDirectory?: (directory: string) => void
   onRemoveDirectory?: (directory: string) => void
   onReorderDirectories?: (nextDirectories: Array<string>) => void
+  onOpenArchivedSessions?: () => void
 }
 
 type SortableDirectoryGroupProps = {
@@ -1772,6 +1774,7 @@ function useAppSidebarView({
   onDeleteOldSessionsInDirectory,
   onRemoveDirectory,
   onReorderDirectories,
+  onOpenArchivedSessions,
 }: AppSidebarProps) {
   const { isMobile, setOpenMobile } = useSidebar()
   const searchActive = sessionSearch.trim().length > 0
@@ -2168,6 +2171,25 @@ function useAppSidebarView({
             ) : null}
           </DragOverlay>
         </DndContext>
+        {onOpenArchivedSessions ? (
+          <SidebarGroup className="mt-auto pt-0">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  type="button"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false)
+                    onOpenArchivedSessions()
+                  }}
+                >
+                  <ArchiveIcon />
+                  <span>Archived sessions</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
 
       <SidebarRail />

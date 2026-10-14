@@ -14,6 +14,8 @@ export function picoSessionScopeKey(sessionLike: {
 export const picoQueryKeys = {
   piPerformance: (viewerContextId: string) =>
     ["pico", "pi-performance", viewerContextId] as const,
+  archivedSessions: (viewerContextId: string) =>
+    ["pico", "archived-sessions", viewerContextId] as const,
   directorySessionsIndex: (viewerContextId: string, directory: string) =>
     ["pico", "directory-sessions-index", viewerContextId, directory] as const,
   gitStatus: (viewerContextId: string, cwd: string) =>

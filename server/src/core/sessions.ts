@@ -105,8 +105,10 @@ export type SessionMeta = {
   nameSource?: "user" | "auto"
   createdAt: number
   modifiedAt: number
-  /** Deleted by the user. */
+  /** Archived by the user. The session stays on disk and can be restored. */
   archived?: boolean
+  /** When the user archived the session. */
+  archivedAt?: number
   /** Replaced by a tree navigation fork, which is the session now. */
   replacedBy?: string
   /** First conversation of the session's family. */
@@ -1681,9 +1683,33 @@ export class Sessions implements HostSessions {
     this.meta(id)
     if (this.isBusy(id))
       throw badRequest("Wait for the session to finish before archiving it.")
-    this.#updateMeta(id, { archived: true })
+    this.#updateMeta(id, { archived: true, archivedAt: Date.now() })
     this.#viewers.forget(id)
     this.#scheduleSessionsBroadcast()
+  }
+
+  /** Make an archived session visible again. */
+  restore(id: string) {
+    const meta = this.meta(id)
+    if (!meta.archived) return
+    this.#updateMeta(id, { archived: undefined, archivedAt: undefined })
+    this.#scheduleSessionsBroadcast()
+  }
+
+  /** Archived sessions, most recently archived first. */
+  archivedSessions() {
+    return [...this.#metas.entries()]
+      .filter(([, meta]) => meta.archived && !meta.replacedBy)
+      .sort(
+        (left, right) =>
+          (right[1].archivedAt ?? activity(right[1])) -
+          (left[1].archivedAt ?? activity(left[1]))
+      )
+      .map(([id, meta]) => ({
+        ...this.summary(id, new Set()),
+        directory: meta.group ?? meta.cwd,
+        ...(meta.archivedAt ? { archivedAt: iso(meta.archivedAt) } : {}),
+      }))
   }
 
   async move(id: string, cwd: string) {
@@ -1907,7 +1933,10 @@ export class Sessions implements HostSessions {
     this.#docs.set(id, {})
     const transcript = await this.transcript(id)
     const summary = summarize(transcript.entries)
-    this.#updateMeta(id, { ...summary, ...(meta.family ? {} : { family: id }) })
+    this.#updateMeta(id, {
+      ...summary,
+      ...(meta.family ? {} : { family: id }),
+    })
     return id
   }
 

@@ -34,6 +34,7 @@ import {
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
 } from "@/lib/pico"
 import type { SessionListEntry } from "@/lib/pico/api"
+import { ArchivedSessionsDialog } from "@/features/pico/archived-sessions-dialog"
 
 const PINNED_SESSION_STORE_DIRECTORY = "__pico_pinned_sessions__"
 
@@ -86,6 +87,7 @@ function useAppShellSidebarControllerView({
   sidebarStore,
   sessionWorkspaceRef,
 }: AppShellSidebarControllerProps) {
+  const [archivedSessionsOpen, setArchivedSessionsOpen] = React.useState(false)
   const [directorySessionsStore] = React.useState(() =>
     createDirectorySessionsStore({}, {})
   )
@@ -789,66 +791,91 @@ function useAppShellSidebarControllerView({
     }
   }
 
+  const showRestoredSessionDirectory = (directory: string) => {
+    sidebarStore.setSidebarDirectories((current) => {
+      const normalizedCurrent = normalizeStoredDirectoryList(current)
+      if (normalizedCurrent.includes(directory)) return current
+      const next = normalizeStoredDirectoryList([
+        ...normalizedCurrent,
+        directory,
+      ])
+      safeLocalStorageSetItem(
+        SIDEBAR_DIRECTORIES_STORAGE_KEY,
+        JSON.stringify(next)
+      )
+      return next
+    })
+  }
+
   return (
-    <AppSidebar
-      sessionSearch={sessionSearch}
-      onOpenSessionsDialog={() => {
-        sessionWorkspaceRef.current?.openSessionsDialog()
-      }}
-      visibleDirectories={visibleDirectories}
-      directorySessionsStore={directorySessionsStore}
-      matchingSessionCount={matchingSessionCount}
-      selectedSessionKeys={selectedSidebarSessionKeys}
-      activeSessionId={activeSidebarSessionId || undefined}
-      activeSessionKey={activeSidebarSessionKey || undefined}
-      pinnedSessionKeys={pinnedSidebarSessionKeys}
-      emptyStateText={emptySidebarStateText}
-      onOpenAddDirectoryDialog={() => {
-        sessionWorkspaceRef.current?.openAddDirectoryDialog()
-      }}
-      onSessionClick={handleSidebarSessionClick}
-      onRenameSession={(entry) => {
-        sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
-      }}
-      onDeleteSession={(entry) => {
-        sessionWorkspaceRef.current?.openDeleteDialog([entry])
-      }}
-      onSetSessionUnread={(entry, unread) => {
-        void sessionWorkspaceRef.current?.setSessionUnread(entry, unread)
-      }}
-      onMoveSession={(entry, directory) => {
-        void sessionWorkspaceRef.current?.moveSessionToDirectory(
-          entry,
-          directory
-        )
-      }}
-      onMoveSessionAnyDirectory={(entry) => {
-        sessionWorkspaceRef.current?.openMoveSessionDirectoryDialogForEntry(
-          entry
-        )
-      }}
-      onTogglePinnedSession={togglePinnedSession}
-      onCreateSessionInDirectory={(directory) => {
-        void sessionWorkspaceRef.current?.createSession(directory, {
-          closeMobileSidebar: true,
-        })
-      }}
-      onDeleteOldSessionsInDirectory={(directory) => {
-        sessionWorkspaceRef.current?.openDeleteOldDirectorySessionsDialog(
-          directory
-        )
-      }}
-      onRemoveDirectory={(directory) => {
-        sidebarStore.setSidebarDirectories((current) => {
-          const next = current.filter((entry) => entry !== directory)
-          safeLocalStorageSetItem(
-            SIDEBAR_DIRECTORIES_STORAGE_KEY,
-            JSON.stringify(next)
+    <>
+      <AppSidebar
+        sessionSearch={sessionSearch}
+        onOpenSessionsDialog={() => {
+          sessionWorkspaceRef.current?.openSessionsDialog()
+        }}
+        visibleDirectories={visibleDirectories}
+        directorySessionsStore={directorySessionsStore}
+        matchingSessionCount={matchingSessionCount}
+        selectedSessionKeys={selectedSidebarSessionKeys}
+        activeSessionId={activeSidebarSessionId || undefined}
+        activeSessionKey={activeSidebarSessionKey || undefined}
+        pinnedSessionKeys={pinnedSidebarSessionKeys}
+        emptyStateText={emptySidebarStateText}
+        onOpenAddDirectoryDialog={() => {
+          sessionWorkspaceRef.current?.openAddDirectoryDialog()
+        }}
+        onSessionClick={handleSidebarSessionClick}
+        onRenameSession={(entry) => {
+          sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
+        }}
+        onDeleteSession={(entry) => {
+          sessionWorkspaceRef.current?.openDeleteDialog([entry])
+        }}
+        onSetSessionUnread={(entry, unread) => {
+          void sessionWorkspaceRef.current?.setSessionUnread(entry, unread)
+        }}
+        onMoveSession={(entry, directory) => {
+          void sessionWorkspaceRef.current?.moveSessionToDirectory(
+            entry,
+            directory
           )
-          return next
-        })
-      }}
-      onReorderDirectories={reorderSidebarDirectories}
-    />
+        }}
+        onMoveSessionAnyDirectory={(entry) => {
+          sessionWorkspaceRef.current?.openMoveSessionDirectoryDialogForEntry(
+            entry
+          )
+        }}
+        onTogglePinnedSession={togglePinnedSession}
+        onCreateSessionInDirectory={(directory) => {
+          void sessionWorkspaceRef.current?.createSession(directory, {
+            closeMobileSidebar: true,
+          })
+        }}
+        onDeleteOldSessionsInDirectory={(directory) => {
+          sessionWorkspaceRef.current?.openDeleteOldDirectorySessionsDialog(
+            directory
+          )
+        }}
+        onRemoveDirectory={(directory) => {
+          sidebarStore.setSidebarDirectories((current) => {
+            const next = current.filter((entry) => entry !== directory)
+            safeLocalStorageSetItem(
+              SIDEBAR_DIRECTORIES_STORAGE_KEY,
+              JSON.stringify(next)
+            )
+            return next
+          })
+        }}
+        onReorderDirectories={reorderSidebarDirectories}
+        onOpenArchivedSessions={() => setArchivedSessionsOpen(true)}
+      />
+      <ArchivedSessionsDialog
+        open={archivedSessionsOpen}
+        onOpenChange={setArchivedSessionsOpen}
+        viewerContextId={viewerContextId}
+        onRestored={(result) => showRestoredSessionDirectory(result.directory)}
+      />
+    </>
   )
 }

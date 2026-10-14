@@ -592,6 +592,27 @@ export type DeleteSessionsResponse =
     }
   | ApiErrorResponse
 
+export type ArchivedSessionEntry = SessionListEntry & {
+  /** The sidebar directory the session returns to on restore. */
+  directory: string
+  archivedAt?: string
+}
+
+export type ArchivedSessionsResponse =
+  | {
+      ok: true
+      sessions: Array<ArchivedSessionEntry>
+    }
+  | ApiErrorResponse
+
+export type RestoreSessionResponse =
+  | {
+      ok: true
+      path: string
+      directory: string
+    }
+  | ApiErrorResponse
+
 type AuthProviderKind = "oauth" | "api_key"
 
 export type AuthProviderOption = {

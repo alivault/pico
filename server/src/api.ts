@@ -1579,6 +1579,22 @@ export function createApi(api: ApiContext) {
     return { ok: true, deletedPaths }
   })
 
+  router.get("/api/sessions/archived", () => ({
+    ok: true,
+    sessions: sessions.archivedSessions(),
+  }))
+
+  router.post("/api/session/restore", async (request) => {
+    const body = await request.body<{ path?: string }>()
+    const id = sessionFromPath(body.path)
+    sessions.restore(id)
+    return {
+      ok: true,
+      path: sessionPath(id),
+      directory: sessions.directoryOf(id),
+    }
+  })
+
   router.post("/api/session/move", async (request) => {
     const body = await request.body<{ path?: string; cwd?: string }>()
     const id = sessionFromPath(body.path)
