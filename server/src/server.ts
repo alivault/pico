@@ -349,6 +349,7 @@ export async function startServer(options: {
             await new Promise((resolve) => setTimeout(resolve, 500))
           }
         }
+        host.stopping = true
         ui.cancelAll()
         auth.cancelLogins()
         gitWatcher.stop()

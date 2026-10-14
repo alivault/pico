@@ -434,7 +434,7 @@ export function createLspExtension(host: HostBridge) {
         const client = await pool.client(file, cwd)
         const errors = formatDiagnostics(
           relative(cwd, file) || file,
-          await client.diagnostics(file, 3000),
+          await client.diagnostics(file, 8000),
           1
         )
         if (errors.length === 0) return undefined

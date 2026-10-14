@@ -236,6 +236,7 @@ void test("a watch fires when its condition holds", async () => {
 
 void test("a background job runs, logs, and reports its exit", async () => {
   assert.equal(plainText("\x1b[31mred\x1b[0m\r\nab\rcd\n"), "red\ncd\n")
+  assert.equal(plainText("$ vite\n\n\n\n\n  ready  \n"), "$ vite\n\n  ready\n")
   const dir = await tempDir()
   const host = new HostBridge()
   const jobs = createJobsExtension(host, dir)
@@ -251,7 +252,8 @@ void test("a background job runs, logs, and reports its exit", async () => {
           {
             name: "job_start",
             arguments: {
-              command: "echo first; sleep 0.3; echo second",
+              command:
+                "for word in first second; do echo $word; sleep 0.2; done",
               wait_ms: 50,
             },
           },
@@ -386,6 +388,61 @@ void test("running jobs of an earlier process become lost at startup", async () 
     assert.match(users[0]!, /\[Job lost\] server/)
   } finally {
     terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
+void test("a job that the server stops at shutdown is reported as lost, not finished", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    (messages) =>
+      lastToolResult(messages)
+        ? { text: "started" }
+        : userTexts(messages).at(-1)?.startsWith("[Job")
+          ? { text: "seen" }
+          : {
+              tools: [
+                {
+                  name: "job_start",
+                  arguments: { command: "sleep 30", wait_ms: 0 },
+                },
+              ],
+            },
+    dir
+  )
+  const terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, cwd: dir },
+      },
+      ctx
+    )
+    await (
+      await conversation.submit({ type: "input", content: "run" }, ctx)
+    ).wait(ctx)
+    host.stopping = true
+    terminals.shutdown()
+    await new Promise((done) => setTimeout(done, 300))
+    const before = await harness.snapshot(JobsDoc, conversation.id, ctx)
+    assert.equal(Object.values(before!.items)[0]!.status, "running")
+    host.stopping = false
+    await host.started()
+    const after = await harness.snapshot(JobsDoc, conversation.id, ctx)
+    assert.equal(Object.values(after!.items)[0]!.status, "lost")
+    const users = await eventually(async () => {
+      const entries = await userEntries(conversation)
+      return entries.some((entry) => entry.includes("[Job lost]"))
+        ? entries
+        : undefined
+    })
+    assert.ok(!users.some((entry) => entry.includes("[Job finished]")))
+  } finally {
     await harness.close(ctx)
   }
 })

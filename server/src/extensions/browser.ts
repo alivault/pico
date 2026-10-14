@@ -79,6 +79,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const openTool = defineTool({
     name: "browser_open",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description:
       "Open a URL in your browser and read the page: its title, headings, numbered interactive elements (refs for browser_act), and text. Logins and cookies persist across restarts.",
     parameters: Type.Object({
@@ -105,6 +107,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const snapshotTool = defineTool({
     name: "browser_snapshot",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description:
       "Read the current page of your browser again: elements with refs, and text.",
     parameters: Type.Object({}),
@@ -120,6 +124,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const actTool = defineTool({
     name: "browser_act",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description: [
       "Act on the current page: click, fill (replace the text of a field), type (add keys), press (a key such as Enter), select (an option), check, uncheck, hover, or scroll (down or up).",
       "Target an element with ref (from the last snapshot), a CSS selector, or its visible text. Returns the new page snapshot.",
@@ -192,6 +198,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const screenshotTool = defineTool({
     name: "browser_screenshot",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description: "Take a screenshot of the current page of your browser.",
     parameters: Type.Object({ full_page: Type.Optional(Type.Boolean()) }),
     replay: "safe",
@@ -219,6 +227,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const evalTool = defineTool({
     name: "browser_eval",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description:
       "Evaluate a JavaScript expression in the current page and return its JSON value.",
     parameters: Type.Object({ expression: Type.String() }),
@@ -236,6 +246,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const tabsTool = defineTool({
     name: "browser_tabs",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description: "List your browser tabs, switch to one, or close one.",
     parameters: Type.Object({
       action: Type.Optional(
@@ -271,6 +283,8 @@ export function createBrowserExtension(host: HostBridge) {
 
   const closeTool = defineTool({
     name: "browser_close",
+    // Browser tools share pages, so a round that uses them runs in order.
+    executionMode: "sequential",
     description: "Close your browser. Cookies stay saved for next time.",
     parameters: Type.Object({}),
     execute: (_args, api, context) =>

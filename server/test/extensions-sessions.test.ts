@@ -18,7 +18,9 @@ import {
 } from "../src/extensions/host.ts"
 import {
   createSessionsExtension,
+  lastAnswer,
   normalizeSessionId,
+  STOPPED_ANSWER,
 } from "../src/extensions/sessions.ts"
 import {
   createWorktree,
@@ -295,4 +297,50 @@ void test("a worktree is made outside the repository and removed when clean", as
   await assert.rejects(removeWorktree(worktree), /uncommitted changes/)
   await removeWorktree(worktree, { force: true })
   assert.equal(existsSync(worktree.path), false)
+})
+
+void test("the answer of a stopped run is not an earlier answer", async () => {
+  const dir = await tempDir()
+  const harness = await openHarness(join(dir, "db.sqlite"), [], () => ({
+    text: "x",
+  }))
+  try {
+    const conversation = await harness.createConversation(
+      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+      ctx
+    )
+    const assistant = (text: string, stopReason: string) => ({
+      kind: "pi.assistant",
+      model: [
+        {
+          role: "assistant",
+          content: text ? [{ type: "text", text }] : [],
+          stopReason,
+          timestamp: Date.now(),
+        },
+      ],
+    })
+    const user = (text: string) => ({
+      kind: "pi.user",
+      model: [{ role: "user", content: text, timestamp: Date.now() }],
+    })
+    await harness.commit(async (tx) => {
+      await tx.appendEntry(conversation.id, user("first") as never)
+      await tx.appendEntry(
+        conversation.id,
+        assistant("Old answer", "stop") as never
+      )
+    }, ctx)
+    assert.equal(await lastAnswer(harness, conversation.id, ctx), "Old answer")
+    await harness.commit(async (tx) => {
+      await tx.appendEntry(conversation.id, user("second") as never)
+      await tx.appendEntry(conversation.id, assistant("", "aborted") as never)
+    }, ctx)
+    assert.equal(
+      await lastAnswer(harness, conversation.id, ctx),
+      STOPPED_ANSWER
+    )
+  } finally {
+    await harness.close(ctx)
+  }
 })

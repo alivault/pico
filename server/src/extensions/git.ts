@@ -265,6 +265,7 @@ export function createGitExtension(host: HostBridge) {
 
   const commitTool = defineTool({
     name: "git_commit",
+    executionMode: "sequential",
     description:
       "Commit changes. Give paths to stage and commit only those, all to stage every change (also untracked files), or neither to commit what is staged.",
     parameters: Type.Object({
@@ -324,6 +325,7 @@ export function createGitExtension(host: HostBridge) {
 
   const branchTool = defineTool({
     name: "git_branch",
+    executionMode: "sequential",
     description:
       "List local branches (default), create a branch (optionally from base) and switch to it, or switch to an existing branch.",
     parameters: Type.Object({
@@ -375,6 +377,7 @@ export function createGitExtension(host: HostBridge) {
 
   const pushTool = defineTool({
     name: "git_push",
+    executionMode: "sequential",
     description:
       "Push the current branch. A branch without an upstream is pushed to origin and tracks it. force uses --force-with-lease.",
     parameters: Type.Object({ force: Type.Optional(Type.Boolean()) }),
@@ -405,6 +408,7 @@ export function createGitExtension(host: HostBridge) {
 
   const pullTool = defineTool({
     name: "git_pull",
+    executionMode: "sequential",
     description:
       "Pull the current branch from its upstream (fast-forward or rebase).",
     parameters: Type.Object({ rebase: Type.Optional(Type.Boolean()) }),

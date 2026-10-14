@@ -12,6 +12,7 @@ import { basename, dirname, join } from "node:path"
 
 import * as pty from "node-pty"
 
+import { posixShell } from "../extensions/util.ts"
 import { badRequest } from "../http.ts"
 
 const BACKLOG_MAX_CHUNKS = 500
@@ -283,16 +284,24 @@ export class Terminals {
       onExit: (exit: { exitCode: number; signal?: number }) => void
     }
   ) {
-    const shell = defaultShell()
+    // Jobs run commands that models write, so they need a POSIX shell. A POSIX
+    // login shell keeps the user's PATH; other shells get bash, with the
+    // server's environment.
+    const login = defaultShell()
+    const shell = posixShell(login)
     let child: pty.IPty
     try {
-      child = pty.spawn(shell, ["-l", "-c", command], {
-        name: "xterm-256color",
-        cols: 120,
-        rows: 30,
-        cwd,
-        env: shellEnvironment(),
-      })
+      child = pty.spawn(
+        shell,
+        shell === login ? ["-l", "-c", command] : ["-c", command],
+        {
+          name: "xterm-256color",
+          cols: 120,
+          rows: 30,
+          cwd,
+          env: shellEnvironment(),
+        }
+      )
     } catch (error) {
       throw new Error(
         `Could not start the job: ${error instanceof Error ? error.message : String(error)}`

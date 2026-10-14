@@ -59,7 +59,13 @@ function entryText(entry: EntryRecord) {
     .join("\n")
 }
 
-/** The newest assistant answer of a conversation's active context. */
+export const STOPPED_ANSWER = "(stopped before it answered)"
+
+/**
+ * The answer of the newest run of a conversation: assistant text after its
+ * last user input. A run that was stopped or failed before it answered says
+ * so, instead of returning the answer of an earlier run.
+ */
 export async function lastAnswer(
   harness: Pick<Harness, "conversation">,
   conversationId: ConversationId,
@@ -68,12 +74,17 @@ export async function lastAnswer(
   const conversation = await harness.conversation(conversationId, context)
   if (!conversation) return undefined
   const view = await conversation.context(context)
+  let stopped = false
   for (let index = view.entries.length - 1; index >= 0; index -= 1) {
     const entry = view.entries[index]!
-    if (entry.kind !== "pi.assistant") continue
+    if (entry.kind === "pi.user") break
     const message = entry.model?.[0] as
       | { stopReason?: string; errorMessage?: string }
       | undefined
+    if (entry.kind === "pi.tool-result" && /\baborted\b/.test(entryText(entry)))
+      stopped = true
+    if (entry.kind !== "pi.assistant") continue
+    if (message?.stopReason === "aborted") stopped = true
     const text = entryText(entry)
       .split("\n")
       .filter((line) => !line.startsWith("[tool call:"))
@@ -83,7 +94,7 @@ export async function lastAnswer(
     if (message?.stopReason === "error")
       return `(the run failed: ${message.errorMessage ?? "unknown error"})`
   }
-  return undefined
+  return stopped ? STOPPED_ANSWER : undefined
 }
 
 /** The last messages of a session as text, for `read_session`. */
@@ -188,7 +199,9 @@ function createReportTask(host: HostBridge) {
           [
             needsInput
               ? `[Child session ${input.child} is waiting for the user] ${input.childTitle}`
-              : `[Child session ${input.child} finished] ${input.childTitle}`,
+              : task.state.checkpoint.answer === STOPPED_ANSWER
+                ? `[Child session ${input.child} stopped] ${input.childTitle}`
+                : `[Child session ${input.child} finished] ${input.childTitle}`,
             "Its answer:",
             clip(task.state.checkpoint.answer, 12_000),
           ].join("\n"),
@@ -260,6 +273,7 @@ export function createSessionsExtension(host: HostBridge) {
 
   const spawnTool = defineTool({
     name: "spawn_session",
+    executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
       "Use it to split independent work or to get a fresh review. By default it runs in the background and its answer comes to you as a message when it finishes; set wait to get the answer as the result.",

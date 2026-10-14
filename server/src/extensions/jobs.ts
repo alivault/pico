@@ -89,16 +89,20 @@ const ANSI = new RegExp(
   "g"
 )
 
-/** Terminal output as plain text: no escape codes, carriage returns applied. */
+/**
+ * Terminal output as plain text: no escape codes, carriage returns applied,
+ * and runs of blank lines (from screen clears) cut to one.
+ */
 export function plainText(output: string) {
   return output
     .replace(ANSI, "")
     .split("\n")
     .map((line) => {
       const parts = line.replace(/\r$/, "").split("\r")
-      return parts[parts.length - 1] ?? ""
+      return (parts[parts.length - 1] ?? "").trimEnd()
     })
     .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
 }
 
 export function jobLogPath(dataDir: string, jobId: string) {
@@ -176,6 +180,7 @@ async function notifySession(
 
 /** The jobs that run in this process, with their open log files. */
 class JobRunner {
+  readonly #host: HostBridge
   readonly #dataDir: string
   readonly #logs = new Map<string, WriteStream>()
   readonly #exits = new Map<
@@ -183,7 +188,8 @@ class JobRunner {
     Promise<{ exitCode: number; signal?: number }>
   >()
 
-  constructor(dataDir: string) {
+  constructor(host: HostBridge, dataDir: string) {
+    this.#host = host
     this.#dataDir = dataDir
   }
 
@@ -235,6 +241,9 @@ class JobRunner {
     exit: { exitCode: number; signal?: number }
   ) {
     this.#exits.delete(job.id)
+    // The server stops this job as it shuts down: leave the record running,
+    // so the next start reports it as lost.
+    if (this.#host.stopping) return
     const stopped = this.#stopping.has(job.id)
     this.#stopping.delete(job.id)
     try {
@@ -368,7 +377,7 @@ registerState({
 export type JobsExtension = ReturnType<typeof createJobsExtension>
 
 export function createJobsExtension(host: HostBridge, dataDir: string) {
-  const runner = new JobRunner(dataDir)
+  const runner = new JobRunner(host, dataDir)
   host.onReady((services) => runner.recover(services))
 
   const jobFor = async (
@@ -385,6 +394,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
 
   const startTool = defineTool({
     name: "job_start",
+    executionMode: "sequential",
     description: [
       "Start a long command in the background and return at once: dev servers, watchers, long builds or test runs.",
       "The user can watch it live in the terminal panel. Read its output with job_output, check it with job_status, and stop it with job_stop.",
@@ -535,6 +545,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
 
   const stopTool = defineTool({
     name: "job_stop",
+    executionMode: "sequential",
     description: "Stop a background job (SIGTERM, then SIGKILL).",
     parameters: Type.Object({ id: Type.String() }),
     async execute(args, api, context) {

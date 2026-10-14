@@ -201,6 +201,19 @@ void test("test reports parse for each runner", async () => {
     JSON.stringify({ devDependencies: { vitest: "1" } })
   )
   assert.equal(detectRunner(dir), "vitest")
+  const empty = {
+    runner: "vitest",
+    command: "vitest run -t nothing",
+    exitCode: 0,
+    passed: 0,
+    failed: 0,
+    skipped: 3,
+    total: 3,
+    durationMs: 10,
+    failures: [],
+    outputTail: "",
+  }
+  assert.match(formatReport(empty), /^NO TESTS/)
   const failing = await runTests(dir, { command: "echo nope; exit 2" })
   assert.equal(failing.exitCode, 2)
   assert.match(formatReport(failing), /^FAIL/)

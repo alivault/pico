@@ -58,12 +58,19 @@ function packageJson(cwd: string): Record<string, unknown> | undefined {
   }
 }
 
-function packageRunner(cwd: string) {
-  if (existsSync(join(cwd, "pnpm-lock.yaml"))) return ["pnpm", "exec"]
-  if (existsSync(join(cwd, "yarn.lock"))) return ["yarn"]
+/**
+ * The command that starts a JavaScript test runner. The project's own binary
+ * comes first: a package manager's exec can run an install before it starts,
+ * which is slow and can fail on the user's install policies.
+ */
+function packageRunner(cwd: string, tool: string) {
+  const local = join(cwd, "node_modules", ".bin", tool)
+  if (existsSync(local)) return [local]
+  if (existsSync(join(cwd, "pnpm-lock.yaml"))) return ["pnpm", "exec", tool]
+  if (existsSync(join(cwd, "yarn.lock"))) return ["yarn", tool]
   if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bun.lock")))
-    return ["bunx"]
-  return ["npx", "--no-install"]
+    return ["bunx", tool]
+  return ["npx", "--no-install", tool]
 }
 
 /** The runner of a project, from its files. */
@@ -97,7 +104,8 @@ function plan(
   cwd: string,
   runner: Runner,
   filter: string | undefined,
-  command: string | undefined
+  command: string | undefined,
+  files: readonly string[] = []
 ): Plan {
   const report = join(tmpdir(), `pico-tests-${randomBytes(4).toString("hex")}`)
   switch (runner) {
@@ -105,12 +113,12 @@ function plan(
       return {
         runner,
         command: [
-          ...packageRunner(cwd),
-          "vitest",
+          ...packageRunner(cwd, "vitest"),
           "run",
           "--reporter=json",
           `--outputFile=${report}.json`,
-          ...(filter ? [filter] : []),
+          ...(filter ? ["-t", filter] : []),
+          ...files,
         ],
         reportFile: `${report}.json`,
       }
@@ -118,11 +126,11 @@ function plan(
       return {
         runner,
         command: [
-          ...packageRunner(cwd),
-          "jest",
+          ...packageRunner(cwd, "jest"),
           "--json",
           `--outputFile=${report}.json`,
-          ...(filter ? [filter] : []),
+          ...(filter ? ["-t", filter] : []),
+          ...files,
         ],
         reportFile: `${report}.json`,
       }
@@ -136,6 +144,7 @@ function plan(
           "-q",
           `--junitxml=${report}.xml`,
           ...(filter ? ["-k", filter] : []),
+          ...files,
         ],
         reportFile: `${report}.xml`,
       }
@@ -147,7 +156,7 @@ function plan(
           "test",
           "-json",
           ...(filter ? ["-run", filter] : []),
-          "./...",
+          ...(files.length ? files : ["./..."]),
         ],
       }
     case "cargo":
@@ -353,8 +362,18 @@ export function parseCargo(output: string) {
   }
 }
 
+/** Whether a run found no tests at all, for example a filter that matched nothing. */
+export function noTestsRan(report: TestReport) {
+  return report.passed + report.failed === 0
+}
+
 export function formatReport(report: TestReport) {
-  const head = `${report.failed === 0 && report.exitCode === 0 ? "PASS" : "FAIL"} — ${report.passed} passed, ${report.failed} failed, ${report.skipped} skipped (${report.total} total) in ${(report.durationMs / 1000).toFixed(1)}s [${report.runner}]${report.timedOut ? " (timed out)" : ""}`
+  const verdict = noTestsRan(report)
+    ? "NO TESTS"
+    : report.failed === 0 && report.exitCode === 0
+      ? "PASS"
+      : "FAIL"
+  const head = `${verdict} — ${report.passed} passed, ${report.failed} failed, ${report.skipped} skipped (${report.total} total) in ${(report.durationMs / 1000).toFixed(1)}s [${report.runner}]${report.timedOut ? " (timed out)" : ""}`
   const failures = report.failures.slice(0, 15).map(
     (failure) =>
       `✗ ${failure.name}${failure.file ? ` (${failure.file}${failure.line ? `:${failure.line}` : ""})` : ""}\n${failure.message
@@ -382,6 +401,7 @@ export async function runTests(
   options: {
     runner?: Runner
     filter?: string
+    files?: readonly string[]
     command?: string
     timeoutMs?: number
     signal?: AbortSignal
@@ -390,7 +410,13 @@ export async function runTests(
   const runner = options.command
     ? "command"
     : (options.runner ?? detectRunner(cwd) ?? "command")
-  const testPlan = plan(cwd, runner, options.filter, options.command)
+  const testPlan = plan(
+    cwd,
+    runner,
+    options.filter,
+    options.command,
+    options.files
+  )
   const started = Date.now()
   const result = await runCommand(testPlan.command, {
     cwd,
@@ -460,10 +486,13 @@ export function createTestsExtension() {
     name: "run_tests",
     description: [
       "Run the project's tests and get a structured result: counts and the failing tests with their messages.",
-      "The runner is detected (vitest, jest, pytest, go test, cargo test); set runner or command to override. filter selects tests by name or file.",
+      "The runner is detected (vitest, jest, pytest, go test, cargo test); set runner or command to override. filter selects tests by name (a pattern); files selects test files or packages.",
     ].join(" "),
     parameters: Type.Object({
-      filter: Type.Optional(Type.String()),
+      filter: Type.Optional(
+        Type.String({ description: "A pattern of test names" })
+      ),
+      files: Type.Optional(Type.Array(Type.String())),
       runner: Type.Optional(
         Type.Union(
           ["vitest", "jest", "pytest", "go", "cargo"].map((runner) =>
@@ -484,6 +513,7 @@ export function createTestsExtension() {
       const report = await runTests(cwd, {
         ...(args.runner ? { runner: args.runner as Runner } : {}),
         ...(args.filter ? { filter: args.filter } : {}),
+        ...(args.files?.length ? { files: args.files } : {}),
         ...(args.command ? { command: args.command } : {}),
         ...(args.timeout ? { timeoutMs: args.timeout * 1000 } : {}),
         ...(context.abortSignal ? { signal: context.abortSignal } : {}),
@@ -492,7 +522,7 @@ export function createTestsExtension() {
         output: [{ type: "text", text: formatReport(report) }],
         structuredOutput: report as never,
         details: report as never,
-        ...(report.failed > 0 || report.exitCode !== 0
+        ...(report.failed > 0 || report.exitCode !== 0 || noTestsRan(report)
           ? { isError: true }
           : {}),
       }

@@ -116,6 +116,11 @@ export type HostServices = {
 }
 
 export class HostBridge {
+  /**
+   * The server is shutting down. Processes it stops are not finished work:
+   * a job killed now is reported as lost after the restart.
+   */
+  stopping = false
   #services: HostServices | undefined
   #waiters: Array<(services: HostServices) => void> = []
   #onReady: Array<(services: HostServices) => void | Promise<void>> = []

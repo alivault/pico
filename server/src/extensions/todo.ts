@@ -131,6 +131,26 @@ export function formatTodo(items: readonly TodoItem[]) {
   ].join("\n")
 }
 
+function shortTodo(
+  items: readonly TodoItem[],
+  change: Extract<TodoChange, { op: "update" | "remove" }>
+) {
+  const done = items.filter((item) => item.status === "done").length
+  const item = items.find((entry) => entry.id === change.id)
+  const next = items.find(
+    (entry) => entry.status === "active" || entry.status === "pending"
+  )
+  return [
+    change.op === "remove"
+      ? `Removed item ${change.id}.`
+      : `Item ${change.id} is ${item?.status ?? "changed"}: ${item?.text ?? ""}`,
+    `${done}/${items.length} done.`,
+    next && next !== item ? `Next: ${next.id}. ${next.text}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
 /** Change a session's list from outside a tool, for the web client. */
 export async function updateTodo(
   harness: Harness,
@@ -192,7 +212,12 @@ const todoTool = defineTool({
       }
       return json(draft.items)
     }, context)
-    return textResult(formatTodo(items), { details: { items } })
+    // A full list after set, add, and list; a short line after small changes.
+    const text =
+      change && (change.op === "update" || change.op === "remove")
+        ? shortTodo(items, change)
+        : formatTodo(items)
+    return textResult(text, { details: { items } })
   },
 })
 

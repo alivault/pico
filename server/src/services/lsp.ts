@@ -14,6 +14,8 @@ import { delimiter, dirname, extname, join, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const IDLE_MS = 10 * 60_000
+/** After a diagnostics report, how long to wait for a newer one. */
+const SETTLE_MS = 1500
 const REQUEST_TIMEOUT_MS = 60_000
 
 export type LanguageId =
@@ -362,7 +364,9 @@ export class LspClient {
       this.notify("textDocument/didOpen", {
         textDocument: { uri, languageId: language, version: 1, text },
       })
-    } else if (open.text !== text) {
+      return { uri, text, changed: true }
+    }
+    if (open.text !== text) {
       open.version += 1
       open.text = text
       this.#diagnostics.delete(uri)
@@ -370,23 +374,51 @@ export class LspClient {
         textDocument: { uri, version: open.version },
         contentChanges: [{ text }],
       })
+      return { uri, text, changed: true }
     }
-    return { uri, text }
+    return { uri, text, changed: false }
   }
 
-  /** Diagnostics of a document after the server has had time to check it. */
-  async diagnostics(path: string, waitMs = 4000) {
-    const { uri } = await this.sync(path)
-    if (!this.#diagnostics.has(uri)) {
-      await new Promise<void>((resolveWait) => {
-        const timer = setTimeout(resolveWait, waitMs)
-        const waiters = this.#diagnosticWaiters.get(uri) ?? []
-        waiters.push(() => {
-          clearTimeout(timer)
-          resolveWait()
-        })
-        this.#diagnosticWaiters.set(uri, waiters)
-      })
+  /** Resolve true at the next diagnostics report for `uri`, or false after `ms`. */
+  #nextReport(uri: string, ms: number) {
+    return new Promise<boolean>((resolveWait) => {
+      const waiters = this.#diagnosticWaiters.get(uri) ?? []
+      const waiter = () => {
+        clearTimeout(timer)
+        resolveWait(true)
+      }
+      const timer = setTimeout(() => {
+        const list = this.#diagnosticWaiters.get(uri) ?? []
+        this.#diagnosticWaiters.set(
+          uri,
+          list.filter((entry) => entry !== waiter)
+        )
+        resolveWait(false)
+      }, ms)
+      waiters.push(waiter)
+      this.#diagnosticWaiters.set(uri, waiters)
+    })
+  }
+
+  /**
+   * Diagnostics of a document after the server has checked it. A server can
+   * report in steps (for example an empty report while the project loads, then
+   * the type errors), so after a new or changed document this waits until no
+   * newer report comes for a moment, up to `waitMs`.
+   */
+  async diagnostics(path: string, waitMs = 10_000) {
+    const { uri, changed } = await this.sync(path)
+    if (!changed && this.#diagnostics.has(uri))
+      return this.#diagnostics.get(uri) ?? []
+    const deadline = Date.now() + waitMs
+    if (!this.#diagnostics.has(uri))
+      await this.#nextReport(uri, Math.max(0, deadline - Date.now()))
+    while (Date.now() < deadline) {
+      const newer = await this.#nextReport(
+        uri,
+        Math.min(SETTLE_MS, deadline - Date.now())
+      )
+      if (!newer) break
     }
     return this.#diagnostics.get(uri) ?? []
   }

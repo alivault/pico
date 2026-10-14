@@ -9,6 +9,7 @@ import { HostBridge } from "../src/extensions/host.ts"
 import {
   formatDuration,
   parseDuration,
+  posixShell,
   textResult,
 } from "../src/extensions/util.ts"
 import {
@@ -30,6 +31,11 @@ void test("durations parse common forms and reject others", () => {
   assert.equal(parseDuration("5 parsecs"), undefined)
   assert.equal(formatDuration(90_000), "2m")
   assert.equal(formatDuration(5_400_000), "1h30m")
+})
+
+void test("commands run in a POSIX shell", () => {
+  assert.equal(posixShell("/bin/zsh"), "/bin/zsh")
+  assert.match(posixShell("/opt/homebrew/bin/fish"), /\/(bash|sh)$/)
 })
 
 void test("the host bridge waits for bind and honors abort", async () => {

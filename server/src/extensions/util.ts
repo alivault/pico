@@ -2,6 +2,7 @@
  * Helpers that Pico's own extensions share.
  */
 import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 
 import type { Context, JsonValue } from "@earendil-works/chord"
@@ -28,6 +29,20 @@ export function errorResult(text: string, details?: JsonValue) {
     isError: true,
     ...(details !== undefined ? { details } : {}),
   })
+}
+
+const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"])
+
+/**
+ * A shell for commands that models write: the user's shell when it speaks
+ * POSIX sh, otherwise bash (fish, nushell, and others do not).
+ */
+export function posixShell(preferred = process.env.SHELL) {
+  const name = preferred?.split("/").pop() ?? ""
+  if (preferred && POSIX_SHELLS.has(name)) return preferred
+  for (const candidate of ["/bin/bash", "/usr/bin/bash", "/bin/sh"])
+    if (existsSync(candidate)) return candidate
+  return "/bin/sh"
 }
 
 /** The working directory of the calling conversation. */
@@ -68,7 +83,7 @@ export function runCommand(
   const maxBytes = options.maxBytes ?? 4 * 1024 * 1024
   const [file, args] =
     typeof command === "string"
-      ? [process.env.SHELL || "/bin/sh", ["-c", command]]
+      ? [posixShell(), ["-c", command]]
       : [command[0]!, command.slice(1)]
   return new Promise((resolve) => {
     let stdout = ""
