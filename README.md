@@ -15,11 +15,20 @@ React web app.
 ## Requirements
 
 - Node.js 22.19 or later
-- pnpm 10.33
+- pnpm 10.33 (only to run from source)
 - Git and a shell
 - Provider credentials in `~/.pi/agent/auth.json`, or set them in Pico
 
-## Run
+## Install
+
+```sh
+npm install -g @alivault/pico
+pico-app
+```
+
+Or try it without a global install: `npx @alivault/pico`.
+
+## Run from source
 
 ```sh
 pnpm install

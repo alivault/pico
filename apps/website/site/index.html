@@ -161,17 +161,30 @@
 
       <section id="start" class="start">
         <h2>Get started</h2>
-        <p>You need Node.js 22.19 or later, pnpm, Git, and a shell.</p>
+        <p>You need Node.js 22.19 or later and Git. Install Pico from npm:</p>
         <div class="code">
-          <pre><code>git clone https://github.com/alivault/pico.git
-cd pico
-pnpm install
-pnpm build
-pnpm start</code></pre>
+          <pre><code>npm install -g @alivault/pico
+pico-app</code></pre>
         </div>
         <p>
-          Then open <code>http://127.0.0.1:3141</code>. Add provider credentials
-          in Pico, or use the ones in <code>~/.pi/agent/auth.json</code>.
+          Pico starts and opens <code>http://127.0.0.1:3141</code> in your
+          browser. Add provider credentials in Pico, or use the ones in
+          <code>~/.pi/agent/auth.json</code>.
+        </p>
+        <p>To try it without a global install:</p>
+        <div class="code">
+          <pre><code>npx @alivault/pico</code></pre>
+        </div>
+        <p>Useful commands:</p>
+        <div class="code">
+          <pre><code>pico-app status       # is Pico running?
+pico-app stop --wait  # stop after active runs finish
+pico-app import-pi    # import old Pi sessions (stop Pico first)
+pico-app --help</code></pre>
+        </div>
+        <p>
+          Your data is in <code>~/.pico</code>. To build from source, see the
+          <a href="https://github.com/alivault/pico#run-from-source">README</a>.
         </p>
       </section>
     </main>
