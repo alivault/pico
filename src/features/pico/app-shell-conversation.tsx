@@ -38,16 +38,24 @@ import {
   useConversationHasAssistantOutput,
   useConversationHasMessages,
   useConversationItem,
-  useConversationRevision,
   type ConversationItemsStore,
   type MutableAssistantMessagesStore,
   type RenderConversationGroupDescriptor,
 } from "@/features/pico/app-shell-conversation-store"
 import {
   useAppShellMessageScroll,
-  useMessageScrollValue,
+  useMessageJumpValue,
+  type MessageJumpStateStore,
 } from "@/features/pico/use-app-shell-message-scroll"
-import type { MessageScrollStateStore } from "@/features/pico/use-app-shell-message-scroll"
+import { picoSessionScopeKey } from "@/features/pico/query-keys"
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+  useMessageScrollerScrollable,
+} from "@/components/ui/message-scroller"
 import {
   useSelector,
   type PicoStore,
@@ -65,18 +73,14 @@ function ConversationLatestMessageButton({
   conversationItemsStore,
   draft,
   onClick,
-  scrollStateStore,
 }: {
   conversationItemsStore: ConversationItemsStore
   draft: boolean
   onClick: () => void
-  scrollStateStore: MessageScrollStateStore
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
-  const isDisabled = useMessageScrollValue(
-    scrollStateStore,
-    (snapshot) => draft || !hasMessages || snapshot.isMessagesNearBottom
-  )
+  const scrollable = useMessageScrollerScrollable()
+  const isDisabled = draft || !hasMessages || !scrollable.end
 
   return (
     <TitleTooltip
@@ -97,37 +101,17 @@ function ConversationLatestMessageButton({
   )
 }
 
-function ConversationScrollRevisionObserver({
-  conversationItemsStore,
-  disabled,
-  onRevisionChange,
-}: {
-  conversationItemsStore: ConversationItemsStore
-  disabled: boolean
-  onRevisionChange: () => void
-}) {
-  const conversationRevision = useConversationRevision(conversationItemsStore)
-  const onRevisionChangeEffectEvent = React.useEffectEvent(onRevisionChange)
-
-  React.useLayoutEffect(() => {
-    if (disabled) return
-    onRevisionChangeEffectEvent()
-  }, [conversationRevision, disabled])
-
-  return null
-}
-
 function ConversationPreviousMessageButton({
   centerMessages,
+  jumpStateStore,
   onClick,
-  scrollStateStore,
 }: {
   centerMessages: boolean
+  jumpStateStore: MessageJumpStateStore
   onClick: () => void
-  scrollStateStore: MessageScrollStateStore
 }) {
-  const isDisabled = useMessageScrollValue(
-    scrollStateStore,
+  const isDisabled = useMessageJumpValue(
+    jumpStateStore,
     (snapshot) => !snapshot.hasPreviousMessageJumpTarget
   )
 
@@ -176,10 +160,6 @@ type AppShellConversationSessionState = Pick<
   | "streaming"
 >
 
-const ConversationContentChangeContext = React.createContext<
-  (() => void) | null
->(null)
-
 function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
   return useSelector(
     store,
@@ -196,32 +176,31 @@ function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
   )
 }
 
+const HISTORY_AUTOLOAD_THRESHOLD_PX = 48
+
+// This row sits above the scroller content, not inside it. The first message
+// row then stays the first item, so the scroller keeps the reader in place
+// when older messages are prepended.
 function ConversationEarlierMessages({
-  cancelHistoryPrepend,
   isLoading,
   onLoad,
-  prepareForHistoryPrepend,
-  scrollStateStore,
+  viewport,
 }: {
-  cancelHistoryPrepend: () => void
   isLoading: boolean
   onLoad: () => Promise<void>
-  prepareForHistoryPrepend: () => void
-  scrollStateStore: MessageScrollStateStore
+  viewport: HTMLDivElement | null
 }) {
-  const isNearTop = useMessageScrollValue(
-    scrollStateStore,
-    (snapshot) => snapshot.isMessagesNearTop
-  )
+  const scrollable = useMessageScrollerScrollable()
   const load = React.useCallback(() => {
     if (isLoading) return
-    prepareForHistoryPrepend()
-    void onLoad().finally(cancelHistoryPrepend)
-  }, [cancelHistoryPrepend, isLoading, onLoad, prepareForHistoryPrepend])
+    void onLoad()
+  }, [isLoading, onLoad])
 
   React.useEffect(() => {
-    if (isNearTop && !isLoading) load()
-  }, [isLoading, isNearTop, load])
+    if (!viewport || isLoading || scrollable.start) return
+    if (viewport.scrollTop > HISTORY_AUTOLOAD_THRESHOLD_PX) return
+    load()
+  }, [isLoading, load, scrollable.start, viewport])
 
   return (
     <div className="flex justify-center py-3">
@@ -239,50 +218,60 @@ function ConversationEarlierMessages({
   )
 }
 
-function AppShellConversationFrame({
-  autoScrollEnabled,
-  children,
-  centerMessages,
-  conversationItemsStore,
-  isLoadingOlderHistory,
-  isSessionViewLoading,
-  onLoadOlderHistory,
-  ref,
-  sessionState,
-}: {
+type AppShellConversationFrameProps = {
   autoScrollEnabled: boolean
   centerMessages: boolean
   children: React.ReactNode
   conversationItemsStore: ConversationItemsStore
+  emptyState: React.ReactNode
   isLoadingOlderHistory: boolean
   isSessionViewLoading: boolean
   onLoadOlderHistory: () => Promise<void>
   ref?: React.Ref<AppShellConversationFrameHandle>
   sessionState: AppShellConversationSessionState
-}) {
+}
+
+function AppShellConversationFrame(props: AppShellConversationFrameProps) {
+  // Remount the scroller for each session so the opening position applies
+  // again and no follow state leaks between sessions.
+  // The key also changes when the session view finishes loading, because
+  // the scroller treats rows that arrive later as new turns.
+  const sessionScrollKey = `${picoSessionScopeKey(props.sessionState) || "none"}:${
+    props.isSessionViewLoading ? "loading" : "ready"
+  }`
+
+  return (
+    <MessageScrollerProvider
+      key={sessionScrollKey}
+      autoScroll={props.autoScrollEnabled}
+      defaultScrollPosition="last-anchor"
+      scrollPreviousItemPeek={64}
+    >
+      <AppShellConversationScroller {...props} />
+    </MessageScrollerProvider>
+  )
+}
+
+function AppShellConversationScroller({
+  children,
+  centerMessages,
+  conversationItemsStore,
+  emptyState,
+  isLoadingOlderHistory,
+  isSessionViewLoading,
+  onLoadOlderHistory,
+  ref,
+  sessionState,
+}: AppShellConversationFrameProps) {
   const {
-    bottomRef,
-    cancelHistoryPrepend,
+    jumpStateStore,
     jumpToNextMessage,
     jumpToPreviousMessage,
-    messagesContentRef,
-    messagesScrollAreaRef,
-    prepareForHistoryPrepend,
     scrollConversationToBottom,
     scrollConversationToTop,
-    scrollStateStore,
-    syncAfterConversationChange,
-  } = useAppShellMessageScroll({
-    autoScrollEnabled,
-    isSessionViewLoading,
-    sessionState,
-  })
-  const setMessagesScrollAreaElement = React.useCallback(
-    (element: HTMLDivElement | null) => {
-      messagesScrollAreaRef.current = element
-    },
-    [messagesScrollAreaRef]
-  )
+    setViewport,
+    viewport,
+  } = useAppShellMessageScroll()
 
   React.useImperativeHandle(
     ref,
@@ -301,38 +290,29 @@ function AppShellConversationFrame({
   )
 
   return (
-    <div className="relative min-h-0 flex-1">
-      <div
-        ref={setMessagesScrollAreaElement}
+    <MessageScroller className="min-h-0 flex-1">
+      <MessageScrollerViewport
+        ref={setViewport}
         data-conversation-viewport="true"
-        tabIndex={0}
-        role="region"
         aria-label="Conversation messages"
-        className="h-full overflow-x-hidden overflow-y-auto overscroll-contain px-4 outline-none [overflow-anchor:none]"
+        className="overflow-x-hidden px-9 outline-none"
       >
-        <div ref={messagesContentRef} className="flex min-h-full flex-col">
-          <ConversationScrollRevisionObserver
-            conversationItemsStore={conversationItemsStore}
-            disabled={isSessionViewLoading}
-            onRevisionChange={syncAfterConversationChange}
+        {sessionState.historyOffset > 0 && !isSessionViewLoading ? (
+          <ConversationEarlierMessages
+            isLoading={isLoadingOlderHistory}
+            onLoad={onLoadOlderHistory}
+            viewport={viewport}
           />
-          <ConversationContentChangeContext.Provider
-            value={syncAfterConversationChange}
-          >
-            {sessionState.historyOffset > 0 && !isSessionViewLoading ? (
-              <ConversationEarlierMessages
-                cancelHistoryPrepend={cancelHistoryPrepend}
-                isLoading={isLoadingOlderHistory}
-                onLoad={onLoadOlderHistory}
-                prepareForHistoryPrepend={prepareForHistoryPrepend}
-                scrollStateStore={scrollStateStore}
-              />
-            ) : null}
-            {children}
-          </ConversationContentChangeContext.Provider>
-          <div ref={bottomRef} />
-        </div>
-      </div>
+        ) : null}
+        <MessageScrollerContent
+          aria-busy={sessionState.streaming}
+          className="gap-4 py-4"
+        >
+          {isSessionViewLoading ? null : children}
+        </MessageScrollerContent>
+      </MessageScrollerViewport>
+
+      {emptyState}
 
       {!isSessionViewLoading ? (
         <>
@@ -340,16 +320,15 @@ function AppShellConversationFrame({
             conversationItemsStore={conversationItemsStore}
             draft={sessionState.draft}
             onClick={scrollConversationToBottom}
-            scrollStateStore={scrollStateStore}
           />
           <ConversationPreviousMessageButton
             centerMessages={centerMessages}
+            jumpStateStore={jumpStateStore}
             onClick={jumpToPreviousMessage}
-            scrollStateStore={scrollStateStore}
           />
         </>
       ) : null}
-    </div>
+    </MessageScroller>
   )
 }
 
@@ -443,6 +422,10 @@ function AppShellMessagesWorkingIndicator({
   )
 }
 
+// Paint containment from content-visibility clips list markers and other
+// content that overflows the row, so rows stay fully painted.
+const conversationItemClassName = "[content-visibility:visible]"
+
 function ConversationGroupView({
   className,
   group,
@@ -460,23 +443,34 @@ function ConversationGroupView({
 }) {
   if (group.kind === "user") {
     return (
-      <ConversationUserGroupView
-        className={className}
-        itemKey={group.itemKey}
-        store={store}
-      />
+      <MessageScrollerItem
+        messageId={group.key}
+        scrollAnchor
+        className={conversationItemClassName}
+      >
+        <ConversationUserGroupView
+          className={className}
+          itemKey={group.itemKey}
+          store={store}
+        />
+      </MessageScrollerItem>
     )
   }
 
   return (
-    <ConversationAssistantGroupView
-      className={className}
-      groupKey={group.key}
-      hideFooter={hideFooter}
-      hideThinking={hideThinking}
-      hideToolBlocks={hideToolBlocks}
-      store={store}
-    />
+    <MessageScrollerItem
+      messageId={group.key}
+      className={conversationItemClassName}
+    >
+      <ConversationAssistantGroupView
+        className={className}
+        groupKey={group.key}
+        hideFooter={hideFooter}
+        hideThinking={hideThinking}
+        hideToolBlocks={hideToolBlocks}
+        store={store}
+      />
+    </MessageScrollerItem>
   )
 }
 
@@ -529,9 +523,6 @@ function ConversationAssistantGroupView({
   store: ConversationItemsStore
 }) {
   const itemKeys = useConversationAssistantGroupItemKeys(store, groupKey)
-  const syncAfterConversationContentChange = React.use(
-    ConversationContentChangeContext
-  )
   const assistantMessagesStoreRef =
     React.useRef<MutableAssistantMessagesStore | null>(null)
   if (!assistantMessagesStoreRef.current) {
@@ -556,19 +547,11 @@ function ConversationAssistantGroupView({
           store,
         })
       )
-      syncAfterConversationContentChange?.()
     }
 
     updateSnapshot()
     return store.subscribeItems(itemKeys, updateSnapshot)
-  }, [
-    assistantMessagesStore,
-    hideThinking,
-    hideToolBlocks,
-    itemKeys,
-    store,
-    syncAfterConversationContentChange,
-  ])
+  }, [assistantMessagesStore, hideThinking, hideToolBlocks, itemKeys, store])
 
   return (
     <AssistantMessagesStoreCard
@@ -674,7 +657,7 @@ function AppShellConversationEmptyState({
 
   if (showConversationLoadingState) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 py-10 text-sm text-muted-foreground">
         <Spinner />
         {conversationLoadingLabel ? (
           <div>{conversationLoadingLabel}</div>
@@ -686,7 +669,7 @@ function AppShellConversationEmptyState({
   if (hasMessages) return null
 
   return (
-    <Empty>
+    <Empty className="absolute inset-0">
       <EmptyHeader>
         <EmptyTitle>
           {draft ? "New session" : "Start a new conversation"}
@@ -750,14 +733,19 @@ function AppShellConversationWorkingFooter({
   if (!hasMessages || !displayedWorkingState) return null
 
   return (
-    <div className={`${conversationMessageColumnClassName} mt-4`}>
-      <AppShellMessagesWorkingIndicator
-        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-        onCancel={onCancelCompaction}
-        state={displayedWorkingState}
-        useHiddenThinkingPreview={streaming && hideThinking}
-      />
-    </div>
+    <MessageScrollerItem
+      messageId="working-footer"
+      className={conversationItemClassName}
+    >
+      <div className={conversationMessageColumnClassName}>
+        <AppShellMessagesWorkingIndicator
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          onCancel={onCancelCompaction}
+          state={displayedWorkingState}
+          useHiddenThinkingPreview={streaming && hideThinking}
+        />
+      </div>
+    </MessageScrollerItem>
   )
 }
 
@@ -780,15 +768,13 @@ function AppShellConversationMessageStack({
   if (!hasMessages) return null
 
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <AppShellConversationItemGroups
-        centerMessages={centerMessages}
-        conversationItemsStore={conversationItemsStore}
-        hideFooter={false}
-        hideThinking={hideThinking}
-        hideToolBlocks={hideToolBlocks}
-      />
-    </div>
+    <AppShellConversationItemGroups
+      centerMessages={centerMessages}
+      conversationItemsStore={conversationItemsStore}
+      hideFooter={false}
+      hideThinking={hideThinking}
+      hideToolBlocks={hideToolBlocks}
+    />
   )
 }
 
@@ -846,38 +832,36 @@ export const AppShellSessionConversation = React.memo(
         isSessionViewLoading={isSessionViewLoading}
         onLoadOlderHistory={onLoadOlderHistory}
         sessionState={sessionState}
+        emptyState={
+          <AppShellConversationEmptyState
+            awaitingFirstTurn={awaitingFirstTurn}
+            conversationItemsStore={conversationItemsStore}
+            cwd={sessionState.cwd}
+            draft={sessionState.draft}
+            isSessionViewLoading={isSessionViewLoading}
+            isSubmitting={isSubmitting}
+            onCreateSession={onCreateSession}
+            streaming={sessionState.streaming}
+            viewerContextId={viewerContextId}
+            workingStateStore={workingStateStore}
+          />
+        }
       >
-        <AppShellConversationEmptyState
-          awaitingFirstTurn={awaitingFirstTurn}
+        <AppShellConversationMessageStack
+          centerMessages={centerMessages}
           conversationItemsStore={conversationItemsStore}
-          cwd={sessionState.cwd}
-          draft={sessionState.draft}
-          isSessionViewLoading={isSessionViewLoading}
-          isSubmitting={isSubmitting}
-          onCreateSession={onCreateSession}
+          hideToolBlocks={hideToolBlocks}
+          sessionStore={sessionStore}
+        />
+        <AppShellConversationWorkingFooter
+          centerMessages={centerMessages}
+          conversationItemsStore={conversationItemsStore}
+          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+          hideThinking={hideThinking}
+          onCancelCompaction={onCancelCompaction}
           streaming={sessionState.streaming}
-          viewerContextId={viewerContextId}
           workingStateStore={workingStateStore}
         />
-        {!isSessionViewLoading ? (
-          <>
-            <AppShellConversationMessageStack
-              centerMessages={centerMessages}
-              conversationItemsStore={conversationItemsStore}
-              hideToolBlocks={hideToolBlocks}
-              sessionStore={sessionStore}
-            />
-            <AppShellConversationWorkingFooter
-              centerMessages={centerMessages}
-              conversationItemsStore={conversationItemsStore}
-              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-              hideThinking={hideThinking}
-              onCancelCompaction={onCancelCompaction}
-              streaming={sessionState.streaming}
-              workingStateStore={workingStateStore}
-            />
-          </>
-        ) : null}
       </AppShellConversationFrame>
     )
   }

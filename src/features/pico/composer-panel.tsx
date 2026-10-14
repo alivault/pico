@@ -1,5 +1,5 @@
-import * as React from "react";
-import { useWaitingForAnswer } from "@/features/pico/agent/session-extensions";
+import * as React from "react"
+import { useWaitingForAnswer } from "@/features/pico/agent/session-extensions"
 import {
   ArrowUpIcon,
   GitPullRequestArrowIcon,
@@ -8,145 +8,145 @@ import {
   ListStartIcon,
   SquareIcon,
   XIcon,
-} from "lucide-react";
+} from "lucide-react"
 
-import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico";
-import type { CompletionItem } from "@/lib/pico/api";
+import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
+import type { CompletionItem } from "@/lib/pico/api"
 
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state";
-import type { SlashCommandDescriptor } from "@/features/pico/composer-utils";
+import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
 import {
   shallow,
   useSelector,
   type PicoStore,
-} from "@/features/pico/tanstack-store-utils";
+} from "@/features/pico/tanstack-store-utils"
 
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { TitleTooltip } from "@/components/ui/tooltip";
-import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu";
-import { ComposerPendingMessages } from "@/features/pico/composer-pending-messages";
-import { ComposerPickers } from "@/features/pico/composer-pickers";
-import { matchesShortcutEvent } from "@/features/pico/keyboard-shortcuts";
-import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator";
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
+import { TitleTooltip } from "@/components/ui/tooltip"
+import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
+import { ComposerPendingMessages } from "@/features/pico/composer-pending-messages"
+import { ComposerPickers } from "@/features/pico/composer-pickers"
+import { matchesShortcutEvent } from "@/features/pico/keyboard-shortcuts"
+import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
 import {
   formatComposerDiffLineCommentReference,
   formatComposerSkillName,
   parseComposerSkillMessage,
   serializeComposerDraft,
-} from "@/features/pico/composer-utils";
-import { promptImageKey } from "@/features/pico/conversation-view";
+} from "@/features/pico/composer-utils"
+import { promptImageKey } from "@/features/pico/conversation-view"
 import {
   findExactSlashCommand,
   useComposerAssist,
-} from "@/features/pico/use-composer-assist";
+} from "@/features/pico/use-composer-assist"
 
 type PendingComposerMessage = {
-  pendingId: string;
-  text: string;
-  images: Array<PromptImage>;
-  streamingBehavior: "steer" | "followUp";
-};
+  pendingId: string
+  text: string
+  images: Array<PromptImage>
+  streamingBehavior: "steer" | "followUp"
+}
 
 export type ComposerPanelHandle = {
-  focusPrompt: (options?: FocusOptions) => void;
-  openModelPicker: () => void;
-  openThinkingPicker: () => void;
-};
+  focusPrompt: (options?: FocusOptions) => void
+  openModelPicker: () => void
+  openThinkingPicker: () => void
+}
 
-type ImageFileSelection = FileList | Array<File> | null;
+type ImageFileSelection = FileList | Array<File> | null
 
-type ComposerSessionStore = PicoStore<SessionState>;
+type ComposerSessionStore = PicoStore<SessionState>
 
 type ComposerDisplaySettingsStore = PicoStore<{
-  autoScrollEnabled: boolean;
-  centerMessages: boolean;
-  hideToolBlocks: boolean;
-}>;
+  autoScrollEnabled: boolean
+  centerMessages: boolean
+  hideToolBlocks: boolean
+}>
 
 type ComposerPanelProps = {
-  activeSessionId?: string;
-  currentPendingMessages: Array<PendingComposerMessage>;
-  composerDiffLineComments: Array<ComposerDiffLineComment>;
-  composerImages: Array<PromptImage>;
-  composerText: string;
-  composerSkill?: string;
-  composerSyncNonce: number;
-  canStartPendingQueue: boolean;
-  centerMessages: boolean;
-  contextUsageStore: ComposerContextUsageStore;
-  displaySettingsStore: ComposerDisplaySettingsStore;
-  sessionStore: ComposerSessionStore;
-  isSubmitting: boolean;
-  isCompacting: boolean;
-  isStreaming: boolean;
-  awaitingFirstTurn: boolean;
-  disabled?: boolean;
-  flush?: boolean;
-  topContent?: React.ReactNode;
-  viewerContextId: string;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onComposerTextChange: (value: string) => void;
-  onPickImages: (files: ImageFileSelection) => void;
-  onRemoveComposerDiffLineComment: (id: string) => void;
-  onRemoveComposerImage: (index: number) => void;
-  onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void;
-  onAbort: () => void;
-  onEditPendingMessage: (pendingId: string, text: string) => void;
-  onRemovePendingMessage: (pendingId: string) => void;
-  onReorderPending: (pendingId: string, direction: -1 | 1) => void;
-  onStartPendingQueue: () => void;
-  onRunBuiltinSlashCommand: (name: string, args: string) => void;
-  onSelectModel: (value: string) => void;
-  onSelectThinkingLevel: (level: string) => void;
-  requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>;
+  activeSessionId?: string
+  currentPendingMessages: Array<PendingComposerMessage>
+  composerDiffLineComments: Array<ComposerDiffLineComment>
+  composerImages: Array<PromptImage>
+  composerText: string
+  composerSkill?: string
+  composerSyncNonce: number
+  canStartPendingQueue: boolean
+  centerMessages: boolean
+  contextUsageStore: ComposerContextUsageStore
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
+  isSubmitting: boolean
+  isCompacting: boolean
+  isStreaming: boolean
+  awaitingFirstTurn: boolean
+  disabled?: boolean
+  flush?: boolean
+  topContent?: React.ReactNode
+  viewerContextId: string
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  onComposerTextChange: (value: string) => void
+  onPickImages: (files: ImageFileSelection) => void
+  onRemoveComposerDiffLineComment: (id: string) => void
+  onRemoveComposerImage: (index: number) => void
+  onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
+  onAbort: () => void
+  onEditPendingMessage: (pendingId: string, text: string) => void
+  onRemovePendingMessage: (pendingId: string) => void
+  onReorderPending: (pendingId: string, direction: -1 | 1) => void
+  onStartPendingQueue: () => void
+  onRunBuiltinSlashCommand: (name: string, args: string) => void
+  onSelectModel: (value: string) => void
+  onSelectThinkingLevel: (level: string) => void
+  requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
     isQuotedPrefix: boolean
-  ) => Promise<Array<CompletionItem>>;
-};
+  ) => Promise<Array<CompletionItem>>
+}
 
 type ComposerAttachmentsProps = {
-  images: Array<PromptImage>;
-  disabled: boolean;
-  onRemoveImage: (index: number) => void;
-};
+  images: Array<PromptImage>
+  disabled: boolean
+  onRemoveImage: (index: number) => void
+}
 
 type ComposerPromptEditorProps = {
-  composerDiffLineComments: Array<ComposerDiffLineComment>;
-  composerImages: Array<PromptImage>;
-  composerText: string;
-  composerSkill?: string;
-  composerSyncNonce: number;
-  isSubmitting: boolean;
-  isCompacting: boolean;
-  isStreaming: boolean;
-  awaitingFirstTurn: boolean;
-  disabled?: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  promptRef: React.RefObject<HTMLTextAreaElement | null>;
-  displaySettingsStore: ComposerDisplaySettingsStore;
-  sessionStore: ComposerSessionStore;
-  onComposerTextChange: (value: string) => void;
-  onPickImages: (files: ImageFileSelection) => void;
-  onRemoveComposerDiffLineComment: (id: string) => void;
-  onRemoveComposerImage: (index: number) => void;
-  onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void;
-  onAbort: () => void;
-  onRunBuiltinSlashCommand: (name: string, args: string) => void;
-  requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>;
+  composerDiffLineComments: Array<ComposerDiffLineComment>
+  composerImages: Array<PromptImage>
+  composerText: string
+  composerSkill?: string
+  composerSyncNonce: number
+  isSubmitting: boolean
+  isCompacting: boolean
+  isStreaming: boolean
+  awaitingFirstTurn: boolean
+  disabled?: boolean
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  promptRef: React.RefObject<HTMLTextAreaElement | null>
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
+  onComposerTextChange: (value: string) => void
+  onPickImages: (files: ImageFileSelection) => void
+  onRemoveComposerDiffLineComment: (id: string) => void
+  onRemoveComposerImage: (index: number) => void
+  onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
+  onAbort: () => void
+  onRunBuiltinSlashCommand: (name: string, args: string) => void
+  requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
     isQuotedPrefix: boolean
-  ) => Promise<Array<CompletionItem>>;
-};
+  ) => Promise<Array<CompletionItem>>
+}
 
 function selectionIsAtStart(textarea: HTMLTextAreaElement | null) {
-  if (!textarea) return false;
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  return start === 0 && end === 0;
+  if (!textarea) return false
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  return start === 0 && end === 0
 }
 
 function buildComposerSlashCommands({
@@ -154,9 +154,9 @@ function buildComposerSlashCommands({
   hideThinkingBlock,
   hideToolBlocks,
 }: {
-  availableSkills: SessionState["availableSkills"];
-  hideThinkingBlock: boolean;
-  hideToolBlocks: boolean;
+  availableSkills: SessionState["availableSkills"]
+  hideThinkingBlock: boolean
+  hideToolBlocks: boolean
 }) {
   return [
     {
@@ -237,15 +237,15 @@ function buildComposerSlashCommands({
       scope: skill.scope,
       source: skill.source,
     })),
-  ] satisfies Array<SlashCommandDescriptor>;
+  ] satisfies Array<SlashCommandDescriptor>
 }
 
 function useComposerSlashCommands({
   displaySettingsStore,
   sessionStore,
 }: {
-  displaySettingsStore: ComposerDisplaySettingsStore;
-  sessionStore: ComposerSessionStore;
+  displaySettingsStore: ComposerDisplaySettingsStore
+  sessionStore: ComposerSessionStore
 }) {
   const { availableSkills, hideThinkingBlock } = useSelector(
     sessionStore,
@@ -254,11 +254,11 @@ function useComposerSlashCommands({
       hideThinkingBlock: sessionState.hideThinkingBlock,
     }),
     { compare: shallow }
-  );
+  )
   const hideToolBlocks = useSelector(
     displaySettingsStore,
     (displaySettings) => displaySettings.hideToolBlocks
-  );
+  )
 
   return React.useMemo(
     () =>
@@ -268,14 +268,14 @@ function useComposerSlashCommands({
         hideToolBlocks,
       }),
     [availableSkills, hideThinkingBlock, hideToolBlocks]
-  );
+  )
 }
 
 type ComposerPickerState = {
-  modelPickerOpen: boolean;
-  thinkingPickerOpen: boolean;
-  modelQuery: string;
-};
+  modelPickerOpen: boolean
+  thinkingPickerOpen: boolean
+  modelQuery: string
+}
 
 type ComposerPickerAction =
   | { type: "openModel" }
@@ -283,13 +283,13 @@ type ComposerPickerAction =
   | { type: "setModelOpen"; open: boolean }
   | { type: "setThinkingOpen"; open: boolean }
   | { type: "setModelQuery"; query: string }
-  | { type: "syncDisabled"; disabled: boolean };
+  | { type: "syncDisabled"; disabled: boolean }
 
 const INITIAL_COMPOSER_PICKER_STATE: ComposerPickerState = {
   modelPickerOpen: false,
   thinkingPickerOpen: false,
   modelQuery: "",
-};
+}
 
 function composerPickerReducer(
   state: ComposerPickerState,
@@ -297,19 +297,19 @@ function composerPickerReducer(
 ): ComposerPickerState {
   switch (action.type) {
     case "openModel":
-      return { ...state, modelPickerOpen: true, thinkingPickerOpen: false };
+      return { ...state, modelPickerOpen: true, thinkingPickerOpen: false }
     case "openThinking":
-      return { ...state, modelPickerOpen: false, thinkingPickerOpen: true };
+      return { ...state, modelPickerOpen: false, thinkingPickerOpen: true }
     case "setModelOpen":
       return {
         ...state,
         modelPickerOpen: action.open,
         modelQuery: action.open ? state.modelQuery : "",
-      };
+      }
     case "setThinkingOpen":
-      return { ...state, thinkingPickerOpen: action.open };
+      return { ...state, thinkingPickerOpen: action.open }
     case "setModelQuery":
-      return { ...state, modelQuery: action.query };
+      return { ...state, modelQuery: action.query }
     case "syncDisabled":
       if (action.disabled) {
         return {
@@ -317,29 +317,27 @@ function composerPickerReducer(
           modelPickerOpen: false,
           thinkingPickerOpen: false,
           modelQuery: "",
-        };
+        }
       }
       if (!state.modelPickerOpen && state.modelQuery) {
-        return { ...state, modelQuery: "" };
+        return { ...state, modelQuery: "" }
       }
-      return state;
+      return state
   }
 }
 
 function getClipboardImageFiles(data: DataTransfer) {
   const itemFiles = Array.from(data.items).flatMap((item) => {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) return [];
-    const file = item.getAsFile();
-    return file?.type.startsWith("image/") ? [file] : [];
-  });
+    if (item.kind !== "file" || !item.type.startsWith("image/")) return []
+    const file = item.getAsFile()
+    return file?.type.startsWith("image/") ? [file] : []
+  })
 
   if (itemFiles.length > 0) {
-    return itemFiles;
+    return itemFiles
   }
 
-  return Array.from(data.files).filter((file) =>
-    file.type.startsWith("image/")
-  );
+  return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
 }
 
 export function ComposerPanel({
@@ -381,41 +379,41 @@ export function ComposerPanel({
   requestFileCompletions,
   ref,
 }: ComposerPanelProps & {
-  ref?: React.Ref<ComposerPanelHandle>;
+  ref?: React.Ref<ComposerPanelHandle>
 }) {
-  const promptRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
   const [pickerState, dispatchPickerState] = React.useReducer(
     composerPickerReducer,
     INITIAL_COMPOSER_PICKER_STATE
-  );
-  const { modelPickerOpen, thinkingPickerOpen, modelQuery } = pickerState;
+  )
+  const { modelPickerOpen, thinkingPickerOpen, modelQuery } = pickerState
 
   React.useImperativeHandle(
     ref,
     () => ({
       focusPrompt: (options) => {
-        promptRef.current?.focus(options);
+        promptRef.current?.focus(options)
       },
       openModelPicker: () => {
-        dispatchPickerState({ type: "openModel" });
+        dispatchPickerState({ type: "openModel" })
       },
       openThinkingPicker: () => {
-        dispatchPickerState({ type: "openThinking" });
+        dispatchPickerState({ type: "openThinking" })
       },
     }),
     []
-  );
+  )
 
   React.useEffect(() => {
-    dispatchPickerState({ type: "syncDisabled", disabled });
-  }, [disabled, modelPickerOpen]);
+    dispatchPickerState({ type: "syncDisabled", disabled })
+  }, [disabled, modelPickerOpen])
 
   const composerColumnClassName =
     centerMessages || flush
       ? `mx-auto flex w-full max-w-[80ch] flex-col ${
           centerMessages ? "gap-1.5" : "gap-3"
         }`
-      : "flex w-full flex-col gap-3";
+      : "flex w-full flex-col gap-3"
 
   const content = (
     <>
@@ -491,16 +489,16 @@ export function ComposerPanel({
         className="hidden"
         disabled={disabled}
         onChange={(event) => {
-          if (disabled) return;
-          onPickImages(event.target.files);
+          if (disabled) return
+          onPickImages(event.target.files)
         }}
       />
     </>
-  );
+  )
 
-  if (flush) return content;
+  if (flush) return content
 
-  return <div className="border-t p-4">{content}</div>;
+  return <div className="px-4 pb-4">{content}</div>
 }
 
 const ComposerAttachments = React.memo(function ComposerAttachments({
@@ -508,7 +506,7 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
   disabled,
   onRemoveImage,
 }: ComposerAttachmentsProps) {
-  if (images.length === 0) return null;
+  if (images.length === 0) return null
 
   return (
     <div className="flex flex-wrap gap-3">
@@ -532,8 +530,8 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
         </div>
       ))}
     </div>
-  );
-});
+  )
+})
 
 const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   composerDiffLineComments,
@@ -560,115 +558,114 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   requestPathCompletions,
   requestFileCompletions,
 }: ComposerPromptEditorProps) {
-  const waitingForAnswer = useWaitingForAnswer();
+  const waitingForAnswer = useWaitingForAnswer()
   const slashCommands = useComposerSlashCommands({
     displaySettingsStore,
     sessionStore,
-  });
-  const draftTextRef = React.useRef(composerText);
-  const draftSkillRef = React.useRef<string | undefined>(composerSkill);
+  })
+  const draftTextRef = React.useRef(composerText)
+  const draftSkillRef = React.useRef<string | undefined>(composerSkill)
   const selectionRef = React.useRef({
     start: composerText.length,
     end: composerText.length,
-  });
-  const hasDraftTextRef = React.useRef(composerText.trim().length > 0);
-  const composerSyncNonceRef = React.useRef(composerSyncNonce);
-  const [draftSkill, setDraftSkill] = React.useState(composerSkill);
+  })
+  const hasDraftTextRef = React.useRef(composerText.trim().length > 0)
+  const composerSyncNonceRef = React.useRef(composerSyncNonce)
+  const [draftSkill, setDraftSkill] = React.useState(composerSkill)
   const [hasDraftText, setHasDraftText] = React.useState(
     hasDraftTextRef.current
-  );
-  const refreshAssistStateRef = React.useRef<() => void>(() => {});
-  const multilineRef = React.useRef(false);
-  const [multiline, setMultiline] = React.useState(false);
-  const assistPointerSelectionSuppressedRef = React.useRef(false);
+  )
+  const refreshAssistStateRef = React.useRef<() => void>(() => {})
+  const multilineRef = React.useRef(false)
+  const [multiline, setMultiline] = React.useState(false)
+  const assistPointerSelectionSuppressedRef = React.useRef(false)
   const [
     assistPointerSelectionSuppressed,
     setAssistPointerSelectionSuppressed,
-  ] = React.useState(false);
+  ] = React.useState(false)
 
   // Like ChatGPT: keep the prompt on one row until the text needs a second
   // line, then stack the prompt above the buttons. Collapse again only when
   // the prompt is empty, so the layout does not flip while the user types.
   const measureMultiline = React.useCallback(() => {
-    const textarea = promptRef.current;
-    if (!textarea) return;
+    const textarea = promptRef.current
+    if (!textarea) return
 
-    const text = textarea.value;
-    let next = multilineRef.current;
+    const text = textarea.value
+    let next = multilineRef.current
     if (!text) {
-      next = false;
+      next = false
     } else if (text.includes("\n")) {
-      next = true;
+      next = true
     } else if (!next) {
-      const lineHeight =
-        parseFloat(getComputedStyle(textarea).lineHeight) || 20;
-      next = textarea.scrollHeight > lineHeight * 1.5;
+      const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 20
+      next = textarea.scrollHeight > lineHeight * 1.5
     }
 
     if (next !== multilineRef.current) {
-      multilineRef.current = next;
-      setMultiline(next);
+      multilineRef.current = next
+      setMultiline(next)
     }
-  }, [promptRef]);
+  }, [promptRef])
 
   React.useLayoutEffect(() => {
-    const textarea = promptRef.current;
-    if (!textarea) return;
-    measureMultiline();
-    const observer = new ResizeObserver(() => measureMultiline());
-    observer.observe(textarea);
-    return () => observer.disconnect();
-  }, [measureMultiline, promptRef]);
+    const textarea = promptRef.current
+    if (!textarea) return
+    measureMultiline()
+    const observer = new ResizeObserver(() => measureMultiline())
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [measureMultiline, promptRef])
 
   const syncDraftToParent = (text: string, skillName?: string) => {
-    onComposerTextChange(serializeComposerDraft({ text, skillName }));
-  };
+    onComposerTextChange(serializeComposerDraft({ text, skillName }))
+  }
 
   const scheduleDraftSync = (text: string, skillName?: string) => {
-    syncDraftToParent(text, skillName);
-  };
+    syncDraftToParent(text, skillName)
+  }
 
   const applyDraft = (
     text: string,
     skillName?: string,
     options?: {
-      immediate?: boolean;
+      immediate?: boolean
       selection?: {
-        start: number;
-        end: number;
-      };
+        start: number
+        end: number
+      }
     }
   ) => {
-    const previousSkillName = draftSkillRef.current;
-    const nextHasDraftText = text.trim().length > 0;
+    const previousSkillName = draftSkillRef.current
+    const nextHasDraftText = text.trim().length > 0
 
-    draftTextRef.current = text;
-    draftSkillRef.current = skillName;
+    draftTextRef.current = text
+    draftSkillRef.current = skillName
     if (options?.selection) {
-      selectionRef.current = options.selection;
+      selectionRef.current = options.selection
     }
 
     if (previousSkillName !== skillName) {
-      setDraftSkill(skillName);
+      setDraftSkill(skillName)
     }
     if (hasDraftTextRef.current !== nextHasDraftText) {
-      hasDraftTextRef.current = nextHasDraftText;
-      setHasDraftText(nextHasDraftText);
+      hasDraftTextRef.current = nextHasDraftText
+      setHasDraftText(nextHasDraftText)
     }
     if (promptRef.current && promptRef.current.value !== text) {
-      promptRef.current.value = text;
+      promptRef.current.value = text
     }
 
-    refreshAssistStateRef.current();
-    measureMultiline();
+    refreshAssistStateRef.current()
+    measureMultiline()
 
     if (options?.immediate) {
-      syncDraftToParent(text, skillName);
-      return;
+      syncDraftToParent(text, skillName)
+      return
     }
 
-    scheduleDraftSync(text, skillName);
-  };
+    scheduleDraftSync(text, skillName)
+  }
 
   const {
     visibleCompletion,
@@ -694,41 +691,41 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     requestPathCompletions,
     requestFileCompletions,
     applyDraft,
-  });
+  })
 
   React.useEffect(() => {
-    refreshAssistStateRef.current = refreshAssistState;
-  }, [refreshAssistState]);
+    refreshAssistStateRef.current = refreshAssistState
+  }, [refreshAssistState])
 
   React.useEffect(() => {
     const sameLocalDraft =
       composerText === draftTextRef.current &&
-      composerSkill === draftSkillRef.current;
-    const syncNonceChanged = composerSyncNonce !== composerSyncNonceRef.current;
-    composerSyncNonceRef.current = composerSyncNonce;
+      composerSkill === draftSkillRef.current
+    const syncNonceChanged = composerSyncNonce !== composerSyncNonceRef.current
+    composerSyncNonceRef.current = composerSyncNonce
 
     if (sameLocalDraft && !syncNonceChanged) {
-      refreshAssistStateRef.current();
-      return;
+      refreshAssistStateRef.current()
+      return
     }
 
-    const nextHasDraftText = composerText.trim().length > 0;
+    const nextHasDraftText = composerText.trim().length > 0
 
-    draftTextRef.current = composerText;
-    draftSkillRef.current = composerSkill;
+    draftTextRef.current = composerText
+    draftSkillRef.current = composerSkill
     selectionRef.current = {
       start: composerText.length,
       end: composerText.length,
-    };
-    hasDraftTextRef.current = nextHasDraftText;
-    setDraftSkill(composerSkill);
-    setHasDraftText(nextHasDraftText);
-    if (promptRef.current && promptRef.current.value !== composerText) {
-      promptRef.current.value = composerText;
     }
-    dismissMenus();
-    refreshAssistStateRef.current();
-    measureMultiline();
+    hasDraftTextRef.current = nextHasDraftText
+    setDraftSkill(composerSkill)
+    setHasDraftText(nextHasDraftText)
+    if (promptRef.current && promptRef.current.value !== composerText) {
+      promptRef.current.value = composerText
+    }
+    dismissMenus()
+    refreshAssistStateRef.current()
+    measureMultiline()
   }, [
     composerSkill,
     composerSyncNonce,
@@ -736,69 +733,69 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     dismissMenus,
     measureMultiline,
     promptRef,
-  ]);
+  ])
 
   const hasSubmittableContent =
     hasDraftText ||
     composerDiffLineComments.length > 0 ||
-    composerImages.length > 0;
+    composerImages.length > 0
   const responseInFlight =
-    isStreaming || isCompacting || awaitingFirstTurn || isSubmitting;
-  const acceptFollowUps = responseInFlight;
+    isStreaming || isCompacting || awaitingFirstTurn || isSubmitting
+  const acceptFollowUps = responseInFlight
   const setAssistPointerSelectionSuppressedValue = (next: boolean) => {
-    assistPointerSelectionSuppressedRef.current = next;
-    setAssistPointerSelectionSuppressed(next);
-  };
-  const blockInitialSubmit = isSubmitting && !acceptFollowUps;
+    assistPointerSelectionSuppressedRef.current = next
+    setAssistPointerSelectionSuppressed(next)
+  }
+  const blockInitialSubmit = isSubmitting && !acceptFollowUps
   const handleComposerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.closest("button, textarea, input, [role='button']")) return;
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    if (target.closest("button, textarea, input, [role='button']")) return
 
-    event.preventDefault();
-    promptRef.current?.focus();
-  };
+    event.preventDefault()
+    promptRef.current?.focus()
+  }
 
   const runPrimaryComposerAction = (streamingBehavior?: StreamingBehavior) => {
-    if (disabled) return;
+    if (disabled) return
 
-    const draftText = draftTextRef.current;
-    const draftSkill = draftSkillRef.current;
-    const exact = findExactSlashCommand(draftText, slashCommands);
+    const draftText = draftTextRef.current
+    const draftSkill = draftSkillRef.current
+    const exact = findExactSlashCommand(draftText, slashCommands)
     if (exact) {
       if (exact.command.kind === "builtin") {
-        dismissMenus();
-        onRunBuiltinSlashCommand(exact.command.name, exact.args);
-        return;
+        dismissMenus()
+        onRunBuiltinSlashCommand(exact.command.name, exact.args)
+        return
       }
 
       if (!exact.args) {
-        dismissMenus();
-        applyDraft("", exact.command.skillName, { immediate: true });
-        return;
+        dismissMenus()
+        applyDraft("", exact.command.skillName, { immediate: true })
+        return
       }
     }
 
-    const selectedSlashCommand = getSelectedSlashCommand();
+    const selectedSlashCommand = getSelectedSlashCommand()
     if (slashMenuState && selectedSlashCommand) {
-      dismissMenus();
+      dismissMenus()
       if (selectedSlashCommand.kind === "builtin") {
-        onRunBuiltinSlashCommand(selectedSlashCommand.name, "");
-        return;
+        onRunBuiltinSlashCommand(selectedSlashCommand.name, "")
+        return
       }
-      applyDraft("", selectedSlashCommand.skillName, { immediate: true });
-      return;
+      applyDraft("", selectedSlashCommand.skillName, { immediate: true })
+      return
     }
 
-    syncDraftToParent(draftText, draftSkill);
-    onSubmitPrompt(streamingBehavior);
-  };
+    syncDraftToParent(draftText, draftSkill)
+    onSubmitPrompt(streamingBehavior)
+  }
 
   const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (disabled) return;
+    if (disabled) return
 
-    const parsed = parseComposerSkillMessage(event.target.value);
-    const nextText = parsed.matched ? parsed.text : event.target.value;
+    const parsed = parseComposerSkillMessage(event.target.value)
+    const nextText = parsed.matched ? parsed.text : event.target.value
     const nextSelection = parsed.matched
       ? {
           start: nextText.length,
@@ -807,39 +804,39 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       : {
           start: event.target.selectionStart,
           end: event.target.selectionEnd,
-        };
+        }
 
     applyDraft(nextText, parsed.matched ? parsed.skillName : undefined, {
       selection: nextSelection,
-    });
-  };
+    })
+  }
 
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (disabled) return;
+    if (disabled) return
 
-    const imageFiles = getClipboardImageFiles(event.clipboardData);
-    if (imageFiles.length === 0) return;
+    const imageFiles = getClipboardImageFiles(event.clipboardData)
+    if (imageFiles.length === 0) return
 
-    onPickImages(imageFiles);
-  };
+    onPickImages(imageFiles)
+  }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (disabled) {
-      event.preventDefault();
-      return;
+      event.preventDefault()
+      return
     }
 
-    const draftText = draftTextRef.current;
-    const currentDraftSkill = draftSkillRef.current;
+    const draftText = draftTextRef.current
+    const currentDraftSkill = draftSkillRef.current
     const moveDownShortcut = matchesShortcutEvent(
       event.nativeEvent,
       "Control+J"
-    );
-    const moveUpShortcut = matchesShortcutEvent(event.nativeEvent, "Control+K");
+    )
+    const moveUpShortcut = matchesShortcutEvent(event.nativeEvent, "Control+K")
 
     if (event.key === "Backspace" && !draftText && currentDraftSkill) {
-      applyDraft("", undefined, { immediate: true });
-      return;
+      applyDraft("", undefined, { immediate: true })
+      return
     }
 
     if (
@@ -848,19 +845,19 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       !currentDraftSkill &&
       composerDiffLineComments.length > 0
     ) {
-      const lastComment = composerDiffLineComments.at(-1);
-      if (lastComment) onRemoveComposerDiffLineComment(lastComment.id);
-      return;
+      const lastComment = composerDiffLineComments.at(-1)
+      if (lastComment) onRemoveComposerDiffLineComment(lastComment.id)
+      return
     }
 
     if (
       visibleCompletion &&
       (event.key === "ArrowDown" || event.key === "ArrowUp")
     ) {
-      event.preventDefault();
-      setAssistPointerSelectionSuppressedValue(true);
-      moveCompletionSelection(event.key === "ArrowDown" ? 1 : -1);
-      return;
+      event.preventDefault()
+      setAssistPointerSelectionSuppressedValue(true)
+      moveCompletionSelection(event.key === "ArrowDown" ? 1 : -1)
+      return
     }
 
     if (
@@ -868,41 +865,41 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       !visibleCompletion &&
       (event.key === "ArrowDown" || event.key === "ArrowUp")
     ) {
-      event.preventDefault();
-      setAssistPointerSelectionSuppressedValue(true);
-      moveSlashSelection(event.key === "ArrowDown" ? 1 : -1);
-      return;
+      event.preventDefault()
+      setAssistPointerSelectionSuppressedValue(true)
+      moveSlashSelection(event.key === "ArrowDown" ? 1 : -1)
+      return
     }
 
     if (moveDownShortcut || moveUpShortcut) {
-      const direction = moveDownShortcut ? 1 : -1;
+      const direction = moveDownShortcut ? 1 : -1
       if (visibleCompletion) {
-        event.preventDefault();
-        event.stopPropagation();
-        setAssistPointerSelectionSuppressedValue(true);
-        moveCompletionSelection(direction);
-        return;
+        event.preventDefault()
+        event.stopPropagation()
+        setAssistPointerSelectionSuppressedValue(true)
+        moveCompletionSelection(direction)
+        return
       }
 
       if (slashMenuState) {
-        event.preventDefault();
-        event.stopPropagation();
-        setAssistPointerSelectionSuppressedValue(true);
-        moveSlashSelection(direction);
+        event.preventDefault()
+        event.stopPropagation()
+        setAssistPointerSelectionSuppressedValue(true)
+        moveSlashSelection(direction)
       }
     }
 
     if (event.key === "Tab") {
       if (visibleCompletion && selectedCompletionItem) {
-        event.preventDefault();
-        applyCompletion(selectedCompletionItem);
-        return;
+        event.preventDefault()
+        applyCompletion(selectedCompletionItem)
+        return
       }
-      const selectedSlashCommand = getSelectedSlashCommand();
+      const selectedSlashCommand = getSelectedSlashCommand()
       if (slashMenuState && selectedSlashCommand) {
-        event.preventDefault();
-        applySlashSuggestion(selectedSlashCommand);
-        return;
+        event.preventDefault()
+        applySlashSuggestion(selectedSlashCommand)
+        return
       }
     }
 
@@ -912,16 +909,16 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       !event.nativeEvent.isComposing
     ) {
       if (visibleCompletion && selectedCompletionItem) {
-        event.preventDefault();
-        applyCompletion(selectedCompletionItem);
-        return;
+        event.preventDefault()
+        applyCompletion(selectedCompletionItem)
+        return
       }
 
-      event.preventDefault();
+      event.preventDefault()
       runPrimaryComposerAction(
         event.altKey ? "followUp" : acceptFollowUps ? "steer" : undefined
-      );
-      return;
+      )
+      return
     }
 
     if (
@@ -932,17 +929,17 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       !event.shiftKey
     ) {
       if (visibleCompletion || slashMenuState) {
-        event.preventDefault();
-        event.stopPropagation();
-        dismissMenus();
-        return;
+        event.preventDefault()
+        event.stopPropagation()
+        dismissMenus()
+        return
       }
 
       if (responseInFlight && !event.repeat) {
-        event.preventDefault();
-        event.stopPropagation();
-        onAbort();
-        return;
+        event.preventDefault()
+        event.stopPropagation()
+        onAbort()
+        return
       }
     }
 
@@ -954,33 +951,33 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       currentDraftSkill &&
       selectionIsAtStart(promptRef.current)
     ) {
-      applyDraft("", undefined, { immediate: true });
+      applyDraft("", undefined, { immediate: true })
     }
-  };
+  }
 
   const handleHoverCompletion = (index: number) => {
-    if (assistPointerSelectionSuppressedRef.current) return;
-    selectCompletionIndex(index);
-  };
+    if (assistPointerSelectionSuppressedRef.current) return
+    selectCompletionIndex(index)
+  }
 
   const handleMoveCompletion = (index: number) => {
-    setAssistPointerSelectionSuppressedValue(false);
-    selectCompletionIndex(index);
-  };
+    setAssistPointerSelectionSuppressedValue(false)
+    selectCompletionIndex(index)
+  }
 
   const handleHoverSlashCommand = (index: number) => {
-    if (assistPointerSelectionSuppressedRef.current) return;
-    selectSlashIndex(index);
-  };
+    if (assistPointerSelectionSuppressedRef.current) return
+    selectSlashIndex(index)
+  }
 
   const handleMoveSlashCommand = (index: number) => {
-    setAssistPointerSelectionSuppressedValue(false);
-    selectSlashIndex(index);
-  };
+    setAssistPointerSelectionSuppressedValue(false)
+    selectSlashIndex(index)
+  }
 
-  const hasChips = Boolean(draftSkill) || composerDiffLineComments.length > 0;
-  const hasImages = composerImages.length > 0;
-  const expanded = multiline || hasChips || hasImages;
+  const hasChips = Boolean(draftSkill) || composerDiffLineComments.length > 0
+  const hasImages = composerImages.length > 0
+  const expanded = multiline || hasChips || hasImages
   const gridTemplateAreas = expanded
     ? [
         hasImages ? '"attachments attachments attachments"' : null,
@@ -989,7 +986,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       ]
         .filter(Boolean)
         .join(" ")
-    : '"leading primary trailing"';
+    : '"leading primary trailing"'
 
   return (
     <div
@@ -1090,10 +1087,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               waitingForAnswer
                 ? "Type your answer…"
                 : acceptFollowUps
-                ? "Add a message to the queue…"
-                : draftSkill
-                ? `Ask with ${formatComposerSkillName(draftSkill)}…`
-                : "Ask anything…"
+                  ? "Add a message to the queue…"
+                  : draftSkill
+                    ? `Ask with ${formatComposerSkillName(draftSkill)}…`
+                    : "Ask anything…"
             }
             className="max-h-[min(40dvh,18rem)] min-h-[22px] max-w-full min-w-0 flex-1 basis-[min(240px,100%)] resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 disabled:cursor-text disabled:bg-transparent disabled:opacity-60 md:text-sm dark:bg-transparent dark:disabled:bg-transparent"
           />
@@ -1140,7 +1137,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
               }
               aria-label="Send"
               onClick={() => {
-                runPrimaryComposerAction(undefined);
+                runPrimaryComposerAction(undefined)
               }}
             >
               {blockInitialSubmit ? <Spinner /> : <ArrowUpIcon />}
@@ -1196,5 +1193,5 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         </div>
       ) : null}
     </div>
-  );
-});
+  )
+})
