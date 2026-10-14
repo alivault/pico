@@ -1283,7 +1283,9 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     )
 
   const directoryHeader = (
-    <div className="flex items-center gap-2 rounded-lg">
+    // pl-2 puts the folder icon on the sidebar's icon column. The new-session
+    // button stays flush right, so its icon ends on the right content edge.
+    <div className="flex items-center gap-2 rounded-lg pl-2">
       <CollapsibleTrigger
         type="button"
         className={cn(
