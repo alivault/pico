@@ -516,7 +516,7 @@ function DeleteSessionsDialog({
               Cancel
             </Button>
             <Button variant="destructive" onClick={onDeleteSession}>
-              Delete
+              Archive
             </Button>
           </DialogFooter>
         </DialogContent>

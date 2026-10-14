@@ -848,7 +848,7 @@ function SidebarSessionItem({
                 variant="destructive"
                 onClick={() => onDeleteSession(entry)}
               >
-                Delete
+                Archive
               </ContextMenuItem>
             ) : null}
           </ContextMenuContent>
