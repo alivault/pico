@@ -694,7 +694,7 @@ function SidebarSessionItem({
         // A child row draws its highlight in an inset layer, so the tree
         // lines stay clear. The click area stays the full row width.
         nestingDepth > 0 &&
-          "isolate data-active:bg-transparent! active:bg-transparent!"
+          "isolate active:bg-transparent! data-active:bg-transparent!"
       )}
       onClick={(event) => {
         onSessionClick?.(entry, {
@@ -1003,7 +1003,8 @@ function buildSessionTreeGuides(
         seen.add(current)
         const parent = parentOf(current)
         if (!parent) break
-        const hasLaterSibling = (lastChildIndex.get(parent) ?? -1) > currentIndex
+        const hasLaterSibling =
+          (lastChildIndex.get(parent) ?? -1) > currentIndex
         guides = (hasLaterSibling ? "1" : "0") + guides
         current = byId.get(parent)
         currentIndex = indexById.get(parent) ?? -1
