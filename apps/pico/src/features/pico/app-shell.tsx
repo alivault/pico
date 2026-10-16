@@ -3285,8 +3285,8 @@ function useAppShellSessionWorkspaceView({
       {
         id: "toggle-review-pane",
         group: "Git",
-        title: "Toggle Review Pane",
-        description: "Toggle the review pane for changed files",
+        title: "Toggle Git Pane",
+        description: "Toggle the Git pane for changed files",
         shortcut: formatShortcutLabel(rightSidebarPaneShortcut("review")),
         keywords: ["review", "diff", "file", "changes", "pane"],
         onSelect: toggleFileView,
