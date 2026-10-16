@@ -28,7 +28,10 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
 import { ComposerPendingMessages } from "@/features/pico/composer-pending-messages"
 import { ComposerPickers } from "@/features/pico/composer-pickers"
-import { matchesShortcutEvent } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  matchesShortcutEvent,
+} from "@/features/pico/keyboard-shortcuts"
 import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
 import {
   formatComposerDiffLineCommentReference,
@@ -830,9 +833,12 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     const currentDraftSkill = draftSkillRef.current
     const moveDownShortcut = matchesShortcutEvent(
       event.nativeEvent,
-      "Control+J"
+      appShortcut("J")
     )
-    const moveUpShortcut = matchesShortcutEvent(event.nativeEvent, "Control+K")
+    const moveUpShortcut = matchesShortcutEvent(
+      event.nativeEvent,
+      appShortcut("K")
+    )
 
     if (event.key === "Backspace" && !draftText && currentDraftSkill) {
       applyDraft("", undefined, { immediate: true })

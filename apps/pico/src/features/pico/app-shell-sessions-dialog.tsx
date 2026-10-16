@@ -33,6 +33,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
+  appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
@@ -723,13 +724,13 @@ function useAppShellSessionsDialogView({
       return
     }
 
-    if (matchesShortcutEvent(event.nativeEvent, "Control+R")) {
+    if (matchesShortcutEvent(event.nativeEvent, appShortcut("R"))) {
       event.preventDefault()
       renameSelectedSession()
       return
     }
 
-    if (matchesShortcutEvent(event.nativeEvent, "Control+D")) {
+    if (matchesShortcutEvent(event.nativeEvent, appShortcut("D"))) {
       event.preventDefault()
       deleteSelectedSession()
     }
@@ -838,10 +839,12 @@ function useAppShellSessionsDialogView({
             <FooterKbd>Enter</FooterKbd> Switch
           </span>
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel("Control+R")}</FooterKbd> Rename
+            <FooterKbd>{formatShortcutLabel(appShortcut("R"))}</FooterKbd>{" "}
+            Rename
           </span>
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel("Control+D")}</FooterKbd> Archive
+            <FooterKbd>{formatShortcutLabel(appShortcut("D"))}</FooterKbd>{" "}
+            Archive
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Esc</FooterKbd> Close
@@ -899,7 +902,7 @@ function useAppShellSessionsDialogView({
               dispatch({ type: "browseRequested" })
               return
             }
-            if (matchesShortcutEvent(event.nativeEvent, "Control+G")) {
+            if (matchesShortcutEvent(event.nativeEvent, appShortcut("G"))) {
               event.preventDefault()
               event.stopPropagation()
               void generateSelectedSessionName()
@@ -917,7 +920,8 @@ function useAppShellSessionsDialogView({
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel("Control+G")}</FooterKbd> Generate
+            <FooterKbd>{formatShortcutLabel(appShortcut("G"))}</FooterKbd>{" "}
+            Generate
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Save

@@ -22,7 +22,10 @@ import {
   ComposerContextUsageIndicator,
   type ComposerContextUsageStore,
 } from "@/features/pico/composer-context-usage-indicator"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
 import { modelLabel } from "@/features/pico/model-label"
 import {
   useSelector,
@@ -170,7 +173,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
 
   return (
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
-      <TitleTooltip title="Model" kbd={formatShortcutLabel("Control+M")}>
+      <TitleTooltip title="Model" kbd={formatShortcutLabel(appShortcut("M"))}>
         <PopoverTrigger
           render={
             <Button
@@ -282,7 +285,7 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
       <TitleTooltip
         title="Reasoning"
-        kbd={`${formatShortcutLabel("Control+R")} / ${formatShortcutLabel("Control+Shift+R")}`}
+        kbd={`${formatShortcutLabel(appShortcut("R"))} / ${formatShortcutLabel(appShortcut("Shift+R"))}`}
       >
         <PopoverTrigger
           render={

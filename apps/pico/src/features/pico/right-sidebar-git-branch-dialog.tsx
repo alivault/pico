@@ -27,6 +27,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
+  appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
@@ -159,7 +160,7 @@ function GitBranchBrowse({
       value={selectedValue}
       onValueChange={onSelectedValueChange}
       onKeyDown={(event) => {
-        if (matchesShortcutEvent(event.nativeEvent, "Control+N")) {
+        if (matchesShortcutEvent(event.nativeEvent, appShortcut("N"))) {
           event.preventDefault()
           onCreateStage()
         }
@@ -185,7 +186,7 @@ function GitBranchBrowse({
             <GitBranchIcon className="size-4 text-muted-foreground" />
             <span className="font-medium">Create new branch…</span>
             <CommandShortcut>
-              {formatShortcutLabel("Control+N")}
+              {formatShortcutLabel(appShortcut("N"))}
             </CommandShortcut>
           </CommandItem>
         </CommandGroup>
@@ -342,7 +343,7 @@ function GitBranchBrowseShortcuts() {
       </span>
       <span className="inline-flex items-center gap-1">
         <GitBranchDialogKbd>
-          {formatShortcutLabel("Control+N")}
+          {formatShortcutLabel(appShortcut("N"))}
         </GitBranchDialogKbd>{" "}
         New branch
       </span>

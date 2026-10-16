@@ -15,6 +15,7 @@ import {
   type SidebarHorizontalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
+import { isMacPlatform } from "@/features/pico/keyboard-shortcuts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -47,6 +48,20 @@ const SIDEBAR_WIDTH_LEGACY_STORAGE_KEY = "sidebar_width"
 const SIDEBAR_WIDTH_MOBILE = "20rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+
+// On macOS, Command+B or Control+B toggles the sidebar. On Windows and Linux,
+// the browser uses Control, so Alt+B toggles the sidebar.
+function hasSidebarShortcutModifier(event: KeyboardEvent) {
+  if (event.shiftKey) return false
+  if (isMacPlatform) {
+    return (
+      (event.metaKey || event.ctrlKey) &&
+      !(event.metaKey && event.ctrlKey) &&
+      !event.altKey
+    )
+  }
+  return event.altKey && !event.ctrlKey && !event.metaKey
+}
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -282,10 +297,7 @@ function SidebarProvider({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.key.toLowerCase() === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey) &&
-        !(event.metaKey && event.ctrlKey) &&
-        !event.shiftKey &&
-        !event.altKey
+        hasSidebarShortcutModifier(event)
       ) {
         event.preventDefault()
         toggleSidebarRef.current()

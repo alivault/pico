@@ -6,7 +6,10 @@ import { toast } from "sonner"
 
 import type { AppCommand } from "@/features/pico/app-shell-command-palette"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
 import type {
@@ -491,7 +494,7 @@ function getSettingsCommandGroups({
             "Collapse assistant reasoning into the short hidden-thinking preview.",
           valueLabel: formatToggleValue(hideThinkingBlocks),
           toggled: hideThinkingBlocks,
-          shortcut: formatShortcutLabel("Control+T"),
+          shortcut: formatShortcutLabel(appShortcut("T")),
           keywords: ["reasoning", "thinking", "display", "collapse"],
           onSelect: () => onHideThinkingBlocksChange(!hideThinkingBlocks),
         },
@@ -502,7 +505,7 @@ function getSettingsCommandGroups({
             "Hide assistant tool execution cards in the conversation view.",
           valueLabel: formatToggleValue(hideToolBlocks),
           toggled: hideToolBlocks,
-          shortcut: formatShortcutLabel("Control+O"),
+          shortcut: formatShortcutLabel(appShortcut("O")),
           keywords: ["tools", "calls", "display", "cards"],
           onSelect: () => onHideToolBlocksChange(!hideToolBlocks),
         },

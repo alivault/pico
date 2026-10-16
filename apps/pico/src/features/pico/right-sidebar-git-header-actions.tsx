@@ -14,7 +14,11 @@ import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+  pullShortcut,
+} from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitCommitDialog } from "@/features/pico/right-sidebar-git-commit-dialog"
 import {
@@ -233,7 +237,10 @@ export function HeaderGitActions({
       {showActions ? (
         <div className="flex items-center gap-1">
           {canCommit ? (
-            <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
+            <TitleTooltip
+              title="Commit"
+              kbd={formatShortcutLabel(appShortcut("C"))}
+            >
               <Button
                 variant="ghost"
                 size="icon"
@@ -248,7 +255,10 @@ export function HeaderGitActions({
             </TitleTooltip>
           ) : null}
           {canCommit ? (
-            <TitleTooltip title="Commit" kbd={formatShortcutLabel("Control+C")}>
+            <TitleTooltip
+              title="Commit"
+              kbd={formatShortcutLabel(appShortcut("C"))}
+            >
               <Button
                 variant="ghost"
                 className="hidden md:inline-flex"
@@ -261,7 +271,10 @@ export function HeaderGitActions({
             </TitleTooltip>
           ) : null}
           {showMobilePush ? (
-            <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
+            <TitleTooltip
+              title="Push"
+              kbd={formatShortcutLabel(appShortcut("P"))}
+            >
               <Button
                 variant="ghost"
                 size="icon"
@@ -277,7 +290,10 @@ export function HeaderGitActions({
             </TitleTooltip>
           ) : null}
           {showPush ? (
-            <TitleTooltip title="Push" kbd={formatShortcutLabel("Control+P")}>
+            <TitleTooltip
+              title="Push"
+              kbd={formatShortcutLabel(appShortcut("P"))}
+            >
               <Button
                 variant="ghost"
                 className="hidden md:inline-flex"
@@ -293,7 +309,7 @@ export function HeaderGitActions({
           {showForcePush ? (
             <TitleTooltip
               title="Force push"
-              kbd={formatShortcutLabel("Control+Shift+P")}
+              kbd={formatShortcutLabel(appShortcut("Shift+P"))}
             >
               <Button
                 variant="ghost"
@@ -308,7 +324,7 @@ export function HeaderGitActions({
             </TitleTooltip>
           ) : null}
           {showPull ? (
-            <TitleTooltip title="Pull" kbd={formatShortcutLabel("Alt+P")}>
+            <TitleTooltip title="Pull" kbd={formatShortcutLabel(pullShortcut)}>
               <Button
                 variant="ghost"
                 className="hidden md:inline-flex"

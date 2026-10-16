@@ -90,7 +90,10 @@ import {
   formatDisplayPath,
   formatFolderName,
 } from "@/features/pico/app-shell-common"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
 import {
   createPicoStore,
   setStoreState,
@@ -1673,7 +1676,7 @@ function AppSidebarSearchButton({
             <SearchIcon />
             <span>Search sessions…</span>
             <span className="ml-auto hidden items-center md:flex">
-              <Kbd>{formatShortcutLabel("Control+S")}</Kbd>
+              <Kbd>{formatShortcutLabel(appShortcut("S"))}</Kbd>
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -1732,7 +1735,7 @@ function AppSidebarDirectoriesHeader({
         ) : null}
         <TitleTooltip
           title="Add directory"
-          kbd={formatShortcutLabel("Control+D")}
+          kbd={formatShortcutLabel(appShortcut("D"))}
         >
           <Button
             variant="ghost"

@@ -32,7 +32,10 @@ import {
   shallowRecordEqual,
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
 import {
   HeaderGitActions,
   HeaderGitStatusText,
@@ -133,7 +136,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 )}`
               : "Create a new session"
           }
-          kbd={formatShortcutLabel("Control+N")}
+          kbd={formatShortcutLabel(appShortcut("N"))}
         >
           <Button
             size="icon"
@@ -208,7 +211,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Create new session</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+N")}
+                  {formatShortcutLabel(appShortcut("N"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               {newSessionDirectoryOptions.length > 0 ? (
@@ -308,7 +311,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Fork</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+F")}
+                  {formatShortcutLabel(appShortcut("F"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -323,7 +326,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                     : "Hide thinking"}
                 </span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+T")}
+                  {formatShortcutLabel(appShortcut("T"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -333,7 +336,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>{hideToolBlocks ? "Show tools" : "Hide tools"}</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+O")}
+                  {formatShortcutLabel(appShortcut("O"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -345,7 +348,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Rename session</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+E")}
+                  {formatShortcutLabel(appShortcut("E"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -357,7 +360,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Archive session</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+X")}
+                  {formatShortcutLabel(appShortcut("X"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -377,7 +380,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Commands</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+K")}
+                  {formatShortcutLabel(appShortcut("K"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -387,7 +390,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Settings</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+,")}
+                  {formatShortcutLabel(appShortcut(","))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -409,7 +412,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </TitleTooltip>
           <TitleTooltip
             title="Toggle right sidebar"
-            kbd={formatShortcutLabel("Control+\\")}
+            kbd={formatShortcutLabel(appShortcut("\\"))}
           >
             <Button
               size="icon"

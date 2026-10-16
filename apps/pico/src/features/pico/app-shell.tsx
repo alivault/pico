@@ -117,7 +117,11 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+  pullShortcut,
+} from "@/features/pico/keyboard-shortcuts"
 import {
   createPicoLatestThrottler,
   type PicoLatestThrottler,
@@ -3082,7 +3086,7 @@ function useAppShellSessionWorkspaceView({
         group: "Sessions",
         title: "New session",
         description: "Create a new draft session",
-        shortcut: formatShortcutLabel("Control+N"),
+        shortcut: formatShortcutLabel(appShortcut("N")),
         keywords: ["create", "draft", "session"],
         onSelect: createSession,
       },
@@ -3091,7 +3095,7 @@ function useAppShellSessionWorkspaceView({
         group: "Sessions",
         title: "Open sessions",
         description: "Search and switch sessions",
-        shortcut: formatShortcutLabel("Control+S"),
+        shortcut: formatShortcutLabel(appShortcut("S")),
         keywords: ["session", "search", "switch", "jump"],
         onSelect: openSessionsDialog,
       },
@@ -3106,7 +3110,7 @@ function useAppShellSessionWorkspaceView({
         description: commandState.isMobile
           ? "Switch the mobile right sidebar tab on or off"
           : "Toggle the right sidebar",
-        shortcut: formatShortcutLabel("Control+\\"),
+        shortcut: formatShortcutLabel(appShortcut("\\")),
         keywords: [
           "right",
           "sidebar",
@@ -3138,7 +3142,7 @@ function useAppShellSessionWorkspaceView({
         group: "Git",
         title: "Commit changes",
         description: "Open the Git commit dialog",
-        shortcut: formatShortcutLabel("Control+C"),
+        shortcut: formatShortcutLabel(appShortcut("C")),
         keywords: ["git", "commit", "changes", "stage"],
         onSelect: openCommitDialog,
       },
@@ -3147,7 +3151,7 @@ function useAppShellSessionWorkspaceView({
         group: "Git",
         title: "Push changes",
         description: "Push local commits to the remote",
-        shortcut: formatShortcutLabel("Control+P"),
+        shortcut: formatShortcutLabel(appShortcut("P")),
         keywords: ["git", "push", "remote", "upstream"],
         onSelect: pushGitChanges,
       },
@@ -3156,7 +3160,7 @@ function useAppShellSessionWorkspaceView({
         group: "Git",
         title: "Force push changes",
         description: "Force push local commits with --force-with-lease",
-        shortcut: formatShortcutLabel("Control+Shift+P"),
+        shortcut: formatShortcutLabel(appShortcut("Shift+P")),
         keywords: ["git", "force", "push", "remote", "upstream", "lease"],
         onSelect: forcePushGitChanges,
       },
@@ -3165,7 +3169,7 @@ function useAppShellSessionWorkspaceView({
         group: "Git",
         title: "Pull changes",
         description: "Pull remote changes into the current branch",
-        shortcut: formatShortcutLabel("Alt+P"),
+        shortcut: formatShortcutLabel(pullShortcut),
         keywords: ["git", "pull", "remote", "upstream"],
         onSelect: pullGitChanges,
       },
@@ -3174,7 +3178,7 @@ function useAppShellSessionWorkspaceView({
         group: "Assistant",
         title: "Focus prompt",
         description: "Move focus to the prompt field",
-        shortcut: formatShortcutLabel("Control+Enter"),
+        shortcut: formatShortcutLabel(appShortcut("Enter")),
         keywords: ["prompt", "composer", "input", "message", "reply"],
         onSelect: focusPrompt,
       },
@@ -3183,7 +3187,7 @@ function useAppShellSessionWorkspaceView({
         group: "Assistant",
         title: "Set model",
         description: "Open the model picker",
-        shortcut: formatShortcutLabel("Control+M"),
+        shortcut: formatShortcutLabel(appShortcut("M")),
         keywords: ["model", "provider", "picker", "choose"],
         onSelect: () => {
           if (!commandPaletteStateRef.current.hasAvailableModels) {
@@ -3198,7 +3202,7 @@ function useAppShellSessionWorkspaceView({
         group: "Sidebar",
         title: "Add Directory",
         description: "Add a directory accordion to the sidebar",
-        shortcut: formatShortcutLabel("Control+D"),
+        shortcut: formatShortcutLabel(appShortcut("D")),
         keywords: ["workspace", "sidebar", "directory", "folder"],
         onSelect: openAddDirectoryDialog,
       },
@@ -3216,7 +3220,7 @@ function useAppShellSessionWorkspaceView({
         group: "Sessions",
         title: "Fork session",
         description: "Create a new session from a previous user message",
-        shortcut: formatShortcutLabel("Control+F"),
+        shortcut: formatShortcutLabel(appShortcut("F")),
         keywords: ["fork", "branch", "draft"],
         onSelect: openForkDialog,
       },
@@ -3241,7 +3245,7 @@ function useAppShellSessionWorkspaceView({
         group: "Assistant",
         title: "Next reasoning level",
         description: `Current level: ${currentThinkingLevel}`,
-        shortcut: formatShortcutLabel("Control+R"),
+        shortcut: formatShortcutLabel(appShortcut("R")),
         keywords: ["thinking", "reasoning", "level", "cycle", "next"],
         onSelect: () => {
           void cycleThinkingLevel(1)
@@ -3252,7 +3256,7 @@ function useAppShellSessionWorkspaceView({
         group: "Assistant",
         title: "Previous reasoning level",
         description: `Current level: ${currentThinkingLevel}`,
-        shortcut: formatShortcutLabel("Control+Shift+R"),
+        shortcut: formatShortcutLabel(appShortcut("Shift+R")),
         keywords: [
           "thinking",
           "reasoning",
@@ -3294,7 +3298,7 @@ function useAppShellSessionWorkspaceView({
         group: "App",
         title: "Open settings",
         description: "Open app settings",
-        shortcut: formatShortcutLabel("Control+,"),
+        shortcut: formatShortcutLabel(appShortcut(",")),
         keywords: ["settings", "theme", "notifications", "display"],
         onSelect: openSettingsDialog,
       },
@@ -3306,7 +3310,7 @@ function useAppShellSessionWorkspaceView({
         group: "Sessions",
         title: "Rename session",
         description: "Rename the current session",
-        shortcut: formatShortcutLabel("Control+E"),
+        shortcut: formatShortcutLabel(appShortcut("E")),
         keywords: ["rename", "title", "name"],
         onSelect: openRenameDialog,
       })
@@ -3317,7 +3321,7 @@ function useAppShellSessionWorkspaceView({
         description: `Archive ${getCurrentSessionTitleFromState(
           sessionStateRef.current
         )}`,
-        shortcut: formatShortcutLabel("Control+X"),
+        shortcut: formatShortcutLabel(appShortcut("X")),
         keywords: ["archive", "delete", "remove", "session"],
         onSelect: openDeleteDialogForCurrentSession,
       })

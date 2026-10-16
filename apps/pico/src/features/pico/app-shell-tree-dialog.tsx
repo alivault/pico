@@ -33,6 +33,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
+  appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
@@ -89,11 +90,11 @@ const TREE_FILTER_OPTIONS: Array<{
   label: string
   shortcut: string
 }> = [
-  { mode: "default", label: "Default", shortcut: "Control+D" },
-  { mode: "no-tools", label: "No tools", shortcut: "Control+T" },
-  { mode: "user-only", label: "User only", shortcut: "Control+U" },
-  { mode: "labeled-only", label: "Labeled", shortcut: "Control+L" },
-  { mode: "all", label: "All", shortcut: "Control+A" },
+  { mode: "default", label: "Default", shortcut: appShortcut("D") },
+  { mode: "no-tools", label: "No tools", shortcut: appShortcut("T") },
+  { mode: "user-only", label: "User only", shortcut: appShortcut("U") },
+  { mode: "labeled-only", label: "Labeled", shortcut: appShortcut("L") },
+  { mode: "all", label: "All", shortcut: appShortcut("A") },
 ]
 
 function toggleTreeFilterMode(
@@ -1312,8 +1313,8 @@ function useTreeBrowsePanelView({
           }
 
           if (
-            matchesShortcutEvent(event.nativeEvent, "Control+ArrowLeft") ||
-            matchesShortcutEvent(event.nativeEvent, "Control+ArrowRight")
+            matchesShortcutEvent(event.nativeEvent, appShortcut("ArrowLeft")) ||
+            matchesShortcutEvent(event.nativeEvent, appShortcut("ArrowRight"))
           ) {
             event.preventDefault()
             event.stopPropagation()
@@ -1426,7 +1427,7 @@ function useTreeBrowsePanelView({
             <TreeFooterHint kbd="↑/↓">Move</TreeFooterHint>
             <TreeFooterHint kbd="←/→">Page</TreeFooterHint>
             <TreeFooterHint
-              kbd={`${formatShortcutLabel("Control+ArrowLeft")}/${formatShortcutLabel("Control+ArrowRight")}`}
+              kbd={`${formatShortcutLabel(appShortcut("ArrowLeft"))}/${formatShortcutLabel(appShortcut("ArrowRight"))}`}
             >
               Fold
             </TreeFooterHint>
@@ -1553,14 +1554,14 @@ function TreeContinueActionsPanel({
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const moveDown =
-        matchesShortcutEvent(event, "Control+J") ||
+        matchesShortcutEvent(event, appShortcut("J")) ||
         (!event.metaKey &&
           !event.ctrlKey &&
           !event.altKey &&
           !event.shiftKey &&
           event.key === "ArrowDown")
       const moveUp =
-        matchesShortcutEvent(event, "Control+K") ||
+        matchesShortcutEvent(event, appShortcut("K")) ||
         (!event.metaKey &&
           !event.ctrlKey &&
           !event.altKey &&
@@ -1957,7 +1958,7 @@ function useAppShellTreeDialogView({
         const nextMode = presetMap[key]
         if (
           nextMode &&
-          matchesShortcutEvent(event, `Control+${key.toUpperCase()}`)
+          matchesShortcutEvent(event, appShortcut(key.toUpperCase()))
         ) {
           event.preventDefault()
           event.stopPropagation()

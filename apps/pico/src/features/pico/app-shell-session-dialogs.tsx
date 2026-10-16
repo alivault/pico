@@ -10,6 +10,11 @@ import { WandSparklesIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import {
+  appShortcut,
+  formatShortcutLabel,
+  matchesShortcutEvent,
+} from "@/features/pico/keyboard-shortcuts"
 import type { ForkMessage } from "@/features/pico/app-shell-dialog-types"
 import type {
   DeleteOldDirectorySessionsResponse,
@@ -114,7 +119,7 @@ function RenameSessionDialog({
           onOpenChange(false)
           return
         }
-        if (event.ctrlKey && event.key.toLowerCase() === "g") {
+        if (matchesShortcutEvent(event.nativeEvent, appShortcut("G"))) {
           event.preventDefault()
           event.stopPropagation()
           onGenerateSessionName()
@@ -154,8 +159,8 @@ function RenameSessionDialog({
       {isMobile ? null : (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
-            <FooterKbd>Ctrl</FooterKbd>
-            <FooterKbd>G</FooterKbd> Generate
+            <FooterKbd>{formatShortcutLabel(appShortcut("G"))}</FooterKbd>{" "}
+            Generate
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Save

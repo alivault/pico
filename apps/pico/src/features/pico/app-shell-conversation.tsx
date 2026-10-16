@@ -26,7 +26,10 @@ import {
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import type { AppShellWorkingState } from "@/features/pico/app-shell-working-state"
 import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
 import {
   AssistantMessagesStoreCard,
   UserMessageCard,
@@ -85,7 +88,7 @@ function ConversationLatestMessageButton({
   return (
     <TitleTooltip
       title="Jump to latest message"
-      kbd={formatShortcutLabel("Control+ArrowDown")}
+      kbd={formatShortcutLabel(appShortcut("ArrowDown"))}
     >
       <Button
         variant="secondary"
@@ -118,7 +121,7 @@ function ConversationPreviousMessageButton({
   const button = (
     <TitleTooltip
       title="Jump to previous message"
-      kbd={formatShortcutLabel("Control+ArrowLeft")}
+      kbd={formatShortcutLabel(appShortcut("ArrowLeft"))}
     >
       <Button
         variant="secondary"

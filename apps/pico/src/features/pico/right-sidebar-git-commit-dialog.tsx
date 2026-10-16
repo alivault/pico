@@ -32,6 +32,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
+  appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
@@ -396,7 +397,7 @@ function GitCommitMessageEditor({
               return
             }
 
-            if (matchesShortcutEvent(event.nativeEvent, "Control+G")) {
+            if (matchesShortcutEvent(event.nativeEvent, appShortcut("G"))) {
               event.preventDefault()
               event.stopPropagation()
               onGenerateCommitMessage()
@@ -420,7 +421,7 @@ function GitCommitMessageEditor({
         ) : null}
       </div>
       <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-        <span>{formatShortcutLabel("Control+G")} Generate</span>
+        <span>{formatShortcutLabel(appShortcut("G"))} Generate</span>
         <span>{formatShortcutLabel("Control+Enter")} Continue</span>
         <span>Esc Back</span>
       </div>

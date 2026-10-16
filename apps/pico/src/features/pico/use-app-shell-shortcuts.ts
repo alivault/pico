@@ -3,6 +3,12 @@ import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
 import type { SessionListEntry } from "@/lib/pico/api"
 
+import {
+  appModifierFlag,
+  matchesShortcutEvent,
+  pullShortcut,
+} from "./keyboard-shortcuts"
+
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
 
 type ShortcutActions = {
@@ -360,14 +366,16 @@ export function useAppShellShortcuts({
       return
     }
 
+    if (matchesShortcutEvent(event, pullShortcut)) {
+      event.preventDefault()
+      closeCommandPaletteForShortcut(context.commandPaletteOpen)
+      void shortcutActionsRef.current.pullGitChanges()
+      return
+    }
+
     if (key === "p") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-
-      if (event.altKey) {
-        void shortcutActionsRef.current.pullGitChanges()
-        return
-      }
 
       if (event.shiftKey) {
         void shortcutActionsRef.current.forcePushGitChanges()
@@ -520,7 +528,7 @@ export function useAppShellShortcuts({
       },
     },
     {
-      hotkey: { key: "Enter", ctrl: true },
+      hotkey: { key: "Enter", ...appModifierFlag },
       callback: handleFocusPrompt,
       options: {
         meta: {
@@ -531,7 +539,7 @@ export function useAppShellShortcuts({
     },
     ...(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const).map(
       (key) => ({
-        hotkey: { key, ctrl: true },
+        hotkey: { key, ...appModifierFlag },
         callback: handleConversationJump,
         options: {
           meta: {
@@ -544,7 +552,6 @@ export function useAppShellShortcuts({
     ...(
       [
         { key: "\\" },
-        { key: "`" },
         { key: "K" },
         { key: "P" },
         { key: "P", shift: true },
@@ -564,7 +571,7 @@ export function useAppShellShortcuts({
         { key: "X" },
       ] as const
     ).map((hotkey) => ({
-      hotkey: { ...hotkey, ctrl: true },
+      hotkey: { ...hotkey, ...appModifierFlag },
       callback: handleGlobalShortcut,
       options: {
         meta: {
@@ -574,7 +581,19 @@ export function useAppShellShortcuts({
       },
     })),
     {
-      hotkey: { key: "P", alt: true },
+      // The terminal toggle uses Control on all platforms, like VS Code.
+      // Alt+` switches windows on some Linux desktops.
+      hotkey: { key: "`", ctrl: true },
+      callback: handleGlobalShortcut,
+      options: {
+        meta: {
+          name: "App shell shortcut",
+          description: "Run a Pico app shell command.",
+        },
+      },
+    },
+    {
+      hotkey: pullShortcut,
       callback: handleGlobalShortcut,
       options: {
         meta: {
