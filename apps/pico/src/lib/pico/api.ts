@@ -722,6 +722,21 @@ export type SessionExtensionsEvent = {
   kind?: string
 }
 
+/** The sidebar layout that all devices share. */
+export type SidebarStateSnapshot = {
+  directories: Array<string>
+  pinnedSessionKeys: Array<string>
+  collapsedDirectories: Record<string, boolean>
+  revision: number
+  initialized: boolean
+}
+
+export type SidebarStateEvent = SidebarStateSnapshot & {
+  type: "sidebar_state"
+  /** The page that made the change. */
+  clientId: string
+}
+
 export type PicoServerEvent =
   | StateSyncPayload
   | ConversationDeltaEvent
@@ -735,6 +750,7 @@ export type PicoServerEvent =
   | AutoSessionNamingErrorEvent
   | GitChangedEvent
   | SessionExtensionsEvent
+  | SidebarStateEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return Boolean(

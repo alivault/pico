@@ -56,13 +56,23 @@ export function safeLocalStorageGetItem(key: string) {
   }
 }
 
+let localStorageWriteListener: ((key: string) => void) | undefined
+
+/** Get a call after each successful write, for example to sync a key. */
+export function setLocalStorageWriteListener(
+  listener: ((key: string) => void) | undefined
+) {
+  localStorageWriteListener = listener
+}
+
 export function safeLocalStorageSetItem(key: string, value: string) {
   try {
     window.localStorage.setItem(key, value)
-    return true
   } catch {
     return false
   }
+  localStorageWriteListener?.(key)
+  return true
 }
 
 function safeSessionStorageGetItem(key: string) {

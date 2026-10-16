@@ -1,5 +1,9 @@
 import * as React from "react"
 import { emitPicoEvent } from "@/features/pico/agent/events"
+import {
+  handleSidebarStateEvent,
+  refreshSidebarState,
+} from "@/features/pico/sidebar-sync"
 import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -736,6 +740,8 @@ export function useAppShellSessionSync({
   const handleEventSourceOpen = React.useCallback(
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
+      // Events may be lost while the stream was closed.
+      refreshSidebarState()
       const currentState = sessionStateRef.current
       if (currentState.connected) return
       const nextState = { ...currentState, connected: true }
@@ -1015,6 +1021,11 @@ export function useAppShellSessionSync({
             scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
           })
         }
+        return
+      }
+
+      if (payload.type === "sidebar_state") {
+        handleSidebarStateEvent(payload)
         return
       }
 

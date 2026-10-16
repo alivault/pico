@@ -13,6 +13,10 @@ export type PicoEventMap = {
   "pico:open-sidebar-tab": { tab: "agent" | "preview" | "review" }
   /** Show a background job in the terminal panel. */
   "pico:open-job-terminal": { jobId: string }
+  /** Another device changed the shared sidebar layout in local storage. */
+  "pico:sidebar-state": {
+    changed: Array<"directories" | "pinnedSessionKeys" | "collapsedDirectories">
+  }
   /** Open the agent settings dialog. */
   "pico:open-agent-settings": Record<string, never>
 }

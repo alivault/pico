@@ -85,6 +85,7 @@ import {
   safeLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
+import { usePicoEvent } from "@/features/pico/agent/events"
 import {
   formatDisplayPath,
   formatFolderName,
@@ -1829,6 +1830,11 @@ function useAppSidebarView({
   React.useEffect(() => {
     collapsedDirectoryStore.loadStored()
   }, [collapsedDirectoryStore])
+
+  usePicoEvent("pico:sidebar-state", ({ changed }) => {
+    if (changed.includes("collapsedDirectories"))
+      collapsedDirectoryStore.loadStored()
+  })
 
   React.useEffect(() => {
     if (directoryOrderingEnabled) return

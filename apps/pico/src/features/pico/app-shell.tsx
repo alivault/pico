@@ -1,5 +1,6 @@
 import * as React from "react"
 import { usePicoEvent } from "@/features/pico/agent/events"
+import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -2039,6 +2040,19 @@ function useAppShellSessionWorkspaceView({
     ]
   )
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
+  // Another device changed the shared sidebar layout. The first directories
+  // that the event stream loads stay the same, so the stream does not restart.
+  usePicoEvent("pico:sidebar-state", ({ changed }) => {
+    if (changed.includes("directories")) {
+      sidebarStore.setSidebarDirectories(
+        normalizeStoredDirectoryList(readStoredSidebarDirectories().directories)
+      )
+    }
+    if (changed.includes("pinnedSessionKeys")) {
+      sidebarStore.setPinnedSidebarSessionKeys(readStoredPinnedSessionKeys())
+    }
+  })
+
   usePicoEvent("pico:open-session", (detail) => {
     handleSelectSession(detail.sessionId)
   })
@@ -3698,6 +3712,8 @@ export function PicoAppShell({
     const nextContext = storedContext?.trim() || createContextId()
     safeLocalStorageSetItem(VIEWER_CONTEXT_STORAGE_KEY, nextContext)
     setViewerContextId(nextContext)
+
+    startSidebarSync()
 
     const storedDirectories = readStoredSidebarDirectories()
     const nextDirectories = normalizeStoredDirectoryList(
