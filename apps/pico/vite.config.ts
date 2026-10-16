@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from "node:fs"
+import { copyFileSync, existsSync, readFileSync } from "node:fs"
 import os from "node:os"
 import { join } from "node:path"
 
@@ -9,6 +9,12 @@ import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
 import { searchForWorkspaceRoot } from "vite"
 import type { Plugin } from "vite"
+
+const picoVersion = (
+  JSON.parse(
+    readFileSync(new URL("./package.json", import.meta.url), "utf8")
+  ) as { version: string }
+).version
 
 const localHostname = os.hostname()
 const localHostnameWithoutSuffix = localHostname.replace(/\.local$/i, "")
@@ -93,6 +99,9 @@ const config = {
       ".pico-dev/**",
       "server/dist/**",
     ],
+  },
+  define: {
+    __PICO_VERSION__: JSON.stringify(picoVersion),
   },
   resolve: {
     tsconfigPaths: true,

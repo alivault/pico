@@ -650,8 +650,13 @@ function SettingsBrowseBody({
           </CommandGroup>
         ))}
       </CommandList>
-      <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
-        Use ↑/↓ to select, Enter to open or toggle, and Esc to close.
+      <div className="flex items-center gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <span className="hidden min-w-0 flex-1 md:block">
+          Use ↑/↓ to select, Enter to open or toggle, and Esc to close.
+        </span>
+        <span className="ml-auto shrink-0 tabular-nums">
+          Pico v{__PICO_VERSION__}
+        </span>
       </div>
     </Command>
   )
