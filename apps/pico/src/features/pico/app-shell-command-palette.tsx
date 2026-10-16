@@ -25,6 +25,8 @@ export type AppCommand = {
   description: string
   group: string
   shortcut?: string
+  /** The current value of a setting, for example "On" or "Off". */
+  valueLabel?: string
   keywords?: Array<string>
   onSelect: () => void | Promise<void>
 }
@@ -46,6 +48,16 @@ function commandValue(command: AppCommand) {
   return [command.title, command.description, ...(command.keywords ?? [])].join(
     " "
   )
+}
+
+// Each search word must appear in the command text. The default fuzzy match
+// of cmdk matches almost every command for longer queries.
+function commandPaletteFilter(value: string, search: string) {
+  const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return 1
+
+  const text = value.toLowerCase()
+  return words.every((word) => text.includes(word)) ? 1 : 0
 }
 
 function AppShellCommandPalette({
@@ -85,7 +97,12 @@ function AppShellCommandPalette({
   }
 
   const commandPaletteBody = (
-    <Command shouldFilter loop className="min-h-0 flex-1">
+    <Command
+      shouldFilter
+      filter={commandPaletteFilter}
+      loop
+      className="min-h-0 flex-1"
+    >
       <CommandInput
         value={query}
         onValueChange={setQuery}
@@ -108,6 +125,11 @@ function AppShellCommandPalette({
                     {command.description}
                   </span>
                 </div>
+                {command.valueLabel ? (
+                  <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
+                    {command.valueLabel}
+                  </CommandShortcut>
+                ) : null}
                 {command.shortcut ? (
                   <CommandShortcut>{command.shortcut}</CommandShortcut>
                 ) : null}

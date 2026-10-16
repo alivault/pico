@@ -4,7 +4,9 @@ import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import type { AppCommand } from "@/features/pico/app-shell-command-palette"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
 import type {
@@ -242,6 +244,9 @@ type SettingsCommand = {
   title: string
   description: string
   valueLabel: string
+  shortcut?: string
+  /** The current state of an on/off setting. Not set for other settings. */
+  toggled?: boolean
   keywords: Array<string>
   onSelect: () => void | Promise<void>
 }
@@ -302,6 +307,52 @@ export type AppShellSettingsDialogHandle = {
   open: () => void
   close: () => void
   isOpen: () => boolean
+  /** Open the dialog on the theme picker. */
+  openTheme: () => void
+  /** The settings as command palette commands, with their current values. */
+  getPaletteCommands: () => Array<AppCommand>
+}
+
+type SettingsDialogCommandsHandle = {
+  getGroups: () => Array<SettingsCommandGroup>
+  openTheme: () => void
+}
+
+// The command palette has its own login and logout commands. The settings
+// versions return to the settings dialog when the auth dialog closes.
+const PALETTE_EXCLUDED_SETTING_IDS = new Set([
+  "login-providers",
+  "logout-providers",
+])
+
+function settingsPaletteCommands(
+  groups: Array<SettingsCommandGroup>,
+  openTheme: () => void
+): Array<AppCommand> {
+  return groups.flatMap((group) =>
+    group.commands
+      .filter((command) => !PALETTE_EXCLUDED_SETTING_IDS.has(command.id))
+      .map((command) => ({
+        id: `settings:${command.id}`,
+        group: "Settings",
+        title: command.title,
+        description: command.description,
+        valueLabel: command.valueLabel,
+        shortcut: command.shortcut,
+        keywords: ["settings", group.heading, ...command.keywords],
+        onSelect:
+          command.id === "theme"
+            ? openTheme
+            : async () => {
+                await command.onSelect()
+                if (command.toggled !== undefined) {
+                  toast.info(
+                    `${command.title}: ${formatToggleValue(!command.toggled)}`
+                  )
+                }
+              },
+      }))
+  )
 }
 
 type AppShellSettingsDialogProps = {
@@ -329,6 +380,7 @@ type AppShellSettingsDialogProps = {
   desktopNotificationPermission: DesktopNotificationPermission
   onLoginProviders: () => void
   onLogoutProviders: () => void
+  commandsRef?: React.Ref<SettingsDialogCommandsHandle>
 }
 
 type SettingsCommandGroupsOptions = Pick<
@@ -438,6 +490,8 @@ function getSettingsCommandGroups({
           description:
             "Collapse assistant reasoning into the short hidden-thinking preview.",
           valueLabel: formatToggleValue(hideThinkingBlocks),
+          toggled: hideThinkingBlocks,
+          shortcut: formatShortcutLabel("Control+T"),
           keywords: ["reasoning", "thinking", "display", "collapse"],
           onSelect: () => onHideThinkingBlocksChange(!hideThinkingBlocks),
         },
@@ -447,6 +501,8 @@ function getSettingsCommandGroups({
           description:
             "Hide assistant tool execution cards in the conversation view.",
           valueLabel: formatToggleValue(hideToolBlocks),
+          toggled: hideToolBlocks,
+          shortcut: formatShortcutLabel("Control+O"),
           keywords: ["tools", "calls", "display", "cards"],
           onSelect: () => onHideToolBlocksChange(!hideToolBlocks),
         },
@@ -456,7 +512,16 @@ function getSettingsCommandGroups({
           description:
             "Constrain each message to a centered 80 character column.",
           valueLabel: formatToggleValue(centerMessages),
-          keywords: ["center", "messages", "width", "80", "column"],
+          toggled: centerMessages,
+          keywords: [
+            "center",
+            "messages",
+            "width",
+            "max width",
+            "composer",
+            "80",
+            "column",
+          ],
           onSelect: () => onCenterMessagesChange(!centerMessages),
         },
         {
@@ -465,6 +530,7 @@ function getSettingsCommandGroups({
           description:
             "Follow new messages and streaming output automatically.",
           valueLabel: formatToggleValue(autoScrollEnabled),
+          toggled: autoScrollEnabled,
           keywords: ["auto", "scroll", "latest", "follow", "streaming"],
           onSelect: () => onAutoScrollEnabledChange(!autoScrollEnabled),
         },
@@ -493,6 +559,7 @@ function getSettingsCommandGroups({
           description:
             "Keep supported provider prompt caches longer for sessions with pauses between turns.",
           valueLabel: formatToggleValue(piCacheRetention === "long"),
+          toggled: piCacheRetention === "long",
           keywords: ["pi", "prompt", "cache", "retention", "performance"],
           onSelect: () =>
             onPiCacheRetentionChange(
@@ -556,6 +623,7 @@ function getSettingsCommandGroups({
           title: "Desktop notifications",
           description: desktopNotificationDescription,
           valueLabel: formatToggleValue(sessionDoneDesktopNotificationsEnabled),
+          toggled: sessionDoneDesktopNotificationsEnabled,
           keywords: [
             "desktop",
             "browser",
@@ -574,6 +642,7 @@ function getSettingsCommandGroups({
           description:
             "Play a short confirmation sound when a session finishes.",
           valueLabel: formatToggleValue(sessionDoneSoundEnabled),
+          toggled: sessionDoneSoundEnabled,
           keywords: ["sound", "audio", "completion", "notifications"],
           onSelect: () =>
             onSessionDoneSoundEnabledChange(!sessionDoneSoundEnabled),
@@ -645,6 +714,11 @@ function SettingsBrowseBody({
                 <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
                   {command.valueLabel}
                 </CommandShortcut>
+                {command.shortcut ? (
+                  <CommandShortcut className="shrink-0">
+                    {command.shortcut}
+                  </CommandShortcut>
+                ) : null}
               </CommandItem>
             ))}
           </CommandGroup>
@@ -834,6 +908,7 @@ function AppShellSettingsDialog({
   desktopNotificationPermission,
   onLoginProviders,
   onLogoutProviders,
+  commandsRef,
 }: AppShellSettingsDialogProps) {
   const queryClient = useQueryClient()
   const performanceQuery = useQuery({
@@ -844,7 +919,8 @@ function AppShellSettingsDialog({
           contextId: viewerContextId,
         })
       ),
-    enabled: open && Boolean(viewerContextId),
+    // The command palette shows these values too, so load them when closed.
+    enabled: Boolean(viewerContextId),
     staleTime: 30_000,
   })
   const performance = performanceQuery.data?.ok
@@ -913,6 +989,14 @@ function AppShellSettingsDialog({
     state.stage,
   ])
 
+  function openThemeStage() {
+    themePreviewInitialRef.current = themeSelectionForCurrent(
+      currentTheme,
+      currentThemeColorMode
+    )
+    dispatch({ type: "open-theme", currentTheme, currentThemeColorMode })
+  }
+
   const handleSelect = (command: SettingsCommand) => {
     void Promise.resolve(command.onSelect()).catch((error: unknown) => {
       console.error(error)
@@ -975,14 +1059,13 @@ function AppShellSettingsDialog({
         cacheRetention,
       })
     },
-    onThemeCommand: () => {
-      themePreviewInitialRef.current = themeSelectionForCurrent(
-        currentTheme,
-        currentThemeColorMode
-      )
-      dispatch({ type: "open-theme", currentTheme, currentThemeColorMode })
-    },
+    onThemeCommand: openThemeStage,
   })
+
+  React.useImperativeHandle(commandsRef, () => ({
+    getGroups: () => settingGroups,
+    openTheme: openThemeStage,
+  }))
 
   const settingsCommandBody = (
     <SettingsDialogBody
@@ -1043,7 +1126,7 @@ function AppShellSettingsDialog({
 
 type AppShellSettingsDialogControllerProps = Omit<
   AppShellSettingsDialogProps,
-  "open" | "onOpenChange"
+  "open" | "onOpenChange" | "commandsRef"
 > & {
   ref?: React.Ref<AppShellSettingsDialogHandle>
   openStateRef?: React.RefObject<boolean>
@@ -1056,6 +1139,7 @@ export function AppShellSettingsDialogController({
 }: AppShellSettingsDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const openRef = React.useRef(open)
+  const commandsRef = React.useRef<SettingsDialogCommandsHandle>(null)
 
   const setOpenState = (nextOpen: boolean) => {
     openRef.current = nextOpen
@@ -1075,6 +1159,16 @@ export function AppShellSettingsDialogController({
         setOpenState(false)
       },
       isOpen: () => openRef.current,
+      openTheme: () => {
+        // Open first. The dialog resets to the settings list while closed.
+        setOpenState(true)
+        commandsRef.current?.openTheme()
+      },
+      getPaletteCommands: () =>
+        settingsPaletteCommands(commandsRef.current?.getGroups() ?? [], () => {
+          setOpenState(true)
+          commandsRef.current?.openTheme()
+        }),
     }),
     []
   )
@@ -1083,6 +1177,7 @@ export function AppShellSettingsDialogController({
     <AppShellSettingsDialog
       open={open}
       onOpenChange={setOpenState}
+      commandsRef={commandsRef}
       {...props}
     />
   )

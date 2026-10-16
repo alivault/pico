@@ -3061,7 +3061,6 @@ function useAppShellSessionWorkspaceView({
 
   const buildCommandPaletteCommands = () => {
     const commandState = commandPaletteStateRef.current
-    const currentHideThinkingBlock = sessionStateRef.current.hideThinkingBlock
     const currentThinkingLevel = sessionStateRef.current.thinkingLevel
     const commands: Array<AppCommand> = [
       {
@@ -3224,19 +3223,6 @@ function useAppShellSessionWorkspaceView({
         onSelect: runCompact,
       },
       {
-        id: "toggle-thinking",
-        group: "Assistant",
-        title: currentHideThinkingBlock
-          ? "Show thinking blocks"
-          : "Hide thinking blocks",
-        description: currentHideThinkingBlock
-          ? "Show assistant thinking blocks"
-          : "Hide assistant thinking blocks",
-        shortcut: formatShortcutLabel("Control+T"),
-        keywords: ["thinking", "reasoning", "visibility", "show", "hide"],
-        onSelect: toggleHideThinking,
-      },
-      {
         id: "cycle-reasoning",
         group: "Assistant",
         title: "Next reasoning level",
@@ -3272,19 +3258,6 @@ function useAppShellSessionWorkspaceView({
         description: "Toggle the review pane for changed files",
         keywords: ["review", "diff", "file", "changes", "pane"],
         onSelect: toggleFileView,
-      },
-      {
-        id: "toggle-tools",
-        group: "Assistant",
-        title: displaySettingsRef.current.hideToolBlocks
-          ? "Show tool calls"
-          : "Hide tool calls",
-        description: displaySettingsRef.current.hideToolBlocks
-          ? "Show assistant tool calls"
-          : "Hide assistant tool calls",
-        shortcut: formatShortcutLabel("Control+O"),
-        keywords: ["tools", "tool calls", "visibility", "show", "hide"],
-        onSelect: toggleHideToolBlocks,
       },
       {
         id: "login-provider",
@@ -3356,6 +3329,9 @@ function useAppShellSessionWorkspaceView({
         },
       })
     }
+
+    // Settings come last, from the same list as the settings dialog.
+    commands.push(...(settingsDialogRef.current?.getPaletteCommands() ?? []))
 
     return commands
   }
