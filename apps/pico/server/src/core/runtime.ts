@@ -37,6 +37,7 @@ import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
 import { ResourceCache } from "./resources.ts"
 import { PicoSettings } from "./settings.ts"
+import { SidebarState } from "./sidebar-state.ts"
 
 export type Runtime = {
   readonly harness: Harness
@@ -44,6 +45,8 @@ export type Runtime = {
   readonly registry: Registry
   readonly resources: ResourceCache
   readonly settings: PicoSettings
+  /** The sidebar layout that all devices share. */
+  readonly sidebar: SidebarState
   readonly agentDir: string
   readonly mcp: McpExtension
   readonly extensions: PicoExtensionServices
@@ -59,6 +62,7 @@ export async function openRuntime(
   mkdirSync(paths.dataDir, { recursive: true })
   const agentDir = getAgentDir()
   const settings = new PicoSettings(paths.settingsFile)
+  const sidebar = new SidebarState(paths.sidebarFile)
 
   let piSettings = SettingsManager.create(homedir(), agentDir)
   let piSettingsLoadedAt = Date.now()
@@ -163,6 +167,7 @@ export async function openRuntime(
     registry,
     resources,
     settings,
+    sidebar,
     agentDir,
     mcp,
     extensions: pico.services,

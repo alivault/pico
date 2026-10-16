@@ -64,6 +64,37 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
       await fetch(`${url}/api/client/manifest`)
     ).json()) as { authentication: { type: string } }
     assert.equal(manifest.authentication.type, "none")
+    const sidebar = async (path: string, body?: unknown) =>
+      (await (
+        await fetch(`${url}${path}`, {
+          ...(body
+            ? {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+              }
+            : {}),
+        })
+      ).json()) as {
+        directories: string[]
+        pinnedSessionKeys: string[]
+        initialized: boolean
+      }
+    assert.equal((await sidebar("/api/sidebar-state")).initialized, false)
+    await sidebar("/api/sidebar-state", {
+      clientId: "one",
+      directories: ["/a"],
+    })
+    const merged = await sidebar("/api/sidebar-state/merge", {
+      clientId: "two",
+      directories: ["/b", "/a"],
+      pinnedSessionKeys: ["s1"],
+    })
+    assert.deepEqual(merged.directories, ["/a", "/b"])
+    assert.deepEqual((await sidebar("/api/sidebar-state")).pinnedSessionKeys, [
+      "s1",
+    ])
+    assert.ok(JSON.parse(await readFile(join(data, "sidebar.json"), "utf8")))
     const duplicate = spawn(process.execPath, args, { env, stdio: "ignore" })
     const code = await new Promise((done) => duplicate.once("exit", done))
     assert.equal(code, 1)

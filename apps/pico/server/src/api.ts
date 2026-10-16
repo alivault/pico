@@ -599,6 +599,47 @@ export function createApi(api: ApiContext) {
     }
   })
 
+  // The sidebar layout that all devices share. `clientId` comes back in the
+  // event, so the page that made the change can skip its own event.
+  router.get("/api/sidebar-state", () => ({
+    ok: true,
+    ...runtime.sidebar.snapshot(),
+  }))
+
+  const sidebarStateRoute = (mode: "update" | "merge") =>
+    async function (request: Request) {
+      const body = await request.body<{
+        clientId?: unknown
+        directories?: unknown
+        pinnedSessionKeys?: unknown
+        collapsedDirectories?: unknown
+      }>()
+      const change = {
+        ...(body.directories !== undefined
+          ? { directories: body.directories }
+          : {}),
+        ...(body.pinnedSessionKeys !== undefined
+          ? { pinnedSessionKeys: body.pinnedSessionKeys }
+          : {}),
+        ...(body.collapsedDirectories !== undefined
+          ? { collapsedDirectories: body.collapsedDirectories }
+          : {}),
+      }
+      const state =
+        mode === "merge"
+          ? runtime.sidebar.merge(change)
+          : runtime.sidebar.update(change)
+      hub.push({
+        type: "sidebar_state",
+        ...state,
+        clientId: stringField(body.clientId) ?? "",
+      })
+      return { ok: true, ...state }
+    }
+
+  router.post("/api/sidebar-state", sidebarStateRoute("update"))
+  router.post("/api/sidebar-state/merge", sidebarStateRoute("merge"))
+
   router.post("/api/settings/hide-thinking", async (request) => {
     const body = await request.body<{ hide?: boolean }>()
     const hide = Boolean(body.hide)

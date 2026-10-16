@@ -20,6 +20,8 @@ export type ServerPaths = {
   dataDir: string
   database: string
   settingsFile: string
+  /** The sidebar layout that all devices share. */
+  sidebarFile: string
   viewersFile: string
   stateFile: string
   lockFile: string
@@ -37,6 +39,7 @@ export function serverPaths(dataDir: string, webDir?: string): ServerPaths {
     dataDir,
     database: join(dataDir, "pico.sqlite"),
     settingsFile: join(dataDir, "settings.json"),
+    sidebarFile: join(dataDir, "sidebar.json"),
     viewersFile: join(dataDir, "viewers.json"),
     stateFile: join(dataDir, "server.json"),
     lockFile: join(dataDir, "server.lock"),
