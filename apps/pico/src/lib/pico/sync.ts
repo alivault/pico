@@ -23,6 +23,8 @@ type MessageContentPart = {
 
 type SyncMessage = NonNullable<StateSyncPayload["messages"]>[number]
 
+type UserItem = Extract<ConversationItem, { kind: "user" }>
+
 export function previewUrlForImage(
   image: Pick<PromptImage, "mimeType" | "data">
 ) {
@@ -420,6 +422,22 @@ function reconcileConversationItems(
     }
   }
 
+  // The server replaces an optimistic user item with a committed one that
+  // has a new key. Find the optimistic item by its prompt body, so the row
+  // keeps its render key and the message scroller does not remount it.
+  const unmatchedOptimisticItems = previousItems.filter(
+    (item): item is UserItem =>
+      item.kind === "user" && isOptimisticPendingConversationItem(item)
+  )
+  const takeOptimisticItem = (item: ConversationItem) => {
+    if (item.kind !== "user" || isPendingConversationItem(item)) return
+    const index = unmatchedOptimisticItems.findIndex((candidate) =>
+      sameUserPromptBody(candidate, item)
+    )
+    if (index < 0) return
+    return unmatchedOptimisticItems.splice(index, 1)[0]
+  }
+
   let changed = previousItems.length !== nextItems.length
   const reconciled: Array<ConversationItem> = []
 
@@ -433,6 +451,7 @@ function reconcileConversationItems(
       (nextRenderKey
         ? previousItemsByRenderKey.get(nextRenderKey)
         : undefined) ||
+      takeOptimisticItem(nextItem) ||
       previousItems[index]
 
     if (!previousItem || previousItem.kind !== nextItem.kind) {
@@ -447,7 +466,10 @@ function reconcileConversationItems(
     }
 
     if (previousItem.kind === "user" && nextItem.kind === "user") {
-      if (sameUserMessageBody(previousItem, nextItem)) {
+      if (
+        sameUserMessageBody(previousItem, nextItem) ||
+        committedOptimisticUserItem(previousItem, nextItem)
+      ) {
         changed = true
         reconciled.push(withConversationItemRenderKey(nextItem, previousItem))
         continue
@@ -1005,6 +1027,18 @@ function isPendingConversationItem(item: ConversationItem) {
 function isOptimisticPendingConversationItem(item: ConversationItem) {
   return (
     item.kind === "user" && Boolean(item.pendingId?.startsWith("optimistic:"))
+  )
+}
+
+function committedOptimisticUserItem(
+  previousItem: UserItem,
+  nextItem: UserItem
+) {
+  return (
+    isOptimisticPendingConversationItem(previousItem) &&
+    !isPendingConversationItem(nextItem) &&
+    !nextItem.queued &&
+    sameUserPromptBody(previousItem, nextItem)
   )
 }
 

@@ -424,7 +424,9 @@ function AppShellMessagesWorkingIndicator({
 
 // Paint containment from content-visibility clips list markers and other
 // content that overflows the row, so rows stay fully painted.
-const conversationItemClassName = "[content-visibility:visible]"
+// The working footer can share the last row, so rows stack with a gap.
+const conversationItemClassName =
+  "flex flex-col gap-4 [content-visibility:visible]"
 
 function ConversationGroupView({
   className,
@@ -433,6 +435,7 @@ function ConversationGroupView({
   hideThinking,
   hideToolBlocks,
   store,
+  workingFooter,
 }: {
   className: string
   group: RenderConversationGroupDescriptor
@@ -440,6 +443,7 @@ function ConversationGroupView({
   hideThinking: boolean
   hideToolBlocks: boolean
   store: ConversationItemsStore
+  workingFooter?: React.ReactNode
 }) {
   if (group.kind === "user") {
     return (
@@ -453,6 +457,7 @@ function ConversationGroupView({
           itemKey={group.itemKey}
           store={store}
         />
+        {workingFooter}
       </MessageScrollerItem>
     )
   }
@@ -470,6 +475,7 @@ function ConversationGroupView({
         hideToolBlocks={hideToolBlocks}
         store={store}
       />
+      {workingFooter}
     </MessageScrollerItem>
   )
 }
@@ -568,12 +574,14 @@ function AppShellConversationItemGroups({
   hideFooter,
   hideThinking,
   hideToolBlocks,
+  workingFooter,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
+  workingFooter: React.ReactNode
 }) {
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
@@ -585,11 +593,25 @@ function AppShellConversationItemGroups({
     hideToolBlocks,
   })
 
-  if (renderedConversationGroups.length === 0) return null
+  if (renderedConversationGroups.length === 0) {
+    return (
+      <MessageScrollerItem
+        messageId="working-footer"
+        className={conversationItemClassName}
+      >
+        {workingFooter}
+      </MessageScrollerItem>
+    )
+  }
 
+  const lastGroupIndex = renderedConversationGroups.length - 1
+
+  // The working footer renders inside the last row, not as a row of its own.
+  // The scroller looks for a new turn only after the rows it already knows,
+  // so a footer row at the end would hide the new user message from it.
   return (
     <>
-      {renderedConversationGroups.map((group) => (
+      {renderedConversationGroups.map((group, index) => (
         <ConversationGroupView
           key={group.key}
           className={conversationMessageColumnClassName}
@@ -598,6 +620,7 @@ function AppShellConversationItemGroups({
           hideThinking={hideThinking}
           hideToolBlocks={hideToolBlocks}
           store={conversationItemsStore}
+          workingFooter={index === lastGroupIndex ? workingFooter : null}
         />
       ))}
     </>
@@ -733,19 +756,14 @@ function AppShellConversationWorkingFooter({
   if (!hasMessages || !displayedWorkingState) return null
 
   return (
-    <MessageScrollerItem
-      messageId="working-footer"
-      className={conversationItemClassName}
-    >
-      <div className={conversationMessageColumnClassName}>
-        <AppShellMessagesWorkingIndicator
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-          onCancel={onCancelCompaction}
-          state={displayedWorkingState}
-          useHiddenThinkingPreview={streaming && hideThinking}
-        />
-      </div>
-    </MessageScrollerItem>
+    <div className={conversationMessageColumnClassName}>
+      <AppShellMessagesWorkingIndicator
+        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+        onCancel={onCancelCompaction}
+        state={displayedWorkingState}
+        useHiddenThinkingPreview={streaming && hideThinking}
+      />
+    </div>
   )
 }
 
@@ -754,11 +772,13 @@ function AppShellConversationMessageStack({
   conversationItemsStore,
   hideToolBlocks,
   sessionStore,
+  workingFooter,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideToolBlocks: boolean
   sessionStore: PicoStore<SessionState>
+  workingFooter: React.ReactNode
 }) {
   const hideThinking = useSelector(
     sessionStore,
@@ -774,6 +794,7 @@ function AppShellConversationMessageStack({
       hideFooter={false}
       hideThinking={hideThinking}
       hideToolBlocks={hideToolBlocks}
+      workingFooter={workingFooter}
     />
   )
 }
@@ -852,15 +873,17 @@ export const AppShellSessionConversation = React.memo(
           conversationItemsStore={conversationItemsStore}
           hideToolBlocks={hideToolBlocks}
           sessionStore={sessionStore}
-        />
-        <AppShellConversationWorkingFooter
-          centerMessages={centerMessages}
-          conversationItemsStore={conversationItemsStore}
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-          hideThinking={hideThinking}
-          onCancelCompaction={onCancelCompaction}
-          streaming={sessionState.streaming}
-          workingStateStore={workingStateStore}
+          workingFooter={
+            <AppShellConversationWorkingFooter
+              centerMessages={centerMessages}
+              conversationItemsStore={conversationItemsStore}
+              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
+              hideThinking={hideThinking}
+              onCancelCompaction={onCancelCompaction}
+              streaming={sessionState.streaming}
+              workingStateStore={workingStateStore}
+            />
+          }
         />
       </AppShellConversationFrame>
     )
