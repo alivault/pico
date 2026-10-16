@@ -20,6 +20,21 @@ export const appModifierFlag = isMacPlatform
 // uses Alt+L.
 export const pullShortcut = isMacPlatform ? "Alt+P" : "Alt+L"
 
+// Keys that open a right sidebar pane, with the app modifier and Shift.
+export const rightSidebarPaneShortcutKeys = {
+  files: "F",
+  review: "G",
+  history: "H",
+  agent: "A",
+  preview: "V",
+} as const
+
+export type RightSidebarShortcutPane = keyof typeof rightSidebarPaneShortcutKeys
+
+export function rightSidebarPaneShortcut(pane: RightSidebarShortcutPane) {
+  return appShortcut(`Shift+${rightSidebarPaneShortcutKeys[pane]}`)
+}
+
 export function appShortcut(keys: string) {
   return `${appModifier}+${keys}`
 }

@@ -1197,7 +1197,7 @@ export function RightSidebar({
           showAgent={!isMobile}
           showPreview={Boolean(preview?.target) || activeTab === "preview"}
           showFiles={isMobile && hasOpenFileTabs}
-          showHistory={historyAsTab}
+          showHistory={historyAsTab || activeTab === "history"}
           showReview
         />
         <div

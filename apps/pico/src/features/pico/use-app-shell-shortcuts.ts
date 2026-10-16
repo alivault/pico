@@ -7,6 +7,8 @@ import {
   appModifierFlag,
   matchesShortcutEvent,
   pullShortcut,
+  rightSidebarPaneShortcutKeys,
+  type RightSidebarShortcutPane,
 } from "./keyboard-shortcuts"
 
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
@@ -37,6 +39,7 @@ type ShortcutActions = {
   scrollConversationToBottom: () => void
   scrollConversationToTop: () => void
   toggleGitPanel: () => void
+  toggleRightSidebarPane: (pane: RightSidebarShortcutPane) => void
   toggleTerminalPanel: () => void
   toggleHideThinking: () => void | Promise<unknown>
   toggleHideToolBlocks: () => void
@@ -330,6 +333,20 @@ export function useAppShellShortcuts({
     shortcutActionsRef.current.scrollConversationToBottom()
   }
 
+  const handleRightSidebarPaneShortcut = (
+    event: KeyboardEvent,
+    pane: RightSidebarShortcutPane
+  ) => {
+    const context = getShortcutContext(event)
+
+    if (context.blockingModalOpen || event.defaultPrevented) return
+    if (isTerminalTarget(event.target) && !context.commandPaletteOpen) return
+
+    event.preventDefault()
+    closeCommandPaletteForShortcut(context.commandPaletteOpen)
+    shortcutActionsRef.current.toggleRightSidebarPane(pane)
+  }
+
   const handleGlobalShortcut = (event: KeyboardEvent) => {
     const key =
       event.altKey && event.code.startsWith("Key")
@@ -577,6 +594,22 @@ export function useAppShellShortcuts({
         meta: {
           name: "App shell shortcut",
           description: "Run a Pico app shell command.",
+        },
+      },
+    })),
+    ...(
+      Object.entries(rightSidebarPaneShortcutKeys) as Array<
+        [RightSidebarShortcutPane, string]
+      >
+    ).map(([pane, key]) => ({
+      hotkey: { key, shift: true, ...appModifierFlag },
+      callback: (event: KeyboardEvent) => {
+        handleRightSidebarPaneShortcut(event, pane)
+      },
+      options: {
+        meta: {
+          name: "Open right sidebar pane",
+          description: "Open or close a pane of the right sidebar.",
         },
       },
     })),

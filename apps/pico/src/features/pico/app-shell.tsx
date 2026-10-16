@@ -121,6 +121,8 @@ import {
   appShortcut,
   formatShortcutLabel,
   pullShortcut,
+  rightSidebarPaneShortcut,
+  type RightSidebarShortcutPane,
 } from "@/features/pico/keyboard-shortcuts"
 import {
   createPicoLatestThrottler,
@@ -1249,28 +1251,39 @@ function useAppShellSessionWorkspaceView({
     })
   })
 
-  const toggleReviewPane = () => {
+  // Open the right sidebar on a pane. If the pane already shows, close the
+  // sidebar.
+  const toggleRightSidebarPane = (pane: RightSidebarShortcutPane) => {
     const activeTab = rightSidebarStore.state.activeTab
     if (isMobile) {
-      setRightSidebarActiveTab(rightSidebarStore, "review")
+      // On mobile, the Agent panel has its own top-level tab.
+      if (pane === "agent") {
+        setCurrentTab((tab) => (tab === "agent" ? "session" : "agent"))
+        return
+      }
+      if (pane === "files")
+        setStoreField(rightSidebarStore, "fileActivePath", "")
+      setRightSidebarActiveTab(rightSidebarStore, pane)
       setCurrentTab((tab) =>
-        tab === "git" && activeTab === "review" ? "session" : "git"
+        tab === "git" && activeTab === pane ? "session" : "git"
       )
       return
     }
 
-    if (gitPanelOpen && activeTab === "review") {
+    if (gitPanelOpen && activeTab === pane) {
       setGitPanelOpen(false)
       return
     }
 
     batch(() => {
-      setRightSidebarActiveTab(rightSidebarStore, "review")
+      setRightSidebarActiveTab(rightSidebarStore, pane)
       setGitPanelOpen(true)
     })
   }
 
-  const toggleFileView = toggleReviewPane
+  const toggleFileView = () => {
+    toggleRightSidebarPane("review")
+  }
 
   React.useEffect(() => {
     resetRightSidebarFiles(rightSidebarStore)
@@ -3274,8 +3287,45 @@ function useAppShellSessionWorkspaceView({
         group: "Git",
         title: "Toggle Review Pane",
         description: "Toggle the review pane for changed files",
+        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("review")),
         keywords: ["review", "diff", "file", "changes", "pane"],
         onSelect: toggleFileView,
+      },
+      {
+        id: "toggle-files-pane",
+        group: "Workspace",
+        title: "Toggle Files Pane",
+        description: "Toggle the project files pane",
+        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("files")),
+        keywords: ["files", "tree", "explorer", "project", "pane"],
+        onSelect: () => toggleRightSidebarPane("files"),
+      },
+      {
+        id: "toggle-history-pane",
+        group: "Git",
+        title: "Toggle History Pane",
+        description: "Toggle the commit history pane",
+        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("history")),
+        keywords: ["history", "commits", "log", "git", "pane"],
+        onSelect: () => toggleRightSidebarPane("history"),
+      },
+      {
+        id: "toggle-agent-pane",
+        group: "Workspace",
+        title: "Toggle Agent Pane",
+        description: "Toggle the agent pane",
+        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("agent")),
+        keywords: ["agent", "todo", "memory", "jobs", "pane"],
+        onSelect: () => toggleRightSidebarPane("agent"),
+      },
+      {
+        id: "toggle-preview-pane",
+        group: "Workspace",
+        title: "Toggle Preview Pane",
+        description: "Toggle the web preview pane",
+        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("preview")),
+        keywords: ["preview", "browser", "web", "localhost", "pane"],
+        onSelect: () => toggleRightSidebarPane("preview"),
       },
       {
         id: "login-provider",
@@ -3395,6 +3445,7 @@ function useAppShellSessionWorkspaceView({
       conversationFrameRef.current?.scrollConversationToTop()
     },
     toggleGitPanel,
+    toggleRightSidebarPane,
     toggleTerminalPanel,
     toggleHideThinking,
     toggleHideToolBlocks,
