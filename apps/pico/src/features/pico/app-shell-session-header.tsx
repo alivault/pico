@@ -125,7 +125,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   )
 
   return (
-    <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter)">
+    <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter) pt-[calc(var(--sidebar-gutter)+env(safe-area-inset-top))]">
       <div className="relative flex w-full items-center gap-1">
         <SidebarTrigger className="shrink-0" />
         <TitleTooltip

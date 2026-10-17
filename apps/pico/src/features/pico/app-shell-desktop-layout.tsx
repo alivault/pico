@@ -796,14 +796,16 @@ function useAppShellTabsControllerView({
       ? "flex min-h-0 flex-1 flex-col"
       : "hidden min-h-0 flex-1 flex-col md:flex"
   const mobileGitClassName =
-    currentTab === "git" ? "min-h-0 flex-1 overflow-hidden md:hidden" : "hidden"
+    currentTab === "git"
+      ? "min-h-0 flex-1 overflow-hidden pb-[env(safe-area-inset-bottom)] md:hidden"
+      : "hidden"
   const mobileAgentClassName =
     currentTab === "agent"
-      ? "min-h-0 flex-1 overflow-hidden bg-background md:hidden"
+      ? "min-h-0 flex-1 overflow-hidden bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
       : "hidden"
   const mobileTerminalClassName =
     currentTab === "terminal"
-      ? "min-h-0 flex-1 overflow-hidden md:hidden"
+      ? "min-h-0 flex-1 overflow-hidden pb-[env(safe-area-inset-bottom)] md:hidden"
       : "hidden"
   const rightSidebarHasVisibleFiles = useSelector(
     rightSidebarStore,

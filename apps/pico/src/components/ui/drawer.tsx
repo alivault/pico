@@ -86,7 +86,7 @@ function DrawerContent({
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[90svh] flex-col rounded-t-[20px] border border-border bg-popover text-sm text-popover-foreground shadow-lg outline-none",
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[90svh] flex-col rounded-t-[20px] border border-border bg-popover pb-[env(safe-area-inset-bottom)] text-sm text-popover-foreground shadow-lg outline-none",
           className
         )}
         {...props}

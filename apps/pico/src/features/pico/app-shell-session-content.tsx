@@ -106,7 +106,7 @@ export function AppShellSessionContent({
 
   if (showNewSessionComposer) {
     return (
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] items-end justify-items-center overflow-auto p-4 md:place-items-center">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] items-end justify-items-center overflow-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:place-items-center">
         <AppShellComposerController
           actionsRef={actionsRef}
           composerPanelRef={composerPanelRef}
