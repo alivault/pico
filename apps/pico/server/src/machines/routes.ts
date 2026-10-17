@@ -18,6 +18,7 @@ import {
 
 import { VERSION } from "../config.ts"
 import type { Runtime } from "../core/runtime.ts"
+import type { Viewers } from "../core/viewers.ts"
 import { conversationIdOf, type Sessions } from "../core/sessions.ts"
 import type { EventHub } from "../events.ts"
 import {
@@ -61,8 +62,10 @@ function isNotifyEvent(payload: { type: string; [key: string]: unknown }) {
 
 export function localSummary(
   sessions: Sessions,
-  runtime: Runtime
+  runtime: Runtime,
+  viewers: Viewers
 ): MachineSummary {
+  const unreadBy = viewers.unreadBy()
   return {
     hostname: hostname(),
     version: VERSION,
@@ -79,6 +82,9 @@ export function localSummary(
           directory: meta.group ?? session.cwd,
           busy: session.busy,
           needsInput: session.needsInput,
+          ...(unreadBy.has(session.id)
+            ? { unreadBy: unreadBy.get(session.id)! }
+            : {}),
           ...(session.parent ? { parent: session.parent } : {}),
           ...(session.lastMessageAt
             ? { lastMessageAt: session.lastMessageAt }
@@ -89,17 +95,27 @@ export function localSummary(
 }
 
 /** Call `listener` (at most every 250 ms) when the summary can change. */
-function onSummaryChange(hub: EventHub, listener: () => void) {
+function onSummaryChange(
+  hub: EventHub,
+  viewers: Viewers,
+  listener: () => void
+) {
   let timer: NodeJS.Timeout | undefined
-  const unsubscribe = hub.subscribe((event) => {
-    if (!SUMMARY_EVENTS.has(event.payload.type) || timer) return
+  const schedule = () => {
+    if (timer) return
     timer = setTimeout(() => {
       timer = undefined
       listener()
     }, 250)
+  }
+  const unsubscribeHub = hub.subscribe((event) => {
+    if (SUMMARY_EVENTS.has(event.payload.type)) schedule()
   })
+  // Read states change the unread sessions of a summary.
+  const unsubscribeViewers = viewers.subscribe(schedule)
   return () => {
-    unsubscribe()
+    unsubscribeHub()
+    unsubscribeViewers()
     if (timer) clearTimeout(timer)
   }
 }
@@ -126,9 +142,14 @@ function parseModel(
 /** The routes that a hub calls on this server. */
 export function addMachineServerRoutes(
   router: Router,
-  context: { sessions: Sessions; runtime: Runtime; hub: EventHub }
+  context: {
+    sessions: Sessions
+    runtime: Runtime
+    hub: EventHub
+    viewers: Viewers
+  }
 ) {
-  const { sessions, runtime, hub } = context
+  const { sessions, runtime, hub, viewers } = context
 
   const requireSession = (value: unknown) => {
     const text = typeof value === "string" ? value : ""
@@ -152,7 +173,7 @@ export function addMachineServerRoutes(
 
   router.get("/api/machine/summary", () => ({
     ok: true,
-    ...localSummary(sessions, runtime),
+    ...localSummary(sessions, runtime, viewers),
   }))
 
   router.get("/api/machine/events", (request, response) => {
@@ -160,10 +181,10 @@ export function addMachineServerRoutes(
     const send = () =>
       stream.send({
         type: "machine_summary",
-        summary: localSummary(sessions, runtime),
+        summary: localSummary(sessions, runtime, viewers),
       })
     send()
-    const stopSummary = onSummaryChange(hub, send)
+    const stopSummary = onSummaryChange(hub, viewers, send)
     const stopNotify = hub.subscribe((event) => {
       if (isNotifyEvent(event.payload)) stream.send(event.payload)
     })
@@ -310,6 +331,7 @@ export function addMachineServerRoutes(
 export function localMachine(
   sessions: Sessions,
   runtime: Runtime,
+  viewers: Viewers,
   startedAt: number
 ): MachineInfo {
   return {
@@ -321,7 +343,7 @@ export function localMachine(
     state: "online",
     since: startedAt,
     version: VERSION,
-    summary: localSummary(sessions, runtime),
+    summary: localSummary(sessions, runtime, viewers),
   }
 }
 
@@ -338,14 +360,15 @@ export function addHubRoutes(
     sessions: Sessions
     runtime: Runtime
     hub: EventHub
+    viewers: Viewers
     machines: MachineManager
     startedAt: number
   }
 ) {
-  const { sessions, runtime, hub, machines } = context
+  const { sessions, runtime, hub, viewers, machines } = context
   const snapshot = () => ({
     machines: [
-      localMachine(sessions, runtime, context.startedAt),
+      localMachine(sessions, runtime, viewers, context.startedAt),
       ...machines.list(),
     ],
     ...(machines.fileError ? { fileError: machines.fileError } : {}),
@@ -364,7 +387,7 @@ export function addHubRoutes(
       }, 100)
     }
     stream.send({ type: "machines", ...snapshot() })
-    const stopLocal = onSummaryChange(hub, send)
+    const stopLocal = onSummaryChange(hub, viewers, send)
     const stopRemote = machines.subscribe(send)
     void stream.closed.then(() => {
       stopLocal()

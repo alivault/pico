@@ -56,6 +56,8 @@ export type SessionStatusSummary = {
   directory: string
   busy: boolean
   needsInput: boolean
+  /** The viewer contexts (browsers) that did not see the last run yet. */
+  unreadBy?: string[]
   parent?: string
   lastMessageAt?: number
 }
@@ -168,6 +170,13 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
                 : "",
           busy: entry.busy === true,
           needsInput: entry.needsInput === true,
+          ...(Array.isArray(entry.unreadBy)
+            ? {
+                unreadBy: entry.unreadBy.filter(
+                  (id): id is string => typeof id === "string"
+                ),
+              }
+            : {}),
           ...(typeof entry.parent === "string" ? { parent: entry.parent } : {}),
           ...(typeof entry.lastMessageAt === "number"
             ? { lastMessageAt: entry.lastMessageAt }

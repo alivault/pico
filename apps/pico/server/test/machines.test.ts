@@ -22,6 +22,7 @@ import {
   type MachineProfile,
 } from "../src/machines/profiles.ts"
 import { allowedRemotePath, machineRoute } from "../src/machines/proxy.ts"
+import { applyStatePatch, OfflineCache } from "../src/machines/offline-cache.ts"
 import {
   isAuthFailure,
   parseDiscovery,
@@ -182,6 +183,59 @@ void test("the SSE parser joins data lines and skips comments", () => {
   assert.equal(
     parseSummary({ sessions: [{ id: "s1", busy: true }] })?.sessions[0]?.busy,
     true
+  )
+})
+
+void test("the offline cache follows state patches and session lists", () => {
+  assert.deepEqual(
+    applyStatePatch(
+      { type: "state_sync", sessionId: "s1", items: [1, 2, 3] },
+      {
+        type: "state_sync",
+        itemsPatch: {
+          previousLength: 3,
+          start: 1,
+          deleteCount: 1,
+          items: [9, 8],
+        },
+        isStreaming: true,
+      }
+    ),
+    {
+      type: "state_sync",
+      sessionId: "s1",
+      items: [1, 9, 8, 3],
+      isStreaming: true,
+    }
+  )
+  assert.equal(
+    applyStatePatch(
+      { items: [1] },
+      { itemsPatch: { previousLength: 2, start: 0, deleteCount: 0, items: [] } }
+    ),
+    undefined
+  )
+
+  const cache = new OfflineCache()
+  const observe = cache.observeStream("ctx")
+  observe({ type: "state_sync", sessionId: "s1", items: ["a"] })
+  observe({
+    type: "state_sync",
+    itemsPatch: { previousLength: 1, start: 1, deleteCount: 0, items: ["b"] },
+  })
+  observe({ type: "sessions", directories: ["/p"] })
+  const [state, sessions] = cache.bootstrap("ctx", "s1")
+  assert.deepEqual(state?.items, ["a", "b"])
+  assert.deepEqual(sessions?.directories, ["/p"])
+  assert.deepEqual(cache.bootstrap("other", undefined), [])
+
+  cache.putResponse("/api/a", "application/json", Buffer.from("{}"))
+  assert.equal(cache.response("/api/a")?.body.toString(), "{}")
+  assert.equal(cache.response("/api/b"), undefined)
+  assert.deepEqual(
+    parseSummary({ sessions: [{ id: "s1", unreadBy: ["ctx", 3] }] })
+      ?.sessions[0]?.unreadBy,
+    ["ctx"]
   )
 })
 
@@ -584,6 +638,36 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
     const offline = await fetch(`${hub.url}/m/m_remote/api/system/health`)
     assert.equal(offline.status, 503)
     assert.equal(((await offline.json()) as { state: string }).state, "offline")
+    // The offline view: copies of GET answers and the last event state.
+    const cached = await fetch(`${hub.url}/m/m_remote/api/client/manifest`)
+    assert.equal(cached.status, 200)
+    assert.equal(cached.headers.get("x-pico-offline"), "1")
+    const offlineAbort = new AbortController()
+    const offlineEvents = await fetch(
+      `${hub.url}/m/m_remote/events?context=t`,
+      { signal: offlineAbort.signal }
+    )
+    assert.equal(offlineEvents.status, 200)
+    const offlineReader = offlineEvents.body!.getReader()
+    let offlineText = ""
+    while (!offlineText.includes("state_sync")) {
+      const { value, done } = await offlineReader.read()
+      if (done) break
+      offlineText += Buffer.from(value).toString("utf8")
+    }
+    assert.match(offlineText, /state_sync/)
+    assert.doesNotMatch(offlineText, /^id:/m)
+    offlineAbort.abort()
+    assert.equal(
+      (
+        await fetch(`${hub.url}/m/m_remote/api/prompt?context=t`, {
+          method: "POST",
+          body: "{}",
+        })
+      ).status,
+      503
+    )
+
     // The local machine still works.
     assert.equal((await fetch(`${hub.url}/api/system/health`)).status, 200)
   } finally {

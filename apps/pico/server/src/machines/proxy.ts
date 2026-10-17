@@ -7,9 +7,10 @@
  *
  * The server runs `security.check()` on the browser request first. The proxy
  * sends the request with `Host: 127.0.0.1` and no `Origin`, so the remote
- * check passes. It streams bodies, never retries, and answers 503 at once
- * when the machine is not online. It forwards only `/api/` and `/events`,
- * and never `/api/system/shutdown`.
+ * check passes. It streams bodies, never retries, and answers at once when
+ * the machine is not online: from the offline cache (`offline-cache.ts`)
+ * for GET requests and event streams, else with 503. It forwards only
+ * `/api/` and `/events`, and never `/api/system/shutdown`.
  */
 import {
   request as httpRequest,
@@ -18,10 +19,16 @@ import {
   type ServerResponse,
 } from "node:http"
 import type { Duplex } from "node:stream"
+import { StringDecoder } from "node:string_decoder"
 
-import { sendJson } from "../http.ts"
+import { sendJson, SseStream } from "../http.ts"
 import type { PreviewProxies } from "../services/preview.ts"
-import { MachineError, type MachineManager } from "./manager.ts"
+import { MachineError, SseParser, type MachineManager } from "./manager.ts"
+import {
+  cacheableGet,
+  MAX_CACHED_RESPONSE_BYTES,
+  OfflineCache,
+} from "./offline-cache.ts"
 
 /** `/m/<id>/<rest>`: the machine ID and the remote path, or undefined. */
 export function machineRoute(url: string) {
@@ -83,10 +90,69 @@ function offline(response: ServerResponse, error: unknown, label: string) {
 export class MachineProxy {
   readonly #machines: MachineManager
   readonly #previews: PreviewProxies
+  readonly #caches = new Map<string, OfflineCache>()
+  /** Offline event streams; they close when their machine is online again. */
+  readonly #offlineStreams = new Map<SseStream, string>()
 
   constructor(machines: MachineManager, previews: PreviewProxies) {
     this.#machines = machines
     this.#previews = previews
+    machines.subscribe(() => {
+      for (const [stream, machineId] of this.#offlineStreams) {
+        const connection = machines.get(machineId)
+        // The browser connects again and gets the live state.
+        if (!connection || connection.online) {
+          this.#offlineStreams.delete(stream)
+          stream.close()
+        }
+      }
+      for (const machineId of this.#caches.keys())
+        if (!machines.get(machineId)) this.#caches.delete(machineId)
+    })
+  }
+
+  #cache(machineId: string) {
+    let cache = this.#caches.get(machineId)
+    if (!cache) {
+      cache = new OfflineCache()
+      this.#caches.set(machineId, cache)
+    }
+    return cache
+  }
+
+  /** Answer from the offline cache; false when it has nothing. */
+  #fromCache(
+    request: IncomingMessage,
+    response: ServerResponse,
+    route: { machineId: string; path: string; search: string }
+  ) {
+    const cache = this.#caches.get(route.machineId)
+    if (!cache || (request.method !== "GET" && request.method !== "HEAD"))
+      return false
+    if (route.path === "/events") {
+      const query = new URLSearchParams(route.search)
+      const events = cache.bootstrap(
+        query.get("context")?.trim() || "default",
+        query.get("session")?.trim() || undefined
+      )
+      if (events.length === 0) return false
+      const stream = new SseStream(request, response)
+      // No event IDs: the browser keeps the last live ID for its replay.
+      for (const event of events) stream.send(event)
+      this.#offlineStreams.set(stream, route.machineId)
+      void stream.closed.then(() => this.#offlineStreams.delete(stream))
+      return true
+    }
+    const entry = cache.response(`${route.path}${route.search}`)
+    if (!entry) return false
+    response.writeHead(200, {
+      "content-type": entry.type,
+      "content-length": entry.body.length,
+      "cache-control": "no-store",
+      "x-pico-offline": "1",
+    })
+    response.end(request.method === "HEAD" ? undefined : entry.body)
+    return true
   }
 
   /** Handle an HTTP request to `/m/...`; false when the URL is not one. */
@@ -112,7 +178,8 @@ export class MachineProxy {
     try {
       target = connection.endpoint()
     } catch (error) {
-      offline(response, error, connection.profile.label)
+      if (!this.#fromCache(request, response, route))
+        offline(response, error, connection.profile.label)
       return true
     }
     if (
@@ -138,6 +205,8 @@ export class MachineProxy {
         response.writeHead(reply.statusCode ?? 502, headers)
         response.flushHeaders()
         reply.on("data", () => connection.activity())
+        if (reply.statusCode === 200)
+          this.#keepCopy(route, request.method ?? "GET", reply)
         reply.pipe(response)
       }
     )
@@ -159,6 +228,49 @@ export class MachineProxy {
     })
     request.pipe(upstream)
     return true
+  }
+
+  /** Follow an answer for the offline cache while it streams through. */
+  #keepCopy(
+    route: { machineId: string; path: string; search: string },
+    method: string,
+    reply: IncomingMessage
+  ) {
+    const cache = this.#cache(route.machineId)
+    if (route.path === "/events") {
+      const observe = cache.observeStream(
+        new URLSearchParams(route.search).get("context")?.trim() || "default"
+      )
+      const parser = new SseParser((data) => {
+        try {
+          const payload = JSON.parse(data) as unknown
+          if (payload && typeof payload === "object")
+            observe(payload as Record<string, unknown>)
+        } catch {
+          // Not JSON: nothing to keep.
+        }
+      })
+      const decoder = new StringDecoder("utf8")
+      reply.on("data", (chunk: Buffer) => parser.push(decoder.write(chunk)))
+      return
+    }
+    const type = String(reply.headers["content-type"] ?? "")
+    if (method !== "GET" || !cacheableGet(route.path) || !type.includes("json"))
+      return
+    const chunks: Buffer[] = []
+    let size = 0
+    reply.on("data", (chunk: Buffer) => {
+      size += chunk.length
+      if (size <= MAX_CACHED_RESPONSE_BYTES) chunks.push(chunk)
+    })
+    reply.once("end", () => {
+      if (size <= MAX_CACHED_RESPONSE_BYTES)
+        cache.putResponse(
+          `${route.path}${route.search}`,
+          type,
+          Buffer.concat(chunks)
+        )
+    })
   }
 
   /**

@@ -203,11 +203,12 @@ export async function startServer(options: {
     listenHosts: () => [options.host],
     draining: () => draining,
   })
-  addMachineServerRoutes(router, { sessions, runtime, hub })
+  addMachineServerRoutes(router, { sessions, runtime, hub, viewers })
   addHubRoutes(router, {
     sessions,
     runtime,
     hub,
+    viewers,
     machines,
     startedAt: Date.now(),
   })

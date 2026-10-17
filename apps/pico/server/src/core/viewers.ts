@@ -32,6 +32,7 @@ const MAX_CONTEXTS = 200
 export class Viewers {
   readonly #file: string
   readonly #contexts = new Map<string, ViewerContext>()
+  readonly #listeners = new Set<() => void>()
   #saveTimer: NodeJS.Timeout | undefined
 
   constructor(file: string) {
@@ -143,6 +144,26 @@ export class Viewers {
     return new Set(id ? (this.#contexts.get(id)?.unread ?? []) : [])
   }
 
+  /** The contexts that have each unread session, for machine summaries. */
+  unreadBy(): Map<string, string[]> {
+    const result = new Map<string, string[]>()
+    for (const [id, context] of this.#contexts)
+      for (const sessionId of context.unread) {
+        const list = result.get(sessionId)
+        if (list) list.push(id)
+        else result.set(sessionId, [id])
+      }
+    return result
+  }
+
+  /** Call `listener` after a change, for example of the unread sessions. */
+  subscribe(listener: () => void) {
+    this.#listeners.add(listener)
+    return () => {
+      this.#listeners.delete(listener)
+    }
+  }
+
   /** Forget a session everywhere, for example after it was deleted. */
   forget(sessionId: string) {
     for (const context of this.#contexts.values()) {
@@ -153,6 +174,7 @@ export class Viewers {
   }
 
   #save() {
+    for (const listener of this.#listeners) listener()
     if (this.#saveTimer) return
     this.#saveTimer = setTimeout(() => {
       this.#saveTimer = undefined
