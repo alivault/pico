@@ -830,7 +830,17 @@ function useAppShellSidebarControllerView({
           sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
         }}
         onDeleteSession={(entry) => {
-          sessionWorkspaceRef.current?.openDeleteDialog([entry])
+          const key = sessionListEntryKey(entry)
+          const { selectedSidebarSessions } =
+            sidebarStore.getWorkspaceSnapshot()
+          const archiveSelection =
+            selectedSidebarSessions.length > 1 &&
+            selectedSidebarSessions.some(
+              (selected) => sessionListEntryKey(selected) === key
+            )
+          sessionWorkspaceRef.current?.openDeleteDialog(
+            archiveSelection ? selectedSidebarSessions : [entry]
+          )
         }}
         onSetSessionUnread={(entry, unread) => {
           void sessionWorkspaceRef.current?.setSessionUnread(entry, unread)
