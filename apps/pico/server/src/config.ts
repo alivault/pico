@@ -25,6 +25,12 @@ export type ServerPaths = {
   viewersFile: string
   stateFile: string
   lockFile: string
+  /** The output of a server that `serve --detach` started. */
+  logFile: string
+  /** The SSH machine profiles of a hub. */
+  machinesFile: string
+  /** Per-machine files: SSH control sockets, forwards, and caches. */
+  machinesDir: string
   /** Built web client, served as a single-page app. */
   webDir: string | undefined
 }
@@ -43,6 +49,9 @@ export function serverPaths(dataDir: string, webDir?: string): ServerPaths {
     viewersFile: join(dataDir, "viewers.json"),
     stateFile: join(dataDir, "server.json"),
     lockFile: join(dataDir, "server.lock"),
+    logFile: join(dataDir, "server.log"),
+    machinesFile: join(dataDir, "machines.json"),
+    machinesDir: join(dataDir, "machines"),
     webDir,
   }
 }

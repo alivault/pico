@@ -12,9 +12,16 @@ if (args.includes("--help")) {
   console.log(`Pico — durable Pi sessions in your browser
 Usage: pico-app [serve|status|stop|import-pi] [--port N] [--host H] [--data-dir D]
                  [--web-dir D] [--open|--no-open] [--wait] [--source-dir D]
+                 [--detach] [--json]
+       pico-app machine add|list|status|reconnect|rename|enable|disable|remove
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
-Import old Pi sessions with import-pi while Pico is stopped.`)
+serve --detach starts Pico in the background (output in <data>/server.log).
+status --json prints the server state as JSON; the exit code is 1 when Pico is
+not running.
+Import old Pi sessions with import-pi while Pico is stopped.
+Show sessions of other machines over SSH with pico-app machine add <target>.
+Run pico-app machine help for details.`)
   process.exit(0)
 }
 if (args.includes("--version")) {
@@ -27,20 +34,26 @@ if (major < 22 || (major === 22 && minor < 19))
 const command = args[0] && !args[0].startsWith("-") ? args.shift() : "serve"
 const open =
   !args.includes("--no-open") &&
+  !args.includes("--detach") &&
   process.env.PICO_OPEN !== "0" &&
   command === "serve"
 const forwarded = args.filter((arg) => !["--open", "--no-open"].includes(arg))
-const dataIndex = forwarded.indexOf("--data-dir")
+const expandHome = (path) => path?.replace(/^~(?=$|\/)/, homedir())
+// For `machine`, --data-dir is the remote data directory; --hub-dir is ours.
+const dataFlag = command === "machine" ? "--hub-dir" : "--data-dir"
+const dataIndex = forwarded.indexOf(dataFlag)
 const inlineData = forwarded
-  .find((arg) => arg.startsWith("--data-dir="))
-  ?.slice(11)
+  .find((arg) => arg.startsWith(`${dataFlag}=`))
+  ?.slice(dataFlag.length + 1)
 const dataDir = resolve(
-  inlineData ??
-    (dataIndex >= 0 ? forwarded[dataIndex + 1] : undefined) ??
-    process.env.PICO_DATA_DIR ??
-    join(homedir(), ".pico")
+  expandHome(
+    inlineData ??
+      (dataIndex >= 0 ? forwarded[dataIndex + 1] : undefined) ??
+      process.env.PICO_DATA_DIR ??
+      join(homedir(), ".pico")
+  )
 )
-if (dataIndex < 0 && !inlineData) forwarded.push("--data-dir", dataDir)
+if (dataIndex < 0 && !inlineData) forwarded.push(dataFlag, dataDir)
 if (
   command === "serve" &&
   !forwarded.some((arg) => arg.startsWith("--web-dir"))

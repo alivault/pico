@@ -9,6 +9,11 @@
  * Restarts: the tools are replay-safe. A rerun finds the child by the call ID
  * stored in the child's metadata (written in the commit that creates it), and
  * prompts carry request IDs, so nothing is created or sent twice.
+ *
+ * Machines: on a hub, the tools take an optional `machine` (a label or an
+ * ID), or an ID such as `workbox:s12`. They then call the remote server
+ * through the hub's SSH connection. An offline machine fails at once. A
+ * remote agent cannot call back to the hub.
  */
 import type { Context } from "@earendil-works/chord"
 import { Type } from "@earendil-works/pi-ai"
@@ -240,8 +245,254 @@ function parseModel(
     : trimmed
 }
 
+type RemoteConnection = NonNullable<
+  ReturnType<NonNullable<HostServices["machines"]>["find"]>
+>
+
+type RemoteSession = {
+  sessionId: string
+  title: string
+  cwd: string
+  busy: boolean
+  needsInput: boolean
+  worktree?: { path: string; branch: string }
+}
+
+const MACHINE_PARAMETER = Type.Optional(
+  Type.String({
+    description:
+      "Another machine of this Pico hub (label or ID). Without it, the tool works on this machine.",
+  })
+)
+
+/**
+ * The remote machine of a tool call: from `machine`, or from an ID such as
+ * `workbox:s12`. Undefined means this machine. Throws for an unknown or
+ * offline machine.
+ */
+export function remoteTarget(
+  services: HostServices,
+  machine: string | undefined,
+  id?: string
+): { connection: RemoteConnection; id?: string } | undefined {
+  const prefixed = id ? /^([^:\s]+):(.+)$/.exec(id.trim()) : null
+  const name =
+    machine?.trim() ||
+    (prefixed && prefixed[1] !== "pico" && services.machines?.find(prefixed[1]!)
+      ? prefixed[1]
+      : undefined)
+  if (!name || name === "local") return undefined
+  const connection = services.machines?.find(name)
+  if (!connection) {
+    const known = services.machines?.list().map((entry) => entry.label) ?? []
+    throw new Error(
+      `Unknown machine: ${name}.${known.length ? ` Machines: ${known.join(", ")}.` : " This Pico has no other machines."}`
+    )
+  }
+  if (!connection.online)
+    throw new Error(
+      `${connection.profile.label} is ${connection.state}. Try again when it is online.`
+    )
+  const sessionId =
+    id === undefined
+      ? undefined
+      : normalizeSessionId(
+          prefixed && !machine?.trim()
+            ? prefixed[2]!
+            : id.replace(/^[^:]+:/, "")
+        )
+  return { connection, ...(sessionId ? { id: sessionId } : {}) }
+}
+
+/** How agents and users write a remote session: `workbox:s12`. */
+function remoteName(connection: RemoteConnection, id: string) {
+  return `${connection.profile.label}:${id}`
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("Aborted"))
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort)
+      resolve()
+    }, ms)
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason ?? new Error("Aborted"))
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+  })
+}
+
+/**
+ * Wait until a remote session is idle, with long polls. Undefined when the
+ * deadline passes first. Network errors end the wait with an error.
+ */
+async function remoteWait(
+  connection: RemoteConnection,
+  id: string,
+  deadline: number | undefined,
+  signal?: AbortSignal
+) {
+  for (;;) {
+    if (signal?.aborted) throw signal.reason ?? new Error("Aborted")
+    const left = deadline === undefined ? 25_000 : deadline - Date.now()
+    if (left <= 0) return undefined
+    const result = (await connection.request(
+      "GET",
+      `/api/machine/session/wait?id=${encodeURIComponent(id)}&timeoutMs=${Math.min(25_000, left)}`,
+      { timeoutMs: 45_000 }
+    )) as RemoteSession & { idle: boolean; answer?: string }
+    if (result.idle) return result
+  }
+}
+
+type RemoteReportInput = {
+  parent: number
+  machine: string
+  child: string
+  childTitle: string
+  key: string
+}
+
+type RemoteReportCheckpoint =
+  | { phase: "wait" }
+  | { phase: "report"; answer: string; needsInput: boolean }
+
+/**
+ * Post the answer of a remote session to the caller when it is idle. It
+ * waits through offline periods; the request ID lets only one message through.
+ */
+function createRemoteReportTask(host: HostBridge) {
+  return defineTask<RemoteReportInput, RemoteReportCheckpoint, null>({
+    name: "pico.remote-child-report",
+    version: 1,
+    initial: () => ({ phase: "wait" }),
+    phases: {
+      wait: async (task, runtime, context) => {
+        let answer: string | undefined
+        let needsInput = false
+        for (;;) {
+          const services = await host.ready(runtime.signal)
+          const connection = services.machines?.find(task.input.machine)
+          if (!connection) {
+            answer = "(the machine was removed from this hub)"
+            break
+          }
+          try {
+            if (!connection.online) throw new Error("offline")
+            const result = await remoteWait(
+              connection,
+              task.input.child,
+              undefined,
+              runtime.signal
+            )
+            if (result) {
+              answer = result.answer ?? "(no answer)"
+              needsInput = result.needsInput
+              break
+            }
+          } catch (error) {
+            if (runtime.signal.aborted) throw error
+            await sleep(15_000, runtime.signal)
+          }
+        }
+        await runtime.commit(
+          () => ({
+            status: "running",
+            checkpoint: { phase: "report", answer, needsInput },
+          }),
+          context
+        )
+      },
+      report: async (task, runtime, context) => {
+        const { input } = task
+        const checkpoint = task.state.checkpoint
+        const services = await host.ready(runtime.signal)
+        const label =
+          services.machines?.find(input.machine)?.profile.label ?? input.machine
+        const name = `${label}:${input.child}`
+        await followUp(
+          host,
+          (id) => runtime.conversation(id, context),
+          input.parent as unknown as ConversationId,
+          [
+            checkpoint.needsInput
+              ? `[Session ${name} is waiting for the user] ${input.childTitle}`
+              : checkpoint.answer === STOPPED_ANSWER
+                ? `[Session ${name} stopped] ${input.childTitle}`
+                : `[Session ${name} finished] ${input.childTitle}`,
+            "Its answer:",
+            clip(checkpoint.answer, 12_000),
+          ].join("\n"),
+          `report:${input.machine}:${input.child}:${input.key}`,
+          context
+        )
+        await runtime.commit(
+          () => ({
+            status: "terminal",
+            outcome: { status: "completed", result: null },
+          }),
+          context
+        )
+      },
+    },
+    abort: async (_task, runtime, context) => {
+      await runtime.commit(
+        () => ({
+          status: "terminal",
+          outcome: { status: "aborted", reason: "cancelled" },
+        }),
+        context
+      )
+    },
+  })
+}
+
 export function createSessionsExtension(host: HostBridge) {
   const ReportTask = createReportTask(host)
+  const RemoteReportTask = createRemoteReportTask(host)
+
+  /** Like `scheduleReport`, for a session on another machine. */
+  const scheduleRemoteReport = async (
+    api: ToolExecutionApi,
+    input: RemoteReportInput,
+    context: Context
+  ) => {
+    if (await api.memo<boolean>("report", context)) return
+    await api.commit(async (tx) => {
+      await tx.createTask(RemoteReportTask, input, {
+        ownership: { kind: "conversation" },
+        conversationId: api.conversationId,
+        background: true,
+      })
+    }, context)
+    await api.memo("report", true, context)
+  }
+
+  /** A request ID that is the same when a tool call runs again. */
+  const callRequestId = (api: ToolExecutionApi) =>
+    `${String(api.conversationId)}:${api.callId}`
+
+  /** The tool's remote target, or an error result. */
+  const resolveRemote = (
+    services: HostServices,
+    machine: string | undefined,
+    id?: string
+  ) => {
+    try {
+      return { target: remoteTarget(services, machine, id) }
+    } catch (error) {
+      return {
+        error: errorResult(
+          error instanceof Error ? error.message : String(error)
+        ),
+      }
+    }
+  }
 
   const requireSession = (services: HostServices, value: string) => {
     const id = services.sessions.current(normalizeSessionId(value))
@@ -304,6 +555,7 @@ export function createSessionsExtension(host: HostBridge) {
           description: "With wait: give up after this many seconds",
         })
       ),
+      machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, api, context) {
@@ -311,6 +563,85 @@ export function createSessionsExtension(host: HostBridge) {
       const parent = sessionIdOf(api.conversationId)
       if (!services.sessions.has(parent))
         return errorResult("spawn_session works only in a Pico session")
+      const remote = resolveRemote(services, args.machine)
+      if (remote.error) return remote.error
+      if (remote.target) {
+        if (args.worktree)
+          return errorResult(
+            "worktree is not available for a session on another machine."
+          )
+        const { connection } = remote.target
+        let created: RemoteSession
+        try {
+          created = (await connection.request(
+            "POST",
+            "/api/machine/session/spawn",
+            {
+              body: {
+                goal: args.goal,
+                ...(args.name ? { name: args.name } : {}),
+                ...(args.cwd ? { cwd: args.cwd } : {}),
+                ...(args.model ? { model: args.model } : {}),
+                ...(args.thinking ? { thinking: args.thinking } : {}),
+                ...(args.profile ? { profile: args.profile } : {}),
+                requestId: callRequestId(api),
+              },
+            }
+          )) as RemoteSession
+        } catch (error) {
+          return errorResult(
+            `Could not start the session on ${connection.profile.label}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
+        const name = remoteName(connection, created.sessionId)
+        const title = args.name ?? created.title ?? args.goal.slice(0, 60)
+        const details = {
+          sessionId: created.sessionId,
+          machine: connection.profile.id,
+          machineLabel: connection.profile.label,
+          title,
+        }
+        if (!args.wait) {
+          await scheduleRemoteReport(
+            api,
+            {
+              parent: Number(api.conversationId),
+              machine: connection.profile.id,
+              child: created.sessionId,
+              childTitle: title,
+              key: `spawn-${api.callId}`,
+            },
+            context
+          )
+          return textResult(
+            `Started session ${name} in ${created.cwd} on ${connection.profile.label}. Its answer comes to you as a message when it finishes. Use read_session, send_to_session, or stop_session with id ${name}.`,
+            { details: json({ ...details, status: "running" }) }
+          )
+        }
+        try {
+          const done = await remoteWait(
+            connection,
+            created.sessionId,
+            args.timeout ? Date.now() + args.timeout * 1000 : undefined,
+            context.abortSignal
+          )
+          return textResult(
+            done
+              ? `Session ${name} (in ${created.cwd}) finished.\nIts answer:\n${clip(done.answer ?? "(no answer)", 20_000)}`
+              : `Session ${name} still runs after ${args.timeout}s. Check it later with read_session or wait_for_sessions.`,
+            {
+              details: json({
+                ...details,
+                status: done ? "done" : "running",
+              }),
+            }
+          )
+        } catch (error) {
+          return errorResult(
+            `Session ${name} started, but the wait failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
+      }
       const parentMeta = services.sessions.meta(parent)
       const settings = services.settings()
       let child = services.sessions
@@ -461,10 +792,84 @@ export function createSessionsExtension(host: HostBridge) {
       ),
       wait: Type.Optional(Type.Boolean()),
       timeout: Type.Optional(Type.Number()),
+      machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, api, context) {
       const services = await host.ready(context.abortSignal)
+      const remote = resolveRemote(services, args.machine, args.id)
+      if (remote.error) return remote.error
+      if (remote.target?.id) {
+        const { connection, id } = remote.target
+        const name = remoteName(connection, id)
+        const from = sessionIdOf(api.conversationId)
+        let sent: RemoteSession
+        try {
+          sent = (await connection.request(
+            "POST",
+            "/api/machine/session/prompt",
+            {
+              body: {
+                id,
+                message: `[Message from session ${from} on the hub] ${args.message}`,
+                mode: args.mode ?? "followUp",
+                requestId: callRequestId(api),
+              },
+            }
+          )) as RemoteSession
+        } catch (error) {
+          return errorResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+        if (!args.wait) {
+          await scheduleRemoteReport(
+            api,
+            {
+              parent: Number(api.conversationId),
+              machine: connection.profile.id,
+              child: id,
+              childTitle: sent.title,
+              key: `send-${api.callId}`,
+            },
+            context
+          )
+          return textResult(
+            `Sent to session ${name}. Its answer comes to you as a message.`,
+            {
+              details: {
+                sessionId: id,
+                machine: connection.profile.id,
+                title: sent.title,
+              },
+            }
+          )
+        }
+        try {
+          const done = await remoteWait(
+            connection,
+            id,
+            args.timeout ? Date.now() + args.timeout * 1000 : undefined,
+            context.abortSignal
+          )
+          return textResult(
+            done
+              ? `Session ${name} answered:\n${clip(done.answer ?? "(no answer)", 20_000)}`
+              : `Session ${name} still runs after ${args.timeout}s.`,
+            {
+              details: {
+                sessionId: id,
+                machine: connection.profile.id,
+                title: sent.title,
+              },
+            }
+          )
+        } catch (error) {
+          return errorResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+      }
       let target: string
       try {
         target = requireSession(services, args.id)
@@ -527,10 +932,34 @@ export function createSessionsExtension(host: HostBridge) {
       id: Type.String(),
       last: Type.Optional(Type.Number()),
       include_tools: Type.Optional(Type.Boolean()),
+      machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, _api, context) {
       const services = await host.ready(context.abortSignal)
+      const remote = resolveRemote(services, args.machine, args.id)
+      if (remote.error) return remote.error
+      if (remote.target?.id) {
+        const { connection, id } = remote.target
+        try {
+          const result = (await connection.request(
+            "GET",
+            `/api/machine/session/read?id=${encodeURIComponent(id)}&last=${Math.min(50, Math.max(1, args.last ?? 6))}${args.include_tools ? "&includeTools=1" : ""}`
+          )) as RemoteSession & { text: string }
+          return textResult(
+            [
+              `Session ${remoteName(connection, id)}: ${result.title} (${result.busy ? "working" : "idle"}${result.needsInput ? ", waiting for the user" : ""})`,
+              `Machine: ${connection.profile.label}. Directory: ${result.cwd}${result.worktree ? ` (worktree, branch ${result.worktree.branch})` : ""}`,
+              "",
+              clip(result.text || "(no messages)", 40_000),
+            ].join("\n")
+          )
+        } catch (error) {
+          return errorResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+      }
       let target: string
       try {
         target = requireSession(services, args.id)
@@ -575,10 +1004,50 @@ export function createSessionsExtension(host: HostBridge) {
           Type.Literal("all"),
         ])
       ),
+      machine: Type.Optional(
+        Type.String({
+          description:
+            "List the sessions of another machine of this hub (label or ID) instead.",
+        })
+      ),
     }),
     replay: "safe",
     async execute(args, api, context) {
       const services = await host.ready(context.abortSignal)
+      const remote = resolveRemote(services, args.machine)
+      if (remote.error) return remote.error
+      if (remote.target) {
+        const { connection } = remote.target
+        try {
+          const result = (await connection.request(
+            "GET",
+            "/api/machine/sessions"
+          )) as {
+            sessions: Array<{
+              id: string
+              title: string
+              cwd: string
+              busy: boolean
+              needsInput: boolean
+              lastMessagePreview?: string
+            }>
+          }
+          if (result.sessions.length === 0)
+            return textResult(`No sessions on ${connection.profile.label}.`)
+          return textResult(
+            result.sessions
+              .map(
+                (item) =>
+                  `${remoteName(connection, item.id)} — ${item.title} [${item.needsInput ? "waiting for the user" : item.busy ? "working" : "idle"}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+              )
+              .join("\n")
+          )
+        } catch (error) {
+          return errorResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+      }
       const self = sessionIdOf(api.conversationId)
       const scope = args.scope ?? "children"
       const meta = services.sessions.has(self)
@@ -610,27 +1079,71 @@ export function createSessionsExtension(host: HostBridge) {
     description:
       "Wait until the given sessions are idle (or the timeout passes), then return the answer of each.",
     parameters: Type.Object({
-      ids: Type.Array(Type.String()),
+      ids: Type.Array(
+        Type.String({
+          description: "Session IDs; workbox:s12 is a session on workbox",
+        })
+      ),
       timeout: Type.Optional(Type.Number({ description: "Seconds" })),
+      machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, _api, context) {
       const services = await host.ready(context.abortSignal)
       let ids: string[]
+      const remotes: Array<{ connection: RemoteConnection; id: string }> = []
       try {
-        ids = args.ids.map((id) => requireSession(services, id))
+        ids = []
+        for (const value of args.ids) {
+          const remote = remoteTarget(services, args.machine, value)
+          if (remote?.id)
+            remotes.push({ connection: remote.connection, id: remote.id })
+          else ids.push(requireSession(services, value))
+        }
       } catch (error) {
         return errorResult(
           error instanceof Error ? error.message : String(error)
         )
       }
+      const deadline = args.timeout
+        ? Date.now() + args.timeout * 1000
+        : undefined
+      const remoteResults = new Map<
+        string,
+        (RemoteSession & { answer?: string }) | Error | undefined
+      >()
       const finished = await within(
-        Promise.all(
-          ids.map((id) => waitIdle(services, conversationOf(id), context))
-        ),
+        Promise.all([
+          ...ids.map((id) => waitIdle(services, conversationOf(id), context)),
+          ...remotes.map(async ({ connection, id }) => {
+            const key = remoteName(connection, id)
+            try {
+              remoteResults.set(
+                key,
+                await remoteWait(connection, id, deadline, context.abortSignal)
+              )
+            } catch (error) {
+              remoteResults.set(
+                key,
+                error instanceof Error ? error : new Error(String(error))
+              )
+            }
+          }),
+        ]),
         args.timeout ? args.timeout * 1000 : undefined
       )
       const parts: string[] = []
+      for (const { connection, id } of remotes) {
+        const key = remoteName(connection, id)
+        const result = remoteResults.get(key)
+        parts.push(
+          result instanceof Error
+            ? `## ${key} (unknown: ${result.message})`
+            : result
+              ? `## ${key} (idle)\n${clip(result.answer ?? "(no answer)", 8000)}`
+              : `## ${key} (still working)`
+        )
+      }
       for (const id of ids) {
         const busy = services.sessions.isBusy(id)
         const answer = await lastAnswer(
@@ -651,10 +1164,25 @@ export function createSessionsExtension(host: HostBridge) {
   const stopTool = defineTool({
     name: "stop_session",
     description: "Stop the current work of another session (like Esc).",
-    parameters: Type.Object({ id: Type.String() }),
+    parameters: Type.Object({ id: Type.String(), machine: MACHINE_PARAMETER }),
     replay: "safe",
     async execute(args, api, context) {
       const services = await host.ready(context.abortSignal)
+      const remote = resolveRemote(services, args.machine, args.id)
+      if (remote.error) return remote.error
+      if (remote.target?.id) {
+        const { connection, id } = remote.target
+        try {
+          await connection.request("POST", "/api/machine/session/stop", {
+            body: { id },
+          })
+        } catch (error) {
+          return errorResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+        return textResult(`Stopped session ${remoteName(connection, id)}.`)
+      }
       let target: string
       try {
         target = requireSession(services, args.id)
@@ -673,6 +1201,6 @@ export function createSessionsExtension(host: HostBridge) {
   return defineExtension({
     name: "sessions",
     tools: [spawnTool, sendTool, readTool, listTool, waitTool, stopTool],
-    tasks: [ReportTask],
+    tasks: [ReportTask, RemoteReportTask],
   })
 }

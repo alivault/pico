@@ -1,9 +1,10 @@
 /**
  * `pico-server`: run, inspect, and stop the Pico server.
  *
- *   pico-server serve [--port 3141] [--host 127.0.0.1] [--data-dir ~/.pico] [--web-dir dir]
- *   pico-server status
+ *   pico-server serve [--port 3141] [--host 127.0.0.1] [--data-dir ~/.pico] [--web-dir dir] [--detach]
+ *   pico-server status [--json]
  *   pico-server stop [--wait]
+ *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
  *
  * Only one server may own a data directory: the durable database has no
  * locking across processes. A second `serve` finds the running server and
@@ -21,6 +22,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs"
+import { spawn } from "node:child_process"
 import { dirname, join, resolve } from "node:path"
 import { homedir } from "node:os"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
@@ -37,6 +39,7 @@ import {
   VERSION,
   type ServerPaths,
 } from "./config.ts"
+import { machineCommand } from "./machines/cli.ts"
 import { startServer, type PicoServer } from "./server.ts"
 
 type ServerState = {
@@ -63,6 +66,16 @@ function parseArgs(argv: string[]) {
     else options.set(key, true)
   }
   return { command, options }
+}
+
+/** The data directory option; a leading `~` is the home directory. */
+function dataDirOption(options: Map<string, string | boolean>) {
+  const value = options.get("data-dir")
+  return resolve(
+    typeof value === "string"
+      ? value.replace(/^~(?=$|\/)/, homedir())
+      : defaultDataDir()
+  )
 }
 
 function readState(paths: ServerPaths): ServerState | undefined {
@@ -184,8 +197,52 @@ async function listen(
   throw lastError
 }
 
+/**
+ * `serve --detach`: start the server in the background with its output in
+ * `<data>/server.log`, and return when it is healthy.
+ */
+async function serveDetached(options: Map<string, string | boolean>) {
+  const paths = serverPaths(dataDirOption(options))
+  const running = readState(paths)
+  if (running && alive(running.pid) && (await health(running))) {
+    console.log(
+      `Pico is already running at http://${running.host}:${running.port}`
+    )
+    return
+  }
+  mkdirSync(paths.dataDir, { recursive: true })
+  const log = openSync(paths.logFile, "a")
+  const args = process.argv
+    .slice(2)
+    .filter((arg) => arg !== "--detach" && arg !== "--detach=true")
+  const child = spawn(
+    process.execPath,
+    [...process.execArgv, process.argv[1]!, ...args],
+    { detached: true, stdio: ["ignore", log, log], env: process.env }
+  )
+  closeSync(log)
+  child.unref()
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null)
+      throw new Error(
+        `Pico stopped with exit code ${child.exitCode}. See ${paths.logFile}`
+      )
+    const state = readState(paths)
+    if (state && state.pid === child.pid && (await health(state))) {
+      console.log(
+        `Pico ${state.version} is running at http://${state.host}:${state.port}`
+      )
+      return
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250))
+  }
+  throw new Error(`Pico did not start in time. See ${paths.logFile}`)
+}
+
 async function serve(options: Map<string, string | boolean>) {
-  const dataDir = resolve(String(options.get("data-dir") ?? defaultDataDir()))
+  if (options.get("detach")) return serveDetached(options)
+  const dataDir = dataDirOption(options)
   const webOption = options.get("web-dir")
   const webDir =
     webOption === false || webOption === "none"
@@ -249,26 +306,32 @@ async function serve(options: Map<string, string | boolean>) {
   process.on("SIGHUP", () => void stop(true))
 }
 
+/**
+ * The server state as JSON. When Pico is not running, the exit code is 1;
+ * with `--json`, stdout is then empty.
+ */
 async function status(options: Map<string, string | boolean>) {
-  const paths = serverPaths(
-    resolve(String(options.get("data-dir") ?? defaultDataDir()))
-  )
+  const paths = serverPaths(dataDirOption(options))
+  const json = Boolean(options.get("json"))
   const state = readState(paths)
   if (!state || !alive(state.pid)) {
-    console.log("Pico is not running.")
+    if (json) console.error("Pico is not running.")
+    else console.log("Pico is not running.")
     process.exitCode = 1
     return
   }
   const result = await health(state)
   console.log(
-    JSON.stringify({ ...state, health: result ?? "unreachable" }, null, 2)
+    JSON.stringify(
+      { ...state, health: result ?? "unreachable" },
+      null,
+      json ? undefined : 2
+    )
   )
 }
 
 async function stopCommand(options: Map<string, string | boolean>) {
-  const paths = serverPaths(
-    resolve(String(options.get("data-dir") ?? defaultDataDir()))
-  )
+  const paths = serverPaths(dataDirOption(options))
   const state = readState(paths)
   if (!state || !alive(state.pid)) {
     console.log("Pico is not running.")
@@ -295,9 +358,7 @@ async function stopCommand(options: Map<string, string | boolean>) {
 }
 
 async function importCommand(options: Map<string, string | boolean>) {
-  const paths = serverPaths(
-    resolve(String(options.get("data-dir") ?? defaultDataDir()))
-  )
+  const paths = serverPaths(dataDirOption(options))
   const source = resolve(
     String(
       options.get("source-dir") ?? join(homedir(), ".pi", "agent", "sessions")
@@ -340,7 +401,18 @@ async function importCommand(options: Map<string, string | boolean>) {
 }
 
 async function main() {
-  const { command, options } = parseArgs(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  if (argv[0] === "machine") {
+    const hubIndex = argv.indexOf("--hub-dir")
+    await machineCommand(
+      argv.slice(1),
+      hubIndex >= 0 && argv[hubIndex + 1]
+        ? resolve(argv[hubIndex + 1]!)
+        : defaultDataDir()
+    )
+    return
+  }
+  const { command, options } = parseArgs(argv)
   if (options.get("version") || command === "--version") {
     console.log(VERSION)
     return
@@ -361,7 +433,7 @@ async function main() {
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop|import-pi [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D]"
+        "Usage: pico-server serve|status|stop|import-pi|machine [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

@@ -21,6 +21,7 @@ xcuserdata/
 
 # Server build output
 apps/pico/server/dist
+apps/pico/server/test/.build
 
 # Copied into the npm package by prepack
 apps/pico/README.md

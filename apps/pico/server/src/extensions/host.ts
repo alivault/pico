@@ -9,6 +9,7 @@
 import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 
 import type { PicoSettingsData } from "../core/settings.ts"
+import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
 import type { PreviewProxies } from "../services/preview.ts"
@@ -113,6 +114,8 @@ export type HostServices = {
   previews?: PreviewProxies
   notifier?: Notifier
   browser?: BrowserManager
+  /** The remote machines of a hub, for the session tools. */
+  machines?: Pick<MachineManager, "find" | "list">
 }
 
 export class HostBridge {

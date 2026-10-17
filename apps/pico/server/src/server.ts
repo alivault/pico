@@ -27,11 +27,19 @@ import {
   type TerminalEvent,
 } from "./services/terminal.ts"
 import { Security } from "./security.ts"
+import {
+  MachineManager,
+  type RemoteEvent,
+  type TransportFactory,
+} from "./machines/manager.ts"
+import { MachineProxy } from "./machines/proxy.ts"
+import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
 
 export type PicoServer = {
   readonly server: Server
   readonly runtime: Runtime
   readonly sessions: Sessions
+  readonly machines: MachineManager
   port(): number
   /** Stop taking new work, wait for runs to finish (up to `timeoutMs`), and close. */
   shutdown(options?: { drain?: boolean; timeoutMs?: number }): Promise<void>
@@ -43,6 +51,8 @@ export async function startServer(options: {
   port: number
   /** `pico-server stop` asked this server to drain and stop. */
   onShutdownRequest?: () => void
+  /** The transport to remote machines; tests use a fake. */
+  machineTransport?: TransportFactory
 }): Promise<PicoServer> {
   const security = new Security(options.host)
   const host = new HostBridge()
@@ -62,12 +72,63 @@ export async function startServer(options: {
     options.paths.dataDir,
     () => runtime.settings.data.browserHeadless
   )
+  const machines = new MachineManager({
+    machinesFile: options.paths.machinesFile,
+    machinesDir: options.paths.machinesDir,
+    ...(options.machineTransport
+      ? { transport: options.machineTransport }
+      : {}),
+  })
   hub.subscribe((event) => notifyFromEvent(event.payload))
-  const sessionLink = (sessionId: unknown) => {
+  const sessionLink = (sessionId: unknown, machineId?: string) => {
     const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
-    const path = typeof sessionId === "string" ? `/?session=${sessionId}` : "/"
+    const query = new URLSearchParams()
+    if (machineId) query.set("machine", machineId)
+    if (typeof sessionId === "string") query.set("session", sessionId)
+    const path = query.size ? `/?${query.toString()}` : "/"
     return base ? `${base}${path}` : path
   }
+  /** Web Push for a remote session; the title names the machine. */
+  const notifyFromRemote = ({ machine, payload }: RemoteEvent) => {
+    const settings = runtime.settings.data
+    const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
+    const title =
+      (typeof payload.title === "string" ? payload.title : undefined) ??
+      machine.summary?.sessions.find((session) => session.id === id)?.title ??
+      "Session"
+    if (payload.type === "session_done" && payload.reason === "agent") {
+      if (!settings.notifyRunDone) return
+      void notifier.send(
+        {
+          title:
+            payload.outcome === "error"
+              ? `Pico (${machine.label}): run failed`
+              : `Pico (${machine.label}): run finished`,
+          body: title,
+          url: sessionLink(id || undefined, machine.id),
+          tag: `done-${machine.id}-${id}`,
+          level: payload.outcome === "error" ? "error" : "success",
+        },
+        { ntfy: false }
+      )
+    } else if (
+      payload.type === "session_status" &&
+      payload.needsInput === true
+    ) {
+      if (!settings.notifyNeedsInput) return
+      void notifier.send(
+        {
+          title: `Pico (${machine.label}): the agent asks a question`,
+          body: title,
+          url: sessionLink(id || undefined, machine.id),
+          tag: `ask-${machine.id}-${id}`,
+          level: "warning",
+        },
+        { ntfy: false }
+      )
+    }
+  }
+  machines.onRemoteEvent(notifyFromRemote)
   const notifyFromEvent = (payload: {
     type: string
     [key: string]: unknown
@@ -113,6 +174,7 @@ export async function startServer(options: {
     previews,
     notifier,
     browser,
+    machines,
   })
   await sessions.load()
   await host.started()
@@ -141,6 +203,15 @@ export async function startServer(options: {
     listenHosts: () => [options.host],
     draining: () => draining,
   })
+  addMachineServerRoutes(router, { sessions, runtime, hub })
+  addHubRoutes(router, {
+    sessions,
+    runtime,
+    hub,
+    machines,
+    startedAt: Date.now(),
+  })
+  const proxy = new MachineProxy(machines, previews)
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)) {
@@ -154,6 +225,7 @@ export async function startServer(options: {
     void (async () => {
       try {
         security.check(request)
+        if (proxy.handle(request, response)) return
         if (await router.handle(request, response)) return
         const path = new URL(request.url ?? "/", "http://localhost").pathname
         if (path.startsWith("/api/") || path === "/events") {
@@ -190,6 +262,7 @@ export async function startServer(options: {
         socket.destroy()
         return
       }
+      if (proxy.upgrade(request, socket, head)) return
       const url = new URL(request.url ?? "/", "http://localhost")
       const match = /^\/api\/terminal\/([^/]+)\/ws$/.exec(url.pathname)
       if (!match) {
@@ -332,12 +405,14 @@ export async function startServer(options: {
     await runtime.close()
     throw error
   }
+  machines.start()
 
   let closing: Promise<void> | undefined
   return {
     server,
     runtime,
     sessions,
+    machines,
     port: () => listeningPort,
     shutdown(shutdownOptions = {}) {
       closing ??= (async () => {
@@ -354,6 +429,7 @@ export async function startServer(options: {
         auth.cancelLogins()
         gitWatcher.stop()
         terminals.shutdown()
+        await machines.close()
         await previews.shutdown()
         await browser.shutdown()
         for (const client of sockets.clients) client.terminate()

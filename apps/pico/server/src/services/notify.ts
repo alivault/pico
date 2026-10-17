@@ -104,8 +104,11 @@ export class Notifier {
     return this.#data.subscriptions.some((item) => item.endpoint === endpoint)
   }
 
-  /** Send to every device; returns how many received it. */
-  async send(notification: Notification) {
+  /**
+   * Send to every device; returns how many received it. `ntfy: false` sends
+   * Web Push only, for example for a remote machine that has its own ntfy.
+   */
+  async send(notification: Notification, options: { ntfy?: boolean } = {}) {
     const payload = JSON.stringify(notification)
     let delivered = 0
     const gone: string[] = []
@@ -132,7 +135,7 @@ export class Notifier {
       })
     )
     for (const endpoint of gone) this.unsubscribe(endpoint)
-    const ntfy = this.#ntfyUrl().trim()
+    const ntfy = options.ntfy === false ? "" : this.#ntfyUrl().trim()
     if (ntfy) {
       try {
         const response = await fetch(ntfy, {

@@ -239,6 +239,7 @@ export function createApi(api: ApiContext) {
         "browser",
         "memory",
         "tool-profiles",
+        "machine-hub",
       ],
     },
   }))
