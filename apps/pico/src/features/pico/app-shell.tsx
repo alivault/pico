@@ -2279,8 +2279,11 @@ function useAppShellSessionWorkspaceView({
       sidebarStore.setDirectoryIndexDataByPath((current) =>
         upsertOptimisticSidebarSessionEntry(current, optimisticEntry)
       )
+      // Update the event index only when it has this directory. Otherwise
+      // the event gets an index with only the new entry, and the merge of the
+      // event replaces the full directory list with it.
       sidebarStore.setSessionsEvent((current) =>
-        current
+        current?.directoryIndexes?.[cwd]
           ? {
               ...current,
               directoryIndexes: upsertOptimisticSidebarSessionEntry(
