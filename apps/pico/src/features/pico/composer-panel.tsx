@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
 import { ComposerPendingMessages } from "@/features/pico/composer-pending-messages"
 import { ComposerPickers } from "@/features/pico/composer-pickers"
@@ -579,6 +580,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     hasDraftTextRef.current
   )
   const refreshAssistStateRef = React.useRef<() => void>(() => {})
+  const isMobile = useIsMobile()
   const multilineRef = React.useRef(false)
   const [multiline, setMultiline] = React.useState(false)
   const assistPointerSelectionSuppressedRef = React.useRef(false)
@@ -983,7 +985,9 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
   const hasChips = Boolean(draftSkill) || composerDiffLineComments.length > 0
   const hasImages = composerImages.length > 0
-  const expanded = multiline || hasChips || hasImages
+  // Mobile is too narrow for the one-row layout, so always stack the prompt
+  // above the buttons there.
+  const expanded = isMobile || multiline || hasChips || hasImages
   const gridTemplateAreas = expanded
     ? [
         hasImages ? '"attachments attachments attachments"' : null,
@@ -1155,21 +1159,27 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
           <>
             <Button
               variant="outline"
+              size={isMobile ? "icon" : "default"}
               className="cursor-pointer"
+              aria-label="Follow-up"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("followUp")}
             >
-              <ListEndIcon data-icon="inline-start" />
-              Follow-up
+              <ListEndIcon data-icon={isMobile ? undefined : "inline-start"} />
+              {isMobile ? null : "Follow-up"}
             </Button>
             <Button
               variant="outline"
+              size={isMobile ? "icon" : "default"}
               className="cursor-pointer"
+              aria-label="Steer"
               disabled={disabled || !hasSubmittableContent}
               onClick={() => runPrimaryComposerAction("steer")}
             >
-              <ListStartIcon data-icon="inline-start" />
-              Steer
+              <ListStartIcon
+                data-icon={isMobile ? undefined : "inline-start"}
+              />
+              {isMobile ? null : "Steer"}
             </Button>
             {responseInFlight ? (
               <TitleTooltip title="Abort" kbd="Esc">
