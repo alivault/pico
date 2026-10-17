@@ -494,6 +494,14 @@ export function useAppShellShortcuts({
       ) {
         return
       }
+      if (context.selectedSidebarSessions.length > 1) {
+        event.preventDefault()
+        closeCommandPaletteForShortcut(context.commandPaletteOpen)
+        shortcutActionsRef.current.openDeleteDialog(
+          context.selectedSidebarSessions
+        )
+        return
+      }
       if (!context.sessionHasFile) return
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
