@@ -1,6 +1,6 @@
 # Design: Multiple machines in one Pico
 
-Status: proposal. Not implemented.
+Status: implemented (version 1). See [Implementation notes](#implementation-notes).
 
 ## Goal
 
@@ -470,3 +470,46 @@ Each phase is one or more commits and keeps `pnpm check` green.
    keeps it running. This plan does the same, so sessions and timers continue.
 3. Do we need a "sync settings" action later, for example for profiles and
    themes, without secrets? Not in version 1.
+
+## Implementation notes
+
+Version 1 follows this plan, with these differences:
+
+- **One machine on each page.** The `machine` search parameter selects the
+  machine of the page, and a switch loads the page again. So all caches,
+  stores, and query keys belong to one server, and the client did not need
+  machine IDs in each key. Local storage keys with machine data (sidebar
+  directories, drafts, terminal tabs) and the event `lastEventId` get a
+  `@<machineId>` suffix (`src/lib/pico/machine.ts`).
+- **Request helpers.** `buildRequestUrl` and `fetchJson` add the
+  `/m/<machineId>` prefix, so the existing calls with raw `/api/` paths work.
+  `scripts/check-api-urls.mjs` (in `pnpm check`) fails on a raw `fetch`,
+  `EventSource`, or `WebSocket` with a server path. Highlighting, Web Push,
+  and the machine list always go to the hub.
+- **Sidebar state.** The directories, pins, and collapsed directories of a
+  machine stay on that machine, because its event stream and session lists
+  use them. The collapsed state of the machine groups is in local storage.
+- **Summaries.** Every server has `/api/machine/summary` and the SSE stream
+  `/api/machine/events` (feature `machine-hub`). The hub sends the summaries
+  of all machines, the local one too, on `/api/machines/events`, not on
+  `/events`. The browser has two streams at most.
+- **Session statuses.** Summaries have working and needs-input. They do not
+  have a per-viewer "done" (unread) state.
+- **Stopped remote server.** A background reconnect does not start a stopped
+  remote server. The machine shows **Attention** with
+  `pico-app machine reconnect`, which starts it.
+- **Install.** `machine add` installs with
+  `npm install --global --prefix ~/.local`. This needs no root (open
+  question 1). An old remote Pico (no `serve --detach`) counts as missing.
+- **Agent tools.** The session tools take `machine`, or an ID such as
+  `workbox:s12`. A background report task (`pico.remote-child-report`)
+  long-polls `/api/machine/session/wait` through offline periods and posts
+  the answer to the parent with a fixed request ID. Worktrees are not
+  available for remote spawns.
+- **Feature checks in the client.** The client does not read the remote
+  manifest yet, so it does not hide controls for missing features.
+- **Tests.** `server/test/machines.test.ts` covers profiles, helpers, the
+  backoff and attention states with fake timers, and a hub that proxies HTTP,
+  SSE, and terminal WebSockets to a second Pico (`test/fixtures/local-hub.ts`
+  uses a transport without SSH). A test against a real `sshd` and the
+  Tailscale cases are still manual.

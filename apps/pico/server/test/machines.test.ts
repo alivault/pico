@@ -373,7 +373,8 @@ async function buildLocalHub() {
   )
   await esbuild.build({
     entryPoints: ["test/fixtures/local-hub.ts"],
-    outfile: "test/.build/local-hub.mjs",
+    // In node_modules: the checks skip it, and it finds the dependencies.
+    outfile: "node_modules/.cache/pico-test/local-hub.mjs",
     bundle: true,
     platform: "node",
     format: "esm",
@@ -387,7 +388,7 @@ async function buildLocalHub() {
       ].join("\n"),
     },
   })
-  return "test/.build/local-hub.mjs"
+  return "node_modules/.cache/pico-test/local-hub.mjs"
 }
 
 async function startPico(

@@ -74,6 +74,36 @@ pnpm start --host <tailscale-ip> --no-open
 
 Use Tailscale Serve for HTTPS (needed for push notifications).
 
+## Multiple machines
+
+One Pico can show the sessions of other computers, for example a build
+server. Each machine runs its own Pico on its `127.0.0.1`. The Pico that you
+open (the hub) connects to them over SSH and shows them in the sidebar.
+Sessions, terminals, and jobs run on their own machine and continue when the
+hub goes offline.
+
+```sh
+pico-app machine add ali@workbox      # SSH target, alias, or Tailscale name
+pico-app machine list
+pico-app machine reconnect workbox    # after a password, key, or check prompt
+pico-app machine remove workbox       # Pico keeps running on workbox
+```
+
+`machine add` connects in your terminal, so SSH can ask for a password or a
+host key. It finds Node.js 22.19+ and Pico on the remote machine, and asks
+before it installs Pico (with npm, into `~/.local`). The hub then uses your
+SSH config, keys, and agent with one shared connection. It never asks for
+input; when SSH needs you, the machine shows **Attention** and the command to
+run. Pico does not store passwords or keys, and it copies no settings or
+credentials to other machines.
+
+Tailscale works: use a MagicDNS name or a `100.x` address as the target,
+with OpenSSH or Tailscale SSH.
+
+Anyone who can open the hub can run commands on all its machines. Keep the
+hub on localhost or your tailnet. Agents on the hub can use the session tools
+with a `machine` argument, for example to start a session on `workbox`.
+
 ## Development
 
 ```sh
