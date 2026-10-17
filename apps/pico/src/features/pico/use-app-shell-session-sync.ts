@@ -1005,6 +1005,23 @@ export function useAppShellSessionSync({
       }
 
       if (isSessionDoneEvent(payload)) {
+        // The server marks a finished run unread in every context that does
+        // not show it. Set the same state here, because a status overlay with
+        // unread false (from when the session was active) hides the unread
+        // flag of a fresh directory index.
+        if (
+          payload.sessionId &&
+          payload.sessionId !== sessionStateRef.current.sessionId
+        ) {
+          applySidebarSessionStatusRef.current({
+            type: "session_status",
+            sessionKey: payload.sessionKey,
+            sessionId: payload.sessionId,
+            sessionPath: payload.sessionPath,
+            streaming: false,
+            unread: true,
+          })
+        }
         setSessionDoneEvents((current) =>
           current.some((entry) => entry.id === payload.id)
             ? current
