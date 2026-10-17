@@ -1161,7 +1161,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
         {acceptFollowUps ? (
           <>
-            <TitleTooltip title="Follow-up">
+            <TitleTooltip title="Follow-up" kbd="⌥ Enter">
               <Button
                 variant="outline"
                 size="icon"
@@ -1173,7 +1173,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
                 <ListEndIcon />
               </Button>
             </TitleTooltip>
-            <TitleTooltip title="Steer">
+            <TitleTooltip title="Steer" kbd="Enter">
               <Button
                 variant="outline"
                 size="icon"
