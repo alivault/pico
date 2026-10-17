@@ -1161,30 +1161,30 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
 
         {acceptFollowUps ? (
           <>
-            <Button
-              variant="outline"
-              size={isMobile ? "icon" : "default"}
-              className="cursor-pointer"
-              aria-label="Follow-up"
-              disabled={disabled || !hasSubmittableContent}
-              onClick={() => runPrimaryComposerAction("followUp")}
-            >
-              <ListEndIcon data-icon={isMobile ? undefined : "inline-start"} />
-              {isMobile ? null : "Follow-up"}
-            </Button>
-            <Button
-              variant="outline"
-              size={isMobile ? "icon" : "default"}
-              className="cursor-pointer"
-              aria-label="Steer"
-              disabled={disabled || !hasSubmittableContent}
-              onClick={() => runPrimaryComposerAction("steer")}
-            >
-              <ListStartIcon
-                data-icon={isMobile ? undefined : "inline-start"}
-              />
-              {isMobile ? null : "Steer"}
-            </Button>
+            <TitleTooltip title="Follow-up">
+              <Button
+                variant="outline"
+                size="icon"
+                className="cursor-pointer"
+                aria-label="Follow-up"
+                disabled={disabled || !hasSubmittableContent}
+                onClick={() => runPrimaryComposerAction("followUp")}
+              >
+                <ListEndIcon />
+              </Button>
+            </TitleTooltip>
+            <TitleTooltip title="Steer">
+              <Button
+                variant="outline"
+                size="icon"
+                className="cursor-pointer"
+                aria-label="Steer"
+                disabled={disabled || !hasSubmittableContent}
+                onClick={() => runPrimaryComposerAction("steer")}
+              >
+                <ListStartIcon />
+              </Button>
+            </TitleTooltip>
             {responseInFlight ? (
               <TitleTooltip title="Abort" kbd="Esc">
                 <Button
