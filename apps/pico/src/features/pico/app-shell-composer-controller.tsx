@@ -255,7 +255,7 @@ export function NewSessionComposerSelectors({
   }
 
   return (
-    <div className="flex min-w-0 items-center justify-start gap-1.5 text-muted-foreground">
+    <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 text-muted-foreground">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
