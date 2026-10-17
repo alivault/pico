@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineFeature } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
 
 type DraftWorktree = {
@@ -34,7 +35,7 @@ type DraftWorktree = {
  * The "New worktree" option of a new session. The choice is part of the
  * server's draft, so the first prompt creates the worktree with the session.
  */
-export function NewSessionWorktreeToggle({
+function NewSessionWorktreeToggleView({
   cwd,
   viewerContextId,
 }: {
@@ -167,4 +168,12 @@ export function NewSessionWorktreeToggle({
       </PopoverContent>
     </Popover>
   )
+}
+
+/** Hidden when the server of the page does not have the feature. */
+export function NewSessionWorktreeToggle(
+  props: React.ComponentProps<typeof NewSessionWorktreeToggleView>
+) {
+  const available = useMachineFeature("worktrees")
+  return available ? <NewSessionWorktreeToggleView {...props} /> : null
 }

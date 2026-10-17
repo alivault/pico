@@ -35,6 +35,7 @@ import {
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineReadOnly } from "@/features/pico/machine-store"
 import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
 import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
@@ -456,6 +457,8 @@ export const AppShellComposerController = React.memo(
     topContent?: React.ReactNode
   }) {
     const snapshot = useAppShellComposerSnapshot(store)
+    // An offline machine is read-only until it is back.
+    const machineReadOnly = useMachineReadOnly()
     const centerMessages = useSelector(
       displaySettingsStore,
       (settings) => settings.centerMessages
@@ -583,7 +586,7 @@ export const AppShellComposerController = React.memo(
         isCompacting={snapshot.isCompacting}
         isStreaming={snapshot.isStreaming}
         awaitingFirstTurn={snapshot.awaitingFirstTurn}
-        disabled={snapshot.disabled}
+        disabled={snapshot.disabled || machineReadOnly}
         flush={Boolean(topContent)}
         topContent={topContent}
         viewerContextId={snapshot.viewerContextId}

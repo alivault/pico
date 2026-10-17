@@ -45,6 +45,8 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
+import { cn } from "@/lib/utils"
+import { useMachineFeature } from "@/features/pico/machine-store"
 
 export type AppShellSessionHeaderActions = {
   createSession: (cwdOverride?: string) => void | Promise<unknown>
@@ -95,6 +97,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
   sessionStore,
   viewerContextId,
 }: AppShellSessionHeaderProps) {
+  const terminalsAvailable = useMachineFeature("native-pty")
   const sessionHeaderState = useSelector(
     sessionStore,
     (sessionState) => ({
@@ -365,7 +368,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="md:hidden"
+                className={cn("md:hidden", !terminalsAvailable && "hidden")}
                 onClick={onToggleTerminalPanel}
               >
                 <span>Terminal</span>
@@ -402,7 +405,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <Button
               size="icon"
               variant="ghost"
-              className="hidden md:inline-flex"
+              className={cn("hidden", terminalsAvailable && "md:inline-flex")}
               aria-pressed={terminalPanelOpen}
               aria-label="Toggle terminal panel"
               onClick={onToggleTerminalPanel}

@@ -159,6 +159,7 @@ function McpSettings({ viewerContextId }: { viewerContextId: string }) {
 }
 
 registerAgentSettingsSection({
+  feature: "mcp",
   key: "mcp",
   order: 20,
   Component: McpSettings,

@@ -1,5 +1,6 @@
 import * as React from "react"
 import { usePicoEvent } from "@/features/pico/agent/events"
+import { useMachineFeature } from "@/features/pico/machine-store"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -1700,12 +1701,19 @@ function useAppShellSessionWorkspaceView({
     setGitPanelOpen((open) => !open)
   }
 
+  const terminalsAvailable = useMachineFeature("native-pty")
+
   usePicoEvent("pico:open-job-terminal", () => {
+    if (!terminalsAvailable) return
     if (isMobile) setCurrentTab("terminal")
     else setTerminalPanelOpen(true)
   })
 
   const toggleTerminalPanel = () => {
+    if (!terminalsAvailable) {
+      toast.info("This machine has no terminals. Update Pico on it.")
+      return
+    }
     if (isMobile) {
       setCurrentTab((tab) => (tab === "terminal" ? "session" : "terminal"))
       return

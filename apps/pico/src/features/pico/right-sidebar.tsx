@@ -36,6 +36,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineFeature } from "@/features/pico/machine-store"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitPanelErrorToasts } from "@/features/pico/right-sidebar-git-toolbar"
 import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
@@ -1032,6 +1033,8 @@ export function RightSidebar({
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const preview = usePreviewState(viewerContextId, sessionId)
+  const previewAvailable = useMachineFeature("preview")
+  const agentPanelAvailable = useMachineFeature("agent-panel")
   const [localState, dispatchLocal] = React.useReducer(
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
@@ -1194,8 +1197,11 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
-          showAgent={!isMobile}
-          showPreview={Boolean(preview?.target) || activeTab === "preview"}
+          showAgent={!isMobile && agentPanelAvailable}
+          showPreview={
+            previewAvailable &&
+            (Boolean(preview?.target) || activeTab === "preview")
+          }
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab || activeTab === "history"}
           showReview

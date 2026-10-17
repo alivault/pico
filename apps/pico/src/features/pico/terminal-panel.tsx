@@ -25,6 +25,7 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { formatDisplayPath } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
+import { activeMachineOffline } from "@/lib/pico/machine"
 import type { TerminalCreateResponse, TerminalEvent } from "@/lib/pico/api"
 import {
   appliedThemeClassColorMode,
@@ -726,6 +727,8 @@ function TerminalTabPane({
         terminalRef.current = terminal
         inputDisposable = terminal.onData((data) => {
           if (!activeRef.current) return
+          // An offline machine is read-only: drop typing until it is back.
+          if (activeMachineOffline()) return
 
           inputBuffer += data
           scheduleInputFlush()

@@ -23,6 +23,7 @@ import {
 import { sessionExtensionsQueryKey } from "@/features/pico/agent/session-extensions"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineFeature } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
 
 type Profile = {
@@ -55,7 +56,7 @@ function useProfiles(viewerContextId: string, sessionId?: string) {
 }
 
 /** A dropdown that sets the tool profile of a session or of the new-session draft. */
-export function ProfilePicker({
+function ProfilePickerView({
   cwd,
   sessionId,
   variant = "ghost",
@@ -248,7 +249,16 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
 }
 
 registerAgentSettingsSection({
+  feature: "tool-profiles",
   key: "profiles",
   order: 10,
   Component: ProfilesSettings,
 })
+
+/** Hidden when the server of the page does not have the feature. */
+export function ProfilePicker(
+  props: React.ComponentProps<typeof ProfilePickerView>
+) {
+  const available = useMachineFeature("tool-profiles")
+  return available ? <ProfilePickerView {...props} /> : null
+}

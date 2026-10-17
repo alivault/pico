@@ -28,6 +28,7 @@ import {
 } from "@/features/pico/agent/push"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { MachineFeatureGate } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
 
 export type AgentSettings = {
@@ -48,6 +49,8 @@ export type AgentSettings = {
 type ExtraSection = {
   key: string
   order: number
+  /** Show the section only when the server has this feature. */
+  feature?: string
   Component: React.ComponentType<{ viewerContextId: string }>
 }
 const extraSections = new Map<string, ExtraSection>()
@@ -439,10 +442,9 @@ export function AgentSettingsDialog({
             {[...extraSections.values()]
               .sort((left, right) => left.order - right.order)
               .map((section) => (
-                <section.Component
-                  key={section.key}
-                  viewerContextId={viewerContextId}
-                />
+                <MachineFeatureGate key={section.key} feature={section.feature}>
+                  <section.Component viewerContextId={viewerContextId} />
+                </MachineFeatureGate>
               ))}
           </div>
         )}

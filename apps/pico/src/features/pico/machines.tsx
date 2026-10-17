@@ -52,107 +52,13 @@ import {
   openMachine,
 } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
-
-/**
- * The machines of the hub: the local runtime and the SSH machines. The hub
- * sends their states and session summaries on `/api/machines/events`. This
- * page shows one machine (see `lib/pico/machine.ts`); the sidebar shows the
- * other machines from their summaries.
- */
-
-export type MachineState =
-  | "connecting"
-  | "online"
-  | "offline"
-  | "attention"
-  | "disabled"
-
-export type MachineSessionSummary = {
-  id: string
-  title: string
-  cwd: string
-  directory: string
-  busy: boolean
-  needsInput: boolean
-  parent?: string
-  lastMessageAt?: number
-}
-
-export type MachineInfo = {
-  id: string
-  label: string
-  target: string
-  dataDir: string | null
-  enabled: boolean
-  state: MachineState
-  since: number
-  problem?: {
-    kind: "auth" | "stopped" | "update" | "setup" | "error"
-    message: string
-    detail?: string
-    url?: string
-  }
-  retryAt?: number
-  version?: string
-  summary?: {
-    hostname: string
-    version: string
-    directories: Array<string>
-    sessions: Array<MachineSessionSummary>
-  }
-}
-
-type MachinesSnapshot = {
-  loaded: boolean
-  machines: Array<MachineInfo>
-  fileError?: string
-}
-
-let snapshot: MachinesSnapshot = { loaded: false, machines: [] }
-const listeners = new Set<() => void>()
-let source: EventSource | undefined
-
-function connect() {
-  if (source || typeof EventSource === "undefined") return
-  source = new EventSource(apiUrl("/api/machines/events"))
-  source.onmessage = (event: MessageEvent<string>) => {
-    let data: { type?: string } & Partial<MachinesSnapshot>
-    try {
-      data = JSON.parse(event.data) as typeof data
-    } catch {
-      return
-    }
-    if (data.type !== "machines" || !Array.isArray(data.machines)) return
-    snapshot = {
-      loaded: true,
-      machines: data.machines,
-      ...(data.fileError ? { fileError: data.fileError } : {}),
-    }
-    for (const listener of listeners) listener()
-  }
-}
-
-function subscribe(listener: () => void) {
-  connect()
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
-export function useMachines() {
-  return React.useSyncExternalStore(
-    subscribe,
-    () => snapshot,
-    () => snapshot
-  )
-}
-
-/** The machine of this page; undefined until the list loads. */
-export function useActiveMachine() {
-  const { machines } = useMachines()
-  return machines.find((machine) => machine.id === activeMachineId())
-}
+import {
+  useMachines,
+  viewerContextIdForSummaries,
+  type MachineInfo,
+  type MachineSessionSummary,
+  type MachineState,
+} from "@/features/pico/machine-store"
 
 async function machineAction(
   id: string,
@@ -214,17 +120,27 @@ function MachineStateDot({
   )
 }
 
+/** A finished run that this browser did not see yet. */
+function isDone(session: MachineSessionSummary) {
+  return (
+    !session.busy &&
+    !session.needsInput &&
+    Boolean(session.unreadBy?.includes(viewerContextIdForSummaries()))
+  )
+}
+
 function sessionCounts(machine: MachineInfo) {
   const sessions = machine.summary?.sessions ?? []
   return {
     working: sessions.filter((session) => session.busy && !session.needsInput)
       .length,
     waiting: sessions.filter((session) => session.needsInput).length,
+    done: sessions.filter(isDone).length,
   }
 }
 
 function MachineCounts({ machine }: { machine: MachineInfo }) {
-  const { working, waiting } = sessionCounts(machine)
+  const { working, waiting, done } = sessionCounts(machine)
   if (machine.state !== "online")
     return (
       <span className="truncate text-[11px] font-normal text-sidebar-foreground/50">
@@ -246,6 +162,14 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
           <span className="flex items-center gap-1">
             <Spinner size="xs" />
             {working}
+          </span>
+        </TitleTooltip>
+      ) : null}
+      {done > 0 ? (
+        <TitleTooltip title={`${done} done`}>
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-full bg-primary" />
+            {done}
           </span>
         </TitleTooltip>
       ) : null}
@@ -354,7 +278,10 @@ function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
   const shown = [
     ...sessions.filter((session) => session.needsInput),
     ...sessions.filter((session) => session.busy && !session.needsInput),
-    ...sessions.filter((session) => !session.busy && !session.needsInput),
+    ...sessions.filter(isDone),
+    ...sessions.filter(
+      (session) => !session.busy && !session.needsInput && !isDone(session)
+    ),
   ].slice(0, GROUP_SESSION_COUNT)
   const dimmed = machine.state !== "online"
   return (
@@ -397,6 +324,11 @@ function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
                         />
                       ) : session.busy ? (
                         <Spinner size="xs" aria-label="Working" />
+                      ) : isDone(session) ? (
+                        <span
+                          className="size-2 rounded-full bg-primary"
+                          aria-label="Session done"
+                        />
                       ) : null}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">

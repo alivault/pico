@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineReadOnly } from "@/features/pico/machine-store"
 import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
 import {
   appShortcut,
@@ -102,6 +103,7 @@ export function HeaderGitActions({
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
+  const machineReadOnly = useMachineReadOnly()
   const statusQuery = useQuery({
     ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
     enabled: Boolean(viewerContextId && normalizedCwd),
@@ -227,8 +229,10 @@ export function HeaderGitActions({
   const showForcePush =
     !isMobile && canForcePush && (!gitActionBusy || forcePushing)
   const showPull = !isMobile && canPull && (!gitActionBusy || pulling)
+  // An offline machine is read-only: no git actions until it is back.
   const showActions =
-    canCommit || showMobilePush || showPush || showForcePush || showPull
+    !machineReadOnly &&
+    (canCommit || showMobilePush || showPush || showForcePush || showPull)
 
   if (!showActions && !commitDialogOpen) return null
 

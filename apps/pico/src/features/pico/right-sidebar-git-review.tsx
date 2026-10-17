@@ -61,6 +61,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineReadOnly } from "@/features/pico/machine-store"
 import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
@@ -630,6 +631,7 @@ function useFileReviewContentView({
     [setChangesScrollGradientElement]
   )
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
+  const machineReadOnly = useMachineReadOnly()
   const historyPanelRef = React.useRef<HTMLDivElement>(null)
   const historyScrollRef = React.useRef<HTMLDivElement>(null)
   const previousNormalizedCwdRef = React.useRef(normalizedCwd)
@@ -858,11 +860,13 @@ function useFileReviewContentView({
     >
       <ProjectFileIconSprite />
       <div className="flex min-h-12 shrink-0 flex-col justify-center gap-2 border-b border-border/70 bg-background p-2">
-        <GitPanelToolbar
-          viewerContextId={viewerContextId}
-          cwd={normalizedCwd}
-          active={active}
-        />
+        <fieldset disabled={machineReadOnly} className="contents">
+          <GitPanelToolbar
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active}
+          />
+        </fieldset>
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-background p-2">
         <div className="flex min-w-0 items-center">

@@ -10,7 +10,7 @@ import {
   type SessionState,
 } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
-import { apiInput, apiUrl } from "@/lib/pico/machine"
+import { apiInput, apiUrl, assertMachineWritable } from "@/lib/pico/machine"
 
 function sameStringArray(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
@@ -203,7 +203,9 @@ export async function fetchJson<T>(
   input: RequestInfo | URL,
   init?: RequestInit
 ) {
-  const response = await fetch(apiInput(input), init)
+  const target = apiInput(input)
+  assertMachineWritable(target, init?.method)
+  const response = await fetch(target, init)
   const text = await response.text()
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 

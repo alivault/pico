@@ -493,8 +493,10 @@ Version 1 follows this plan, with these differences:
   `/api/machine/events` (feature `machine-hub`). The hub sends the summaries
   of all machines, the local one too, on `/api/machines/events`, not on
   `/events`. The browser has two streams at most.
-- **Session statuses.** Summaries have working and needs-input. They do not
-  have a per-viewer "done" (unread) state.
+- **Session statuses.** Summaries have working, needs-input, and
+  `unreadBy`: the viewer contexts that did not see the last run. A browser
+  uses the same context ID on every machine, so the sidebar shows a done dot
+  for the runs that it did not see.
 - **Stopped remote server.** A background reconnect does not start a stopped
   remote server. The machine shows **Attention** with
   `pico-app machine reconnect`, which starts it.
@@ -506,10 +508,21 @@ Version 1 follows this plan, with these differences:
   long-polls `/api/machine/session/wait` through offline periods and posts
   the answer to the parent with a fixed request ID. Worktrees are not
   available for remote spawns.
-- **Feature checks in the client.** The client does not read the remote
-  manifest yet, so it does not hide controls for missing features.
+- **Feature checks in the client.** The hub reads the manifest of each
+  remote and sends its features with the machine list. The client hides the
+  terminal, the Agent and Preview tabs, tool profiles, worktrees, and the MCP
+  settings when the remote server does not have the feature.
+- **Offline view.** The hub proxy keeps copies of small JSON answers to GET
+  requests and follows the event streams of the browsers (the newest state of
+  each open session and the session lists). When the machine is offline, it
+  answers from these copies: `/events` gets the last state without event IDs,
+  and closes when the machine is online again, so the browser connects to the
+  live stream. The copies are in memory only. The page turns off the
+  composer, git actions, and terminal input, and `fetchJson` sends no change
+  (no method but GET or HEAD) to an offline machine. A prompt that the page
+  could not send waits in the offline prompt queue.
 - **Tests.** `server/test/machines.test.ts` covers profiles, helpers, the
   backoff and attention states with fake timers, and a hub that proxies HTTP,
   SSE, and terminal WebSockets to a second Pico (`test/fixtures/local-hub.ts`
-  uses a transport without SSH). A test against a real `sshd` and the
-  Tailscale cases are still manual.
+  uses a transport without SSH), and then answers from its offline copies.
+  A test against a real `sshd` and the Tailscale cases are still manual.

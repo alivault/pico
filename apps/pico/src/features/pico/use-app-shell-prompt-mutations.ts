@@ -30,6 +30,7 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+import { MachineOfflineError } from "@/lib/pico/machine"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -267,6 +268,8 @@ function isOfflinePromptSubmissionError(error: unknown) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return true
   }
+  // The machine of the page is offline: keep the prompt until it is back.
+  if (error instanceof MachineOfflineError) return true
 
   const message = error instanceof Error ? error.message.toLowerCase() : ""
   return (

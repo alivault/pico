@@ -51,6 +51,49 @@ export function apiUrl(path: string, machineId = pageMachineId) {
   return `/m/${encodeURIComponent(machineId)}${path}`
 }
 
+let offlineLabel: string | undefined
+
+/**
+ * The machine store calls this when the machine of the page goes offline
+ * (a label) or comes back (undefined).
+ */
+export function setActiveMachineOffline(label: string | undefined) {
+  offlineLabel = label
+}
+
+/** The machine of the page is offline: the page is read-only. */
+export function activeMachineOffline() {
+  return offlineLabel !== undefined
+}
+
+/** A change that the page did not send, because its machine is offline. */
+export class MachineOfflineError extends Error {
+  constructor(label: string) {
+    super(`${label} is offline. Pico sends nothing until it is back.`)
+    this.name = "MachineOfflineError"
+  }
+}
+
+/**
+ * Throw for a change (any method but GET or HEAD) to an offline machine.
+ * Reads still go to the hub, which answers from its offline copies.
+ */
+export function assertMachineWritable(
+  input: RequestInfo | URL,
+  method: string | undefined
+) {
+  if (offlineLabel === undefined) return
+  if (!method || ["GET", "HEAD"].includes(method.toUpperCase())) return
+  const url =
+    typeof input === "string"
+      ? new URL(input, window.location.origin)
+      : input instanceof URL
+        ? input
+        : new URL(input.url)
+  if (url.pathname.startsWith("/m/"))
+    throw new MachineOfflineError(offlineLabel)
+}
+
 /** Apply `apiUrl` to a fetch input when it is a server path. */
 export function apiInput(input: RequestInfo | URL): RequestInfo | URL {
   if (typeof input === "string") return apiUrl(input)
