@@ -10,6 +10,7 @@ import { CheckIcon, CopyIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HighlightedCode } from "@/features/pico/highlighted-code"
 import type { HighlightResponse } from "@/lib/pico/api"
+import { apiUrl } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 
 const highlightCache = new Map<
@@ -287,7 +288,8 @@ async function getHighlightedCode(code: string, language?: string) {
     return await cached
   }
 
-  const promise = fetch("/api/highlight", {
+  // Highlighting is global data: it always goes to the hub.
+  const promise = fetch(apiUrl("/api/highlight"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ code, language }),

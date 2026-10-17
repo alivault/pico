@@ -87,6 +87,10 @@ import {
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
+  SidebarMachineSwitcher,
+  SidebarOtherMachines,
+} from "@/features/pico/machines"
+import {
   formatDisplayPath,
   formatFolderName,
 } from "@/features/pico/app-shell-common"
@@ -2004,6 +2008,7 @@ function useAppSidebarView({
       className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
     >
       <SidebarContent>
+        <SidebarMachineSwitcher />
         <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
         <DndContext
           sensors={sensors}
@@ -2181,6 +2186,7 @@ function useAppSidebarView({
             ) : null}
           </DragOverlay>
         </DndContext>
+        <SidebarOtherMachines />
         {onOpenArchivedSessions ? (
           <SidebarGroup className="mt-auto pt-0">
             <SidebarMenu>

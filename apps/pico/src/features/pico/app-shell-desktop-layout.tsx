@@ -18,6 +18,7 @@ import {
   type AppShellRightSidebarState,
   type OpenFileViewTabOptions,
 } from "@/features/pico/app-shell-right-sidebar-state"
+import { MachineConnectionBanner } from "@/features/pico/machines"
 import {
   applyStoreAction,
   setStoreField,
@@ -1117,6 +1118,7 @@ function useAppShellTabsControllerView({
           viewerContextId={viewerContextId}
         />
       ) : null}
+      <MachineConnectionBanner />
 
       {isMobile ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>

@@ -2,7 +2,7 @@
  * A hub for tests: a normal Pico server whose machines use a transport to a
  * Pico on this computer instead of SSH. The test bundles and runs it.
  *
- *   node local-hub.mjs <data-dir> <remote-port>
+ *   node local-hub.mjs <data-dir> <remote-port> [<web-dir>]
  */
 import { writeFileSync } from "node:fs"
 import { Agent } from "node:http"
@@ -67,9 +67,9 @@ class LocalTransport implements MachineTransport {
   }
 }
 
-const [dataDir, remotePort] = process.argv.slice(2)
+const [dataDir, remotePort, webDir] = process.argv.slice(2)
 const server = await startServer({
-  paths: serverPaths(dataDir!),
+  paths: serverPaths(dataDir!, webDir),
   host: "127.0.0.1",
   port: 0,
   machineTransport: () => new LocalTransport(Number(remotePort)),

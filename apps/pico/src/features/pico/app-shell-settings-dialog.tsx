@@ -593,6 +593,15 @@ function getSettingsCommandGroups({
           ],
           onSelect: () => emitPicoEvent("pico:open-agent-settings", {}),
         },
+        {
+          id: "machines",
+          title: "Machines",
+          description:
+            "Show the sessions of other computers over SSH, and manage them.",
+          valueLabel: "Open",
+          keywords: ["machines", "ssh", "remote", "tailscale", "hub", "host"],
+          onSelect: () => emitPicoEvent("pico:open-machines", {}),
+        },
       ],
     },
     {

@@ -45,8 +45,8 @@
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt",
-    "check": "vp check && pnpm --filter @pico/server typecheck && pnpm test",
-    "check:fix": "vp check --fix && pnpm --filter @pico/server typecheck && pnpm test",
+    "check": "vp check && node ./scripts/check-api-urls.mjs && pnpm --filter @pico/server typecheck && pnpm test",
+    "check:fix": "vp check --fix && node ./scripts/check-api-urls.mjs && pnpm --filter @pico/server typecheck && pnpm test",
     "release": "node ./scripts/release.mjs"
   },
   "devDependencies": {

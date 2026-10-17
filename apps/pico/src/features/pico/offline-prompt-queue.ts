@@ -1,9 +1,13 @@
 import type { PromptImage, StreamingBehavior } from "@/lib/pico"
+import { activeMachineId, LOCAL_MACHINE_ID } from "@/lib/pico/machine"
 
-const OFFLINE_PROMPT_DB_NAME = "pico-offline-prompts"
+/** Prompts wait for the machine that they were written for. */
+const MACHINE_SUFFIX =
+  activeMachineId() === LOCAL_MACHINE_ID ? "" : `@${activeMachineId()}`
+const OFFLINE_PROMPT_DB_NAME = `pico-offline-prompts${MACHINE_SUFFIX}`
 const OFFLINE_PROMPT_DB_VERSION = 1
 const OFFLINE_PROMPT_STORE_NAME = "prompts"
-const OFFLINE_PROMPT_FALLBACK_STORAGE_KEY = "pico-offline-prompts"
+const OFFLINE_PROMPT_FALLBACK_STORAGE_KEY = `pico-offline-prompts${MACHINE_SUFFIX}`
 
 export type OfflinePromptImage = Pick<PromptImage, "type" | "mimeType" | "data">
 

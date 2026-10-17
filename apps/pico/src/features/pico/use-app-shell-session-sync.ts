@@ -40,6 +40,7 @@ import {
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pico"
+import { activeMachineId, LOCAL_MACHINE_ID } from "@/lib/pico/machine"
 import { applyConversationDelta, sameContextUsage } from "@/lib/pico/sync"
 import {
   isConversationDeltaEvent,
@@ -127,8 +128,10 @@ type UseAppShellSessionSyncOptions = {
   lastSyncedEditorTextRef: React.RefObject<string>
 }
 
+/** Each machine has its own event sequence, so its own last ID. */
 function eventsLastIdStorageKey(viewerContextId: string) {
-  return `${EVENT_SOURCE_LAST_ID_STORAGE_PREFIX}${viewerContextId}`
+  const machine = activeMachineId()
+  return `${EVENT_SOURCE_LAST_ID_STORAGE_PREFIX}${viewerContextId}${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
 }
 
 function readStoredEventsLastId(viewerContextId: string) {

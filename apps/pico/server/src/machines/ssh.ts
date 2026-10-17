@@ -163,12 +163,13 @@ export class SshTransport implements MachineTransport {
     options: {
       timeoutMs?: number
       signal?: AbortSignal
-      input?: "inherit" | "ignore"
+      /** Show the errors in the terminal (interactive commands). */
+      echo?: boolean
     } = {}
   ) {
     return new Promise<ExecResult>((resolve, reject) => {
       const child = spawn(this.#ssh, args, {
-        stdio: [options.input ?? "ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
       })
       let stdout = ""
       let stderr = ""
@@ -177,7 +178,7 @@ export class SshTransport implements MachineTransport {
       })
       child.stderr.on("data", (chunk: Buffer) => {
         stderr += chunk.toString("utf8")
-        if (this.#interactive) process.stderr.write(chunk)
+        if (options.echo) process.stderr.write(chunk)
       })
       const timer = options.timeoutMs
         ? setTimeout(() => child.kill("SIGTERM"), options.timeoutMs)
@@ -305,6 +306,7 @@ export class SshTransport implements MachineTransport {
       ],
       {
         timeoutMs: options.timeoutMs ?? 30_000,
+        echo: this.#interactive,
         ...(options.signal ? { signal: options.signal } : {}),
       }
     )

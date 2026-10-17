@@ -10,6 +10,7 @@ import {
   type SessionState,
 } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
+import { apiInput, apiUrl } from "@/lib/pico/machine"
 
 function sameStringArray(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
@@ -177,7 +178,7 @@ export function buildRequestUrl(
     >
   }
 ) {
-  const url = new URL(path, window.location.origin)
+  const url = new URL(apiUrl(path), window.location.origin)
   url.searchParams.set("context", contextId)
   if (sessionId) {
     url.searchParams.set("session", sessionId)
@@ -202,7 +203,7 @@ export async function fetchJson<T>(
   input: RequestInfo | URL,
   init?: RequestInit
 ) {
-  const response = await fetch(input, init)
+  const response = await fetch(apiInput(input), init)
   const text = await response.text()
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 

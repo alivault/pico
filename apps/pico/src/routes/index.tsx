@@ -6,6 +6,8 @@ import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-t
 
 const indexSearchSchema = z.object({
   session: z.string().optional(),
+  /** A remote machine of the hub; see `lib/pico/machine.ts`. */
+  machine: z.string().optional(),
 })
 
 export const Route = createFileRoute("/")({

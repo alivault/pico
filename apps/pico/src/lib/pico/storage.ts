@@ -3,6 +3,7 @@ import {
   normalizeThemeColorMode,
   normalizeThemeFamily,
 } from "@/lib/pico/themes"
+import { machineStorageKey } from "@/lib/pico/machine"
 
 export const THEME_STORAGE_KEY = "pico-theme"
 export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
@@ -50,7 +51,7 @@ export function createContextId() {
 
 export function safeLocalStorageGetItem(key: string) {
   try {
-    return window.localStorage.getItem(key)
+    return window.localStorage.getItem(machineStorageKey(key))
   } catch {
     return null
   }
@@ -65,9 +66,10 @@ export function setLocalStorageWriteListener(
   localStorageWriteListener = listener
 }
 
+/** Machine data (see `machineStorageKey`) is kept apart for each machine. */
 export function safeLocalStorageSetItem(key: string, value: string) {
   try {
-    window.localStorage.setItem(key, value)
+    window.localStorage.setItem(machineStorageKey(key), value)
   } catch {
     return false
   }
@@ -77,7 +79,7 @@ export function safeLocalStorageSetItem(key: string, value: string) {
 
 function safeSessionStorageGetItem(key: string) {
   try {
-    return window.sessionStorage.getItem(key)
+    return window.sessionStorage.getItem(machineStorageKey(key))
   } catch {
     return null
   }
@@ -85,7 +87,7 @@ function safeSessionStorageGetItem(key: string) {
 
 function safeSessionStorageSetItem(key: string, value: string) {
   try {
-    window.sessionStorage.setItem(key, value)
+    window.sessionStorage.setItem(machineStorageKey(key), value)
     return true
   } catch {
     return false
