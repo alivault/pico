@@ -84,6 +84,16 @@
     );
     /* Session rows: status icon offset from the row top, and tree lines. */
     --sidebar-row-icon-top: 0.625rem;
+    /* Session rows have a smaller status slot than the 16px row icons. The
+       largest status icon is 14px, so the slot needs no more room. */
+    --sidebar-status-icon: 0.875rem;
+    --sidebar-status-top: calc(
+      var(--sidebar-row-icon-top) +
+        (var(--sidebar-icon) - var(--sidebar-status-icon)) / 2
+    );
+    --sidebar-session-text-inset: calc(
+      var(--sidebar-item-pad) + var(--sidebar-status-icon) + var(--sidebar-gap)
+    );
     --sidebar-tree-step: 0.875rem;
   }
 
