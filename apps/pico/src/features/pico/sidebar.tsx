@@ -770,9 +770,18 @@ function SidebarSessionItem({
       <span className="flex min-w-0 flex-1 items-start gap-2">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 flex-1 truncate pr-16 font-medium">
+            <span className="min-w-0 flex-1 truncate font-medium">
               {entry.title}
             </span>
+            {/* An invisible copy of the timestamp keeps space for the real
+                one, which sits on top of the row. */}
+            {hasTimestamp ? (
+              <SidebarSessionTime
+                aria-hidden="true"
+                value={timestamp}
+                className="invisible shrink-0 text-[11px] font-normal"
+              />
+            ) : null}
           </span>
           {entry.worktreeBranch ? (
             <span className="flex min-w-0 items-center gap-1 text-[11px] font-normal text-sidebar-foreground/50">
