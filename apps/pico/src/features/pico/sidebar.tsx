@@ -769,8 +769,9 @@ function SidebarSessionItem({
             </span>
           ) : null}
           {pinnedDirectoryLabel ? (
-            <span className="min-w-0 truncate text-[11px] font-normal text-sidebar-foreground/50">
-              {pinnedDirectoryLabel}
+            <span className="flex min-w-0 items-center gap-1 text-[11px] font-normal text-sidebar-foreground/50">
+              <FolderIcon className="size-3 shrink-0" aria-label="Folder" />
+              <span className="truncate">{pinnedDirectoryLabel}</span>
             </span>
           ) : null}
         </span>
