@@ -601,12 +601,8 @@ function useSidebarSessionActive(
 
 type SidebarSessionItemProps = {
   entryKey: string
-  /**
-   * The code of the directory's tree line at this row (see
-   * `buildSessionTreeGuides`): "1" when more sessions of the directory follow,
-   * "0" for the last one. Undefined outside a directory (pinned sessions).
-   */
-  folderGuide?: "0" | "1"
+  /** The row is in a directory, under its line (not a pinned session). */
+  inDirectory?: boolean
   directorySessionsStore: DirectorySessionsStore
   activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
@@ -629,7 +625,7 @@ type SidebarSessionItemProps = {
 
 function SidebarSessionItem({
   entryKey,
-  folderGuide,
+  inDirectory = false,
   directorySessionsStore,
   activeSessionStore,
   selectedSessionKeyStore,
@@ -647,14 +643,12 @@ function SidebarSessionItem({
   onTogglePinnedSession,
 }: SidebarSessionItemProps) {
   const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
-  const childGuides = useSelector(
+  const childDepth = useSelector(
     directorySessionsStore,
-    (state) => state.treeGuidesByKey.get(entryKey) ?? ""
+    (state) => state.depthByKey.get(entryKey) ?? 0
   )
-  // In a directory, every session hangs from the directory's line: its code
-  // comes first, and the child levels follow.
-  const treeGuides = (folderGuide ?? "") + childGuides
-  const nestingDepth = treeGuides.length
+  // A session in a directory is one level in, under the directory's line.
+  const nestingDepth = (inDirectory ? 1 : 0) + childDepth
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
     entryKey
@@ -824,7 +818,14 @@ function SidebarSessionItem({
       {...draggable.listeners}
     >
       {sessionButton}
-      {treeGuides ? <SidebarSessionTreeGuides guides={treeGuides} /> : null}
+      {/* A child session draws the lines of its parents' levels. Rows of one
+          subtree follow each other, so their lines join into one. */}
+      {Array.from({ length: childDepth }, (_, index) => (
+        <SidebarTreeLine
+          key={index}
+          level={nestingDepth - childDepth + index}
+        />
+      ))}
       {sessionTrailingControls}
     </div>
   )
@@ -901,8 +902,8 @@ type DirectorySessionsSnapshot = {
 type DirectorySessionsState = {
   sessionKeysByDirectory: Record<string, Array<string>>
   entriesByKey: Map<string, SessionListEntry>
-  /** Tree line codes per child session; see `buildSessionTreeGuides`. */
-  treeGuidesByKey: Map<string, string>
+  /** Nesting depth per child session; see `buildSessionDepths`. */
+  depthByKey: Map<string, number>
   loadingByDirectory: Record<string, boolean>
 }
 
@@ -989,62 +990,42 @@ function nestChildSessions(sessions: Array<SessionListEntry>) {
 const MAX_SESSION_NESTING_DEPTH = 4
 
 /**
- * Tree line codes for each child session, in nested list order. The string
- * has one character for each nesting level. "1" means the line at that level
- * continues below the row, because a later sibling follows. "0" means it
- * stops. The last character is the row's own connector.
+ * The nesting depth of each child session, in nested list order: 1 for a
+ * child of a top-level session, 2 for its child, and so on. Top-level
+ * sessions have no entry.
  */
-function buildSessionTreeGuides(
+function buildSessionDepths(
   sessionsByDirectory: Record<string, Array<SessionListEntry>>
 ) {
-  const guidesByKey = new Map<string, string>()
+  const depthByKey = new Map<string, number>()
 
   for (const sessions of Object.values(sessionsByDirectory)) {
-    const ordered = nestChildSessions(sessions)
     const ids = new Set(
-      ordered.flatMap((entry) => (entry.id ? [entry.id] : []))
+      sessions.flatMap((entry) => (entry.id ? [entry.id] : []))
     )
-    const parentOf = (entry: SessionListEntry) =>
-      entry.parent && entry.parent !== entry.id && ids.has(entry.parent)
-        ? entry.parent
-        : undefined
-    const lastChildIndex = new Map<string, number>()
-    ordered.forEach((entry, index) => {
-      const parent = parentOf(entry)
-      if (parent) lastChildIndex.set(parent, index)
-    })
-    const indexById = new Map<string, number>()
     const byId = new Map<string, SessionListEntry>()
-    ordered.forEach((entry, index) => {
-      if (entry.id && !indexById.has(entry.id)) {
-        indexById.set(entry.id, index)
-        byId.set(entry.id, entry)
-      }
-    })
-
-    ordered.forEach((entry, index) => {
+    for (const entry of sessions) {
+      if (entry.id && !byId.has(entry.id)) byId.set(entry.id, entry)
+    }
+    for (const entry of sessions) {
       const key = sessionListEntryKey(entry)
-      if (!key || guidesByKey.has(key)) return
-      let guides = ""
+      if (!key || depthByKey.has(key)) continue
+      let depth = 0
       let current: SessionListEntry | undefined = entry
-      let currentIndex = index
       const seen = new Set<SessionListEntry>()
-      while (current && guides.length < MAX_SESSION_NESTING_DEPTH) {
+      while (current && depth < MAX_SESSION_NESTING_DEPTH) {
         if (seen.has(current)) break
         seen.add(current)
-        const parent = parentOf(current)
-        if (!parent) break
-        const hasLaterSibling =
-          (lastChildIndex.get(parent) ?? -1) > currentIndex
-        guides = (hasLaterSibling ? "1" : "0") + guides
+        const parent: string | undefined = current.parent
+        if (!parent || parent === current.id || !ids.has(parent)) break
+        depth += 1
         current = byId.get(parent)
-        currentIndex = indexById.get(parent) ?? -1
       }
-      if (guides) guidesByKey.set(key, guides)
-    })
+      if (depth > 0) depthByKey.set(key, depth)
+    }
   }
 
-  return guidesByKey
+  return depthByKey
 }
 
 /** Status icon slot of a session row, on the sidebar icon column. */
@@ -1052,56 +1033,37 @@ const SESSION_STATUS_ICON_CLASS =
   "absolute top-(--sidebar-row-icon-top) left-[calc(var(--sidebar-item-pad)+var(--session-indent))] flex size-(--sidebar-icon) items-center justify-center"
 
 /**
- * CSS variables for a session row at a nesting depth. The row padding, status
- * icon, tree lines, and indented highlight all read them.
+ * CSS variables for a session row at a nesting depth (1 for a session in a
+ * directory, more for child sessions). The row padding, status icon, and
+ * indented highlight read them.
  *
  *   --session-indent           extra inset for the depth
- *   --session-tree-line        x of the row's own tree line: the center of the
- *                              parent's status icon
- *   --session-highlight-start  x where the elbow ends and the highlight starts
+ *   --session-highlight-start  x where the highlight starts: just after the
+ *                              row's innermost line
  */
 function sessionTreeStyle(depth: number) {
   return {
     "--session-indent": `calc(${depth} * var(--sidebar-tree-step))`,
-    "--session-tree-line": `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${Math.max(depth - 1, 0)} * var(--sidebar-tree-step))`,
-    "--session-highlight-start":
-      "calc(var(--session-tree-line) + var(--sidebar-tree-elbow))",
+    "--session-highlight-start": `calc(${sessionTreeLineLeft(Math.max(depth - 1, 0))} + 0.25rem)`,
   }
 }
 
-/** x of the tree line at a level, from 0 for the top level. */
+/**
+ * x of the line at a level: level 0 is under the directory icon, level 1
+ * under the status icon of a top-level session, and so on.
+ */
 function sessionTreeLineLeft(level: number) {
   return `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${level} * var(--sidebar-tree-step))`
 }
 
-/** Hierarchy lines that join a child session row to its parent. */
-function SidebarSessionTreeGuides({ guides }: { guides: string }) {
-  const depth = guides.length
+/** A straight line at a level, over the full height of its box. */
+function SidebarTreeLine({ level }: { level: number }) {
   return (
-    <span aria-hidden="true" className="pointer-events-none absolute inset-0">
-      {Array.from(guides).map((code, index) => {
-        const continues = code === "1"
-        if (index < depth - 1) {
-          // A line for an ancestor level, only when more siblings follow.
-          return continues ? (
-            <span
-              key={index}
-              className="absolute inset-y-0 w-px bg-sidebar-foreground/15"
-              style={{ left: sessionTreeLineLeft(index) }}
-            />
-          ) : null
-        }
-        // The row's own elbow ends at the status icon's vertical center.
-        return (
-          <React.Fragment key={index}>
-            <span className="absolute top-0 left-(--session-tree-line) h-[calc(var(--sidebar-row-icon-top)+var(--sidebar-icon)/2)] w-(--sidebar-tree-elbow) rounded-bl-md border-b border-l border-sidebar-foreground/15" />
-            {continues ? (
-              <span className="absolute top-[calc(var(--sidebar-row-icon-top)+var(--sidebar-icon)/2)] bottom-0 left-(--session-tree-line) w-px bg-sidebar-foreground/15" />
-            ) : null}
-          </React.Fragment>
-        )
-      })}
-    </span>
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 w-px bg-sidebar-border"
+      style={{ left: sessionTreeLineLeft(level) }}
+    />
   )
 }
 
@@ -1183,7 +1145,7 @@ export function createDirectorySessionsStore(
     {
       sessionKeysByDirectory: buildDirectorySessionKeys(sessionsByDirectory),
       entriesByKey: buildDirectorySessionEntryMap(sessionsByDirectory),
-      treeGuidesByKey: buildSessionTreeGuides(sessionsByDirectory),
+      depthByKey: buildSessionDepths(sessionsByDirectory),
       loadingByDirectory,
     },
     sameDirectorySessionsState
@@ -1196,7 +1158,7 @@ export function createDirectorySessionsStore(
           nextSessionsByDirectory
         ),
         entriesByKey: buildDirectorySessionEntryMap(nextSessionsByDirectory),
-        treeGuidesByKey: buildSessionTreeGuides(nextSessionsByDirectory),
+        depthByKey: buildSessionDepths(nextSessionsByDirectory),
         loadingByDirectory: nextLoadingByDirectory,
       })
     },
@@ -1311,18 +1273,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     : Math.min(unpinnedSessionKeys.length, renderCount)
   const visibleSessionKeys = unpinnedSessionKeys.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < unpinnedSessionKeys.length
-  const treeGuidesByKey = useSelector(
-    directorySessionsStore,
-    (state) => state.treeGuidesByKey
-  )
-  // The directory's tree line runs down to its last top-level session, or on
-  // to "Show more" when more sessions follow.
-  const lastRootIndex = visibleSessionKeys.findLastIndex(
-    (entryKey) => !treeGuidesByKey.get(entryKey)
-  )
-  const folderGuideAt = (index: number) =>
-    hasMoreSessions || index < lastRootIndex ? "1" : "0"
-  const showTreeLine = !overlay && !collapsed && visibleSessionKeys.length > 0
+  const showTreeLine = !overlay && visibleSessionKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
     isLoadingSessions,
     SIDEBAR_LOADING_SPINNER_DELAY_MS
@@ -1342,14 +1293,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     // Left item-pad puts the folder icon on the sidebar icon column. The
     // new-session button stays flush right: its item-size box already holds
     // the item-pad, so its icon ends on the right content edge.
-    <div className="relative flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
-      {showTreeLine ? (
-        // The start of the directory's tree line, under the folder icon.
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-[calc(50%+var(--sidebar-icon)/2+0.125rem)] bottom-0 left-[calc(var(--sidebar-item-pad)+var(--sidebar-icon)/2)] w-px bg-sidebar-foreground/15"
-        />
-      ) : null}
+    <div className="flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
       <CollapsibleTrigger
         type="button"
         className={cn(
@@ -1493,13 +1437,15 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   Loading sessions…
                 </div>
               ) : unpinnedSessionKeys.length > 0 ? (
-                <div className="flex flex-col">
+                // The directory's line runs down its sessions and "Show more".
+                <div className="relative flex flex-col">
+                  {showTreeLine ? <SidebarTreeLine level={0} /> : null}
                   <SidebarMenu>
-                    {visibleSessionKeys.map((entryKey, index) => (
+                    {visibleSessionKeys.map((entryKey) => (
                       <SidebarSessionItem
                         key={entryKey}
                         entryKey={entryKey}
-                        folderGuide={folderGuideAt(index)}
+                        inDirectory
                         directorySessionsStore={directorySessionsStore}
                         activeSessionStore={activeSessionStore}
                         selectedSessionKeyStore={selectedSessionKeyStore}
@@ -1521,14 +1467,9 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
 
                   {hasMoreSessions ? (
                     <div
-                      className="relative flex flex-col"
+                      className="flex flex-col"
                       style={sessionTreeStyle(1) as React.CSSProperties}
                     >
-                      {/* The last branch of the directory's tree line. */}
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute top-0 left-(--session-tree-line) h-4 w-(--sidebar-tree-elbow) rounded-bl-md border-b border-l border-sidebar-foreground/15"
-                      />
                       <Button
                         variant="ghost"
                         className="h-8 justify-start pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
