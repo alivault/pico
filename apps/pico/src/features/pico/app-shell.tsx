@@ -3612,23 +3612,6 @@ function useAppShellSessionWorkspaceView({
         onSelectSession={handleSelectSession}
       />
 
-      <AppShellSessionHeader
-        actionsRef={sessionHeaderActionsRef}
-        defaultNewSessionDirectory={defaultNewSessionDirectory}
-        displaySessionCwd={displaySessionCwd}
-        gitPanelOpen={gitPanelOpen}
-        terminalPanelOpen={terminalPanelOpen}
-        loadingDisplaySessionTitle={loadingDisplaySessionTitle}
-        currentSessionPinned={currentSessionPinned}
-        displaySettingsStore={displaySettingsStore}
-        isSessionViewLoading={isSessionViewLoading}
-        newSessionDirectoryOptions={newSessionDirectoryOptions}
-        onToggleGitPanel={toggleGitPanel}
-        onToggleTerminalPanel={toggleTerminalPanel}
-        sessionStore={sessionStore}
-        viewerContextId={viewerContextId}
-      />
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {sidebar}
         <SidebarInset className="min-h-0 overflow-hidden">
@@ -3644,6 +3627,24 @@ function useAppShellSessionWorkspaceView({
             displaySettingsStore={displaySettingsStore}
             fileInputRef={fileInputRef}
             gitPanelOpen={gitPanelOpen}
+            header={
+              <AppShellSessionHeader
+                actionsRef={sessionHeaderActionsRef}
+                defaultNewSessionDirectory={defaultNewSessionDirectory}
+                displaySessionCwd={displaySessionCwd}
+                gitPanelOpen={gitPanelOpen}
+                terminalPanelOpen={terminalPanelOpen}
+                loadingDisplaySessionTitle={loadingDisplaySessionTitle}
+                currentSessionPinned={currentSessionPinned}
+                displaySettingsStore={displaySettingsStore}
+                isSessionViewLoading={isSessionViewLoading}
+                newSessionDirectoryOptions={newSessionDirectoryOptions}
+                onToggleGitPanel={toggleGitPanel}
+                onToggleTerminalPanel={toggleTerminalPanel}
+                sessionStore={sessionStore}
+                viewerContextId={viewerContextId}
+              />
+            }
             terminalPanelOpen={terminalPanelOpen}
             isLoadingOlderHistory={isLoadingOlderHistory}
             isSessionViewLoading={isSessionViewLoading}

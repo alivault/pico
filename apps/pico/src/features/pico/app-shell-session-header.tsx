@@ -129,7 +129,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
 
   return (
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter) pt-[calc(var(--sidebar-gutter)+env(safe-area-inset-top))]">
-      <div className="relative flex w-full items-center gap-1">
+      <div className="flex w-full min-w-0 items-center gap-1">
         <SidebarTrigger className="shrink-0" />
         <TitleTooltip
           title={
@@ -153,8 +153,8 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <SquarePenIcon />
           </Button>
         </TitleTooltip>
-        <div className="absolute left-1/2 flex w-max max-w-[calc(100%-4rem)] -translate-x-1/2 flex-col items-center justify-center gap-0 text-center">
-          <div className="flex max-w-full min-w-0 items-center justify-center gap-1.5">
+        <div className="ml-1 flex min-w-0 flex-1 flex-col items-start justify-center gap-0 text-left">
+          <div className="flex max-w-full min-w-0 items-center gap-1.5">
             {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
               <Spinner
                 size="xs"
@@ -168,7 +168,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </h2>
             </TitleTooltip>
           </div>
-          <div className="flex max-w-full min-w-0 items-center justify-center gap-x-2">
+          <div className="flex max-w-full min-w-0 items-center gap-x-2">
             {showFolderName && displaySessionCwd ? (
               <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
                 <span className="truncate">
@@ -187,7 +187,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             />
           </div>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
           <HeaderGitActions
             viewerContextId={viewerContextId}
             cwd={displaySessionCwd}

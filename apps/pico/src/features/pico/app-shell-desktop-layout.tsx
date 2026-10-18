@@ -702,6 +702,7 @@ type AppShellTabsControllerProps = AppShellSessionContentProps & {
   appUiStore: PicoStore<AppShellUiState>
   composerDiffLineComments: Array<ComposerDiffLineComment>
   gitPanelOpen: boolean
+  header?: React.ReactNode
   terminalPanelOpen: boolean
   isMobile: boolean
   onCloseAllFileViewTabs: () => void
@@ -735,6 +736,7 @@ function useAppShellTabsControllerView({
   displaySettingsStore,
   fileInputRef,
   gitPanelOpen,
+  header,
   terminalPanelOpen,
   isLoadingOlderHistory,
   isSessionViewLoading,
@@ -908,6 +910,12 @@ function useAppShellTabsControllerView({
 
   const sessionPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {isMobile ? null : (
+        <>
+          {header}
+          <MachineConnectionBanner />
+        </>
+      )}
       <div className={sessionVisibleClassName}>
         <AppShellSessionContent
           actionsRef={actionsRef}
@@ -1110,13 +1118,14 @@ function useAppShellTabsControllerView({
       onValueChange={onValueChange}
       className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
     >
+      {isMobile ? header : null}
       {showTabsList ? (
         <AppShellTabsList
           sessionStore={sessionStore}
           viewerContextId={viewerContextId}
         />
       ) : null}
-      <MachineConnectionBanner />
+      {isMobile ? <MachineConnectionBanner /> : null}
 
       {isMobile ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
@@ -1151,7 +1160,7 @@ function useAppShellTabsControllerView({
                 aria-hidden={!desktopSideWorkspaceOpen}
                 data-state={desktopSideWorkspaceOpen ? "open" : "closed"}
                 data-desktop-panel="side-workspace"
-                className={`hidden h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background data-[state=closed]:pointer-events-none md:flex ${desktopTransitionClassName}`}
+                className={`hidden h-full min-h-0 min-w-0 shrink-0 overflow-visible bg-background pt-[env(safe-area-inset-top)] data-[state=closed]:pointer-events-none md:flex ${desktopTransitionClassName}`}
                 style={{ width: `${desktopSideWorkspaceWidth}px` }}
               >
                 {desktopGitPanelRendered ? (

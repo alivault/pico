@@ -2195,7 +2195,7 @@ function useAppSidebarView({
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
+      className="border-r border-sidebar-border/70 pt-[env(safe-area-inset-top)]"
     >
       <SidebarContent>
         {/* Search covers all machines, so it stays above their groups. */}
