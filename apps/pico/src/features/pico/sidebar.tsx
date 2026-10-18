@@ -29,6 +29,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitForkIcon,
+  LoaderCircleIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   SearchIcon,
@@ -758,7 +759,11 @@ function SidebarSessionItem({
         </TitleTooltip>
       ) : entry.streaming ? (
         <span className={SESSION_STATUS_ICON_CLASS}>
-          <Spinner size="xs" aria-label="Session streaming" />
+          <LoaderCircleIcon
+            role="status"
+            className="size-3.5 animate-spin text-primary"
+            aria-label="Session streaming"
+          />
         </span>
       ) : showUnread ? (
         <span className={SESSION_STATUS_ICON_CLASS}>
