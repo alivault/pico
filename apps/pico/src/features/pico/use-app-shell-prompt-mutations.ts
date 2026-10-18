@@ -30,7 +30,7 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import { MachineOfflineError } from "@/lib/pico/machine"
+import { currentMachineEpoch, MachineOfflineError } from "@/lib/pico/machine"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -903,8 +903,11 @@ export function useAppShellPromptMutations({
 
     offlinePromptFlushInFlightRef.current = true
     try {
+      const epoch = currentMachineEpoch()
       const queuedPrompts = await readOfflinePrompts(viewerContextId)
-      if (queuedPrompts.length === 0) return
+      // The prompts belong to the machine of the read. Do not send them to
+      // another machine that the page opened meanwhile.
+      if (queuedPrompts.length === 0 || epoch !== currentMachineEpoch()) return
 
       let flushedCount = 0
       for (const item of queuedPrompts) {

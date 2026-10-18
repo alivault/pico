@@ -1,13 +1,18 @@
 import type { PromptImage, StreamingBehavior } from "@/lib/pico"
 import { activeMachineId, LOCAL_MACHINE_ID } from "@/lib/pico/machine"
 
-/** Prompts wait for the machine that they were written for. */
-const MACHINE_SUFFIX =
-  activeMachineId() === LOCAL_MACHINE_ID ? "" : `@${activeMachineId()}`
-const OFFLINE_PROMPT_DB_NAME = `pico-offline-prompts${MACHINE_SUFFIX}`
 const OFFLINE_PROMPT_DB_VERSION = 1
 const OFFLINE_PROMPT_STORE_NAME = "prompts"
-const OFFLINE_PROMPT_FALLBACK_STORAGE_KEY = `pico-offline-prompts${MACHINE_SUFFIX}`
+
+/**
+ * Prompts wait for the machine that they were written for, so each machine
+ * has its own database (and fallback key) with this name. Each call reads the
+ * machine of the page when it starts.
+ */
+function queueName() {
+  const machine = activeMachineId()
+  return `pico-offline-prompts${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
+}
 
 export type OfflinePromptImage = Pick<PromptImage, "type" | "mimeType" | "data">
 
@@ -27,19 +32,18 @@ export type OfflinePromptQueueItem = {
   draftCwd?: string
 }
 
-let dbPromise: Promise<IDBDatabase | null> | undefined
+const dbPromises = new Map<string, Promise<IDBDatabase | null>>()
 
 function hasIndexedDb() {
   return typeof indexedDB !== "undefined"
 }
 
-function openOfflinePromptDb() {
+function openOfflinePromptDb(name: string) {
   if (!hasIndexedDb()) return Promise.resolve(null)
-  dbPromise ??= new Promise<IDBDatabase | null>((resolve) => {
-    const request = indexedDB.open(
-      OFFLINE_PROMPT_DB_NAME,
-      OFFLINE_PROMPT_DB_VERSION
-    )
+  const existing = dbPromises.get(name)
+  if (existing) return existing
+  const dbPromise = new Promise<IDBDatabase | null>((resolve) => {
+    const request = indexedDB.open(name, OFFLINE_PROMPT_DB_VERSION)
 
     request.onupgradeneeded = () => {
       const db = request.result
@@ -51,13 +55,13 @@ function openOfflinePromptDb() {
     request.onerror = () => resolve(null)
     request.onsuccess = () => resolve(request.result)
   })
-
+  dbPromises.set(name, dbPromise)
   return dbPromise
 }
 
-function fallbackItems() {
+function fallbackItems(name: string) {
   try {
-    const raw = window.localStorage.getItem(OFFLINE_PROMPT_FALLBACK_STORAGE_KEY)
+    const raw = window.localStorage.getItem(name)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? normalizeItems(parsed) : []
@@ -66,12 +70,12 @@ function fallbackItems() {
   }
 }
 
-function rememberFallbackItems(items: Array<OfflinePromptQueueItem>) {
+function rememberFallbackItems(
+  name: string,
+  items: Array<OfflinePromptQueueItem>
+) {
   try {
-    window.localStorage.setItem(
-      OFFLINE_PROMPT_FALLBACK_STORAGE_KEY,
-      JSON.stringify(items)
-    )
+    window.localStorage.setItem(name, JSON.stringify(items))
   } catch {
     // Ignore fallback persistence failures.
   }
@@ -153,11 +157,12 @@ function normalizeItems(values: Array<unknown>) {
 }
 
 export async function enqueueOfflinePrompt(item: OfflinePromptQueueItem) {
-  const db = await openOfflinePromptDb()
+  const name = queueName()
+  const db = await openOfflinePromptDb(name)
   if (!db) {
-    const items = fallbackItems().filter((entry) => entry.id !== item.id)
+    const items = fallbackItems(name).filter((entry) => entry.id !== item.id)
     items.push(item)
-    rememberFallbackItems(normalizeItems(items))
+    rememberFallbackItems(name, normalizeItems(items))
     return
   }
 
@@ -172,9 +177,10 @@ export async function enqueueOfflinePrompt(item: OfflinePromptQueueItem) {
 }
 
 export async function readOfflinePrompts(contextId?: string) {
-  const db = await openOfflinePromptDb()
+  const name = queueName()
+  const db = await openOfflinePromptDb(name)
   if (!db) {
-    const items = fallbackItems()
+    const items = fallbackItems(name)
     return contextId
       ? items.filter((item) => item.contextId === contextId)
       : items
@@ -197,9 +203,13 @@ export async function readOfflinePrompts(contextId?: string) {
 }
 
 export async function removeOfflinePrompt(id: string) {
-  const db = await openOfflinePromptDb()
+  const name = queueName()
+  const db = await openOfflinePromptDb(name)
   if (!db) {
-    rememberFallbackItems(fallbackItems().filter((item) => item.id !== id))
+    rememberFallbackItems(
+      name,
+      fallbackItems(name).filter((item) => item.id !== id)
+    )
     return
   }
 

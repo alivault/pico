@@ -22,6 +22,7 @@ import {
   safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/pico/api"
+import { onBeforeMachineSwitch } from "@/lib/pico/machine"
 import { setLocalStorageWriteListener } from "@/lib/pico/storage"
 
 export type SidebarSyncField =
@@ -64,6 +65,8 @@ let flushing = false
 const dirty = new Set<SidebarSyncField>()
 /** Fields that a request now sends; a read must not overwrite them. */
 const sending = new Set<SidebarSyncField>()
+/** Goes up when the page opens another machine; older loads stop. */
+let generation = 0
 
 function readLocal(field: SidebarSyncField) {
   if (field === "directories") return readStoredSidebarDirectories().directories
@@ -171,13 +174,16 @@ export function startSidebarSync() {
   if (started || typeof window === "undefined") return
   started = true
   setLocalStorageWriteListener(onLocalWrite)
+  const startGeneration = generation
   const attempt = async (): Promise<void> => {
     try {
       await load()
     } catch {
       await new Promise((done) => setTimeout(done, RETRY_DELAY_MS))
+      if (startGeneration !== generation) return
       return attempt()
     }
+    if (startGeneration !== generation) return
     ready = true
     if (pendingEvent) applyRemote(pendingEvent)
     pendingEvent = null
@@ -214,3 +220,25 @@ export function refreshSidebarState() {
     })
     .catch(() => undefined)
 }
+
+/**
+ * The sidebar state belongs to one machine. Before the page opens another
+ * machine, send the changes that wait, then start again for the new machine
+ * (the new app shell calls `startSidebarSync`).
+ */
+onBeforeMachineSwitch(() => {
+  if (flushTimer) {
+    clearTimeout(flushTimer)
+    flushTimer = undefined
+  }
+  if (ready && !flushing) void flush()
+  generation += 1
+  started = false
+  ready = false
+  applyingRemote = false
+  lastRevision = -1
+  pendingEvent = null
+  flushing = false
+  dirty.clear()
+  sending.clear()
+})

@@ -4,6 +4,7 @@ import {
   activeMachineId,
   apiUrl,
   isRemoteMachine,
+  onMachineSwitch,
   setActiveMachineOffline,
 } from "@/lib/pico/machine"
 
@@ -86,17 +87,28 @@ function connect() {
       machines: data.machines,
       ...(data.fileError ? { fileError: data.fileError } : {}),
     }
-    const active = data.machines.find(
-      (machine) => machine.id === activeMachineId()
-    )
-    setActiveMachineOffline(
-      isRemoteMachine() && active?.state !== "online"
-        ? (active?.label ?? "This machine")
-        : undefined
-    )
+    syncActiveMachineOffline()
     for (const listener of listeners) listener()
   }
 }
+
+/** Tell `lib/pico/machine.ts` whether the machine of the page is offline. */
+function syncActiveMachineOffline() {
+  if (!snapshot.loaded) {
+    setActiveMachineOffline(undefined)
+    return
+  }
+  const active = snapshot.machines.find(
+    (machine) => machine.id === activeMachineId()
+  )
+  setActiveMachineOffline(
+    isRemoteMachine() && active?.state !== "online"
+      ? (active?.label ?? "This machine")
+      : undefined
+  )
+}
+
+onMachineSwitch(syncActiveMachineOffline)
 
 function subscribe(listener: () => void) {
   connect()

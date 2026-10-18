@@ -2,6 +2,7 @@ import * as React from "react"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
+import { takePendingNewSession } from "@/lib/pico/machine"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -2560,6 +2561,13 @@ function useAppShellSessionWorkspaceView({
       setSessionState,
     ]
   )
+
+  // The sidebar of another machine opened this one to start a new session.
+  React.useEffect(() => {
+    if (!viewerContextId) return
+    const directory = takePendingNewSession()
+    if (directory) void createSession(directory)
+  }, [createSession, viewerContextId])
 
   const createDiffLineCommentId = () => {
     if (

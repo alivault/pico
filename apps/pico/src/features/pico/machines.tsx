@@ -26,17 +26,12 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { SettingsSection } from "@/features/pico/agent/agent-settings-dialog"
 import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
 import { errorText } from "@/features/pico/agent/shared"
-import { formatFolderName } from "@/features/pico/app-shell-common"
 import { fetchJson } from "@/features/pico/app-shell-utils"
 import {
   activeMachineId,
@@ -114,7 +109,7 @@ function MachineStateDot({
 }
 
 /** A finished run that this browser did not see yet. */
-function isDone(session: MachineSessionSummary) {
+export function isMachineSessionUnread(session: MachineSessionSummary) {
   return (
     !session.busy &&
     !session.needsInput &&
@@ -128,7 +123,7 @@ function sessionCounts(machine: MachineInfo) {
     working: sessions.filter((session) => session.busy && !session.needsInput)
       .length,
     waiting: sessions.filter((session) => session.needsInput).length,
-    done: sessions.filter(isDone).length,
+    done: sessions.filter(isMachineSessionUnread).length,
   }
 }
 
@@ -253,7 +248,6 @@ export function SidebarActiveMachine({
 }
 
 const COLLAPSED_STORAGE_KEY = "pico-machine-groups-collapsed"
-const GROUP_SESSION_COUNT = 6
 
 function readCollapsed(): Record<string, boolean> {
   try {
@@ -286,19 +280,16 @@ function useMachineCollapsed(id: string) {
   return [collapsed, update] as const
 }
 
-function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
-  const { isMobile, setOpenMobile } = useSidebar()
+type RenderMachineContent = (machine: MachineInfo) => React.ReactNode
+
+function OtherMachineGroup({
+  machine,
+  renderContent,
+}: {
+  machine: MachineInfo
+  renderContent: RenderMachineContent
+}) {
   const [collapsed, setCollapsed] = useMachineCollapsed(machine.id)
-  const sessions = machine.summary?.sessions ?? []
-  // Sessions that need the user come first, then running ones, then recent.
-  const shown = [
-    ...sessions.filter((session) => session.needsInput),
-    ...sessions.filter((session) => session.busy && !session.needsInput),
-    ...sessions.filter(isDone),
-    ...sessions.filter(
-      (session) => !session.busy && !session.needsInput && !isDone(session)
-    ),
-  ].slice(0, GROUP_SESSION_COUNT)
   const dimmed = machine.state !== "online"
   return (
     <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
@@ -306,62 +297,7 @@ function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
         <MachineGroupLabel machine={machine} collapsed={collapsed} />
         <CollapsibleContent>
           <SidebarGroupContent className={cn(dimmed && "opacity-60")}>
-            <SidebarMenu>
-              {shown.map((session) => (
-                <SidebarMenuItem key={session.id}>
-                  <SidebarMenuButton
-                    type="button"
-                    className="h-auto items-start gap-2 py-1.5"
-                    onClick={() => {
-                      if (isMobile) setOpenMobile(false)
-                      openMachine(machine.id, session.id)
-                    }}
-                  >
-                    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                      {session.needsInput ? (
-                        <MessageCircleQuestionIcon
-                          className="size-3.5 text-amber-500"
-                          aria-label="The agent waits for your answer"
-                        />
-                      ) : session.busy ? (
-                        <Spinner size="xs" aria-label="Working" />
-                      ) : isDone(session) ? (
-                        <span
-                          className="size-2 rounded-full bg-primary"
-                          aria-label="Session done"
-                        />
-                      ) : null}
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate">{session.title}</span>
-                      <span className="truncate text-[11px] text-sidebar-foreground/50">
-                        {formatFolderName(session.directory || session.cwd)}
-                      </span>
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  type="button"
-                  className="text-[12px] text-sidebar-foreground/60"
-                  onClick={() => {
-                    if (isMobile) setOpenMobile(false)
-                    openMachine(machine.id)
-                  }}
-                >
-                  <span className="pl-6">
-                    {sessions.length === 0
-                      ? machine.summary
-                        ? "No sessions. Open this machine"
-                        : "Open this machine"
-                      : sessions.length > shown.length
-                        ? `All ${sessions.length} sessions…`
-                        : "Open this machine"}
-                  </span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            {renderContent(machine)}
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
@@ -369,8 +305,15 @@ function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
   )
 }
 
-/** One group for each other machine, under the directories of this one. */
-export function SidebarOtherMachines() {
+/**
+ * One group for each other machine, under the directories of this one.
+ * `renderContent` draws the directories of a machine (see `sidebar.tsx`).
+ */
+export function SidebarOtherMachines({
+  renderContent,
+}: {
+  renderContent: RenderMachineContent
+}) {
   const { machines } = useMachines()
   if (machines.length < 2) return null
   const activeId = activeMachineId()
@@ -379,7 +322,11 @@ export function SidebarOtherMachines() {
       {machines
         .filter((machine) => machine.id !== activeId)
         .map((machine) => (
-          <OtherMachineGroup key={machine.id} machine={machine} />
+          <OtherMachineGroup
+            key={machine.id}
+            machine={machine}
+            renderContent={renderContent}
+          />
         ))}
     </>
   )

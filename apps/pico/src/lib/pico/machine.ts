@@ -1,8 +1,10 @@
 /**
  * The machine that this page shows. A hub shows its own runtime (`local`)
  * and remote machines over SSH. The page shows one machine at a time: the
- * `machine` search parameter selects it, and a switch loads the page again,
- * so caches and stores never mix IDs of two servers.
+ * `machine` search parameter selects it. A switch does not load the page
+ * again. The route mounts a new app shell for the machine, with its own query
+ * cache, so caches and stores never mix IDs of two servers (see
+ * `routes/index.tsx`).
  *
  * Requests for a remote machine go to the hub's proxy at `/m/<id>/...`.
  * Global data stays on the hub: highlighting, Web Push, and the machine list.
@@ -15,17 +17,59 @@ const MACHINE_ID_PATTERN = /^m_[a-z0-9]{4,32}$/
 /** Paths that always go to the hub, whatever the machine. */
 const HUB_PATHS = ["/api/highlight", "/api/push/", "/api/machines"]
 
-function readMachineId() {
-  if (typeof window === "undefined") return LOCAL_MACHINE_ID
-  const value = new URLSearchParams(window.location.search).get("machine")
+/** A machine ID from the URL; `local` for a missing or bad value. */
+export function normalizeMachineId(value: string | null | undefined) {
   return value && MACHINE_ID_PATTERN.test(value) ? value : LOCAL_MACHINE_ID
 }
 
-const pageMachineId = readMachineId()
+function readMachineId() {
+  if (typeof window === "undefined") return LOCAL_MACHINE_ID
+  return normalizeMachineId(
+    new URLSearchParams(window.location.search).get("machine")
+  )
+}
 
-/** The machine of this page. It does not change until the page loads again. */
+let pageMachineId = readMachineId()
+/** Goes up at each switch. Requests of an older machine use it to stop. */
+let machineEpoch = 0
+const beforeSwitchListeners = new Set<() => void>()
+const switchListeners = new Set<(machineId: string) => void>()
+
+/** The machine of this page. It changes only in `setPageMachine`. */
 export function activeMachineId() {
   return pageMachineId
+}
+
+export function currentMachineEpoch() {
+  return machineEpoch
+}
+
+/**
+ * Make `machineId` the machine of the page. The route calls this before it
+ * mounts the app shell of the new machine. Modules with state for one machine
+ * reset it in `onMachineSwitch`.
+ */
+export function setPageMachine(machineId: string) {
+  if (machineId === pageMachineId) return
+  for (const listener of beforeSwitchListeners) listener()
+  pageMachineId = machineId
+  machineEpoch += 1
+  for (const listener of switchListeners) listener(machineId)
+}
+
+/** Run `listener` while the old machine is still the machine of the page. */
+export function onBeforeMachineSwitch(listener: () => void) {
+  beforeSwitchListeners.add(listener)
+  return () => {
+    beforeSwitchListeners.delete(listener)
+  }
+}
+
+export function onMachineSwitch(listener: (machineId: string) => void) {
+  switchListeners.add(listener)
+  return () => {
+    switchListeners.delete(listener)
+  }
 }
 
 export function isRemoteMachine(machineId = pageMachineId) {
@@ -94,6 +138,22 @@ export function assertMachineWritable(
     throw new MachineOfflineError(offlineLabel)
 }
 
+/** Whether a fetch input goes to a machine, not to global hub data. */
+export function isMachineRequest(input: RequestInfo | URL) {
+  const url =
+    typeof input === "string"
+      ? new URL(input, window.location.origin)
+      : input instanceof URL
+        ? input
+        : new URL(input.url)
+  if (url.origin !== window.location.origin) return false
+  if (url.pathname.startsWith("/m/")) return true
+  return (
+    isServerPath(url.pathname) &&
+    !HUB_PATHS.some((prefix) => url.pathname.startsWith(prefix))
+  )
+}
+
 /** Apply `apiUrl` to a fetch input when it is a server path. */
 export function apiInput(input: RequestInfo | URL): RequestInfo | URL {
   if (typeof input === "string") return apiUrl(input)
@@ -133,7 +193,39 @@ export function machinePageUrl(machineId: string, sessionId?: string) {
   return search ? `/?${search}` : "/"
 }
 
-/** Open another machine. The page loads again for it. */
-export function openMachine(machineId: string, sessionId?: string) {
-  window.location.assign(machinePageUrl(machineId, sessionId))
+type MachineNavigator = (machineId: string, sessionId?: string) => void
+
+let machineNavigator: MachineNavigator | undefined
+
+/** The route sets how to open a machine without a page load. */
+export function setMachineNavigator(navigator: MachineNavigator | undefined) {
+  machineNavigator = navigator
+}
+
+let pendingNewSession: { machineId: string; directory: string } | undefined
+
+/**
+ * Open a machine, optionally with a session, or with a new session in
+ * `newSessionDirectory`. The app shell of that machine creates the session
+ * when it mounts (see `takePendingNewSession`).
+ */
+export function openMachine(
+  machineId: string,
+  options: { sessionId?: string; newSessionDirectory?: string } = {}
+) {
+  pendingNewSession = options.newSessionDirectory
+    ? { machineId, directory: options.newSessionDirectory }
+    : undefined
+  if (machineNavigator) {
+    machineNavigator(machineId, options.sessionId)
+    return
+  }
+  window.location.assign(machinePageUrl(machineId, options.sessionId))
+}
+
+/** The directory of a new session to create on the machine of the page. */
+export function takePendingNewSession() {
+  const pending = pendingNewSession
+  pendingNewSession = undefined
+  return pending?.machineId === pageMachineId ? pending.directory : undefined
 }

@@ -87,9 +87,15 @@ import {
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
+  isMachineSessionUnread,
   SidebarActiveMachine,
   SidebarOtherMachines,
 } from "@/features/pico/machines"
+import type {
+  MachineInfo,
+  MachineSessionSummary,
+} from "@/features/pico/machine-store"
+import { openMachine } from "@/lib/pico/machine"
 import {
   formatDisplayPath,
   formatFolderName,
@@ -322,22 +328,21 @@ function sameCollapsedDirectoryState(
   return leftKeys.every((key) => Boolean(left[key]) === Boolean(right[key]))
 }
 
-function createCollapsedDirectoryStore(): CollapsedDirectoryStore {
+function createCollapsedDirectoryStore(
+  storageKey = COLLAPSED_DIRECTORIES_STORAGE_KEY
+): CollapsedDirectoryStore {
   const store = createPicoStore<CollapsedDirectoryState>(
     {},
     sameCollapsedDirectoryState
   ) as CollapsedDirectoryStore
 
   const persist = () => {
-    safeLocalStorageSetItem(
-      COLLAPSED_DIRECTORIES_STORAGE_KEY,
-      JSON.stringify(store.state)
-    )
+    safeLocalStorageSetItem(storageKey, JSON.stringify(store.state))
   }
 
   Object.assign(store, {
     loadStored() {
-      setStoreState(store, readStoredCollapsedDirectories())
+      setStoreState(store, readStoredCollapsedDirectories(storageKey))
     },
     toggle(directory) {
       store.setCollapsed(directory, !store.state[directory])
@@ -648,9 +653,10 @@ function SidebarSessionItem({
     entryKey,
     entry?.id
   )
+  const dragDisabled = isMobile || overlay || !entry?.path
   const draggable = useDraggable({
     id: `session:${entryKey}`,
-    disabled: isMobile || overlay || !entry?.path,
+    disabled: dragDisabled,
     data: {
       type: "session",
       entry,
@@ -797,7 +803,9 @@ function SidebarSessionItem({
           ...sessionTreeStyle(nestingDepth),
         } as React.CSSProperties
       }
-      {...draggable.attributes}
+      // A row that cannot move (a session of another machine) has no drag
+      // attributes: they would mark the row as disabled (`aria-disabled`).
+      {...(dragDisabled ? {} : draggable.attributes)}
       {...draggable.listeners}
     >
       {sessionButton}
@@ -1756,6 +1764,128 @@ function AppSidebarDirectoriesHeader({
   )
 }
 
+const NO_PINNED_SESSION_KEYS: Array<string> = []
+const NO_MOVE_TARGET_DIRECTORIES: Array<string> = []
+
+/** A session of another machine, from its summary, as a sidebar entry. */
+function machineSummaryEntry(session: MachineSessionSummary): SessionListEntry {
+  return {
+    id: session.id,
+    cwd: session.directory || session.cwd,
+    title: session.title,
+    ...(session.lastMessageAt
+      ? { lastMessageAt: new Date(session.lastMessageAt).toISOString() }
+      : {}),
+    streaming: session.busy,
+    needsInput: session.needsInput,
+    unread: isMachineSessionUnread(session),
+    ...(session.parent ? { parent: session.parent } : {}),
+  }
+}
+
+/**
+ * The sidebar directories of a machine with their sessions, as the machine
+ * shows them when it is the machine of the page.
+ */
+function groupMachineSessions(machine: MachineInfo) {
+  const summary = machine.summary
+  const directories = summary?.directories ?? []
+  const sessionsByDirectory: Record<string, Array<SessionListEntry>> = {}
+  for (const directory of directories) sessionsByDirectory[directory] = []
+  for (const session of summary?.sessions ?? []) {
+    const directory = session.directory || session.cwd
+    sessionsByDirectory[directory]?.push(machineSummaryEntry(session))
+  }
+  return { directories, sessionsByDirectory }
+}
+
+/**
+ * The directories and sessions of another machine of the hub, from its
+ * summary. They look like the directories of this machine. A click opens the
+ * session on its machine; the new-session button of a directory opens the
+ * machine and starts a session there.
+ */
+export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  const grouped = React.useMemo(() => groupMachineSessions(machine), [machine])
+  const [stores] = React.useState(() => {
+    const collapsed = createCollapsedDirectoryStore(
+      `pico-machine-collapsed-directories:${machine.id}`
+    )
+    collapsed.loadStored()
+    return {
+      sessions: createDirectorySessionsStore(grouped.sessionsByDirectory, {}),
+      collapsed,
+      active: createActiveSidebarSessionStore(),
+      selected: createSelectedSessionKeyStore(),
+    }
+  })
+
+  React.useEffect(() => {
+    stores.sessions.setData(grouped.sessionsByDirectory, {})
+  }, [grouped, stores])
+
+  const online = machine.state === "online"
+  const openSession = React.useCallback(
+    (entry: SessionListEntry) => {
+      if (entry.id) openMachine(machine.id, { sessionId: entry.id })
+    },
+    [machine.id]
+  )
+  const createSession = React.useCallback(
+    (directory: string) => {
+      if (isMobile) setOpenMobile(false)
+      openMachine(machine.id, { newSessionDirectory: directory })
+    },
+    [isMobile, machine.id, setOpenMobile]
+  )
+
+  if (grouped.directories.length === 0) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            type="button"
+            className="text-[12px] text-sidebar-foreground/60"
+            onClick={() => {
+              if (isMobile) setOpenMobile(false)
+              openMachine(machine.id)
+            }}
+          >
+            <span className="pl-6">
+              {machine.summary
+                ? "No directories. Open this machine"
+                : "Open this machine"}
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
+  return (
+    <>
+      {grouped.directories.map((directory) => (
+        <DirectorySessionGroup
+          key={directory}
+          directory={directory}
+          directorySessionsStore={stores.sessions}
+          collapsedDirectoryStore={stores.collapsed}
+          searchActive={false}
+          moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
+          activeSessionStore={stores.active}
+          selectedSessionKeyStore={stores.selected}
+          pinnedSessionKeys={NO_PINNED_SESSION_KEYS}
+          isMobile={isMobile}
+          setOpenMobile={setOpenMobile}
+          onSessionClick={openSession}
+          onCreateSessionInDirectory={online ? createSession : undefined}
+        />
+      ))}
+    </>
+  )
+}
+
 export function AppSidebar(props: AppSidebarProps) {
   return useAppSidebarView(props)
 }
@@ -2191,7 +2321,11 @@ function useAppSidebarView({
             </DragOverlay>
           </DndContext>
         </SidebarActiveMachine>
-        <SidebarOtherMachines />
+        <SidebarOtherMachines
+          renderContent={(machine) => (
+            <OtherMachineDirectories machine={machine} />
+          )}
+        />
         {onOpenArchivedSessions ? (
           <SidebarGroup className="mt-auto pt-0">
             <SidebarMenu>

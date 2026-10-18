@@ -295,9 +295,11 @@ export function readStoredPinnedSessionKeys() {
   }
 }
 
-export function readStoredCollapsedDirectories() {
+export function readStoredCollapsedDirectories(
+  key = COLLAPSED_DIRECTORIES_STORAGE_KEY
+) {
   try {
-    const raw = safeLocalStorageGetItem(COLLAPSED_DIRECTORIES_STORAGE_KEY)
+    const raw = safeLocalStorageGetItem(key)
     if (!raw) return {}
 
     const parsed = JSON.parse(raw)
