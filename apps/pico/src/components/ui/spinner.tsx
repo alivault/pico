@@ -1,24 +1,15 @@
+import { LoaderCircleIcon } from "lucide-react"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const SPINNER_CELLS = [
-  { id: "top-left", className: "pico-spinner-pixel-0" },
-  { id: "top", className: "pico-spinner-pixel-1" },
-  { id: "top-right", className: "pico-spinner-pixel-2" },
-  { id: "right", className: "pico-spinner-pixel-5" },
-  { id: "bottom-right", className: "pico-spinner-pixel-8" },
-  { id: "bottom", className: "pico-spinner-pixel-7" },
-  { id: "bottom-left", className: "pico-spinner-pixel-6" },
-  { id: "left", className: "pico-spinner-pixel-3" },
-] as const
-
 type SpinnerSize = "xs" | "sm" | "md"
 
-type SpinnerProps = Omit<React.ComponentProps<"span">, "size"> & {
+type SpinnerProps = Omit<React.ComponentProps<"svg">, "size"> & {
   size?: SpinnerSize
 }
 
+// Even sizes, so the icon sits on whole pixels when a box centers it.
 const SPINNER_SIZE_CLASS_NAMES = {
   xs: "size-3",
   sm: "size-3.5",
@@ -32,26 +23,16 @@ function Spinner({
   ...props
 }: SpinnerProps) {
   return (
-    <span
+    <LoaderCircleIcon
       role="status"
       aria-label={ariaLabel}
-      data-pico-spinner-size={size}
       className={cn(
-        "pico-spinner pointer-events-none inline-flex shrink-0 items-center justify-center font-mono leading-none text-primary select-none",
+        "pointer-events-none shrink-0 animate-spin text-primary motion-reduce:animate-none",
         SPINNER_SIZE_CLASS_NAMES[size],
         className
       )}
       {...props}
-    >
-      <span aria-hidden="true" className="pico-spinner-pixels">
-        {SPINNER_CELLS.map((cell) => (
-          <span
-            key={cell.id}
-            className={cn("pico-spinner-pixel", cell.className)}
-          />
-        ))}
-      </span>
-    </span>
+    />
   )
 }
 
