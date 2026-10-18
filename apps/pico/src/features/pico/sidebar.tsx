@@ -90,6 +90,7 @@ import { usePicoEvent } from "@/features/pico/agent/events"
 import {
   isMachineSessionUnread,
   SidebarMachineGroups,
+  useHasMachineGroups,
 } from "@/features/pico/machines"
 import type {
   MachineInfo,
@@ -600,6 +601,12 @@ function useSidebarSessionActive(
 
 type SidebarSessionItemProps = {
   entryKey: string
+  /**
+   * The code of the directory's tree line at this row (see
+   * `buildSessionTreeGuides`): "1" when more sessions of the directory follow,
+   * "0" for the last one. Undefined outside a directory (pinned sessions).
+   */
+  folderGuide?: "0" | "1"
   directorySessionsStore: DirectorySessionsStore
   activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
@@ -622,6 +629,7 @@ type SidebarSessionItemProps = {
 
 function SidebarSessionItem({
   entryKey,
+  folderGuide,
   directorySessionsStore,
   activeSessionStore,
   selectedSessionKeyStore,
@@ -639,10 +647,13 @@ function SidebarSessionItem({
   onTogglePinnedSession,
 }: SidebarSessionItemProps) {
   const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
-  const treeGuides = useSelector(
+  const childGuides = useSelector(
     directorySessionsStore,
     (state) => state.treeGuidesByKey.get(entryKey) ?? ""
   )
+  // In a directory, every session hangs from the directory's line: its code
+  // comes first, and the child levels follow.
+  const treeGuides = (folderGuide ?? "") + childGuides
   const nestingDepth = treeGuides.length
   const isSelected = useSidebarSessionSelected(
     selectedSessionKeyStore,
@@ -1300,6 +1311,18 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     : Math.min(unpinnedSessionKeys.length, renderCount)
   const visibleSessionKeys = unpinnedSessionKeys.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < unpinnedSessionKeys.length
+  const treeGuidesByKey = useSelector(
+    directorySessionsStore,
+    (state) => state.treeGuidesByKey
+  )
+  // The directory's tree line runs down to its last top-level session, or on
+  // to "Show more" when more sessions follow.
+  const lastRootIndex = visibleSessionKeys.findLastIndex(
+    (entryKey) => !treeGuidesByKey.get(entryKey)
+  )
+  const folderGuideAt = (index: number) =>
+    hasMoreSessions || index < lastRootIndex ? "1" : "0"
+  const showTreeLine = !overlay && !collapsed && visibleSessionKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
     isLoadingSessions,
     SIDEBAR_LOADING_SPINNER_DELAY_MS
@@ -1319,7 +1342,14 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     // Left item-pad puts the folder icon on the sidebar icon column. The
     // new-session button stays flush right: its item-size box already holds
     // the item-pad, so its icon ends on the right content edge.
-    <div className="flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
+    <div className="relative flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
+      {showTreeLine ? (
+        // The start of the directory's tree line, under the folder icon.
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-[calc(50%+var(--sidebar-icon)/2+0.125rem)] bottom-0 left-[calc(var(--sidebar-item-pad)+var(--sidebar-icon)/2)] w-px bg-sidebar-foreground/15"
+        />
+      ) : null}
       <CollapsibleTrigger
         type="button"
         className={cn(
@@ -1465,10 +1495,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
               ) : unpinnedSessionKeys.length > 0 ? (
                 <div className="flex flex-col">
                   <SidebarMenu>
-                    {visibleSessionKeys.map((entryKey) => (
+                    {visibleSessionKeys.map((entryKey, index) => (
                       <SidebarSessionItem
                         key={entryKey}
                         entryKey={entryKey}
+                        folderGuide={folderGuideAt(index)}
                         directorySessionsStore={directorySessionsStore}
                         activeSessionStore={activeSessionStore}
                         selectedSessionKeyStore={selectedSessionKeyStore}
@@ -1489,32 +1520,47 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   </SidebarMenu>
 
                   {hasMoreSessions ? (
-                    <Button
-                      variant="ghost"
-                      className="h-8 justify-start pl-(--sidebar-text-inset) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        setRenderCount((current) =>
-                          Math.min(
-                            unpinnedSessionKeys.length,
-                            current + DIRECTORY_SESSION_LOAD_MORE_COUNT
-                          )
-                        )
-                      }}
+                    <div
+                      className="relative flex flex-col"
+                      style={sessionTreeStyle(1) as React.CSSProperties}
                     >
-                      Show{" "}
-                      {Math.min(
-                        DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                        unpinnedSessionKeys.length - visibleCount
-                      )}{" "}
-                      more
-                    </Button>
+                      {/* The last branch of the directory's tree line. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-0 left-(--session-tree-line) h-4 w-(--sidebar-tree-elbow) rounded-bl-md border-b border-l border-sidebar-foreground/15"
+                      />
+                      <Button
+                        variant="ghost"
+                        className="h-8 justify-start pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        onClick={() => {
+                          setRenderCount((current) =>
+                            Math.min(
+                              unpinnedSessionKeys.length,
+                              current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                            )
+                          )
+                        }}
+                      >
+                        Show{" "}
+                        {Math.min(
+                          DIRECTORY_SESSION_LOAD_MORE_COUNT,
+                          unpinnedSessionKeys.length - visibleCount
+                        )}{" "}
+                        more
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               ) : (
                 <div className="p-2 text-sm text-sidebar-foreground/70">
-                  {searchActive
-                    ? "No matching unpinned sessions."
-                    : "No unpinned sessions."}
+                  {/* "Unpinned" only when sessions are pinned. */}
+                  {pinnedSessionKeys.length === 0
+                    ? searchActive
+                      ? "No matching sessions."
+                      : "No sessions."
+                    : searchActive
+                      ? "No matching unpinned sessions."
+                      : "No unpinned sessions."}
                 </div>
               )}
             </SidebarGroupContent>
@@ -1741,30 +1787,58 @@ function AppSidebarDirectoriesHeader({
           )
         ) : null}
       </CollapsibleTrigger>
-      <span className="flex items-center gap-1">
-        {!collapsed ? (
-          <DirectoryCollapseAllButton
-            searchActive={searchActive}
-            visibleDirectories={visibleDirectories}
-            collapsedDirectoryStore={collapsedDirectoryStore}
-          />
-        ) : null}
-        <TitleTooltip
-          title="Add directory"
-          kbd={formatShortcutLabel(appShortcut("D"))}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-            onClick={onOpenAddDirectoryDialog}
-            aria-label="Add directory"
-          >
-            <FolderPlusIcon />
-          </Button>
-        </TitleTooltip>
-      </span>
+      <DirectoryActions
+        searchActive={searchActive}
+        showCollapseAll={!collapsed}
+        visibleDirectories={visibleDirectories}
+        collapsedDirectoryStore={collapsedDirectoryStore}
+        onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+      />
     </SidebarGroupLabel>
+  )
+}
+
+/**
+ * Collapse all and Add directory. They are on the "Directories" heading, or
+ * on the machine heading when the sidebar has a group for each machine.
+ */
+function DirectoryActions({
+  searchActive,
+  showCollapseAll,
+  visibleDirectories,
+  collapsedDirectoryStore,
+  onOpenAddDirectoryDialog,
+}: {
+  searchActive: boolean
+  showCollapseAll: boolean
+  visibleDirectories: Array<string>
+  collapsedDirectoryStore: CollapsedDirectoryStore
+  onOpenAddDirectoryDialog: () => void
+}) {
+  return (
+    <span className="flex items-center gap-1">
+      {showCollapseAll ? (
+        <DirectoryCollapseAllButton
+          searchActive={searchActive}
+          visibleDirectories={visibleDirectories}
+          collapsedDirectoryStore={collapsedDirectoryStore}
+        />
+      ) : null}
+      <TitleTooltip
+        title="Add directory"
+        kbd={formatShortcutLabel(appShortcut("D"))}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+          onClick={onOpenAddDirectoryDialog}
+          aria-label="Add directory"
+        >
+          <FolderPlusIcon />
+        </Button>
+      </TitleTooltip>
+    </span>
   )
 }
 
@@ -1945,6 +2019,12 @@ function useAppSidebarView({
     createSelectedSessionKeyStore
   )
   const [activeSessionStore] = React.useState(createActiveSidebarSessionStore)
+  // With a group for each machine, the machine heading replaces the
+  // "Directories" heading and takes its buttons, so all machine groups have
+  // the same levels: machine, directory, session. A search still shows the
+  // heading, with its count of matches.
+  const hasMachineGroups = useHasMachineGroups()
+  const showDirectoriesHeader = !hasMachineGroups || searchActive
   const directoriesCollapsed = useDirectoryCollapsed(
     collapsedDirectoryStore,
     DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
@@ -2147,6 +2227,15 @@ function useAppSidebarView({
         {/* Search covers all machines, so it stays above their groups. */}
         <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
         <SidebarMachineGroups
+          activeActions={
+            <DirectoryActions
+              searchActive={searchActive}
+              showCollapseAll
+              visibleDirectories={visibleDirectories}
+              collapsedDirectoryStore={collapsedDirectoryStore}
+              onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+            />
+          }
           renderContent={(machine) => (
             <OtherMachineDirectories machine={machine} />
           )}
@@ -2177,7 +2266,7 @@ function useAppSidebarView({
               onTogglePinnedSession={onTogglePinnedSession}
             />
             <Collapsible
-              open={!directoriesCollapsed}
+              open={showDirectoriesHeader ? !directoriesCollapsed : true}
               onOpenChange={(open) => {
                 if (searchActive) return
                 collapsedDirectoryStore.setCollapsed(
@@ -2186,15 +2275,19 @@ function useAppSidebarView({
                 )
               }}
             >
-              <SidebarGroup className="py-1">
-                <AppSidebarDirectoriesHeader
-                  sessionSearch={sessionSearch}
-                  visibleDirectories={visibleDirectories}
-                  matchingSessionCount={matchingSessionCount}
-                  collapsed={directoriesCollapsed}
-                  collapsedDirectoryStore={collapsedDirectoryStore}
-                  onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
-                />
+              <SidebarGroup
+                className={showDirectoriesHeader ? "py-1" : "pt-0 pb-1"}
+              >
+                {showDirectoriesHeader ? (
+                  <AppSidebarDirectoriesHeader
+                    sessionSearch={sessionSearch}
+                    visibleDirectories={visibleDirectories}
+                    matchingSessionCount={matchingSessionCount}
+                    collapsed={directoriesCollapsed}
+                    collapsedDirectoryStore={collapsedDirectoryStore}
+                    onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+                  />
+                ) : null}
                 <CollapsibleContent>
                   <SidebarGroupContent>
                     {visibleDirectories.length === 0 ? (

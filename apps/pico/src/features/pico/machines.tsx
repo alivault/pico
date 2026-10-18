@@ -173,10 +173,13 @@ function MachineGroupLabel({
   machine,
   collapsed,
   active = false,
+  actions,
 }: {
   machine: MachineInfo
   collapsed: boolean
   active?: boolean
+  /** More icon buttons of the machine of the page, before "Manage". */
+  actions?: React.ReactNode
 }) {
   return (
     // pr-0 when there is an icon button: it already holds the item-pad.
@@ -205,6 +208,7 @@ function MachineGroupLabel({
         </span>
         <MachineCounts machine={machine} />
       </CollapsibleTrigger>
+      {active ? actions : null}
       {active ? (
         <TitleTooltip title="Manage machines">
           <Button
@@ -286,19 +290,35 @@ function OtherMachineGroup({
  */
 function ActiveMachineGroup({
   machine,
+  actions,
   children,
 }: {
   machine: MachineInfo
+  actions?: React.ReactNode
   children: React.ReactNode
 }) {
   const [collapsed, setCollapsed] = useMachineCollapsed(machine.id)
   return (
     <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
       <SidebarGroup className="pt-1 pb-0">
-        <MachineGroupLabel machine={machine} collapsed={collapsed} active />
+        <MachineGroupLabel
+          machine={machine}
+          collapsed={collapsed}
+          active
+          actions={actions}
+        />
       </SidebarGroup>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
+  )
+}
+
+/** Whether the hub has more than one machine, so the sidebar has groups. */
+export function useHasMachineGroups() {
+  const { machines } = useMachines()
+  return (
+    machines.length > 1 &&
+    machines.some((machine) => machine.id === activeMachineId())
   )
 }
 
@@ -312,9 +332,12 @@ function ActiveMachineGroup({
  */
 export function SidebarMachineGroups({
   children,
+  activeActions,
   renderContent,
 }: {
   children: React.ReactNode
+  /** Icon buttons for the heading of the machine of this page. */
+  activeActions?: React.ReactNode
   renderContent: RenderMachineContent
 }) {
   const { machines } = useMachines()
@@ -325,7 +348,11 @@ export function SidebarMachineGroups({
     <>
       {machines.map((machine) =>
         machine.id === activeId ? (
-          <ActiveMachineGroup key={machine.id} machine={machine}>
+          <ActiveMachineGroup
+            key={machine.id}
+            machine={machine}
+            actions={activeActions}
+          >
             {children}
           </ActiveMachineGroup>
         ) : (
