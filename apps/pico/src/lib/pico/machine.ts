@@ -202,19 +202,26 @@ export function setMachineNavigator(navigator: MachineNavigator | undefined) {
   machineNavigator = navigator
 }
 
-let pendingNewSession: { machineId: string; directory: string } | undefined
+/** An action for the app shell of a machine to run when it mounts. */
+export type PendingMachineAction =
+  | { type: "new-session"; directory: string }
+  | { type: "add-directory" }
+
+let pendingAction:
+  | { machineId: string; action: PendingMachineAction }
+  | undefined
 
 /**
- * Open a machine, optionally with a session, or with a new session in
- * `newSessionDirectory`. The app shell of that machine creates the session
- * when it mounts (see `takePendingNewSession`).
+ * Open a machine, optionally with a session or with an action: a new session
+ * in a directory, or the Add directory dialog. The app shell of that machine
+ * runs the action when it mounts (see `takePendingMachineAction`).
  */
 export function openMachine(
   machineId: string,
-  options: { sessionId?: string; newSessionDirectory?: string } = {}
+  options: { sessionId?: string; action?: PendingMachineAction } = {}
 ) {
-  pendingNewSession = options.newSessionDirectory
-    ? { machineId, directory: options.newSessionDirectory }
+  pendingAction = options.action
+    ? { machineId, action: options.action }
     : undefined
   if (machineNavigator) {
     machineNavigator(machineId, options.sessionId)
@@ -223,9 +230,9 @@ export function openMachine(
   window.location.assign(machinePageUrl(machineId, options.sessionId))
 }
 
-/** The directory of a new session to create on the machine of the page. */
-export function takePendingNewSession() {
-  const pending = pendingNewSession
-  pendingNewSession = undefined
-  return pending?.machineId === pageMachineId ? pending.directory : undefined
+/** The action that waits for the machine of the page, once. */
+export function takePendingMachineAction() {
+  const pending = pendingAction
+  pendingAction = undefined
+  return pending?.machineId === pageMachineId ? pending.action : undefined
 }

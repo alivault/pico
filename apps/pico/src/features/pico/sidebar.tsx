@@ -1834,28 +1834,30 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const createSession = React.useCallback(
     (directory: string) => {
       if (isMobile) setOpenMobile(false)
-      openMachine(machine.id, { newSessionDirectory: directory })
+      openMachine(machine.id, {
+        action: { type: "new-session", directory },
+      })
     },
     [isMobile, machine.id, setOpenMobile]
   )
 
+  // A machine without directories: add the first one there. The heading
+  // shows the state of a machine that is not online.
   if (grouped.directories.length === 0) {
+    if (!online) return null
     return (
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
             type="button"
-            className="text-[12px] text-sidebar-foreground/60"
+            className="text-sidebar-foreground/60"
             onClick={() => {
               if (isMobile) setOpenMobile(false)
-              openMachine(machine.id)
+              openMachine(machine.id, { action: { type: "add-directory" } })
             }}
           >
-            <span className="pl-6">
-              {machine.summary
-                ? "No directories. Open this machine"
-                : "Open this machine"}
-            </span>
+            <FolderPlusIcon className="text-sidebar-foreground/50" />
+            <span>Add directory…</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
