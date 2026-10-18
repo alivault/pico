@@ -87,7 +87,7 @@ import {
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
-  SidebarMachineSwitcher,
+  SidebarActiveMachine,
   SidebarOtherMachines,
 } from "@/features/pico/machines"
 import {
@@ -2008,172 +2008,147 @@ function useAppSidebarView({
       className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
     >
       <SidebarContent>
-        <SidebarMachineSwitcher />
-        <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
-        >
-          <PinnedSessionGroup
-            pinnedSessionKeys={pinnedSessionKeys}
-            directorySessionsStore={directorySessionsStore}
-            collapsedDirectoryStore={collapsedDirectoryStore}
-            searchActive={searchActive}
-            activeSessionStore={activeSessionStore}
-            selectedSessionKeyStore={selectedSessionKeyStore}
-            isMobile={isMobile}
-            moveTargetDirectories={visibleDirectories}
-            setOpenMobile={setOpenMobile}
-            onSessionClick={onSessionClick}
-            onRenameSession={onRenameSession}
-            onDeleteSession={onDeleteSession}
-            onSetSessionUnread={onSetSessionUnread}
-            onMoveSession={onMoveSession}
-            onTogglePinnedSession={onTogglePinnedSession}
-          />
-          <Collapsible
-            open={!directoriesCollapsed}
-            onOpenChange={(open) => {
-              if (searchActive) return
-              collapsedDirectoryStore.setCollapsed(
-                DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
-                !open
-              )
-            }}
+        <SidebarActiveMachine>
+          <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
-            <SidebarGroup className="py-1">
-              <AppSidebarDirectoriesHeader
-                sessionSearch={sessionSearch}
-                visibleDirectories={visibleDirectories}
-                matchingSessionCount={matchingSessionCount}
-                collapsed={directoriesCollapsed}
-                collapsedDirectoryStore={collapsedDirectoryStore}
-                onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
-              />
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  {visibleDirectories.length === 0 ? (
-                    <div className="p-2">
-                      <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <FolderIcon />
-                          </EmptyMedia>
-                          <EmptyTitle>{emptyStateText}</EmptyTitle>
-                        </EmptyHeader>
-                      </Empty>
-                    </div>
-                  ) : (
-                    <SortableContext
-                      items={orderedVisibleDirectories}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {orderedVisibleDirectories.map((directory) => {
-                        return (
-                          <SortableDirectoryGroup
-                            key={directory}
-                            id={directory}
-                            disabled={!directoryOrderingEnabled}
-                          >
-                            {({ attributes, listeners, isDragging }) => (
-                              <DirectorySessionGroup
-                                directory={directory}
-                                directorySessionsStore={directorySessionsStore}
-                                collapsedDirectoryStore={
-                                  collapsedDirectoryStore
-                                }
-                                searchActive={searchActive}
-                                moveTargetDirectories={visibleDirectories}
-                                activeSessionStore={activeSessionStore}
-                                selectedSessionKeyStore={
-                                  selectedSessionKeyStore
-                                }
-                                pinnedSessionKeys={pinnedSessionKeys}
-                                isMobile={isMobile}
-                                setOpenMobile={setOpenMobile}
-                                isDragging={isDragging}
-                                isSessionDropTarget={
-                                  sessionDropDirectory === directory
-                                }
-                                attributes={attributes}
-                                listeners={listeners}
-                                onSessionClick={onSessionClick}
-                                onRenameSession={onRenameSession}
-                                onDeleteSession={onDeleteSession}
-                                onSetSessionUnread={onSetSessionUnread}
-                                onMoveSession={onMoveSession}
-                                onMoveSessionAnyDirectory={
-                                  onMoveSessionAnyDirectory
-                                }
-                                onTogglePinnedSession={onTogglePinnedSession}
-                                onCreateSessionInDirectory={
-                                  onCreateSessionInDirectory
-                                }
-                                onDeleteOldSessionsInDirectory={
-                                  onDeleteOldSessionsInDirectory
-                                }
-                                onRemoveDirectory={
-                                  onRemoveDirectory
-                                    ? removeDirectory
-                                    : undefined
-                                }
-                              />
-                            )}
-                          </SortableDirectoryGroup>
-                        )
-                      })}
-                    </SortableContext>
-                  )}
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
+            <PinnedSessionGroup
+              pinnedSessionKeys={pinnedSessionKeys}
+              directorySessionsStore={directorySessionsStore}
+              collapsedDirectoryStore={collapsedDirectoryStore}
+              searchActive={searchActive}
+              activeSessionStore={activeSessionStore}
+              selectedSessionKeyStore={selectedSessionKeyStore}
+              isMobile={isMobile}
+              moveTargetDirectories={visibleDirectories}
+              setOpenMobile={setOpenMobile}
+              onSessionClick={onSessionClick}
+              onRenameSession={onRenameSession}
+              onDeleteSession={onDeleteSession}
+              onSetSessionUnread={onSetSessionUnread}
+              onMoveSession={onMoveSession}
+              onTogglePinnedSession={onTogglePinnedSession}
+            />
+            <Collapsible
+              open={!directoriesCollapsed}
+              onOpenChange={(open) => {
+                if (searchActive) return
+                collapsedDirectoryStore.setCollapsed(
+                  DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
+                  !open
+                )
+              }}
+            >
+              <SidebarGroup className="py-1">
+                <AppSidebarDirectoriesHeader
+                  sessionSearch={sessionSearch}
+                  visibleDirectories={visibleDirectories}
+                  matchingSessionCount={matchingSessionCount}
+                  collapsed={directoriesCollapsed}
+                  collapsedDirectoryStore={collapsedDirectoryStore}
+                  onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+                />
+                <CollapsibleContent>
+                  <SidebarGroupContent>
+                    {visibleDirectories.length === 0 ? (
+                      <div className="p-2">
+                        <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <FolderIcon />
+                            </EmptyMedia>
+                            <EmptyTitle>{emptyStateText}</EmptyTitle>
+                          </EmptyHeader>
+                        </Empty>
+                      </div>
+                    ) : (
+                      <SortableContext
+                        items={orderedVisibleDirectories}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {orderedVisibleDirectories.map((directory) => {
+                          return (
+                            <SortableDirectoryGroup
+                              key={directory}
+                              id={directory}
+                              disabled={!directoryOrderingEnabled}
+                            >
+                              {({ attributes, listeners, isDragging }) => (
+                                <DirectorySessionGroup
+                                  directory={directory}
+                                  directorySessionsStore={
+                                    directorySessionsStore
+                                  }
+                                  collapsedDirectoryStore={
+                                    collapsedDirectoryStore
+                                  }
+                                  searchActive={searchActive}
+                                  moveTargetDirectories={visibleDirectories}
+                                  activeSessionStore={activeSessionStore}
+                                  selectedSessionKeyStore={
+                                    selectedSessionKeyStore
+                                  }
+                                  pinnedSessionKeys={pinnedSessionKeys}
+                                  isMobile={isMobile}
+                                  setOpenMobile={setOpenMobile}
+                                  isDragging={isDragging}
+                                  isSessionDropTarget={
+                                    sessionDropDirectory === directory
+                                  }
+                                  attributes={attributes}
+                                  listeners={listeners}
+                                  onSessionClick={onSessionClick}
+                                  onRenameSession={onRenameSession}
+                                  onDeleteSession={onDeleteSession}
+                                  onSetSessionUnread={onSetSessionUnread}
+                                  onMoveSession={onMoveSession}
+                                  onMoveSessionAnyDirectory={
+                                    onMoveSessionAnyDirectory
+                                  }
+                                  onTogglePinnedSession={onTogglePinnedSession}
+                                  onCreateSessionInDirectory={
+                                    onCreateSessionInDirectory
+                                  }
+                                  onDeleteOldSessionsInDirectory={
+                                    onDeleteOldSessionsInDirectory
+                                  }
+                                  onRemoveDirectory={
+                                    onRemoveDirectory
+                                      ? removeDirectory
+                                      : undefined
+                                  }
+                                />
+                              )}
+                            </SortableDirectoryGroup>
+                          )
+                        })}
+                      </SortableContext>
+                    )}
+                  </SidebarGroupContent>
+                </CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
 
-          <DragOverlay>
-            {activeDirectory ? (
-              <DirectorySessionGroup
-                directory={activeDirectory}
-                directorySessionsStore={directorySessionsStore}
-                collapsedDirectoryStore={collapsedDirectoryStore}
-                searchActive={searchActive}
-                moveTargetDirectories={visibleDirectories}
-                activeSessionStore={activeSessionStore}
-                selectedSessionKeyStore={selectedSessionKeyStore}
-                pinnedSessionKeys={pinnedSessionKeys}
-                isMobile={isMobile}
-                setOpenMobile={setOpenMobile}
-                overlay
-                onSessionClick={onSessionClick}
-                onRenameSession={onRenameSession}
-                onDeleteSession={onDeleteSession}
-                onSetSessionUnread={onSetSessionUnread}
-                onMoveSession={onMoveSession}
-                onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                onTogglePinnedSession={onTogglePinnedSession}
-                onCreateSessionInDirectory={onCreateSessionInDirectory}
-                onDeleteOldSessionsInDirectory={onDeleteOldSessionsInDirectory}
-                onRemoveDirectory={
-                  onRemoveDirectory ? removeDirectory : undefined
-                }
-              />
-            ) : activeSessionDrag ? (
-              <SidebarMenu className="w-64 rounded-lg bg-sidebar p-1 shadow-lg ring-1 ring-sidebar-border/70">
-                <SidebarSessionItem
-                  entryKey={activeSessionDrag.entryKey}
+            <DragOverlay>
+              {activeDirectory ? (
+                <DirectorySessionGroup
+                  directory={activeDirectory}
                   directorySessionsStore={directorySessionsStore}
+                  collapsedDirectoryStore={collapsedDirectoryStore}
+                  searchActive={searchActive}
+                  moveTargetDirectories={visibleDirectories}
                   activeSessionStore={activeSessionStore}
                   selectedSessionKeyStore={selectedSessionKeyStore}
-                  isPinned={pinnedSessionKeys.includes(
-                    activeSessionDrag.entryKey
-                  )}
+                  pinnedSessionKeys={pinnedSessionKeys}
                   isMobile={isMobile}
-                  overlay
-                  moveTargetDirectories={visibleDirectories}
                   setOpenMobile={setOpenMobile}
+                  overlay
                   onSessionClick={onSessionClick}
                   onRenameSession={onRenameSession}
                   onDeleteSession={onDeleteSession}
@@ -2181,11 +2156,41 @@ function useAppSidebarView({
                   onMoveSession={onMoveSession}
                   onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
                   onTogglePinnedSession={onTogglePinnedSession}
+                  onCreateSessionInDirectory={onCreateSessionInDirectory}
+                  onDeleteOldSessionsInDirectory={
+                    onDeleteOldSessionsInDirectory
+                  }
+                  onRemoveDirectory={
+                    onRemoveDirectory ? removeDirectory : undefined
+                  }
                 />
-              </SidebarMenu>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+              ) : activeSessionDrag ? (
+                <SidebarMenu className="w-64 rounded-lg bg-sidebar p-1 shadow-lg ring-1 ring-sidebar-border/70">
+                  <SidebarSessionItem
+                    entryKey={activeSessionDrag.entryKey}
+                    directorySessionsStore={directorySessionsStore}
+                    activeSessionStore={activeSessionStore}
+                    selectedSessionKeyStore={selectedSessionKeyStore}
+                    isPinned={pinnedSessionKeys.includes(
+                      activeSessionDrag.entryKey
+                    )}
+                    isMobile={isMobile}
+                    overlay
+                    moveTargetDirectories={visibleDirectories}
+                    setOpenMobile={setOpenMobile}
+                    onSessionClick={onSessionClick}
+                    onRenameSession={onRenameSession}
+                    onDeleteSession={onDeleteSession}
+                    onSetSessionUnread={onSetSessionUnread}
+                    onMoveSession={onMoveSession}
+                    onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
+                    onTogglePinnedSession={onTogglePinnedSession}
+                  />
+                </SidebarMenu>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </SidebarActiveMachine>
         <SidebarOtherMachines />
         {onOpenArchivedSessions ? (
           <SidebarGroup className="mt-auto pt-0">

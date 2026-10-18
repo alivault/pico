@@ -2,10 +2,9 @@ import * as React from "react"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  ChevronsUpDownIcon,
   MessageCircleQuestionIcon,
   RefreshCwIcon,
-  ServerIcon,
+  Settings2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -22,12 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   SidebarGroup,
@@ -177,62 +170,85 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
   )
 }
 
-/** The machine switcher at the top of the sidebar, when there are machines. */
-export function SidebarMachineSwitcher() {
-  const { machines } = useMachines()
-  if (machines.length < 2) return null
-  const activeId = activeMachineId()
-  const current = machines.find((machine) => machine.id === activeId)
+/**
+ * The heading of a machine group in the sidebar. All machines use it, so the
+ * machine of this page looks the same as the others.
+ */
+function MachineGroupLabel({
+  machine,
+  collapsed,
+  active = false,
+}: {
+  machine: MachineInfo
+  collapsed: boolean
+  active?: boolean
+}) {
   return (
-    <SidebarGroup className="pb-0">
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<SidebarMenuButton type="button" />}
-              aria-label="Switch machine"
-            >
-              <ServerIcon />
-              <span className="min-w-0 truncate font-medium">
-                {current?.label ?? "Unknown machine"}
-              </span>
-              {current ? (
-                <MachineStateDot state={current.state} className="ml-1" />
-              ) : null}
-              <ChevronsUpDownIcon className="ml-auto opacity-60" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              {machines.map((machine) => (
-                <DropdownMenuItem
-                  key={machine.id}
-                  onClick={() => {
-                    if (machine.id !== activeId) openMachine(machine.id)
-                  }}
-                  className="gap-2"
-                >
-                  <MachineStateDot state={machine.state} />
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate",
-                      machine.id === activeId && "font-semibold"
-                    )}
-                  >
-                    {machine.label}
-                  </span>
-                  <MachineCounts machine={machine} />
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem
-                onClick={() => emitOpenMachines()}
-                className="text-muted-foreground"
-              >
-                Manage machines…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroup>
+    // pr-0 when there is an icon button: it already holds the item-pad.
+    <SidebarGroupLabel
+      className={cn("justify-between gap-1", active && "pr-0")}
+    >
+      <CollapsibleTrigger
+        type="button"
+        className="group/machine-label flex min-w-0 flex-1 items-center justify-between gap-3 text-left outline-hidden"
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <MachineStateDot state={machine.state} />
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              active && "text-sidebar-foreground"
+            )}
+          >
+            {machine.label}
+          </span>
+          {collapsed ? (
+            <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
+          ) : (
+            <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
+          )}
+        </span>
+        <MachineCounts machine={machine} />
+      </CollapsibleTrigger>
+      {active ? (
+        <TitleTooltip title="Manage machines">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            onClick={() => emitOpenMachines()}
+            aria-label="Manage machines"
+          >
+            <Settings2Icon />
+          </Button>
+        </TitleTooltip>
+      ) : null}
+    </SidebarGroupLabel>
+  )
+}
+
+/**
+ * The group of the machine of this page, when the hub has more machines. Its
+ * content is the full sidebar of this machine (search, pinned sessions,
+ * directories). With one machine, the content shows without a heading.
+ */
+export function SidebarActiveMachine({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const { machines } = useMachines()
+  const activeId = activeMachineId()
+  const [collapsed, setCollapsed] = useMachineCollapsed(activeId)
+  const machine = machines.find((entry) => entry.id === activeId)
+  if (machines.length < 2 || !machine) return <>{children}</>
+  return (
+    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+      <SidebarGroup className="pb-0">
+        <MachineGroupLabel machine={machine} collapsed={collapsed} active />
+      </SidebarGroup>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -287,22 +303,7 @@ function OtherMachineGroup({ machine }: { machine: MachineInfo }) {
   return (
     <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
       <SidebarGroup className="py-1">
-        <SidebarGroupLabel
-          render={
-            <CollapsibleTrigger className="group/machine-label justify-between gap-3" />
-          }
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <MachineStateDot state={machine.state} />
-            <span className="min-w-0 truncate">{machine.label}</span>
-            {collapsed ? (
-              <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
-            ) : (
-              <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
-            )}
-          </span>
-          <MachineCounts machine={machine} />
-        </SidebarGroupLabel>
+        <MachineGroupLabel machine={machine} collapsed={collapsed} />
         <CollapsibleContent>
           <SidebarGroupContent className={cn(dimmed && "opacity-60")}>
             <SidebarMenu>
