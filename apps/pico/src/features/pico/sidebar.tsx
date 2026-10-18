@@ -30,6 +30,7 @@ import {
   FolderPlusIcon,
   GitForkIcon,
   MessageCircleQuestionIcon,
+  PinIcon,
   SearchIcon,
   SquarePenIcon,
 } from "lucide-react"
@@ -601,7 +602,7 @@ function useSidebarSessionActive(
 
 type SidebarSessionItemProps = {
   entryKey: string
-  /** The row is in a directory, under its line (not a pinned session). */
+  /** The row is in a directory or the pinned group, under its line. */
   inDirectory?: boolean
   directorySessionsStore: DirectorySessionsStore
   activeSessionStore: ActiveSidebarSessionStore
@@ -1593,12 +1594,15 @@ function PinnedSessionGroup({
       }}
     >
       <SidebarGroup className="py-1">
-        <SidebarGroupLabel
-          render={
-            <CollapsibleTrigger className="group/pinned-label justify-between gap-3" />
-          }
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        {/* Same header shape as a directory, so the icon sits on the
+            sidebar icon column and the line starts under it. */}
+        <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
+          <CollapsibleTrigger
+            type="button"
+            className="group/pinned-label flex min-w-0 flex-1 cursor-default items-center gap-2 text-left text-sm text-sidebar-foreground"
+            disabled={searchActive}
+          >
+            <PinIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
             <span className="min-w-0 truncate">Pinned</span>
             {!searchActive ? (
               collapsed ? (
@@ -1607,36 +1611,37 @@ function PinnedSessionGroup({
                 <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/pinned-label:opacity-100 group-focus-visible/pinned-label:opacity-100" />
               )
             ) : null}
-          </span>
-          <span className="text-[11px] font-normal text-sidebar-foreground/50">
-            {pinnedSessionKeys.length}
-          </span>
-        </SidebarGroupLabel>
+          </CollapsibleTrigger>
+        </div>
         <CollapsibleContent>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {pinnedSessionKeys.map((entryKey) => (
-                <SidebarSessionItem
-                  key={entryKey}
-                  entryKey={entryKey}
-                  directorySessionsStore={directorySessionsStore}
-                  activeSessionStore={activeSessionStore}
-                  selectedSessionKeyStore={selectedSessionKeyStore}
-                  isPinned
-                  isMobile={isMobile}
-                  overlay={false}
-                  moveTargetDirectories={moveTargetDirectories}
-                  setOpenMobile={setOpenMobile}
-                  onSessionClick={onSessionClick}
-                  onRenameSession={onRenameSession}
-                  onDeleteSession={onDeleteSession}
-                  onSetSessionUnread={onSetSessionUnread}
-                  onMoveSession={onMoveSession}
-                  onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                  onTogglePinnedSession={onTogglePinnedSession}
-                />
-              ))}
-            </SidebarMenu>
+            <div className="relative flex flex-col">
+              <SidebarTreeLine level={0} />
+              <SidebarMenu>
+                {pinnedSessionKeys.map((entryKey) => (
+                  <SidebarSessionItem
+                    key={entryKey}
+                    entryKey={entryKey}
+                    inDirectory
+                    directorySessionsStore={directorySessionsStore}
+                    activeSessionStore={activeSessionStore}
+                    selectedSessionKeyStore={selectedSessionKeyStore}
+                    isPinned
+                    isMobile={isMobile}
+                    overlay={false}
+                    moveTargetDirectories={moveTargetDirectories}
+                    setOpenMobile={setOpenMobile}
+                    onSessionClick={onSessionClick}
+                    onRenameSession={onRenameSession}
+                    onDeleteSession={onDeleteSession}
+                    onSetSessionUnread={onSetSessionUnread}
+                    onMoveSession={onMoveSession}
+                    onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
+                    onTogglePinnedSession={onTogglePinnedSession}
+                  />
+                ))}
+              </SidebarMenu>
+            </div>
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
