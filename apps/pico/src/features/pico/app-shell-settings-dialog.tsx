@@ -11,6 +11,10 @@ import {
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
+import {
+  setShowSessionPreviews,
+  useShowSessionPreviews,
+} from "@/features/pico/sidebar-display-settings"
 import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
 import type {
   PiCacheRetention,
@@ -408,6 +412,7 @@ type SettingsCommandGroupsOptions = Pick<
   | "onLogoutProviders"
 > & {
   onThemeCommand: () => void
+  showSessionPreviews: boolean
   piTransport: PiTransport
   piCacheRetention: PiCacheRetention
   onPiTransportChange: (transport: PiTransport) => void | Promise<void>
@@ -449,6 +454,7 @@ function getSettingsCommandGroups({
   onLoginProviders,
   onLogoutProviders,
   onThemeCommand,
+  showSessionPreviews,
   piTransport,
   piCacheRetention,
   onPiTransportChange,
@@ -536,6 +542,21 @@ function getSettingsCommandGroups({
           toggled: autoScrollEnabled,
           keywords: ["auto", "scroll", "latest", "follow", "streaming"],
           onSelect: () => onAutoScrollEnabledChange(!autoScrollEnabled),
+        },
+      ],
+    },
+    {
+      heading: "Sidebar",
+      commands: [
+        {
+          id: "sidebar-session-previews",
+          title: "Show session previews",
+          description:
+            "Show the last message under each session in the sidebar.",
+          valueLabel: formatToggleValue(showSessionPreviews),
+          toggled: showSessionPreviews,
+          keywords: ["sidebar", "session", "preview", "last message"],
+          onSelect: () => setShowSessionPreviews(!showSessionPreviews),
         },
       ],
     },
@@ -923,6 +944,7 @@ function AppShellSettingsDialog({
   commandsRef,
 }: AppShellSettingsDialogProps) {
   const queryClient = useQueryClient()
+  const showSessionPreviews = useShowSessionPreviews()
   const performanceQuery = useQuery({
     queryKey: picoQueryKeys.piPerformance(viewerContextId),
     queryFn: () =>
@@ -1057,6 +1079,7 @@ function AppShellSettingsDialog({
     desktopNotificationPermission,
     onLoginProviders,
     onLogoutProviders,
+    showSessionPreviews,
     piTransport: performance?.transport ?? "auto",
     piCacheRetention: performance?.cacheRetention ?? "standard",
     onPiTransportChange: async (transport) => {

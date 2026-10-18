@@ -76,6 +76,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Kbd } from "@/components/ui/kbd"
+import { useShowSessionPreviews } from "@/features/pico/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
@@ -652,6 +653,7 @@ function SidebarSessionItem({
     entryKey,
     entry?.id
   )
+  const showSessionPreviews = useShowSessionPreviews()
   const dragDisabled = isMobile || overlay || !entry?.path
   const draggable = useDraggable({
     id: `session:${entryKey}`,
@@ -668,7 +670,9 @@ function SidebarSessionItem({
   const timestamp =
     entry.lastMessageAt || entry.modified || entry.lastUserMessageAt
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
-  const lastMessagePreview = entry.lastMessagePreview?.trim() || ""
+  const lastMessagePreview = showSessionPreviews
+    ? entry.lastMessagePreview?.trim() || ""
+    : ""
   const pinnedDirectoryLabel = isPinned
     ? formatFolderName(entry.cwd?.trim() || entry.path?.trim() || "")
     : ""
