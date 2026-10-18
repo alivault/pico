@@ -36,10 +36,7 @@ import {
   appShortcut,
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
-import {
-  HeaderGitActions,
-  HeaderGitStatusText,
-} from "@/features/pico/right-sidebar-git-header-actions"
+import { HeaderGitStatusText } from "@/features/pico/right-sidebar-git-header-actions"
 import {
   useSelector,
   type PicoStore,
@@ -188,10 +185,6 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </div>
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
-          <HeaderGitActions
-            viewerContextId={viewerContextId}
-            cwd={displaySessionCwd}
-          />
           <DropdownMenu>
             <TitleTooltip title="Session menu">
               <DropdownMenuTrigger
