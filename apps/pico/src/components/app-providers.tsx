@@ -29,6 +29,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           {children}
           <Toaster
             richColors
+            closeButton
             position="top-right"
             offset={{ top: "calc(2.75rem + 0.75rem)" }}
             mobileOffset={{ top: "calc(2.75rem + 0.75rem)" }}
