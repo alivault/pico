@@ -124,6 +124,8 @@ const config = {
     proxy: {
       "/api": backendProxy,
       "/events": backendProxy,
+      // The hub proxy to the other machines (see `src/lib/pico/machine.ts`).
+      "/m/": backendProxy,
     },
   },
   preview: {
@@ -132,6 +134,8 @@ const config = {
     proxy: {
       "/api": backendProxy,
       "/events": backendProxy,
+      // The hub proxy to the other machines (see `src/lib/pico/machine.ts`).
+      "/m/": backendProxy,
     },
   },
   plugins,
