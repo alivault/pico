@@ -711,7 +711,7 @@ function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive || isSelected}
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-text-inset)+var(--session-indent))]",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-(--session-text-left)",
         (isActive || isSelected) && "text-sidebar-accent-foreground",
         (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
         // The hover state uses the whole row (with the trailing controls),
@@ -1052,20 +1052,27 @@ function buildSessionDepths(
 
 /** Status icon slot of a session row, on the sidebar icon column. */
 const SESSION_STATUS_ICON_CLASS =
-  "absolute top-(--sidebar-row-icon-top) left-[calc(var(--sidebar-item-pad)+var(--session-indent))] flex size-(--sidebar-icon) items-center justify-center"
+  "absolute top-(--sidebar-row-icon-top) left-(--session-slot-left) flex size-(--sidebar-icon) items-center justify-center"
 
 /**
  * CSS variables for a session row at a nesting depth (1 for a session in a
  * directory, more for child sessions). The row padding, status icon, and
  * indented highlight read them.
  *
- *   --session-indent           extra inset for the depth
+ *   --session-slot-left        x of the status slot: one gap after the
+ *                              highlight edge
+ *   --session-text-left        x of the title: one gap after the slot
  *   --session-highlight-start  x where the highlight starts: just after the
  *                              row's innermost line
  */
 function sessionTreeStyle(depth: number) {
   return {
-    "--session-indent": `calc(${depth} * var(--sidebar-tree-step))`,
+    "--session-slot-left":
+      depth === 0
+        ? "var(--sidebar-session-gap)"
+        : `calc(var(--sidebar-item-pad) + ${depth} * var(--sidebar-tree-step))`,
+    "--session-text-left":
+      "calc(var(--session-slot-left) + var(--sidebar-icon) + var(--sidebar-session-gap))",
     "--session-highlight-start": `calc(${sessionTreeLineLeft(Math.max(depth - 1, 0))} + 0.25rem)`,
   }
 }
@@ -1494,7 +1501,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                     >
                       <Button
                         variant="ghost"
-                        className="h-8 justify-start pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         onClick={() => {
                           setRenderCount((current) =>
                             Math.min(

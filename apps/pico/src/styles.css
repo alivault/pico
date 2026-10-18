@@ -84,7 +84,14 @@
     );
     /* Session rows: status icon offset from the row top, and tree lines. */
     --sidebar-row-icon-top: 0.625rem;
-    --sidebar-tree-step: 0.875rem;
+    /* Session rows: the space on each side of the status slot (from the
+       highlight edge to the slot, and from the slot to the title). */
+    --sidebar-session-gap: 0.25rem;
+    /* One tree level: the highlight starts 0.25rem after its parent's line,
+       then the gap, then half the slot to the next line. */
+    --sidebar-tree-step: calc(
+      0.25rem + var(--sidebar-session-gap) + var(--sidebar-icon) / 2
+    );
   }
 
   * {
