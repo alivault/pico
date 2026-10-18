@@ -39,7 +39,6 @@ export type AppShellSessionContentProps = {
   defaultNewSessionDirectory: string
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
-  hiddenThinkingPreviewStore: PicoStore<string>
   isLoadingOlderHistory: boolean
   isSessionViewLoading: boolean
   isSubmitting: boolean
@@ -64,7 +63,6 @@ export function AppShellSessionContent({
   defaultNewSessionDirectory,
   displaySettingsStore,
   fileInputRef,
-  hiddenThinkingPreviewStore,
   isLoadingOlderHistory,
   isSessionViewLoading,
   isSubmitting,
@@ -137,7 +135,6 @@ export function AppShellSessionContent({
         conversationFrameRef={conversationFrameRef}
         conversationItemsStore={conversationItemsStore}
         displaySettingsStore={displaySettingsStore}
-        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
         isLoadingOlderHistory={isLoadingOlderHistory}
         isSessionViewLoading={isSessionViewLoading}
         isSubmitting={isSubmitting}

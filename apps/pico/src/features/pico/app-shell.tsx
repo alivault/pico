@@ -917,15 +917,6 @@ function useAppShellSessionWorkspaceView({
       setIsLoadingOlderHistory(false)
     }
   }, [conversationItemsStore, setSessionState, viewerContextId])
-  const hiddenThinkingPreviewStoreRef = React.useRef<PicoStore<string> | null>(
-    null
-  )
-  if (!hiddenThinkingPreviewStoreRef.current) {
-    hiddenThinkingPreviewStoreRef.current = createPicoStore<string>(
-      sessionStateRef.current.hiddenThinkingPreview || ""
-    )
-  }
-  const hiddenThinkingPreviewStore = hiddenThinkingPreviewStoreRef.current
   const workingStateStoreRef =
     React.useRef<PicoStore<AppShellWorkingState | null> | null>(null)
   if (!workingStateStoreRef.current) {
@@ -1111,13 +1102,6 @@ function useAppShellSessionWorkspaceView({
       conversationItemsThrottler.cancel()
     },
     [conversationItemsThrottler]
-  )
-  const setHiddenThinkingPreview = React.useCallback(
-    (value: string, options?: { preserveExisting?: boolean }) => {
-      if (options?.preserveExisting && !value) return
-      setStoreState(hiddenThinkingPreviewStore, value)
-    },
-    [hiddenThinkingPreviewStore]
   )
   const setWorkingState = React.useCallback(
     (state: AppShellWorkingState | null) => {
@@ -2100,7 +2084,6 @@ function useAppShellSessionWorkspaceView({
     pendingRouteSessionPathRef,
     setSessionState,
     setConversationItems,
-    setHiddenThinkingPreview,
     setWorkingState,
     setCompactRunningState,
     setComposerContextUsage,
@@ -3662,7 +3645,6 @@ function useAppShellSessionWorkspaceView({
             fileInputRef={fileInputRef}
             gitPanelOpen={gitPanelOpen}
             terminalPanelOpen={terminalPanelOpen}
-            hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
             isLoadingOlderHistory={isLoadingOlderHistory}
             isSessionViewLoading={isSessionViewLoading}
             isSubmitting={isSubmitting}

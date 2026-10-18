@@ -83,7 +83,6 @@ export {
   normalizePromptImage,
   previewUrlForImage,
   sameContextUsage,
-  thinkingSummaryText,
 } from "@/lib/pico/sync"
 export { flattenTree } from "@/lib/pico/tree"
 
@@ -303,7 +302,6 @@ export type SessionState = {
   availableModels: Array<ModelOption>
   availableSkills: Array<SkillOption>
   hideThinkingBlock: boolean
-  hiddenThinkingPreview?: string
   contextUsage?: {
     tokens?: number | null
     contextWindow?: number

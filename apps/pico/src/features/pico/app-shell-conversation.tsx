@@ -335,22 +335,8 @@ function AppShellConversationScroller({
   )
 }
 
-function AppShellWorkingIndicatorLabel({
-  fallbackLabel,
-  hiddenThinkingPreviewStore,
-  useHiddenThinkingPreview,
-}: {
-  fallbackLabel: string
-  hiddenThinkingPreviewStore: PicoStore<string>
-  useHiddenThinkingPreview: boolean
-}) {
-  const hiddenThinkingPreview = useSelector(hiddenThinkingPreviewStore)
-  const visibleLabel =
-    useHiddenThinkingPreview && hiddenThinkingPreview
-      ? hiddenThinkingPreview
-      : fallbackLabel
-
-  if (!visibleLabel.trim()) {
+function AppShellWorkingIndicatorLabel({ label }: { label: string }) {
+  if (!label.trim()) {
     return (
       <div aria-hidden="true" className="invisible leading-5 font-medium">
         Working…
@@ -358,21 +344,15 @@ function AppShellWorkingIndicatorLabel({
     )
   }
 
-  return (
-    <div className="leading-5 font-medium text-foreground">{visibleLabel}</div>
-  )
+  return <div className="leading-5 font-medium text-foreground">{label}</div>
 }
 
 function AppShellMessagesWorkingIndicator({
-  hiddenThinkingPreviewStore,
   onCancel,
   state,
-  useHiddenThinkingPreview,
 }: {
-  hiddenThinkingPreviewStore: PicoStore<string>
   onCancel?: () => void
   state: AppShellWorkingState
-  useHiddenThinkingPreview: boolean
 }) {
   return (
     <div
@@ -397,11 +377,7 @@ function AppShellMessagesWorkingIndicator({
             ) : state.error ? (
               <div className="font-medium text-destructive">{state.label}</div>
             ) : (
-              <AppShellWorkingIndicatorLabel
-                fallbackLabel={state.label}
-                hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-                useHiddenThinkingPreview={useHiddenThinkingPreview}
-              />
+              <AppShellWorkingIndicatorLabel label={state.label} />
             )}
           </div>
           {state.cancelable && !state.done && !state.error && onCancel ? (
@@ -725,18 +701,12 @@ function AppShellConversationEmptyState({
 function AppShellConversationWorkingFooter({
   centerMessages,
   conversationItemsStore,
-  hiddenThinkingPreviewStore,
-  hideThinking,
   onCancelCompaction,
-  streaming,
   workingStateStore,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
-  hiddenThinkingPreviewStore: PicoStore<string>
-  hideThinking: boolean
   onCancelCompaction: () => void
-  streaming: boolean
   workingStateStore: PicoStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
@@ -761,10 +731,8 @@ function AppShellConversationWorkingFooter({
   return (
     <div className={conversationMessageColumnClassName}>
       <AppShellMessagesWorkingIndicator
-        hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
         onCancel={onCancelCompaction}
         state={displayedWorkingState}
-        useHiddenThinkingPreview={streaming && hideThinking}
       />
     </div>
   )
@@ -808,7 +776,6 @@ export const AppShellSessionConversation = React.memo(
     conversationFrameRef,
     conversationItemsStore,
     displaySettingsStore,
-    hiddenThinkingPreviewStore,
     isLoadingOlderHistory,
     isSessionViewLoading,
     isSubmitting,
@@ -823,7 +790,6 @@ export const AppShellSessionConversation = React.memo(
     conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
     conversationItemsStore: ConversationItemsStore
     displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
-    hiddenThinkingPreviewStore: PicoStore<string>
     isLoadingOlderHistory: boolean
     isSessionViewLoading: boolean
     isSubmitting: boolean
@@ -880,10 +846,7 @@ export const AppShellSessionConversation = React.memo(
             <AppShellConversationWorkingFooter
               centerMessages={centerMessages}
               conversationItemsStore={conversationItemsStore}
-              hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
-              hideThinking={hideThinking}
               onCancelCompaction={onCancelCompaction}
-              streaming={sessionState.streaming}
               workingStateStore={workingStateStore}
             />
           }

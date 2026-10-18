@@ -23,7 +23,6 @@ import type {
 import {
   buildRequestUrl,
   fetchJson,
-  latestCurrentTurnThinkingSummaryText,
   updateStateFromSync,
 } from "@/features/pico/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pico/composer-utils"
@@ -103,10 +102,6 @@ type UseAppShellSessionSyncOptions = {
   pendingRouteSessionPathRef: React.RefObject<string | undefined>
   setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
   setConversationItems: (items: SessionState["items"]) => void
-  setHiddenThinkingPreview: (
-    value: string,
-    options?: { preserveExisting?: boolean }
-  ) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
   setCompactRunningState: (running: boolean) => void
   setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
@@ -579,7 +574,6 @@ export function useAppShellSessionSync({
   pendingRouteSessionPathRef,
   setSessionState,
   setConversationItems,
-  setHiddenThinkingPreview,
   setWorkingState,
   setCompactRunningState,
   setComposerContextUsage,
@@ -798,18 +792,10 @@ export function useAppShellSessionSync({
           replaying: false,
           streaming: true,
           items,
-          hiddenThinkingPreview: previousState.hideThinkingBlock
-            ? latestCurrentTurnThinkingSummaryText(items)
-            : undefined,
         } satisfies SessionState
         batch(() => {
           sessionStateRef.current = nextState
           setConversationItems(items)
-          setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
-            preserveExisting: Boolean(
-              previousState.streaming && !nextState.hiddenThinkingPreview
-            ),
-          })
           if (!previousState.streaming) {
             setComposerStreaming(true)
             setWorkingState({ label: "Working…", cancelable: false })
@@ -887,13 +873,6 @@ export function useAppShellSessionSync({
 
         batch(() => {
           sessionStateRef.current = nextState
-          setHiddenThinkingPreview(nextState.hiddenThinkingPreview || "", {
-            preserveExisting: Boolean(
-              previousState.streaming &&
-              nextState.streaming &&
-              !nextState.hiddenThinkingPreview
-            ),
-          })
           if (previousState.contextUsage !== nextState.contextUsage) {
             setComposerContextUsage(nextState.contextUsage)
           }
@@ -1114,7 +1093,6 @@ export function useAppShellSessionSync({
       setComposerStreaming,
       setCompactRunningState,
       setConversationItems,
-      setHiddenThinkingPreview,
       setPendingMessages,
       setSessionDoneEvents,
       setSessionState,

@@ -4,7 +4,6 @@ import {
   previewUrlForImage,
   promptDraftKey,
   sameContextUsage,
-  thinkingSummaryText,
   type ConversationItem,
   type PromptImage,
   type SessionState,
@@ -102,43 +101,6 @@ function normalizeStatuses(
   }
 
   return normalized
-}
-
-function isCurrentResponseBoundaryUser(item: SessionState["items"][number]) {
-  return (
-    item.kind === "user" &&
-    !item.queued &&
-    item.streamingBehavior !== "followUp" &&
-    item.streamingBehavior !== "steer"
-  )
-}
-
-export function latestCurrentTurnThinkingSummaryText(
-  items: SessionState["items"]
-) {
-  // Keep the current-response scope narrow: scan backwards until the latest
-  // real user turn, but ignore queued follow-ups/steering messages.
-  for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
-    const item = items[itemIndex]
-    if (!item) continue
-
-    if (isCurrentResponseBoundaryUser(item)) return undefined
-    if (item.kind !== "assistant") continue
-
-    for (
-      let blockIndex = item.blocks.length - 1;
-      blockIndex >= 0;
-      blockIndex -= 1
-    ) {
-      const block = item.blocks[blockIndex]
-      if (block?.type !== "thinking") continue
-
-      const summary = thinkingSummaryText(block, { allowPlaceholder: true })
-      if (summary) return summary
-    }
-  }
-
-  return undefined
 }
 
 function shareUiState(
@@ -469,10 +431,6 @@ export function updateStateFromSync(
       : sync.contextUsage
     : base.contextUsage
   const uiState = shareUiState(base.uiState, sync.uiState)
-  const hiddenThinkingPreview =
-    streaming && hideThinkingBlock
-      ? latestCurrentTurnThinkingSummaryText(items)
-      : undefined
 
   if (
     previous.connected &&
@@ -497,7 +455,6 @@ export function updateStateFromSync(
     previous.availableModels === availableModels &&
     previous.availableSkills === availableSkills &&
     previous.hideThinkingBlock === hideThinkingBlock &&
-    previous.hiddenThinkingPreview === hiddenThinkingPreview &&
     previous.contextUsage === contextUsage &&
     previous.uiState === uiState
   ) {
@@ -528,7 +485,6 @@ export function updateStateFromSync(
     availableModels,
     availableSkills,
     hideThinkingBlock,
-    hiddenThinkingPreview,
     contextUsage,
     uiState,
   } satisfies SessionState

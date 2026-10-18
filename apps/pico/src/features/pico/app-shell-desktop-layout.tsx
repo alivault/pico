@@ -736,7 +736,6 @@ function useAppShellTabsControllerView({
   fileInputRef,
   gitPanelOpen,
   terminalPanelOpen,
-  hiddenThinkingPreviewStore,
   isLoadingOlderHistory,
   isSessionViewLoading,
   isSubmitting,
@@ -920,7 +919,6 @@ function useAppShellTabsControllerView({
           defaultNewSessionDirectory={defaultNewSessionDirectory}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
-          hiddenThinkingPreviewStore={hiddenThinkingPreviewStore}
           isLoadingOlderHistory={isLoadingOlderHistory}
           isSessionViewLoading={isSessionViewLoading}
           isSubmitting={isSubmitting}
