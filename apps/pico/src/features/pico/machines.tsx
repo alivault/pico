@@ -222,31 +222,6 @@ function MachineGroupLabel({
   )
 }
 
-/**
- * The group of the machine of this page, when the hub has more machines. Its
- * content is the full sidebar of this machine (search, pinned sessions,
- * directories). With one machine, the content shows without a heading.
- */
-export function SidebarActiveMachine({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const { machines } = useMachines()
-  const activeId = activeMachineId()
-  const [collapsed, setCollapsed] = useMachineCollapsed(activeId)
-  const machine = machines.find((entry) => entry.id === activeId)
-  if (machines.length < 2 || !machine) return <>{children}</>
-  return (
-    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
-      <SidebarGroup className="pb-0">
-        <MachineGroupLabel machine={machine} collapsed={collapsed} active />
-      </SidebarGroup>
-      <CollapsibleContent>{children}</CollapsibleContent>
-    </Collapsible>
-  )
-}
-
 const COLLAPSED_STORAGE_KEY = "pico-machine-groups-collapsed"
 
 function readCollapsed(): Record<string, boolean> {
@@ -306,28 +281,61 @@ function OtherMachineGroup({
 }
 
 /**
- * One group for each other machine, under the directories of this one.
- * `renderContent` draws the directories of a machine (see `sidebar.tsx`).
+ * The group of the machine of this page. Its content is the full sidebar of
+ * this machine (search, pinned sessions, directories).
  */
-export function SidebarOtherMachines({
+function ActiveMachineGroup({
+  machine,
+  children,
+}: {
+  machine: MachineInfo
+  children: React.ReactNode
+}) {
+  const [collapsed, setCollapsed] = useMachineCollapsed(machine.id)
+  return (
+    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+      <SidebarGroup className="pt-1 pb-0">
+        <MachineGroupLabel machine={machine} collapsed={collapsed} active />
+      </SidebarGroup>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+/**
+ * One group for each machine of the hub, in the order of the hub's list.
+ * The order does not change when the page opens another machine: only the
+ * content of the groups changes. `children` is the full sidebar of the
+ * machine of this page; `renderContent` draws the directories of another
+ * machine (see `sidebar.tsx`). With one machine, `children` shows without a
+ * heading.
+ */
+export function SidebarMachineGroups({
+  children,
   renderContent,
 }: {
+  children: React.ReactNode
   renderContent: RenderMachineContent
 }) {
   const { machines } = useMachines()
-  if (machines.length < 2) return null
   const activeId = activeMachineId()
+  const active = machines.find((machine) => machine.id === activeId)
+  if (machines.length < 2 || !active) return <>{children}</>
   return (
     <>
-      {machines
-        .filter((machine) => machine.id !== activeId)
-        .map((machine) => (
+      {machines.map((machine) =>
+        machine.id === activeId ? (
+          <ActiveMachineGroup key={machine.id} machine={machine}>
+            {children}
+          </ActiveMachineGroup>
+        ) : (
           <OtherMachineGroup
             key={machine.id}
             machine={machine}
             renderContent={renderContent}
           />
-        ))}
+        )
+      )}
     </>
   )
 }

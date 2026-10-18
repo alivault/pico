@@ -88,8 +88,7 @@ import {
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
   isMachineSessionUnread,
-  SidebarActiveMachine,
-  SidebarOtherMachines,
+  SidebarMachineGroups,
 } from "@/features/pico/machines"
 import type {
   MachineInfo,
@@ -2138,7 +2137,11 @@ function useAppSidebarView({
       className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
     >
       <SidebarContent>
-        <SidebarActiveMachine>
+        <SidebarMachineGroups
+          renderContent={(machine) => (
+            <OtherMachineDirectories machine={machine} />
+          )}
+        >
           <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
           <DndContext
             sensors={sensors}
@@ -2320,12 +2323,7 @@ function useAppSidebarView({
               ) : null}
             </DragOverlay>
           </DndContext>
-        </SidebarActiveMachine>
-        <SidebarOtherMachines
-          renderContent={(machine) => (
-            <OtherMachineDirectories machine={machine} />
-          )}
-        />
+        </SidebarMachineGroups>
         {onOpenArchivedSessions ? (
           <SidebarGroup className="mt-auto pt-0">
             <SidebarMenu>
