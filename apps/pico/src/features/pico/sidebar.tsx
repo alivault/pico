@@ -710,13 +710,20 @@ function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive || isSelected}
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] not-data-active:hover:bg-transparent! not-data-active:hover:text-sidebar-foreground! not-data-active:data-open:hover:bg-transparent! not-data-active:data-open:hover:text-sidebar-foreground!",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-text-inset)+var(--session-indent))]",
         (isActive || isSelected) && "text-sidebar-accent-foreground",
         (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
+        // The hover state uses the whole row (with the trailing controls),
+        // so the highlight stays when the pointer is on the timestamp.
+        !(isActive || isSelected) &&
+          "group-hover/session:text-sidebar-accent-foreground",
+        !(isActive || isSelected) &&
+          nestingDepth === 0 &&
+          "group-hover/session:bg-sidebar-accent/50",
         // A child row draws its highlight in an inset layer, so the tree
         // lines stay clear. The click area stays the full row width.
         nestingDepth > 0 &&
-          "isolate active:bg-transparent! data-active:bg-transparent!"
+          "isolate not-data-active:hover:bg-transparent! active:bg-transparent! not-data-active:data-open:hover:bg-transparent! data-active:bg-transparent!"
       )}
       onClick={(event) => {
         onSessionClick?.(entry, {
@@ -728,10 +735,15 @@ function SidebarSessionItem({
         }
       }}
     >
-      {nestingDepth > 0 && (isActive || isSelected) ? (
+      {nestingDepth > 0 ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 left-(--session-highlight-start) -z-10 rounded-md bg-sidebar-accent"
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-0 left-(--session-highlight-start) -z-10 rounded-md",
+            isActive || isSelected
+              ? "bg-sidebar-accent"
+              : "bg-transparent group-hover/session:bg-sidebar-accent/50"
+          )}
         />
       ) : null}
       {entry.needsInput ? (
