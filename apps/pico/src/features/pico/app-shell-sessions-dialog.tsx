@@ -259,10 +259,62 @@ function applySessionStatus(
   }
 }
 
-function sessionSearchKeywords(entry: SessionListEntry, directory: string) {
-  return [entry.title, entry.name, entry.path, entry.cwd, directory].filter(
-    Boolean
-  ) as Array<string>
+/** The words of a search query, in lower case. */
+function searchWords(query: string) {
+  return query.toLowerCase().split(/\s+/).filter(Boolean)
+}
+
+/** Whether `word` starts a word in `text` (after a non-letter, or at 0). */
+function startsWord(text: string, word: string) {
+  let index = text.indexOf(word)
+  while (index !== -1) {
+    if (index === 0 || !/[\p{L}\p{N}]/u.test(text[index - 1] ?? "")) return true
+    index = text.indexOf(word, index + 1)
+  }
+  return false
+}
+
+/**
+ * How well a session matches the search words: 0 for no match. Each word must
+ * be in the title, a folder, or the machine name. A word in the title counts
+ * more than in a folder, and the start of a word counts more than its middle.
+ * The whole query in the title counts extra. The session file path is not
+ * searched: it holds the home folder and random IDs, which match almost any
+ * query.
+ */
+function sessionMatchScore(
+  words: Array<string>,
+  fields: { title: string; folders: Array<string>; machine?: string }
+) {
+  if (words.length === 0) return 1
+  const title = fields.title.toLowerCase()
+  const folders = fields.folders.join("\n").toLowerCase()
+  const machine = fields.machine?.toLowerCase() ?? ""
+  let score = 0
+  for (const word of words) {
+    if (title.includes(word)) score += startsWord(title, word) ? 4 : 2
+    else if (folders.includes(word))
+      score += startsWord(folders, word) ? 1.5 : 1
+    else if (machine.includes(word)) score += 1
+    else return 0
+  }
+  if (words.length > 1 && title.includes(words.join(" "))) score += 2
+  return score
+}
+
+/** Matches first by score, then the newest. Drops the items with no match. */
+function rankMatches<T>(
+  items: Array<T>,
+  score: (item: T) => number,
+  time: (item: T) => number
+) {
+  return items
+    .map((item) => ({ item, score: score(item), time: time(item) }))
+    .filter((entry) => entry.score > 0)
+    .toSorted(
+      (left, right) => right.score - left.score || right.time - left.time
+    )
+    .map((entry) => entry.item)
 }
 
 function isActiveSession(
@@ -358,9 +410,10 @@ function sessionsDialogReducer(
         renameValue: "",
       }
     case "queryChanged":
+      // A new query selects its best match (see the selection effect).
       return state.query === action.query
         ? state
-        : { ...state, query: action.query }
+        : { ...state, query: action.query, selectedSessionKey: "" }
     case "scopeToggled":
       return {
         ...state,
@@ -569,24 +622,46 @@ function useAppShellSessionsDialogView({
       key: sessionListEntryKey(entry),
     }))
   )
-  const sortedSessionItems = flatSessions.toSorted(
-    (left, right) =>
-      sessionActivityTime(right.entry) - sessionActivityTime(left.entry)
+  const words = searchWords(query)
+  const sortedSessionItems = rankMatches(
+    flatSessions,
+    ({ entry, directory }) =>
+      sessionMatchScore(words, {
+        title: entry.title,
+        folders: [tildePath(entry.cwd || ""), tildePath(directory)],
+      }),
+    ({ entry }) => sessionActivityTime(entry)
   )
   // With more machines, "All sessions" also shows the other machines.
   const { machines } = useMachines()
   const activeId = activeMachineId()
   const activeMachine = machines.find((machine) => machine.id === activeId)
   const showMachines = scope === "all" && machines.length > 1 && activeMachine
-  const otherMachineGroups = showMachines
-    ? otherMachineSessionGroups(machines, activeId)
-    : []
-  const visibleSessionKeys = [
-    ...flatSessions.map((session) => session.key),
-    ...otherMachineGroups.flatMap((group) =>
-      group.items.map((item) => item.key)
+  const otherMachineGroups = (
+    showMachines ? otherMachineSessionGroups(machines, activeId) : []
+  ).map((group) => ({
+    ...group,
+    items: rankMatches(
+      group.items,
+      ({ session, machine }) =>
+        sessionMatchScore(words, {
+          title: session.title,
+          folders: [tildePath(session.cwd), tildePath(session.directory)],
+          machine: machine.label,
+        }),
+      ({ session }) => session.lastMessageAt ?? 0
     ),
-  ]
+  }))
+  // The order of the list: the machines in sidebar order, each one ranked.
+  const visibleSessionKeys = (
+    showMachines ? machines : [{ id: activeId }]
+  ).flatMap((machine) =>
+    machine.id === activeId
+      ? sortedSessionItems.map((session) => session.key)
+      : (otherMachineGroups
+          .find((group) => group.machine.id === machine.id)
+          ?.items.map((item) => item.key) ?? [])
+  )
   const selectedSession = selectedSessionKey
     ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
     : undefined
@@ -652,9 +727,13 @@ function useAppShellSessionsDialogView({
     const selectedStillVisible = visibleSessionKeys.includes(selectedSessionKey)
     if (selectedStillVisible) return
 
-    const activeSession = flatSessions.find((session) =>
-      isActiveSession(session.entry, activeSessionId, activeSessionPath)
-    )
+    // Without a query, select the session of the page; with one, the best
+    // match.
+    const activeSession = words.length
+      ? undefined
+      : flatSessions.find((session) =>
+          isActiveSession(session.entry, activeSessionId, activeSessionPath)
+        )
     dispatch({
       type: "visibleSelectionChanged",
       key: activeSession?.key || visibleSessionKeys[0] || "",
@@ -666,6 +745,7 @@ function useAppShellSessionsDialogView({
     open,
     selectedSessionKey,
     visibleSessionKeys,
+    words.length,
   ])
 
   React.useEffect(() => {
@@ -819,84 +899,85 @@ function useAppShellSessionsDialogView({
     }
   }
 
-  const activeSessionsGroup = (
-    <CommandGroup
-      key={activeId}
-      heading={
-        showMachines ? (
-          <MachineGroupHeading
-            machine={activeMachine}
-            suffix={loading ? " · loading" : undefined}
-          />
-        ) : (
-          `${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
-        )
-      }
-    >
-      {loading && sortedSessionItems.length === 0 ? (
-        <CommandItem value="loading:sessions" disabled>
-          <Spinner className="text-primary" />
-          <span className="text-muted-foreground">Loading sessions…</span>
-        </CommandItem>
-      ) : null}
-      {sortedSessionItems.map(({ directory, entry }) => {
-        const entryKey = sessionListEntryKey(entry)
-        const timestamp = entry.lastUserMessageAt || entry.modified
-        const sessionTime = formatSessionTime(timestamp)
-        const active = isActiveSession(
-          entry,
-          activeSessionId,
-          activeSessionPath
-        )
-        const showUnread = Boolean(entry.unread) && !entry.streaming
-
-        return (
-          <CommandItem
-            key={entryKey}
-            value={entryKey}
-            keywords={sessionSearchKeywords(entry, directory)}
-            onSelect={() => selectSession(entry)}
-            className="items-start py-2"
-          >
-            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-              {entry.streaming ? (
-                <Spinner
-                  className="text-primary"
-                  aria-label="Session streaming"
-                />
-              ) : showUnread ? (
-                <span
-                  className="size-2 rounded-full bg-primary"
-                  aria-label="Session done"
-                />
-              ) : null}
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate font-medium">{entry.title}</span>
-              <span className="line-clamp-1 text-xs text-muted-foreground">
-                {tildePath(entry.cwd || directory)}
-              </span>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {sessionTime ? (
-                <span className="truncate text-[11px] text-muted-foreground/70">
-                  {sessionTime}
-                </span>
-              ) : null}
-              <CommandShortcut
-                className={cn(
-                  "ml-0 shrink-0 tracking-normal normal-case",
-                  !active && "opacity-0"
-                )}
-              >
-                Current
-              </CommandShortcut>
-            </div>
+  // A group without matches is hidden, like the groups of other machines.
+  const activeSessionsGroup =
+    sortedSessionItems.length === 0 && !loading ? null : (
+      <CommandGroup
+        key={activeId}
+        heading={
+          showMachines ? (
+            <MachineGroupHeading
+              machine={activeMachine}
+              suffix={loading ? " · loading" : undefined}
+            />
+          ) : (
+            `${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
+          )
+        }
+      >
+        {loading && sortedSessionItems.length === 0 ? (
+          <CommandItem value="loading:sessions" disabled>
+            <Spinner className="text-primary" />
+            <span className="text-muted-foreground">Loading sessions…</span>
           </CommandItem>
-        )
-      })}
-    </CommandGroup>
-  )
+        ) : null}
+        {sortedSessionItems.map(({ directory, entry }) => {
+          const entryKey = sessionListEntryKey(entry)
+          const timestamp = entry.lastUserMessageAt || entry.modified
+          const sessionTime = formatSessionTime(timestamp)
+          const active = isActiveSession(
+            entry,
+            activeSessionId,
+            activeSessionPath
+          )
+          const showUnread = Boolean(entry.unread) && !entry.streaming
+
+          return (
+            <CommandItem
+              key={entryKey}
+              value={entryKey}
+              onSelect={() => selectSession(entry)}
+              className="items-start py-2"
+            >
+              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                {entry.streaming ? (
+                  <Spinner
+                    className="text-primary"
+                    aria-label="Session streaming"
+                  />
+                ) : showUnread ? (
+                  <span
+                    className="size-2 rounded-full bg-primary"
+                    aria-label="Session done"
+                  />
+                ) : null}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate font-medium">{entry.title}</span>
+                <span className="line-clamp-1 text-xs text-muted-foreground">
+                  {tildePath(entry.cwd || directory)}
+                </span>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {sessionTime ? (
+                  <span className="truncate text-[11px] text-muted-foreground/70">
+                    {sessionTime}
+                  </span>
+                ) : null}
+                <CommandShortcut
+                  className={cn(
+                    "ml-0 shrink-0 tracking-normal normal-case",
+                    !active && "opacity-0"
+                  )}
+                >
+                  Current
+                </CommandShortcut>
+              </div>
+            </CommandItem>
+          )
+        })}
+      </CommandGroup>
+    )
 
   const otherMachineGroupElement = (machine: MachineInfo) => {
     const group = otherMachineGroups.find(
@@ -919,7 +1000,6 @@ function useAppShellSessionsDialogView({
             <CommandItem
               key={item.key}
               value={item.key}
-              keywords={[session.title, session.cwd, directory, machine.label]}
               onSelect={() => selectOtherMachineSession(item)}
               className="items-start py-2"
             >
@@ -961,7 +1041,9 @@ function useAppShellSessionsDialogView({
 
   const sessionsBrowseBody = (
     <Command
-      shouldFilter
+      // `sessionMatchScore` filters and ranks the sessions. The fuzzy filter
+      // of cmdk matched letters spread over long paths.
+      shouldFilter={false}
       loop
       value={selectedSessionKey}
       onValueChange={(key) => {
