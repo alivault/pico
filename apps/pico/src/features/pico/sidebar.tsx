@@ -711,7 +711,7 @@ function SidebarSessionItem({
       data-session-key={entryKey}
       isActive={isActive || isSelected}
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-session-text-inset)+var(--session-indent))]",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-[calc(var(--sidebar-text-inset)+var(--session-indent))]",
         (isActive || isSelected) && "text-sidebar-accent-foreground",
         (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
         // The hover state uses the whole row (with the trailing controls),
@@ -1052,7 +1052,7 @@ function buildSessionDepths(
 
 /** Status icon slot of a session row, on the sidebar icon column. */
 const SESSION_STATUS_ICON_CLASS =
-  "absolute top-(--sidebar-status-top) left-[calc(var(--sidebar-item-pad)+var(--session-indent))] flex size-(--sidebar-status-icon) items-center justify-center"
+  "absolute top-(--sidebar-row-icon-top) left-[calc(var(--sidebar-item-pad)+var(--session-indent))] flex size-(--sidebar-icon) items-center justify-center"
 
 /**
  * CSS variables for a session row at a nesting depth (1 for a session in a
@@ -1071,14 +1071,11 @@ function sessionTreeStyle(depth: number) {
 }
 
 /**
- * x of the line at a level: level 0 is under the directory (or Pinned)
- * icon, and level n is under the status icon of a session at depth n.
+ * x of the line at a level: level 0 is under the directory icon, level 1
+ * under the status icon of a top-level session, and so on.
  */
 function sessionTreeLineLeft(level: number) {
-  if (level === 0) {
-    return "calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2)"
-  }
-  return `calc(var(--sidebar-item-pad) + var(--sidebar-status-icon) / 2 + ${level} * var(--sidebar-tree-step))`
+  return `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${level} * var(--sidebar-tree-step))`
 }
 
 /** A straight line at a level, over the full height of its box. */
@@ -1497,7 +1494,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                     >
                       <Button
                         variant="ghost"
-                        className="h-8 justify-start pl-[calc(var(--sidebar-session-text-inset)+var(--session-indent))] text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        className="h-8 justify-start pl-[calc(var(--sidebar-text-inset)+var(--session-indent))] text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         onClick={() => {
                           setRenderCount((current) =>
                             Math.min(
