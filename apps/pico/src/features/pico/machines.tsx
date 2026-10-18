@@ -85,7 +85,7 @@ export function machineStateLabel(machine: MachineInfo) {
   return STATE_LABELS[machine.state]
 }
 
-function MachineStateDot({
+export function MachineStateDot({
   state,
   className,
 }: {

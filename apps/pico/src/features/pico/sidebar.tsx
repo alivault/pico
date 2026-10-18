@@ -2139,12 +2139,13 @@ function useAppSidebarView({
       className="top-[var(--header-height)] !h-[calc(100svh_-_var(--header-height))] border-r border-sidebar-border/70"
     >
       <SidebarContent>
+        {/* Search covers all machines, so it stays above their groups. */}
+        <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
         <SidebarMachineGroups
           renderContent={(machine) => (
             <OtherMachineDirectories machine={machine} />
           )}
         >
-          <AppSidebarSearchButton onOpenSessionsDialog={onOpenSessionsDialog} />
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}

@@ -1,5 +1,9 @@
 import * as React from "react"
-import { ArrowLeftIcon, WandSparklesIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  MessageCircleQuestionIcon,
+  WandSparklesIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import type {
@@ -37,8 +41,18 @@ import {
   formatShortcutLabel,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
+import {
+  useMachines,
+  type MachineInfo,
+  type MachineSessionSummary,
+} from "@/features/pico/machine-store"
+import {
+  isMachineSessionUnread,
+  MachineStateDot,
+} from "@/features/pico/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/pico"
+import { activeMachineId, openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 
 type SessionsDialogScope = "current" | "all"
@@ -87,6 +101,56 @@ function tildePath(value: string) {
   return value
     .replace(/^\/Users\/[^/]+(?=\/|$)/, "~")
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
+}
+
+type OtherMachineSessionItem = {
+  key: string
+  machine: MachineInfo
+  session: MachineSessionSummary
+}
+
+/**
+ * The sessions of the other machines of the hub, from their summaries, newest
+ * first. The summaries hold the sessions of each machine (up to 200), so the
+ * search covers all machines without a request to each one.
+ */
+function otherMachineSessionGroups(
+  machines: Array<MachineInfo>,
+  activeId: string
+) {
+  return machines
+    .filter((machine) => machine.id !== activeId)
+    .map((machine) => ({
+      machine,
+      items: (machine.summary?.sessions ?? [])
+        .toSorted(
+          (left, right) =>
+            (right.lastMessageAt ?? 0) - (left.lastMessageAt ?? 0)
+        )
+        .map(
+          (session): OtherMachineSessionItem => ({
+            key: `machine:${machine.id}:${session.id}`,
+            machine,
+            session,
+          })
+        ),
+    }))
+}
+
+function MachineGroupHeading({
+  machine,
+  suffix,
+}: {
+  machine: MachineInfo
+  suffix?: string
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <MachineStateDot state={machine.state} />
+      {machine.label}
+      {suffix}
+    </span>
+  )
 }
 
 function normalizeDirectories(directories: Array<string>) {
@@ -509,6 +573,20 @@ function useAppShellSessionsDialogView({
     (left, right) =>
       sessionActivityTime(right.entry) - sessionActivityTime(left.entry)
   )
+  // With more machines, "All sessions" also shows the other machines.
+  const { machines } = useMachines()
+  const activeId = activeMachineId()
+  const activeMachine = machines.find((machine) => machine.id === activeId)
+  const showMachines = scope === "all" && machines.length > 1 && activeMachine
+  const otherMachineGroups = showMachines
+    ? otherMachineSessionGroups(machines, activeId)
+    : []
+  const visibleSessionKeys = [
+    ...flatSessions.map((session) => session.key),
+    ...otherMachineGroups.flatMap((group) =>
+      group.items.map((item) => item.key)
+    ),
+  ]
   const selectedSession = selectedSessionKey
     ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
     : undefined
@@ -571,9 +649,7 @@ function useAppShellSessionsDialogView({
   React.useEffect(() => {
     if (!open) return
 
-    const selectedStillVisible = flatSessions.some(
-      (session) => session.key === selectedSessionKey
-    )
+    const selectedStillVisible = visibleSessionKeys.includes(selectedSessionKey)
     if (selectedStillVisible) return
 
     const activeSession = flatSessions.find((session) =>
@@ -581,7 +657,7 @@ function useAppShellSessionsDialogView({
     )
     dispatch({
       type: "visibleSelectionChanged",
-      key: activeSession?.key || flatSessions[0]?.key || "",
+      key: activeSession?.key || visibleSessionKeys[0] || "",
     })
   }, [
     activeSessionId,
@@ -589,6 +665,7 @@ function useAppShellSessionsDialogView({
     flatSessions,
     open,
     selectedSessionKey,
+    visibleSessionKeys,
   ])
 
   React.useEffect(() => {
@@ -625,6 +702,12 @@ function useAppShellSessionsDialogView({
     if (!entry.id) return
     onOpenChange(false)
     onSelectSession(entry.id, { sessionPath: entry.path })
+  }
+
+  /** Open a session of another machine: the page switches machines. */
+  const selectOtherMachineSession = (item: OtherMachineSessionItem) => {
+    onOpenChange(false)
+    openMachine(item.machine.id, { sessionId: item.session.id })
   }
 
   const renameSelectedSession = () => {
@@ -736,6 +819,146 @@ function useAppShellSessionsDialogView({
     }
   }
 
+  const activeSessionsGroup = (
+    <CommandGroup
+      key={activeId}
+      heading={
+        showMachines ? (
+          <MachineGroupHeading
+            machine={activeMachine}
+            suffix={loading ? " · loading" : undefined}
+          />
+        ) : (
+          `${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
+        )
+      }
+    >
+      {loading && sortedSessionItems.length === 0 ? (
+        <CommandItem value="loading:sessions" disabled>
+          <Spinner className="text-primary" />
+          <span className="text-muted-foreground">Loading sessions…</span>
+        </CommandItem>
+      ) : null}
+      {sortedSessionItems.map(({ directory, entry }) => {
+        const entryKey = sessionListEntryKey(entry)
+        const timestamp = entry.lastUserMessageAt || entry.modified
+        const sessionTime = formatSessionTime(timestamp)
+        const active = isActiveSession(
+          entry,
+          activeSessionId,
+          activeSessionPath
+        )
+        const showUnread = Boolean(entry.unread) && !entry.streaming
+
+        return (
+          <CommandItem
+            key={entryKey}
+            value={entryKey}
+            keywords={sessionSearchKeywords(entry, directory)}
+            onSelect={() => selectSession(entry)}
+            className="items-start py-2"
+          >
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+              {entry.streaming ? (
+                <Spinner
+                  className="text-primary"
+                  aria-label="Session streaming"
+                />
+              ) : showUnread ? (
+                <span
+                  className="size-2 rounded-full bg-primary"
+                  aria-label="Session done"
+                />
+              ) : null}
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-medium">{entry.title}</span>
+              <span className="line-clamp-1 text-xs text-muted-foreground">
+                {tildePath(entry.cwd || directory)}
+              </span>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {sessionTime ? (
+                <span className="truncate text-[11px] text-muted-foreground/70">
+                  {sessionTime}
+                </span>
+              ) : null}
+              <CommandShortcut
+                className={cn(
+                  "ml-0 shrink-0 tracking-normal normal-case",
+                  !active && "opacity-0"
+                )}
+              >
+                Current
+              </CommandShortcut>
+            </div>
+          </CommandItem>
+        )
+      })}
+    </CommandGroup>
+  )
+
+  const otherMachineGroupElement = (machine: MachineInfo) => {
+    const group = otherMachineGroups.find(
+      (entry) => entry.machine.id === machine.id
+    )
+    if (!group || group.items.length === 0) return null
+    return (
+      <CommandGroup
+        key={machine.id}
+        heading={<MachineGroupHeading machine={machine} />}
+        className={cn(machine.state !== "online" && "opacity-60")}
+      >
+        {group.items.map((item) => {
+          const { session } = item
+          const sessionTime = session.lastMessageAt
+            ? formatSessionTime(new Date(session.lastMessageAt).toISOString())
+            : ""
+          const directory = session.directory || session.cwd
+          return (
+            <CommandItem
+              key={item.key}
+              value={item.key}
+              keywords={[session.title, session.cwd, directory, machine.label]}
+              onSelect={() => selectOtherMachineSession(item)}
+              className="items-start py-2"
+            >
+              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                {session.needsInput ? (
+                  <MessageCircleQuestionIcon
+                    className="size-3.5 text-amber-500"
+                    aria-label="The agent waits for your answer"
+                  />
+                ) : session.busy ? (
+                  <Spinner
+                    className="text-primary"
+                    aria-label="Session streaming"
+                  />
+                ) : isMachineSessionUnread(session) ? (
+                  <span
+                    className="size-2 rounded-full bg-primary"
+                    aria-label="Session done"
+                  />
+                ) : null}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate font-medium">{session.title}</span>
+                <span className="line-clamp-1 text-xs text-muted-foreground">
+                  {tildePath(session.cwd || directory)}
+                </span>
+              </div>
+              {sessionTime ? (
+                <span className="shrink-0 truncate text-[11px] text-muted-foreground/70">
+                  {sessionTime}
+                </span>
+              ) : null}
+            </CommandItem>
+          )
+        })}
+      </CommandGroup>
+    )
+  }
+
   const sessionsBrowseBody = (
     <Command
       shouldFilter
@@ -762,78 +985,23 @@ function useAppShellSessionsDialogView({
         <CommandEmpty>
           {loading ? "Loading sessions…" : "No sessions found."}
         </CommandEmpty>
-        <CommandGroup
-          heading={`${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`}
-        >
-          {loading && sortedSessionItems.length === 0 ? (
-            <CommandItem value="loading:sessions" disabled>
-              <Spinner className="text-primary" />
-              <span className="text-muted-foreground">Loading sessions…</span>
-            </CommandItem>
-          ) : null}
-          {sortedSessionItems.map(({ directory, entry }) => {
-            const entryKey = sessionListEntryKey(entry)
-            const timestamp = entry.lastUserMessageAt || entry.modified
-            const sessionTime = formatSessionTime(timestamp)
-            const active = isActiveSession(
-              entry,
-              activeSessionId,
-              activeSessionPath
+        {showMachines
+          ? machines.map((machine) =>
+              machine.id === activeId
+                ? activeSessionsGroup
+                : otherMachineGroupElement(machine)
             )
-            const showUnread = Boolean(entry.unread) && !entry.streaming
-
-            return (
-              <CommandItem
-                key={entryKey}
-                value={entryKey}
-                keywords={sessionSearchKeywords(entry, directory)}
-                onSelect={() => selectSession(entry)}
-                className="items-start py-2"
-              >
-                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                  {entry.streaming ? (
-                    <Spinner
-                      className="text-primary"
-                      aria-label="Session streaming"
-                    />
-                  ) : showUnread ? (
-                    <span
-                      className="size-2 rounded-full bg-primary"
-                      aria-label="Session done"
-                    />
-                  ) : null}
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate font-medium">{entry.title}</span>
-                  <span className="line-clamp-1 text-xs text-muted-foreground">
-                    {tildePath(entry.cwd || directory)}
-                  </span>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  {sessionTime ? (
-                    <span className="truncate text-[11px] text-muted-foreground/70">
-                      {sessionTime}
-                    </span>
-                  ) : null}
-                  <CommandShortcut
-                    className={cn(
-                      "ml-0 shrink-0 tracking-normal normal-case",
-                      !active && "opacity-0"
-                    )}
-                  >
-                    Current
-                  </CommandShortcut>
-                </div>
-              </CommandItem>
-            )
-          })}
-        </CommandGroup>
+          : activeSessionsGroup}
       </CommandList>
       {!isMobile ? (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Tab</FooterKbd>
-            {scope === "all" ? "Current directory" : "All sessions"}
+            {scope === "all"
+              ? "Current directory"
+              : machines.length > 1
+                ? "All machines"
+                : "All sessions"}
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Switch
