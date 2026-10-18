@@ -377,11 +377,10 @@ function useAppShellAddDirectoryDialogView({
     recentMatching.length > 0 ||
     knownMatching.length > 0
   const queryLooksLikePath = directoryInputLooksLikePath(directoryQuery)
+  // A path shows its completions also when saved directories match it: a
+  // match such as the current directory must not hide the folders in it.
   const shouldShowPathCompletions = Boolean(
-    directoryQuery &&
-    onRequestPathCompletions &&
-    !hasDirectoryMatches &&
-    queryLooksLikePath
+    directoryQuery && onRequestPathCompletions && queryLooksLikePath
   )
   const shouldShowDirectorySearch = Boolean(
     directoryQuery &&
@@ -515,14 +514,47 @@ function useAppShellAddDirectoryDialogView({
     [directorySearchDebouncer, pathCompletionDebouncer]
   )
 
+  // Completions come first, except when saved directories match the input:
+  // then the match stays the first item, so Enter keeps choosing it.
+  const pathCompletionsGroup =
+    shouldShowPathCompletions &&
+    (pathCompletionLoading || pathCompletionItems.length > 0) ? (
+      <CommandGroup heading="Path completions">
+        {pathCompletionLoading && pathCompletionItems.length === 0 ? (
+          <CommandItem value="path-completion:loading" disabled>
+            Loading directories…
+          </CommandItem>
+        ) : null}
+        {pathCompletionItems.map((completion, index) => (
+          <CommandItem
+            key={`path-completion:${completion.value}`}
+            value={pathCompletionCommandValue(completion, index)}
+            onSelect={() => onAddDirectoryPath(completion.value)}
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <DirectoryPathLabel path={completion.value} />
+              <span className="truncate text-xs text-muted-foreground">
+                Press Tab to complete this path instead.
+              </span>
+            </div>
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    ) : null
+
   const commandValues = [
-    ...pathCompletionItems.map(pathCompletionCommandValue),
+    ...(hasDirectoryMatches
+      ? []
+      : pathCompletionItems.map(pathCompletionCommandValue)),
     ...directorySearchItems.map(directorySearchCommandValue),
     ...(manualPath ? [`add ${manualPath}`] : []),
     ...openedMatching.map((directoryPath) => `opened ${directoryPath}`),
     ...currentMatching.map((directoryPath) => `current ${directoryPath}`),
     ...recentMatching.map((directoryPath) => `recent ${directoryPath}`),
     ...knownMatching.map((directoryPath) => `known ${directoryPath}`),
+    ...(hasDirectoryMatches
+      ? pathCompletionItems.map(pathCompletionCommandValue)
+      : []),
   ]
 
   React.useEffect(() => {
@@ -660,30 +692,7 @@ function useAppShellAddDirectoryDialogView({
               : "No recent or discovered directories yet."}
           </CommandEmpty>
         ) : null}
-        {shouldShowPathCompletions &&
-        (pathCompletionLoading || pathCompletionItems.length > 0) ? (
-          <CommandGroup heading="Path completions">
-            {pathCompletionLoading && pathCompletionItems.length === 0 ? (
-              <CommandItem value="path-completion:loading" disabled>
-                Loading directories…
-              </CommandItem>
-            ) : null}
-            {pathCompletionItems.map((completion, index) => (
-              <CommandItem
-                key={`path-completion:${completion.value}`}
-                value={pathCompletionCommandValue(completion, index)}
-                onSelect={() => onAddDirectoryPath(completion.value)}
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <DirectoryPathLabel path={completion.value} />
-                  <span className="truncate text-xs text-muted-foreground">
-                    Press Tab to complete this path instead.
-                  </span>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
+        {hasDirectoryMatches ? null : pathCompletionsGroup}
         {shouldShowDirectorySearch &&
         (directorySearchLoading || directorySearchItems.length > 0) ? (
           <CommandGroup heading="Matching folders">
@@ -806,6 +815,7 @@ function useAppShellAddDirectoryDialogView({
             ))}
           </CommandGroup>
         ) : null}
+        {hasDirectoryMatches ? pathCompletionsGroup : null}
       </CommandList>
       <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
         <span className="inline-flex items-center gap-1">
