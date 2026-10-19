@@ -1352,7 +1352,7 @@ export function RightSidebarTabStrip({
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background p-2">
+    <div className="flex h-12 shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background px-2">
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Git", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
