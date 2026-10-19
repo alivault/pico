@@ -467,6 +467,7 @@ type AppSidebarProps = {
   onTogglePinnedSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onDeleteOldSessionsInDirectory?: (directory: string) => void
+  onMarkSessionsRead?: (entries: Array<SessionListEntry>) => void
   onRemoveDirectory?: (directory: string) => void
   onReorderDirectories?: (nextDirectories: Array<string>) => void
   onOpenArchivedSessions?: () => void
@@ -1276,7 +1277,20 @@ type DirectorySessionGroupProps = {
   onTogglePinnedSession?: (entry: SessionListEntry) => void
   onCreateSessionInDirectory?: (directory: string) => void
   onDeleteOldSessionsInDirectory?: (directory: string) => void
+  onMarkSessionsRead?: (entries: Array<SessionListEntry>) => void
   onRemoveDirectory?: (directory: string) => void
+}
+
+function directoryUnreadSessions(
+  state: DirectorySessionsState,
+  directory: string
+) {
+  const entries: Array<SessionListEntry> = []
+  for (const entryKey of state.sessionKeysByDirectory[directory] ?? []) {
+    const entry = state.entriesByKey.get(entryKey)
+    if (entry?.unread && entry.path) entries.push(entry)
+  }
+  return entries
 }
 
 const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
@@ -1305,6 +1319,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   onTogglePinnedSession,
   onCreateSessionInDirectory,
   onDeleteOldSessionsInDirectory,
+  onMarkSessionsRead,
   onRemoveDirectory,
 }: DirectorySessionGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
@@ -1319,6 +1334,15 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     directory,
     searchActive
   )
+  const hasUnreadSessions = useSelector(
+    directorySessionsStore,
+    (state) => directoryUnreadSessions(state, directory).length > 0
+  )
+  const markSessionsRead = () => {
+    onMarkSessionsRead?.(
+      directoryUnreadSessions(directorySessionsStore.state, directory)
+    )
+  }
   const pinnedSessionKeySet = new Set(pinnedSessionKeys)
   const unpinnedSessionKeys = sessionKeys.filter(
     (entryKey) => !pinnedSessionKeySet.has(entryKey)
@@ -1341,6 +1365,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     Boolean(
       onCreateSessionInDirectory ||
       onDeleteOldSessionsInDirectory ||
+      onMarkSessionsRead ||
       onRemoveDirectory
     )
 
@@ -1416,6 +1441,14 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 Archive old sessions…
               </DropdownMenuItem>
             ) : null}
+            {onMarkSessionsRead ? (
+              <DropdownMenuItem
+                disabled={!hasUnreadSessions}
+                onClick={markSessionsRead}
+              >
+                Mark all as read
+              </DropdownMenuItem>
+            ) : null}
             {onRemoveDirectory ? (
               <DropdownMenuItem
                 variant="destructive"
@@ -1463,6 +1496,14 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   onClick={() => onDeleteOldSessionsInDirectory(directory)}
                 >
                   Archive old sessions…
+                </ContextMenuItem>
+              ) : null}
+              {onMarkSessionsRead ? (
+                <ContextMenuItem
+                  disabled={!hasUnreadSessions}
+                  onClick={markSessionsRead}
+                >
+                  Mark all as read
                 </ContextMenuItem>
               ) : null}
               {onRemoveDirectory ? (
@@ -2106,6 +2147,7 @@ function useAppSidebarView({
   onTogglePinnedSession,
   onCreateSessionInDirectory,
   onDeleteOldSessionsInDirectory,
+  onMarkSessionsRead,
   onRemoveDirectory,
   onReorderDirectories,
   onOpenArchivedSessions,
@@ -2472,6 +2514,7 @@ function useAppSidebarView({
                                   onDeleteOldSessionsInDirectory={
                                     onDeleteOldSessionsInDirectory
                                   }
+                                  onMarkSessionsRead={onMarkSessionsRead}
                                   onRemoveDirectory={
                                     onRemoveDirectory
                                       ? removeDirectory
@@ -2514,6 +2557,7 @@ function useAppSidebarView({
                   onDeleteOldSessionsInDirectory={
                     onDeleteOldSessionsInDirectory
                   }
+                  onMarkSessionsRead={onMarkSessionsRead}
                   onRemoveDirectory={
                     onRemoveDirectory ? removeDirectory : undefined
                   }

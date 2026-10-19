@@ -31,6 +31,7 @@ export type AppShellSessionWorkspaceHandle = {
     entry: SessionListEntry,
     unread: boolean
   ) => Promise<boolean>
+  markSessionsRead: (entries: Array<SessionListEntry>) => Promise<boolean>
   selectSession: (
     nextSessionId?: string,
     options?: SelectSessionNavigationOptions

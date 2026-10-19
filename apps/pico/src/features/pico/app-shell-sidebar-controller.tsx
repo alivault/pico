@@ -874,6 +874,9 @@ function useAppShellSidebarControllerView({
             directory
           )
         }}
+        onMarkSessionsRead={(entries) => {
+          void sessionWorkspaceRef.current?.markSessionsRead(entries)
+        }}
         onRemoveDirectory={(directory) => {
           sidebarStore.setSidebarDirectories((current) => {
             const next = current.filter((entry) => entry !== directory)

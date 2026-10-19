@@ -2927,6 +2927,66 @@ function useAppShellSessionWorkspaceView({
     }
   }
 
+  const markSessionsRead = async (entries: Array<SessionListEntry>) => {
+    if (!viewerContextId) return false
+
+    const targets = entries.filter((entry) => entry.path && entry.unread)
+    if (targets.length === 0) return true
+
+    const applyUnread = (target: SessionListEntry, value: boolean) => {
+      sidebarStore.setSidebarSessionStatusByKey((current) =>
+        mergeSidebarSessionStatusMap(current, {
+          type: "session_status",
+          sessionId: target.id,
+          sessionPath: target.path,
+          unread: value,
+        })
+      )
+    }
+
+    for (const target of targets) applyUnread(target, false)
+
+    const results = await Promise.allSettled(
+      targets.map((target) =>
+        fetchJson<Extract<SessionReadStateResponse, { ok: true }>>(
+          buildRequestUrl("/api/session/read-state", {
+            machineId,
+            contextId: viewerContextId,
+            sessionId: activeSessionId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: target.path, unread: false }),
+          }
+        )
+      )
+    )
+
+    let failed = 0
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return
+      failed += 1
+      applyUnread(targets[index], true)
+    })
+
+    await queryClient.invalidateQueries({
+      queryKey: ["pico", "directory-sessions-index", viewerContextId],
+      refetchType: "active",
+    })
+
+    if (failed > 0) {
+      toast.error(`Failed to mark ${failed} of ${targets.length} sessions read`)
+      return false
+    }
+    toast.success(
+      targets.length === 1
+        ? "Marked 1 session read"
+        : `Marked ${targets.length} sessions read`
+    )
+    return true
+  }
+
   const moveSessionDirectoryTargetToPath = async (directory: string) => {
     const target = moveSessionDirectoryTargetRef.current
     if (!target) return false
@@ -3663,6 +3723,7 @@ function useAppShellSessionWorkspaceView({
       openSessionsDialog,
       openSettingsDialog,
       setSessionUnread,
+      markSessionsRead,
       selectSession: handleSelectSession,
     },
   }
@@ -3688,6 +3749,7 @@ function useAppShellSessionWorkspaceView({
       openSessionsDialog: actions?.openSessionsDialog ?? openSessionsDialog,
       openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
       setSessionUnread: actions?.setSessionUnread ?? setSessionUnread,
+      markSessionsRead: actions?.markSessionsRead ?? markSessionsRead,
       selectSession: actions?.selectSession ?? handleSelectSession,
     }
   }, [
@@ -3703,6 +3765,7 @@ function useAppShellSessionWorkspaceView({
     openSessionsDialog,
     openSettingsDialog,
     setSessionUnread,
+    markSessionsRead,
   ])
 
   return (
