@@ -5,7 +5,7 @@ import {
   CircleDotIcon,
   CircleIcon,
   ListChecksIcon,
-  BrushCleaningIcon,
+  BroomIcon,
   PlusIcon,
   XIcon,
 } from "lucide-react"
@@ -225,7 +225,7 @@ function TodoActions({ sessionId, state, viewerContextId }: AgentSectionProps) {
   return (
     <IconAction
       label="Remove done items"
-      icon={<BrushCleaningIcon />}
+      icon={<BroomIcon />}
       onClick={() => change({ op: "clear", scope: "done" })}
     />
   )
