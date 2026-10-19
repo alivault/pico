@@ -1836,6 +1836,7 @@ function streamEvents(
   let releaseWatch: (() => void) | undefined
   let watchedSession: string | undefined
   let previousItems: Item[] = []
+  let previousHistoryOffset: unknown
   let itemsChangedByDelta = false
 
   // The URL session initializes this viewer. Later selections must follow
@@ -1867,10 +1868,18 @@ function streamEvents(
       }
       const syncedSession =
         typeof payload.sessionId === "string" ? payload.sessionId : undefined
-      if (syncedSession !== liveSession || itemsChangedByDelta) {
+      // A patch has no history offset. When the history window slides,
+      // send all items so the client can line up its older history.
+      const historyOffset = payload.historyOffset
+      if (
+        syncedSession !== liveSession ||
+        itemsChangedByDelta ||
+        historyOffset !== previousHistoryOffset
+      ) {
         liveSession = syncedSession
         bindWatch(syncedSession)
         previousItems = items
+        previousHistoryOffset = historyOffset
         itemsChangedByDelta = false
         stream.send(payload, event.sequence)
         return
