@@ -1570,6 +1570,8 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
 
 type PinnedSessionGroupProps = {
   pinnedSessionKeys: Array<string>
+  /** The group is inside another sidebar group that already adds the side gutter. */
+  nested?: boolean
   directorySessionsStore: DirectorySessionsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
   searchActive: boolean
@@ -1594,6 +1596,7 @@ type PinnedSessionGroupProps = {
 
 function PinnedSessionGroup({
   pinnedSessionKeys,
+  nested = false,
   directorySessionsStore,
   collapsedDirectoryStore,
   searchActive,
@@ -1630,7 +1633,7 @@ function PinnedSessionGroup({
         )
       }}
     >
-      <SidebarGroup className="py-1">
+      <SidebarGroup className={cn("py-1", nested && "px-0")}>
         {/* Same header shape as a directory, so the icon sits on the
             sidebar icon column and the line starts under it. */}
         <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
@@ -2025,6 +2028,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   return (
     <>
       <PinnedSessionGroup
+        nested
         pinnedSessionKeys={pinnedSessionKeys}
         directorySessionsStore={stores.sessions}
         collapsedDirectoryStore={stores.collapsed}
