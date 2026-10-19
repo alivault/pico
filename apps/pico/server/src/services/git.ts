@@ -393,18 +393,22 @@ export async function fileReview(
     `HEAD:${previous ?? relative}`,
   ])
   let newContent = ""
+  let binary = old.stdout.includes("\0")
   try {
     const bytes = await readFile(join(cwd, relative))
-    if (!bytes.includes(0) && bytes.length <= 4 * 1024 * 1024)
+    if (bytes.includes(0)) binary = true
+    else if (bytes.length <= 4 * 1024 * 1024)
       newContent = bytes.toString("utf8")
   } catch {
     // Deleted or unreadable: the new side is empty.
   }
+  // Binary content does not give a line diff, and it can hang the renderer.
   return {
     path: relative,
     previousPath: previous,
-    oldContent: old.stdout,
-    newContent,
+    oldContent: binary ? "" : old.stdout,
+    newContent: binary ? "" : newContent,
+    binary,
   }
 }
 

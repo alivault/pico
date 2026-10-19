@@ -1544,6 +1544,12 @@ function ReviewFileAccordionItem({
               {getErrorMessage(reviewQuery.error, "Failed to load hunk")}
             </GitSectionNote>
           </div>
+        ) : reviewQuery.data?.binary ? (
+          <div className="p-3">
+            <GitSectionNote>
+              Binary file. Open the file to view it.
+            </GitSectionNote>
+          </div>
         ) : oldContent !== newContent ? (
           <MultiFileDiff<ReviewDiffLineAnnotationMetadata>
             oldFile={{

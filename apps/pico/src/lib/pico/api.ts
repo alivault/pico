@@ -248,6 +248,7 @@ export type GitFileReviewResponse =
       previousPath?: string
       oldContent: string
       newContent: string
+      binary?: boolean
     }
   | ApiErrorResponse
 
