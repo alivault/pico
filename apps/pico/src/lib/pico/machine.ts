@@ -253,6 +253,13 @@ export function takeMachineActions(machineId: string) {
   return queue
 }
 
+/** True when a new-session action waits for the app shell of `machineId`. */
+export function hasPendingNewSessionAction(machineId: string) {
+  return (pendingActions.get(machineId) ?? []).some(
+    (action) => action.type === "new-session"
+  )
+}
+
 /** Get a call when an action for `machineId` arrives. */
 export function onMachineAction(machineId: string, listener: () => void) {
   let listeners = actionListeners.get(machineId)

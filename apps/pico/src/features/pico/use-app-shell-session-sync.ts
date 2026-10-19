@@ -27,6 +27,7 @@ import {
 } from "@/features/pico/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pico/composer-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
+import { hasPendingNewSessionAction } from "@/lib/pico/machine"
 import {
   batch,
   useSelector,
@@ -1299,10 +1300,16 @@ export function useAppShellSessionSync({
     }
 
     if (syncedSessionId !== sessionId) {
+      // The sidebar opened this machine for a new session. The shell still
+      // has the session that it showed before, and it makes the new session
+      // in an effect after this one. Do not take the route back to the old
+      // session.
+      if (hasPendingNewSessionAction(machineId)) return
       handleSelectSessionRef.current(syncedSessionId, { replace: true })
     }
   }, [
     handleSelectSessionRef,
+    machineId,
     pendingRouteSessionIdRef,
     pendingRouteSessionPathRef,
     sessionId,
