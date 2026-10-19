@@ -252,7 +252,7 @@ export function TodoProgressChip({
         type="button"
         variant="outline"
         size="sm"
-        className="mx-auto mb-1.5 h-7 max-w-full rounded-full bg-background/90 px-3 text-xs font-normal text-muted-foreground shadow-sm backdrop-blur"
+        className="mb-1.5 h-7 max-w-full rounded-full bg-background/90 px-3 text-xs font-normal text-muted-foreground shadow-sm backdrop-blur"
         onClick={() => emitPicoEvent("pico:open-sidebar-tab", { tab: "agent" })}
       >
         <ListChecksIcon className="shrink-0" />

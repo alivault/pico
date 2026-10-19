@@ -27,6 +27,7 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
 import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
+import { WaitingQuestionChip } from "@/features/pico/agent/ask"
 import { TodoProgressChip } from "@/features/pico/agent/todo"
 
 export type AppShellSessionContentProps = {
@@ -150,7 +151,11 @@ export function AppShellSessionContent({
       />
 
       {toolRenderContext.sessionId ? (
-        <div className="flex shrink-0 justify-center px-4">
+        <div className="flex shrink-0 flex-wrap justify-center gap-x-2 px-4">
+          <WaitingQuestionChip
+            sessionId={toolRenderContext.sessionId}
+            viewerContextId={viewerContextId}
+          />
           <TodoProgressChip
             sessionId={toolRenderContext.sessionId}
             viewerContextId={viewerContextId}

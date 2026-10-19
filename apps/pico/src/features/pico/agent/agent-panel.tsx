@@ -66,7 +66,7 @@ export function AgentPanel({
     return (
       <AgentPanelEmpty
         title="No session"
-        text="Start a session to see its plan, questions, jobs, and helpers here."
+        text="Start a session to see its plan, jobs, and helpers here."
       />
     )
   }
@@ -123,8 +123,8 @@ export function AgentPanel({
         })}
         {visible.length <= 1 ? (
           <p className="px-1 text-xs text-muted-foreground">
-            The agent&apos;s plan, questions, timers, jobs, child sessions, and
-            memory show here when it uses them.
+            The agent&apos;s plan, timers, jobs, child sessions, and memory show
+            here when it uses them.
           </p>
         ) : null}
       </div>
