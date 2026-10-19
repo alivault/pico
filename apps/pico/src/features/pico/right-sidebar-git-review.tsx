@@ -159,14 +159,14 @@ function GitFileStatus({ status }: { status: string | undefined }) {
 
 function GitFileDiff({ file }: { file: GitChangeFile }) {
   if (!gitFileHasLineChanges(file)) {
-    return <span className="min-w-0" />
+    return null
   }
 
   const linesAdded = gitFileLineChangeValue(file.linesAdded)
   const linesDeleted = gitFileLineChangeValue(file.linesDeleted)
 
   return (
-    <span className="inline-flex min-w-0 gap-2 justify-self-end whitespace-nowrap tabular-nums">
+    <span className="inline-flex shrink-0 gap-2 whitespace-nowrap tabular-nums">
       {linesAdded > 0 ? (
         <span className="text-emerald-500">+{linesAdded}</span>
       ) : null}
@@ -1373,10 +1373,10 @@ function ReviewFileAccordionItem({
       data-review-file-value={value}
       className="group/review-file-trigger relative flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-none border border-transparent bg-background px-3 py-2 text-left text-[13px] font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground"
     >
-      <span className="grid min-w-0 flex-1 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2">
+      <span className="flex min-w-0 flex-1 items-center gap-2">
         <GitFileStatus status={file.status} />
         <ProjectFileTypeIcon path={file.path} />
-        <span className="min-w-0 truncate text-left">
+        <span className="min-w-0 flex-1 truncate text-left">
           {file.previousPath ? (
             <>
               <span className="text-muted-foreground">{file.previousPath}</span>

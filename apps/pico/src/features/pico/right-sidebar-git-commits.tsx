@@ -1444,7 +1444,7 @@ function useGitCommitRowView({
       )}
     >
       <span
-        className="min-w-0 flex-1 truncate pr-8 text-foreground"
+        className="min-w-0 flex-1 truncate text-foreground"
         style={{ paddingLeft: graphWidth }}
       >
         {title || parsed.hash || "Commit"}
