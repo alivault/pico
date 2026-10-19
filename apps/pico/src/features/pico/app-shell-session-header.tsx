@@ -23,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatDisplayPath,
@@ -102,7 +101,6 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
       hideThinkingBlock: sessionState.hideThinkingBlock,
       sessionHasFile: Boolean(sessionState.sessionFile),
       sessionName: sessionState.sessionName,
-      sessionStreaming: sessionState.streaming,
       sessionId: sessionState.draft ? undefined : sessionState.sessionId,
     }),
     { compare: shallowRecordEqual }
@@ -152,13 +150,6 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
         </TitleTooltip>
         <div className="ml-1 flex min-w-0 flex-1 flex-col items-start justify-center gap-0 text-left">
           <div className="flex max-w-full min-w-0 items-center gap-1.5">
-            {!isSessionViewLoading && sessionHeaderState.sessionStreaming ? (
-              <Spinner
-                size="xs"
-                className="shrink-0"
-                aria-label="Session streaming"
-              />
-            ) : null}
             <TitleTooltip title={displaySessionTitle}>
               <h2 className="min-w-0 truncate text-[13px] leading-tight font-semibold">
                 {displaySessionTitle}
