@@ -63,7 +63,6 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "scratchpad",
       "browser",
       "notify",
-      "memory",
       "todo",
     ],
     removeTools: ["write", "edit", "bash", "browser_eval"],

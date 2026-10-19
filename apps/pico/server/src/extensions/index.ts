@@ -12,7 +12,6 @@ import { createGithubExtension } from "./github.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
 import { createLspExtension } from "./lsp.ts"
-import { createMemoryExtension } from "./memory.ts"
 import { createNotifyExtension } from "./notify.ts"
 import { createPreviewExtension } from "./preview.ts"
 import { createRenderExtension } from "./render.ts"
@@ -60,7 +59,6 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
       createPreviewExtension(host),
       createNotifyExtension(host),
       createBrowserExtension(host),
-      createMemoryExtension(),
       createTodoExtension(),
     ],
     services: {

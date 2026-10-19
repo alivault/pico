@@ -3422,7 +3422,7 @@ function useAppShellSessionWorkspaceView({
         title: "Toggle Agent Pane",
         description: "Toggle the agent pane",
         shortcut: formatShortcutLabel(rightSidebarPaneShortcut("agent")),
-        keywords: ["agent", "todo", "memory", "jobs", "pane"],
+        keywords: ["agent", "todo", "jobs", "pane"],
         onSelect: () => toggleRightSidebarPane("agent"),
       },
       {

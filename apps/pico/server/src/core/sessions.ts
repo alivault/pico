@@ -54,12 +54,6 @@ import type {
   HostSessions,
   HostSessionSummary,
 } from "../extensions/host.ts"
-import {
-  changeMemory,
-  GLOBAL_MEMORY,
-  projectKey,
-  type MemoryChange,
-} from "../extensions/memory.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { allProfiles, applyProfile, findProfile } from "./profiles.ts"
 import { removeWorktree } from "../services/worktree.ts"
@@ -525,7 +519,7 @@ export class Sessions implements HostSessions {
           change.conversationId === undefined &&
           this.#isStateKind(change.record.kind)
         ) {
-          // A session-wide document, such as project memory: every session may show it.
+          // A session-wide document: every session may show it.
           this.#hub.push({
             type: "session_extensions",
             sessionId: "*",
@@ -1482,29 +1476,6 @@ export class Sessions implements HostSessions {
     this.extensionStateChanged(id, "profile")
     void this.publishStateIfWatched(id)
     return profile.name
-  }
-
-  /** Change the project or global memory of a session from the web client. */
-  async changeMemory(
-    id: string,
-    scope: "project" | "global",
-    change: MemoryChange
-  ) {
-    const meta = this.meta(id)
-    const key = scope === "global" ? GLOBAL_MEMORY : await projectKey(meta.cwd)
-    try {
-      return await changeMemory(
-        this.#harness,
-        key,
-        {
-          ...change,
-          ...(change.op === "add" ? { source: "user" as const } : {}),
-        },
-        ctx
-      )
-    } catch (error) {
-      throw badRequest(error instanceof Error ? error.message : String(error))
-    }
   }
 
   /** Change the todo list of a session from the web client. */

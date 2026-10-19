@@ -28,7 +28,6 @@ import type { HostBridge } from "./extensions/host.ts"
 import { stopJob } from "./extensions/jobs.ts"
 import { ensurePreview } from "./extensions/preview.ts"
 import { TimersDoc } from "./extensions/schedule.ts"
-import type { MemoryChange } from "./extensions/memory.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
@@ -237,7 +236,6 @@ export function createApi(api: ApiContext) {
         "preview",
         "push-notifications",
         "browser",
-        "memory",
         "tool-profiles",
         "machine-hub",
       ],
@@ -1506,27 +1504,6 @@ export function createApi(api: ApiContext) {
     }
     runtime.settings.update({ profiles: clean as never })
     return { ok: true, profiles: sessions.profiles(), custom: clean }
-  })
-
-  router.post("/api/session/memory", async (request) => {
-    const id = requireSession(request)
-    const body = await request.body<Record<string, unknown>>()
-    const scope = body.scope === "global" ? "global" : "project"
-    const op = stringField(body.op)
-    const text = typeof body.text === "string" ? body.text : undefined
-    const factId = stringField(body.id)
-    let change: MemoryChange
-    if (op === "add") {
-      if (!text?.trim()) throw badRequest("text is required")
-      change = { op, text }
-    } else if (op === "update" && factId) {
-      change = { op, id: factId, ...(text ? { text } : {}) }
-    } else if (op === "remove" && factId) {
-      change = { op, id: factId }
-    } else {
-      throw badRequest("op must be add, update (with id), or remove (with id)")
-    }
-    return { ok: true, facts: await sessions.changeMemory(id, scope, change) }
   })
 
   router.get("/api/session/extensions", async (request) => {

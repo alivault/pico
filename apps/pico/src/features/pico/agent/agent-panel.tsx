@@ -150,7 +150,7 @@ export function AgentPanel({
     return (
       <AgentPanelEmpty
         title="Nothing here yet"
-        text="The agent's plan, jobs, timers, child sessions, and memory show here when it uses them."
+        text="The agent's plan, jobs, timers, and child sessions show here when it uses them."
       />
     )
   }

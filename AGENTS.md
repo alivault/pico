@@ -9,6 +9,11 @@
   - `apps/website`: the static website for pico.aliabbas.net. Plain HTML and CSS in `apps/website/site`. No build step.
 - Deploy the website with `pnpm website:deploy` (runs `pnpm dlx wrangler@4 deploy`, so wrangler is not a project dependency).
 
+## Architecture
+
+- Web client and machines: every request and machine storage key names its machine explicitly. Get the machine with `useMachineId()` (`lib/pico/machine-context.tsx`) or a `machineId` argument. Build URLs with `buildRequestUrl({ machineId, ... })`, or with `hubUrl` or `buildHubRequestUrl` for hub data. `scripts/check-api-urls.mjs` guards this.
+- The route keeps one `PicoAppShell` per opened machine in a React `Activity` (`routes/index.tsx`). Floating UI renders into a per-shell portal container (`components/ui/portal-container.tsx`).
+
 ## Tooling
 
 - The Pico app uses Vite+ (`vp`). Do not use Prettier or ESLint directly. The config is in `apps/pico/vite.config.ts`. Run `vp` commands from `apps/pico`. To format files outside `apps/pico` (for example the README or the website), run `pnpm exec vp fmt -c apps/pico/vite.config.ts <files>` from the repo root.
