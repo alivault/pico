@@ -10,11 +10,13 @@ import {
 } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import {
-  apiInput,
-  apiUrl,
   assertMachineWritable,
   currentMachineEpoch,
-  isMachineRequest,
+  hubUrl,
+  isUnaddressedServerPath,
+  machineApiUrl,
+  pageMachine,
+  requestMachineId,
 } from "@/lib/pico/machine"
 
 function sameStringArray(left: Array<string>, right: Array<string>) {
@@ -131,8 +133,13 @@ function shareUiState(
     : sharedUiState
 }
 
-export function buildRequestUrl(
-  path: string,
+type RequestSearchParams = Record<
+  string,
+  string | number | boolean | Array<string | number | boolean> | undefined
+>
+
+function withRequestParams(
+  base: string,
   {
     contextId,
     sessionId,
@@ -140,13 +147,10 @@ export function buildRequestUrl(
   }: {
     contextId: string
     sessionId?: string
-    searchParams?: Record<
-      string,
-      string | number | boolean | Array<string | number | boolean> | undefined
-    >
+    searchParams?: RequestSearchParams
   }
 ) {
-  const url = new URL(apiUrl(path), window.location.origin)
+  const url = new URL(base, window.location.origin)
   url.searchParams.set("context", contextId)
   if (sessionId) {
     url.searchParams.set("session", sessionId)
@@ -167,20 +171,56 @@ export function buildRequestUrl(
   return url.toString()
 }
 
+/** The URL of a request to a machine; see `useMachineId()`. */
+export function buildRequestUrl(
+  path: string,
+  {
+    machineId,
+    ...options
+  }: {
+    /** The machine that gets the request. */
+    machineId: string
+    contextId: string
+    sessionId?: string
+    searchParams?: RequestSearchParams
+  }
+) {
+  return withRequestParams(machineApiUrl(machineId, path), options)
+}
+
+/** The URL of a request for global hub data, such as Web Push. */
+export function buildHubRequestUrl(
+  path: string,
+  options: {
+    contextId: string
+    searchParams?: RequestSearchParams
+  }
+) {
+  return withRequestParams(hubUrl(path), options)
+}
+
 export async function fetchJson<T>(
   input: RequestInfo | URL,
   init?: RequestInit
 ) {
-  const target = apiInput(input)
-  assertMachineWritable(target, init?.method)
+  if (typeof input === "string" && isUnaddressedServerPath(input)) {
+    throw new Error(
+      `${input} has no machine. Use buildRequestUrl or machineApiUrl.`
+    )
+  }
+  assertMachineWritable(input, init?.method)
+  const targetMachine = requestMachineId(input)
   const epoch = currentMachineEpoch()
-  const response = await fetch(target, init)
+  const response = await fetch(input, init)
   const text = await response.text()
   // The page opened another machine meanwhile. The caller belongs to the app
-  // shell of the old machine, which is gone. Never settle, so that a next step
-  // of the caller does not send its request to the new machine, and no error
+  // shell of the old machine, which is gone. Never settle, so that no error
   // shows for a page that is not there any more.
-  if (epoch !== currentMachineEpoch() && isMachineRequest(target))
+  if (
+    targetMachine !== undefined &&
+    targetMachine !== pageMachine() &&
+    epoch !== currentMachineEpoch()
+  )
     return await new Promise<never>(() => undefined)
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 

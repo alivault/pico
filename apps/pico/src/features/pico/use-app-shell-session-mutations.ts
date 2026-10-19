@@ -18,9 +18,10 @@ import type {
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
   PINNED_SESSIONS_STORAGE_KEY,
-  safeLocalStorageSetItem,
+  machineLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
@@ -386,6 +387,7 @@ export function useAppShellSessionMutations({
   setCompactWorkingState,
   isCompactAbortRequested,
 }: UseAppShellSessionMutationsOptions) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const modelRequestIdRef = React.useRef(0)
   const thinkingLevelRequestIdRef = React.useRef(0)
@@ -411,6 +413,7 @@ export function useAppShellSessionMutations({
       try {
         const response = await fetchJson<ModelResponseData>(
           buildRequestUrl("/api/model", {
+            machineId,
             contextId: viewerContextId,
             sessionId: activeSessionId,
             searchParams: { sessionKey: targetSession.sessionKey },
@@ -476,6 +479,7 @@ export function useAppShellSessionMutations({
           try {
             const response = await fetchJson<ThinkingResponseData>(
               buildRequestUrl("/api/thinking", {
+                machineId,
                 contextId: viewerContextId,
                 sessionId: activeSessionId,
               }),
@@ -558,6 +562,7 @@ export function useAppShellSessionMutations({
       try {
         await fetchJson(
           buildRequestUrl("/api/settings/hide-thinking", {
+            machineId,
             contextId: viewerContextId,
             sessionId: activeSessionId,
           }),
@@ -589,6 +594,7 @@ export function useAppShellSessionMutations({
     try {
       await fetchJson(
         buildRequestUrl("/api/slash-command", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -619,6 +625,7 @@ export function useAppShellSessionMutations({
     try {
       const response = await fetchJson<CloneSessionResponseData>(
         buildRequestUrl("/api/session/clone", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -644,6 +651,7 @@ export function useAppShellSessionMutations({
 
       return await fetchJson<RenameSessionResponseData>(
         buildRequestUrl("/api/session/rename", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -784,6 +792,7 @@ export function useAppShellSessionMutations({
 
       return await fetchJson<MoveSessionResponseData>(
         buildRequestUrl("/api/session/move", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -910,7 +919,8 @@ export function useAppShellSessionMutations({
           setPinnedSidebarSessionKeys((current) => {
             const next = replaceSessionKey(current, previousKey, nextKey)
             if (next !== current) {
-              safeLocalStorageSetItem(
+              machineLocalStorageSetItem(
+                machineId,
                 PINNED_SESSIONS_STORAGE_KEY,
                 JSON.stringify(next)
               )
@@ -984,6 +994,7 @@ export function useAppShellSessionMutations({
 
       await fetchJson<DeleteSessionsResponse>(
         buildRequestUrl("/api/sessions/delete", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),

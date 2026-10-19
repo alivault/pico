@@ -21,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
 const CONTEXT_USAGE_MOBILE_QUERY = "(hover: none), (pointer: coarse)"
@@ -536,6 +537,7 @@ export function ComposerContextUsageIndicator({
   modelProvider,
   viewerContextId,
 }: ComposerContextUsageIndicatorProps) {
+  const machineId = useMachineId()
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const useMobilePopover = useContextUsageMobilePopover()
   const providerUsageQuery = useQuery({
@@ -550,6 +552,7 @@ export function ComposerContextUsageIndicator({
 
       const data = await fetchJson<ProviderUsageResponse>(
         buildRequestUrl("/api/provider-usage", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
           searchParams: { provider: modelProvider },

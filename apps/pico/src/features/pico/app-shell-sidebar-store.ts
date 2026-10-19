@@ -123,6 +123,7 @@ function sameReferenceArray<T>(left: Array<T>, right: Array<T>) {
 }
 
 export async function fetchDirectorySessionsIndexes(options: {
+  machineId: string
   viewerContextId: string
   directories: Array<string>
 }) {
@@ -137,6 +138,7 @@ export async function fetchDirectorySessionsIndexes(options: {
 
   return await fetchJson<DirectorySessionsIndexesData>(
     buildRequestUrl("/api/directory-sessions-indexes", {
+      machineId: options.machineId,
       contextId: options.viewerContextId,
       searchParams: {
         directory: directories,

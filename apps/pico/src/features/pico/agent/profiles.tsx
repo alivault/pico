@@ -25,6 +25,7 @@ import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type Profile = {
   name: string
@@ -42,11 +43,13 @@ export function profileLabel(name: string) {
 type ProfilesResponse = { ok: true; profiles: Array<Profile>; current: string }
 
 function useProfiles(viewerContextId: string, sessionId?: string) {
+  const machineId = useMachineId()
   return useQuery({
     queryKey: ["pico", "profiles", viewerContextId, sessionId ?? "draft"],
     queryFn: () =>
       fetchJson<ProfilesResponse>(
         buildRequestUrl("/api/profiles", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         })
@@ -67,12 +70,14 @@ function ProfilePickerView({
   variant?: "ghost" | "outline"
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const query = useProfiles(viewerContextId, sessionId)
   const mutation = useMutation({
     mutationFn: (profile: string) =>
       fetchJson<{ profile: string }>(
         buildRequestUrl("/api/session/profile", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),
@@ -174,6 +179,7 @@ const EXAMPLE = `{
 }`
 
 function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const query = useProfiles(viewerContextId)
   const [text, setText] = React.useState<string | null>(null)
@@ -187,6 +193,7 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
     mutationFn: (profiles: unknown) =>
       fetchJson(
         buildRequestUrl("/api/settings/profiles", {
+          machineId,
           contextId: viewerContextId,
         }),
         {

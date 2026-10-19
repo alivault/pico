@@ -39,7 +39,7 @@ import {
   readStoredPromptDraft,
   rememberStoredPromptDraft,
 } from "@/lib/pico"
-import { activeMachineId, LOCAL_MACHINE_ID } from "@/lib/pico/machine"
+import { LOCAL_MACHINE_ID } from "@/lib/pico/machine"
 import { applyConversationDelta, sameContextUsage } from "@/lib/pico/sync"
 import {
   isConversationDeltaEvent,
@@ -50,6 +50,7 @@ import {
   isStateSyncEvent,
   uiRequestExpectsResponse,
 } from "@/lib/pico/api"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
 const COMPACT_WORKING_LABEL = "Compacting context..."
@@ -124,15 +125,14 @@ type UseAppShellSessionSyncOptions = {
 }
 
 /** Each machine has its own event sequence, so its own last ID. */
-function eventsLastIdStorageKey(viewerContextId: string) {
-  const machine = activeMachineId()
+function eventsLastIdStorageKey(machine: string, viewerContextId: string) {
   return `${EVENT_SOURCE_LAST_ID_STORAGE_PREFIX}${viewerContextId}${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
 }
 
-function readStoredEventsLastId(viewerContextId: string) {
+function readStoredEventsLastId(machineId: string, viewerContextId: string) {
   try {
     return window.sessionStorage.getItem(
-      eventsLastIdStorageKey(viewerContextId)
+      eventsLastIdStorageKey(machineId, viewerContextId)
     )
   } catch {
     return null
@@ -140,12 +140,13 @@ function readStoredEventsLastId(viewerContextId: string) {
 }
 
 function rememberStoredEventsLastId(
+  machineId: string,
   viewerContextId: string,
   lastEventId: string
 ) {
   try {
     window.sessionStorage.setItem(
-      eventsLastIdStorageKey(viewerContextId),
+      eventsLastIdStorageKey(machineId, viewerContextId),
       lastEventId
     )
   } catch {
@@ -586,6 +587,7 @@ export function useAppShellSessionSync({
   pendingUiRequestHandlerRef,
   lastSyncedEditorTextRef,
 }: UseAppShellSessionSyncOptions) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const initialEventsSessionIdRef = React.useRef(sessionId)
   const currentSessionIdRef = React.useRef(sessionId)
@@ -610,7 +612,7 @@ export function useAppShellSessionSync({
 
   React.useEffect(() => {
     eventsLastIdRef.current = normalizeEventSourceLastId(
-      readStoredEventsLastId(viewerContextId)
+      readStoredEventsLastId(machineId, viewerContextId)
     )
   }, [viewerContextId])
 
@@ -738,7 +740,7 @@ export function useAppShellSessionSync({
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
       // Events may be lost while the stream was closed.
-      refreshSidebarState()
+      refreshSidebarState(machineId)
       const currentState = sessionStateRef.current
       if (currentState.connected) return
       const nextState = { ...currentState, connected: true }
@@ -772,7 +774,7 @@ export function useAppShellSessionSync({
       const lastEventId = normalizeEventSourceLastId(event.lastEventId)
       if (lastEventId) {
         eventsLastIdRef.current = lastEventId
-        rememberStoredEventsLastId(viewerContextId, lastEventId)
+        rememberStoredEventsLastId(machineId, viewerContextId, lastEventId)
       }
       const payload = JSON.parse(event.data) as PicoServerEvent
 
@@ -835,6 +837,7 @@ export function useAppShellSessionSync({
         const localPromptText = composerTextRef.current
 
         rememberStoredPromptDraft(
+          machineId,
           previousState,
           serializeComposerDraft({
             text: localPromptText,
@@ -867,7 +870,7 @@ export function useAppShellSessionSync({
           !sessionChanged && localPromptText !== previousEditorText
         const nextPromptText = preserveLocalPrompt
           ? localPromptText
-          : (readStoredPromptDraft(nextState) ??
+          : (readStoredPromptDraft(machineId, nextState) ??
             nextState.uiState.editorText ??
             "")
 
@@ -1024,7 +1027,7 @@ export function useAppShellSessionSync({
       }
 
       if (payload.type === "sidebar_state") {
-        handleSidebarStateEvent(payload)
+        handleSidebarStateEvent(machineId, payload)
         return
       }
 
@@ -1173,6 +1176,7 @@ export function useAppShellSessionSync({
 
     const source = new EventSource(
       buildRequestUrl("/events", {
+        machineId,
         contextId: viewerContextId,
         sessionId: initialEventsSessionIdRef.current,
         searchParams: {
@@ -1231,6 +1235,7 @@ export function useAppShellSessionSync({
 
     void fetchJson<SimpleOkResponse>(
       buildRequestUrl("/api/session/select", {
+        machineId,
         contextId: viewerContextId,
         sessionId,
         searchParams: {

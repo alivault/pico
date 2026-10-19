@@ -84,7 +84,7 @@ import {
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   readStoredCollapsedDirectories,
-  safeLocalStorageSetItem,
+  machineLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
@@ -113,6 +113,7 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
 const SIDEBAR_TIME_MIN_DELAY_MS = 1000
@@ -331,6 +332,7 @@ function sameCollapsedDirectoryState(
 }
 
 function createCollapsedDirectoryStore(
+  machineId: string,
   storageKey = COLLAPSED_DIRECTORIES_STORAGE_KEY
 ): CollapsedDirectoryStore {
   const store = createPicoStore<CollapsedDirectoryState>(
@@ -339,12 +341,19 @@ function createCollapsedDirectoryStore(
   ) as CollapsedDirectoryStore
 
   const persist = () => {
-    safeLocalStorageSetItem(storageKey, JSON.stringify(store.state))
+    machineLocalStorageSetItem(
+      machineId,
+      storageKey,
+      JSON.stringify(store.state)
+    )
   }
 
   Object.assign(store, {
     loadStored() {
-      setStoreState(store, readStoredCollapsedDirectories(storageKey))
+      setStoreState(
+        store,
+        readStoredCollapsedDirectories(machineId, storageKey)
+      )
     },
     toggle(directory) {
       store.setCollapsed(directory, !store.state[directory])
@@ -1862,6 +1871,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const grouped = React.useMemo(() => groupMachineSessions(machine), [machine])
   const [stores] = React.useState(() => {
     const collapsed = createCollapsedDirectoryStore(
+      machine.id,
       `pico-machine-collapsed-directories:${machine.id}`
     )
     collapsed.loadStored()
@@ -1969,6 +1979,7 @@ function useAppSidebarView({
   onReorderDirectories,
   onOpenArchivedSessions,
 }: AppSidebarProps) {
+  const machineId = useMachineId()
   const { isMobile, setOpenMobile } = useSidebar()
   const searchActive = sessionSearch.trim().length > 0
   const directoryOrderingEnabled =
@@ -1986,8 +1997,8 @@ function useAppSidebarView({
   >(null)
   const [previewDirectoryOrder, setPreviewDirectoryOrder] =
     React.useState<Array<string> | null>(null)
-  const [collapsedDirectoryStore] = React.useState(
-    createCollapsedDirectoryStore
+  const [collapsedDirectoryStore] = React.useState(() =>
+    createCollapsedDirectoryStore(machineId)
   )
   const [selectedSessionKeyStore] = React.useState(
     createSelectedSessionKeyStore
@@ -2028,10 +2039,14 @@ function useAppSidebarView({
     collapsedDirectoryStore.loadStored()
   }, [collapsedDirectoryStore])
 
-  usePicoEvent("pico:sidebar-state", ({ changed }) => {
-    if (changed.includes("collapsedDirectories"))
-      collapsedDirectoryStore.loadStored()
-  })
+  usePicoEvent(
+    "pico:sidebar-state",
+    ({ machineId: changedMachine, changed }) => {
+      if (changedMachine !== machineId) return
+      if (changed.includes("collapsedDirectories"))
+        collapsedDirectoryStore.loadStored()
+    }
+  )
 
   React.useEffect(() => {
     if (directoryOrderingEnabled) return

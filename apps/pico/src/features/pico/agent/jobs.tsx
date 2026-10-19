@@ -29,6 +29,7 @@ import {
   toolDetails,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type Job = {
   id: string
@@ -71,13 +72,20 @@ function JobsSection({
   state: Record<string, unknown>
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const jobs = (state.jobs as Array<Job> | undefined) ?? []
   const now = useNow()
   const [logJob, setLogJob] = React.useState<Job | null>(null)
   const stop = (jobId: string) => {
-    void postSessionJson(viewerContextId, sessionId, "/api/session/job/stop", {
-      jobId,
-    }).catch((error: unknown) => toast.error(errorText(error)))
+    void postSessionJson(
+      machineId,
+      viewerContextId,
+      sessionId,
+      "/api/session/job/stop",
+      {
+        jobId,
+      }
+    ).catch((error: unknown) => toast.error(errorText(error)))
   }
   const row = (job: Job) => {
     const running = job.status === "running"

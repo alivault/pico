@@ -6,12 +6,13 @@ import { z } from "zod"
 import { PicoAppShell } from "@/features/pico/app-shell"
 import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 import {
-  activeMachineId,
   LOCAL_MACHINE_ID,
   normalizeMachineId,
+  pageMachine,
   setMachineNavigator,
   setPageMachine,
 } from "@/lib/pico/machine"
+import { MachineProvider } from "@/lib/pico/machine-context"
 import { queryClientForMachine } from "@/lib/pico/query-client"
 
 const indexSearchSchema = z.object({
@@ -34,7 +35,7 @@ function App() {
   // back and forward buttons both change it. Switch before the shell of the
   // new machine renders, so that its first requests go to that machine. This
   // runs once for each switch: then the machine of the page is equal.
-  if (machine !== activeMachineId()) setPageMachine(machine)
+  if (machine !== pageMachine()) setPageMachine(machine)
 
   React.useEffect(() => {
     setMachineNavigator((nextMachine, nextSession) => {
@@ -49,26 +50,28 @@ function App() {
   }, [navigate])
 
   return (
-    <QueryClientProvider client={queryClientForMachine(machine)}>
-      <PicoAppShell
-        key={machine}
-        sessionId={session}
-        onSelectSession={(
-          nextSessionId?: string,
-          options?: SelectSessionNavigationOptions
-        ) => {
-          const nextRouteSessionId = nextSessionId || undefined
-          if (nextRouteSessionId === session) return
+    <MachineProvider machineId={machine}>
+      <QueryClientProvider client={queryClientForMachine(machine)}>
+        <PicoAppShell
+          key={machine}
+          sessionId={session}
+          onSelectSession={(
+            nextSessionId?: string,
+            options?: SelectSessionNavigationOptions
+          ) => {
+            const nextRouteSessionId = nextSessionId || undefined
+            if (nextRouteSessionId === session) return
 
-          void navigate({
-            search: (previous) => ({
-              ...previous,
-              session: nextRouteSessionId,
-            }),
-            replace: options?.replace ?? false,
-          })
-        }}
-      />
-    </QueryClientProvider>
+            void navigate({
+              search: (previous) => ({
+                ...previous,
+                session: nextRouteSessionId,
+              }),
+              replace: options?.replace ?? false,
+            })
+          }}
+        />
+      </QueryClientProvider>
+    </MachineProvider>
   )
 }

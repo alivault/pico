@@ -29,12 +29,13 @@ import {
   normalizeSessionSelectionKeys,
   normalizeStoredDirectoryList,
   PINNED_SESSIONS_STORAGE_KEY,
-  safeLocalStorageSetItem,
+  machineLocalStorageSetItem,
   sessionListEntryKey,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
 } from "@/lib/pico"
 import type { SessionListEntry } from "@/lib/pico/api"
 import { ArchivedSessionsDialog } from "@/features/pico/archived-sessions-dialog"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const PINNED_SESSION_STORE_DIRECTORY = "__pico_pinned_sessions__"
 
@@ -87,6 +88,7 @@ function useAppShellSidebarControllerView({
   sidebarStore,
   sessionWorkspaceRef,
 }: AppShellSidebarControllerProps) {
+  const machineId = useMachineId()
   const [archivedSessionsOpen, setArchivedSessionsOpen] = React.useState(false)
   const [directorySessionsStore] = React.useState(() =>
     createDirectorySessionsStore({}, {})
@@ -421,6 +423,7 @@ function useAppShellSidebarControllerView({
     const requestId = startDirectoryIndexRequest(directoriesToRefresh)
 
     void fetchDirectorySessionsIndexes({
+      machineId,
       viewerContextId,
       directories: directoriesToRefresh,
     })
@@ -588,6 +591,7 @@ function useAppShellSidebarControllerView({
     )
 
     void fetchDirectorySessionsIndexes({
+      machineId,
       viewerContextId,
       directories: missingDirectories,
     })
@@ -682,7 +686,8 @@ function useAppShellSidebarControllerView({
         return current
       }
 
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         SIDEBAR_DIRECTORIES_STORAGE_KEY,
         JSON.stringify(normalizedNext)
       )
@@ -700,7 +705,8 @@ function useAppShellSidebarControllerView({
         ? currentKeys.filter((currentKey) => currentKey !== key)
         : [key, ...currentKeys]
 
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         PINNED_SESSIONS_STORAGE_KEY,
         JSON.stringify(nextKeys)
       )
@@ -799,7 +805,8 @@ function useAppShellSidebarControllerView({
         ...normalizedCurrent,
         directory,
       ])
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         SIDEBAR_DIRECTORIES_STORAGE_KEY,
         JSON.stringify(next)
       )
@@ -870,7 +877,8 @@ function useAppShellSidebarControllerView({
         onRemoveDirectory={(directory) => {
           sidebarStore.setSidebarDirectories((current) => {
             const next = current.filter((entry) => entry !== directory)
-            safeLocalStorageSetItem(
+            machineLocalStorageSetItem(
+              machineId,
               SIDEBAR_DIRECTORIES_STORAGE_KEY,
               JSON.stringify(next)
             )

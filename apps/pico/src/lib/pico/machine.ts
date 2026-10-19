@@ -1,13 +1,14 @@
 /**
- * The machine that this page shows. A hub shows its own runtime (`local`)
- * and remote machines over SSH. The page shows one machine at a time: the
- * `machine` search parameter selects it. A switch does not load the page
- * again. The route mounts a new app shell for the machine, with its own query
- * cache, so caches and stores never mix IDs of two servers (see
- * `routes/index.tsx`).
+ * Machines of the hub. A hub shows its own runtime (`local`) and remote
+ * machines over SSH. Each request, storage key, and offline check names its
+ * machine explicitly: nothing in this module reads a "current" machine.
  *
  * Requests for a remote machine go to the hub's proxy at `/m/<id>/...`.
  * Global data stays on the hub: highlighting, Web Push, and the machine list.
+ *
+ * The `machine` search parameter selects the machine that the page shows
+ * (see `routes/index.tsx`). React code gets the machine of its subtree from
+ * `useMachineId()` (`machine-context.tsx`).
  */
 
 export const LOCAL_MACHINE_ID = "local"
@@ -22,57 +23,30 @@ export function normalizeMachineId(value: string | null | undefined) {
   return value && MACHINE_ID_PATTERN.test(value) ? value : LOCAL_MACHINE_ID
 }
 
-function readMachineId() {
-  if (typeof window === "undefined") return LOCAL_MACHINE_ID
-  return normalizeMachineId(
-    new URLSearchParams(window.location.search).get("machine")
-  )
-}
-
-let pageMachineId = readMachineId()
 /** Goes up at each switch. Requests of an older machine use it to stop. */
 let machineEpoch = 0
-const beforeSwitchListeners = new Set<() => void>()
-const switchListeners = new Set<(machineId: string) => void>()
-
-/** The machine of this page. It changes only in `setPageMachine`. */
-export function activeMachineId() {
-  return pageMachineId
-}
+let pageMachineId = LOCAL_MACHINE_ID
 
 export function currentMachineEpoch() {
   return machineEpoch
 }
 
 /**
- * Make `machineId` the machine of the page. The route calls this before it
- * mounts the app shell of the new machine. Modules with state for one machine
- * reset it in `onMachineSwitch`.
+ * Tell the request layer which machine the page shows. The route calls this
+ * before it mounts the app shell of the new machine. Only the epoch check of
+ * `fetchJson` uses it.
  */
 export function setPageMachine(machineId: string) {
   if (machineId === pageMachineId) return
-  for (const listener of beforeSwitchListeners) listener()
   pageMachineId = machineId
   machineEpoch += 1
-  for (const listener of switchListeners) listener(machineId)
 }
 
-/** Run `listener` while the old machine is still the machine of the page. */
-export function onBeforeMachineSwitch(listener: () => void) {
-  beforeSwitchListeners.add(listener)
-  return () => {
-    beforeSwitchListeners.delete(listener)
-  }
+export function pageMachine() {
+  return pageMachineId
 }
 
-export function onMachineSwitch(listener: (machineId: string) => void) {
-  switchListeners.add(listener)
-  return () => {
-    switchListeners.delete(listener)
-  }
-}
-
-export function isRemoteMachine(machineId = pageMachineId) {
+export function isRemoteMachine(machineId: string) {
   return machineId !== LOCAL_MACHINE_ID
 }
 
@@ -85,29 +59,79 @@ export function isServerPath(path: string) {
   )
 }
 
-/**
- * The URL of a server path for a machine: unchanged for the local machine
- * and for global hub data, `/m/<id>/...` for a remote machine.
- */
-export function apiUrl(path: string, machineId = pageMachineId) {
-  if (!isServerPath(path) || machineId === LOCAL_MACHINE_ID) return path
-  if (HUB_PATHS.some((prefix) => path.startsWith(prefix))) return path
-  return `/m/${encodeURIComponent(machineId)}${path}`
+/** Whether a server path is global hub data, the same for every machine. */
+export function isHubPath(path: string) {
+  return HUB_PATHS.some((prefix) => path.startsWith(prefix))
 }
 
-let offlineLabel: string | undefined
-
 /**
- * The machine store calls this when the machine of the page goes offline
- * (a label) or comes back (undefined).
+ * The absolute URL of a server path for a machine: the path itself for the
+ * local machine and for global hub data, `/m/<id>/...` for a remote machine.
+ * The URL is absolute, so that `fetchJson` can tell it from a path that has
+ * no machine yet (see `isUnaddressedServerPath`).
  */
-export function setActiveMachineOffline(label: string | undefined) {
-  offlineLabel = label
+export function machineApiUrl(machineId: string, path: string) {
+  if (!isServerPath(path)) return path
+  const routed =
+    machineId === LOCAL_MACHINE_ID || isHubPath(path)
+      ? path
+      : `/m/${encodeURIComponent(machineId)}${path}`
+  return new URL(routed, window.location.origin).toString()
 }
 
-/** The machine of the page is offline: the page is read-only. */
-export function activeMachineOffline() {
-  return offlineLabel !== undefined
+/** The URL of global hub data. Throws for a path of a machine. */
+export function hubUrl(path: string) {
+  if (!isHubPath(path)) {
+    throw new Error(`${path} is not hub data. Give the machine of the request.`)
+  }
+  return path
+}
+
+function requestUrl(input: RequestInfo | URL) {
+  return typeof input === "string"
+    ? new URL(input, window.location.origin)
+    : input instanceof URL
+      ? input
+      : new URL(input.url)
+}
+
+/**
+ * The machine that a request goes to: from the `/m/<id>/` prefix, `local`
+ * for other server paths, undefined for hub data and other URLs.
+ */
+export function requestMachineId(input: RequestInfo | URL) {
+  const url = requestUrl(input)
+  if (url.origin !== window.location.origin) return undefined
+  const match = /^\/m\/([^/]+)\//.exec(url.pathname)
+  if (match) return decodeURIComponent(match[1]!)
+  if (!isServerPath(url.pathname) || isHubPath(url.pathname)) return undefined
+  return LOCAL_MACHINE_ID
+}
+
+/**
+ * A request input with a server path that has no machine yet. Such an input
+ * would go to the local machine by accident, so `fetchJson` refuses it. Use
+ * `buildRequestUrl` or `machineApiUrl`.
+ */
+export function isUnaddressedServerPath(input: RequestInfo | URL) {
+  if (typeof input !== "string") return false
+  return input.startsWith("/") && isServerPath(input) && !isHubPath(input)
+}
+
+const offlineLabels = new Map<string, string>()
+
+/**
+ * The machine store calls this with the label of each remote machine that is
+ * not online.
+ */
+export function setMachineOfflineLabels(labels: Map<string, string>) {
+  offlineLabels.clear()
+  for (const [id, label] of labels) offlineLabels.set(id, label)
+}
+
+/** The label of a machine that is offline; undefined when it is online. */
+export function machineOfflineLabel(machineId: string) {
+  return offlineLabels.get(machineId)
 }
 
 /** A change that the page did not send, because its machine is offline. */
@@ -126,43 +150,11 @@ export function assertMachineWritable(
   input: RequestInfo | URL,
   method: string | undefined
 ) {
-  if (offlineLabel === undefined) return
   if (!method || ["GET", "HEAD"].includes(method.toUpperCase())) return
-  const url =
-    typeof input === "string"
-      ? new URL(input, window.location.origin)
-      : input instanceof URL
-        ? input
-        : new URL(input.url)
-  if (url.pathname.startsWith("/m/"))
-    throw new MachineOfflineError(offlineLabel)
-}
-
-/** Whether a fetch input goes to a machine, not to global hub data. */
-export function isMachineRequest(input: RequestInfo | URL) {
-  const url =
-    typeof input === "string"
-      ? new URL(input, window.location.origin)
-      : input instanceof URL
-        ? input
-        : new URL(input.url)
-  if (url.origin !== window.location.origin) return false
-  if (url.pathname.startsWith("/m/")) return true
-  return (
-    isServerPath(url.pathname) &&
-    !HUB_PATHS.some((prefix) => url.pathname.startsWith(prefix))
-  )
-}
-
-/** Apply `apiUrl` to a fetch input when it is a server path. */
-export function apiInput(input: RequestInfo | URL): RequestInfo | URL {
-  if (typeof input === "string") return apiUrl(input)
-  if (input instanceof URL && input.origin === window.location.origin) {
-    const path = `${input.pathname}${input.search}`
-    const next = apiUrl(path)
-    return next === path ? input : new URL(next, window.location.origin)
-  }
-  return input
+  const machineId = requestMachineId(input)
+  if (!machineId) return
+  const label = machineOfflineLabel(machineId)
+  if (label !== undefined) throw new MachineOfflineError(label)
 }
 
 /** Local storage keys whose values belong to one machine. */
@@ -177,11 +169,29 @@ const MACHINE_SCOPED_KEYS = new Set([
   "pico-sidebar-state-merged",
 ])
 
-/** A storage key for the machine of this page. */
-export function machineStorageKey(key: string) {
-  if (pageMachineId === LOCAL_MACHINE_ID || !MACHINE_SCOPED_KEYS.has(key))
+export function isMachineScopedStorageKey(key: string) {
+  return MACHINE_SCOPED_KEYS.has(key)
+}
+
+/**
+ * The storage key of a machine's value: the plain key for the local machine
+ * and for global keys, `key@<id>` for a remote machine.
+ */
+export function machineStorageKey(machineId: string, key: string) {
+  if (machineId === LOCAL_MACHINE_ID || !MACHINE_SCOPED_KEYS.has(key))
     return key
-  return `${key}@${pageMachineId}`
+  return `${key}@${machineId}`
+}
+
+/** The machine of a scoped storage key, or undefined for a global key. */
+export function storageKeyMachine(storageKey: string) {
+  const at = storageKey.lastIndexOf("@")
+  const key = at < 0 ? storageKey : storageKey.slice(0, at)
+  if (!MACHINE_SCOPED_KEYS.has(key)) return undefined
+  return {
+    key,
+    machineId: at < 0 ? LOCAL_MACHINE_ID : storageKey.slice(at + 1),
+  }
 }
 
 /** The page of a machine, optionally with a session open. */
@@ -230,9 +240,10 @@ export function openMachine(
   window.location.assign(machinePageUrl(machineId, options.sessionId))
 }
 
-/** The action that waits for the machine of the page, once. */
-export function takePendingMachineAction() {
+/** The action that waits for `machineId`, once. */
+export function takePendingMachineAction(machineId: string) {
   const pending = pendingAction
+  if (pending?.machineId !== machineId) return undefined
   pendingAction = undefined
-  return pending?.machineId === pageMachineId ? pending.action : undefined
+  return pending.action
 }

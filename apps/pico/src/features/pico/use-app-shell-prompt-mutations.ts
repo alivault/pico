@@ -30,7 +30,7 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import { currentMachineEpoch, MachineOfflineError } from "@/lib/pico/machine"
+import { MachineOfflineError } from "@/lib/pico/machine"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
@@ -38,8 +38,9 @@ import {
   normalizeStoredDirectoryList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
-  safeLocalStorageSetItem,
+  machineLocalStorageSetItem,
 } from "@/lib/pico"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
 type SessionNewData = Extract<SessionNewResponse, { ok: true }>
@@ -283,11 +284,13 @@ function isOfflinePromptSubmissionError(error: unknown) {
 function buildCurrentSessionRequestUrl(
   path: string,
   {
+    machineId,
     contextId,
     sessionState,
     fallbackSessionId,
     targetSessionKey,
   }: {
+    machineId: string
     contextId: string
     sessionState: SessionState
     fallbackSessionId?: string
@@ -296,6 +299,7 @@ function buildCurrentSessionRequestUrl(
 ) {
   if (targetSessionKey) {
     return buildRequestUrl(path, {
+      machineId,
       contextId,
       searchParams: { sessionKey: targetSessionKey },
     })
@@ -318,14 +322,19 @@ function buildCurrentSessionRequestUrl(
       : (sessionState.sessionId ?? fallbackSessionId)
 
   return buildRequestUrl(path, {
+    machineId,
     contextId,
     sessionId,
     searchParams: shouldUseSessionKey ? { sessionKey } : undefined,
   })
 }
 
-function buildOfflinePromptRequestUrl(item: OfflinePromptQueueItem) {
+function buildOfflinePromptRequestUrl(
+  machineId: string,
+  item: OfflinePromptQueueItem
+) {
   return buildRequestUrl("/api/prompt", {
+    machineId,
     contextId: item.contextId,
     sessionId: item.targetSessionKey ? undefined : item.sessionId,
     searchParams: item.targetSessionKey
@@ -442,6 +451,7 @@ export function useAppShellPromptMutations({
   setComposerDiffLineComments,
   setComposerImages,
 }: UseAppShellPromptMutationsOptions) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const draftSessionLoadingOwnerKeyRef = React.useRef(
     draftSessionLoadingOwnerKey
@@ -541,6 +551,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<DirectoryResolveData>(
         buildRequestUrl("/api/directory/resolve", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -614,7 +625,8 @@ export function useAppShellPromptMutations({
         const response = await addDirectoryMutation.mutateAsync(requestedPath)
         setSidebarDirectories((current) => {
           const next = normalizeStoredDirectoryList([...current, response.path])
-          safeLocalStorageSetItem(
+          machineLocalStorageSetItem(
+            machineId,
             SIDEBAR_DIRECTORIES_STORAGE_KEY,
             JSON.stringify(next)
           )
@@ -647,6 +659,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<SessionNewData>(
         buildCurrentSessionRequestUrl("/api/session/new", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
@@ -672,7 +685,11 @@ export function useAppShellPromptMutations({
       })
       if (nextCwd) {
         rememberRecentDirectory(nextCwd)
-        safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextCwd)
+        machineLocalStorageSetItem(
+          machineId,
+          DRAFT_DIRECTORY_STORAGE_KEY,
+          nextCwd
+        )
         setStoredDraftDirectory(nextCwd)
       }
       const ownerKey = promptDraftKey({ cwd: nextCwd })
@@ -863,6 +880,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<PromptResponse>(
         buildCurrentSessionRequestUrl("/api/prompt", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
@@ -903,21 +921,22 @@ export function useAppShellPromptMutations({
 
     offlinePromptFlushInFlightRef.current = true
     try {
-      const epoch = currentMachineEpoch()
-      const queuedPrompts = await readOfflinePrompts(viewerContextId)
-      // The prompts belong to the machine of the read. Do not send them to
-      // another machine that the page opened meanwhile.
-      if (queuedPrompts.length === 0 || epoch !== currentMachineEpoch()) return
+      // The prompts of a machine go only to that machine.
+      const queuedPrompts = await readOfflinePrompts(machineId, viewerContextId)
+      if (queuedPrompts.length === 0) return
 
       let flushedCount = 0
       for (const item of queuedPrompts) {
         try {
-          await fetchJson<PromptResponse>(buildOfflinePromptRequestUrl(item), {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(buildOfflinePromptBody(item)),
-          })
-          await removeOfflinePrompt(item.id)
+          await fetchJson<PromptResponse>(
+            buildOfflinePromptRequestUrl(machineId, item),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(buildOfflinePromptBody(item)),
+            }
+          )
+          await removeOfflinePrompt(machineId, item.id)
           offlinePromptFailureToastIdsRef.current.delete(item.id)
           flushedCount += 1
         } catch (error) {
@@ -945,7 +964,7 @@ export function useAppShellPromptMutations({
     } finally {
       offlinePromptFlushInFlightRef.current = false
     }
-  }, [queryClient, viewerContextId])
+  }, [machineId, queryClient, viewerContextId])
 
   React.useEffect(() => {
     if (!viewerContextId) return
@@ -1156,7 +1175,7 @@ export function useAppShellPromptMutations({
           isOfflinePromptSubmissionError(error) &&
           (queueSessionKey || queueSessionId)
         ) {
-          await enqueueOfflinePrompt({
+          await enqueueOfflinePrompt(machineId, {
             id: clientRequestId,
             contextId: viewerContextId,
             createdAt: Date.now(),
@@ -1477,6 +1496,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<SimpleOkResponse>(
         buildCurrentSessionRequestUrl("/api/abort", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
@@ -1516,6 +1536,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<PendingMessagesResponse>(
         buildCurrentSessionRequestUrl("/api/pending-messages/reorder", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
@@ -1587,6 +1608,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<PendingMessagesResponse>(
         buildCurrentSessionRequestUrl("/api/pending-messages/start", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,
@@ -1639,6 +1661,7 @@ export function useAppShellPromptMutations({
 
       return await fetchJson<PendingMessageRemoveResponse>(
         buildCurrentSessionRequestUrl("/api/pending-message/remove", {
+          machineId,
           contextId: viewerContextId,
           sessionState: sessionStateRef.current,
           fallbackSessionId: activeSessionId,

@@ -15,6 +15,7 @@ export type PicoEventMap = {
   "pico:open-job-terminal": { jobId: string }
   /** Another device changed the shared sidebar layout in local storage. */
   "pico:sidebar-state": {
+    machineId: string
     changed: Array<"directories" | "pinnedSessionKeys" | "collapsedDirectories">
   }
   /** Open the agent settings dialog. */

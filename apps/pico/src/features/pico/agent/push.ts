@@ -1,4 +1,4 @@
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildHubRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 
 /** Web Push needs a service worker, the Push API, and HTTPS or localhost. */
 export function pushSupported() {
@@ -29,7 +29,7 @@ export async function pushEnabled(viewerContextId: string) {
   const existing = await (await registration()).pushManager.getSubscription()
   if (!existing) return false
   const status = await fetchJson<{ subscribed?: boolean }>(
-    buildRequestUrl("/api/push/key", {
+    buildHubRequestUrl("/api/push/key", {
       contextId: viewerContextId,
       searchParams: { endpoint: existing.endpoint },
     })
@@ -46,7 +46,7 @@ export async function enablePush(viewerContextId: string) {
   if (permission !== "granted")
     throw new Error("The browser does not allow notifications for Pico.")
   const { publicKey } = await fetchJson<{ publicKey: string }>(
-    buildRequestUrl("/api/push/key", { contextId: viewerContextId })
+    buildHubRequestUrl("/api/push/key", { contextId: viewerContextId })
   )
   const worker = await registration()
   const subscription =
@@ -56,7 +56,7 @@ export async function enablePush(viewerContextId: string) {
       applicationServerKey: keyBytes(publicKey),
     }))
   await fetchJson(
-    buildRequestUrl("/api/push/subscribe", { contextId: viewerContextId }),
+    buildHubRequestUrl("/api/push/subscribe", { contextId: viewerContextId }),
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -75,7 +75,7 @@ export async function disablePush(viewerContextId: string) {
   ).pushManager.getSubscription()
   if (!subscription) return
   await fetchJson(
-    buildRequestUrl("/api/push/unsubscribe", { contextId: viewerContextId }),
+    buildHubRequestUrl("/api/push/unsubscribe", { contextId: viewerContextId }),
     {
       method: "POST",
       headers: { "content-type": "application/json" },

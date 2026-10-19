@@ -3,7 +3,10 @@ import {
   normalizeThemeColorMode,
   normalizeThemeFamily,
 } from "@/lib/pico/themes"
-import { machineStorageKey } from "@/lib/pico/machine"
+import {
+  isMachineScopedStorageKey,
+  machineStorageKey,
+} from "@/lib/pico/machine"
 
 export const THEME_STORAGE_KEY = "pico-theme"
 export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
@@ -49,45 +52,90 @@ export function createContextId() {
     .slice(2, 10)}`
 }
 
+function assertGlobalKey(key: string) {
+  if (isMachineScopedStorageKey(key)) {
+    throw new Error(`${key} belongs to a machine. Use the machine storage API.`)
+  }
+}
+
+/** A global value, the same for every machine. */
 export function safeLocalStorageGetItem(key: string) {
+  assertGlobalKey(key)
   try {
-    return window.localStorage.getItem(machineStorageKey(key))
+    return window.localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-let localStorageWriteListener: ((key: string) => void) | undefined
+/** A value of one machine (see `machineStorageKey`). */
+export function machineLocalStorageGetItem(machineId: string, key: string) {
+  try {
+    return window.localStorage.getItem(machineStorageKey(machineId, key))
+  } catch {
+    return null
+  }
+}
 
-/** Get a call after each successful write, for example to sync a key. */
+let localStorageWriteListener:
+  | ((key: string, machineId: string | undefined) => void)
+  | undefined
+
+/**
+ * Get a call after each successful write, for example to sync a key. The
+ * machine is undefined for a global key.
+ */
 export function setLocalStorageWriteListener(
-  listener: ((key: string) => void) | undefined
+  listener: ((key: string, machineId: string | undefined) => void) | undefined
 ) {
   localStorageWriteListener = listener
 }
 
-/** Machine data (see `machineStorageKey`) is kept apart for each machine. */
+/** Write a global value, the same for every machine. */
 export function safeLocalStorageSetItem(key: string, value: string) {
+  assertGlobalKey(key)
   try {
-    window.localStorage.setItem(machineStorageKey(key), value)
+    window.localStorage.setItem(key, value)
   } catch {
     return false
   }
-  localStorageWriteListener?.(key)
+  localStorageWriteListener?.(key, undefined)
   return true
 }
 
-function safeSessionStorageGetItem(key: string) {
+/** Write a value of one machine (see `machineStorageKey`). */
+export function machineLocalStorageSetItem(
+  machineId: string,
+  key: string,
+  value: string
+) {
   try {
-    return window.sessionStorage.getItem(machineStorageKey(key))
+    window.localStorage.setItem(machineStorageKey(machineId, key), value)
+  } catch {
+    return false
+  }
+  localStorageWriteListener?.(
+    key,
+    isMachineScopedStorageKey(key) ? machineId : undefined
+  )
+  return true
+}
+
+function machineSessionStorageGetItem(machineId: string, key: string) {
+  try {
+    return window.sessionStorage.getItem(machineStorageKey(machineId, key))
   } catch {
     return null
   }
 }
 
-function safeSessionStorageSetItem(key: string, value: string) {
+function machineSessionStorageSetItem(
+  machineId: string,
+  key: string,
+  value: string
+) {
   try {
-    window.sessionStorage.setItem(machineStorageKey(key), value)
+    window.sessionStorage.setItem(machineStorageKey(machineId, key), value)
     return true
   } catch {
     return false
@@ -169,9 +217,9 @@ function normalizeStoredTerminalTabs(value: unknown): StoredTerminalTabsState {
   }
 }
 
-function loadStoredTerminalTabs() {
+function loadStoredTerminalTabs(machineId: string) {
   try {
-    const raw = safeLocalStorageGetItem(TERMINAL_TABS_STORAGE_KEY)
+    const raw = machineLocalStorageGetItem(machineId, TERMINAL_TABS_STORAGE_KEY)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === "object"
@@ -182,21 +230,22 @@ function loadStoredTerminalTabs() {
   }
 }
 
-export function readStoredTerminalTabs(scopeKey: string) {
+export function readStoredTerminalTabs(machineId: string, scopeKey: string) {
   const key = scopeKey.trim()
   if (!key) return { activeTabId: null, tabs: [] }
 
-  return normalizeStoredTerminalTabs(loadStoredTerminalTabs()[key])
+  return normalizeStoredTerminalTabs(loadStoredTerminalTabs(machineId)[key])
 }
 
 export function rememberStoredTerminalTabs(
+  machineId: string,
   scopeKey: string,
   state: StoredTerminalTabsState
 ) {
   const key = scopeKey.trim()
   if (!key) return false
 
-  const storedTabs = loadStoredTerminalTabs()
+  const storedTabs = loadStoredTerminalTabs(machineId)
   const normalizedState = normalizeStoredTerminalTabs(state)
 
   if (normalizedState.tabs.length > 0) {
@@ -205,7 +254,8 @@ export function rememberStoredTerminalTabs(
     delete storedTabs[key]
   }
 
-  return safeLocalStorageSetItem(
+  return machineLocalStorageSetItem(
+    machineId,
     TERMINAL_TABS_STORAGE_KEY,
     JSON.stringify(storedTabs)
   )
@@ -229,9 +279,12 @@ export function promptDraftKeyMatchesOwner(
   return ownerKey === promptDraftKey() && draftKey.startsWith("draft:")
 }
 
-function loadStoredPromptDrafts() {
+function loadStoredPromptDrafts(machineId: string) {
   try {
-    const raw = safeSessionStorageGetItem(PROMPT_DRAFTS_STORAGE_KEY)
+    const raw = machineSessionStorageGetItem(
+      machineId,
+      PROMPT_DRAFTS_STORAGE_KEY
+    )
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === "object"
@@ -242,19 +295,23 @@ function loadStoredPromptDrafts() {
   }
 }
 
-export function readStoredPromptDraft(target: PromptDraftTarget = {}) {
-  const drafts = loadStoredPromptDrafts()
+export function readStoredPromptDraft(
+  machineId: string,
+  target: PromptDraftTarget = {}
+) {
+  const drafts = loadStoredPromptDrafts(machineId)
   const key = promptDraftKey(target)
   const value = drafts[key]
   return typeof value === "string" ? value : undefined
 }
 
 export function rememberStoredPromptDraft(
+  machineId: string,
   target: PromptDraftTarget = {},
   text = ""
 ) {
   const key = promptDraftKey(target)
-  const drafts = loadStoredPromptDrafts()
+  const drafts = loadStoredPromptDrafts(machineId)
   const nextValue = typeof text === "string" ? text : ""
 
   if (nextValue) {
@@ -263,15 +320,19 @@ export function rememberStoredPromptDraft(
     delete drafts[key]
   }
 
-  return safeSessionStorageSetItem(
+  return machineSessionStorageSetItem(
+    machineId,
     PROMPT_DRAFTS_STORAGE_KEY,
     JSON.stringify(drafts)
   )
 }
 
-export function readStoredSidebarDirectories() {
+export function readStoredSidebarDirectories(machineId: string) {
   try {
-    const raw = safeLocalStorageGetItem(SIDEBAR_DIRECTORIES_STORAGE_KEY)
+    const raw = machineLocalStorageGetItem(
+      machineId,
+      SIDEBAR_DIRECTORIES_STORAGE_KEY
+    )
     if (raw == null) {
       return { directories: [], hasStoredValue: false }
     }
@@ -285,9 +346,12 @@ export function readStoredSidebarDirectories() {
   }
 }
 
-export function readStoredPinnedSessionKeys() {
+export function readStoredPinnedSessionKeys(machineId: string) {
   try {
-    const raw = safeLocalStorageGetItem(PINNED_SESSIONS_STORAGE_KEY)
+    const raw = machineLocalStorageGetItem(
+      machineId,
+      PINNED_SESSIONS_STORAGE_KEY
+    )
     if (!raw) return []
     return normalizeSessionSelectionKeys(JSON.parse(raw))
   } catch {
@@ -296,10 +360,11 @@ export function readStoredPinnedSessionKeys() {
 }
 
 export function readStoredCollapsedDirectories(
+  machineId: string,
   key = COLLAPSED_DIRECTORIES_STORAGE_KEY
 ) {
   try {
-    const raw = safeLocalStorageGetItem(key)
+    const raw = machineLocalStorageGetItem(machineId, key)
     if (!raw) return {}
 
     const parsed = JSON.parse(raw)
@@ -316,13 +381,18 @@ export function readStoredCollapsedDirectories(
   }
 }
 
-export function readStoredDraftDirectory() {
-  return (safeLocalStorageGetItem(DRAFT_DIRECTORY_STORAGE_KEY) ?? "").trim()
+export function readStoredDraftDirectory(machineId: string) {
+  return (
+    machineLocalStorageGetItem(machineId, DRAFT_DIRECTORY_STORAGE_KEY) ?? ""
+  ).trim()
 }
 
-export function readStoredRecentDirectories() {
+export function readStoredRecentDirectories(machineId: string) {
   try {
-    const raw = safeLocalStorageGetItem(RECENT_DIRECTORIES_STORAGE_KEY)
+    const raw = machineLocalStorageGetItem(
+      machineId,
+      RECENT_DIRECTORIES_STORAGE_KEY
+    )
     if (!raw) return []
     return normalizeStoredDirectoryList(JSON.parse(raw))
   } catch {

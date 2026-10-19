@@ -23,6 +23,7 @@ import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type DraftWorktree = {
   ok: true
@@ -42,6 +43,7 @@ function NewSessionWorktreeToggleView({
   cwd: string
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const queryKey = ["pico", "draft-worktree", viewerContextId, cwd] as const
   const query = useQuery({
@@ -49,6 +51,7 @@ function NewSessionWorktreeToggleView({
     queryFn: () =>
       fetchJson<DraftWorktree>(
         buildRequestUrl("/api/session/draft-worktree", {
+          machineId,
           contextId: viewerContextId,
           searchParams: { cwd },
         })
@@ -63,6 +66,7 @@ function NewSessionWorktreeToggleView({
     mutationFn: (body: { enabled: boolean; branch?: string }) =>
       fetchJson<DraftWorktree>(
         buildRequestUrl("/api/session/draft-worktree", {
+          machineId,
           contextId: viewerContextId,
         }),
         {

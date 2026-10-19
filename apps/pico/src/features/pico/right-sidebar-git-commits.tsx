@@ -105,6 +105,7 @@ import type {
   GitCommitRemoteUrlResponse,
 } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type GitCommitRemoteUrlData = Extract<GitCommitRemoteUrlResponse, { ok: true }>
 type GitCommitFilesData = Extract<GitCommitFilesResponse, { ok: true }>
@@ -1092,6 +1093,7 @@ function GitCommitFilesList({
   disabled: boolean
   onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
 }) {
+  const machineId = useMachineId()
   const filesQuery = useQuery({
     queryKey: commit
       ? picoQueryKeys.gitCommitFiles(viewerContextId, cwd, commit)
@@ -1102,7 +1104,7 @@ function GitCommitFilesList({
           `/api/git-commit-files?cwd=${encodeURIComponent(cwd)}&commit=${encodeURIComponent(
             commit
           )}`,
-          { contextId: viewerContextId }
+          { machineId, contextId: viewerContextId }
         )
       ),
     enabled: Boolean(!disabled && viewerContextId && cwd && commit),
@@ -1199,6 +1201,7 @@ function useGitCommitRowView({
   value,
   onOpenCommitDiff,
 }: GitCommitRowProps) {
+  const machineId = useMachineId()
   const parsed = parseGitCommitGraphLine(line)
   const queryClient = useQueryClient()
   const [rowState, dispatchRow] = React.useReducer(
@@ -1248,6 +1251,7 @@ function useGitCommitRowView({
     mutationFn: async (request: GitCommitActionRequest) => {
       return await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-commit-action", {
+          machineId,
           contextId: viewerContextId,
         }),
         {
@@ -1274,7 +1278,10 @@ function useGitCommitRowView({
   const createBranchMutation = useMutation({
     mutationFn: async (branch: string) => {
       return await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-checkout", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-checkout", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1349,7 +1356,7 @@ function useGitCommitRowView({
       `/api/git-commit-remote-url?cwd=${encodeURIComponent(
         cwd
       )}&commit=${encodeURIComponent(parsed.fullHash)}`,
-      { contextId: viewerContextId }
+      { machineId, contextId: viewerContextId }
     )
     void fetchJson<GitCommitRemoteUrlData>(url)
       .then((response) => {
@@ -1903,6 +1910,7 @@ export function GitCommitsSection({
   embedded?: boolean
   flush?: boolean
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const [commitsLimit, setCommitsLimit] = React.useState(GIT_COMMITS_PAGE_SIZE)
   const commitsLoadMoreRef = React.useRef<HTMLDivElement>(null)
@@ -1915,6 +1923,7 @@ export function GitCommitsSection({
   )
   const commitsQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "commits",

@@ -31,6 +31,7 @@ import {
   toolDetails,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export type TodoStatus = "pending" | "active" | "done" | "blocked"
 export type TodoItem = {
@@ -175,10 +176,12 @@ function TodoSection({
   state: Record<string, unknown>
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const items = todoItemsFrom(state)
   const [text, setText] = React.useState("")
   const change = (body: Record<string, unknown>) => {
     void postSessionJson(
+      machineId,
       viewerContextId,
       sessionId,
       "/api/session/todo",

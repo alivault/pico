@@ -55,6 +55,7 @@ import type {
 } from "@/lib/pico/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type GitBranchDialogStage = "browse" | "create"
 
@@ -483,6 +484,7 @@ export function GitBranchDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const normalizedCwd = normalizeCwd(cwd)
@@ -492,6 +494,7 @@ export function GitBranchDialog({
   )
   const branchesQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "branches",
@@ -519,7 +522,10 @@ export function GitBranchDialog({
   const checkoutMutation = useMutation({
     mutationFn: async (payload: GitCheckoutBranchPayload) =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-checkout", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-checkout", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },

@@ -27,6 +27,7 @@ import {
 } from "@/features/pico/tool-renderers/registry"
 import { ShowContent } from "@/features/pico/tool-renderers/show"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type PreviewState = {
   target: string
@@ -64,6 +65,7 @@ export function PreviewPanel({
   sessionId?: string
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const preview = usePreviewState(viewerContextId, sessionId)
   const ensured = useQuery({
     queryKey: [
@@ -75,6 +77,7 @@ export function PreviewPanel({
     ],
     queryFn: () =>
       postSessionJson<PreviewState & { port: number }>(
+        machineId,
         viewerContextId,
         sessionId,
         "/api/session/preview/ensure",

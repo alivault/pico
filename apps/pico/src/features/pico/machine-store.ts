@@ -1,18 +1,17 @@
 import * as React from "react"
 
+import { useMachineId } from "@/lib/pico/machine-context"
 import {
-  activeMachineId,
-  apiUrl,
+  hubUrl,
   isRemoteMachine,
-  onMachineSwitch,
-  setActiveMachineOffline,
+  setMachineOfflineLabels,
 } from "@/lib/pico/machine"
 
 /**
  * The machines of the hub: the local runtime and the SSH machines. The hub
- * sends their states and session summaries on `/api/machines/events`. This
- * page shows one machine (see `lib/pico/machine.ts`); the sidebar shows the
- * other machines from their summaries.
+ * sends their states and session summaries on `/api/machines/events`. The
+ * page shows one machine at a time (see `routes/index.tsx`); the sidebar
+ * shows the other machines from their summaries.
  */
 
 export type MachineState =
@@ -73,7 +72,7 @@ let source: EventSource | undefined
 
 function connect() {
   if (source || typeof EventSource === "undefined") return
-  source = new EventSource(apiUrl("/api/machines/events"))
+  source = new EventSource(hubUrl("/api/machines/events"))
   source.onmessage = (event: MessageEvent<string>) => {
     let data: { type?: string } & Partial<MachinesSnapshot>
     try {
@@ -87,28 +86,20 @@ function connect() {
       machines: data.machines,
       ...(data.fileError ? { fileError: data.fileError } : {}),
     }
-    syncActiveMachineOffline()
+    syncMachineOffline()
     for (const listener of listeners) listener()
   }
 }
 
-/** Tell `lib/pico/machine.ts` whether the machine of the page is offline. */
-function syncActiveMachineOffline() {
-  if (!snapshot.loaded) {
-    setActiveMachineOffline(undefined)
-    return
+/** Tell `lib/pico/machine.ts` which remote machines are not online. */
+function syncMachineOffline() {
+  const labels = new Map<string, string>()
+  for (const machine of snapshot.machines) {
+    if (isRemoteMachine(machine.id) && machine.state !== "online")
+      labels.set(machine.id, machine.label || "This machine")
   }
-  const active = snapshot.machines.find(
-    (machine) => machine.id === activeMachineId()
-  )
-  setActiveMachineOffline(
-    isRemoteMachine() && active?.state !== "online"
-      ? (active?.label ?? "This machine")
-      : undefined
-  )
+  setMachineOfflineLabels(labels)
 }
-
-onMachineSwitch(syncActiveMachineOffline)
 
 function subscribe(listener: () => void) {
   connect()
@@ -126,10 +117,11 @@ export function useMachines() {
   )
 }
 
-/** The machine of this page; undefined until the list loads. */
+/** The machine of this subtree; undefined until the list loads. */
 export function useActiveMachine() {
   const { machines } = useMachines()
-  return machines.find((machine) => machine.id === activeMachineId())
+  const machineId = useMachineId()
+  return machines.find((machine) => machine.id === machineId)
 }
 
 /**
@@ -139,8 +131,9 @@ export function useActiveMachine() {
  */
 export function useMachineReadOnly() {
   const { loaded, machines } = useMachines()
-  if (!isRemoteMachine() || !loaded) return false
-  const machine = machines.find((entry) => entry.id === activeMachineId())
+  const machineId = useMachineId()
+  if (!isRemoteMachine(machineId) || !loaded) return false
+  const machine = machines.find((entry) => entry.id === machineId)
   return machine?.state !== "online"
 }
 
@@ -151,9 +144,10 @@ export function useMachineReadOnly() {
  */
 export function useMachineFeature(feature: string) {
   const { machines } = useMachines()
-  if (!isRemoteMachine()) return true
+  const machineId = useMachineId()
+  if (!isRemoteMachine(machineId)) return true
   const features = machines.find(
-    (machine) => machine.id === activeMachineId()
+    (machine) => machine.id === machineId
   )?.features
   return !features || features.includes(feature)
 }

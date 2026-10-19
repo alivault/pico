@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 /**
  * An icon-only action with a tooltip and an accessible name. The default size
@@ -128,6 +129,7 @@ export function TextDialog({
   viewerContextId: string
   refreshMs?: number
 }) {
+  const machineId = useMachineId()
   const query = useQuery({
     queryKey: [
       "pico",
@@ -140,6 +142,7 @@ export function TextDialog({
     queryFn: () =>
       fetchJson<{ text: string }>(
         buildRequestUrl(path, {
+          machineId,
           contextId: viewerContextId,
           sessionId,
           searchParams,

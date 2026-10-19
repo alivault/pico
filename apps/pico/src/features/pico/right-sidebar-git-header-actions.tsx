@@ -8,6 +8,7 @@ import {
   selectGitStatusSummary,
 } from "@/features/pico/right-sidebar-git-data"
 import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export function GitTabStatusText({
   viewerContextId,
@@ -16,9 +17,14 @@ export function GitTabStatusText({
   viewerContextId: string
   cwd?: string
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled: Boolean(viewerContextId && normalizedCwd),
     select: (data) =>
       data.gitStatus === null
@@ -40,9 +46,14 @@ export function HeaderGitStatusText({
   cwd?: string
   className?: string
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled: Boolean(viewerContextId && normalizedCwd),
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],
@@ -68,9 +79,14 @@ export function DraftGitStatusBadge({
   viewerContextId: string
   cwd?: string
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled: Boolean(viewerContextId && normalizedCwd),
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],

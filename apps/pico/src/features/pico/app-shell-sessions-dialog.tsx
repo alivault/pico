@@ -52,8 +52,9 @@ import {
 } from "@/features/pico/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/pico"
-import { activeMachineId, openMachine } from "@/lib/pico/machine"
+import { openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type SessionsDialogScope = "current" | "all"
 type SessionsDialogStage = "browse" | "rename" | "delete"
@@ -329,11 +330,13 @@ function isActiveSession(
 }
 
 function fetchDirectorySessionsIndexes(
+  machineId: string,
   viewerContextId: string,
   directories: Array<string>
 ) {
   return fetchJson<DirectorySessionsIndexesResponse>(
     buildRequestUrl("/api/directory-sessions-indexes", {
+      machineId,
       contextId: viewerContextId,
       searchParams: {
         directory: directories,
@@ -566,6 +569,7 @@ function useAppShellSessionsDialogView({
   onDeleteSession,
   onError,
 }: AppShellSessionsDialogProps) {
+  const machineId = useMachineId()
   const isMobile = useIsMobile()
   const [isGeneratingName, setIsGeneratingName] = React.useState(false)
   const [generatedNamePath, setGeneratedNamePath] = React.useState("")
@@ -634,7 +638,7 @@ function useAppShellSessionsDialogView({
   )
   // With more machines, "All sessions" also shows the other machines.
   const { machines } = useMachines()
-  const activeId = activeMachineId()
+  const activeId = machineId
   const activeMachine = machines.find((machine) => machine.id === activeId)
   const showMachines = scope === "all" && machines.length > 1 && activeMachine
   const otherMachineGroups = (
@@ -697,7 +701,11 @@ function useAppShellSessionsDialogView({
       directories: missingDirectories,
     })
 
-    void fetchDirectorySessionsIndexes(viewerContextId, missingDirectories)
+    void fetchDirectorySessionsIndexes(
+      machineId,
+      viewerContextId,
+      missingDirectories
+    )
       .then((response) => {
         dispatch({
           type: "directoriesLoadingFinished",
@@ -817,6 +825,7 @@ function useAppShellSessionsDialogView({
     try {
       const response = await fetchJson<GenerateSessionNameData>(
         buildRequestUrl("/api/session/name", {
+          machineId,
           contextId: viewerContextId,
         }),
         {

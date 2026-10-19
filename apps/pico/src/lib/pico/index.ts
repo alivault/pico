@@ -48,6 +48,8 @@ export {
   rememberStoredTerminalTabs,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
+  machineLocalStorageGetItem,
+  machineLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico/storage"
 export type { StoredTerminalTabsState } from "@/lib/pico/storage"

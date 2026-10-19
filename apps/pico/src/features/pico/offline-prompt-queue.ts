@@ -1,16 +1,14 @@
 import type { PromptImage, StreamingBehavior } from "@/lib/pico"
-import { activeMachineId, LOCAL_MACHINE_ID } from "@/lib/pico/machine"
+import { LOCAL_MACHINE_ID } from "@/lib/pico/machine"
 
 const OFFLINE_PROMPT_DB_VERSION = 1
 const OFFLINE_PROMPT_STORE_NAME = "prompts"
 
 /**
  * Prompts wait for the machine that they were written for, so each machine
- * has its own database (and fallback key) with this name. Each call reads the
- * machine of the page when it starts.
+ * has its own database (and fallback key) with this name.
  */
-function queueName() {
-  const machine = activeMachineId()
+function queueName(machine: string) {
   return `pico-offline-prompts${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
 }
 
@@ -156,8 +154,11 @@ function normalizeItems(values: Array<unknown>) {
     .sort((left, right) => left.createdAt - right.createdAt)
 }
 
-export async function enqueueOfflinePrompt(item: OfflinePromptQueueItem) {
-  const name = queueName()
+export async function enqueueOfflinePrompt(
+  machineId: string,
+  item: OfflinePromptQueueItem
+) {
+  const name = queueName(machineId)
   const db = await openOfflinePromptDb(name)
   if (!db) {
     const items = fallbackItems(name).filter((entry) => entry.id !== item.id)
@@ -176,8 +177,11 @@ export async function enqueueOfflinePrompt(item: OfflinePromptQueueItem) {
   })
 }
 
-export async function readOfflinePrompts(contextId?: string) {
-  const name = queueName()
+export async function readOfflinePrompts(
+  machineId: string,
+  contextId?: string
+) {
+  const name = queueName(machineId)
   const db = await openOfflinePromptDb(name)
   if (!db) {
     const items = fallbackItems(name)
@@ -202,8 +206,8 @@ export async function readOfflinePrompts(contextId?: string) {
     : items
 }
 
-export async function removeOfflinePrompt(id: string) {
-  const name = queueName()
+export async function removeOfflinePrompt(machineId: string, id: string) {
+  const name = queueName(machineId)
   const db = await openOfflinePromptDb(name)
   if (!db) {
     rememberFallbackItems(

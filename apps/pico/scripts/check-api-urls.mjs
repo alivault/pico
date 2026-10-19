@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * Every client request must reach the machine of the page. Requests go
- * through `buildRequestUrl`, `fetchJson`, or `apiUrl` (see
- * `src/lib/pico/machine.ts`), which add the `/m/<machine>` prefix of the hub
- * proxy. This check fails on a raw `fetch`, `EventSource`, or `WebSocket`
- * with a server path.
+ * Every client request names its machine. Requests go through
+ * `buildRequestUrl` (with a `machineId`), `buildHubRequestUrl`, `hubUrl`, or
+ * `machineApiUrl` (see `src/lib/pico/machine.ts`), which add the
+ * `/m/<machine>` prefix of the hub proxy. This check fails on:
+ *
+ * - a raw `fetch`, `EventSource`, or `WebSocket` with a server path;
+ * - a read of the machine that the page shows (`pageMachine`) outside the
+ *   files that may use it;
+ * - a direct use of `machineStorageKey`, which skips the sidebar sync.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { dirname, join, relative } from "node:path"
@@ -23,18 +27,46 @@ function* files(dir) {
   }
 }
 
-const problems = []
-for (const file of files(source)) {
-  const text = readFileSync(file, "utf8")
-  for (const match of text.matchAll(RAW_REQUEST)) {
-    const line = text.slice(0, match.index).split("\n").length
-    problems.push(`${relative(root, file)}:${line}: ${match[0]}`)
+const RULES = [
+  {
+    pattern: RAW_REQUEST,
+    allowed: [],
+    message:
+      "Raw server paths skip the machine prefix. Use buildRequestUrl or hubUrl",
+  },
+  {
+    pattern: /\bpageMachine\(/g,
+    allowed: [
+      "src/lib/pico/machine.ts",
+      "src/routes/index.tsx",
+      "src/features/pico/app-shell-utils.ts",
+    ],
+    message:
+      "Code must not read the machine of the page. Use useMachineId() or a machineId argument",
+  },
+  {
+    pattern: /\bmachineStorageKey\(/g,
+    allowed: ["src/lib/pico/machine.ts", "src/lib/pico/storage.ts"],
+    message:
+      "Use machineLocalStorageGetItem or machineLocalStorageSetItem, not machineStorageKey",
+  },
+]
+
+let failed = false
+for (const rule of RULES) {
+  const problems = []
+  for (const file of files(source)) {
+    const path = relative(root, file)
+    if (rule.allowed.includes(path)) continue
+    const text = readFileSync(file, "utf8")
+    for (const match of text.matchAll(rule.pattern)) {
+      const line = text.slice(0, match.index).split("\n").length
+      problems.push(`${path}:${line}: ${match[0]}`)
+    }
   }
-}
-if (problems.length > 0) {
-  console.error(
-    "Raw server paths skip the machine prefix. Use buildRequestUrl, fetchJson, or apiUrl:"
-  )
+  if (problems.length === 0) continue
+  failed = true
+  console.error(`${rule.message}:`)
   for (const problem of problems) console.error(`  ${problem}`)
-  process.exit(1)
 }
+if (failed) process.exit(1)

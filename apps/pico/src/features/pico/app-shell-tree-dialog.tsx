@@ -41,6 +41,7 @@ import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { flattenTree } from "@/lib/pico"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type SessionTreeData = Extract<SessionTreeResponse, { ok: true }>
 type NavigateSessionTreeData = Extract<
@@ -2315,6 +2316,7 @@ export function AppShellTreeDialogController({
   treeSummaryAvailable,
   activeSessionStreaming,
 }: AppShellTreeDialogControllerProps) {
+  const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
   const [treeQuery, setTreeQuery] = React.useState("")
   const [selectedTreeNodeId, setSelectedTreeNodeId] = React.useState<
@@ -2338,6 +2340,7 @@ export function AppShellTreeDialogController({
     queryFn: () =>
       fetchJson<SessionTreeData>(
         buildRequestUrl("/api/session/tree", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         })
@@ -2361,6 +2364,7 @@ export function AppShellTreeDialogController({
 
       return await fetchJson<SessionTreeData>(
         buildRequestUrl("/api/session/tree/label", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),
@@ -2384,6 +2388,7 @@ export function AppShellTreeDialogController({
 
       return await fetchJson<SimpleOkResponse>(
         buildRequestUrl("/api/abort", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),
@@ -2415,6 +2420,7 @@ export function AppShellTreeDialogController({
 
       return await fetchJson<NavigateSessionTreeData>(
         buildRequestUrl("/api/session/tree", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),

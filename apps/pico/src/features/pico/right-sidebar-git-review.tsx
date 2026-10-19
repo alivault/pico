@@ -117,6 +117,7 @@ import {
   type SidebarVerticalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 function GitFileStatus({ status }: { status: string | undefined }) {
   const [indexCharacter, worktreeCharacter] = gitFileStatusCharacters(status)
@@ -581,6 +582,7 @@ function useFileReviewContentView({
   onOpenFile,
   showEmbeddedHistory = true,
 }: FileReviewContentProps) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
@@ -637,6 +639,7 @@ function useFileReviewContentView({
   const previousNormalizedCwdRef = React.useRef(normalizedCwd)
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "files",
@@ -659,7 +662,7 @@ function useFileReviewContentView({
           ? "/api/git-discard"
           : "/api/git-stage"
       return await fetchJson<GitActionResponse>(
-        buildRequestUrl(endpoint, { contextId: viewerContextId }),
+        buildRequestUrl(endpoint, { machineId, contextId: viewerContextId }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1171,6 +1174,7 @@ function ReviewFileAccordionItem({
   open: boolean
   stuck: boolean
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const queryClient = useQueryClient()
   const value = reviewFileValue(file)
@@ -1181,6 +1185,7 @@ function ReviewFileAccordionItem({
   const previewPatch = gitFileShouldPreviewPatch(file) && !fullContextRequested
   const diffQuery = useQuery({
     ...gitFileDiffQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       path: file.path,
@@ -1192,6 +1197,7 @@ function ReviewFileAccordionItem({
   })
   const reviewQuery = useQuery({
     ...gitFileReviewQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       path: file.path,
@@ -1259,7 +1265,10 @@ function ReviewFileAccordionItem({
   const stageMutation = useMutation({
     mutationFn: async (action: "stage" | "unstage") =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-stage", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-stage", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1298,7 +1307,10 @@ function ReviewFileAccordionItem({
   const discardMutation = useMutation({
     mutationFn: async () =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-discard", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-discard", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },

@@ -68,6 +68,7 @@ import type {
   DirectorySearchResponse,
   PathCompletionsResponse,
 } from "@/lib/pico/api"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type AppShellFloatingControllersProps = {
   activeSessionId?: string
@@ -249,6 +250,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
     | "sessionStore"
     | "viewerContextId"
   >) {
+    const machineId = useMachineId()
     const recentDirectories = useSelector(recentDirectoriesStore)
     const useForNewSession = useSelector(
       sessionStore,
@@ -259,6 +261,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
 
       const response = await fetchJson<PathCompletionsResponse>(
         buildRequestUrl("/api/path-completions", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -275,6 +278,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
 
       const response = await fetchJson<DirectorySearchResponse>(
         buildRequestUrl("/api/directory-search", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -327,12 +331,14 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
     | "sessionCwd"
     | "viewerContextId"
   >) {
+    const machineId = useMachineId()
     const recentDirectories = useSelector(recentDirectoriesStore)
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       if (!viewerContextId) return []
 
       const response = await fetchJson<PathCompletionsResponse>(
         buildRequestUrl("/api/path-completions", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -349,6 +355,7 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
 
       const response = await fetchJson<DirectorySearchResponse>(
         buildRequestUrl("/api/directory-search", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),

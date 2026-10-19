@@ -29,6 +29,7 @@ import {
   toolArgs,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type Fact = {
   id: string
@@ -222,14 +223,21 @@ function MemorySection({
   state: Record<string, unknown>
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const memory = state.memory as MemoryState | undefined
   const [adding, setAdding] = React.useState(false)
   if (!memory) return null
   const change = (target: Scope) => (body: Record<string, unknown>) => {
-    void postSessionJson(viewerContextId, sessionId, "/api/session/memory", {
-      ...body,
-      scope: target,
-    }).catch((error: unknown) => toast.error(errorText(error)))
+    void postSessionJson(
+      machineId,
+      viewerContextId,
+      sessionId,
+      "/api/session/memory",
+      {
+        ...body,
+        scope: target,
+      }
+    ).catch((error: unknown) => toast.error(errorText(error)))
   }
   const projectName =
     memory.project.split("/").filter(Boolean).at(-1) ?? memory.project

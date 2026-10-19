@@ -3,7 +3,6 @@ import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
 } from "@/lib/pico/storage"
-import { machineStorageKey } from "@/lib/pico/machine"
 
 export const SHOW_SESSION_PREVIEWS_STORAGE_KEY = "pico-sidebar-session-previews"
 
@@ -27,7 +26,7 @@ function notify() {
 }
 
 function onStorage(event: StorageEvent) {
-  if (event.key !== machineStorageKey(SHOW_SESSION_PREVIEWS_STORAGE_KEY)) return
+  if (event.key !== SHOW_SESSION_PREVIEWS_STORAGE_KEY) return
   showSessionPreviews = readShowSessionPreviews()
   notify()
 }

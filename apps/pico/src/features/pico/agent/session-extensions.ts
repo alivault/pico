@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useToolRenderContext } from "@/features/pico/tool-renderers/registry"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 /** One value for each Agent panel state provider on the server. */
 export type SessionExtensionState = Record<string, unknown>
@@ -26,6 +27,7 @@ export function useSessionExtensions(
   sessionId: string | undefined,
   enabled = true
 ) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   usePicoEvent("pico:session-extensions", (detail) => {
     if (
@@ -42,6 +44,7 @@ export function useSessionExtensions(
     queryFn: async () => {
       const response = await fetchJson<SessionExtensionsResponse>(
         buildRequestUrl("/api/session/extensions", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         })
@@ -63,13 +66,14 @@ export function useWaitingForAnswer() {
 
 /** Send a JSON request to a session route. */
 export function postSessionJson<T>(
+  machineId: string,
   viewerContextId: string,
   sessionId: string | undefined,
   path: string,
   body: Record<string, unknown>
 ) {
   return fetchJson<T>(
-    buildRequestUrl(path, { contextId: viewerContextId, sessionId }),
+    buildRequestUrl(path, { machineId, contextId: viewerContextId, sessionId }),
     {
       method: "POST",
       headers: { "content-type": "application/json" },

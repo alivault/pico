@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export type AppShellAuthDialogHandle = {
   open: (
@@ -223,6 +224,7 @@ function useAppShellAuthDialogControllerView({
   viewerContextId,
   sessionId,
 }: AppShellAuthDialogControllerProps) {
+  const machineId = useMachineId()
   const isMobile = useIsMobile()
   const queryClient = useQueryClient()
   const [state, dispatch] = React.useReducer(
@@ -269,6 +271,7 @@ function useAppShellAuthDialogControllerView({
     queryFn: async () => {
       return await fetchJson<AuthProvidersResponse>(
         buildRequestUrl("/api/auth/providers", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         })
@@ -286,6 +289,7 @@ function useAppShellAuthDialogControllerView({
     }) => {
       return await fetchJson<AuthMutationResponse>(
         buildRequestUrl("/api/auth/api-key", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),
@@ -314,6 +318,7 @@ function useAppShellAuthDialogControllerView({
     mutationFn: async ({ provider }: { provider: string }) => {
       return await fetchJson<AuthMutationResponse>(
         buildRequestUrl("/api/auth/oauth", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),
@@ -342,6 +347,7 @@ function useAppShellAuthDialogControllerView({
     mutationFn: async ({ provider }: { provider: string }) => {
       return await fetchJson<AuthMutationResponse>(
         buildRequestUrl("/api/auth/logout", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),

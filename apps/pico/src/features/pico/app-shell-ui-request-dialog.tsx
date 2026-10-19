@@ -34,6 +34,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type AppShellUiRequestDialogProps = {
   pendingUiRequest: ExtensionUiEvent | null
@@ -685,6 +686,7 @@ export function AppShellUiRequestDialogController({
   sessionId,
   onAuthBack,
 }: AppShellUiRequestDialogControllerProps) {
+  const machineId = useMachineId()
   const [pendingUiRequest, setPendingUiRequest] =
     React.useState<ExtensionUiEvent | null>(null)
   const [pendingUiValue, setPendingUiValue] = React.useState("")
@@ -711,6 +713,7 @@ export function AppShellUiRequestDialogController({
 
     return await fetchJson<UiRequestResponse>(
       buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
+        machineId,
         contextId: viewerContextId,
         sessionId,
       }),

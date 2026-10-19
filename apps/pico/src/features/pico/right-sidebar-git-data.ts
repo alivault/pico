@@ -30,9 +30,11 @@ export const GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES = 10_000
 export const GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD = 100
 
 export function gitStatusQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
 }) {
@@ -41,6 +43,7 @@ export function gitStatusQueryOptions({
     queryFn: () =>
       fetchJson<GitStatusData>(
         buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
+          machineId,
           contextId: viewerContextId,
         })
       ),
@@ -50,11 +53,13 @@ export function gitStatusQueryOptions({
 }
 
 export function gitChangesQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
   scope,
   commitsLimit,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
   scope: "files" | "branches" | "commits"
@@ -82,9 +87,7 @@ export function gitChangesQueryOptions({
                 )}`
               : ""
           }`,
-          {
-            contextId: viewerContextId,
-          }
+          { machineId, contextId: viewerContextId }
         )
       ),
     staleTime: GIT_QUERY_STALE_TIME_MS,
@@ -93,10 +96,12 @@ export function gitChangesQueryOptions({
 }
 
 export function gitFileDiffQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
   path,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
   path: string
@@ -107,9 +112,7 @@ export function gitFileDiffQueryOptions({
       fetchJson<GitFileDiffData>(
         buildRequestUrl(
           `/api/git-diff?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}`,
-          {
-            contextId: viewerContextId,
-          }
+          { machineId, contextId: viewerContextId }
         )
       ),
     staleTime: GIT_QUERY_STALE_TIME_MS,
@@ -118,11 +121,13 @@ export function gitFileDiffQueryOptions({
 }
 
 export function gitFileReviewQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
   path,
   previousPath,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
   path: string
@@ -143,9 +148,7 @@ export function gitFileReviewQueryOptions({
       fetchJson<GitFileReviewData>(
         buildRequestUrl(
           `/api/git-review?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}${previousPathParam}`,
-          {
-            contextId: viewerContextId,
-          }
+          { machineId, contextId: viewerContextId }
         )
       ),
     staleTime: GIT_QUERY_STALE_TIME_MS,

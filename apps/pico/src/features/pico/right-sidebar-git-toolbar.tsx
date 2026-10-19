@@ -49,6 +49,7 @@ import type {
   GitScopedProps,
 } from "@/features/pico/right-sidebar-types"
 import type { GitActionResponse } from "@/lib/pico/api"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 // Hide a button label when the git toolbar is narrow. The label stays for
 // screen readers.
@@ -59,15 +60,21 @@ export function GitPanelErrorToasts({
   cwd,
   active,
 }: GitScopedProps) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const enabled = Boolean(active && viewerContextId && normalizedCwd)
   const statusErrorQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled,
     notifyOnChangeProps: ["error", "errorUpdatedAt"],
   })
   const filesErrorQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "files",
@@ -77,6 +84,7 @@ export function GitPanelErrorToasts({
   })
   const branchesErrorQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "branches",
@@ -86,6 +94,7 @@ export function GitPanelErrorToasts({
   })
   const commitsErrorQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "commits",
@@ -128,10 +137,15 @@ function GitRepositorySummary({
 }: GitScopedProps & {
   onBranchClick?: () => void
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const enabled = Boolean(active && viewerContextId && normalizedCwd)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled,
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data", "isPending", "error"],
@@ -226,19 +240,25 @@ export function GitPanelToolbar({
   cwd,
   active,
 }: GitScopedProps) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const normalizedCwd = normalizeCwd(cwd)
   const [branchDialogOpen, setBranchDialogOpen] = React.useState(false)
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled: Boolean(active && viewerContextId && normalizedCwd),
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],
   })
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "files",
@@ -286,7 +306,7 @@ export function GitPanelToolbar({
     mutationFn: async (action: GitRemoteAction) => {
       const endpoint = action === "pull" ? "/api/git-pull" : "/api/git-push"
       return await fetchJson<GitActionResponse>(
-        buildRequestUrl(endpoint, { contextId: viewerContextId }),
+        buildRequestUrl(endpoint, { machineId, contextId: viewerContextId }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },

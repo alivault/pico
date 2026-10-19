@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { getShellLayout } from "@/hooks/use-shell-layout"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
 const PI_TRANSPORT_OPTIONS: Array<PiTransport> = [
@@ -940,6 +941,7 @@ function AppShellSettingsDialog({
   onLogoutProviders,
   commandsRef,
 }: AppShellSettingsDialogProps) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const showSessionPreviews = useShowSessionPreviews()
   const performanceQuery = useQuery({
@@ -947,6 +949,7 @@ function AppShellSettingsDialog({
     queryFn: () =>
       fetchJson<PiPerformanceSettingsResponse>(
         buildRequestUrl("/api/settings/performance", {
+          machineId,
           contextId: viewerContextId,
         })
       ),
@@ -964,6 +967,7 @@ function AppShellSettingsDialog({
     }) =>
       await fetchJson<PiPerformanceSettingsResponse>(
         buildRequestUrl("/api/settings/performance", {
+          machineId,
           contextId: viewerContextId,
         }),
         {

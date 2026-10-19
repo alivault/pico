@@ -1,28 +1,31 @@
 /**
  * Sync the sidebar layout across devices: the added directories in order, the
- * pinned sessions, and the collapsed directories. The server keeps the shared
- * copy. Local storage stays the copy that the UI reads, so the sidebar shows
- * at once when the page opens.
+ * pinned sessions, and the collapsed directories. Each machine's server keeps
+ * the shared copy of that machine. Local storage stays the copy that the UI
+ * reads, so the sidebar shows at once when the page opens.
  *
- * All writes to the synced keys go through `safeLocalStorageSetItem`, so this
- * module sees each change without changes at the call sites. A change from
- * another device goes into local storage, and then a `pico:sidebar-state`
- * event tells the stores to read it again.
+ * All writes to the synced keys go through `machineLocalStorageSetItem`, so
+ * this module sees each change without changes at the call sites. A change
+ * from another device goes into local storage, and then a
+ * `pico:sidebar-state` event tells the stores of that machine to read it
+ * again.
+ *
+ * There is one sync for each machine, so several machines can sync at the
+ * same time.
  */
 import { emitPicoEvent } from "@/features/pico/agent/events"
-import { fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
   PINNED_SESSIONS_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  machineLocalStorageGetItem,
+  machineLocalStorageSetItem,
   readStoredCollapsedDirectories,
   readStoredPinnedSessionKeys,
   readStoredSidebarDirectories,
-  safeLocalStorageGetItem,
-  safeLocalStorageSetItem,
 } from "@/lib/pico"
 import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/pico/api"
-import { onBeforeMachineSwitch } from "@/lib/pico/machine"
 import { setLocalStorageWriteListener } from "@/lib/pico/storage"
 
 export type SidebarSyncField =
@@ -55,190 +58,233 @@ const clientId =
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-let started = false
-let ready = false
-let applyingRemote = false
-let lastRevision = -1
-let pendingEvent: SidebarStateSnapshot | null = null
-let flushTimer: ReturnType<typeof setTimeout> | undefined
-let flushing = false
-const dirty = new Set<SidebarSyncField>()
-/** Fields that a request now sends; a read must not overwrite them. */
-const sending = new Set<SidebarSyncField>()
-/** Goes up when the page opens another machine; older loads stop. */
-let generation = 0
+class MachineSidebarSync {
+  readonly machineId: string
+  #contextId = ""
+  #started = false
+  #ready = false
+  #applyingRemote = false
+  #lastRevision = -1
+  #pendingEvent: SidebarStateSnapshot | null = null
+  #flushTimer: ReturnType<typeof setTimeout> | undefined
+  #flushing = false
+  readonly #dirty = new Set<SidebarSyncField>()
+  /** Fields that a request now sends; a read must not overwrite them. */
+  readonly #sending = new Set<SidebarSyncField>()
 
-function readLocal(field: SidebarSyncField) {
-  if (field === "directories") return readStoredSidebarDirectories().directories
-  if (field === "pinnedSessionKeys") return readStoredPinnedSessionKeys()
-  return readStoredCollapsedDirectories()
-}
-
-function readAllLocal() {
-  return {
-    directories: readLocal("directories"),
-    pinnedSessionKeys: readLocal("pinnedSessionKeys"),
-    collapsedDirectories: readLocal("collapsedDirectories"),
+  constructor(machineId: string) {
+    this.machineId = machineId
   }
-}
 
-function onLocalWrite(key: string) {
-  if (applyingRemote) return
-  const field = FIELD_BY_KEY[key]
-  if (!field) return
-  dirty.add(field)
-  if (ready) scheduleFlush(FLUSH_DELAY_MS)
-}
-
-function scheduleFlush(delay: number) {
-  if (flushTimer) clearTimeout(flushTimer)
-  flushTimer = setTimeout(() => {
-    flushTimer = undefined
-    void flush()
-  }, delay)
-}
-
-async function flush() {
-  if (flushing || dirty.size === 0) return
-  flushing = true
-  const fields = [...dirty]
-  dirty.clear()
-  for (const field of fields) sending.add(field)
-  const body: Record<string, unknown> = { clientId }
-  for (const field of fields) body[field] = readLocal(field)
-  try {
-    const state = await fetchJson<SidebarStateResponse>("/api/sidebar-state", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+  #url() {
+    return buildRequestUrl("/api/sidebar-state", {
+      machineId: this.machineId,
+      contextId: this.#contextId,
     })
-    lastRevision = Math.max(lastRevision, state.revision)
-  } catch {
-    // Send it again later; a newer local change replaces the old value.
-    for (const field of fields) dirty.add(field)
-    scheduleFlush(RETRY_DELAY_MS)
-  } finally {
-    sending.clear()
-    flushing = false
   }
-  if (dirty.size > 0 && !flushTimer) scheduleFlush(FLUSH_DELAY_MS)
-}
 
-/**
- * Write the shared state to local storage, except fields with local changes.
- * Events skip old revisions. A fresh read (`force`) is always current, also
- * when the server started again with a lower revision.
- */
-function applyRemote(state: SidebarStateSnapshot, force = false) {
-  if (!force && state.revision <= lastRevision) return
-  lastRevision = state.revision
-  const changed: Array<SidebarSyncField> = []
-  applyingRemote = true
-  try {
-    for (const field of Object.keys(KEY_BY_FIELD) as Array<SidebarSyncField>) {
-      if (dirty.has(field) || sending.has(field)) continue
-      const next = JSON.stringify(state[field])
-      const key = KEY_BY_FIELD[field]
-      if (safeLocalStorageGetItem(key) === next) continue
-      safeLocalStorageSetItem(key, next)
-      changed.push(field)
+  #readLocal(field: SidebarSyncField) {
+    if (field === "directories")
+      return readStoredSidebarDirectories(this.machineId).directories
+    if (field === "pinnedSessionKeys")
+      return readStoredPinnedSessionKeys(this.machineId)
+    return readStoredCollapsedDirectories(this.machineId)
+  }
+
+  #readAllLocal() {
+    return {
+      directories: this.#readLocal("directories"),
+      pinnedSessionKeys: this.#readLocal("pinnedSessionKeys"),
+      collapsedDirectories: this.#readLocal("collapsedDirectories"),
     }
-  } finally {
-    applyingRemote = false
   }
-  if (changed.length > 0) emitPicoEvent("pico:sidebar-state", { changed })
-}
 
-async function load() {
-  const state = await fetchJson<SidebarStateResponse>("/api/sidebar-state")
-  if (state.initialized && safeLocalStorageGetItem(MERGED_STORAGE_KEY)) {
-    applyRemote(state, true)
-    return
+  onLocalWrite(key: string) {
+    if (this.#applyingRemote) return
+    const field = FIELD_BY_KEY[key]
+    if (!field) return
+    this.#dirty.add(field)
+    if (this.#ready) this.#scheduleFlush(FLUSH_DELAY_MS)
   }
-  // The first sync of this browser: add its own lists to the shared state.
-  dirty.clear()
-  const merged = await fetchJson<SidebarStateResponse>(
-    "/api/sidebar-state/merge",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clientId, ...readAllLocal() }),
-    }
-  )
-  safeLocalStorageSetItem(MERGED_STORAGE_KEY, "1")
-  applyRemote(merged, true)
-}
 
-/** Start the sync once per page. Safe to call again. */
-export function startSidebarSync() {
-  if (started || typeof window === "undefined") return
-  started = true
-  setLocalStorageWriteListener(onLocalWrite)
-  const startGeneration = generation
-  const attempt = async (): Promise<void> => {
+  #scheduleFlush(delay: number) {
+    if (this.#flushTimer) clearTimeout(this.#flushTimer)
+    this.#flushTimer = setTimeout(() => {
+      this.#flushTimer = undefined
+      void this.#flush()
+    }, delay)
+  }
+
+  async #flush() {
+    if (this.#flushing || this.#dirty.size === 0) return
+    this.#flushing = true
+    const fields = [...this.#dirty]
+    this.#dirty.clear()
+    for (const field of fields) this.#sending.add(field)
+    const body: Record<string, unknown> = { clientId }
+    for (const field of fields) body[field] = this.#readLocal(field)
     try {
-      await load()
+      const state = await fetchJson<SidebarStateResponse>(this.#url(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      this.#lastRevision = Math.max(this.#lastRevision, state.revision)
     } catch {
-      await new Promise((done) => setTimeout(done, RETRY_DELAY_MS))
-      if (startGeneration !== generation) return
-      return attempt()
+      // Send it again later; a newer local change replaces the old value.
+      for (const field of fields) this.#dirty.add(field)
+      this.#scheduleFlush(RETRY_DELAY_MS)
+    } finally {
+      this.#sending.clear()
+      this.#flushing = false
     }
-    if (startGeneration !== generation) return
-    ready = true
-    if (pendingEvent) applyRemote(pendingEvent)
-    pendingEvent = null
-    // Changes made while the first load ran win over the shared state.
-    if (dirty.size > 0) scheduleFlush(0)
+    if (this.#dirty.size > 0 && !this.#flushTimer)
+      this.#scheduleFlush(FLUSH_DELAY_MS)
   }
-  void attempt()
-}
 
-/** Apply a `sidebar_state` event from the server event stream. */
-export function handleSidebarStateEvent(event: SidebarStateEvent) {
-  if (event.clientId === clientId) return
-  if (!ready) {
-    if (!pendingEvent || event.revision > pendingEvent.revision)
-      pendingEvent = event
-    return
-  }
-  applyRemote(event)
-}
-
-/** Read the shared state again, for example after the event stream reconnects. */
-export function refreshSidebarState() {
-  if (!ready) return
-  void fetchJson<SidebarStateResponse>("/api/sidebar-state")
-    .then((state) => {
-      if (state.initialized) {
-        applyRemote(state, true)
-        return
+  /**
+   * Write the shared state to local storage, except fields with local
+   * changes. Events skip old revisions. A fresh read (`force`) is always
+   * current, also when the server started again with a lower revision.
+   */
+  #applyRemote(state: SidebarStateSnapshot, force = false) {
+    if (!force && state.revision <= this.#lastRevision) return
+    this.#lastRevision = state.revision
+    const changed: Array<SidebarSyncField> = []
+    this.#applyingRemote = true
+    try {
+      for (const field of Object.keys(
+        KEY_BY_FIELD
+      ) as Array<SidebarSyncField>) {
+        if (this.#dirty.has(field) || this.#sending.has(field)) continue
+        const next = JSON.stringify(state[field])
+        const key = KEY_BY_FIELD[field]
+        if (machineLocalStorageGetItem(this.machineId, key) === next) continue
+        machineLocalStorageSetItem(this.machineId, key, next)
+        changed.push(field)
       }
-      // The server lost its copy: send this page's copy again.
-      for (const field of Object.keys(KEY_BY_FIELD) as Array<SidebarSyncField>)
-        dirty.add(field)
-      scheduleFlush(0)
+    } finally {
+      this.#applyingRemote = false
+    }
+    if (changed.length > 0)
+      emitPicoEvent("pico:sidebar-state", {
+        machineId: this.machineId,
+        changed,
+      })
+  }
+
+  async #load() {
+    const state = await fetchJson<SidebarStateResponse>(this.#url())
+    if (
+      state.initialized &&
+      machineLocalStorageGetItem(this.machineId, MERGED_STORAGE_KEY)
+    ) {
+      this.#applyRemote(state, true)
+      return
+    }
+    // The first sync of this browser: add its own lists to the shared state.
+    this.#dirty.clear()
+    const merged = await fetchJson<SidebarStateResponse>(
+      buildRequestUrl("/api/sidebar-state/merge", {
+        machineId: this.machineId,
+        contextId: this.#contextId,
+      }),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clientId, ...this.#readAllLocal() }),
+      }
+    )
+    machineLocalStorageSetItem(this.machineId, MERGED_STORAGE_KEY, "1")
+    this.#applyRemote(merged, true)
+  }
+
+  start(contextId: string) {
+    if (this.#started) return
+    this.#started = true
+    this.#contextId = contextId
+    const attempt = async (): Promise<void> => {
+      try {
+        await this.#load()
+      } catch {
+        await new Promise((done) => setTimeout(done, RETRY_DELAY_MS))
+        return attempt()
+      }
+      this.#ready = true
+      if (this.#pendingEvent) this.#applyRemote(this.#pendingEvent)
+      this.#pendingEvent = null
+      // Changes made while the first load ran win over the shared state.
+      if (this.#dirty.size > 0) this.#scheduleFlush(0)
+    }
+    void attempt()
+  }
+
+  handleEvent(event: SidebarStateEvent) {
+    if (event.clientId === clientId) return
+    if (!this.#ready) {
+      if (!this.#pendingEvent || event.revision > this.#pendingEvent.revision)
+        this.#pendingEvent = event
+      return
+    }
+    this.#applyRemote(event)
+  }
+
+  refresh() {
+    if (!this.#ready) return
+    void fetchJson<SidebarStateResponse>(this.#url())
+      .then((state) => {
+        if (state.initialized) {
+          this.#applyRemote(state, true)
+          return
+        }
+        // The server lost its copy: send this page's copy again.
+        for (const field of Object.keys(
+          KEY_BY_FIELD
+        ) as Array<SidebarSyncField>)
+          this.#dirty.add(field)
+        this.#scheduleFlush(0)
+      })
+      .catch(() => undefined)
+  }
+}
+
+const syncs = new Map<string, MachineSidebarSync>()
+
+function syncFor(machineId: string) {
+  let sync = syncs.get(machineId)
+  if (!sync) {
+    sync = new MachineSidebarSync(machineId)
+    syncs.set(machineId, sync)
+  }
+  return sync
+}
+
+let listening = false
+
+/** Start the sync of a machine once per page. Safe to call again. */
+export function startSidebarSync(machineId: string, contextId: string) {
+  if (typeof window === "undefined") return
+  if (!listening) {
+    listening = true
+    setLocalStorageWriteListener((key, keyMachineId) => {
+      if (keyMachineId !== undefined) syncs.get(keyMachineId)?.onLocalWrite(key)
     })
-    .catch(() => undefined)
+  }
+  syncFor(machineId).start(contextId)
+}
+
+/** Apply a `sidebar_state` event from the event stream of a machine. */
+export function handleSidebarStateEvent(
+  machineId: string,
+  event: SidebarStateEvent
+) {
+  syncFor(machineId).handleEvent(event)
 }
 
 /**
- * The sidebar state belongs to one machine. Before the page opens another
- * machine, send the changes that wait, then start again for the new machine
- * (the new app shell calls `startSidebarSync`).
+ * Read the shared state of a machine again, for example after its event
+ * stream reconnects.
  */
-onBeforeMachineSwitch(() => {
-  if (flushTimer) {
-    clearTimeout(flushTimer)
-    flushTimer = undefined
-  }
-  if (ready && !flushing) void flush()
-  generation += 1
-  started = false
-  ready = false
-  applyingRemote = false
-  lastRevision = -1
-  pendingEvent = null
-  flushing = false
-  dirty.clear()
-  sending.clear()
-})
+export function refreshSidebarState(machineId: string) {
+  syncFor(machineId).refresh()
+}

@@ -33,12 +33,8 @@ import { SettingsSection } from "@/features/pico/agent/agent-settings-dialog"
 import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
 import { errorText } from "@/features/pico/agent/shared"
 import { fetchJson } from "@/features/pico/app-shell-utils"
-import {
-  activeMachineId,
-  apiUrl,
-  LOCAL_MACHINE_ID,
-  openMachine,
-} from "@/lib/pico/machine"
+import { useMachineId } from "@/lib/pico/machine-context"
+import { hubUrl, LOCAL_MACHINE_ID, openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import {
   useMachines,
@@ -55,7 +51,7 @@ async function machineAction(
 ) {
   try {
     await fetchJson(
-      apiUrl(`/api/machines/${encodeURIComponent(id)}/${action}`),
+      hubUrl(`/api/machines/${encodeURIComponent(id)}/${action}`),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -327,9 +323,9 @@ function ActiveMachineGroup({
 /** Whether the hub has more than one machine, so the sidebar has groups. */
 export function useHasMachineGroups() {
   const { machines } = useMachines()
+  const machineId = useMachineId()
   return (
-    machines.length > 1 &&
-    machines.some((machine) => machine.id === activeMachineId())
+    machines.length > 1 && machines.some((machine) => machine.id === machineId)
   )
 }
 
@@ -352,7 +348,7 @@ export function SidebarMachineGroups({
   renderContent: RenderMachineContent
 }) {
   const { machines } = useMachines()
-  const activeId = activeMachineId()
+  const activeId = useMachineId()
   const active = machines.find((machine) => machine.id === activeId)
   if (machines.length < 2 || !active) return <>{children}</>
   return (
@@ -394,7 +390,7 @@ function useNow(active: boolean) {
  */
 export function MachineConnectionBanner() {
   const { loaded, machines } = useMachines()
-  const activeId = activeMachineId()
+  const activeId = useMachineId()
   const machine = machines.find((entry) => entry.id === activeId)
   const now = useNow(Boolean(machine?.retryAt))
   if (activeId === LOCAL_MACHINE_ID || !loaded) return null

@@ -25,13 +25,14 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { formatDisplayPath } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
-import { activeMachineOffline } from "@/lib/pico/machine"
+import { machineOfflineLabel } from "@/lib/pico/machine"
 import type { TerminalCreateResponse, TerminalEvent } from "@/lib/pico/api"
 import {
   appliedThemeClassColorMode,
   type ResolvedThemeMode,
 } from "@/lib/pico/themes"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type TerminalCreateData = Extract<TerminalCreateResponse, { ok: true }>
 
@@ -158,8 +159,11 @@ function createTerminalTab(id = createTerminalTabId()): TerminalTab {
   }
 }
 
-function createTerminalTabsState(scopeKey: string): TerminalTabsState {
-  const storedTabs = readStoredTerminalTabs(scopeKey)
+function createTerminalTabsState(
+  machineId: string,
+  scopeKey: string
+): TerminalTabsState {
+  const storedTabs = readStoredTerminalTabs(machineId, scopeKey)
   const tabs = storedTabs.tabs.map((id) => createTerminalTab(id))
   return {
     activeTabId: storedTabs.activeTabId ?? tabs[0]?.id ?? null,
@@ -168,8 +172,11 @@ function createTerminalTabsState(scopeKey: string): TerminalTabsState {
   }
 }
 
-function rememberTerminalTabsState(state: TerminalTabsState) {
-  rememberStoredTerminalTabs(state.scopeKey, {
+function rememberTerminalTabsState(
+  machineId: string,
+  state: TerminalTabsState
+) {
+  rememberStoredTerminalTabs(machineId, state.scopeKey, {
     activeTabId: state.activeTabId,
     tabs: state.tabs.map((tab) => tab.id),
   })
@@ -425,6 +432,7 @@ function TerminalTabPane({
   tabId,
   viewerContextId,
 }: TerminalTabPaneProps) {
+  const machineId = useMachineId()
   const terminalElementRef = React.useRef<HTMLDivElement | null>(null)
   const terminalRef = React.useRef<XtermTerminal | null>(null)
   const terminalIdRef = React.useRef<string | null>(null)
@@ -475,8 +483,8 @@ function TerminalTabPane({
     const pendingInputs = new Map<number, string>()
 
     const requestOptions = sessionId
-      ? { contextId: viewerContextId, sessionId }
-      : { contextId: viewerContextId }
+      ? { machineId, contextId: viewerContextId, sessionId }
+      : { machineId, contextId: viewerContextId }
 
     const publishStatus = (nextStatus: TerminalStatus) => {
       if (disposed) return
@@ -728,7 +736,7 @@ function TerminalTabPane({
         inputDisposable = terminal.onData((data) => {
           if (!activeRef.current) return
           // An offline machine is read-only: drop typing until it is back.
-          if (activeMachineOffline()) return
+          if (machineOfflineLabel(machineId) !== undefined) return
 
           inputBuffer += data
           scheduleInputFlush()
@@ -845,10 +853,11 @@ export function TerminalPanel({
   showCloseButton = true,
   viewerContextId,
 }: TerminalPanelProps) {
+  const machineId = useMachineId()
   const normalizedCwd = cwd?.trim() || ""
   const scopeKey = `${viewerContextId}:${sessionId ?? "no-session"}:${normalizedCwd}`
   const [tabsState, setTabsState] = React.useState<TerminalTabsState>(() =>
-    createTerminalTabsState(scopeKey)
+    createTerminalTabsState(machineId, scopeKey)
   )
   const [statusDialogTabId, setStatusDialogTabId] = React.useState<
     string | null
@@ -862,7 +871,7 @@ export function TerminalPanel({
   React.useEffect(() => {
     if (tabsState.scopeKey === scopeKey) return
 
-    setTabsState(createTerminalTabsState(scopeKey))
+    setTabsState(createTerminalTabsState(machineId, scopeKey))
   }, [scopeKey, tabsState.scopeKey])
 
   React.useEffect(() => {
@@ -877,7 +886,7 @@ export function TerminalPanel({
 
     const tab = createTerminalTab()
     const nextState = { activeTabId: tab.id, scopeKey, tabs: [tab] }
-    rememberTerminalTabsState(nextState)
+    rememberTerminalTabsState(machineId, nextState)
     setTabsState(nextState)
   }, [active, normalizedCwd, scopeKey, tabs.length, tabsState.scopeKey])
 
@@ -891,8 +900,8 @@ export function TerminalPanel({
     : 0
 
   const requestOptions = sessionId
-    ? { contextId: viewerContextId, sessionId }
-    : { contextId: viewerContextId }
+    ? { machineId, contextId: viewerContextId, sessionId }
+    : { machineId, contextId: viewerContextId }
 
   const addTerminalTab = () => {
     if (!normalizedCwd) return
@@ -907,7 +916,7 @@ export function TerminalPanel({
               activeTabId: tab.id,
               tabs: [...current.tabs, tab],
             }
-      rememberTerminalTabsState(nextState)
+      rememberTerminalTabsState(machineId, nextState)
       return nextState
     })
   }
@@ -926,7 +935,7 @@ export function TerminalPanel({
             activeTabId: tabId,
             tabs: [...base.tabs, createTerminalTab(tabId)],
           }
-      rememberTerminalTabsState(nextState)
+      rememberTerminalTabsState(machineId, nextState)
       return nextState
     })
   }
@@ -976,7 +985,7 @@ export function TerminalPanel({
         activeTabId: nextActiveTabId,
         tabs: nextTabs,
       }
-      rememberTerminalTabsState(nextState)
+      rememberTerminalTabsState(machineId, nextState)
       return nextState
     })
   }
@@ -1071,7 +1080,7 @@ export function TerminalPanel({
                         if (current.scopeKey !== scopeKey) return current
 
                         const nextState = { ...current, activeTabId: tab.id }
-                        rememberTerminalTabsState(nextState)
+                        rememberTerminalTabsState(machineId, nextState)
                         return nextState
                       })
                     }}

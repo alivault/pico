@@ -192,6 +192,7 @@ import {
   readStoredSidebarDirectories,
   rememberStoredPromptDraft,
   safeLocalStorageSetItem,
+  machineLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
 import type {
@@ -211,6 +212,7 @@ import type {
   SessionReadStateResponse,
   SessionStatusEvent,
 } from "@/lib/pico/api"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 const INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT = 6
 type AppShellController = {
@@ -272,6 +274,7 @@ function useAppShellSessionWorkspaceView({
 }: AppShellSessionWorkspaceProps & {
   ref?: React.Ref<AppShellSessionWorkspaceHandle>
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const initialSessionStateRef = React.useRef<SessionState | null>(null)
   if (!initialSessionStateRef.current) {
@@ -890,6 +893,7 @@ function useAppShellSessionWorkspaceView({
         Extract<SessionHistoryResponse, { ok: true }>
       >(
         buildRequestUrl("/api/session/history", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
           searchParams: { before, limit: 50 },
@@ -1429,6 +1433,7 @@ function useAppShellSessionWorkspaceView({
     }
 
     rememberStoredPromptDraft(
+      machineId,
       target,
       serializeComposerDraft({ text: nextText, skillName: nextSkill })
     )
@@ -1463,6 +1468,7 @@ function useAppShellSessionWorkspaceView({
       }
     })
     rememberStoredPromptDraft(
+      machineId,
       target,
       serializeComposerDraft({ text: nextText, skillName: nextSkill })
     )
@@ -1473,7 +1479,7 @@ function useAppShellSessionWorkspaceView({
     batch(() => {
       setGitPanelOpen(readStoredRightSidebarOpen())
       setTerminalPanelOpen(readStoredTerminalPanelOpen())
-      setStoredDraftDirectory(readStoredDraftDirectory() || "")
+      setStoredDraftDirectory(readStoredDraftDirectory(machineId) || "")
       setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
       setSessionDoneDesktopNotificationsEnabled(
         readStoredSessionDoneDesktopNotificationsEnabled()
@@ -1481,7 +1487,7 @@ function useAppShellSessionWorkspaceView({
       setHideToolBlocks(readStoredHideToolBlocks())
       setCenterMessages(readStoredCenterMessages())
       setAutoScrollEnabled(readStoredAutoScrollEnabled())
-      setRecentDirectories(readStoredRecentDirectories())
+      setRecentDirectories(readStoredRecentDirectories(machineId))
       setDesktopNotificationPermission(getDesktopNotificationPermission())
     })
   }
@@ -1562,7 +1568,10 @@ function useAppShellSessionWorkspaceView({
     ),
     mutationFn: async (cwd: string) =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-push", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-push", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1591,7 +1600,10 @@ function useAppShellSessionWorkspaceView({
     ),
     mutationFn: async (cwd: string) =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-push", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-push", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1622,7 +1634,10 @@ function useAppShellSessionWorkspaceView({
     ),
     mutationFn: async (cwd: string) =>
       await fetchJson<GitActionResponse>(
-        buildRequestUrl("/api/git-pull", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-pull", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -2061,16 +2076,24 @@ function useAppShellSessionWorkspaceView({
   const handleSelectSessionRef = useLatestRef(handleSelectSession)
   // Another device changed the shared sidebar layout. The first directories
   // that the event stream loads stay the same, so the stream does not restart.
-  usePicoEvent("pico:sidebar-state", ({ changed }) => {
-    if (changed.includes("directories")) {
-      sidebarStore.setSidebarDirectories(
-        normalizeStoredDirectoryList(readStoredSidebarDirectories().directories)
-      )
+  usePicoEvent(
+    "pico:sidebar-state",
+    ({ machineId: changedMachine, changed }) => {
+      if (changedMachine !== machineId) return
+      if (changed.includes("directories")) {
+        sidebarStore.setSidebarDirectories(
+          normalizeStoredDirectoryList(
+            readStoredSidebarDirectories(machineId).directories
+          )
+        )
+      }
+      if (changed.includes("pinnedSessionKeys")) {
+        sidebarStore.setPinnedSidebarSessionKeys(
+          readStoredPinnedSessionKeys(machineId)
+        )
+      }
     }
-    if (changed.includes("pinnedSessionKeys")) {
-      sidebarStore.setPinnedSidebarSessionKeys(readStoredPinnedSessionKeys())
-    }
-  })
+  )
 
   usePicoEvent("pico:open-session", (detail) => {
     handleSelectSession(detail.sessionId)
@@ -2109,7 +2132,11 @@ function useAppShellSessionWorkspaceView({
   React.useEffect(() => {
     const nextDirectory = sessionState.cwd?.trim()
     if (!nextDirectory) return
-    safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
+    machineLocalStorageSetItem(
+      machineId,
+      DRAFT_DIRECTORY_STORAGE_KEY,
+      nextDirectory
+    )
     setStoredDraftDirectory(nextDirectory)
   }, [sessionState.cwd])
 
@@ -2133,7 +2160,8 @@ function useAppShellSessionWorkspaceView({
         nextDirectory,
         ...normalizedCurrent,
       ])
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         SIDEBAR_DIRECTORIES_STORAGE_KEY,
         JSON.stringify(nextDirectories)
       )
@@ -2213,7 +2241,8 @@ function useAppShellSessionWorkspaceView({
         normalizedDirectory,
         ...current,
       ]).slice(0, RECENT_DIRECTORIES_LIMIT)
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         RECENT_DIRECTORIES_STORAGE_KEY,
         JSON.stringify(next)
       )
@@ -2266,7 +2295,8 @@ function useAppShellSessionWorkspaceView({
           cwd,
           ...normalizedCurrent,
         ])
-        safeLocalStorageSetItem(
+        machineLocalStorageSetItem(
+          machineId,
           SIDEBAR_DIRECTORIES_STORAGE_KEY,
           JSON.stringify(nextDirectories)
         )
@@ -2445,7 +2475,11 @@ function useAppShellSessionWorkspaceView({
       const previousState = sessionStateRef.current
       if (!previousState.draft || previousState.items.length > 0) return
 
-      safeLocalStorageSetItem(DRAFT_DIRECTORY_STORAGE_KEY, nextDirectory)
+      machineLocalStorageSetItem(
+        machineId,
+        DRAFT_DIRECTORY_STORAGE_KEY,
+        nextDirectory
+      )
       setStoredDraftDirectory(nextDirectory)
       rememberRecentDirectory(nextDirectory)
 
@@ -2460,6 +2494,7 @@ function useAppShellSessionWorkspaceView({
       setSessionState(nextState)
 
       rememberStoredPromptDraft(
+        machineId,
         nextState,
         serializeComposerDraft({
           text: composerTextRef.current,
@@ -2558,10 +2593,10 @@ function useAppShellSessionWorkspaceView({
   // opened this one to start a session or to add a directory.
   React.useEffect(() => {
     if (!viewerContextId) return
-    const action = takePendingMachineAction()
+    const action = takePendingMachineAction(machineId)
     if (action?.type === "new-session") void createSession(action.directory)
     if (action?.type === "add-directory") addDirectoryDialogRef.current?.open()
-  }, [createSession, viewerContextId])
+  }, [createSession, machineId, viewerContextId])
 
   const createDiffLineCommentId = () => {
     if (
@@ -2822,6 +2857,7 @@ function useAppShellSessionWorkspaceView({
     try {
       await fetchJson<Extract<SessionReadStateResponse, { ok: true }>>(
         buildRequestUrl("/api/session/read-state", {
+          machineId,
           contextId: viewerContextId,
           sessionId: activeSessionId,
         }),
@@ -3488,7 +3524,8 @@ function useAppShellSessionWorkspaceView({
         ? currentKeys.filter((currentKey) => currentKey !== key)
         : [key, ...currentKeys]
 
-      safeLocalStorageSetItem(
+      machineLocalStorageSetItem(
+        machineId,
         PINNED_SESSIONS_STORAGE_KEY,
         JSON.stringify(nextKeys)
       )
@@ -3763,6 +3800,7 @@ export function PicoAppShell({
     options?: SelectSessionNavigationOptions
   ) => void
 }) {
+  const machineId = useMachineId()
   const [viewerContextId, setViewerContextId] = React.useState("")
   const sidebarStoreRef = React.useRef<AppShellSidebarStore | null>(null)
   if (!sidebarStoreRef.current) {
@@ -3781,9 +3819,9 @@ export function PicoAppShell({
     safeLocalStorageSetItem(VIEWER_CONTEXT_STORAGE_KEY, nextContext)
     setViewerContextId(nextContext)
 
-    startSidebarSync()
+    startSidebarSync(machineId, nextContext)
 
-    const storedDirectories = readStoredSidebarDirectories()
+    const storedDirectories = readStoredSidebarDirectories(machineId)
     const nextDirectories = normalizeStoredDirectoryList(
       storedDirectories.directories
     )
@@ -3791,7 +3829,7 @@ export function PicoAppShell({
       0,
       INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
     )
-    const nextPinnedSessionKeys = readStoredPinnedSessionKeys()
+    const nextPinnedSessionKeys = readStoredPinnedSessionKeys(machineId)
     sidebarStore.setSidebarState((current) => {
       if (
         sameStringArray(current.sidebarDirectories, nextDirectories) &&

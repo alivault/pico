@@ -74,6 +74,7 @@ import { AgentPanel } from "@/features/pico/agent/agent-panel"
 import { PreviewPanel, usePreviewState } from "@/features/pico/agent/preview"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type GitCommitDiffData = Extract<GitCommitDiffResponse, { ok: true }>
 type CommitDiffStyle = "unified" | "split"
@@ -817,6 +818,7 @@ function CommitDiffContent({
   ) => void
   tab: GitCommitDiffTab | undefined
 }) {
+  const machineId = useMachineId()
   const [diffStyle, setDiffStyle] = React.useState<CommitDiffStyle>("unified")
   const [stickyCommitFileValue, setStickyCommitFileValue] = React.useState("")
   const isMobile = useIsMobile()
@@ -871,7 +873,7 @@ function CommitDiffContent({
               ? `&previousPath=${encodeURIComponent(tab.previousPath)}`
               : ""
           }`,
-          { contextId: viewerContextId }
+          { machineId, contextId: viewerContextId }
         )
       ),
     enabled: Boolean(active && viewerContextId && cwd && tab?.commit),
@@ -1030,6 +1032,7 @@ export function RightSidebar({
   onReorderFiles,
   showToolbar = true,
 }: RightSidebarProps) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const preview = usePreviewState(viewerContextId, sessionId)
@@ -1069,6 +1072,7 @@ export function RightSidebar({
     ) ?? localState.commitDiffTabs[0]
   const fileDialogTreeQuery = useQuery({
     ...projectFileTreeQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
     }),

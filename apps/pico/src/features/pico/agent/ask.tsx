@@ -34,6 +34,7 @@ import {
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type QuestionOption = { label: string; description?: string }
 type QuestionField = {
@@ -355,13 +356,20 @@ export function QuestionForm({
 }
 
 function useAnswer(viewerContextId: string, sessionId: string | undefined) {
+  const machineId = useMachineId()
   const [sending, setSending] = React.useState(false)
   const answer = (questionId: string, value: AnswerValue) => {
     setSending(true)
-    void postSessionJson(viewerContextId, sessionId, "/api/session/answer", {
-      questionId,
-      value,
-    })
+    void postSessionJson(
+      machineId,
+      viewerContextId,
+      sessionId,
+      "/api/session/answer",
+      {
+        questionId,
+        value,
+      }
+    )
       .catch((error: unknown) =>
         toast.error(error instanceof Error ? error.message : String(error))
       )

@@ -10,6 +10,7 @@ import {
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type McpServer = {
   name: string
@@ -22,13 +23,17 @@ type McpServer = {
 }
 
 function McpSettings({ viewerContextId }: { viewerContextId: string }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const queryKey = ["pico", "mcp-servers", viewerContextId]
   const query = useQuery({
     queryKey,
     queryFn: () =>
       fetchJson<{ servers: Array<McpServer> }>(
-        buildRequestUrl("/api/mcp/servers", { contextId: viewerContextId })
+        buildRequestUrl("/api/mcp/servers", {
+          machineId,
+          contextId: viewerContextId,
+        })
       ),
     refetchInterval: 5000,
   })
@@ -48,6 +53,7 @@ function McpSettings({ viewerContextId }: { viewerContextId: string }) {
           authorized?: boolean
         }>(
           buildRequestUrl(`/api/mcp/${encodeURIComponent(name)}/${kind}`, {
+            machineId,
             contextId: viewerContextId,
           }),
           { method: "POST" }

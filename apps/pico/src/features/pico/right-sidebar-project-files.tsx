@@ -102,6 +102,7 @@ import type {
 import { useIsMobile } from "@/hooks/use-mobile"
 import { installGlobalResizeCursor } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type ProjectFileTreeData = Extract<ProjectFileTreeResponse, { ok: true }>
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
@@ -232,9 +233,11 @@ async function getHighlightedProjectFile(code: string, language?: string) {
 }
 
 export function projectFileTreeQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
 }) {
@@ -243,6 +246,7 @@ export function projectFileTreeQueryOptions({
     queryFn: () =>
       fetchJson<ProjectFileTreeData>(
         buildRequestUrl(`/api/files/tree?cwd=${encodeURIComponent(cwd)}`, {
+          machineId,
           contextId: viewerContextId,
         })
       ),
@@ -252,10 +256,12 @@ export function projectFileTreeQueryOptions({
 }
 
 function projectFileReadQueryOptions({
+  machineId,
   viewerContextId,
   cwd,
   path,
 }: {
+  machineId: string
   viewerContextId: string
   cwd: string
   path: string
@@ -266,9 +272,7 @@ function projectFileReadQueryOptions({
       fetchJson<ProjectFileReadData>(
         buildRequestUrl(
           `/api/files/read?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(path)}`,
-          {
-            contextId: viewerContextId,
-          }
+          { machineId, contextId: viewerContextId }
         )
       ),
     staleTime: PROJECT_FILE_QUERY_STALE_TIME_MS,
@@ -492,6 +496,7 @@ export function ProjectFilesWorkspace({
   onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
   previewMode?: ProjectFilesPreviewMode
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
   const [collapseAllRevision, setCollapseAllRevision] = React.useState(0)
@@ -499,6 +504,7 @@ export function ProjectFilesWorkspace({
   const showInlinePreview = inlinePreview && Boolean(activeFilePath)
   const fileTreeQuery = useQuery({
     ...projectFileTreeQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
     }),
@@ -508,6 +514,7 @@ export function ProjectFilesWorkspace({
   })
   const gitFilesQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "files",
@@ -726,9 +733,11 @@ export function ProjectFileContent({
 }: GitScopedProps & {
   path: string
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const fileQuery = useQuery({
     ...projectFileReadQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       path,

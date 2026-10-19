@@ -56,6 +56,7 @@ import type {
 } from "@/features/pico/right-sidebar-types"
 import type { GitChangeFile, GitCommitResponse } from "@/lib/pico/api"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type GitCommitDialogStage = "browse" | "message"
 type GitCommitPendingRun = "commit" | "push" | "force-push" | null
@@ -567,6 +568,7 @@ export function GitCommitDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const [state, dispatch] = React.useReducer(
@@ -591,6 +593,7 @@ export function GitCommitDialog({
   const requestGeneratedCommitMessage = async () =>
     await fetchJson<GitCommitMessageData>(
       buildRequestUrl("/api/git-commit-message", {
+        machineId,
         contextId: viewerContextId,
       }),
       {
@@ -611,7 +614,10 @@ export function GitCommitDialog({
       commitMessage: string
     }) =>
       await fetchJson<GitCommitResponse>(
-        buildRequestUrl("/api/git-commit", { contextId: viewerContextId }),
+        buildRequestUrl("/api/git-commit", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -831,16 +837,22 @@ export function GitCommitDialogController({
   openStateRef: React.RefObject<boolean>
   ref?: React.Ref<GitCommitDialogControllerHandle>
 }) {
+  const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const [open, setOpen] = React.useState(false)
   const statusQuery = useQuery({
-    ...gitStatusQueryOptions({ viewerContextId, cwd: normalizedCwd }),
+    ...gitStatusQueryOptions({
+      machineId,
+      viewerContextId,
+      cwd: normalizedCwd,
+    }),
     enabled: Boolean(open && viewerContextId && normalizedCwd),
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],
   })
   const filesQuery = useQuery({
     ...gitChangesQueryOptions({
+      machineId,
       viewerContextId,
       cwd: normalizedCwd,
       scope: "files",

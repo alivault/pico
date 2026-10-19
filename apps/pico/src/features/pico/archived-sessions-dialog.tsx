@@ -34,6 +34,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type ArchivedSessionsData = Extract<ArchivedSessionsResponse, { ok: true }>
 type RestoreSessionData = Extract<RestoreSessionResponse, { ok: true }>
@@ -68,6 +69,7 @@ export function ArchivedSessionsDialog({
   viewerContextId,
   onRestored,
 }: ArchivedSessionsDialogProps) {
+  const machineId = useMachineId()
   const isMobile = useIsMobile()
   const queryClient = useQueryClient()
   const [filter, setFilter] = React.useState("")
@@ -81,6 +83,7 @@ export function ArchivedSessionsDialog({
     queryFn: () =>
       fetchJson<ArchivedSessionsData>(
         buildRequestUrl("/api/sessions/archived", {
+          machineId,
           contextId: viewerContextId,
         })
       ),
@@ -92,6 +95,7 @@ export function ArchivedSessionsDialog({
     mutationFn: (path: string) =>
       fetchJson<RestoreSessionData>(
         buildRequestUrl("/api/session/restore", {
+          machineId,
           contextId: viewerContextId,
         }),
         {

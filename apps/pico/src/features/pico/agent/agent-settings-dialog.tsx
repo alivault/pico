@@ -27,9 +27,14 @@ import {
   pushSupported,
 } from "@/features/pico/agent/push"
 import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  buildHubRequestUrl,
+  buildRequestUrl,
+  fetchJson,
+} from "@/features/pico/app-shell-utils"
 import { MachineFeatureGate } from "@/features/pico/machine-store"
 import { cn } from "@/lib/utils"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export type AgentSettings = {
   notifyRunDone: boolean
@@ -199,7 +204,7 @@ function DevicePushRow({ viewerContextId }: { viewerContextId: string }) {
               run(
                 () =>
                   fetchJson(
-                    buildRequestUrl("/api/push/test", {
+                    buildHubRequestUrl("/api/push/test", {
                       contextId: viewerContextId,
                     }),
                     { method: "POST" }
@@ -245,20 +250,27 @@ export function AgentSettingsDialog({
   open: boolean
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const queryKey = ["pico", "agent-settings", viewerContextId]
   const query = useQuery({
     queryKey,
     queryFn: () =>
       fetchJson<AgentSettings & { ok: true }>(
-        buildRequestUrl("/api/settings/agent", { contextId: viewerContextId })
+        buildRequestUrl("/api/settings/agent", {
+          machineId,
+          contextId: viewerContextId,
+        })
       ),
     enabled: open,
   })
   const mutation = useMutation({
     mutationFn: (change: Partial<AgentSettings>) =>
       fetchJson<AgentSettings & { ok: true }>(
-        buildRequestUrl("/api/settings/agent", { contextId: viewerContextId }),
+        buildRequestUrl("/api/settings/agent", {
+          machineId,
+          contextId: viewerContextId,
+        }),
         {
           method: "POST",
           headers: { "content-type": "application/json" },

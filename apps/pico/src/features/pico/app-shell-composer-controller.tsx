@@ -62,6 +62,7 @@ import type {
   GitStatusResponse,
   PathCompletionsResponse,
 } from "@/lib/pico/api"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
@@ -73,9 +74,11 @@ function useAppShellComposerSnapshot(
 }
 
 function gitStatusQueryOptions({
+  machineId,
   cwd,
   viewerContextId,
 }: {
+  machineId: string
   cwd: string
   viewerContextId: string
 }) {
@@ -84,6 +87,7 @@ function gitStatusQueryOptions({
     queryFn: () =>
       fetchJson<GitStatusData>(
         buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
+          machineId,
           contextId: viewerContextId,
         })
       ),
@@ -93,9 +97,11 @@ function gitStatusQueryOptions({
 }
 
 function gitBranchesQueryOptions({
+  machineId,
   cwd,
   viewerContextId,
 }: {
+  machineId: string
   cwd: string
   viewerContextId: string
 }) {
@@ -105,9 +111,7 @@ function gitBranchesQueryOptions({
       fetchJson<GitChangesData>(
         buildRequestUrl(
           `/api/git-changes?cwd=${encodeURIComponent(cwd)}&gitScope=branches`,
-          {
-            contextId: viewerContextId,
-          }
+          { machineId, contextId: viewerContextId }
         )
       ),
     staleTime: 30_000,
@@ -156,6 +160,7 @@ export function NewSessionComposerSelectors({
   onOpenAddDirectoryDialog: () => void
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
   const [createBranchName, setCreateBranchName] = React.useState("")
@@ -179,7 +184,11 @@ export function NewSessionComposerSelectors({
   const selectedDirectoryLabel =
     formatFolderName(selectedDirectory) || "Select directory"
   const gitStatusQuery = useQuery({
-    ...gitStatusQueryOptions({ cwd: selectedDirectory, viewerContextId }),
+    ...gitStatusQueryOptions({
+      machineId,
+      cwd: selectedDirectory,
+      viewerContextId,
+    }),
     enabled: Boolean(selectedDirectory && viewerContextId),
     select: (data) => data.gitStatus,
     notifyOnChangeProps: ["data", "isPending", "error"],
@@ -187,7 +196,11 @@ export function NewSessionComposerSelectors({
   const gitStatus = gitStatusQuery.data
   const branchLabel = gitStatus ? currentBranchLabel(gitStatus) : ""
   const branchQuery = useQuery({
-    ...gitBranchesQueryOptions({ cwd: selectedDirectory, viewerContextId }),
+    ...gitBranchesQueryOptions({
+      machineId,
+      cwd: selectedDirectory,
+      viewerContextId,
+    }),
     enabled: Boolean(selectedDirectory && viewerContextId && gitStatus),
     select: (data) => data.localBranches,
     notifyOnChangeProps: ["data", "isPending", "error"],
@@ -197,6 +210,7 @@ export function NewSessionComposerSelectors({
     mutationFn: async (payload: NewSessionComposerBranchCheckoutPayload) =>
       await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-checkout", {
+          machineId,
           contextId: viewerContextId,
         }),
         {
@@ -456,6 +470,7 @@ export const AppShellComposerController = React.memo(
     store: PicoStore<AppShellComposerSnapshot>
     topContent?: React.ReactNode
   }) {
+    const machineId = useMachineId()
     const snapshot = useAppShellComposerSnapshot(store)
     // An offline machine is read-only until it is back.
     const machineReadOnly = useMachineReadOnly()
@@ -536,6 +551,7 @@ export const AppShellComposerController = React.memo(
 
       const response = await fetchJson<PathCompletionsResponse>(
         buildRequestUrl("/api/path-completions", {
+          machineId,
           contextId: currentSnapshot.viewerContextId,
           sessionId: currentSnapshot.activeSessionId,
         }),
@@ -554,6 +570,7 @@ export const AppShellComposerController = React.memo(
 
         const response = await fetchJson<FileCompletionsResponse>(
           buildRequestUrl("/api/file-completions", {
+            machineId,
             contextId: currentSnapshot.viewerContextId,
             sessionId: currentSnapshot.activeSessionId,
           }),

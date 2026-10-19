@@ -36,6 +36,7 @@ import {
   useToolRenderContext,
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export type ChildSession = {
   id: string
@@ -49,10 +50,18 @@ export type ChildSession = {
   lastMessageAt?: number
 }
 
-function stopSession(viewerContextId: string, sessionId: string) {
-  void postSessionJson(viewerContextId, sessionId, "/api/abort", {}).catch(
-    (error: unknown) => toast.error(errorText(error))
-  )
+function stopSession(
+  machineId: string,
+  viewerContextId: string,
+  sessionId: string
+) {
+  void postSessionJson(
+    machineId,
+    viewerContextId,
+    sessionId,
+    "/api/abort",
+    {}
+  ).catch((error: unknown) => toast.error(errorText(error)))
 }
 
 function ChildStatus({ child }: { child: ChildSession }) {
@@ -89,6 +98,7 @@ function ChildRow({
   now: number
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   return (
     <Item variant="outline" size="sm" className="items-start gap-2 p-0 pr-1">
       <button
@@ -128,7 +138,7 @@ function ChildRow({
             label="Stop the child session"
             icon={<SquareIcon />}
             tone="destructive"
-            onClick={() => stopSession(viewerContextId, child.id)}
+            onClick={() => stopSession(machineId, viewerContextId, child.id)}
           />
         </ItemActions>
       ) : null}
@@ -143,6 +153,7 @@ function ChildrenSection({
   state: Record<string, unknown>
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const children = (state.children as Array<ChildSession> | undefined) ?? []
   const now = useNow()
   const busy = children.filter((child) => child.busy)
@@ -164,7 +175,8 @@ function ChildrenSection({
           variant="outline"
           className="text-destructive"
           onClick={() => {
-            for (const child of busy) stopSession(viewerContextId, child.id)
+            for (const child of busy)
+              stopSession(machineId, viewerContextId, child.id)
           }}
         >
           <SquareIcon /> Stop all {busy.length} child sessions

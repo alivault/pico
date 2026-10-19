@@ -55,6 +55,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 type DeleteOldDirectorySessionsData = Extract<
@@ -246,6 +247,7 @@ export function RenameSessionDialogController({
   viewerContextId,
   onRenameSession,
 }: RenameSessionDialogControllerProps) {
+  const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
   const [renameValue, setRenameValue] = React.useState("")
   const [isGeneratingName, setIsGeneratingName] = React.useState(false)
@@ -289,6 +291,7 @@ export function RenameSessionDialogController({
     try {
       const response = await fetchJson<GenerateSessionNameData>(
         buildRequestUrl("/api/session/name", {
+          machineId,
           contextId: viewerContextId,
         }),
         {
@@ -691,6 +694,7 @@ export function DeleteOldDirectorySessionsDialogController({
   openStateRef,
   viewerContextId,
 }: DeleteOldDirectorySessionsDialogControllerProps) {
+  const machineId = useMachineId()
   const queryClient = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [directory, setDirectory] = React.useState("")
@@ -722,6 +726,7 @@ export function DeleteOldDirectorySessionsDialogController({
     mutationFn: async (dryRun: boolean) => {
       return await fetchJson<DeleteOldDirectorySessionsData>(
         buildRequestUrl("/api/directory-sessions/cleanup", {
+          machineId,
           contextId: viewerContextId,
         }),
         {
@@ -1052,6 +1057,7 @@ export function ForkSessionDialogController({
   sessionScopeKey,
   sessionId,
 }: ForkSessionDialogControllerProps) {
+  const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
   const openRef = React.useRef(open)
   const queryClient = useQueryClient()
@@ -1073,6 +1079,7 @@ export function ForkSessionDialogController({
     queryFn: () =>
       fetchJson<ForkableMessagesData>(
         buildRequestUrl("/api/session/fork", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         })
@@ -1090,6 +1097,7 @@ export function ForkSessionDialogController({
 
       return await fetchJson<ForkSessionResponse>(
         buildRequestUrl("/api/session/fork", {
+          machineId,
           contextId: viewerContextId,
           sessionId,
         }),

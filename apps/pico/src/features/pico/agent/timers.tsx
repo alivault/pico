@@ -24,6 +24,7 @@ import {
   registerToolRenderer,
   toolArgs,
 } from "@/features/pico/tool-renderers/registry"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 type TimerItem = {
   id: string
@@ -76,10 +77,12 @@ function TimersSection({
   state: Record<string, unknown>
   viewerContextId: string
 }) {
+  const machineId = useMachineId()
   const items = (state.timers as Array<TimerItem> | undefined) ?? []
   const now = useNow()
   const cancel = (id: string) => {
     void postSessionJson(
+      machineId,
       viewerContextId,
       sessionId,
       "/api/session/timer/cancel",
