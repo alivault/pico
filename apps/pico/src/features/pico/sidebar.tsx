@@ -83,7 +83,9 @@ import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
+  PINNED_SESSIONS_STORAGE_KEY,
   readStoredCollapsedDirectories,
+  readStoredPinnedSessionKeys,
   machineLocalStorageSetItem,
   sessionListEntryKey,
 } from "@/lib/pico"
@@ -93,10 +95,16 @@ import {
   SidebarMachineGroups,
   useHasMachineGroups,
 } from "@/features/pico/machines"
-import type {
-  MachineInfo,
-  MachineSessionSummary,
+import {
+  viewerContextIdForSummaries,
+  type MachineInfo,
+  type MachineSessionSummary,
 } from "@/features/pico/machine-store"
+import {
+  OtherMachineArchiveDialog,
+  OtherMachineRenameDialog,
+} from "@/features/pico/other-machine-session-dialogs"
+import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import {
   openMachine,
   openSession as openMachineSession,
@@ -622,6 +630,8 @@ type SidebarSessionItemProps = {
   isPinned: boolean
   isMobile: boolean
   overlay: boolean
+  /** False for a session of another machine: it cannot move here. */
+  sessionDraggable?: boolean
   moveTargetDirectories: Array<string>
   setOpenMobile: (open: boolean) => void
   onSessionClick?: (
@@ -645,6 +655,7 @@ function SidebarSessionItem({
   isPinned,
   isMobile,
   overlay,
+  sessionDraggable = true,
   moveTargetDirectories,
   setOpenMobile,
   onSessionClick,
@@ -672,7 +683,7 @@ function SidebarSessionItem({
     entry?.id
   )
   const showSessionPreviews = useShowSessionPreviews()
-  const dragDisabled = isMobile || overlay || !entry?.path
+  const dragDisabled = !sessionDraggable || isMobile || overlay || !entry?.path
   const draggable = useDraggable({
     id: `session:${entryKey}`,
     disabled: dragDisabled,
@@ -1246,6 +1257,8 @@ type DirectorySessionGroupProps = {
   pinnedSessionKeys: Array<string>
   isMobile: boolean
   setOpenMobile: (open: boolean) => void
+  /** False for the sessions of another machine. */
+  sessionsDraggable?: boolean
   isDragging?: boolean
   isSessionDropTarget?: boolean
   overlay?: boolean
@@ -1277,6 +1290,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   pinnedSessionKeys,
   isMobile,
   setOpenMobile,
+  sessionsDraggable,
   isDragging,
   isSessionDropTarget,
   overlay = false,
@@ -1493,6 +1507,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                         isPinned={pinnedSessionKeys.includes(entryKey)}
                         isMobile={isMobile}
                         overlay={overlay}
+                        sessionDraggable={sessionsDraggable}
                         moveTargetDirectories={moveTargetDirectories}
                         setOpenMobile={setOpenMobile}
                         onSessionClick={onSessionClick}
@@ -1563,6 +1578,8 @@ type PinnedSessionGroupProps = {
   isMobile: boolean
   moveTargetDirectories: Array<string>
   setOpenMobile: (open: boolean) => void
+  /** False for the sessions of another machine. */
+  sessionsDraggable?: boolean
   onSessionClick?: (
     entry: SessionListEntry,
     modifiers: SessionClickModifiers
@@ -1585,6 +1602,7 @@ function PinnedSessionGroup({
   isMobile,
   moveTargetDirectories,
   setOpenMobile,
+  sessionsDraggable,
   onSessionClick,
   onRenameSession,
   onDeleteSession,
@@ -1648,6 +1666,7 @@ function PinnedSessionGroup({
                     isPinned
                     isMobile={isMobile}
                     overlay={false}
+                    sessionDraggable={sessionsDraggable}
                     moveTargetDirectories={moveTargetDirectories}
                     setOpenMobile={setOpenMobile}
                     onSessionClick={onSessionClick}
@@ -1828,13 +1847,16 @@ function DirectoryActions({
   )
 }
 
-const NO_PINNED_SESSION_KEYS: Array<string> = []
 const NO_MOVE_TARGET_DIRECTORIES: Array<string> = []
 
 /** A session of another machine, from its summary, as a sidebar entry. */
 function machineSummaryEntry(session: MachineSessionSummary): SessionListEntry {
   return {
     id: session.id,
+    // The session path of a Pico server. With it, the rename and archive
+    // routes find the session, and the key of the row matches the pinned
+    // session keys of that machine.
+    path: `pico:${session.id}`,
     cwd: session.directory || session.cwd,
     title: session.title,
     ...(session.lastMessageAt
@@ -1864,10 +1886,55 @@ function groupMachineSessions(machine: MachineInfo) {
 }
 
 /**
+ * The pinned session keys of another machine. They are part of the sidebar
+ * state that the machine's server keeps, so this starts the sidebar sync of
+ * that machine. The sync keeps the local copy and sends changes to it.
+ */
+function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
+  const [keys, setKeys] = React.useState(() =>
+    readStoredPinnedSessionKeys(machineId)
+  )
+
+  React.useEffect(() => {
+    if (!online) return
+    const contextId = viewerContextIdForSummaries()
+    if (contextId) startSidebarSync(machineId, contextId)
+  }, [machineId, online])
+
+  usePicoEvent(
+    "pico:sidebar-state",
+    ({ machineId: changedMachine, changed }) => {
+      if (changedMachine !== machineId) return
+      if (changed.includes("pinnedSessionKeys"))
+        setKeys(readStoredPinnedSessionKeys(machineId))
+    }
+  )
+
+  const toggle = React.useCallback(
+    (key: string) => {
+      const current = readStoredPinnedSessionKeys(machineId)
+      const next = current.includes(key)
+        ? current.filter((entry) => entry !== key)
+        : [key, ...current]
+      machineLocalStorageSetItem(
+        machineId,
+        PINNED_SESSIONS_STORAGE_KEY,
+        JSON.stringify(next)
+      )
+      setKeys(next)
+    },
+    [machineId]
+  )
+
+  return [keys, toggle] as const
+}
+
+/**
  * The directories and sessions of another machine of the hub, from its
  * summary. They look like the directories of this machine. A click opens the
  * session on its machine; the new-session button of a directory opens the
- * machine and starts a session there.
+ * machine and starts a session there. Pin, rename, and archive change the
+ * session on its machine.
  */
 export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const { isMobile, setOpenMobile } = useSidebar()
@@ -1891,6 +1958,30 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   }, [grouped, stores])
 
   const online = machine.state === "online"
+  const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedSessionKeys(
+    machine.id,
+    online
+  )
+  // Only the pins of sessions in the summary: the summary does not have
+  // archived sessions, and it stops at 200 sessions.
+  const pinnedSessionKeys = React.useMemo(() => {
+    const known = new Set(
+      Object.values(grouped.sessionsByDirectory)
+        .flat()
+        .map((entry) => sessionListEntryKey(entry))
+    )
+    return storedPinnedKeys.filter((key) => known.has(key))
+  }, [grouped, storedPinnedKeys])
+  const [renameEntry, setRenameEntry] = React.useState<SessionListEntry>()
+  const [archiveEntry, setArchiveEntry] = React.useState<SessionListEntry>()
+  const sessionActions = online
+    ? {
+        onRenameSession: setRenameEntry,
+        onDeleteSession: setArchiveEntry,
+        onTogglePinnedSession: (entry: SessionListEntry) =>
+          togglePinnedKey(sessionListEntryKey(entry)),
+      }
+    : {}
   const openSession = React.useCallback(
     (entry: SessionListEntry) => {
       if (entry.id)
@@ -1933,6 +2024,20 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
 
   return (
     <>
+      <PinnedSessionGroup
+        pinnedSessionKeys={pinnedSessionKeys}
+        directorySessionsStore={stores.sessions}
+        collapsedDirectoryStore={stores.collapsed}
+        searchActive={false}
+        activeSessionStore={stores.active}
+        selectedSessionKeyStore={stores.selected}
+        isMobile={isMobile}
+        moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
+        setOpenMobile={setOpenMobile}
+        sessionsDraggable={false}
+        onSessionClick={openSession}
+        {...sessionActions}
+      />
       {grouped.directories.map((directory) => (
         <DirectorySessionGroup
           key={directory}
@@ -1943,13 +2048,31 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
           moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
           activeSessionStore={stores.active}
           selectedSessionKeyStore={stores.selected}
-          pinnedSessionKeys={NO_PINNED_SESSION_KEYS}
+          pinnedSessionKeys={pinnedSessionKeys}
           isMobile={isMobile}
           setOpenMobile={setOpenMobile}
+          sessionsDraggable={false}
           onSessionClick={openSession}
           onCreateSessionInDirectory={online ? createSession : undefined}
+          {...sessionActions}
         />
       ))}
+      <OtherMachineRenameDialog
+        machineId={machine.id}
+        machineLabel={machine.label}
+        entry={renameEntry}
+        onOpenChange={(open) => {
+          if (!open) setRenameEntry(undefined)
+        }}
+      />
+      <OtherMachineArchiveDialog
+        machineId={machine.id}
+        machineLabel={machine.label}
+        entry={archiveEntry}
+        onOpenChange={(open) => {
+          if (!open) setArchiveEntry(undefined)
+        }}
+      />
     </>
   )
 }
