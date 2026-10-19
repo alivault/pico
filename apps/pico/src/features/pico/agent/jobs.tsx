@@ -12,6 +12,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { TitleTooltip } from "@/components/ui/tooltip"
+import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
@@ -92,9 +93,8 @@ function JobsSection({
     return (
       <Item
         key={job.id}
-        variant={running ? "outline" : "muted"}
         size="sm"
-        className="py-2"
+        className="group/row gap-2 px-1.5 py-1.5 hover:bg-muted/50"
       >
         <ItemMedia>
           <span
@@ -108,7 +108,7 @@ function JobsSection({
           </TitleTooltip>
           <ItemDescription>{statusText(job, now)}</ItemDescription>
         </ItemContent>
-        <ItemActions className="gap-0.5">
+        <ItemActions className={cn("gap-0.5", REVEAL_ON_HOVER)}>
           {running ? (
             <IconAction
               label="Show in the terminal panel"
@@ -139,12 +139,12 @@ function JobsSection({
     <>
       <div className="space-y-1.5">
         {active.length ? (
-          <ItemGroup className="gap-1.5">{active.map(row)}</ItemGroup>
+          <ItemGroup className="gap-0.5">{active.map(row)}</ItemGroup>
         ) : (
           <p className="px-1 text-xs text-muted-foreground">No job runs now.</p>
         )}
         <FinishedGroup count={finished.length}>
-          <ItemGroup className="gap-1.5">{finished.map(row)}</ItemGroup>
+          <ItemGroup className="gap-0.5">{finished.map(row)}</ItemGroup>
         </FinishedGroup>
       </div>
       {logJob ? (
@@ -168,8 +168,12 @@ function JobsSection({
 registerAgentSection({
   key: "jobs",
   title: "Background jobs",
-  order: 40,
+  order: 20,
   visible: (state) => Array.isArray(state.jobs) && state.jobs.length > 0,
+  busy: (state) =>
+    ((state.jobs as Array<Job> | undefined) ?? []).some(
+      (job) => job.status === "running"
+    ),
   summary(state) {
     const jobs = (state.jobs as Array<Job> | undefined) ?? []
     const running = jobs.filter((job) => job.status === "running").length

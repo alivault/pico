@@ -70,7 +70,7 @@ import {
 } from "@/lib/pico"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import "@/features/pico/agent/register"
-import { AgentPanel } from "@/features/pico/agent/agent-panel"
+import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
 import { PreviewPanel, usePreviewState } from "@/features/pico/agent/preview"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
@@ -1143,6 +1143,8 @@ export function RightSidebar({
     setActiveTab(tab)
   }
 
+  const agentBusy = useAgentBusy(viewerContextId, sessionId)
+
   // On mobile, the Agent panel has its own top-level tab.
   const leaveAgentTabEffectEvent = React.useEffectEvent(() => {
     setActiveTab("review")
@@ -1201,6 +1203,7 @@ export function RightSidebar({
           }}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
+          agentBusy={agentBusy}
           showAgent={!isMobile && agentPanelAvailable}
           showPreview={
             previewAvailable &&

@@ -11,6 +11,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { TitleTooltip } from "@/components/ui/tooltip"
+import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
@@ -95,9 +96,8 @@ function TimersSection({
     return (
       <Item
         key={item.id}
-        variant={pending ? "outline" : "muted"}
         size="sm"
-        className="py-2"
+        className="group/row gap-2 px-1.5 py-1.5 hover:bg-muted/50"
       >
         <ItemMedia variant="icon">
           <Icon aria-label={item.kind === "watch" ? "Watch" : "Timer"} />
@@ -114,7 +114,7 @@ function TimersSection({
           ) : null}
         </ItemContent>
         {pending ? (
-          <ItemActions>
+          <ItemActions className={REVEAL_ON_HOVER}>
             <IconAction
               label={item.kind === "watch" ? "Stop watching" : "Cancel timer"}
               icon={<XIcon />}
@@ -131,12 +131,12 @@ function TimersSection({
   return (
     <div className="space-y-1.5">
       {active.length ? (
-        <ItemGroup className="gap-1.5">{active.map(row)}</ItemGroup>
+        <ItemGroup className="gap-0.5">{active.map(row)}</ItemGroup>
       ) : (
         <p className="px-1 text-xs text-muted-foreground">Nothing waits now.</p>
       )}
       <FinishedGroup count={finished.length}>
-        <ItemGroup className="gap-1.5">{finished.map(row)}</ItemGroup>
+        <ItemGroup className="gap-0.5">{finished.map(row)}</ItemGroup>
       </FinishedGroup>
     </div>
   )

@@ -1205,6 +1205,7 @@ export function RightSidebarTabStrip({
   onOpenFileDialog,
   onReorderCommitDiffs,
   onReorderFiles,
+  agentBusy = false,
   showAgent = false,
   showPreview = false,
   showFiles = false,
@@ -1231,6 +1232,8 @@ export function RightSidebarTabStrip({
   onOpenFileDialog?: () => void
   onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
+  /** Show a dot on the Agent tab while the agent has live work there. */
+  agentBusy?: boolean
   showAgent?: boolean
   showPreview?: boolean
   showFiles?: boolean
@@ -1239,10 +1242,12 @@ export function RightSidebarTabStrip({
 }) {
   const renderTab = ({
     active: activeOverride,
+    indicator,
     label,
     value,
   }: {
     active?: boolean
+    indicator?: string
     label: string
     value: RightSidebarTabValue
   }) => {
@@ -1261,6 +1266,13 @@ export function RightSidebarTabStrip({
         }}
       >
         {label}
+        {indicator ? (
+          <span
+            role="img"
+            aria-label={indicator}
+            className="ml-1.5 size-1.5 rounded-full bg-primary"
+          />
+        ) : null}
       </button>
     )
   }
@@ -1344,7 +1356,13 @@ export function RightSidebarTabStrip({
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Git", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
-      {showAgent ? renderTab({ label: "Agent", value: "agent" }) : null}
+      {showAgent
+        ? renderTab({
+            indicator: agentBusy ? "The agent has live work" : undefined,
+            label: "Agent",
+            value: "agent",
+          })
+        : null}
       {showPreview ? renderTab({ label: "Preview", value: "preview" }) : null}
       {!hasOpenFiles || showFiles
         ? renderTab({

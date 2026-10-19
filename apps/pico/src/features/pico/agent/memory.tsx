@@ -1,5 +1,5 @@
 import * as React from "react"
-import { PencilIcon, PlusIcon, XIcon } from "lucide-react"
+import { PlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,10 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import {
+  registerAgentSection,
+  type AgentSectionProps,
+} from "@/features/pico/agent/agent-panel"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import { errorText, IconAction } from "@/features/pico/agent/shared"
 import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
@@ -56,6 +59,7 @@ function FactDialog({
   initialText,
   initialScope,
   chooseScope = false,
+  tags,
   onSubmit,
 }: {
   open: boolean
@@ -65,6 +69,7 @@ function FactDialog({
   initialText: string
   initialScope: Scope
   chooseScope?: boolean
+  tags?: Array<string>
   onSubmit: (text: string, scope: Scope) => void
 }) {
   const [text, setText] = React.useState(initialText)
@@ -92,7 +97,10 @@ function FactDialog({
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{scopeDescription(scope)}</DialogDescription>
+            <DialogDescription>
+              {scopeDescription(scope)}
+              {tags?.length ? ` Tags: ${tags.join(", ")}.` : null}
+            </DialogDescription>
           </DialogHeader>
           <Textarea
             autoFocus
@@ -158,29 +166,21 @@ function FactRow({
 }) {
   const [editing, setEditing] = React.useState(false)
   return (
-    <li className="group/row flex items-start gap-1 rounded-md px-1 py-1 text-sm hover:bg-muted/50">
-      <span className="min-w-0 flex-1 pt-0.5">
+    <li className="group/row flex items-start gap-1 rounded-md px-1 py-0.5 text-sm hover:bg-muted/50">
+      <button
+        type="button"
+        className="line-clamp-2 min-w-0 flex-1 rounded-sm py-1 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={() => setEditing(true)}
+      >
         {fact.text}
-        {fact.tags?.length ? (
-          <span className="text-xs text-muted-foreground">
-            {" "}
-            · {fact.tags.join(", ")}
-          </span>
-        ) : null}
-      </span>
-      <span className={cn("-my-1 flex shrink-0", REVEAL_ON_HOVER)}>
-        <IconAction
-          label="Edit fact"
-          icon={<PencilIcon />}
-          onClick={() => setEditing(true)}
-        />
-        <IconAction
-          label="Remove fact"
-          icon={<XIcon />}
-          tone="destructive"
-          onClick={() => onChange({ op: "remove", id: fact.id })}
-        />
-      </span>
+      </button>
+      <IconAction
+        label="Remove fact"
+        icon={<XIcon />}
+        tone="destructive"
+        className={cn("shrink-0", REVEAL_ON_HOVER)}
+        onClick={() => onChange({ op: "remove", id: fact.id })}
+      />
       <FactDialog
         open={editing}
         onOpenChange={setEditing}
@@ -188,6 +188,7 @@ function FactRow({
         submitLabel="Save"
         initialText={fact.text}
         initialScope={scope}
+        tags={fact.tags}
         onSubmit={(text) => {
           if (text !== fact.text) onChange({ op: "update", id: fact.id, text })
         }}
@@ -214,40 +215,34 @@ function FactList({
   )
 }
 
-function MemorySection({
-  sessionId,
-  state,
-  viewerContextId,
-}: {
-  sessionId: string
-  state: Record<string, unknown>
-  viewerContextId: string
-}) {
+function useMemoryChange(viewerContextId: string, sessionId: string) {
   const machineId = useMachineId()
-  const memory = state.memory as MemoryState | undefined
-  const [adding, setAdding] = React.useState(false)
-  if (!memory) return null
-  const change = (target: Scope) => (body: Record<string, unknown>) => {
+  return (scope: Scope) => (body: Record<string, unknown>) => {
     void postSessionJson(
       machineId,
       viewerContextId,
       sessionId,
       "/api/session/memory",
-      {
-        ...body,
-        scope: target,
-      }
+      { ...body, scope }
     ).catch((error: unknown) => toast.error(errorText(error)))
   }
-  const projectName =
-    memory.project.split("/").filter(Boolean).at(-1) ?? memory.project
+}
+
+const SCOPE_HEADING = "w-fit px-1 pt-1 text-xs text-muted-foreground"
+
+function MemorySection({
+  sessionId,
+  state,
+  viewerContextId,
+}: AgentSectionProps) {
+  const memory = state.memory as MemoryState | undefined
+  const change = useMemoryChange(viewerContextId, sessionId)
+  if (!memory) return null
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
+    <div className="space-y-2">
+      <div className="space-y-0.5">
         <TitleTooltip title={memory.project}>
-          <div className="w-fit px-1 text-xs font-medium text-muted-foreground">
-            This project ({projectName})
-          </div>
+          <div className={SCOPE_HEADING}>This project</div>
         </TitleTooltip>
         {memory.facts.length ? (
           <FactList
@@ -263,10 +258,8 @@ function MemorySection({
         )}
       </div>
       {memory.global.length ? (
-        <div className="space-y-1">
-          <div className="px-1 text-xs font-medium text-muted-foreground">
-            All projects
-          </div>
+        <div className="space-y-0.5">
+          <div className={SCOPE_HEADING}>All projects</div>
           <FactList
             facts={memory.global}
             scope="global"
@@ -274,15 +267,20 @@ function MemorySection({
           />
         </div>
       ) : null}
-      <Button
-        variant="outline"
-        size="sm"
-        className="ml-1"
+    </div>
+  )
+}
+
+function MemoryActions({ sessionId, viewerContextId }: AgentSectionProps) {
+  const change = useMemoryChange(viewerContextId, sessionId)
+  const [adding, setAdding] = React.useState(false)
+  return (
+    <>
+      <IconAction
+        label="Add fact"
+        icon={<PlusIcon />}
         onClick={() => setAdding(true)}
-      >
-        <PlusIcon />
-        Add fact
-      </Button>
+      />
       <FactDialog
         open={adding}
         onOpenChange={setAdding}
@@ -293,7 +291,7 @@ function MemorySection({
         chooseScope
         onSubmit={(text, scope) => change(scope)({ op: "add", text })}
       />
-    </div>
+    </>
   )
 }
 
@@ -301,12 +299,14 @@ registerAgentSection({
   key: "memory",
   title: "Memory",
   order: 50,
+  defaultOpen: false,
   visible: (state) => Boolean(state.memory),
   summary(state) {
     const memory = state.memory as MemoryState | undefined
     const count = (memory?.facts.length ?? 0) + (memory?.global.length ?? 0)
     return count ? `${count} ${count === 1 ? "fact" : "facts"}` : undefined
   },
+  Actions: MemoryActions,
   Component: MemorySection,
 })
 

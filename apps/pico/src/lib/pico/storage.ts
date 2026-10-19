@@ -33,6 +33,7 @@ export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
   "pico-right-sidebar-history-height"
 export const RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY =
   "pico-right-sidebar-history-tab"
+export const AGENT_SECTIONS_OPEN_STORAGE_KEY = "pico-agent-sections-open"
 export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
 export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
 export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"

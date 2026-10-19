@@ -17,8 +17,12 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
-import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import {
+  registerAgentSection,
+  type AgentSectionProps,
+} from "@/features/pico/agent/agent-panel"
 import { emitPicoEvent } from "@/features/pico/agent/events"
+import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import {
   postSessionJson,
   useSessionExtensions,
@@ -36,6 +40,7 @@ import {
   useToolRenderContext,
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
+import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 export type ChildSession = {
@@ -100,11 +105,14 @@ function ChildRow({
 }) {
   const machineId = useMachineId()
   return (
-    <Item variant="outline" size="sm" className="items-start gap-2 p-0 pr-1">
+    <Item
+      size="sm"
+      className="group/row items-start gap-1 p-0 hover:bg-muted/50"
+    >
       <button
         type="button"
         aria-label={`Open ${child.title}`}
-        className="flex min-w-0 flex-1 items-start gap-2.5 rounded-lg px-3 py-2 text-left outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() =>
           emitPicoEvent("pico:open-session", { sessionId: child.id })
         }
@@ -128,12 +136,15 @@ function ChildRow({
           ) : null}
         </ItemContent>
         <ChevronRightIcon
-          className="mt-1 size-4 shrink-0 text-muted-foreground"
+          className={cn(
+            "mt-1 size-4 shrink-0 text-muted-foreground",
+            REVEAL_ON_HOVER
+          )}
           aria-hidden="true"
         />
       </button>
       {child.busy ? (
-        <ItemActions className="self-center">
+        <ItemActions className={cn("self-center pr-1", REVEAL_ON_HOVER)}>
           <IconAction
             label="Stop the child session"
             icon={<SquareIcon />}
@@ -146,57 +157,57 @@ function ChildRow({
   )
 }
 
-function ChildrenSection({
-  state,
-  viewerContextId,
-}: {
-  state: Record<string, unknown>
-  viewerContextId: string
-}) {
-  const machineId = useMachineId()
-  const children = (state.children as Array<ChildSession> | undefined) ?? []
+function childrenFrom(state: Record<string, unknown>) {
+  return (state.children as Array<ChildSession> | undefined) ?? []
+}
+
+function ChildrenSection({ state, viewerContextId }: AgentSectionProps) {
   const now = useNow()
-  const busy = children.filter((child) => child.busy)
   return (
-    <div className="space-y-2">
-      <ItemGroup className="gap-1.5">
-        {children.map((child) => (
-          <ChildRow
-            key={child.id}
-            child={child}
-            now={now}
-            viewerContextId={viewerContextId}
-          />
-        ))}
-      </ItemGroup>
-      {busy.length > 1 ? (
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-destructive"
-          onClick={() => {
-            for (const child of busy)
-              stopSession(machineId, viewerContextId, child.id)
-          }}
-        >
-          <SquareIcon /> Stop all {busy.length} child sessions
-        </Button>
-      ) : null}
-    </div>
+    <ItemGroup className="gap-0.5">
+      {childrenFrom(state).map((child) => (
+        <ChildRow
+          key={child.id}
+          child={child}
+          now={now}
+          viewerContextId={viewerContextId}
+        />
+      ))}
+    </ItemGroup>
+  )
+}
+
+function ChildrenActions({ state, viewerContextId }: AgentSectionProps) {
+  const machineId = useMachineId()
+  const busy = childrenFrom(state).filter((child) => child.busy)
+  if (busy.length < 2) return null
+  return (
+    <IconAction
+      label={`Stop all ${busy.length} child sessions`}
+      icon={<SquareIcon />}
+      tone="destructive"
+      onClick={() => {
+        for (const child of busy)
+          stopSession(machineId, viewerContextId, child.id)
+      }}
+    />
   )
 }
 
 registerAgentSection({
   key: "children",
   title: "Child sessions",
-  order: 15,
+  order: 40,
   summary(state) {
-    const children = (state.children as Array<ChildSession> | undefined) ?? []
+    const children = childrenFrom(state)
     const working = children.filter((child) => child.busy).length
     return working ? `${working} working` : undefined
   },
   visible: (state) =>
     Array.isArray(state.children) && state.children.length > 0,
+  busy: (state) =>
+    childrenFrom(state).some((child) => child.busy || child.needsInput),
+  Actions: ChildrenActions,
   Component: ChildrenSection,
 })
 

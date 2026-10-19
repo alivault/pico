@@ -13,10 +13,6 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
-  registerAgentSection,
-  type AgentSectionProps,
-} from "@/features/pico/agent/agent-panel"
-import {
   registerAgentSettingsSection,
   SettingsSection,
 } from "@/features/pico/agent/agent-settings-dialog"
@@ -143,32 +139,6 @@ function ProfilePickerView({
     </DropdownMenu>
   )
 }
-
-function SessionProfileSection({
-  cwd,
-  sessionId,
-  viewerContextId,
-}: AgentSectionProps) {
-  return (
-    <div className="flex items-center justify-between gap-2 px-1 text-sm">
-      <span className="text-muted-foreground">Tools the agent can use</span>
-      <ProfilePicker
-        cwd={cwd}
-        sessionId={sessionId}
-        variant="outline"
-        viewerContextId={viewerContextId}
-      />
-    </div>
-  )
-}
-
-registerAgentSection({
-  key: "profile",
-  title: "Session",
-  order: 5,
-  visible: () => true,
-  Component: SessionProfileSection,
-})
 
 const EXAMPLE = `{
   "docs": {

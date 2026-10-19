@@ -5,6 +5,8 @@ import {
   CircleDotIcon,
   CircleIcon,
   ListChecksIcon,
+  ListXIcon,
+  PlusIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -17,9 +19,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import {
+  registerAgentSection,
+  type AgentSectionProps,
+} from "@/features/pico/agent/agent-panel"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
   postSessionJson,
@@ -167,19 +171,9 @@ function todoItemsFrom(state: Record<string, unknown>) {
   return todo?.items ?? []
 }
 
-function TodoSection({
-  sessionId,
-  state,
-  viewerContextId,
-}: {
-  sessionId: string
-  state: Record<string, unknown>
-  viewerContextId: string
-}) {
+function useTodoChange(viewerContextId: string, sessionId: string) {
   const machineId = useMachineId()
-  const items = todoItemsFrom(state)
-  const [text, setText] = React.useState("")
-  const change = (body: Record<string, unknown>) => {
+  return (body: Record<string, unknown>) => {
     void postSessionJson(
       machineId,
       viewerContextId,
@@ -188,12 +182,17 @@ function TodoSection({
       body
     ).catch((error: unknown) => toast.error(errorText(error)))
   }
-  const done = items.filter((item) => item.status === "done").length
+}
+
+function TodoSection({ sessionId, state, viewerContextId }: AgentSectionProps) {
+  const items = todoItemsFrom(state)
+  const [text, setText] = React.useState("")
+  const change = useTodoChange(viewerContextId, sessionId)
   return (
-    <div className="space-y-2">
+    <div className="space-y-0.5">
       <TodoList items={items} onChange={change} />
       <form
-        className="flex gap-1.5"
+        className="flex items-center gap-1.5 rounded-md px-1"
         onSubmit={(event) => {
           event.preventDefault()
           if (!text.trim()) return
@@ -201,34 +200,34 @@ function TodoSection({
           setText("")
         }}
       >
-        <Input
+        <PlusIcon
+          aria-hidden="true"
+          className="mx-1.5 size-4 shrink-0 text-muted-foreground"
+        />
+        <input
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="New item"
           aria-label="New plan item"
-          className="h-8"
+          className="h-7 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
-        <Button
-          type="submit"
-          size="sm"
-          variant="outline"
-          disabled={!text.trim()}
-        >
-          Add
-        </Button>
       </form>
-      {done > 0 ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-muted-foreground"
-          onClick={() => change({ op: "clear", scope: "done" })}
-        >
-          Remove done items
-        </Button>
-      ) : null}
     </div>
+  )
+}
+
+function TodoActions({ sessionId, state, viewerContextId }: AgentSectionProps) {
+  const change = useTodoChange(viewerContextId, sessionId)
+  const done = todoItemsFrom(state).filter(
+    (item) => item.status === "done"
+  ).length
+  if (done === 0) return null
+  return (
+    <IconAction
+      label="Remove done items"
+      icon={<ListXIcon />}
+      onClick={() => change({ op: "clear", scope: "done" })}
+    />
   )
 }
 
@@ -268,13 +267,14 @@ export function TodoProgressChip({
 registerAgentSection({
   key: "todo",
   title: "Plan",
-  order: 20,
+  order: 10,
   visible: (state) => todoItemsFrom(state).length > 0,
   summary(state) {
     const items = todoItemsFrom(state)
     const done = items.filter((item) => item.status === "done").length
     return `${done} of ${items.length} done`
   },
+  Actions: TodoActions,
   Component: TodoSection,
 })
 

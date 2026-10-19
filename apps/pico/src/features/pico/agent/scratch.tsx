@@ -1,15 +1,7 @@
 import * as React from "react"
-import { ChevronRightIcon, NotebookTextIcon } from "lucide-react"
+import { NotebookTextIcon } from "lucide-react"
 
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { TextDialog } from "@/features/pico/agent/shared"
 import {
@@ -46,36 +38,31 @@ function ScratchSection({
   const [open, setOpen] = React.useState<ScratchEntry | null>(null)
   return (
     <>
-      <ItemGroup className="gap-1">
+      <ul className="space-y-0.5">
         {entries.map((entry) => (
-          <Item
-            key={entry.id}
-            size="sm"
-            className="py-1.5 hover:bg-muted/60"
-            render={
+          <li key={entry.id}>
+            <TitleTooltip
+              title={`${entry.lines} lines${entry.source ? ` from ${entry.source}` : ""}`}
+            >
               <button
                 type="button"
                 aria-label={`Show ${entry.name}`}
+                className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
                 onClick={() => setOpen(entry)}
-              />
-            }
-          >
-            <ItemMedia variant="icon">
-              <NotebookTextIcon />
-            </ItemMedia>
-            <ItemContent className="min-w-0">
-              <ItemTitle className="block truncate">{entry.name}</ItemTitle>
-              <ItemDescription className="tabular-nums">
-                {entry.lines} lines · {formatBytes(entry.bytes)}
-                {entry.source ? ` · from ${entry.source}` : ""}
-              </ItemDescription>
-            </ItemContent>
-            <ItemActions>
-              <ChevronRightIcon className="size-4 text-muted-foreground" />
-            </ItemActions>
-          </Item>
+              >
+                <NotebookTextIcon
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+                <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {formatBytes(entry.bytes)}
+                </span>
+              </button>
+            </TitleTooltip>
+          </li>
         ))}
-      </ItemGroup>
+      </ul>
       {open ? (
         <TextDialog
           open
@@ -97,6 +84,7 @@ registerAgentSection({
   key: "scratch",
   title: "Scratchpad",
   order: 60,
+  defaultOpen: false,
   visible: (state) => Array.isArray(state.scratch) && state.scratch.length > 0,
   summary(state) {
     const count = (state.scratch as Array<unknown> | undefined)?.length ?? 0
