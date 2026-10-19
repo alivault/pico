@@ -1,6 +1,6 @@
 # Plan: Address machines explicitly in the web client
 
-Status: proposed. Not started.
+Status: implemented in four commits (`46cb0ff`, `d5fa1bb`, `f516ae9`, and this note). See "Implementation notes" at the end for the differences from this plan.
 
 ## Problem
 
@@ -137,3 +137,50 @@ Done when: a switch keeps the composer text, the right sidebar, and the scroll p
 
 - Unit tests for `MachineClient.url`, `storageKey` (same strings as today), and `sessionKey`.
 - Server tests already cover the proxy. Add an end-to-end check with the local machine and one fake remote machine (the hub tests can start a second server): switch machines and back, and check that the draft is kept and that no request goes to the wrong `/m/<id>/` prefix.
+
+## Implementation notes
+
+The goal is the same as above: the client has no "current machine" global, each request and storage key names its machine, and a machine switch does not remount or lose state. Three parts differ from the plan.
+
+### One shell for each machine, kept alive (phase 4)
+
+The plan moved about twenty stores of `PicoAppShell` into records keyed by machine, with one shell for all machines. The implementation keeps one `PicoAppShell` for each machine that the page opened, in a React `Activity` (`routes/index.tsx`):
+
+- The URL selects the shown machine. The other shells are in `<Activity mode="hidden">`. They keep all their state (composer text and images, right sidebar, open files, conversation scroll). Their effects stop, so their event streams close and their window listeners go away, as before.
+- This is the Herdr model: one pane for each machine, all kept alive, one shown.
+- It needed no change to the 3800 lines of `app-shell.tsx` stores, so the risk is much smaller. The "done when" checks of phase 4 pass: a switch keeps the composer text, the right sidebar, and the scroll position, and the shell does not remount.
+
+Things that this needed:
+
+- One `SidebarProvider` above all shells, so the left sidebar state is window state.
+- A portal container for each shell (`components/ui/portal-container.tsx`). All floating UI of `components/ui` renders into it. The container is a portal at the top of the `Activity`, so the hidden `Activity` hides it. Without this, a menu that was open when a shell hid stayed on the screen.
+- `isInShownMachineShell` for the two `document.querySelectorAll("[data-sidebar-session-item]")` calls.
+- `React.useId` for the IDs of the worktree toggle, which is in each shell's composer.
+- `usePreservedScrollWhileHidden` in `app-shell-conversation.tsx`. `display: none` loses the scroll position, and the message scroller scrolls to the end when its viewport grows from zero.
+- A hidden shell that changes its session (for example when a request ends after the switch) updates its own workspace in the route. It does not navigate, so it cannot take the page back.
+- `openMachine` queues an action for the shell of the target machine (`queueMachineAction`). The shell runs the actions when it shows. This replaces the one-shot `pendingAction`.
+
+Window-level preferences that a shell reads from storage on mount (right sidebar and terminal panel open state, display settings) are read again when a shell shows, because its effects run again.
+
+### Per-machine query clients stay (phase 2)
+
+The plan put the machine ID into every query key and used one `QueryClient`. With one shell for each machine, each shell has the `QueryClient` of its machine (`queryClientForMachine`). This isolates the data of each machine at least as well as keys, with no change to the query keys. The machine ID is not in query keys.
+
+### Connections stay in the shell (phase 3)
+
+The plan moved the `/events` stream into a `MachineConnection` with a lifetime of its own. With kept-alive shells, the stream belongs to the shell of its machine and closes while the shell is hidden, as the plan said for a first step. The other parts of phase 3 are done: each machine has its own offline state (`machineOfflineLabel`), sidebar sync (`MachineSidebarSync`), offline prompt queue, and event last ID.
+
+### Phase 5
+
+- **Machine choice in the new-session composer:** done. The directory picker lists the directories of each other machine (from its summary), with offline machines disabled and an "Add directory on <machine>" item. A choice moves the prompt draft and images to that machine's composer (`moveDraftToMachine`, `MachineAction.draft`).
+- **Live sidebar for all machines:** the hub already pushes the summary of each machine (titles, working and input state, unread state) on `/api/machines/events`. No change was necessary for this release. A detailed event stream for hidden machines is still open.
+- **Actions across machines:** `openSession(ref)` and the action queue replace the handoff. Moving a session to another machine needs server work and is still open.
+
+### Guard rails
+
+`scripts/check-api-urls.mjs` (part of `pnpm check`) fails on a raw `fetch`, `EventSource`, or `WebSocket` with a server path, on `pageMachine(`, and on a direct use of `machineStorageKey(`. `fetchJson` also refuses a relative server path without a machine at run time, and the storage functions refuse a machine key without a machine.
+
+### Known limits
+
+- A menu that is open when its shell hides is still open when the shell shows again. It is hidden while the shell is hidden. A click in the page (the usual way to switch) closes it first.
+- Hidden shells re-render at low priority when global stores change (for example the machine list). This costs some CPU with many machines.
