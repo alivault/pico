@@ -149,8 +149,13 @@ export const ComposerPendingMessages = React.memo(
         className="rounded-2xl border bg-card"
       >
         <AccordionItem value="pending-prompts" className="border-0">
-          <div className="flex min-h-10 items-center gap-2 px-3 py-2">
-            <AccordionTrigger className="min-h-0 flex-1 p-0 hover:no-underline">
+          <div
+            className={`flex min-h-10 items-center gap-2 ${canStartQueue ? "pr-3" : ""}`}
+          >
+            <AccordionTrigger
+              headerClassName="min-w-0 flex-1 self-stretch"
+              className="min-h-10 items-center rounded-2xl px-3 py-2 hover:no-underline"
+            >
               <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
                 <span className="truncate">Queue</span>
                 <Badge variant="outline" className="shrink-0">
