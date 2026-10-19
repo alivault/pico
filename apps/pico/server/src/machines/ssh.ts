@@ -220,11 +220,17 @@ export class SshTransport implements MachineTransport {
 
   async connect(signal: AbortSignal) {
     if (await this.#check()) return
+    // The forwards died with the old master. A stale `api.sock` file can
+    // stay, so `attach` must not trust it.
+    this.#attachedPort = undefined
+    this.#forwards.clear()
     // A stale socket from a crashed master turns off multiplexing.
-    try {
-      unlinkSync(this.#control)
-    } catch {
-      // There is no socket.
+    for (const path of [this.#control, this.#api]) {
+      try {
+        unlinkSync(path)
+      } catch {
+        // There is no socket.
+      }
     }
     if (signal.aborted) throw new Error("Aborted")
     // `-f` goes to the background after authentication. The master keeps
