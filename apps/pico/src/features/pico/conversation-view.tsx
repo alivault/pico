@@ -35,6 +35,7 @@ import {
 import { cn } from "@/lib/utils"
 import "@/features/pico/agent/register"
 import { toolRenderer } from "@/features/pico/tool-renderers/registry"
+import { useMachineId } from "@/lib/pico/machine-context"
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -2156,7 +2157,9 @@ function rememberToolCollapsibleOpenKey(key: string, open: boolean) {
   }
 }
 
-function useRememberedToolCollapsibleOpen(openStateKey: string) {
+function useRememberedToolCollapsibleOpen(toolStateKey: string) {
+  // Tool call IDs come from each machine, so the key holds the machine too.
+  const openStateKey = `${useMachineId()}:${toolStateKey}`
   const [open, setOpenState] = React.useState(() =>
     rememberedToolCollapsibleOpenKeys.has(openStateKey)
   )

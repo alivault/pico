@@ -11,12 +11,9 @@ import {
 import { isApiErrorResponse } from "@/lib/pico/api"
 import {
   assertMachineWritable,
-  currentMachineEpoch,
   hubUrl,
   isUnaddressedServerPath,
   machineApiUrl,
-  pageMachine,
-  requestMachineId,
 } from "@/lib/pico/machine"
 
 function sameStringArray(left: Array<string>, right: Array<string>) {
@@ -209,19 +206,8 @@ export async function fetchJson<T>(
     )
   }
   assertMachineWritable(input, init?.method)
-  const targetMachine = requestMachineId(input)
-  const epoch = currentMachineEpoch()
   const response = await fetch(input, init)
   const text = await response.text()
-  // The page opened another machine meanwhile. The caller belongs to the app
-  // shell of the old machine, which is gone. Never settle, so that no error
-  // shows for a page that is not there any more.
-  if (
-    targetMachine !== undefined &&
-    targetMachine !== pageMachine() &&
-    epoch !== currentMachineEpoch()
-  )
-    return await new Promise<never>(() => undefined)
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 
   if (!response.ok) {

@@ -44,6 +44,9 @@ function NewSessionWorktreeToggleView({
   viewerContextId: string
 }) {
   const machineId = useMachineId()
+  // Each machine's app shell has a composer, so the IDs must be unique.
+  const worktreeFieldId = React.useId()
+  const branchFieldId = React.useId()
   const queryClient = useQueryClient()
   const queryKey = ["pico", "draft-worktree", viewerContextId, cwd] as const
   const query = useQuery({
@@ -116,16 +119,14 @@ function NewSessionWorktreeToggleView({
         <FieldGroup className="gap-4">
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor="new-session-worktree">
-                New worktree
-              </FieldLabel>
+              <FieldLabel htmlFor={worktreeFieldId}>New worktree</FieldLabel>
               <FieldDescription>
                 The session works in its own git worktree and branch, so it does
                 not change the files that other sessions use.
               </FieldDescription>
             </FieldContent>
             <Switch
-              id="new-session-worktree"
+              id={worktreeFieldId}
               checked={enabled}
               disabled={mutation.isPending}
               onCheckedChange={(checked) =>
@@ -139,7 +140,7 @@ function NewSessionWorktreeToggleView({
           </Field>
           {enabled ? (
             <Field>
-              <FieldLabel htmlFor="new-session-branch">Branch name</FieldLabel>
+              <FieldLabel htmlFor={branchFieldId}>Branch name</FieldLabel>
               <form
                 className="flex gap-2"
                 onSubmit={(event) => {
@@ -151,7 +152,7 @@ function NewSessionWorktreeToggleView({
                 }}
               >
                 <Input
-                  id="new-session-branch"
+                  id={branchFieldId}
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
                   placeholder="Made from the first prompt"

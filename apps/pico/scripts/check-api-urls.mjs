@@ -6,8 +6,8 @@
  * `/m/<machine>` prefix of the hub proxy. This check fails on:
  *
  * - a raw `fetch`, `EventSource`, or `WebSocket` with a server path;
- * - a read of the machine that the page shows (`pageMachine`) outside the
- *   files that may use it;
+ * - a read of a page-wide machine (`pageMachine`, removed): code gets its
+ *   machine from `useMachineId()` or an argument;
  * - a direct use of `machineStorageKey`, which skips the sidebar sync.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs"
@@ -36,11 +36,7 @@ const RULES = [
   },
   {
     pattern: /\bpageMachine\(/g,
-    allowed: [
-      "src/lib/pico/machine.ts",
-      "src/routes/index.tsx",
-      "src/features/pico/app-shell-utils.ts",
-    ],
+    allowed: [],
     message:
       "Code must not read the machine of the page. Use useMachineId() or a machineId argument",
   },

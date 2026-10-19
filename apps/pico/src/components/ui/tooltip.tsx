@@ -5,6 +5,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
 import { Kbd } from "@/components/ui/kbd"
+import { usePortalContainer } from "@/components/ui/portal-container"
 
 function TooltipProvider({
   delay = 0,
@@ -43,8 +44,9 @@ function TooltipContent({
   > & {
     positionerClassName?: string
   }) {
+  const portalContainer = usePortalContainer()
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={portalContainer}>
       <TooltipPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}

@@ -14,9 +14,10 @@ export function createPicoQueryClient() {
 const machineQueryClients = new Map<string, QueryClient>()
 
 /**
- * Each machine has its own query cache. Query keys do not hold a machine ID,
- * so two machines must not share a cache. A machine keeps its cache when the
- * page opens another one, so a switch back shows its data at once.
+ * Each machine has its own query cache, given to its app shell by the route.
+ * Query keys do not hold a machine ID: the cache of a machine holds only the
+ * data of that machine, so the data of two machines cannot mix. Code that
+ * needs the data of another machine reads it from that machine's cache.
  */
 export function queryClientForMachine(machineId: string) {
   let client = machineQueryClients.get(machineId)

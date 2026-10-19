@@ -97,7 +97,10 @@ import type {
   MachineInfo,
   MachineSessionSummary,
 } from "@/features/pico/machine-store"
-import { openMachine } from "@/lib/pico/machine"
+import {
+  openMachine,
+  openSession as openMachineSession,
+} from "@/lib/pico/machine"
 import {
   formatDisplayPath,
   formatFolderName,
@@ -1890,7 +1893,8 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const online = machine.state === "online"
   const openSession = React.useCallback(
     (entry: SessionListEntry) => {
-      if (entry.id) openMachine(machine.id, { sessionId: entry.id })
+      if (entry.id)
+        openMachineSession({ machineId: machine.id, sessionId: entry.id })
     },
     [machine.id]
   )

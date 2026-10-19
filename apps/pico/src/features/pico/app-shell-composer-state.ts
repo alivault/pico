@@ -248,6 +248,11 @@ export type AppShellComposerActions = {
     streamingBehavior?: StreamingBehavior
   ) => void | Promise<unknown>
   syncComposerDraft: (value: string) => void
+  /**
+   * Start a new session in a directory of another machine. The prompt draft
+   * and images move to that machine's composer.
+   */
+  moveDraftToMachine: (machineId: string, directory: string) => void
 }
 
 export function createInitialAppShellComposerSnapshot(

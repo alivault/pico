@@ -16,6 +16,7 @@ import type {
   SessionStatusEvent,
   SessionsEvent,
 } from "@/lib/pico/api"
+import { isInShownMachineShell } from "@/lib/pico/machine-context"
 
 export type DirectorySessionsIndexData = DirectorySessionsIndexSnapshot
 type DirectorySessionsIndexesData = Extract<
@@ -409,6 +410,7 @@ export function getRenderedSidebarSessionKeys() {
   return Array.from(
     document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
   ).flatMap((element) => {
+    if (!isInShownMachineShell(element)) return []
     const key = element.dataset.sessionKey?.trim() || ""
     return key.length > 0 ? [key] : []
   })

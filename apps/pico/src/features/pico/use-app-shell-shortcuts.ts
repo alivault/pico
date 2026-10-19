@@ -10,6 +10,7 @@ import {
   rightSidebarPaneShortcutKeys,
   type RightSidebarShortcutPane,
 } from "./keyboard-shortcuts"
+import { isInShownMachineShell } from "@/lib/pico/machine-context"
 
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
 
@@ -235,7 +236,7 @@ export function useAppShellShortcuts({
 
     const sessionButtons = Array.from(
       document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
-    )
+    ).filter(isInShownMachineShell)
     const focusedSessionButton =
       context.activeElement instanceof HTMLElement
         ? context.activeElement.closest<HTMLElement>(

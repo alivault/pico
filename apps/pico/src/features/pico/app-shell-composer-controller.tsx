@@ -5,6 +5,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  ServerIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -21,7 +22,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -35,7 +38,13 @@ import {
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
+import {
+  useMachineReadOnly,
+  useMachines,
+  type MachineInfo,
+} from "@/features/pico/machine-store"
+import { useHasMachineGroups } from "@/features/pico/machines"
+import { openMachine } from "@/lib/pico/machine"
 import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
 import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
@@ -140,6 +149,58 @@ function localBranchTrackText(branch: GitLocalBranch) {
   return "synced"
 }
 
+/**
+ * The directories of another machine in the new-session directory picker.
+ * A choice opens that machine and starts the session there; the prompt
+ * draft goes with it.
+ */
+function OtherMachineDirectoryGroup({
+  machine,
+  onSelect,
+}: {
+  machine: MachineInfo
+  onSelect: (directory: string) => void
+}) {
+  const online = machine.state === "online"
+  const directories = machine.summary?.directories ?? []
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="flex items-center gap-1.5">
+        <ServerIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">{machine.label}</span>
+        {online ? null : (
+          <span className="ml-auto text-xs font-normal">Offline</span>
+        )}
+      </DropdownMenuLabel>
+      {directories.map((directory) => (
+        <DropdownMenuItem
+          key={directory}
+          disabled={!online}
+          onClick={() => onSelect(directory)}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate">{formatFolderName(directory)}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {directory}
+            </span>
+          </div>
+        </DropdownMenuItem>
+      ))}
+      {online ? (
+        <DropdownMenuItem
+          onClick={() =>
+            openMachine(machine.id, { action: { type: "add-directory" } })
+          }
+        >
+          <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span>Add directory on {machine.label}…</span>
+        </DropdownMenuItem>
+      ) : null}
+    </DropdownMenuGroup>
+  )
+}
+
 type NewSessionComposerBranchCheckoutPayload = {
   branch: string
   create?: boolean
@@ -150,6 +211,7 @@ export function NewSessionComposerSelectors({
   defaultNewSessionDirectory,
   directoryOptions,
   onCreateSession,
+  onMoveDraftToMachine,
   onOpenAddDirectoryDialog,
   viewerContextId,
 }: {
@@ -157,10 +219,18 @@ export function NewSessionComposerSelectors({
   defaultNewSessionDirectory: string
   directoryOptions: Array<{ path: string; label: string }>
   onCreateSession: (cwdOverride?: string) => void
+  /** Start the session on another machine, with the prompt draft. */
+  onMoveDraftToMachine: (machineId: string, directory: string) => void
   onOpenAddDirectoryDialog: () => void
   viewerContextId: string
 }) {
   const machineId = useMachineId()
+  const { machines } = useMachines()
+  const hasMachineGroups = useHasMachineGroups()
+  const thisMachine = machines.find((machine) => machine.id === machineId)
+  const otherMachines = hasMachineGroups
+    ? machines.filter((machine) => machine.id !== machineId && machine.enabled)
+    : []
   const queryClient = useQueryClient()
   const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
   const [createBranchName, setCreateBranchName] = React.useState("")
@@ -286,34 +356,50 @@ export function NewSessionComposerSelectors({
           <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-80">
-          {directoryMenuOptions.map((option) => (
-            <DropdownMenuItem
-              key={option.path}
-              onClick={() => onCreateSession(option.path)}
-            >
+          <DropdownMenuGroup>
+            {hasMachineGroups ? (
+              <DropdownMenuLabel>
+                {thisMachine?.label ?? "This machine"}
+              </DropdownMenuLabel>
+            ) : null}
+            {directoryMenuOptions.map((option) => (
+              <DropdownMenuItem
+                key={option.path}
+                onClick={() => onCreateSession(option.path)}
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-xs text-muted-foreground">
+                    {option.label}
+                  </span>
+                  <span className="truncate">
+                    {formatDisplayPath(option.path)}
+                  </span>
+                </div>
+                {option.path === selectedDirectory ? (
+                  <CheckIcon className="ml-2 size-4 shrink-0" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onOpenAddDirectoryDialog}>
+              <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">
-                  {option.label}
-                </span>
-                <span className="truncate">
-                  {formatDisplayPath(option.path)}
+                <span>Add directory…</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  Search or paste a path for this new session.
                 </span>
               </div>
-              {option.path === selectedDirectory ? (
-                <CheckIcon className="ml-2 size-4 shrink-0" />
-              ) : null}
             </DropdownMenuItem>
+          </DropdownMenuGroup>
+          {otherMachines.map((machine) => (
+            <OtherMachineDirectoryGroup
+              key={machine.id}
+              machine={machine}
+              onSelect={(directory) =>
+                onMoveDraftToMachine(machine.id, directory)
+              }
+            />
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onOpenAddDirectoryDialog}>
-            <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span>Add directory…</span>
-              <span className="truncate text-xs text-muted-foreground">
-                Search or paste a path for this new session.
-              </span>
-            </div>
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

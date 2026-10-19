@@ -52,7 +52,7 @@ import {
 } from "@/features/pico/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { sessionListEntryKey } from "@/lib/pico"
-import { openMachine } from "@/lib/pico/machine"
+import { openSession } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -795,7 +795,7 @@ function useAppShellSessionsDialogView({
   /** Open a session of another machine: the page switches machines. */
   const selectOtherMachineSession = (item: OtherMachineSessionItem) => {
     onOpenChange(false)
-    openMachine(item.machine.id, { sessionId: item.session.id })
+    openSession({ machineId: item.machine.id, sessionId: item.session.id })
   }
 
   const renameSelectedSession = () => {

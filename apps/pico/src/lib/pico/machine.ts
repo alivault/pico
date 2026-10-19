@@ -7,9 +7,13 @@
  * Global data stays on the hub: highlighting, Web Push, and the machine list.
  *
  * The `machine` search parameter selects the machine that the page shows
- * (see `routes/index.tsx`). React code gets the machine of its subtree from
- * `useMachineId()` (`machine-context.tsx`).
+ * (see `routes/index.tsx`). The page keeps an app shell for each machine
+ * that it opened, so a switch keeps the state of each machine. React code
+ * gets the machine of its subtree from `useMachineId()`
+ * (`machine-context.tsx`).
  */
+
+import type { PromptImage } from "@/lib/pico"
 
 export const LOCAL_MACHINE_ID = "local"
 
@@ -21,29 +25,6 @@ const HUB_PATHS = ["/api/highlight", "/api/push/", "/api/machines"]
 /** A machine ID from the URL; `local` for a missing or bad value. */
 export function normalizeMachineId(value: string | null | undefined) {
   return value && MACHINE_ID_PATTERN.test(value) ? value : LOCAL_MACHINE_ID
-}
-
-/** Goes up at each switch. Requests of an older machine use it to stop. */
-let machineEpoch = 0
-let pageMachineId = LOCAL_MACHINE_ID
-
-export function currentMachineEpoch() {
-  return machineEpoch
-}
-
-/**
- * Tell the request layer which machine the page shows. The route calls this
- * before it mounts the app shell of the new machine. Only the epoch check of
- * `fetchJson` uses it.
- */
-export function setPageMachine(machineId: string) {
-  if (machineId === pageMachineId) return
-  pageMachineId = machineId
-  machineEpoch += 1
-}
-
-export function pageMachine() {
-  return pageMachineId
 }
 
 export function isRemoteMachine(machineId: string) {
@@ -194,6 +175,32 @@ export function storageKeyMachine(storageKey: string) {
   }
 }
 
+/**
+ * A session with its machine. A session ID alone is not unique: two machines
+ * can have the same ID. Use this type where data of more than one machine
+ * meets, for example in the sidebar groups and the sessions dialog.
+ */
+export type SessionRef = { machineId: string; sessionId: string }
+
+/**
+ * The string form of a `SessionRef`: the plain session ID for the local
+ * machine, so that stored keys stay readable, `<id>@<machine>` otherwise.
+ */
+export function sessionRefKey(ref: SessionRef) {
+  return ref.machineId === LOCAL_MACHINE_ID
+    ? ref.sessionId
+    : `${ref.sessionId}@${ref.machineId}`
+}
+
+export function sameSessionRef(
+  left: SessionRef | undefined,
+  right: SessionRef | undefined
+) {
+  return (
+    left?.machineId === right?.machineId && left?.sessionId === right?.sessionId
+  )
+}
+
 /** The page of a machine, optionally with a session open. */
 export function machinePageUrl(machineId: string, sessionId?: string) {
   const query = new URLSearchParams()
@@ -212,27 +219,62 @@ export function setMachineNavigator(navigator: MachineNavigator | undefined) {
   machineNavigator = navigator
 }
 
-/** An action for the app shell of a machine to run when it mounts. */
-export type PendingMachineAction =
-  | { type: "new-session"; directory: string }
+/**
+ * An action for the app shell of a machine: a new session in a directory
+ * (optionally with a prompt draft to put in its composer), or the Add
+ * directory dialog.
+ */
+export type MachineAction =
+  | {
+      type: "new-session"
+      directory: string
+      draft?: { text: string; images: Array<PromptImage> }
+    }
   | { type: "add-directory" }
 
-let pendingAction:
-  | { machineId: string; action: PendingMachineAction }
-  | undefined
+const pendingActions = new Map<string, Array<MachineAction>>()
+const actionListeners = new Map<string, Set<() => void>>()
 
 /**
- * Open a machine, optionally with a session or with an action: a new session
- * in a directory, or the Add directory dialog. The app shell of that machine
- * runs the action when it mounts (see `takePendingMachineAction`).
+ * Give an action to the app shell of a machine. The shell runs it when it
+ * shows: at once when it shows now, else when the page opens that machine.
+ */
+export function queueMachineAction(machineId: string, action: MachineAction) {
+  const queue = pendingActions.get(machineId) ?? []
+  queue.push(action)
+  pendingActions.set(machineId, queue)
+  for (const listener of actionListeners.get(machineId) ?? []) listener()
+}
+
+/** The actions that wait for a machine; the queue is empty after the call. */
+export function takeMachineActions(machineId: string) {
+  const queue = pendingActions.get(machineId) ?? []
+  pendingActions.delete(machineId)
+  return queue
+}
+
+/** Get a call when an action for `machineId` arrives. */
+export function onMachineAction(machineId: string, listener: () => void) {
+  let listeners = actionListeners.get(machineId)
+  if (!listeners) {
+    listeners = new Set()
+    actionListeners.set(machineId, listeners)
+  }
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
+ * Show a machine, optionally with a session open or with an action for its
+ * app shell (see `queueMachineAction`).
  */
 export function openMachine(
   machineId: string,
-  options: { sessionId?: string; action?: PendingMachineAction } = {}
+  options: { sessionId?: string; action?: MachineAction } = {}
 ) {
-  pendingAction = options.action
-    ? { machineId, action: options.action }
-    : undefined
+  if (options.action) queueMachineAction(machineId, options.action)
   if (machineNavigator) {
     machineNavigator(machineId, options.sessionId)
     return
@@ -240,10 +282,7 @@ export function openMachine(
   window.location.assign(machinePageUrl(machineId, options.sessionId))
 }
 
-/** The action that waits for `machineId`, once. */
-export function takePendingMachineAction(machineId: string) {
-  const pending = pendingAction
-  if (pending?.machineId !== machineId) return undefined
-  pendingAction = undefined
-  return pending.action
+/** Show a session of any machine. */
+export function openSession(ref: SessionRef) {
+  openMachine(ref.machineId, { sessionId: ref.sessionId })
 }

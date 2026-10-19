@@ -25,3 +25,14 @@ export function useMachineId() {
   }
   return machineId
 }
+
+/**
+ * Whether an element is in the app shell that shows. The page keeps the
+ * shells of other machines in a hidden `Activity`, which sets
+ * `display: none` on the shell's root (see `routes/index.tsx`). Use this to
+ * skip their elements in `document.querySelectorAll` results.
+ */
+export function isInShownMachineShell(element: Element) {
+  const shell = element.closest<HTMLElement>("[data-machine-shell]")
+  return !shell || shell.style.display !== "none"
+}

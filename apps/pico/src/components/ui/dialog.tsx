@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { usePortalContainer } from "@/components/ui/portal-container"
 
 const PICO_DIALOG_CLOSED_EVENT = "pico:dialog-closed"
 
@@ -53,7 +54,13 @@ export function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+  return (
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      container={usePortalContainer()}
+      {...props}
+    />
+  )
 }
 
 export function DialogClose({ ...props }: DialogPrimitive.Close.Props) {

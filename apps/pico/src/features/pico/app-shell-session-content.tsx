@@ -119,6 +119,9 @@ export function AppShellSessionContent({
               defaultNewSessionDirectory={defaultNewSessionDirectory}
               directoryOptions={newSessionDirectoryOptions}
               onCreateSession={onCreateSession}
+              onMoveDraftToMachine={(targetMachine, directory) =>
+                actionsRef.current.moveDraftToMachine(targetMachine, directory)
+              }
               onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
               viewerContextId={viewerContextId}
             />

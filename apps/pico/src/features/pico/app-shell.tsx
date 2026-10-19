@@ -3,16 +3,17 @@ import { usePicoEvent } from "@/features/pico/agent/events"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { focusShellSide, getShellLayout } from "@/hooks/use-shell-layout"
-import { takePendingMachineAction } from "@/lib/pico/machine"
+import {
+  onMachineAction,
+  openMachine,
+  takeMachineActions,
+  type MachineAction,
+} from "@/lib/pico/machine"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
-import {
-  SidebarInset,
-  SidebarProvider,
-  useSidebar,
-} from "@/components/ui/sidebar"
+import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { AppShellFloatingControllers } from "@/features/pico/app-shell-floating-controllers"
 import { AppShellTabsController } from "@/features/pico/app-shell-desktop-layout"
 import {
@@ -2589,14 +2590,35 @@ function useAppShellSessionWorkspaceView({
     ]
   )
 
-  // The sidebar group of this machine, shown while another machine was open,
-  // opened this one to start a session or to add a directory.
+  // Actions from outside this shell: for example the sidebar group of this
+  // machine, shown while another machine was open, or the directory picker
+  // of another machine's new-session composer. The effect runs again when
+  // the shell shows, so actions that came while it was hidden run then.
+  const runMachineAction = React.useEffectEvent((action: MachineAction) => {
+    if (action.type === "add-directory") {
+      addDirectoryDialogRef.current?.open()
+      return
+    }
+    const draft = action.draft
+    void createSession(action.directory).then(() => {
+      if (!draft) return
+      // The prompt that the user wrote in another machine's composer before
+      // choosing a directory of this machine.
+      replaceComposerDraftRef.current(draft.text, sessionStateRef.current, {
+        forceSync: true,
+      })
+      if (draft.images.length > 0) setComposerImages(draft.images)
+    })
+  })
   React.useEffect(() => {
     if (!viewerContextId) return
-    const action = takePendingMachineAction(machineId)
-    if (action?.type === "new-session") void createSession(action.directory)
-    if (action?.type === "add-directory") addDirectoryDialogRef.current?.open()
-  }, [createSession, machineId, viewerContextId])
+    const run = () => {
+      for (const action of takeMachineActions(machineId))
+        runMachineAction(action)
+    }
+    run()
+    return onMachineAction(machineId, run)
+  }, [machineId, viewerContextId])
 
   const createDiffLineCommentId = () => {
     if (
@@ -3128,6 +3150,23 @@ function useAppShellSessionWorkspaceView({
     setThinkingLevel,
     submitPrompt,
     syncComposerDraft,
+    moveDraftToMachine: (targetMachine, directory) => {
+      const text = serializeComposerDraft({
+        text: composerTextRef.current,
+        skillName: composerSkillRef.current,
+      })
+      const images = composerImagesRef.current
+      // The draft moves: it does not stay in this machine's composer too.
+      replaceComposerDraft("", sessionStateRef.current, { forceSync: true })
+      setComposerImages([])
+      openMachine(targetMachine, {
+        action: {
+          type: "new-session",
+          directory,
+          draft: text || images.length > 0 ? { text, images } : undefined,
+        },
+      })
+    },
   })
 
   const commandPaletteStateRef = useLatestRef({
@@ -3851,22 +3890,20 @@ export function PicoAppShell({
   }, [sidebarStore])
 
   return (
-    <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:calc(3rem+env(safe-area-inset-top))]">
-      <AppShellSessionWorkspace
-        ref={sessionWorkspaceRef}
-        viewerContextId={viewerContextId}
-        sessionId={sessionId}
-        onSelectSession={onSelectSession}
-        sidebar={
-          <AppShellSidebarController
-            viewerContextId={viewerContextId}
-            sidebarStore={sidebarStore}
-            sessionWorkspaceRef={sessionWorkspaceRef}
-          />
-        }
-        sidebarStore={sidebarStore}
-        sessionSearchInputRef={sessionSearchInputRef}
-      />
-    </SidebarProvider>
+    <AppShellSessionWorkspace
+      ref={sessionWorkspaceRef}
+      viewerContextId={viewerContextId}
+      sessionId={sessionId}
+      onSelectSession={onSelectSession}
+      sidebar={
+        <AppShellSidebarController
+          viewerContextId={viewerContextId}
+          sidebarStore={sidebarStore}
+          sessionWorkspaceRef={sessionWorkspaceRef}
+        />
+      }
+      sidebarStore={sidebarStore}
+      sessionSearchInputRef={sessionSearchInputRef}
+    />
   )
 }

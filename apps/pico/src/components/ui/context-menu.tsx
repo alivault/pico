@@ -4,6 +4,7 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 import { cn } from "@/lib/utils"
 import { KeyboardShortcutContent } from "@/components/ui/kbd"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
+import { usePortalContainer } from "@/components/ui/portal-container"
 
 function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
@@ -13,7 +14,11 @@ export function ContextMenuPortal({
   ...props
 }: ContextMenuPrimitive.Portal.Props) {
   return (
-    <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />
+    <ContextMenuPrimitive.Portal
+      data-slot="context-menu-portal"
+      container={usePortalContainer()}
+      {...props}
+    />
   )
 }
 
@@ -35,8 +40,9 @@ function ContextMenuContent({
     ContextMenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const portalContainer = usePortalContainer()
   return (
-    <ContextMenuPrimitive.Portal>
+    <ContextMenuPrimitive.Portal container={portalContainer}>
       <ContextMenuPrimitive.Positioner
         className="isolate z-50 outline-none"
         align={align}
