@@ -23,6 +23,7 @@
   - Full check: `pnpm check` from the repo root (runs `vp check`, the server type check, and the server tests).
 - Format only the files you changed, then look at `git diff` to make sure `vp fmt` did not change unrelated lines.
 - Server: `pnpm --filter @pico/server typecheck` and `pnpm test`. The tests build `apps/pico/server/dist` first.
+- When Pico runs from `pnpm dev`, the server restarts after each successful rebuild. This includes changes to `apps/pico/server/src/**`, `apps/pico/server/package.json`, and dependency installs. A restart stops the current agent turn. Group these edits so the server rebuilds less often, and expect the turn to stop after them.
 
 ## Releases
 
