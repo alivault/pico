@@ -9,7 +9,8 @@ import {
   CopyIcon,
 } from "lucide-react"
 
-import type { ConversationItem, PromptImage } from "@/lib/pico"
+import type { ConversationItem, PromptImage, ToolImage } from "@/lib/pico"
+import { sameToolImages } from "@/lib/pico/sync"
 import {
   CodeBlock,
   copyTextToClipboard,
@@ -712,7 +713,8 @@ function sameAssistantBlock(
         left.isError === right.isError &&
         left.running === right.running &&
         sameUnknownValue(left.args, right.args) &&
-        sameUnknownValue(left.details, right.details)
+        sameUnknownValue(left.details, right.details) &&
+        sameToolImages(left.images, right.images)
       )
     case "compaction":
       if (right.type !== "compaction") return false
@@ -1133,6 +1135,60 @@ function useAssistantBlock(store: AssistantBlockStore, key: string) {
 }
 
 const EMPTY_TOOL_BLOCKS: Array<AssistantToolBlock> = []
+const EMPTY_TOOL_IMAGES: ToolImage[] = []
+
+function toolImagesFromBlocks(blocks: Array<AssistantToolBlock>) {
+  const images = blocks.flatMap((block) => block.images ?? [])
+  return images.length > 0 ? images : EMPTY_TOOL_IMAGES
+}
+
+function toolImageSrc(image: ToolImage) {
+  return `data:${image.mimeType};base64,${image.data}`
+}
+
+/** Images from tool results, shown below the tool card header. */
+const ToolResultImages = React.memo(function ToolResultImages({
+  images,
+}: {
+  images: ToolImage[]
+}) {
+  const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null)
+  const selected = selectedIndex === null ? null : images[selectedIndex]
+
+  if (images.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap gap-3 px-3 pb-3">
+      {images.map((image, index) => (
+        <button
+          key={`${image.data.slice(0, 24)}:${index}`}
+          type="button"
+          className="max-w-full cursor-zoom-in overflow-hidden rounded-lg border bg-background/80 p-0 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          onClick={() => setSelectedIndex(index)}
+        >
+          <img
+            src={toolImageSrc(image)}
+            alt="Tool result"
+            className="block max-h-64 max-w-full object-contain"
+          />
+          <span className="sr-only">Open image</span>
+        </button>
+      ))}
+      {selected ? (
+        <ImageLightbox
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setSelectedIndex(null)
+          }}
+          imageSrc={toolImageSrc(selected)}
+          imageAlt="Tool result"
+          title="Tool result image"
+          description="Expanded preview of an image from a tool result."
+        />
+      ) : null}
+    </div>
+  )
+})
 
 type ToolBlockHeaderSnapshot = {
   name: string | undefined
@@ -1140,6 +1196,7 @@ type ToolBlockHeaderSnapshot = {
   isError: boolean
   summary: string
   editStats: EditDiffStatCounts | null
+  images: ToolImage[]
   openStateKey: string
 }
 
@@ -1148,6 +1205,7 @@ type ExploreToolGroupHeaderSnapshot = {
   summary: string
   hasRunning: boolean
   hasError: boolean
+  images: ToolImage[]
   openStateKey: string
 }
 
@@ -1189,6 +1247,10 @@ function buildToolBlockHeaderSnapshot(
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolPatchText(block))
         : null,
+    // Custom renderers show their own result, images included.
+    images: toolRenderer(block.name)
+      ? EMPTY_TOOL_IMAGES
+      : (block.images ?? EMPTY_TOOL_IMAGES),
     openStateKey: rememberedToolCollapsibleStateKey(block),
   }
 }
@@ -1206,6 +1268,7 @@ function sameToolBlockHeaderSnapshot(
     left.isError === right.isError &&
     left.summary === right.summary &&
     sameEditDiffStatCounts(left.editStats, right.editStats) &&
+    sameToolImages(left.images, right.images) &&
     left.openStateKey === right.openStateKey
   )
 }
@@ -1270,6 +1333,7 @@ function buildExploreToolGroupHeaderSnapshot(
     summary: blocks.length > 0 ? exploreGroupSummary(blocks) : "",
     hasRunning: blocks.some((block) => block.running),
     hasError: blocks.some((block) => block.isError),
+    images: toolImagesFromBlocks(blocks),
     openStateKey: rememberedToolCollapsibleStateKey(blocks[0], "explore"),
   }
 }
@@ -1283,6 +1347,7 @@ function sameExploreToolGroupHeaderSnapshot(
     left.summary === right.summary &&
     left.hasRunning === right.hasRunning &&
     left.hasError === right.hasError &&
+    sameToolImages(left.images, right.images) &&
     left.openStateKey === right.openStateKey
   )
 }
@@ -1296,6 +1361,7 @@ function useAssistantToolGroupHeader(
     summary: "",
     hasRunning: false,
     hasError: false,
+    images: EMPTY_TOOL_IMAGES,
     openStateKey: "explore:missing",
   })
 
@@ -2281,6 +2347,7 @@ function ToolBlockCardContent({
           </div>
         </CollapsibleContent>
       ) : null}
+      <ToolResultImages images={header.images} />
     </Collapsible>
   )
 }
@@ -2381,6 +2448,7 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
           </div>
         </CollapsibleContent>
       ) : null}
+      <ToolResultImages images={header.images} />
     </Collapsible>
   )
 })

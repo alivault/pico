@@ -8,6 +8,7 @@ import type {
   StateSyncPayload,
   StreamingBehavior,
   ToolBlock,
+  ToolImage,
 } from "@/lib/pico"
 import { toolCategoryFromTool } from "@/lib/pico/tool-classification"
 
@@ -199,6 +200,7 @@ function sameAssistantBlockPayload(
         stableJsonValue(left.args) === stableJsonValue(right.args) &&
         left.output === right.output &&
         stableJsonValue(left.details) === stableJsonValue(right.details) &&
+        sameToolImages(left.images, right.images) &&
         Boolean(left.isError) === Boolean(right.isError) &&
         Boolean(left.running) === Boolean(right.running)
       )
@@ -854,7 +856,37 @@ function mutateToolBlockInItems(
   }
 }
 
-export type ToolResultUpdate = Pick<ToolBlock, "output" | "details" | "isError">
+export type ToolResultUpdate = Pick<
+  ToolBlock,
+  "output" | "details" | "images" | "isError"
+>
+
+/** Whether two tool image lists are the same. Compares the data cheaply. */
+export function sameToolImages(
+  left: ToolImage[] | undefined,
+  right: ToolImage[] | undefined
+) {
+  if (left === right) return true
+  if ((left?.length ?? 0) !== (right?.length ?? 0)) return false
+  return (left ?? []).every((image, index) => {
+    const other = right?.[index]
+    return (
+      other !== undefined &&
+      image.mimeType === other.mimeType &&
+      image.data.length === other.data.length &&
+      image.data.slice(0, 64) === other.data.slice(0, 64) &&
+      image.data.slice(-64) === other.data.slice(-64)
+    )
+  })
+}
+
+function toolImagesFromMessage(message: { content?: unknown }) {
+  const images = extractMessageImages(message).map(({ mimeType, data }) => ({
+    mimeType,
+    data,
+  }))
+  return images.length > 0 ? images : undefined
+}
 
 function applyToolResultToBlock(
   block: ToolBlock,
@@ -865,6 +897,7 @@ function applyToolResultToBlock(
   if (
     block.output === update.output &&
     block.details === update.details &&
+    sameToolImages(block.images, update.images) &&
     block.isError === update.isError &&
     !block.running
   ) {
@@ -875,6 +908,7 @@ function applyToolResultToBlock(
     ...block,
     output: update.output,
     details: update.details,
+    ...(update.images ? { images: update.images } : {}),
     isError: update.isError,
     running: false,
   }
@@ -935,6 +969,9 @@ export function mergeAssistantBlocksForStreaming(options: {
           category: block.category || previousTool.category,
           output: previousTool.output || block.output,
           details: previousTool.details ?? block.details,
+          ...((previousTool.images ?? block.images)
+            ? { images: previousTool.images ?? block.images }
+            : {}),
           isError: previousTool.isError || block.isError,
           running: previousTool.running === false ? false : block.running,
         } satisfies ToolBlock
@@ -1374,6 +1411,7 @@ export function buildItemsFromSync(
       const update = {
         output: extractMessageText(message),
         details: message.details,
+        images: toolImagesFromMessage(message),
         isError: Boolean(message.isError),
       } satisfies ToolResultUpdate
 
@@ -1383,6 +1421,7 @@ export function buildItemsFromSync(
       mutateToolBlockInItems(items, callId, (block) => {
         block.output = update.output
         block.details = update.details
+        if (update.images) block.images = update.images
         block.isError = update.isError
         block.running = false
       })

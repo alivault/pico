@@ -191,9 +191,13 @@ export type ToolBlock = {
   category?: "explore"
   output: string
   details?: unknown
+  /** Images in the tool result, for example from reading an image file. */
+  images?: ToolImage[]
   isError: boolean
   running: boolean
 }
+
+export type ToolImage = { mimeType: string; data: string }
 
 type CompactionBlock = {
   type: "compaction"

@@ -37,9 +37,13 @@ export type ToolBlock = {
   args?: unknown
   output: string
   details?: unknown
+  /** Images in the tool result, for example from reading an image file. */
+  images?: ToolImage[]
   isError: boolean
   running: boolean
 }
+
+export type ToolImage = { mimeType: string; data: string }
 
 export type CompactionBlock = {
   type: "compaction"
@@ -335,6 +339,11 @@ export function itemsFromEntries(
       if (!location) continue
       location.block.output = messageText(message)
       location.block.details = message.details
+      const images = messageImages(message).map(({ mimeType, data }) => ({
+        mimeType,
+        data,
+      }))
+      if (images.length > 0) location.block.images = images
       location.block.isError = Boolean(message.isError)
       location.block.running = false
       continue

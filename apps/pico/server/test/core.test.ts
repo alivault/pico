@@ -11,6 +11,7 @@ import {
   messageText,
   contextTokens,
   assistantBlocks,
+  itemsFromEntries,
 } from "../src/core/items.ts"
 import { Security } from "../src/security.ts"
 import type { IncomingMessage } from "node:http"
@@ -115,4 +116,47 @@ void test("local requests reject foreign hosts and origins", () => {
       ),
     /Cross-origin/
   )
+})
+
+void test("tool results keep their images", () => {
+  const items = itemsFromEntries([
+    {
+      id: 1,
+      kind: "pi.assistant",
+      model: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "call",
+              name: "read",
+              arguments: { path: "a.png" },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 2,
+      kind: "pi.tool-result",
+      model: [
+        {
+          role: "toolResult",
+          toolCallId: "call",
+          content: [
+            { type: "text", text: "Read image file [image/png]" },
+            { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+          ],
+        },
+      ],
+    },
+  ] as never)
+  const item = items[0]
+  assert.equal(item?.kind, "assistant")
+  const block = item?.kind === "assistant" ? item.blocks[0] : undefined
+  assert.equal(block?.type, "tool")
+  assert.deepEqual(block?.type === "tool" ? block.images : undefined, [
+    { mimeType: "image/png", data: "aGVsbG8=" },
+  ])
 })
