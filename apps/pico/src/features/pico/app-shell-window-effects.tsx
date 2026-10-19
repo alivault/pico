@@ -22,9 +22,6 @@ import {
 import type { SessionState } from "@/lib/pico"
 import type { SessionDoneEvent } from "@/lib/pico/api"
 
-const TITLE_STREAMING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
-const TITLE_STREAMING_INTERVAL_MS = 500
-
 function getIsPageForeground() {
   if (typeof document === "undefined") return true
 
@@ -49,20 +46,13 @@ function getWindowTitleUnreadCount(
 function setPicoDocumentTitle({
   backgroundCurrentSessionUnreadKey,
   currentPageTitle,
-  sessionStreaming,
   sidebarUnreadVersion,
-  titleStreamingFrameIndex,
 }: {
   backgroundCurrentSessionUnreadKey: string
   currentPageTitle: string
-  sessionStreaming: boolean
   sidebarUnreadVersion: string
-  titleStreamingFrameIndex: number
 }) {
-  const streamingPrefix = sessionStreaming
-    ? `${TITLE_STREAMING_FRAMES[titleStreamingFrameIndex]} `
-    : ""
-  const nextTitle = `${streamingPrefix}${currentPageTitle}`
+  const nextTitle = currentPageTitle
   const unreadSessionCount = getWindowTitleUnreadCount(
     sidebarUnreadVersion,
     backgroundCurrentSessionUnreadKey
@@ -97,7 +87,6 @@ export function AppShellWindowEffectsHost({
       }),
       sessionCwd: sessionState.cwd,
       sessionName: sessionState.sessionName,
-      sessionStreaming: sessionState.streaming,
       firstMessage: sessionState.firstMessage,
       uiTitle: sessionState.uiState.title?.trim() || "",
     }),
@@ -145,7 +134,6 @@ export function AppShellWindowEffectsHost({
         notificationState.sessionDoneDesktopNotificationsEnabled
       }
       sessionDoneSoundEnabled={notificationState.sessionDoneSoundEnabled}
-      sessionStreaming={sessionWindowState.sessionStreaming}
       sessionDoneEvents={notificationState.sessionDoneEvents}
       sidebarStore={sidebarStore}
       onConsumeSessionDoneEvents={onConsumeSessionDoneEvents}
@@ -161,7 +149,6 @@ function AppShellWindowEffects({
   sessionCwd,
   sessionDoneDesktopNotificationsEnabled,
   sessionDoneSoundEnabled,
-  sessionStreaming,
   sessionDoneEvents,
   sidebarStore,
   onConsumeSessionDoneEvents,
@@ -173,7 +160,6 @@ function AppShellWindowEffects({
   sessionCwd?: string
   sessionDoneDesktopNotificationsEnabled: boolean
   sessionDoneSoundEnabled: boolean
-  sessionStreaming: boolean
   sessionDoneEvents: Array<SessionDoneEvent>
   sidebarStore: AppShellSidebarStore
   onConsumeSessionDoneEvents: (ids: Array<string>) => void
@@ -190,11 +176,9 @@ function AppShellWindowEffects({
       .join("\n")
   )
   const isPageForegroundRef = React.useRef(getIsPageForeground())
-  const titleStreamingFrameIndexRef = React.useRef(0)
   const backgroundCurrentSessionUnreadKeyRef = React.useRef("")
   const titleSnapshotRef = React.useRef({
     currentPageTitle,
-    sessionStreaming,
     sidebarUnreadVersion,
   })
   const processedSessionDoneEventIdsRef = React.useRef<Set<string>>(new Set())
@@ -204,18 +188,16 @@ function AppShellWindowEffects({
       ...titleSnapshotRef.current,
       backgroundCurrentSessionUnreadKey:
         backgroundCurrentSessionUnreadKeyRef.current,
-      titleStreamingFrameIndex: titleStreamingFrameIndexRef.current,
     })
   }
 
   React.useEffect(() => {
     titleSnapshotRef.current = {
       currentPageTitle,
-      sessionStreaming,
       sidebarUnreadVersion,
     }
     updateDocumentTitle()
-  }, [currentPageTitle, sessionStreaming, sidebarUnreadVersion])
+  }, [currentPageTitle, sidebarUnreadVersion])
 
   React.useEffect(() => {
     const syncPageForeground = () => {
@@ -249,25 +231,6 @@ function AppShellWindowEffects({
       document.removeEventListener("visibilitychange", syncPageForeground)
     }
   }, [activeSessionNotificationKey])
-
-  React.useEffect(() => {
-    if (!sessionStreaming) {
-      titleStreamingFrameIndexRef.current = 0
-      updateDocumentTitle()
-      return
-    }
-
-    const intervalId = window.setInterval(() => {
-      titleStreamingFrameIndexRef.current =
-        (titleStreamingFrameIndexRef.current + 1) %
-        TITLE_STREAMING_FRAMES.length
-      updateDocumentTitle()
-    }, TITLE_STREAMING_INTERVAL_MS)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [sessionStreaming])
 
   React.useEffect(() => {
     if (sessionDoneEvents.length === 0) return
