@@ -1049,17 +1049,45 @@ function sameUserPromptBody(
   return left.text === right.text && samePromptImages(left.images, right.images)
 }
 
-function hasMatchingCommittedUserItem(
+/**
+ * Find where the committed list continues after an optimistic item. The
+ * anchor is the last committed item before it in the previous list. Indexes
+ * are not stable: the server history window can slide, and patched syncs
+ * do not always carry the new offset. Item keys are stable.
+ */
+function committedSearchStart(
+  previousItems: Array<ConversationItem>,
+  previousIndex: number,
+  committedItems: Array<ConversationItem>
+) {
+  for (let index = previousIndex - 1; index >= 0; index -= 1) {
+    const item = previousItems[index]
+    if (!item || isPendingConversationItem(item)) continue
+    if (isQueuedConversationItem(item)) continue
+    if (item.kind === "assistant" && item.streaming) continue
+    if (!item.itemKey) continue
+
+    const committedIndex = committedItems.findIndex(
+      (candidate) => candidate.itemKey === item.itemKey
+    )
+    return committedIndex >= 0 ? committedIndex + 1 : 0
+  }
+
+  return 0
+}
+
+function takeMatchingCommittedUserItem(
   candidate: Extract<ConversationItem, { kind: "user" }>,
   committedItems: Array<ConversationItem>,
-  previousIndex: number
+  startIndex: number,
+  usedIndexes: Set<number>
 ) {
-  const startIndex = Math.max(0, previousIndex)
-
   for (let index = startIndex; index < committedItems.length; index += 1) {
     const item = committedItems[index]
-    if (item?.kind !== "user") continue
-    if (sameUserPromptBody(candidate, item)) return true
+    if (item?.kind !== "user" || usedIndexes.has(index)) continue
+    if (!sameUserPromptBody(candidate, item)) continue
+    usedIndexes.add(index)
+    return true
   }
 
   return false
@@ -1074,6 +1102,7 @@ function mergePendingItemsForSync(options: {
 
   const mergedPendingItems: Array<Extract<ConversationItem, { kind: "user" }>> =
     []
+  const usedCommittedIndexes = new Set<number>()
 
   for (
     let previousIndex = 0;
@@ -1090,10 +1119,15 @@ function mergePendingItemsForSync(options: {
     }
 
     if (
-      hasMatchingCommittedUserItem(
+      takeMatchingCommittedUserItem(
         previousItem,
         options.committedItems,
-        previousIndex
+        committedSearchStart(
+          options.previousItems,
+          previousIndex,
+          options.committedItems
+        ),
+        usedCommittedIndexes
       )
     ) {
       continue
