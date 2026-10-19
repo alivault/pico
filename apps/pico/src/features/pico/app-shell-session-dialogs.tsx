@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
@@ -144,32 +145,25 @@ function RenameSessionDialog({
             Update the display name shown in the sidebar.
           </div>
         </div>
-        {isMobile ? null : (
-          <Button
-            type="button"
-            variant="ghost"
+      </div>
+      <div className="flex min-h-0 flex-1 items-center p-3">{renameInput}</div>
+      {isMobile ? null : (
+        <ShortcutFooter>
+          <ShortcutButton
+            kbd={formatShortcutLabel(appShortcut("G"))}
             disabled={generatingName || !canGenerateName}
             onClick={onGenerateSessionName}
           >
             {generatingName ? <Spinner /> : <WandSparklesIcon />}
             Generate
-          </Button>
-        )}
-      </div>
-      <div className="flex min-h-0 flex-1 items-center p-3">{renameInput}</div>
-      {isMobile ? null : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel(appShortcut("G"))}</FooterKbd>{" "}
-            Generate
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Save
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Esc</FooterKbd> Cancel
-          </span>
-        </div>
+          </ShortcutButton>
+          <ShortcutButton kbd="Enter" onClick={onRenameSession}>
+            Save
+          </ShortcutButton>
+          <ShortcutButton kbd="Esc" onClick={() => onOpenChange(false)}>
+            Cancel
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </div>
   )
@@ -416,6 +410,7 @@ function DeleteSessionsDialog({
       }
 
       if (event.key !== "Enter" || event.isComposing) return
+      if (event.target instanceof HTMLButtonElement) return
       event.preventDefault()
       event.stopPropagation()
       onDeleteSession()
@@ -446,6 +441,7 @@ function DeleteSessionsDialog({
           return
         }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+        if (event.target instanceof HTMLButtonElement) return
         event.preventDefault()
         event.stopPropagation()
         onDeleteSession()
@@ -496,14 +492,14 @@ function DeleteSessionsDialog({
         ) : null}
       </div>
       {isMobile ? null : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Archive
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Esc</FooterKbd> Cancel
-          </span>
-        </div>
+        <ShortcutFooter>
+          <ShortcutButton kbd="Enter" onClick={onDeleteSession}>
+            Archive
+          </ShortcutButton>
+          <ShortcutButton kbd="Esc" onClick={() => onOpenChange(false)}>
+            Cancel
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </div>
   )

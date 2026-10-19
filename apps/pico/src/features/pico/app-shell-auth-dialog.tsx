@@ -29,7 +29,8 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
-import { Kbd } from "@/components/ui/kbd"
+import { Spinner } from "@/components/ui/spinner"
+import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -584,16 +585,19 @@ function useAppShellAuthDialogControllerView({
           </Button>
         </div>
       ) : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd>
+        <ShortcutFooter>
+          <ShortcutButton
+            type="submit"
+            kbd="Enter"
+            disabled={apiKeyMutation.isPending || !apiKey.trim()}
+          >
+            {apiKeyMutation.isPending ? <Spinner /> : null}
             Save
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd>
+          </ShortcutButton>
+          <ShortcutButton kbd="Esc" onClick={backToLoginProviders}>
             Back
-          </span>
-        </div>
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </form>
   )

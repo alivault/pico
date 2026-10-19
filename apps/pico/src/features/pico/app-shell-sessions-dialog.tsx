@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
@@ -876,6 +877,7 @@ function useAppShellSessionsDialogView({
       }
 
       if (event.key !== "Enter" || event.isComposing) return
+      if (event.target instanceof HTMLButtonElement) return
       event.preventDefault()
       event.stopPropagation()
       void confirmDeleteSelectedSession()
@@ -1133,17 +1135,19 @@ function useAppShellSessionsDialogView({
             {selectedSession?.title || "Selected session"}
           </div>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={isGeneratingName || !canGenerateSelectedSessionName}
-          onClick={() => {
-            void generateSelectedSessionName()
-          }}
-        >
-          {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
-          Generate
-        </Button>
+        {isMobile ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={isGeneratingName || !canGenerateSelectedSessionName}
+            onClick={() => {
+              void generateSelectedSessionName()
+            }}
+          >
+            {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
+            Generate
+          </Button>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <Input
@@ -1177,18 +1181,34 @@ function useAppShellSessionsDialogView({
         />
       </div>
       {isMobile ? null : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>{formatShortcutLabel(appShortcut("G"))}</FooterKbd>{" "}
+        <ShortcutFooter>
+          <ShortcutButton
+            kbd={formatShortcutLabel(appShortcut("G"))}
+            disabled={isGeneratingName || !canGenerateSelectedSessionName}
+            onClick={() => {
+              void generateSelectedSessionName()
+            }}
+          >
+            {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
             Generate
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Save
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Esc</FooterKbd> Back
-          </span>
-        </div>
+          </ShortcutButton>
+          <ShortcutButton
+            kbd="Enter"
+            onClick={() => {
+              void saveSelectedSessionRename()
+            }}
+          >
+            Save
+          </ShortcutButton>
+          <ShortcutButton
+            kbd="Esc"
+            onClick={() => {
+              dispatch({ type: "browseRequested" })
+            }}
+          >
+            Back
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </div>
   )
@@ -1207,6 +1227,7 @@ function useAppShellSessionsDialogView({
           return
         }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+        if (event.target instanceof HTMLButtonElement) return
         event.preventDefault()
         event.stopPropagation()
         void confirmDeleteSelectedSession()
@@ -1238,14 +1259,24 @@ function useAppShellSessionsDialogView({
         </p>
       </div>
       {isMobile ? null : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Enter</FooterKbd> Archive
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FooterKbd>Esc</FooterKbd> Back
-          </span>
-        </div>
+        <ShortcutFooter>
+          <ShortcutButton
+            kbd="Enter"
+            onClick={() => {
+              void confirmDeleteSelectedSession()
+            }}
+          >
+            Archive
+          </ShortcutButton>
+          <ShortcutButton
+            kbd="Esc"
+            onClick={() => {
+              dispatch({ type: "browseRequested" })
+            }}
+          >
+            Back
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </div>
   )

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
@@ -410,30 +411,54 @@ function GitBranchCreate({
           placeholder="branch-name"
           className="min-w-0 flex-1"
         />
-        <Button
-          type="button"
-          disabled={!createBranchName.trim() || checkoutPending}
-          onClick={onCreateBranch}
-        >
-          {checkoutPending ? <Spinner /> : null}
-          Create
-        </Button>
+        {isMobile ? (
+          <Button
+            type="button"
+            disabled={!createBranchName.trim() || checkoutPending}
+            onClick={onCreateBranch}
+          >
+            {checkoutPending ? <Spinner /> : null}
+            Create
+          </Button>
+        ) : null}
       </div>
-      {isMobile ? null : <GitBranchCreateShortcuts />}
+      {isMobile ? null : (
+        <GitBranchCreateShortcuts
+          canCreate={Boolean(createBranchName.trim()) && !checkoutPending}
+          checkoutPending={checkoutPending}
+          onBrowseStage={onBrowseStage}
+          onCreateBranch={onCreateBranch}
+        />
+      )}
     </div>
   )
 }
 
-function GitBranchCreateShortcuts() {
+function GitBranchCreateShortcuts({
+  canCreate,
+  checkoutPending,
+  onBrowseStage,
+  onCreateBranch,
+}: {
+  canCreate: boolean
+  checkoutPending: boolean
+  onBrowseStage: () => void
+  onCreateBranch: () => void
+}) {
   return (
-    <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-      <span className="inline-flex items-center gap-1">
-        <GitBranchDialogKbd>Enter</GitBranchDialogKbd> Create
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <GitBranchDialogKbd>Esc</GitBranchDialogKbd> Back
-      </span>
-    </div>
+    <ShortcutFooter>
+      <ShortcutButton
+        kbd="Enter"
+        disabled={!canCreate}
+        onClick={onCreateBranch}
+      >
+        {checkoutPending ? <Spinner /> : null}
+        Create
+      </ShortcutButton>
+      <ShortcutButton kbd="Esc" onClick={onBrowseStage}>
+        Back
+      </ShortcutButton>
+    </ShortcutFooter>
   )
 }
 

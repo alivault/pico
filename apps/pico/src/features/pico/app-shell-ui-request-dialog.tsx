@@ -30,7 +30,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
-import { Kbd } from "@/components/ui/kbd"
+import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Textarea } from "@/components/ui/textarea"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -165,16 +165,18 @@ function AuthManualRedirectForm({
           </Button>
         </div>
       ) : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd>
+        <ShortcutFooter>
+          <ShortcutButton
+            type="submit"
+            kbd="Enter"
+            disabled={!pendingUiValue.trim()}
+          >
             Submit URL
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd>
+          </ShortcutButton>
+          <ShortcutButton kbd="Esc" onClick={onBack}>
             Back
-          </span>
-        </div>
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </form>
   )
@@ -409,16 +411,18 @@ function AuthInputForm({
           </Button>
         </div>
       ) : (
-        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Enter</Kbd>
+        <ShortcutFooter>
+          <ShortcutButton
+            type="submit"
+            kbd="Enter"
+            disabled={!allowEmpty && !pendingUiValue.trim()}
+          >
             Continue login
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Kbd>Esc</Kbd>
+          </ShortcutButton>
+          <ShortcutButton kbd="Esc" onClick={onCancel}>
             Back
-          </span>
-        </div>
+          </ShortcutButton>
+        </ShortcutFooter>
       )}
     </form>
   )
