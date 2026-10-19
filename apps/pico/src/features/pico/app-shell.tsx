@@ -87,6 +87,7 @@ import {
 import {
   createAppShellSidebarStore,
   mergeSidebarSessionStatusMap,
+  bindOptimisticSidebarSessionEntries,
   removeOptimisticSidebarSessionEntry,
   updateOptimisticSidebarSessionPreviewEntry,
   upsertOptimisticSidebarSessionEntry,
@@ -1318,6 +1319,23 @@ function useAppShellSessionWorkspaceView({
       mergeSidebarSessionStatusMap(current, status)
     )
   }
+  const bindOptimisticSidebarSessionRef = React.useRef(
+    (session: { cwd?: string; sessionId?: string; sessionPath?: string }) => {
+      sidebarStore.setDirectoryIndexDataByPath((current) =>
+        bindOptimisticSidebarSessionEntries(current, session)
+      )
+      sidebarStore.setSessionsEvent((current) => {
+        if (!current?.directoryIndexes) return current
+        const directoryIndexes = bindOptimisticSidebarSessionEntries(
+          current.directoryIndexes,
+          session
+        )
+        return directoryIndexes === current.directoryIndexes
+          ? current
+          : { ...current, directoryIndexes }
+      })
+    }
+  )
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionPinKey = sessionListEntryKey({
@@ -2124,6 +2142,7 @@ function useAppShellSessionWorkspaceView({
     setSessionsEvent: sidebarStore.setSessionsEvent,
     setSessionDoneEvents,
     applySidebarSessionStatusRef,
+    bindOptimisticSidebarSessionRef,
     setComposerImages,
     setPendingMessages,
     pendingUiRequestHandlerRef,

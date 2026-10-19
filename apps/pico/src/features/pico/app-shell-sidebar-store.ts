@@ -345,6 +345,59 @@ export function removeOptimisticSidebarSessionEntry(
   return changed ? next : current
 }
 
+/**
+ * Give the optimistic entries of a directory the identity of the session that
+ * the server made for the draft. A directory index fetch keeps optimistic
+ * entries until the server lists their ID. Without this step, the draft ID
+ * never shows in the index, and the sidebar shows the placeholder next to the
+ * real session.
+ */
+export function bindOptimisticSidebarSessionEntries(
+  current: Record<string, DirectorySessionsIndexData>,
+  session: { cwd?: string; sessionId?: string; sessionPath?: string }
+) {
+  const directory = session.cwd?.trim() || ""
+  const sessionId = session.sessionId?.trim() || ""
+  const sessionPath = session.sessionPath?.trim() || ""
+  const snapshot = directory ? current[directory] : undefined
+  if (!snapshot || !sessionId) return current
+
+  const pending = snapshot.sessions.filter(
+    (entry) => isOptimisticSidebarSessionEntry(entry) && !entry.path
+  )
+  if (pending.length === 0) return current
+
+  const listed = snapshot.sessions.some(
+    (entry) =>
+      !isOptimisticSidebarSessionEntry(entry) &&
+      (entry.id === sessionId || (sessionPath && entry.path === sessionPath))
+  )
+  const [first] = pending
+  const sessions = snapshot.sessions.flatMap((entry) => {
+    if (!pending.includes(entry)) return [entry]
+    if (listed || entry !== first) return []
+    return [
+      {
+        ...entry,
+        id: sessionId,
+        ...(sessionPath ? { path: sessionPath } : {}),
+        optimistic: true,
+      } satisfies SessionListEntry,
+    ]
+  })
+  const removed = snapshot.sessions.length - sessions.length
+
+  return {
+    ...current,
+    [directory]: {
+      ...snapshot,
+      totalCount: Math.max(0, snapshot.totalCount - removed),
+      revision: `bind-optimistic:${sessionId}:${snapshot.revision}`,
+      sessions,
+    },
+  }
+}
+
 export function isOptimisticSidebarSessionEntry(entry: SessionListEntry) {
   return Boolean(
     entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)

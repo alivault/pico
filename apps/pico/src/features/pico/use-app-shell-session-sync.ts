@@ -114,6 +114,13 @@ type UseAppShellSessionSyncOptions = {
   applySidebarSessionStatusRef: React.RefObject<
     (status: SessionStatusEvent) => void
   >
+  bindOptimisticSidebarSessionRef: React.RefObject<
+    (session: {
+      cwd?: string
+      sessionId?: string
+      sessionPath?: string
+    }) => void
+  >
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   setPendingMessages: React.Dispatch<
     React.SetStateAction<Array<PendingComposerMessage>>
@@ -582,6 +589,7 @@ export function useAppShellSessionSync({
   setSessionsEvent,
   setSessionDoneEvents,
   applySidebarSessionStatusRef,
+  bindOptimisticSidebarSessionRef,
   setComposerImages,
   setPendingMessages,
   pendingUiRequestHandlerRef,
@@ -937,6 +945,16 @@ export function useAppShellSessionSync({
             })
           }
 
+          // The draft became a real session. Move the sidebar placeholder
+          // to the new session, so it does not stay next to the real entry.
+          if (previousState.draft && !nextState.draft && nextState.sessionId) {
+            bindOptimisticSidebarSessionRef.current({
+              cwd: nextState.cwd,
+              sessionId: nextState.sessionId,
+              sessionPath: nextState.sessionFile,
+            })
+          }
+
           if (sessionChanged) {
             setSessionsEvent((current) => {
               if (!current) return current
@@ -1082,6 +1100,7 @@ export function useAppShellSessionSync({
     },
     [
       applySidebarSessionStatusRef,
+      bindOptimisticSidebarSessionRef,
       composerSkillRef,
       composerTextRef,
       handleSelectSessionRef,
