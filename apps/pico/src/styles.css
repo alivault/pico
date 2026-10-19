@@ -10,6 +10,13 @@
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *, .flexoki-dark *, [data-pico-theme-mode="dark"] *));
 
+@theme {
+  /* The compact (mobile) layout starts below this width. It is the minimum
+     width of the left sidebar plus the minimum width of the center column.
+     Keep it the same as SHELL_COMPACT_MAX_WIDTH in hooks/use-shell-layout.ts. */
+  --breakpoint-md: 42.5rem;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;

@@ -2,6 +2,7 @@ import * as React from "react"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
+import { focusShellSide, getShellLayout } from "@/hooks/use-shell-layout"
 import { takePendingMachineAction } from "@/lib/pico/machine"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -317,6 +318,8 @@ function useAppShellSessionWorkspaceView({
   >(
     (action) => {
       const nextOpen = applyStoreAction(appUiStore.state.gitPanelOpen, action)
+      // A sidebar that the user opens gets priority over the left sidebar.
+      if (nextOpen) focusShellSide("right")
       setStoreField(appUiStore, "gitPanelOpen", nextOpen)
       safeLocalStorageSetItem(
         RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
@@ -1256,7 +1259,7 @@ function useAppShellSessionWorkspaceView({
       return
     }
 
-    if (gitPanelOpen && activeTab === pane) {
+    if (gitPanelOpen && getShellLayout().rightShown && activeTab === pane) {
       setGitPanelOpen(false)
       return
     }
@@ -1680,6 +1683,12 @@ function useAppShellSessionWorkspaceView({
   const toggleGitPanel = () => {
     if (isMobile) {
       setCurrentTab((tab) => (tab === "git" ? "session" : "git"))
+      return
+    }
+    // The sidebar is open but hidden because the window is too narrow. Show
+    // it; the left sidebar hides instead.
+    if (gitPanelOpen && !getShellLayout().rightShown) {
+      focusShellSide("right")
       return
     }
 

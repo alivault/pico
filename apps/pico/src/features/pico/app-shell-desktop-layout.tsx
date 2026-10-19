@@ -34,6 +34,12 @@ import {
   type SidebarVerticalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import {
+  focusShellSide,
+  SHELL_RIGHT_MIN_WIDTH,
+  updateShellLayout,
+  useShellLayout,
+} from "@/hooks/use-shell-layout"
+import {
   RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY,
   TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
   safeLocalStorageGetItem,
@@ -290,7 +296,6 @@ function AppShellDesktopGitPanel({
 
 const DESKTOP_DEFAULT_FILE_VIEW_WIDTH = 520
 const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
-const DESKTOP_MIN_SESSION_WIDTH = 320
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
 const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
 const DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT = 280
@@ -401,67 +406,6 @@ function clampDesktopPanelSize(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min
   if (max <= min) return Math.max(0, max)
   return Math.min(max, Math.max(min, value))
-}
-
-function fitDesktopSidePanelWidths({
-  availableWidth,
-  fileOpen,
-  fileWidth,
-  gitOpen,
-  gitWidth,
-}: {
-  availableWidth: number
-  fileOpen: boolean
-  fileWidth: number
-  gitOpen: boolean
-  gitWidth: number
-}) {
-  const maxSideWidth = Math.max(0, availableWidth - DESKTOP_MIN_SESSION_WIDTH)
-
-  if (!fileOpen && !gitOpen) {
-    return { fileWidth: 0, gitWidth: 0, sideWidth: 0 }
-  }
-
-  if (fileOpen && !gitOpen) {
-    const nextFileWidth = clampDesktopPanelSize(
-      fileWidth,
-      Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth),
-      maxSideWidth
-    )
-    return { fileWidth: nextFileWidth, gitWidth: 0, sideWidth: nextFileWidth }
-  }
-
-  if (!fileOpen && gitOpen) {
-    const nextGitWidth = clampDesktopPanelSize(
-      gitWidth,
-      Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth),
-      maxSideWidth
-    )
-    return { fileWidth: 0, gitWidth: nextGitWidth, sideWidth: nextGitWidth }
-  }
-
-  const requestedTotal = Math.max(1, fileWidth + gitWidth)
-  if (requestedTotal <= maxSideWidth) {
-    return {
-      fileWidth,
-      gitWidth,
-      sideWidth: fileWidth + gitWidth,
-    }
-  }
-
-  const minWidth = Math.min(DESKTOP_MIN_SIDE_PANEL_WIDTH, maxSideWidth / 2)
-  let nextFileWidth = Math.round((fileWidth / requestedTotal) * maxSideWidth)
-  nextFileWidth = Math.max(
-    minWidth,
-    Math.min(maxSideWidth - minWidth, nextFileWidth)
-  )
-  const nextGitWidth = Math.max(0, maxSideWidth - nextFileWidth)
-
-  return {
-    fileWidth: nextFileWidth,
-    gitWidth: nextGitWidth,
-    sideWidth: nextFileWidth + nextGitWidth,
-  }
 }
 
 function AppShellDesktopResizeHandle({
@@ -813,12 +757,22 @@ function useAppShellTabsControllerView({
     rightSidebarStore,
     selectRightSidebarHasVisibleFiles
   )
-  const desktopGitPanelOpen = !isMobile && gitPanelOpen
-  const desktopFileViewOpen =
-    !isMobile && gitPanelOpen && rightSidebarHasVisibleFiles
-  const desktopSideWorkspaceOpen = desktopFileViewOpen || desktopGitPanelOpen
+  // The user wants the right sidebar open. It can still be hidden when the
+  // window is too narrow (see use-shell-layout.ts).
+  const desktopGitPanelRequested = !isMobile && gitPanelOpen
+  const desktopFileViewRequested =
+    desktopGitPanelRequested && rightSidebarHasVisibleFiles
+  const rightShown = useShellLayout((layout) => layout.rightShown)
+  const desktopSideWorkspaceFittedWidth = useShellLayout(
+    (layout) => layout.rightWidth
+  )
+  const desktopSideWorkspaceMaxWidth = useShellLayout(
+    (layout) => layout.rightMaxWidth
+  )
+  const desktopGitPanelOpen = desktopGitPanelRequested && rightShown
+  const desktopFileViewOpen = desktopFileViewRequested && rightShown
+  const desktopSideWorkspaceOpen = desktopGitPanelOpen
   const desktopLayoutRef = React.useRef<HTMLDivElement | null>(null)
-  const [desktopLayoutWidth, setDesktopLayoutWidth] = React.useState(0)
   const [desktopLayoutHeight, setDesktopLayoutHeight] = React.useState(0)
   const [desktopSidePanelWidths, setDesktopSidePanelWidthsState] =
     React.useState<DesktopSidePanelWidths>(() =>
@@ -1019,7 +973,6 @@ function useAppShellTabsControllerView({
     if (!element) return
 
     const updateSize = () => {
-      setDesktopLayoutWidth(element.clientWidth)
       setDesktopLayoutHeight(element.clientHeight)
     }
 
@@ -1035,25 +988,33 @@ function useAppShellTabsControllerView({
     return () => observer.disconnect()
   }, [isMobile])
 
-  const desktopAvailableWidth =
-    desktopLayoutWidth ||
-    (typeof window === "undefined" ? 1200 : window.innerWidth)
   const desktopAvailableHeight =
     desktopLayoutHeight ||
     (typeof window === "undefined" ? 800 : window.innerHeight)
   const desktopGitPanelRendered =
     desktopSideWorkspaceOpen || desktopGitPanelMounted || desktopGitPanelOpen
-  const desktopFittedWidths = fitDesktopSidePanelWidths({
-    availableWidth: desktopAvailableWidth,
-    fileOpen: desktopFileViewOpen,
-    fileWidth: desktopFileViewWidth,
-    gitOpen: desktopGitPanelOpen,
-    gitWidth: desktopGitPanelWidth,
-  })
+  // Tell the layout solver what the right sidebar wants. With open files, the
+  // right sidebar shows the file view and the git panel side by side.
+  React.useLayoutEffect(() => {
+    updateShellLayout({
+      rightOpen: desktopGitPanelRequested,
+      rightWidth: desktopFileViewRequested
+        ? desktopFileViewWidth + desktopGitPanelWidth
+        : desktopGitPanelWidth,
+      rightMinWidth: desktopFileViewRequested
+        ? SHELL_RIGHT_MIN_WIDTH * 2
+        : SHELL_RIGHT_MIN_WIDTH,
+    })
+  }, [
+    desktopFileViewRequested,
+    desktopFileViewWidth,
+    desktopGitPanelRequested,
+    desktopGitPanelWidth,
+  ])
   const desktopSideWorkspaceRendered =
     desktopSideWorkspaceOpen || desktopGitPanelMounted
   const desktopSideWorkspaceWidth = desktopSideWorkspaceOpen
-    ? desktopFittedWidths.sideWidth
+    ? desktopSideWorkspaceFittedWidth
     : 0
   const desktopTerminalOpen = !isMobile && terminalPanelOpen
   const desktopTerminalRendered =
@@ -1088,11 +1049,9 @@ function useAppShellTabsControllerView({
   const desktopTerminalResizeEnd = () => {
     setDesktopTerminalResizing(false)
   }
-  const desktopSideWorkspaceMaxWidth = Math.max(
-    0,
-    desktopAvailableWidth - DESKTOP_MIN_SESSION_WIDTH
-  )
   const setDesktopSideWorkspaceWidth = (nextSize: number) => {
+    // A sidebar that the user resizes gets priority over the left sidebar.
+    focusShellSide("right")
     if (!desktopFileViewOpen) {
       setDesktopGitPanelWidth(nextSize)
       return

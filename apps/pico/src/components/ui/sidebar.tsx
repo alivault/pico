@@ -9,6 +9,12 @@ import type { VariantProps } from "class-variance-authority"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
+  focusShellSide,
+  getShellLayout,
+  updateShellLayout,
+  useShellLayout,
+} from "@/hooks/use-shell-layout"
+import {
   getSidebarHorizontalResizeCursor,
   getSidebarResizeTargetMinimumSize,
   useSidebarResize,
@@ -75,6 +81,10 @@ type SidebarContextProps = {
   sidebarResizing: boolean
   setSidebarResizing: (resizing: boolean) => void
   sidebarWidth: string
+  // The width on screen. It is smaller than sidebarWidth when the window has
+  // too little room for all columns.
+  sidebarDisplayWidth: string
+  sidebarMaxWidth: string
   setSidebarWidth: (width: string) => void
   toggleSidebar: () => void
 }
@@ -254,8 +264,19 @@ function SidebarProvider({
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
   const open = openProp ?? uncontrolledOpen
+  const leftShown = useShellLayout((layout) => layout.leftShown)
+  const leftDisplayWidth = useShellLayout((layout) => layout.leftWidth)
+  const leftMaxWidth = useShellLayout((layout) => layout.leftMaxWidth)
+  React.useLayoutEffect(() => {
+    updateShellLayout({
+      leftOpen: open,
+      leftWidth: parseCssLengthToPixels(sidebarWidth, 320),
+    })
+  }, [open, sidebarWidth])
   const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
     const openState = typeof value === "function" ? value(open) : value
+    // A sidebar that the user opens gets priority over the right sidebar.
+    if (openState) focusShellSide("left")
     if (setOpenProp) {
       setOpenProp(openState)
     } else {
@@ -286,9 +307,11 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = () => {
-    return isMobile
-      ? setOpenMobile(!openMobile)
-      : setOpen((current) => !current)
+    if (isMobile) return setOpenMobile(!openMobile)
+    // The sidebar is open but hidden because the window is too narrow. Show
+    // it; the right sidebar hides instead.
+    if (open && !getShellLayout().leftShown) return focusShellSide("left")
+    return setOpen((current) => !current)
   }
   const toggleSidebarRef = useLatestRef(toggleSidebar)
 
@@ -310,7 +333,14 @@ function SidebarProvider({
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
-  const state = open ? "expanded" : "collapsed"
+  const shown = isMobile ? open : open && leftShown
+  const state = shown ? "expanded" : "collapsed"
+  const sidebarDisplayWidth =
+    !isMobile && leftShown ? `${leftDisplayWidth}px` : sidebarWidth
+  const sidebarMaxWidth = `${Math.min(
+    parseCssLengthToPixels(SIDEBAR_WIDTH_MAX, 512),
+    leftMaxWidth
+  )}px`
 
   const contextValue: SidebarContextProps = {
     state,
@@ -324,6 +354,8 @@ function SidebarProvider({
     sidebarResizing,
     setSidebarResizing,
     sidebarWidth,
+    sidebarDisplayWidth,
+    sidebarMaxWidth,
     setSidebarWidth,
     toggleSidebar,
   }
@@ -336,7 +368,7 @@ function SidebarProvider({
         style={
           {
             ...style,
-            "--sidebar-width": sidebarWidth,
+            "--sidebar-width": sidebarDisplayWidth,
             "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
           } as React.CSSProperties
         }
@@ -509,17 +541,22 @@ function SidebarRail({
     setOpen,
     setSidebarResizing,
     setSidebarWidth,
-    sidebarWidth,
+    sidebarDisplayWidth,
+    sidebarMaxWidth,
     state,
   } = useSidebar()
   const { handleClick, handlePointerDown } = useSidebarResize({
     isMobile,
-    maxWidth: SIDEBAR_WIDTH_MAX,
+    maxWidth: sidebarMaxWidth,
     minWidth: SIDEBAR_WIDTH_MIN,
     state,
-    width: sidebarWidth,
+    width: sidebarDisplayWidth,
     onOpenChange: setOpen,
-    onResize: setSidebarWidth,
+    onResize: (width) => {
+      // A sidebar that the user resizes gets priority over the right sidebar.
+      focusShellSide("left")
+      setSidebarWidth(width)
+    },
     onResizeActiveChange: setSidebarResizing,
   })
   const [horizontalResizeCursor, setHorizontalResizeCursor] =

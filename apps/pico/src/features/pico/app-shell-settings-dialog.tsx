@@ -52,6 +52,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { getShellLayout } from "@/hooks/use-shell-layout"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
 const PI_TRANSPORT_OPTIONS: Array<PiTransport> = [
@@ -76,7 +77,6 @@ const THEME_SELECTION_SECTIONS = THEME_SELECTION_SECTION_CONFIGS.map(
     ),
   })
 )
-const SETTINGS_DIALOG_AUTO_FOCUS_MEDIA = "(min-width: 768px)"
 
 type ThemeSelection = {
   theme: ThemeFamily
@@ -84,10 +84,7 @@ type ThemeSelection = {
 }
 
 function shouldAutoFocusSettingsDialogInput() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia(SETTINGS_DIALOG_AUTO_FOCUS_MEDIA).matches
-  )
+  return !getShellLayout().compact
 }
 
 function isThemeColorMode(value: string): value is ThemeColorMode {

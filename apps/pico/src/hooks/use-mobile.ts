@@ -1,19 +1,7 @@
-import * as React from "react"
+import { useShellLayout } from "@/hooks/use-shell-layout"
 
-const MOBILE_BREAKPOINT = 768
-
+// True when the app uses the compact (mobile) layout: the window is too narrow
+// for the left sidebar and the center column side by side.
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
+  return useShellLayout((layout) => layout.compact)
 }
