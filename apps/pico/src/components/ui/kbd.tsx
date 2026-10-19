@@ -152,10 +152,12 @@ function ShortcutText({ value }: { value: string }) {
 
   if (tokens.length === 0) return null
 
-  return tokens.map((token) => {
+  // A shortcut can repeat a token, for example "Esc Esc", so the keys hold
+  // the position. The list is fixed for one value.
+  return tokens.map((token, index) => {
     if (token.type === "modifier") {
       return (
-        <React.Fragment key={`modifier-${token.modifier}`}>
+        <React.Fragment key={`${index}-modifier-${token.modifier}`}>
           <ShortcutModifierIcon modifier={token.modifier} />
           <span className="sr-only">{token.label}</span>
         </React.Fragment>
@@ -164,7 +166,7 @@ function ShortcutText({ value }: { value: string }) {
 
     if (token.type === "arrow") {
       return (
-        <React.Fragment key={`arrow-${token.arrow}`}>
+        <React.Fragment key={`${index}-arrow-${token.arrow}`}>
           <ShortcutArrowIcon arrow={token.arrow} />
           <span className="sr-only">{token.label}</span>
         </React.Fragment>
@@ -174,7 +176,7 @@ function ShortcutText({ value }: { value: string }) {
     if (token.type === "separator") {
       return (
         <span
-          key={`separator-${token.value}`}
+          key={`${index}-separator-${token.value}`}
           aria-hidden="true"
           className="mx-0.5"
         >
@@ -183,7 +185,7 @@ function ShortcutText({ value }: { value: string }) {
       )
     }
 
-    return <span key={`text-${token.value}`}>{token.value}</span>
+    return <span key={`${index}-text-${token.value}`}>{token.value}</span>
   })
 }
 
