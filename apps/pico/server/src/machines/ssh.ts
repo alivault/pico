@@ -332,8 +332,12 @@ export class SshTransport implements MachineTransport {
     )
   }
 
+  /**
+   * Forward `api.sock` to the remote Pico. Each connect attempt forwards
+   * again: a socket file can stay after its forward is gone (a new master,
+   * or a forward that SSH dropped), and then every request is refused.
+   */
   async attach(remotePort: number) {
-    if (this.#attachedPort === remotePort && existsSync(this.#api)) return
     const ports = new Set([remotePort])
     if (this.#attachedPort !== undefined) ports.add(this.#attachedPort)
     for (const port of ports)

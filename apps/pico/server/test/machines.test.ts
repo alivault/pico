@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { writeFileSync } from "node:fs"
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { Agent } from "node:http"
 import { join } from "node:path"
@@ -30,7 +30,7 @@ import {
   picoCommand,
   versionAtLeast,
 } from "../src/machines/remote.ts"
-import { socketPath, targetArgs } from "../src/machines/ssh.ts"
+import { socketPath, SshTransport, targetArgs } from "../src/machines/ssh.ts"
 import {
   shellQuote,
   TransportError,
@@ -116,6 +116,36 @@ void test("SSH helpers quote, split targets, and keep socket paths short", () =>
   const long = socketPath(`/tmp/${"x".repeat(120)}`, "ssh.sock")
   assert.ok(Buffer.byteLength(long) <= 80, long)
   assert.equal(socketPath("/tmp/m", "ssh.sock"), "/tmp/m/ssh.sock")
+})
+
+void test("SSH attach forwards again when a stale api.sock file stays", async () => {
+  const dir = await tempDir("pico-ssh-")
+  const log = join(dir, "ssh-args.log")
+  const ssh = join(dir, "fake-ssh")
+  writeFileSync(ssh, `#!/bin/sh\necho "$*" >> '${log}'\nexit 0\n`)
+  chmodSync(ssh, 0o755)
+  const machinesDir = join(dir, "machines")
+  const profile: MachineProfile = {
+    id: "m_test",
+    label: "box",
+    target: "ali@box",
+    dataDir: null,
+    enabled: true,
+  }
+  const transport = new SshTransport({ profile, machinesDir, ssh })
+  const endpoint = transport.endpoint()
+  assert.ok("socketPath" in endpoint)
+  const api = endpoint.socketPath
+  mkdirSync(join(machinesDir, profile.id), { recursive: true })
+  await transport.attach(3141)
+  // The forward is gone, but the socket file stays.
+  writeFileSync(api, "")
+  await transport.attach(3141)
+  const forwards = (await readFile(log, "utf8"))
+    .split("\n")
+    .filter((line) => line.includes("-O forward"))
+  assert.equal(forwards.length, 2)
+  assert.ok(forwards.every((line) => line.includes(`${api}:127.0.0.1:3141`)))
 })
 
 void test("remote discovery picks a new enough node and the first pico-app", () => {
