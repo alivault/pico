@@ -47,6 +47,35 @@ registerState({
   },
 })
 
+/** A page script may never settle; give up after this time. */
+const EVAL_TIMEOUT_MS = 60_000
+
+/**
+ * Wait for `work`, but stop when `signal` aborts. Browser calls do not take a
+ * signal, and a page script that never settles must not block an abort.
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined) {
+  if (!signal) return work
+  if (signal.aborted)
+    return Promise.reject(signal.reason ?? new Error("Aborted"))
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error("Aborted"))
+    signal.addEventListener("abort", onAbort, { once: true })
+    work.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", onAbort)
+    })
+  })
+}
+
+/** Reject when `work` takes longer than `ms`. */
+function withTimeout<T>(work: Promise<T>, ms: number, message: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer))
+}
+
 export function createBrowserExtension(host: HostBridge) {
   const withBrowser = async (
     api: ToolExecutionApi,
@@ -59,8 +88,12 @@ export function createBrowserExtension(host: HostBridge) {
     const services = await host.ready(context.abortSignal)
     if (!services.browser) return errorResult("The browser is not available")
     const state = await api.snapshot(BrowserDoc, api.conversationId, context)
+    const signal = context.abortSignal
     try {
-      const result = await work(services.browser, state?.tabs ?? [])
+      const result = await untilAborted(
+        work(services.browser, state?.tabs ?? []),
+        signal
+      )
       const conversation = Number(api.conversationId)
       await services.browser.persist(conversation).catch(() => undefined)
       const tabs = await services.browser.tabs(conversation)
@@ -73,6 +106,7 @@ export function createBrowserExtension(host: HostBridge) {
       }, context)
       return result
     } catch (error) {
+      if (signal?.aborted) throw error
       return errorResult(error instanceof Error ? error.message : String(error))
     }
   }
@@ -235,8 +269,10 @@ export function createBrowserExtension(host: HostBridge) {
     execute: (args, api, context) =>
       withBrowser(api, context, async (browser, tabs) => {
         const { page } = await browser.page(Number(api.conversationId), tabs)
-        const value = (await page.evaluate(
-          `(async () => (${args.expression}))()`
+        const value = (await withTimeout(
+          page.evaluate(`(async () => (${args.expression}))()`),
+          EVAL_TIMEOUT_MS,
+          `The expression did not finish in ${EVAL_TIMEOUT_MS / 1000} seconds`
         )) as unknown
         return textResult(
           clip(JSON.stringify(value, null, 2) ?? "undefined", 30_000)
