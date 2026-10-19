@@ -50,6 +50,10 @@ import type {
 } from "@/features/pico/right-sidebar-types"
 import type { GitActionResponse } from "@/lib/pico/api"
 
+// Hide a button label when the git toolbar is narrow. The label stays for
+// screen readers.
+const narrowLabelClassName = "@max-[20rem]/git-toolbar:sr-only"
+
 export function GitPanelErrorToasts({
   viewerContextId,
   cwd,
@@ -377,7 +381,9 @@ export function GitPanelToolbar({
     showCommitAction || showPushAction || showForcePushAction || showPullAction
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    // In a narrow sidebar, the action buttons show only their icons, so they
+    // stay on one row with the branch.
+    <div className="@container/git-toolbar flex flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-1.5">
         <GitRepositorySummary
           viewerContextId={viewerContextId}
@@ -406,7 +412,8 @@ export function GitPanelToolbar({
                   setCommitDialogOpen(true)
                 }}
               >
-                <GitCommitIcon /> Commit…
+                <GitCommitIcon />
+                <span className={narrowLabelClassName}>Commit…</span>
               </Button>
             </TitleTooltip>
           ) : null}
@@ -424,7 +431,7 @@ export function GitPanelToolbar({
                 }}
               >
                 {pushing ? <Spinner /> : <UploadIcon />}
-                Push
+                <span className={narrowLabelClassName}>Push</span>
               </Button>
             </TitleTooltip>
           ) : null}
@@ -442,7 +449,7 @@ export function GitPanelToolbar({
                 }}
               >
                 {forcePushing ? <Spinner /> : <UploadIcon />}
-                Force Push
+                <span className={narrowLabelClassName}>Force Push</span>
               </Button>
             </TitleTooltip>
           ) : null}
@@ -457,7 +464,7 @@ export function GitPanelToolbar({
                 }}
               >
                 {pulling ? <Spinner /> : <DownloadIcon />}
-                Pull
+                <span className={narrowLabelClassName}>Pull</span>
               </Button>
             </TitleTooltip>
           ) : null}

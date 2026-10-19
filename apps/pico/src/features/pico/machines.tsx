@@ -206,7 +206,14 @@ function MachineGroupLabel({
             <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
           )}
         </span>
-        <MachineCounts machine={machine} />
+        {/* In a narrow sidebar, the machine of this page has no room for its
+            counts next to its icon buttons. The session rows still show
+            their state. */}
+        <span
+          className={cn("contents", active && "@max-[18rem]/sidebar:hidden")}
+        >
+          <MachineCounts machine={machine} />
+        </span>
       </CollapsibleTrigger>
       {active ? actions : null}
       {active ? (
