@@ -232,9 +232,59 @@ type AppShellConversationFrameProps = {
   onLoadOlderHistory: () => Promise<void>
   ref?: React.Ref<AppShellConversationFrameHandle>
   sessionState: AppShellConversationSessionState
+  viewportElementRef?: React.RefObject<HTMLElement | null>
+}
+
+/**
+ * Keep the scroll position of the conversation while the app shell of this
+ * machine is hidden (see `routes/index.tsx`). A hidden shell gets
+ * `display: none`, which loses the position. When the shell shows again,
+ * the message scroller sees its viewport grow from zero and scrolls to the
+ * end in an animation frame from its resize observer. Its observer starts
+ * in a passive effect of a child. This observer starts in a passive effect
+ * of the parent, so its callback and its animation frame come later: this
+ * restore wins. The observer stops after a short time.
+ */
+function usePreservedScrollWhileHidden(
+  elementRef: React.RefObject<HTMLElement | null>
+) {
+  const savedRef = React.useRef<{ element: HTMLElement; top: number } | null>(
+    null
+  )
+  React.useLayoutEffect(() => {
+    // React attaches the viewport ref again only after this effect, so use
+    // the element from the hide. It is the same element when it is still in
+    // the document.
+    const saved = savedRef.current
+    if (saved?.element.isConnected) saved.element.scrollTop = saved.top
+    return () => {
+      const element = elementRef.current
+      savedRef.current = element ? { element, top: element.scrollTop } : null
+    }
+  }, [elementRef])
+  React.useEffect(() => {
+    const saved = savedRef.current
+    if (!saved?.element.isConnected) return
+    let frame = 0
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        saved.element.scrollTop = saved.top
+      })
+    })
+    observer.observe(saved.element)
+    const stop = window.setTimeout(() => observer.disconnect(), 500)
+    return () => {
+      window.clearTimeout(stop)
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [])
 }
 
 function AppShellConversationFrame(props: AppShellConversationFrameProps) {
+  const viewportElementRef = React.useRef<HTMLElement | null>(null)
+  usePreservedScrollWhileHidden(viewportElementRef)
   // Remount the scroller for each session so the opening position applies
   // again and no follow state leaks between sessions.
   // The key also changes when the session view finishes loading, because
@@ -250,7 +300,10 @@ function AppShellConversationFrame(props: AppShellConversationFrameProps) {
       defaultScrollPosition="end"
       scrollPreviousItemPeek={64}
     >
-      <AppShellConversationScroller {...props} />
+      <AppShellConversationScroller
+        {...props}
+        viewportElementRef={viewportElementRef}
+      />
     </MessageScrollerProvider>
   )
 }
@@ -265,6 +318,7 @@ function AppShellConversationScroller({
   onLoadOlderHistory,
   ref,
   sessionState,
+  viewportElementRef,
 }: AppShellConversationFrameProps) {
   const {
     jumpStateStore,
@@ -275,6 +329,10 @@ function AppShellConversationScroller({
     setViewport,
     viewport,
   } = useAppShellMessageScroll()
+
+  React.useLayoutEffect(() => {
+    if (viewportElementRef) viewportElementRef.current = viewport
+  }, [viewport, viewportElementRef])
 
   React.useImperativeHandle(
     ref,
