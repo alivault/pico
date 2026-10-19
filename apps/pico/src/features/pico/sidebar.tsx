@@ -854,7 +854,6 @@ function SidebarSessionItem({
       )}
       style={
         {
-          transform: CSS.Translate.toString(draggable.transform),
           ...sessionTreeStyle(nestingDepth),
         } as React.CSSProperties
       }
@@ -2563,7 +2562,7 @@ function useAppSidebarView({
                   }
                 />
               ) : activeSessionDrag ? (
-                <SidebarMenu className="w-64 rounded-lg bg-sidebar p-1 shadow-lg ring-1 ring-sidebar-border/70">
+                <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
                   <SidebarSessionItem
                     entryKey={activeSessionDrag.entryKey}
                     directorySessionsStore={directorySessionsStore}
