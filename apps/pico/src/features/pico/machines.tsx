@@ -117,8 +117,12 @@ export function isMachineSessionUnread(session: MachineSessionSummary) {
   )
 }
 
+/** Count only the sessions that the sidebar shows: those in its directories. */
 function sessionCounts(machine: MachineInfo) {
-  const sessions = machine.summary?.sessions ?? []
+  const directories = new Set(machine.summary?.directories ?? [])
+  const sessions = (machine.summary?.sessions ?? []).filter((session) =>
+    directories.has(session.directory || session.cwd)
+  )
   return {
     working: sessions.filter((session) => session.busy && !session.needsInput)
       .length,
