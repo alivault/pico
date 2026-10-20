@@ -884,7 +884,7 @@ function FileViewerTabContent({
   const tab = (
     <div
       className={cn(
-        "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex h-full flex-1 shrink-0 items-center justify-center border-r border-border/70 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         active && "bg-muted text-foreground",
         dragging && "border-transparent shadow-none ring-0"
       )}
@@ -991,7 +991,7 @@ function SortableFileViewerTab(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={cn("shrink-0", isDragging && "opacity-0")}
+      className={cn("flex flex-1 shrink-0", isDragging && "opacity-0")}
     >
       <FileViewerTabContent
         {...props}
@@ -1034,7 +1034,7 @@ function CommitDiffViewerTab({
   const tabNode = (
     <div
       className={cn(
-        "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex h-full flex-1 shrink-0 items-center justify-center border-r border-border/70 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         active && "bg-muted text-foreground",
         dragging && "border-transparent shadow-none ring-0"
       )}
@@ -1127,7 +1127,7 @@ function SortableCommitDiffViewerTab(props: {
     <div
       ref={setNodeRef}
       style={style}
-      className={cn("shrink-0", isDragging && "opacity-0")}
+      className={cn("flex flex-1 shrink-0", isDragging && "opacity-0")}
     >
       <CommitDiffViewerTab
         {...props}
@@ -1258,7 +1258,7 @@ export function RightSidebarTabStrip({
         type="button"
         aria-pressed={active}
         className={cn(
-          "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          "inline-flex h-full flex-1 shrink-0 items-center justify-center border-r border-border/70 px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
           active && "bg-muted text-foreground"
         )}
         onClick={() => {
@@ -1290,7 +1290,6 @@ export function RightSidebarTabStrip({
     ...availableMixedTabIds.filter((id) => !mixedTabOrder.includes(id)),
   ]
   const hasOpenFiles = fileTabs.length > 0
-  const hasOpenCommitDiffs = commitDiffTabs.length > 0
   const hasFileTypeIconTabs =
     hasOpenFiles || commitDiffTabs.some((tab) => Boolean(tab.path))
   const hasMixedTabs = mixedTabIds.length > 0
@@ -1352,7 +1351,7 @@ export function RightSidebarTabStrip({
   }
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background px-2">
+    <div className="flex h-12 shrink-0 items-stretch overflow-x-auto border-b border-border/70 bg-background">
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
       {showReview ? renderTab({ label: "Git", value: "review" }) : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
@@ -1371,11 +1370,6 @@ export function RightSidebarTabStrip({
             value: "files",
           })
         : null}
-      {hasOpenFiles || hasOpenCommitDiffs ? (
-        <span className="mx-1 shrink-0 text-xs text-border" aria-hidden="true">
-          |
-        </span>
-      ) : null}
       {hasMixedTabs ? (
         <DndContext
           sensors={sensors}
@@ -1472,7 +1466,7 @@ export function RightSidebarTabStrip({
           <button
             type="button"
             aria-label="Open another file"
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-full w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             onClick={onOpenFileDialog}
           >
             +
