@@ -4,7 +4,6 @@ import {
   ChevronRightIcon,
   MessageCircleQuestionIcon,
   RefreshCwIcon,
-  Settings2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -165,6 +164,38 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
   )
 }
 
+const PROBLEM_BADGES: Record<string, string> = {
+  auth: "! auth",
+  update: "! update",
+  stopped: "! stopped",
+  setup: "! setup",
+}
+
+/**
+ * A machine that needs an action shows a badge in its heading, like Herdr's
+ * `! auth`. A click opens the machines settings with the error and the
+ * command that fixes it. The rest of the heading still opens and closes the
+ * group.
+ */
+function MachineProblemBadge({ machine }: { machine: MachineInfo }) {
+  const label = PROBLEM_BADGES[machine.problem?.kind ?? ""] ?? "! error"
+  return (
+    <TitleTooltip
+      title={machine.problem?.message ?? machineStateLabel(machine)}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 px-1.5 font-mono text-[11px] font-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
+        onClick={() => emitOpenMachines()}
+        aria-label={`${machine.label}: ${machineStateLabel(machine)}. Show details`}
+      >
+        {label}
+      </Button>
+    </TitleTooltip>
+  )
+}
+
 /**
  * The heading of a machine group in the sidebar. All machines use it, so the
  * machine of this page looks the same as the others.
@@ -178,13 +209,14 @@ function MachineGroupLabel({
   machine: MachineInfo
   collapsed: boolean
   active?: boolean
-  /** More icon buttons of the machine of the page, before "Manage". */
+  /** Icon buttons of the group, after the counts. */
   actions?: React.ReactNode
 }) {
+  const attention = machine.state === "attention"
   return (
     // pr-0 when there is an icon button: it already holds the item-pad.
     <SidebarGroupLabel
-      className={cn("justify-between gap-1", active && "pr-0")}
+      className={cn("justify-between gap-1", (actions || attention) && "pr-0")}
     >
       <CollapsibleTrigger
         type="button"
@@ -209,26 +241,16 @@ function MachineGroupLabel({
         {/* In a narrow sidebar, the machine of this page has no room for its
             counts next to its icon buttons. The session rows still show
             their state. */}
-        <span
-          className={cn("contents", active && "@max-[18rem]/sidebar:hidden")}
-        >
-          <MachineCounts machine={machine} />
-        </span>
-      </CollapsibleTrigger>
-      {active ? actions : null}
-      {active ? (
-        <TitleTooltip title="Manage machines">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-            onClick={() => emitOpenMachines()}
-            aria-label="Manage machines"
+        {attention ? null : (
+          <span
+            className={cn("contents", actions && "@max-[18rem]/sidebar:hidden")}
           >
-            <Settings2Icon />
-          </Button>
-        </TitleTooltip>
-      ) : null}
+            <MachineCounts machine={machine} />
+          </span>
+        )}
+      </CollapsibleTrigger>
+      {attention ? <MachineProblemBadge machine={machine} /> : null}
+      {actions}
     </SidebarGroupLabel>
   )
 }
