@@ -24,7 +24,6 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node"
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { createToolSearchExtension } from "@earendil-works/pi-durable/tool-search"
-import { createCodingTools } from "@earendil-works/pi-durable/tools"
 
 import type { ServerPaths } from "../config.ts"
 import type { HostBridge } from "../extensions/host.ts"
@@ -35,6 +34,7 @@ import {
 import { createMcpExtension, type McpExtension } from "../extensions/mcp.ts"
 import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
+import { createPicoCodingTools } from "./coding-tools.ts"
 import { ResourceCache } from "./resources.ts"
 import { PicoSettings } from "./settings.ts"
 import { SidebarState } from "./sidebar-state.ts"
@@ -88,7 +88,12 @@ export async function openRuntime(
     console.warn("[pico] image processing is unavailable:", error)
     return undefined
   })
-  registry.install(images ? createCodingTools({ images }) : createCodingTools())
+  registry.install(
+    createPicoCodingTools({
+      ...(images ? { images } : {}),
+      shellPrefix: () => currentPiSettings().getShellCommandPrefix(),
+    })
+  )
   registry.install(createWebAccessExtension())
   const mcp = createMcpExtension(agentDir, paths.dataDir)
   registry.install(mcp.extension)
