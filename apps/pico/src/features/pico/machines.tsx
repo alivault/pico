@@ -248,22 +248,64 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
-function useMachineCollapsed(id: string) {
-  const [collapsed, setCollapsed] = React.useState(
-    () => readCollapsed()[id] === true
-  )
-  const update = (next: boolean) => {
-    setCollapsed(next)
-    try {
-      const all = readCollapsed()
-      if (next) all[id] = true
-      else delete all[id]
-      window.localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(all))
-    } catch {
-      // Ignore storage failures.
-    }
+// One store for all machine groups, so an Option-click can expand or
+// collapse all of them.
+let collapsedSnapshot: Record<string, boolean> | undefined
+const collapsedListeners = new Set<() => void>()
+
+function getCollapsedSnapshot() {
+  collapsedSnapshot ??= readCollapsed()
+  return collapsedSnapshot
+}
+
+function subscribeCollapsed(listener: () => void) {
+  collapsedListeners.add(listener)
+  return () => {
+    collapsedListeners.delete(listener)
   }
-  return [collapsed, update] as const
+}
+
+function setMachinesCollapsed(ids: Array<string>, collapsed: boolean) {
+  const next = { ...getCollapsedSnapshot() }
+  for (const id of ids) {
+    if (collapsed) next[id] = true
+    else delete next[id]
+  }
+  collapsedSnapshot = next
+  try {
+    window.localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(next))
+  } catch {
+    // Ignore storage failures.
+  }
+  for (const listener of collapsedListeners) listener()
+}
+
+function useMachineCollapsed(id: string) {
+  return React.useSyncExternalStore(
+    subscribeCollapsed,
+    () => getCollapsedSnapshot()[id] === true,
+    () => false
+  )
+}
+
+/** True when the user held Option (Alt) for the click or key press. */
+export function isAltChange(details: { event?: Event }) {
+  const event = details.event
+  return Boolean(event && "altKey" in event && event.altKey)
+}
+
+/**
+ * Expands or collapses one machine group. An Option-click expands or
+ * collapses all of them.
+ */
+function useMachineOpenChange(id: string) {
+  const { machines } = useMachines()
+  return (open: boolean, details: { event?: Event }) => {
+    const ids = isAltChange(details)
+      ? machines.map((machine) => machine.id)
+      : [id]
+    setMachinesCollapsed(ids, !open)
+  }
 }
 
 type RenderMachineContent = (machine: MachineInfo) => React.ReactNode
@@ -275,10 +317,11 @@ function OtherMachineGroup({
   machine: MachineInfo
   renderContent: RenderMachineContent
 }) {
-  const [collapsed, setCollapsed] = useMachineCollapsed(machine.id)
+  const collapsed = useMachineCollapsed(machine.id)
+  const onOpenChange = useMachineOpenChange(machine.id)
   const dimmed = machine.state !== "online"
   return (
-    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+    <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
       <SidebarGroup className="py-1">
         <MachineGroupLabel machine={machine} collapsed={collapsed} />
         <CollapsibleContent>
@@ -304,9 +347,10 @@ function ActiveMachineGroup({
   actions?: React.ReactNode
   children: React.ReactNode
 }) {
-  const [collapsed, setCollapsed] = useMachineCollapsed(machine.id)
+  const collapsed = useMachineCollapsed(machine.id)
+  const onOpenChange = useMachineOpenChange(machine.id)
   return (
-    <Collapsible open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
+    <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
       <SidebarGroup className="pt-1 pb-0">
         <MachineGroupLabel
           machine={machine}

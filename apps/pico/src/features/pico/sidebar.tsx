@@ -23,8 +23,6 @@ import {
   ArchiveIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDown,
   EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -91,6 +89,7 @@ import {
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
+  isAltChange,
   isMachineSessionUnread,
   SidebarMachineGroups,
   useHasMachineGroups,
@@ -472,18 +471,6 @@ function useDirectoryCollapsed(
 ) {
   return useSelector(store, (collapsedDirectories) =>
     searchActive ? false : Boolean(collapsedDirectories[directory])
-  )
-}
-
-function useAllDirectoriesCollapsed(
-  store: CollapsedDirectoryStore,
-  directories: Array<string>
-) {
-  return useSelector(
-    store,
-    (collapsedDirectories) =>
-      directories.length > 0 &&
-      directories.every((directory) => collapsedDirectories[directory])
   )
 }
 
@@ -1294,6 +1281,8 @@ type DirectorySessionGroupProps = {
   directory: string
   directorySessionsStore: DirectorySessionsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
+  /** The groups that an Option-click expands or collapses together. */
+  collapseAllKeys: Array<string>
   searchActive: boolean
   moveTargetDirectories: Array<string>
   activeSessionStore: ActiveSidebarSessionStore
@@ -1340,6 +1329,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   directory,
   directorySessionsStore,
   collapsedDirectoryStore,
+  collapseAllKeys,
   searchActive,
   moveTargetDirectories,
   activeSessionStore,
@@ -1515,8 +1505,12 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   return (
     <Collapsible
       open={!collapsed}
-      onOpenChange={(open) => {
+      onOpenChange={(open, details) => {
         if (searchActive || overlay) return
+        if (isAltChange(details)) {
+          collapsedDirectoryStore.setAll(collapseAllKeys, !open)
+          return
+        }
         collapsedDirectoryStore.setCollapsed(directory, !open)
       }}
       className={cn(
@@ -1670,6 +1664,8 @@ type PinnedSessionGroupProps = {
   nested?: boolean
   directorySessionsStore: DirectorySessionsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
+  /** The groups that an Option-click expands or collapses together. */
+  collapseAllKeys: Array<string>
   searchActive: boolean
   activeSessionStore: ActiveSidebarSessionStore
   selectedSessionKeyStore: SelectedSessionKeyStore
@@ -1695,6 +1691,7 @@ function PinnedSessionGroup({
   nested = false,
   directorySessionsStore,
   collapsedDirectoryStore,
+  collapseAllKeys,
   searchActive,
   activeSessionStore,
   selectedSessionKeyStore,
@@ -1721,8 +1718,12 @@ function PinnedSessionGroup({
   return (
     <Collapsible
       open={!collapsed}
-      onOpenChange={(open) => {
+      onOpenChange={(open, details) => {
         if (searchActive) return
+        if (isAltChange(details)) {
+          collapsedDirectoryStore.setAll(collapseAllKeys, !open)
+          return
+        }
         collapsedDirectoryStore.setCollapsed(
           PINNED_SESSION_GROUP_COLLAPSE_KEY,
           !open
@@ -1786,47 +1787,6 @@ function PinnedSessionGroup({
   )
 }
 
-type DirectoryCollapseAllButtonProps = {
-  searchActive: boolean
-  visibleDirectories: Array<string>
-  collapsedDirectoryStore: CollapsedDirectoryStore
-}
-
-function DirectoryCollapseAllButton({
-  searchActive,
-  visibleDirectories,
-  collapsedDirectoryStore,
-}: DirectoryCollapseAllButtonProps) {
-  const allDirectoriesCollapsed = useAllDirectoriesCollapsed(
-    collapsedDirectoryStore,
-    visibleDirectories
-  )
-
-  const tooltipTitle = allDirectoriesCollapsed
-    ? "Expand all directories"
-    : "Collapse all directories"
-
-  return (
-    <TitleTooltip title={tooltipTitle}>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-        disabled={searchActive || visibleDirectories.length === 0}
-        onClick={() => {
-          collapsedDirectoryStore.setAll(
-            visibleDirectories,
-            !allDirectoriesCollapsed
-          )
-        }}
-        aria-label={tooltipTitle}
-      >
-        {allDirectoriesCollapsed ? <ChevronsUpDown /> : <ChevronsDownUpIcon />}
-      </Button>
-    </TitleTooltip>
-  )
-}
-
 type AppSidebarSearchButtonProps = {
   onOpenSessionsDialog: () => void
 }
@@ -1853,19 +1813,15 @@ function AppSidebarSearchButton({
 
 type AppSidebarDirectoriesHeaderProps = {
   sessionSearch: string
-  visibleDirectories: Array<string>
   matchingSessionCount: number
   collapsed: boolean
-  collapsedDirectoryStore: CollapsedDirectoryStore
   onOpenAddDirectoryDialog: () => void
 }
 
 function AppSidebarDirectoriesHeader({
   sessionSearch,
-  visibleDirectories,
   matchingSessionCount,
   collapsed,
-  collapsedDirectoryStore,
   onOpenAddDirectoryDialog,
 }: AppSidebarDirectoriesHeaderProps) {
   const searchActive = sessionSearch.trim().length > 0
@@ -1891,43 +1847,22 @@ function AppSidebarDirectoriesHeader({
           )
         ) : null}
       </CollapsibleTrigger>
-      <DirectoryActions
-        searchActive={searchActive}
-        showCollapseAll={!collapsed}
-        visibleDirectories={visibleDirectories}
-        collapsedDirectoryStore={collapsedDirectoryStore}
-        onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
-      />
+      <DirectoryActions onOpenAddDirectoryDialog={onOpenAddDirectoryDialog} />
     </SidebarGroupLabel>
   )
 }
 
 /**
- * Collapse all and Add directory. They are on the "Directories" heading, or
- * on the machine heading when the sidebar has a group for each machine.
+ * Add directory. It is on the "Directories" heading, or on the machine
+ * heading when the sidebar has a group for each machine.
  */
 function DirectoryActions({
-  searchActive,
-  showCollapseAll,
-  visibleDirectories,
-  collapsedDirectoryStore,
   onOpenAddDirectoryDialog,
 }: {
-  searchActive: boolean
-  showCollapseAll: boolean
-  visibleDirectories: Array<string>
-  collapsedDirectoryStore: CollapsedDirectoryStore
   onOpenAddDirectoryDialog: () => void
 }) {
   return (
     <span className="flex items-center gap-1">
-      {showCollapseAll ? (
-        <DirectoryCollapseAllButton
-          searchActive={searchActive}
-          visibleDirectories={visibleDirectories}
-          collapsedDirectoryStore={collapsedDirectoryStore}
-        />
-      ) : null}
       <TitleTooltip
         title="Add directory"
         kbd={formatShortcutLabel(appShortcut("D"))}
@@ -2071,6 +2006,10 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
     )
     return storedPinnedKeys.filter((key) => known.has(key))
   }, [grouped, storedPinnedKeys])
+  const collapseAllKeys = React.useMemo(
+    () => [PINNED_SESSION_GROUP_COLLAPSE_KEY, ...grouped.directories],
+    [grouped.directories]
+  )
   const [renameEntry, setRenameEntry] = React.useState<SessionListEntry>()
   const [archiveEntry, setArchiveEntry] = React.useState<SessionListEntry>()
   const sessionActions = online
@@ -2128,6 +2067,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
         pinnedSessionKeys={pinnedSessionKeys}
         directorySessionsStore={stores.sessions}
         collapsedDirectoryStore={stores.collapsed}
+        collapseAllKeys={collapseAllKeys}
         searchActive={false}
         activeSessionStore={stores.active}
         selectedSessionKeyStore={stores.selected}
@@ -2144,6 +2084,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
           directory={directory}
           directorySessionsStore={stores.sessions}
           collapsedDirectoryStore={stores.collapsed}
+          collapseAllKeys={collapseAllKeys}
           searchActive={false}
           moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
           activeSessionStore={stores.active}
@@ -2242,6 +2183,12 @@ function useAppSidebarView({
     collapsedDirectoryStore,
     DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
     searchActive
+  )
+  // An Option-click on the pinned group or a directory expands or collapses
+  // all of them.
+  const collapseAllKeys = React.useMemo(
+    () => [PINNED_SESSION_GROUP_COLLAPSE_KEY, ...visibleDirectories],
+    [visibleDirectories]
   )
 
   React.useLayoutEffect(() => {
@@ -2446,10 +2393,6 @@ function useAppSidebarView({
         <SidebarMachineGroups
           activeActions={
             <DirectoryActions
-              searchActive={searchActive}
-              showCollapseAll
-              visibleDirectories={visibleDirectories}
-              collapsedDirectoryStore={collapsedDirectoryStore}
               onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
             />
           }
@@ -2469,6 +2412,7 @@ function useAppSidebarView({
               pinnedSessionKeys={pinnedSessionKeys}
               directorySessionsStore={directorySessionsStore}
               collapsedDirectoryStore={collapsedDirectoryStore}
+              collapseAllKeys={collapseAllKeys}
               searchActive={searchActive}
               activeSessionStore={activeSessionStore}
               selectedSessionKeyStore={selectedSessionKeyStore}
@@ -2484,8 +2428,19 @@ function useAppSidebarView({
             />
             <Collapsible
               open={showDirectoriesHeader ? !directoriesCollapsed : true}
-              onOpenChange={(open) => {
+              onOpenChange={(open, details) => {
                 if (searchActive) return
+                // An Option-click also expands or collapses all directories.
+                if (isAltChange(details)) {
+                  collapsedDirectoryStore.setAll(
+                    [
+                      DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
+                      ...visibleDirectories,
+                    ],
+                    !open
+                  )
+                  return
+                }
                 collapsedDirectoryStore.setCollapsed(
                   DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
                   !open
@@ -2498,10 +2453,8 @@ function useAppSidebarView({
                 {showDirectoriesHeader ? (
                   <AppSidebarDirectoriesHeader
                     sessionSearch={sessionSearch}
-                    visibleDirectories={visibleDirectories}
                     matchingSessionCount={matchingSessionCount}
                     collapsed={directoriesCollapsed}
-                    collapsedDirectoryStore={collapsedDirectoryStore}
                     onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
                   />
                 ) : null}
@@ -2539,6 +2492,7 @@ function useAppSidebarView({
                                   collapsedDirectoryStore={
                                     collapsedDirectoryStore
                                   }
+                                  collapseAllKeys={collapseAllKeys}
                                   searchActive={searchActive}
                                   moveTargetDirectories={visibleDirectories}
                                   activeSessionStore={activeSessionStore}
@@ -2593,6 +2547,7 @@ function useAppSidebarView({
                   directory={activeDirectory}
                   directorySessionsStore={directorySessionsStore}
                   collapsedDirectoryStore={collapsedDirectoryStore}
+                  collapseAllKeys={collapseAllKeys}
                   searchActive={searchActive}
                   moveTargetDirectories={visibleDirectories}
                   activeSessionStore={activeSessionStore}
