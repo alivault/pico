@@ -330,22 +330,49 @@ function useMachineOpenChange(id: string) {
   }
 }
 
-type RenderMachineContent = (machine: MachineInfo) => React.ReactNode
+type RenderMachine = (machine: MachineInfo) => React.ReactNode
 
-function OtherMachineGroup({
+/**
+ * The group of one machine. All machines use it: the heading has the same
+ * buttons for each machine. The shown machine's content is the live
+ * sidebar of its app shell (`shownContent`, a slot that the shell fills);
+ * another machine's content comes from its hub summary.
+ */
+function MachineGroup({
   machine,
+  shown,
+  shownContent,
   renderContent,
+  renderActions,
 }: {
   machine: MachineInfo
-  renderContent: RenderMachineContent
+  shown: boolean
+  shownContent: React.ReactNode
+  renderContent: RenderMachine
+  renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
 }) {
   const collapsed = useMachineCollapsed(machine.id)
   const onOpenChange = useMachineOpenChange(machine.id)
   const dimmed = machine.state !== "online"
+  const label = (
+    <MachineGroupLabel
+      machine={machine}
+      collapsed={collapsed}
+      active={shown}
+      actions={renderActions?.(machine, shown)}
+    />
+  )
+  if (shown)
+    return (
+      <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
+        <SidebarGroup className="pt-1 pb-0">{label}</SidebarGroup>
+        <CollapsibleContent>{shownContent}</CollapsibleContent>
+      </Collapsible>
+    )
   return (
     <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
       <SidebarGroup className="py-1">
-        <MachineGroupLabel machine={machine} collapsed={collapsed} />
+        {label}
         <CollapsibleContent>
           <SidebarGroupContent className={cn(dimmed && "opacity-60")}>
             {renderContent(machine)}
@@ -356,40 +383,14 @@ function OtherMachineGroup({
   )
 }
 
-/**
- * The group of the machine of this page. Its content is the full sidebar of
- * this machine (search, pinned sessions, directories).
- */
-function ActiveMachineGroup({
-  machine,
-  actions,
-  children,
-}: {
-  machine: MachineInfo
-  actions?: React.ReactNode
-  children: React.ReactNode
-}) {
-  const collapsed = useMachineCollapsed(machine.id)
-  const onOpenChange = useMachineOpenChange(machine.id)
-  return (
-    <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
-      <SidebarGroup className="pt-1 pb-0">
-        <MachineGroupLabel
-          machine={machine}
-          collapsed={collapsed}
-          active
-          actions={actions}
-        />
-      </SidebarGroup>
-      <CollapsibleContent>{children}</CollapsibleContent>
-    </Collapsible>
-  )
-}
-
 /** Whether the hub has more than one machine, so the sidebar has groups. */
 export function useHasMachineGroups() {
-  const { machines } = useMachines()
   const machineId = useMachineId()
+  return useHasMachineGroupsFor(machineId)
+}
+
+export function useHasMachineGroupsFor(machineId: string) {
+  const { machines } = useMachines()
   return (
     machines.length > 1 && machines.some((machine) => machine.id === machineId)
   )
@@ -397,45 +398,38 @@ export function useHasMachineGroups() {
 
 /**
  * One group for each machine of the hub, in the order of the hub's list.
- * The order does not change when the page opens another machine: only the
- * content of the groups changes. `children` is the full sidebar of the
- * machine of this page; `renderContent` draws the directories of another
- * machine (see `sidebar.tsx`). With one machine, `children` shows without a
- * heading.
+ * The order does not change when the page shows another machine: only the
+ * content of the groups changes. With one machine, `shownContent` shows
+ * without a heading.
  */
 export function SidebarMachineGroups({
-  children,
-  activeActions,
+  shownMachineId,
+  shownContent,
   renderContent,
+  renderActions,
 }: {
-  children: React.ReactNode
-  /** Icon buttons for the heading of the machine of this page. */
-  activeActions?: React.ReactNode
-  renderContent: RenderMachineContent
+  shownMachineId: string
+  /** The live sidebar of the machine that shows. */
+  shownContent: React.ReactNode
+  /** The directories of another machine, from its summary. */
+  renderContent: RenderMachine
+  /** Icon buttons for the heading of a machine. */
+  renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
 }) {
   const { machines } = useMachines()
-  const activeId = useMachineId()
-  const active = machines.find((machine) => machine.id === activeId)
-  if (machines.length < 2 || !active) return <>{children}</>
+  if (!useHasMachineGroupsFor(shownMachineId)) return <>{shownContent}</>
   return (
     <>
-      {machines.map((machine) =>
-        machine.id === activeId ? (
-          <ActiveMachineGroup
-            key={machine.id}
-            machine={machine}
-            actions={activeActions}
-          >
-            {children}
-          </ActiveMachineGroup>
-        ) : (
-          <OtherMachineGroup
-            key={machine.id}
-            machine={machine}
-            renderContent={renderContent}
-          />
-        )
-      )}
+      {machines.map((machine) => (
+        <MachineGroup
+          key={machine.id}
+          machine={machine}
+          shown={machine.id === shownMachineId}
+          shownContent={shownContent}
+          renderContent={renderContent}
+          renderActions={renderActions}
+        />
+      ))}
     </>
   )
 }

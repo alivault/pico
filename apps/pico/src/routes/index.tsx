@@ -7,6 +7,8 @@ import { z } from "zod"
 import { PortalContainerProvider } from "@/components/ui/portal-container"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { PicoAppShell } from "@/features/pico/app-shell"
+import { MachinesDialogController } from "@/features/pico/machines"
+import { WindowSidebar } from "@/features/pico/window-sidebar"
 import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 import {
   LOCAL_MACHINE_ID,
@@ -45,8 +47,9 @@ function machineSearch(machineId: string, sessionId: string | undefined) {
  * the right sidebar, open files), and their effects (the event stream,
  * window listeners) stop until they show again.
  *
- * The left sidebar's open state is window state, so one `SidebarProvider`
- * holds it for all shells.
+ * The window owns its window UI one time for all shells: the left sidebar
+ * (`WindowSidebar`; the shown shell fills its slots), its open state, and
+ * the machines dialog. Each shell owns only its machine's state.
  */
 function App() {
   const { session, machine: machineParam } = Route.useSearch()
@@ -104,23 +107,29 @@ function App() {
 
   return (
     <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:calc(3rem+env(safe-area-inset-top))]">
-      {Object.entries(workspaces).map(([machineId, workspace]) => (
-        <React.Activity
-          key={machineId}
-          mode={machineId === shownMachine ? "visible" : "hidden"}
-        >
-          <MachineShell machineId={machineId}>
-            <PicoAppShell
-              sessionId={
-                machineId === shownMachine ? session : workspace.sessionId
-              }
-              onSelectSession={(nextSessionId, options) =>
-                selectSession(machineId, nextSessionId, options)
-              }
-            />
-          </MachineShell>
-        </React.Activity>
-      ))}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <WindowSidebar shownMachineId={shownMachine} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {Object.entries(workspaces).map(([machineId, workspace]) => (
+            <React.Activity
+              key={machineId}
+              mode={machineId === shownMachine ? "visible" : "hidden"}
+            >
+              <MachineShell machineId={machineId}>
+                <PicoAppShell
+                  sessionId={
+                    machineId === shownMachine ? session : workspace.sessionId
+                  }
+                  onSelectSession={(nextSessionId, options) =>
+                    selectSession(machineId, nextSessionId, options)
+                  }
+                />
+              </MachineShell>
+            </React.Activity>
+          ))}
+        </div>
+      </div>
+      <MachinesDialogController />
     </SidebarProvider>
   )
 }
