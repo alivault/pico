@@ -173,6 +173,50 @@ type SessionClickModifiers = {
 }
 
 const EMPTY_DIRECTORY_SESSION_KEYS: Array<string> = []
+
+// One shared set of window listeners tracks whether Option (Alt) is held.
+let altKeyHeldSnapshot = false
+const altKeyHeldListeners = new Set<() => void>()
+
+function setAltKeyHeld(next: boolean) {
+  if (altKeyHeldSnapshot === next) return
+  altKeyHeldSnapshot = next
+  for (const listener of altKeyHeldListeners) listener()
+}
+
+function handleAltKeyEvent(event: KeyboardEvent) {
+  setAltKeyHeld(event.altKey)
+}
+
+function handleAltKeyReset() {
+  setAltKeyHeld(false)
+}
+
+function subscribeAltKeyHeld(listener: () => void) {
+  if (altKeyHeldListeners.size === 0) {
+    window.addEventListener("keydown", handleAltKeyEvent)
+    window.addEventListener("keyup", handleAltKeyEvent)
+    window.addEventListener("blur", handleAltKeyReset)
+  }
+  altKeyHeldListeners.add(listener)
+  return () => {
+    altKeyHeldListeners.delete(listener)
+    if (altKeyHeldListeners.size === 0) {
+      window.removeEventListener("keydown", handleAltKeyEvent)
+      window.removeEventListener("keyup", handleAltKeyEvent)
+      window.removeEventListener("blur", handleAltKeyReset)
+      altKeyHeldSnapshot = false
+    }
+  }
+}
+
+function useAltKeyHeld() {
+  return React.useSyncExternalStore(
+    subscribeAltKeyHeld,
+    () => altKeyHeldSnapshot,
+    () => false
+  )
+}
 const PINNED_SESSION_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
 const DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY = "__pico_directories__"
 
@@ -1351,8 +1395,12 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     : Math.min(unpinnedSessionKeys.length, renderCount)
   const visibleSessionKeys = unpinnedSessionKeys.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < unpinnedSessionKeys.length
-  const canShowLess =
-    !searchActive && visibleCount > INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+  const altKeyHeld = useAltKeyHeld()
+  // Holding Option turns "Show N more" into "Show less".
+  const showLess =
+    altKeyHeld &&
+    !searchActive &&
+    visibleCount > INITIAL_DIRECTORY_SESSION_RENDER_COUNT
   const showTreeLine = !overlay && visibleSessionKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
     isLoadingSessions,
@@ -1563,50 +1611,36 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                     ))}
                   </SidebarMenu>
 
-                  {hasMoreSessions || canShowLess ? (
+                  {hasMoreSessions || showLess ? (
                     <div
-                      className="flex items-center"
+                      className="flex flex-col"
                       style={sessionTreeStyle(1) as React.CSSProperties}
                     >
-                      {hasMoreSessions ? (
-                        <Button
-                          variant="ghost"
-                          className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                          onClick={() => {
-                            setRenderCount((current) =>
-                              Math.min(
-                                unpinnedSessionKeys.length,
-                                current + DIRECTORY_SESSION_LOAD_MORE_COUNT
-                              )
-                            )
-                          }}
-                        >
-                          Show{" "}
-                          {Math.min(
-                            DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                            unpinnedSessionKeys.length - visibleCount
-                          )}{" "}
-                          more
-                        </Button>
-                      ) : null}
-                      {canShowLess ? (
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "h-8 justify-start text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                            hasMoreSessions
-                              ? "ml-auto"
-                              : "pl-(--session-text-left)"
-                          )}
-                          onClick={() => {
+                      <Button
+                        variant="ghost"
+                        className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        onClick={() => {
+                          if (showLess) {
                             setRenderCount(
                               INITIAL_DIRECTORY_SESSION_RENDER_COUNT
                             )
-                          }}
-                        >
-                          Show less
-                        </Button>
-                      ) : null}
+                            return
+                          }
+                          setRenderCount((current) =>
+                            Math.min(
+                              unpinnedSessionKeys.length,
+                              current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                            )
+                          )
+                        }}
+                      >
+                        {showLess
+                          ? "Show less"
+                          : `Show ${Math.min(
+                              DIRECTORY_SESSION_LOAD_MORE_COUNT,
+                              unpinnedSessionKeys.length - visibleCount
+                            )} more`}
+                      </Button>
                     </div>
                   ) : null}
                 </div>
