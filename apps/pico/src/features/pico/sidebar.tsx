@@ -1351,6 +1351,8 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     : Math.min(unpinnedSessionKeys.length, renderCount)
   const visibleSessionKeys = unpinnedSessionKeys.slice(0, visibleCount)
   const hasMoreSessions = visibleCount < unpinnedSessionKeys.length
+  const canShowLess =
+    !searchActive && visibleCount > INITIAL_DIRECTORY_SESSION_RENDER_COUNT
   const showTreeLine = !overlay && visibleSessionKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
     isLoadingSessions,
@@ -1561,30 +1563,50 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                     ))}
                   </SidebarMenu>
 
-                  {hasMoreSessions ? (
+                  {hasMoreSessions || canShowLess ? (
                     <div
-                      className="flex flex-col"
+                      className="flex items-center"
                       style={sessionTreeStyle(1) as React.CSSProperties}
                     >
-                      <Button
-                        variant="ghost"
-                        className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                        onClick={() => {
-                          setRenderCount((current) =>
-                            Math.min(
-                              unpinnedSessionKeys.length,
-                              current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                      {hasMoreSessions ? (
+                        <Button
+                          variant="ghost"
+                          className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                          onClick={() => {
+                            setRenderCount((current) =>
+                              Math.min(
+                                unpinnedSessionKeys.length,
+                                current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                              )
                             )
-                          )
-                        }}
-                      >
-                        Show{" "}
-                        {Math.min(
-                          DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                          unpinnedSessionKeys.length - visibleCount
-                        )}{" "}
-                        more
-                      </Button>
+                          }}
+                        >
+                          Show{" "}
+                          {Math.min(
+                            DIRECTORY_SESSION_LOAD_MORE_COUNT,
+                            unpinnedSessionKeys.length - visibleCount
+                          )}{" "}
+                          more
+                        </Button>
+                      ) : null}
+                      {canShowLess ? (
+                        <Button
+                          variant="ghost"
+                          className={cn(
+                            "h-8 justify-start text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                            hasMoreSessions
+                              ? "ml-auto"
+                              : "pl-(--session-text-left)"
+                          )}
+                          onClick={() => {
+                            setRenderCount(
+                              INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+                            )
+                          }}
+                        >
+                          Show less
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
