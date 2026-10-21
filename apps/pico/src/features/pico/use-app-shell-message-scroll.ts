@@ -209,7 +209,7 @@ export function useAppShellMessageScroll() {
     [jumpTo]
   )
   const scrollConversationToBottom = React.useCallback(() => {
-    scrollToEnd({ behavior: "smooth" })
+    scrollToEnd({ behavior: "auto" })
   }, [scrollToEnd])
   const scrollConversationToTop = React.useCallback(() => {
     scrollToStart({ behavior: "auto" })
