@@ -25,6 +25,9 @@ export type QueueEditRow = {
   originalText: string
   images: Array<PromptImage>
   lane: QueueLane
+  originalLane: QueueLane
+  /** The place of the row when the session started. */
+  originalIndex: number
   removed: boolean
   moved: boolean
   isNew: boolean
@@ -35,6 +38,18 @@ export type QueueEditSession = {
   selectedKey: string
   /** The direction of the last selection change, for the caret position. */
   caret: "start" | "end"
+}
+
+/**
+ * The server holds a paused queue out of the inbox. A held prompt keeps its
+ * number: `pending:12` becomes `held:12`.
+ */
+export function queueIdentity(pendingId: string) {
+  return pendingId.replace(/^(pending|held):/, "")
+}
+
+export function isHeldPendingId(pendingId: string) {
+  return pendingId.startsWith("held:")
 }
 
 let newRowCounter = 0
@@ -55,7 +70,8 @@ export function orderQueueRows<T extends { lane: QueueLane }>(
 }
 
 export function queueRowFromMessage(
-  message: PendingQueueMessage
+  message: PendingQueueMessage,
+  originalIndex = 0
 ): QueueEditRow {
   return {
     key: message.pendingId,
@@ -64,6 +80,8 @@ export function queueRowFromMessage(
     originalText: message.text,
     images: message.images,
     lane: message.streamingBehavior,
+    originalLane: message.streamingBehavior,
+    originalIndex,
     removed: false,
     moved: false,
     isNew: false,
@@ -71,7 +89,21 @@ export function queueRowFromMessage(
 }
 
 export function queueRowsFromMessages(messages: Array<PendingQueueMessage>) {
-  return orderQueueRows(messages.map(queueRowFromMessage))
+  return orderQueueRows(
+    messages.map((message) => queueRowFromMessage(message))
+  ).map((row, index) => ({ ...row, originalIndex: index }))
+}
+
+/** Clear the move marks when every row is back in its first place. */
+function settleMoves(rows: Array<QueueEditRow>) {
+  const last: Partial<Record<QueueLane, number>> = {}
+  for (const row of rows) {
+    if (row.isNew) continue
+    if (row.lane !== row.originalLane) return rows
+    if ((last[row.lane] ?? -1) > row.originalIndex) return rows
+    last[row.lane] = row.originalIndex
+  }
+  return rows.map((row) => (row.moved ? { ...row, moved: false } : row))
 }
 
 export function isQueueRowChanged(row: QueueEditRow) {
@@ -86,7 +118,7 @@ export function hasQueueChanges(session: QueueEditSession) {
 export function mostRecentQueueKey(messages: Array<PendingQueueMessage>) {
   let best: { key: string; id: number } | undefined
   for (const message of messages) {
-    const match = /^pending:(\d+)$/.exec(message.pendingId)
+    const match = /^(?:pending|held):(\d+)$/.exec(message.pendingId)
     const id = match ? Number(match[1]) : Number.NaN
     if (Number.isFinite(id) && (!best || id > best.id)) {
       best = { key: message.pendingId, id }
@@ -122,23 +154,25 @@ export function moveQueueRow(
     const next = [...lane]
     next[index] = next[target]!
     next[target] = moved
-    return row.lane === "steer" ? [...next, ...followUp] : [...steer, ...next]
+    return settleMoves(
+      row.lane === "steer" ? [...next, ...followUp] : [...steer, ...next]
+    )
   }
 
   if (direction === -1 && row.lane === "followUp") {
-    return [
+    return settleMoves([
       ...steer,
       { ...moved, lane: "steer" },
       ...followUp.filter((entry) => entry !== row),
-    ]
+    ])
   }
 
   if (direction === 1 && row.lane === "steer") {
-    return [
+    return settleMoves([
       ...steer.filter((entry) => entry !== row),
       { ...moved, lane: "followUp" },
       ...followUp,
-    ]
+    ])
   }
 
   return null
@@ -160,6 +194,8 @@ export function insertQueueRow(
     originalText: "",
     images: [],
     lane: row.lane,
+    originalLane: row.lane,
+    originalIndex: 0,
     removed: false,
     moved: false,
     isNew: true,
@@ -180,6 +216,8 @@ export function appendQueueRow(
     originalText: "",
     images: [],
     lane,
+    originalLane: lane,
+    originalIndex: 0,
     removed: false,
     moved: false,
     isNew: true,
@@ -196,18 +234,33 @@ export function mergeQueueSession(
   session: QueueEditSession,
   messages: Array<PendingQueueMessage>
 ): QueueEditSession {
-  const live = new Set(messages.map((message) => message.pendingId))
+  const live = new Map(
+    messages.map((message) => [
+      queueIdentity(message.pendingId),
+      message.pendingId,
+    ])
+  )
   const known = new Set(
-    session.rows.flatMap((row) => (row.pendingId ? [row.pendingId] : []))
+    session.rows.flatMap((row) =>
+      row.pendingId ? [queueIdentity(row.pendingId)] : []
+    )
   )
-  const kept = session.rows.filter(
-    (row) => !row.pendingId || live.has(row.pendingId) || isQueueRowChanged(row)
-  )
+  let renamed = false
+  const kept = session.rows.flatMap((row) => {
+    if (!row.pendingId) return [row]
+    const pendingId = live.get(queueIdentity(row.pendingId))
+    if (!pendingId) return isQueueRowChanged(row) ? [row] : []
+    if (pendingId === row.pendingId) return [row]
+    renamed = true
+    return [{ ...row, pendingId }]
+  })
   const added = messages
-    .filter((message) => !known.has(message.pendingId))
-    .map(queueRowFromMessage)
+    .filter((message) => !known.has(queueIdentity(message.pendingId)))
+    .map((message, index) =>
+      queueRowFromMessage(message, session.rows.length + index)
+    )
 
-  if (kept.length === session.rows.length && added.length === 0) {
+  if (!renamed && kept.length === session.rows.length && added.length === 0) {
     return session
   }
 

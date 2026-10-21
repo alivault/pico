@@ -45,8 +45,14 @@ type ComposerPendingMessagesProps = {
   isStreaming: boolean
   onSavePendingQueue: (
     rows: Array<PendingQueueSaveRow>,
-    removedPendingIds: Array<string>
+    removedPendingIds: Array<string>,
+    resume: boolean
   ) => void
+  /**
+   * Hold the queue while the user edits it. Resolves true when the queue
+   * must resume after the edit.
+   */
+  onHoldPendingQueue: () => Promise<boolean>
   onStartPendingQueue: () => void
   onExitEditing: () => void
   ref?: React.Ref<ComposerPendingMessagesHandle>
@@ -88,11 +94,12 @@ function rowIcon(
   row: QueueEditRow,
   index: number,
   lane: (typeof LANES)[number],
-  options: { selected: boolean; paused: boolean }
+  options: { selected: boolean; paused: boolean; held: boolean }
 ) {
   if (row.removed) return "×"
   if (options.selected) return "›"
   if (options.paused) return "⏸"
+  if (options.held) return "◈"
   return index === 0 ? lane.readyIcon : lane.laterIcon
 }
 
@@ -112,11 +119,16 @@ export const ComposerPendingMessages = React.memo(
     canStartQueue,
     isStreaming,
     onSavePendingQueue,
+    onHoldPendingQueue,
     onStartPendingQueue,
     onExitEditing,
     ref,
   }: ComposerPendingMessagesProps) {
     const [session, setSession] = React.useState<QueueEditSession | null>(null)
+    // The hold of the open session: resolves true when the queue must resume.
+    const holdRef = React.useRef<Promise<boolean> | null>(null)
+    const [heldForEdit, setHeldForEdit] = React.useState(false)
+    const editing = session !== null
     const editorRef = React.useRef<HTMLTextAreaElement | null>(null)
     // A move to the other lane mounts a new editor. Keep the focus and caret.
     const attachEditor = React.useCallback(
@@ -148,6 +160,41 @@ export const ComposerPendingMessages = React.memo(
       })
     }, [currentPendingMessages])
 
+    // Hold the queue while a session is open, so that the agent does not get
+    // a prompt with old text. Only server prompts can be held.
+    React.useEffect(() => {
+      if (!editing || holdRef.current) return
+      const hasServerPrompts = currentPendingMessages.some((message) =>
+        /^(pending|held):/.test(message.pendingId)
+      )
+      const hold = hasServerPrompts
+        ? onHoldPendingQueue().catch(() => false)
+        : Promise.resolve(false)
+      holdRef.current = hold
+      void hold.then((resume) => {
+        if (holdRef.current === hold) setHeldForEdit(resume)
+      })
+    }, [currentPendingMessages, editing, onHoldPendingQueue])
+
+    /** End the hold of the session; `finish` gets whether to resume. */
+    const releaseHold = React.useCallback(
+      (finish: (resume: boolean) => void) => {
+        const hold = holdRef.current ?? Promise.resolve(false)
+        holdRef.current = null
+        setHeldForEdit(false)
+        void hold.then(finish)
+      },
+      []
+    )
+
+    // A session can close by itself, when all its prompts were sent.
+    React.useEffect(() => {
+      if (editing || !holdRef.current) return
+      releaseHold((resume) => {
+        if (resume) onStartPendingQueue()
+      })
+    }, [editing, onStartPendingQueue, releaseHold])
+
     const selectedKey = session?.selectedKey
     const caret = session?.caret
     React.useLayoutEffect(() => {
@@ -172,20 +219,33 @@ export const ComposerPendingMessages = React.memo(
       [currentPendingMessages]
     )
 
-    const end = React.useCallback(() => {
+    const close = React.useCallback(() => {
       setSession(null)
       onExitEditing()
     }, [onExitEditing])
 
+    const end = React.useCallback(() => {
+      close()
+      releaseHold((resume) => {
+        if (resume) onStartPendingQueue()
+      })
+    }, [close, onStartPendingQueue, releaseHold])
+
     const save = React.useCallback(() => {
       const current = sessionRef.current
       if (!current) return
-      if (hasQueueChanges(current)) {
-        const plan = queueSessionSavePlan(current)
-        onSavePendingQueue(plan.rows, plan.removedPendingIds)
-      }
-      end()
-    }, [end, onSavePendingQueue])
+      const plan = hasQueueChanges(current)
+        ? queueSessionSavePlan(current)
+        : undefined
+      close()
+      releaseHold((resume) => {
+        if (plan) {
+          onSavePendingQueue(plan.rows, plan.removedPendingIds, resume)
+        } else if (resume) {
+          onStartPendingQueue()
+        }
+      })
+    }, [close, onSavePendingQueue, onStartPendingQueue, releaseHold])
 
     React.useImperativeHandle(
       ref,
@@ -213,7 +273,8 @@ export const ComposerPendingMessages = React.memo(
               images: row.images,
               streamingBehavior: row.lane,
             })),
-            []
+            [],
+            false
           )
           return true
         },
@@ -370,6 +431,8 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const firstLane = rows[0]?.lane
+    // The hold of an open edit is not a pause.
+    const paused = canStartQueue && !heldForEdit
     const selectedLane = selectedRow
       ? laneRows(rows, selectedRow.lane)
       : undefined
@@ -405,7 +468,7 @@ export const ComposerPendingMessages = React.memo(
                       <Kbd>Alt+↑</Kbd> edit
                     </span>
                   ) : null}
-                  {lane.lane === "followUp" && canStartQueue ? (
+                  {lane.lane === "followUp" && paused ? (
                     <>
                       <span className="text-muted-foreground">⏸ Paused</span>
                       <Button
@@ -441,7 +504,8 @@ export const ComposerPendingMessages = React.memo(
                     const selected = row.key === session?.selectedKey
                     const icon = rowIcon(row, index, lane, {
                       selected,
-                      paused: canStartQueue,
+                      paused,
+                      held: heldForEdit,
                     })
                     const changed = session ? isQueueRowChanged(row) : false
 
@@ -594,6 +658,7 @@ export const ComposerPendingMessages = React.memo(
               <span>
                 {selectedRow.lane === "steer" ? "steer" : "follow-up"}{" "}
                 {selectedLane.indexOf(selectedRow) + 1}/{selectedLane.length}
+                {heldForEdit ? " • held while editing" : ""}
                 {unsaved ? " • unsaved" : ""}
               </span>
             ) : null}

@@ -586,12 +586,24 @@ export const AppShellComposerController = React.memo(
       void actionsRef.current.abortSession()
     })
     const onSavePendingQueue = useStableEvent(
-      (rows: Array<PendingQueueSaveRow>, removedPendingIds: Array<string>) => {
+      (
+        rows: Array<PendingQueueSaveRow>,
+        removedPendingIds: Array<string>,
+        resume: boolean
+      ) => {
         if (snapshotRef.current.disabled) return
         const serverRows = actionsRef.current.savePendingDraftFollowUps(rows)
-        void actionsRef.current.savePendingQueue(serverRows, removedPendingIds)
+        void actionsRef.current.savePendingQueue(
+          serverRows,
+          removedPendingIds,
+          resume
+        )
       }
     )
+    const onHoldPendingQueue = useStableEvent(async () => {
+      if (snapshotRef.current.disabled) return false
+      return await actionsRef.current.holdPendingQueue()
+    })
     const onStartPendingQueue = useStableEvent(() => {
       if (snapshotRef.current.disabled) return
       void actionsRef.current.startPendingQueue()
@@ -682,6 +694,7 @@ export const AppShellComposerController = React.memo(
         onSubmitPrompt={onSubmitPrompt}
         onAbort={onAbort}
         onSavePendingQueue={onSavePendingQueue}
+        onHoldPendingQueue={onHoldPendingQueue}
         onStartPendingQueue={onStartPendingQueue}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
         onSelectModel={onSelectModel}

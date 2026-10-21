@@ -11,6 +11,7 @@
  * changes become state syncs, streaming deltas, sidebar updates, and
  * completion events for the clients that watch them.
  */
+import type { JsonValue } from "@earendil-works/chord"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import {
   getSupportedThinkingLevels,
@@ -261,20 +262,55 @@ function userContent(
   return [...(text ? [{ type: "text" as const, text }] : []), ...valid]
 }
 
-function inboxMessage(item: InboxItem): PendingMessage | undefined {
-  if (item.mode === "write") return undefined
-  const content = item.content as unknown
+function pendingMessageOf(
+  pendingId: string,
+  mode: "steer" | "followUp",
+  content: unknown
+): PendingMessage {
   const message = { content }
   return {
-    pendingId: `pending:${item.id}`,
-    text: messageText(message),
-    images: messageImages(message).map(({ mimeType, data }) => ({
+    pendingId,
+    text: messageText(message as never),
+    images: messageImages(message as never).map(({ mimeType, data }) => ({
       type: "image",
       mimeType,
       data,
     })),
-    streamingBehavior: item.mode,
+    streamingBehavior: mode,
   }
+}
+
+function inboxMessage(item: InboxItem): PendingMessage | undefined {
+  if (item.mode === "write") return undefined
+  return pendingMessageOf(`pending:${item.id}`, item.mode, item.content)
+}
+
+/** A queued prompt that Pico holds out of the inbox while the queue is paused. */
+type HeldItem = { id: number; mode: "steer" | "followUp"; content: JsonValue }
+
+/**
+ * The paused queue. An abort, or an open queue edit, moves the queued prompts
+ * here, so the agent does not get them. Resume submits them again.
+ */
+export const HeldQueueDoc = defineDoc<{ items: HeldItem[] }>({
+  kind: "pico.queue",
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "initial",
+  initial: () => ({ items: [] }),
+})
+
+function heldMessage(item: HeldItem): PendingMessage {
+  return pendingMessageOf(`held:${item.id}`, item.mode, item.content)
+}
+
+/** Steering prompts first: a resumed queue starts with a steer, like Pi. */
+function heldInDeliveryOrder(items: HeldItem[]) {
+  return [
+    ...items.filter((item) => item.mode === "steer"),
+    ...items.filter((item) => item.mode !== "steer"),
+  ]
 }
 
 /** One row of a queue edit: an existing prompt (`pendingId`) or a new one. */
@@ -328,6 +364,7 @@ export class Sessions implements HostSessions {
   readonly #naming = new Set<string>()
   /** Sessions whose agent waits for the user. */
   readonly #needsInput = new Set<string>()
+  readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
   #flushScheduled = false
   #sessionsTimer: NodeJS.Timeout | undefined
@@ -1215,9 +1252,10 @@ export class Sessions implements HostSessions {
       draft: false,
       streaming: busy,
       compacting: (live?.compactions?.length ?? 0) > 0,
-      pendingUserMessages: (inbox?.items ?? []).flatMap(
-        (item) => inboxMessage(item) ?? []
-      ),
+      pendingUserMessages: [
+        ...(await this.#heldItems(id)).map(heldMessage),
+        ...(inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? []),
+      ],
       items,
       historyOffset: offset,
       historyTotalCount: committed.length,
@@ -1395,6 +1433,9 @@ export class Sessions implements HostSessions {
         ctx
       )
     }
+    // A new queued prompt resumes a paused queue, ahead of the new prompt.
+    if (this.isBusy(id) && (await this.#heldItems(id)).length > 0)
+      await this.requeue(id)
     const submission = await conversation.submit(
       {
         type: "input",
@@ -1461,6 +1502,10 @@ export class Sessions implements HostSessions {
   }
 
   async abort(id: string) {
+    // Pause the queue: hold the queued prompts before the abort withdraws them.
+    const withdrawn = await this.#withdrawInbox(id)
+    if (withdrawn.length > 0)
+      await this.#setHeld(id, [...(await this.#heldItems(id)), ...withdrawn])
     if (this.#needsInput.has(id))
       await cancelQuestions(this.#harness, conversationIdOf(id), ctx)
     const conversation = await this.conversation(id)
@@ -1511,10 +1556,131 @@ export class Sessions implements HostSessions {
 
   async pendingMessages(id: string): Promise<PendingMessage[]> {
     const inbox = await this.#doc(id, "inbox")
-    return (inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? [])
+    return [
+      ...(await this.#heldItems(id)).map(heldMessage),
+      ...(inbox?.items ?? []).flatMap((item) => inboxMessage(item) ?? []),
+    ]
+  }
+
+  async #heldItems(id: string): Promise<HeldItem[]> {
+    const cached = this.#held.get(id)
+    if (cached) return cached
+    const state = await this.#harness.snapshot(
+      HeldQueueDoc,
+      conversationIdOf(id),
+      ctx
+    )
+    if (!this.#held.has(id)) this.#held.set(id, state?.items ?? [])
+    return this.#held.get(id)!
+  }
+
+  async #setHeld(id: string, items: HeldItem[]) {
+    this.#held.set(id, items)
+    await this.#harness.commit(async (tx) => {
+      const draft = await tx.doc(HeldQueueDoc, conversationIdOf(id))
+      draft.items = JSON.parse(JSON.stringify(items)) as typeof draft.items
+    }, ctx)
+    void this.publishStateIfWatched(id)
+  }
+
+  /** Take the queued prompts out of the inbox, in order. */
+  async #withdrawInbox(id: string): Promise<HeldItem[]> {
+    const inbox = await this.#doc(id, "inbox")
+    const withdrawn: HeldItem[] = []
+    for (const item of inbox?.items ?? []) {
+      if (item.mode === "write") continue
+      const result = await this.#harness.abortSubmission(
+        item.id,
+        ctx,
+        conversationIdOf(id)
+      )
+      if (result === "aborted")
+        withdrawn.push({
+          id: Number(item.id),
+          mode: item.mode,
+          content: item.content,
+        })
+    }
+    return withdrawn
+  }
+
+  /** True when Pico holds queued prompts: the queue is paused. */
+  async isQueuePaused(id: string) {
+    return (await this.#heldItems(id)).length > 0
+  }
+
+  /**
+   * Hold the queue while the user edits it, so that no prompt is sent with
+   * old text. Returns whether the queue was already paused.
+   */
+  async holdQueue(id: string) {
+    const held = await this.#heldItems(id)
+    const wasPaused = held.length > 0
+    const withdrawn = await this.#withdrawInbox(id)
+    if (withdrawn.length > 0) await this.#setHeld(id, [...held, ...withdrawn])
+    return { wasPaused }
+  }
+
+  /** Edit a paused queue in place. Nothing reaches the agent. */
+  async #editHeld(
+    id: string,
+    held: HeldItem[],
+    edits: PendingEdit[],
+    remove: string[]
+  ) {
+    // The client can still name a held prompt by its inbox ID.
+    const key = (pendingId: string) => pendingId.replace(/^(pending|held):/, "")
+    const byPending = new Map(held.map((item) => [String(item.id), item]))
+    const named = new Set(remove.map(key))
+    const next: HeldItem[] = []
+    let nextId = Math.max(Date.now(), ...held.map((item) => item.id + 1))
+    let missed = 0
+    for (const edit of edits) {
+      if (edit.pendingId) {
+        const pendingKey = key(edit.pendingId)
+        if (named.has(pendingKey)) continue
+        const item = byPending.get(pendingKey)
+        if (!item) {
+          missed += 1
+          continue
+        }
+        named.add(pendingKey)
+        const content =
+          edit.text === undefined
+            ? item.content
+            : replaceContentText(item.content, edit.text)
+        if (contentIsEmpty(content)) continue
+        next.push({
+          ...item,
+          content,
+          mode: edit.streamingBehavior ?? item.mode,
+        })
+        continue
+      }
+      const content = userContent(edit.text ?? "", edit.images ?? [])
+      if (contentIsEmpty(content)) continue
+      next.push({
+        id: nextId++,
+        mode: edit.streamingBehavior ?? "followUp",
+        content: content as unknown as JsonValue,
+      })
+    }
+    for (const item of held) {
+      if (!named.has(String(item.id))) next.push(item)
+    }
+    await this.#setHeld(id, next)
+    return { missed }
   }
 
   async removePending(id: string, pendingId: string) {
+    if (pendingId.startsWith("held:")) {
+      const held = await this.#heldItems(id)
+      const next = held.filter((item) => `held:${item.id}` !== pendingId)
+      if (next.length === held.length)
+        throw notFound("Pending prompt not found")
+      await this.#setHeld(id, next)
+      return
+    }
     const result = await this.#harness.abortSubmission(
       submissionIdFromPending(pendingId),
       ctx,
@@ -1534,8 +1700,15 @@ export class Sessions implements HostSessions {
   async requeue(
     id: string,
     edits?: PendingEdit[],
-    remove: string[] = []
+    remove: string[] = [],
+    options: { resume?: boolean } = {}
   ): Promise<{ missed: number }> {
+    const held = await this.#heldItems(id)
+    if (edits && held.length > 0) {
+      const result = await this.#editHeld(id, held, edits, remove)
+      if (options.resume) await this.requeue(id)
+      return result
+    }
     const inbox = await this.#doc(id, "inbox")
     const queued = (inbox?.items ?? []).filter(
       (item): item is Extract<InboxItem, { mode: "steer" | "followUp" }> =>
@@ -1586,6 +1759,16 @@ export class Sessions implements HostSessions {
       if (named.has(`pending:${item.id}`)) continue
       withdraw.push(item)
       plan.push({ item, content: item.content, mode: item.mode })
+    }
+    // Resume a paused queue: its prompts go first.
+    if (!edits && held.length > 0) {
+      plan.unshift(
+        ...heldInDeliveryOrder(held).map((item) => ({
+          content: item.content,
+          mode: item.mode,
+        }))
+      )
+      await this.#setHeld(id, [])
     }
 
     const conversation = await this.conversation(id)

@@ -103,8 +103,10 @@ type ComposerPanelProps = {
   onAbort: () => void
   onSavePendingQueue: (
     rows: Array<PendingQueueSaveRow>,
-    removedPendingIds: Array<string>
+    removedPendingIds: Array<string>,
+    resume: boolean
   ) => void
+  onHoldPendingQueue: () => Promise<boolean>
   onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
   onSelectModel: (value: string) => void
@@ -379,6 +381,7 @@ export function ComposerPanel({
   onSubmitPrompt,
   onAbort,
   onSavePendingQueue,
+  onHoldPendingQueue,
   onStartPendingQueue,
   onRunBuiltinSlashCommand,
   onSelectModel,
@@ -438,6 +441,7 @@ export function ComposerPanel({
           canStartQueue={canStartPendingQueue}
           isStreaming={isStreaming}
           onSavePendingQueue={onSavePendingQueue}
+          onHoldPendingQueue={onHoldPendingQueue}
           onStartPendingQueue={onStartPendingQueue}
           onExitEditing={focusPrompt}
         />

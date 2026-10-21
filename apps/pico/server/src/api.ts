@@ -514,6 +514,7 @@ export function createApi(api: ApiContext) {
       }>
       pendingIds?: string[]
       removedPendingIds?: unknown
+      resume?: unknown
     }>()
     const edits: PendingEdit[] | undefined = Array.isArray(body.pendingMessages)
       ? body.pendingMessages.map(
@@ -542,7 +543,9 @@ export function createApi(api: ApiContext) {
           (value): value is string => typeof value === "string"
         )
       : []
-    const { missed } = await sessions.requeue(id, edits, removed)
+    const { missed } = await sessions.requeue(id, edits, removed, {
+      resume: body.resume === true,
+    })
     return {
       ok: true,
       missed,
@@ -562,12 +565,23 @@ export function createApi(api: ApiContext) {
   router.post("/api/pending-messages/start", async (request) => {
     ensureAcceptingWork()
     const id = requireSession(request)
-    if (sessions.isBusy(id))
+    if (sessions.isBusy(id) && !(await sessions.isQueuePaused(id)))
       throw badRequest(
         "Wait for the current response to finish before starting the queue."
       )
     await sessions.requeue(id)
     return { ok: true, pendingMessages: await sessions.pendingMessages(id) }
+  })
+
+  // Hold the queue while the user edits it. Save or cancel resumes it.
+  router.post("/api/pending-messages/hold", async (request) => {
+    const id = requireSession(request)
+    const { wasPaused } = await sessions.holdQueue(id)
+    return {
+      ok: true,
+      wasPaused,
+      pendingMessages: await sessions.pendingMessages(id),
+    }
   })
 
   router.post("/api/model", async (request) => {

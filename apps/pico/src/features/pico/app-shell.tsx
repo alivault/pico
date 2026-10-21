@@ -65,7 +65,10 @@ import {
   type PendingComposerMessage,
   type UserConversationItem,
 } from "@/features/pico/app-shell-composer-state"
-import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
+import {
+  isHeldPendingId,
+  type PendingQueueSaveRow,
+} from "@/features/pico/pending-queue"
 import {
   createConversationItemsStore,
   type ConversationItemsStore,
@@ -2510,6 +2513,7 @@ function useAppShellSessionWorkspaceView({
     abortSession,
     addDirectoryPath,
     createSession: requestCreateSession,
+    holdPendingQueue,
     savePendingQueue,
     startPendingQueue,
     submitPrompt,
@@ -3223,8 +3227,10 @@ function useAppShellSessionWorkspaceView({
     canStartPendingQueue:
       !composerDisabled &&
       pendingMessages.length > 0 &&
-      !sessionStateRef.current.streaming &&
-      !sessionStateRef.current.compacting &&
+      // A paused queue holds its prompts, also while a new run streams.
+      (pendingMessages.some((message) => isHeldPendingId(message.pendingId)) ||
+        (!sessionStateRef.current.streaming &&
+          !sessionStateRef.current.compacting)) &&
       !awaitingFirstTurn &&
       !isSubmitting,
     centerMessages: displaySettingsRef.current.centerMessages,
@@ -3258,6 +3264,7 @@ function useAppShellSessionWorkspaceView({
         current.filter((_, imageIndex) => imageIndex !== index)
       )
     },
+    holdPendingQueue,
     savePendingDraftFollowUps,
     savePendingQueue,
     startPendingQueue,

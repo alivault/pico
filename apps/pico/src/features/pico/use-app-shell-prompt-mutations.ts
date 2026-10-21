@@ -29,7 +29,10 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
+import {
+  isHeldPendingId,
+  type PendingQueueSaveRow,
+} from "@/features/pico/pending-queue"
 import { MachineOfflineError } from "@/lib/pico/machine"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
@@ -1473,9 +1476,11 @@ export function useAppShellPromptMutations({
     mutationFn: async ({
       rows,
       removedPendingIds,
+      resume,
     }: {
       rows: Array<PendingQueueSaveRow>
       removedPendingIds: Array<string>
+      resume: boolean
     }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -1509,6 +1514,7 @@ export function useAppShellPromptMutations({
                   }
             ),
             removedPendingIds,
+            resume,
           }),
         }
       )
@@ -1528,10 +1534,13 @@ export function useAppShellPromptMutations({
   const savePendingQueue = React.useCallback(
     async (
       rows: Array<PendingQueueSaveRow>,
-      removedPendingIds: Array<string>
+      removedPendingIds: Array<string>,
+      resume: boolean
     ) => {
       if (!viewerContextId) return
-      if (rows.length === 0 && removedPendingIds.length === 0) return
+      if (rows.length === 0 && removedPendingIds.length === 0 && !resume) {
+        return
+      }
 
       const previous = pendingMessagesRef.current
       updatePendingMessages(() =>
@@ -1547,6 +1556,7 @@ export function useAppShellPromptMutations({
         const response = await savePendingQueueMutation.mutateAsync({
           rows,
           removedPendingIds,
+          resume,
         })
         const nextPendingMessages = pendingMessagesFromResponse(response)
         if (nextPendingMessages) {
@@ -1574,6 +1584,42 @@ export function useAppShellPromptMutations({
       viewerContextId,
     ]
   )
+
+  /** Hold the queue for an edit. Resolves true when it must resume after. */
+  const holdPendingQueue = React.useCallback(async () => {
+    if (!viewerContextId) return false
+    try {
+      const response = await fetchJson<
+        PendingMessagesResponse & { wasPaused?: boolean }
+      >(
+        buildCurrentSessionRequestUrl("/api/pending-messages/hold", {
+          machineId,
+          contextId: viewerContextId,
+          sessionState: sessionStateRef.current,
+          fallbackSessionId: activeSessionId,
+        }),
+        { method: "POST" }
+      )
+      const nextPendingMessages = pendingMessagesFromResponse(response)
+      if (nextPendingMessages) {
+        updatePendingMessages(() => nextPendingMessages)
+      }
+      const wasPaused = "wasPaused" in response && response.wasPaused === true
+      const held =
+        nextPendingMessages?.some((message) =>
+          isHeldPendingId(message.pendingId)
+        ) ?? false
+      return held && !wasPaused
+    } catch {
+      return false
+    }
+  }, [
+    activeSessionId,
+    machineId,
+    sessionStateRef,
+    updatePendingMessages,
+    viewerContextId,
+  ])
 
   const startPendingQueueMutation = useMutation({
     mutationFn: async () => {
@@ -1632,6 +1678,7 @@ export function useAppShellPromptMutations({
     abortSession,
     addDirectoryPath,
     createSession,
+    holdPendingQueue,
     savePendingQueue,
     startPendingQueue,
     submitPrompt,
