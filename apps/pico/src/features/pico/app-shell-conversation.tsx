@@ -94,7 +94,7 @@ function ConversationLatestMessageButton({
         variant="outline"
         size="icon-lg"
         disabled={isDisabled}
-        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
+        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px] dark:bg-secondary dark:hover:bg-accent"
         aria-label="Jump to latest message"
         onClick={onClick}
       >
@@ -128,7 +128,7 @@ function ConversationPreviousMessageButton({
         size="icon-lg"
         disabled={isDisabled}
         className={cn(
-          "rounded-full disabled:pointer-events-none disabled:opacity-0",
+          "rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent",
           centerMessages
             ? "pointer-events-auto"
             : "absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
