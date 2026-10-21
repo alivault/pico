@@ -158,7 +158,7 @@ async function changeJob(
   }, context)
 }
 
-/** Send a follow-up to the session of a conversation, or its replacement. */
+/** Send a steer to the session of a conversation, or its replacement (see `notifyAgent`). */
 async function notifySession(
   services: HostServices,
   conversationId: ConversationId,
@@ -173,7 +173,7 @@ async function notifySession(
     BACKGROUND_CONTEXT
   )
   await conversation?.submit(
-    { type: "input", content: text, requestId, whenBusy: "followUp" },
+    { type: "input", content: text, requestId, whenBusy: "steer" },
     BACKGROUND_CONTEXT
   )
 }
@@ -398,7 +398,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     description: [
       "Start a long command in the background and return at once: dev servers, watchers, long builds or test runs.",
       "The user can watch it live in the terminal panel. Read its output with job_output, check it with job_status, and stop it with job_stop.",
-      "With notify_on_exit (default true), you get a message with the exit code and the last output when it ends.",
+      "With notify_on_exit (default true), you get a message with the exit code and the last output when it ends, also while you are busy (at your next turn boundary).",
     ].join(" "),
     parameters: Type.Object({
       command: Type.String(),

@@ -186,11 +186,13 @@ export function tail(text: string, lines: number) {
 }
 
 /**
- * Send a follow-up input to the session that owns `conversationId`, or to the
- * session that replaced it through tree navigation. `requestId` makes a retry
- * after a restart find the same submission.
+ * Send a background message (a job exit, a child's answer, a timer, a watch)
+ * to the session that owns `conversationId`, or to the session that replaced
+ * it through tree navigation. It is a steer: a busy agent gets it at its next
+ * turn boundary, not only when its run ends. `requestId` makes a retry after a
+ * restart find the same submission.
  */
-export async function followUp(
+export async function notifyAgent(
   host: HostBridge,
   open: (id: ConversationId) => Promise<ConversationHandle | undefined>,
   conversationId: ConversationId,
@@ -205,7 +207,7 @@ export async function followUp(
   const target = await open(conversationOf(current))
   if (!target) return
   await target.submit(
-    { type: "input", content: text, requestId, whenBusy: "followUp" },
+    { type: "input", content: text, requestId, whenBusy: "steer" },
     context
   )
 }

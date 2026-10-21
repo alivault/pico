@@ -2,7 +2,7 @@
  * The `schedule` extension: durable timers.
  *
  * A timer is a background task owned by the conversation. It sleeps until its
- * time with the Harness clock, then sends a follow-up input to the session.
+ * time with the Harness clock, then sends a steer input to the session.
  * The sleep is a checkpoint, so a timer survives a server restart; a timer
  * that was due while the server was down fires once at startup. Repeating
  * timers (`every` or `cron`) compute the next time from the current time, so
@@ -28,9 +28,9 @@ import {
 import type { HostBridge } from "./host.ts"
 import {
   errorResult,
-  followUp,
   formatDuration,
   json,
+  notifyAgent,
   parseDuration,
   registerState,
   textResult,
@@ -157,7 +157,7 @@ function createTimerTask(host: HostBridge) {
           `[Scheduled${repeat ? `, run ${runs + 1}` : ""}] ${input.message}`,
           `(timer ${task.id}${input.label !== input.message ? `: ${input.label}` : ""})`,
         ].join("\n")
-        await followUp(
+        await notifyAgent(
           host,
           (id) => runtime.conversation(id, context),
           task.conversationId,
@@ -328,7 +328,7 @@ export function createScheduleExtension(host: HostBridge) {
   const scheduleTool = defineTool({
     name: "schedule",
     description: [
-      "Schedule a durable timer that sends you `message` as a new user turn later. It survives server restarts.",
+      "Schedule a durable timer that sends you `message` later. It survives server restarts. If you are busy then, the message arrives at your next turn boundary (after the current tool calls), so you can keep working.",
       "Give one of: in (a duration such as 20m or 1h30m), at (an ISO time), every (repeat at a fixed interval), or cron (a 5-field cron expression, with optional timezone).",
       "Use it to check on something later, for example CI, a deploy, or a long job, instead of waiting in a loop.",
     ].join(" "),

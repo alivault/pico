@@ -4,7 +4,7 @@
  * `spawn_session` makes a child: a normal Pico session with a `parent` link,
  * which the user can open in the web client. It is ownerless, so it outlives
  * the call that made it. Without `wait`, a background `pico.child-report` task
- * waits for the child and posts its answer back to the parent as a follow-up.
+ * waits for the child and posts its answer back to the parent as a steer input.
  *
  * Restarts: the tools are replay-safe. A rerun finds the child by the call ID
  * stored in the child's metadata (written in the commit that creates it), and
@@ -35,7 +35,7 @@ import {
   type HostBridge,
   type HostServices,
 } from "./host.ts"
-import { clip, errorResult, followUp, json, textResult } from "./util.ts"
+import { clip, errorResult, json, notifyAgent, textResult } from "./util.ts"
 
 /** A session ID from `s123`, `123`, or `pico:s123`. */
 export function normalizeSessionId(value: string) {
@@ -197,7 +197,7 @@ function createReportTask(host: HostBridge) {
         const needsInput = services.sessions
           .list({})
           .find((session) => session.id === input.child)?.needsInput
-        await followUp(
+        await notifyAgent(
           host,
           (id) => runtime.conversation(id, context),
           input.parent as unknown as ConversationId,
@@ -415,7 +415,7 @@ function createRemoteReportTask(host: HostBridge) {
         const label =
           services.machines?.find(input.machine)?.profile.label ?? input.machine
         const name = `${label}:${input.child}`
-        await followUp(
+        await notifyAgent(
           host,
           (id) => runtime.conversation(id, context),
           input.parent as unknown as ConversationId,
@@ -503,7 +503,7 @@ export function createSessionsExtension(host: HostBridge) {
 
   /**
    * Post the answer of `input.child` back to the caller when it is idle. A
-   * second report task after a crash is harmless: the follow-up's request ID
+   * second report task after a crash is harmless: the message's request ID
    * lets only one message through.
    */
   const scheduleReport = async (
@@ -527,7 +527,7 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. By default it runs in the background and its answer comes to you as a message when it finishes; set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. By default it runs in the background and its answer comes to you as a message when it finishes, also while you are busy (at your next turn boundary), so keep working instead of waiting; set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
       "Write the goal as a complete brief: the child does not see this conversation.",
     ].join(" "),

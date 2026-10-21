@@ -2,7 +2,7 @@
  * The `watch` extension: a durable poll for a condition.
  *
  * A watch is a background task: it checks a command, a URL, a file, or the CI
- * checks of a pull request at an interval, and sends a follow-up input when
+ * checks of a pull request at an interval, and sends a steer input when
  * the condition is true, or when it times out. Each check is a checkpoint, so
  * a watch continues after a server restart.
  */
@@ -31,9 +31,9 @@ import {
   clip,
   cwdOf,
   errorResult,
-  followUp,
   formatDuration,
   json,
+  notifyAgent,
   parseDuration,
   runCommand,
   tail,
@@ -318,7 +318,7 @@ function createWatchTask(host: HostBridge) {
           "Last check:",
           output,
         ].join("\n")
-        await followUp(
+        await notifyAgent(
           host,
           (id) => runtime.conversation(id, context),
           task.conversationId,
@@ -364,7 +364,7 @@ export function createWatchExtension(host: HostBridge) {
   const watchTool = defineTool({
     name: "watch",
     description: [
-      "Watch for a condition and get `message` as a new user turn when it is true. The watch is durable: it survives server restarts.",
+      "Watch for a condition and get `message` when it is true. If you are busy then, it arrives at your next turn boundary (after the current tool calls), so you can keep working. The watch is durable: it survives server restarts.",
       "check.type: command (until success, failure, match, or change), url (until status, match, change, up, or down), file (until change, exists, missing, or match), ci (GitHub checks of a PR through gh, until done, success, or failure).",
       "interval is at least 15s (default 1m). timeout ends the watch with a message when the condition stays false (default 24h).",
       "Example: after git push, watch { check: { type: 'ci' }, message: 'CI finished; fix failures' }.",
