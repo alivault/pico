@@ -493,6 +493,8 @@ export function createApi(api: ApiContext) {
         ok: true,
         queued: result.queued,
         ...(result.pendingId ? { pendingId: result.pendingId } : {}),
+        sessionId: id,
+        sessionPath: sessionPath(id),
       }
     })
   )
