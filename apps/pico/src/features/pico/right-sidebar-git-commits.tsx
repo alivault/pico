@@ -642,7 +642,7 @@ function GitCommitPageGraph({
     )
     circles.push(
       <circle
-        key={`circle:${rowIndex}:${row.parsed.fullHash}`}
+        key={`circle:${row.parsed.fullHash || rowIndex}`}
         cx={x}
         cy={y}
         r="4"
