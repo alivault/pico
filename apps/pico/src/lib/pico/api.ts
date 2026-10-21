@@ -376,6 +376,9 @@ export type PromptResponse =
       queued: boolean
       pendingId?: string
       canceled?: boolean
+      /** The session that got the prompt. Older servers do not send it. */
+      sessionId?: string
+      sessionPath?: string
     }
   | ApiErrorResponse
 

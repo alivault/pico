@@ -136,6 +136,10 @@ type UseAppShellPromptMutationsOptions = {
     lastMessagePreview?: string
   }) => string | undefined
   removeOptimisticSidebarSession: (optimisticId: string | undefined) => void
+  bindOptimisticSidebarSession: (
+    optimisticId: string | undefined,
+    session: { sessionId?: string; sessionPath?: string }
+  ) => void
   updateOptimisticSidebarSessionPreview: (options: {
     preview: string
     optimisticSidebarSessionId?: string
@@ -439,6 +443,7 @@ export function useAppShellPromptMutations({
   removeOptimisticUserMessage,
   addOptimisticSidebarSession,
   removeOptimisticSidebarSession,
+  bindOptimisticSidebarSession,
   updateOptimisticSidebarSessionPreview,
   setSidebarDirectories,
   setStoredDraftDirectory,
@@ -1146,6 +1151,16 @@ export function useAppShellPromptMutations({
         ) {
           removeOptimisticPendingMessage(queuedPendingId)
         }
+        // The response names the session that got the prompt. Move the
+        // sidebar placeholder to it now. The state sync can come late or
+        // not show the change from draft to session, and then the
+        // placeholder stays next to the real entry.
+        if (optimisticSidebarSessionId && "sessionId" in response) {
+          bindOptimisticSidebarSession(optimisticSidebarSessionId, {
+            sessionId: response.sessionId,
+            sessionPath: response.sessionPath,
+          })
+        }
         if (
           targetSessionKey &&
           pendingNewSessionPromptTargetRef.current?.sessionKey ===
@@ -1254,6 +1269,7 @@ export function useAppShellPromptMutations({
       addOptimisticPendingMessage,
       addOptimisticSidebarSession,
       addOptimisticUserMessage,
+      bindOptimisticSidebarSession,
       composerDiffLineCommentsRef,
       composerImagesRef,
       composerSkillRef,

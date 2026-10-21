@@ -398,6 +398,63 @@ export function bindOptimisticSidebarSessionEntries(
   }
 }
 
+/**
+ * Give one optimistic entry the identity of the session that the server made
+ * for it. The prompt response names this session, so this step does not
+ * depend on a state sync that shows the draft change into a session. If the
+ * directory already lists the real session, remove the placeholder.
+ */
+export function bindOptimisticSidebarSessionEntryById(
+  current: Record<string, DirectorySessionsIndexData>,
+  optimisticId: string | undefined,
+  session: { sessionId?: string; sessionPath?: string }
+) {
+  const targetId = optimisticId?.trim() || ""
+  const sessionId = session.sessionId?.trim() || ""
+  const sessionPath = session.sessionPath?.trim() || ""
+  if (!targetId || !sessionId || targetId === sessionId) return current
+
+  let changed = false
+  const next: Record<string, DirectorySessionsIndexData> = { ...current }
+
+  for (const [directory, snapshot] of Object.entries(current)) {
+    const placeholder = snapshot.sessions.find(
+      (entry) => entry.id === targetId && isOptimisticSidebarSessionEntry(entry)
+    )
+    if (!placeholder) continue
+
+    const listed = snapshot.sessions.some(
+      (entry) =>
+        entry !== placeholder &&
+        (entry.id === sessionId || (sessionPath && entry.path === sessionPath))
+    )
+    const sessions = snapshot.sessions.flatMap((entry) => {
+      if (entry !== placeholder) return [entry]
+      if (listed) return []
+      return [
+        {
+          ...entry,
+          id: sessionId,
+          ...(sessionPath ? { path: sessionPath } : {}),
+          optimistic: true,
+        } satisfies SessionListEntry,
+      ]
+    })
+
+    changed = true
+    next[directory] = {
+      ...snapshot,
+      totalCount: listed
+        ? Math.max(0, snapshot.totalCount - 1)
+        : snapshot.totalCount,
+      revision: `bind-optimistic:${sessionId}:${snapshot.revision}`,
+      sessions,
+    }
+  }
+
+  return changed ? next : current
+}
+
 export function isOptimisticSidebarSessionEntry(entry: SessionListEntry) {
   return Boolean(
     entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)

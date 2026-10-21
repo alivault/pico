@@ -88,6 +88,7 @@ import {
   createAppShellSidebarStore,
   mergeSidebarSessionStatusMap,
   bindOptimisticSidebarSessionEntries,
+  bindOptimisticSidebarSessionEntryById,
   removeOptimisticSidebarSessionEntry,
   updateOptimisticSidebarSessionPreviewEntry,
   upsertOptimisticSidebarSessionEntry,
@@ -2390,6 +2391,47 @@ function useAppShellSessionWorkspaceView({
     [sidebarStore]
   )
 
+  const bindOptimisticSidebarSession = React.useCallback(
+    (
+      optimisticId: string | undefined,
+      session: { sessionId?: string; sessionPath?: string }
+    ) => {
+      const targetId = optimisticId?.trim() || ""
+      if (!targetId || !session.sessionId) return
+
+      sidebarStore.setDirectoryIndexDataByPath((current) =>
+        bindOptimisticSidebarSessionEntryById(current, targetId, session)
+      )
+      sidebarStore.setSessionsEvent((current) => {
+        if (!current?.directoryIndexes) return current
+        const directoryIndexes = bindOptimisticSidebarSessionEntryById(
+          current.directoryIndexes,
+          targetId,
+          session
+        )
+        return directoryIndexes === current.directoryIndexes
+          ? current
+          : { ...current, directoryIndexes }
+      })
+
+      const previousKey = sessionListEntryKey({ id: targetId })
+      const nextKey = sessionListEntryKey({
+        id: session.sessionId,
+        path: session.sessionPath,
+      })
+      if (!previousKey || !nextKey) return
+      sidebarStore.setSelectedSidebarSessionKeys((current) =>
+        current.includes(previousKey)
+          ? current.map((key) => (key === previousKey ? nextKey : key))
+          : current
+      )
+      sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+        current === previousKey ? nextKey : current
+      )
+    },
+    [sidebarStore]
+  )
+
   const updateOptimisticSidebarSessionPreview = React.useCallback(
     (options: { preview: string; optimisticSidebarSessionId?: string }) => {
       const preview = options.preview.trim()
@@ -2474,6 +2516,7 @@ function useAppShellSessionWorkspaceView({
     removeOptimisticUserMessage,
     addOptimisticSidebarSession,
     removeOptimisticSidebarSession,
+    bindOptimisticSidebarSession,
     updateOptimisticSidebarSessionPreview,
     setSidebarDirectories: sidebarStore.setSidebarDirectories,
     setStoredDraftDirectory,
