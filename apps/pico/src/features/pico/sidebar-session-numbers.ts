@@ -18,13 +18,33 @@ export function getShownSidebarSessionItems(root: ParentNode = document) {
   )
 }
 
-// While the app modifier is held, the rows that Mod+1…9 open. Empty when
-// the modifier is not held. One shared set of window listeners keeps it.
+// How long the app modifier must be held before the numbers show. A quick
+// chord such as Mod+N is shorter, so it does not make the numbers flash.
+const SHOW_NUMBERS_DELAY_MS = 400
+
+const appModifierKey = isMacPlatform ? "Control" : "Alt"
+
+// While the numbers show, the rows that Mod+1…9 open. Empty when they do
+// not show. One shared set of window listeners keeps it.
 let numberedItems: Array<HTMLElement> = []
+let numbersShown = false
+let showNumbersTimer: ReturnType<typeof setTimeout> | undefined
 const numberedItemsListeners = new Set<() => void>()
 
 function isAppModifierHeld(event: KeyboardEvent) {
   return isMacPlatform ? event.ctrlKey : event.altKey
+}
+
+function clearShowNumbersTimer() {
+  if (showNumbersTimer === undefined) return
+  clearTimeout(showNumbersTimer)
+  showNumbersTimer = undefined
+}
+
+function updateNumberedItems() {
+  setNumberedItems(
+    getShownSidebarSessionItems().slice(0, SIDEBAR_SESSION_NUMBER_COUNT)
+  )
 }
 
 function setNumberedItems(next: Array<HTMLElement>) {
@@ -39,14 +59,38 @@ function setNumberedItems(next: Array<HTMLElement>) {
 }
 
 function handleModifierKeyEvent(event: KeyboardEvent) {
-  setNumberedItems(
-    isAppModifierHeld(event)
-      ? getShownSidebarSessionItems().slice(0, SIDEBAR_SESSION_NUMBER_COUNT)
-      : []
-  )
+  if (!isAppModifierHeld(event)) {
+    handleModifierReset()
+    return
+  }
+
+  // While the numbers show, keep them in step with the sidebar. For
+  // example, Mod+3 can open a session that moves the rows.
+  if (numbersShown) {
+    updateNumberedItems()
+    return
+  }
+
+  if (event.type !== "keydown") return
+
+  // Another key with the modifier is a chord: do not show the numbers
+  // until the modifier is pressed again.
+  if (event.key !== appModifierKey) {
+    clearShowNumbersTimer()
+    return
+  }
+
+  if (event.repeat || showNumbersTimer !== undefined) return
+  showNumbersTimer = setTimeout(() => {
+    showNumbersTimer = undefined
+    numbersShown = true
+    updateNumberedItems()
+  }, SHOW_NUMBERS_DELAY_MS)
 }
 
 function handleModifierReset() {
+  clearShowNumbersTimer()
+  numbersShown = false
   setNumberedItems([])
 }
 
@@ -63,6 +107,8 @@ function subscribeNumberedItems(listener: () => void) {
       window.removeEventListener("keydown", handleModifierKeyEvent)
       window.removeEventListener("keyup", handleModifierKeyEvent)
       window.removeEventListener("blur", handleModifierReset)
+      clearShowNumbersTimer()
+      numbersShown = false
       numberedItems = []
     }
   }
