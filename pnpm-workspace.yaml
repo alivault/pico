@@ -8,7 +8,6 @@ catalog:
   vite-plus: 0.1.19
 onlyBuiltDependencies:
   - esbuild
-  - node-pty
   - protobufjs
 overrides:
   vite: "catalog:"

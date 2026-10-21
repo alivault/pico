@@ -6,11 +6,9 @@
  * covers it. Input carries sequence numbers, so a retried send is written once.
  */
 import { userInfo } from "node:os"
-import { accessSync, chmodSync, constants, existsSync } from "node:fs"
-import { createRequire } from "node:module"
-import { basename, dirname, join } from "node:path"
+import { basename } from "node:path"
 
-import * as pty from "node-pty"
+import * as pty from "@lydell/node-pty"
 
 import { posixShell } from "../extensions/util.ts"
 import { badRequest } from "../http.ts"
@@ -123,26 +121,6 @@ export class Terminals {
   readonly #cleanup: NodeJS.Timeout
 
   constructor() {
-    // node-pty 1.1.0's prebuilt helper can lose its executable bit in npm.
-    // Repair only this known package helper, not user files.
-    if (process.platform !== "win32") {
-      const root = dirname(
-        createRequire(import.meta.url).resolve("node-pty/package.json")
-      )
-      for (const dir of [
-        "build/Release",
-        "build/Debug",
-        `prebuilds/${process.platform}-${process.arch}`,
-      ]) {
-        const helper = join(root, dir, "spawn-helper")
-        if (!existsSync(helper)) continue
-        try {
-          accessSync(helper, constants.X_OK)
-        } catch {
-          chmodSync(helper, 0o755)
-        }
-      }
-    }
     this.#cleanup = setInterval(() => this.#removeExpired(), 60_000)
     this.#cleanup.unref()
   }
