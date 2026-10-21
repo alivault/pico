@@ -89,6 +89,9 @@ export function localSummary(
           ...(session.lastMessageAt
             ? { lastMessageAt: session.lastMessageAt }
             : {}),
+          ...(meta.lastUserMessageAt
+            ? { lastUserMessageAt: meta.lastUserMessageAt }
+            : {}),
         }
       }),
   }

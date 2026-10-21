@@ -123,6 +123,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
+import { sortSidebarSessions } from "@/features/pico/session-order"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
 const SIDEBAR_TIME_MIN_DELAY_MS = 1000
@@ -1181,12 +1182,12 @@ function buildDirectorySessionKeys(
   const sessionKeysByDirectory: Record<string, Array<string>> = {}
 
   for (const [directory, sessions] of Object.entries(sessionsByDirectory)) {
-    sessionKeysByDirectory[directory] = nestChildSessions(sessions).flatMap(
-      (entry) => {
-        const key = sessionListEntryKey(entry)
-        return key ? [key] : []
-      }
-    )
+    sessionKeysByDirectory[directory] = nestChildSessions(
+      sortSidebarSessions(sessions)
+    ).flatMap((entry) => {
+      const key = sessionListEntryKey(entry)
+      return key ? [key] : []
+    })
   }
 
   return sessionKeysByDirectory
@@ -1927,6 +1928,11 @@ function machineSummaryEntry(session: MachineSessionSummary): SessionListEntry {
     title: session.title,
     ...(session.lastMessageAt
       ? { lastMessageAt: new Date(session.lastMessageAt).toISOString() }
+      : {}),
+    ...(session.lastUserMessageAt
+      ? {
+          lastUserMessageAt: new Date(session.lastUserMessageAt).toISOString(),
+        }
       : {}),
     streaming: session.busy,
     needsInput: session.needsInput,

@@ -60,6 +60,7 @@ export type SessionStatusSummary = {
   unreadBy?: string[]
   parent?: string
   lastMessageAt?: number
+  lastUserMessageAt?: number
 }
 
 /** What a server tells a hub about its sessions. */
@@ -180,6 +181,9 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
           ...(typeof entry.parent === "string" ? { parent: entry.parent } : {}),
           ...(typeof entry.lastMessageAt === "number"
             ? { lastMessageAt: entry.lastMessageAt }
+            : {}),
+          ...(typeof entry.lastUserMessageAt === "number"
+            ? { lastUserMessageAt: entry.lastUserMessageAt }
             : {}),
         },
       ]

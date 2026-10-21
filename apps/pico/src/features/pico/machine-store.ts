@@ -32,6 +32,7 @@ export type MachineSessionSummary = {
   unreadBy?: Array<string>
   parent?: string
   lastMessageAt?: number
+  lastUserMessageAt?: number
 }
 
 export type MachineInfo = {

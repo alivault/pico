@@ -22,6 +22,7 @@ import {
   sessionListEntryKey,
 } from "@/lib/pico"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { sortSidebarSessions } from "@/features/pico/session-order"
 
 type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
@@ -127,24 +128,6 @@ function applyDirectoryIndexDelete(
   return changed ? next : current
 }
 
-function sessionListTimestampValue(value: string | undefined) {
-  if (!value) return 0
-  const timestamp = new Date(value).getTime()
-  return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-function compareSessionListEntriesByLastUserMessage(
-  left: SessionListEntry,
-  right: SessionListEntry
-) {
-  return (
-    sessionListTimestampValue(right.lastUserMessageAt || right.modified) -
-      sessionListTimestampValue(left.lastUserMessageAt || left.modified) ||
-    sessionListTimestampValue(right.modified) -
-      sessionListTimestampValue(left.modified)
-  )
-}
-
 function sessionEntryMatchesMoveTarget(
   entry: SessionListEntry,
   options: {
@@ -229,9 +212,7 @@ function applyDirectoryIndexMove(
   next[nextCwd] = {
     ...targetSnapshot,
     totalCount: targetSnapshot.totalCount + 1,
-    sessions: [nextEntry, ...targetSnapshot.sessions].sort(
-      compareSessionListEntriesByLastUserMessage
-    ),
+    sessions: sortSidebarSessions([nextEntry, ...targetSnapshot.sessions]),
   }
 
   return next
