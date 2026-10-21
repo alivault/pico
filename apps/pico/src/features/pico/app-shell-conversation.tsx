@@ -76,14 +76,22 @@ function ConversationLatestMessageButton({
   conversationItemsStore,
   draft,
   onClick,
+  streaming,
 }: {
   conversationItemsStore: ConversationItemsStore
   draft: boolean
   onClick: () => void
+  streaming: boolean
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const scrollable = useMessageScrollerScrollable()
   const isDisabled = draft || !hasMessages || !scrollable.end
+  // The turn can stream below the view. A ring on the button shows that
+  // there is live output out of view.
+  const showStreaming = streaming && !isDisabled
+  const label = showStreaming
+    ? "Jump to latest message, response is streaming"
+    : "Jump to latest message"
 
   return (
     <TitleTooltip
@@ -95,10 +103,19 @@ function ConversationLatestMessageButton({
         size="icon-lg"
         disabled={isDisabled}
         className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px] dark:bg-secondary dark:hover:bg-accent"
-        aria-label="Jump to latest message"
+        aria-label={label}
         onClick={onClick}
       >
         <ArrowDownIcon className="size-4" />
+        {showStreaming ? (
+          <Spinner
+            role="presentation"
+            aria-hidden="true"
+            aria-label={undefined}
+            strokeWidth={1.5}
+            className="absolute -inset-px size-[calc(100%+2px)]"
+          />
+        ) : null}
       </Button>
     </TitleTooltip>
   )
@@ -297,7 +314,7 @@ function AppShellConversationFrame(props: AppShellConversationFrameProps) {
     <MessageScrollerProvider
       key={sessionScrollKey}
       autoScroll={props.autoScrollEnabled}
-      defaultScrollPosition="end"
+      defaultScrollPosition="last-anchor"
       scrollPreviousItemPeek={64}
     >
       <AppShellConversationScroller
@@ -381,6 +398,7 @@ function AppShellConversationScroller({
             conversationItemsStore={conversationItemsStore}
             draft={sessionState.draft}
             onClick={scrollConversationToBottom}
+            streaming={sessionState.streaming}
           />
           <ConversationPreviousMessageButton
             centerMessages={centerMessages}
