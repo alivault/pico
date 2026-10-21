@@ -762,6 +762,7 @@ function SidebarSessionItem({
       type="button"
       data-sidebar-session-item
       data-session-key={entryKey}
+      data-current-session={isActive ? "" : undefined}
       isActive={isActive || isSelected}
       className={cn(
         "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-(--session-text-left)",
@@ -1502,6 +1503,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
 
   return (
     <Collapsible
+      data-sidebar-session-group={overlay ? undefined : ""}
       open={!collapsed}
       onOpenChange={(open, details) => {
         if (searchActive || overlay) return
@@ -1715,6 +1717,7 @@ function PinnedSessionGroup({
 
   return (
     <Collapsible
+      data-sidebar-session-group=""
       open={!collapsed}
       onOpenChange={(open, details) => {
         if (searchActive) return

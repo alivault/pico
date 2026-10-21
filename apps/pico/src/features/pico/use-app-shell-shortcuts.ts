@@ -123,6 +123,66 @@ function hasSelectedText(target: EventTarget | null) {
   return false
 }
 
+// The session rows that the sidebar shows, in sidebar order. Rows in a
+// collapsed group are not shown, so they are skipped.
+function getShownSidebarSessionItems(root: ParentNode = document) {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+  ).filter(
+    (element) =>
+      isInShownMachineShell(element) && element.getClientRects().length > 0
+  )
+}
+
+function isCurrentSidebarSessionItem(element: HTMLElement) {
+  return element.dataset.currentSession !== undefined
+}
+
+// Open the session in the sidebar that is `offset` rows from the current
+// session. Without a current session, go to the first or last row.
+function openAdjacentSidebarSession(offset: -1 | 1) {
+  const items = getShownSidebarSessionItems()
+  if (items.length === 0) return
+
+  const currentIndex = items.findIndex(isCurrentSidebarSessionItem)
+  const nextIndex =
+    currentIndex < 0
+      ? offset > 0
+        ? 0
+        : items.length - 1
+      : Math.max(0, Math.min(items.length - 1, currentIndex + offset))
+  if (nextIndex === currentIndex) return
+  items[nextIndex]?.click()
+}
+
+// Open the first session of the previous or next sidebar group (a directory
+// or the pinned group). Groups without shown sessions are skipped.
+function openAdjacentSidebarGroup(offset: -1 | 1) {
+  const groups = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-sidebar-session-group]")
+  ).flatMap((group) => {
+    if (!isInShownMachineShell(group)) return []
+    const items = getShownSidebarSessionItems(group)
+    return items.length > 0 ? [{ group, items }] : []
+  })
+  if (groups.length === 0) return
+
+  const currentIndex = groups.findIndex(({ items }) =>
+    items.some(isCurrentSidebarSessionItem)
+  )
+  const nextIndex =
+    currentIndex < 0
+      ? offset > 0
+        ? 0
+        : groups.length - 1
+      : currentIndex + offset
+  groups[nextIndex]?.items[0]?.click()
+}
+
+function openSidebarSessionAt(index: number) {
+  getShownSidebarSessionItems()[index]?.click()
+}
+
 export function useAppShellShortcuts({
   addDirectoryOpenRef,
   commandPaletteOpenRef,
@@ -332,6 +392,25 @@ export function useAppShellShortcuts({
     }
 
     shortcutActionsRef.current.scrollConversationToBottom()
+  }
+
+  const handleSidebarSessionSwitch = (
+    event: KeyboardEvent,
+    open: () => void
+  ) => {
+    const context = getShortcutContext(event)
+
+    if (
+      context.blockingModalOpen ||
+      event.defaultPrevented ||
+      isTerminalTarget(event.target)
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    closeCommandPaletteForShortcut(context.commandPaletteOpen)
+    open()
   }
 
   const handleRightSidebarPaneShortcut = (
@@ -571,6 +650,61 @@ export function useAppShellShortcuts({
           meta: {
             name: "Navigate conversation",
             description: "Jump between messages or to conversation boundaries.",
+          },
+        },
+      })
+    ),
+    ...(
+      [
+        { key: "ArrowUp", offset: -1 },
+        { key: "ArrowDown", offset: 1 },
+      ] as const
+    ).map(({ key, offset }) => ({
+      hotkey: { key, shift: true, ...appModifierFlag },
+      callback: (event: KeyboardEvent) => {
+        handleSidebarSessionSwitch(event, () => {
+          openAdjacentSidebarSession(offset)
+        })
+      },
+      options: {
+        meta: {
+          name: "Open previous or next session",
+          description: "Open the session above or below in the sidebar.",
+        },
+      },
+    })),
+    ...(
+      [
+        { key: "[", offset: -1 },
+        { key: "]", offset: 1 },
+      ] as const
+    ).map(({ key, offset }) => ({
+      hotkey: { key, ...appModifierFlag },
+      callback: (event: KeyboardEvent) => {
+        handleSidebarSessionSwitch(event, () => {
+          openAdjacentSidebarGroup(offset)
+        })
+      },
+      options: {
+        meta: {
+          name: "Open previous or next directory",
+          description:
+            "Open the first session of the directory above or below in the sidebar.",
+        },
+      },
+    })),
+    ...(["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map(
+      (key, index) => ({
+        hotkey: { key, ...appModifierFlag },
+        callback: (event: KeyboardEvent) => {
+          handleSidebarSessionSwitch(event, () => {
+            openSidebarSessionAt(index)
+          })
+        },
+        options: {
+          meta: {
+            name: "Open sidebar session by number",
+            description: "Open the Nth session in the sidebar.",
           },
         },
       })
