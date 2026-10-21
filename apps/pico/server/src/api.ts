@@ -21,6 +21,7 @@ import {
   parseSessionId,
   sessionKey,
   sessionPath,
+  type PendingEdit,
   type Sessions,
 } from "./core/sessions.ts"
 import type { Viewers } from "./core/viewers.ts"
@@ -505,16 +506,48 @@ export function createApi(api: ApiContext) {
   router.post("/api/pending-messages/reorder", async (request) => {
     const id = requireSession(request)
     const body = await request.body<{
-      pendingMessages?: Array<{ pendingId?: string }>
+      pendingMessages?: Array<{
+        pendingId?: unknown
+        text?: unknown
+        images?: unknown
+        streamingBehavior?: unknown
+      }>
       pendingIds?: string[]
+      removedPendingIds?: unknown
     }>()
-    const order = body.pendingMessages
-      ? body.pendingMessages.map((message) => String(message.pendingId ?? ""))
-      : body.pendingIds
-    if (!Array.isArray(order))
-      throw badRequest("pendingMessages must be an array")
-    await sessions.requeue(id, order)
-    return { ok: true, pendingMessages: await sessions.pendingMessages(id) }
+    const edits: PendingEdit[] | undefined = Array.isArray(body.pendingMessages)
+      ? body.pendingMessages.map(
+          (message): PendingEdit => ({
+            ...(typeof message?.pendingId === "string" && message.pendingId
+              ? { pendingId: message.pendingId }
+              : {}),
+            ...(typeof message?.text === "string"
+              ? { text: message.text }
+              : {}),
+            ...(Array.isArray(message?.images)
+              ? { images: message.images as never }
+              : {}),
+            ...(message?.streamingBehavior === "steer" ||
+            message?.streamingBehavior === "followUp"
+              ? { streamingBehavior: message.streamingBehavior as never }
+              : {}),
+          })
+        )
+      : Array.isArray(body.pendingIds)
+        ? body.pendingIds.map((pendingId) => ({ pendingId: String(pendingId) }))
+        : undefined
+    if (!edits) throw badRequest("pendingMessages must be an array")
+    const removed = Array.isArray(body.removedPendingIds)
+      ? body.removedPendingIds.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : []
+    const { missed } = await sessions.requeue(id, edits, removed)
+    return {
+      ok: true,
+      missed,
+      pendingMessages: await sessions.pendingMessages(id),
+    }
   })
 
   router.post("/api/pending-message/remove", async (request) => {

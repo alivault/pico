@@ -277,6 +277,32 @@ function inboxMessage(item: InboxItem): PendingMessage | undefined {
   }
 }
 
+/** One row of a queue edit: an existing prompt (`pendingId`) or a new one. */
+export type PendingEdit = {
+  pendingId?: string
+  text?: string
+  images?: PromptImageInput[]
+  streamingBehavior?: "steer" | "followUp"
+}
+
+/** Put new text in queued content and keep its images. */
+function replaceContentText(content: unknown, text: string) {
+  if (!Array.isArray(content)) return text
+  const rest = (content as Array<{ type?: string }>).filter(
+    (part) => part?.type !== "text"
+  )
+  if (rest.length === 0) return text
+  return [...(text ? [{ type: "text" as const, text }] : []), ...rest]
+}
+
+function contentIsEmpty(content: unknown) {
+  if (typeof content === "string") return !content.trim()
+  if (!Array.isArray(content)) return true
+  return !(content as Array<{ type?: string; text?: string }>).some(
+    (part) => part?.type !== "text" || Boolean(part.text?.trim())
+  )
+}
+
 function submissionIdFromPending(pendingId: string): SubmissionId {
   const raw = pendingId.startsWith("pending:") ? pendingId.slice(8) : pendingId
   const id = Number(raw)
@@ -1499,10 +1525,17 @@ export class Sessions implements HostSessions {
   }
 
   /**
-   * Put the queued prompts in a new order: withdraw them all and submit them
-   * again. On an idle conversation the first one starts a run.
+   * Write the queue again: withdraw the queued prompts and submit them in the
+   * new order, with new text, lanes, and new rows from `edits`. Prompts in
+   * `remove` are withdrawn only. Queued prompts that `edits` does not name
+   * keep their content and go to the end. Rows whose prompt was already sent
+   * count as `missed`. On an idle conversation the first one starts a run.
    */
-  async requeue(id: string, order?: string[]) {
+  async requeue(
+    id: string,
+    edits?: PendingEdit[],
+    remove: string[] = []
+  ): Promise<{ missed: number }> {
     const inbox = await this.#doc(id, "inbox")
     const queued = (inbox?.items ?? []).filter(
       (item): item is Extract<InboxItem, { mode: "steer" | "followUp" }> =>
@@ -1511,37 +1544,73 @@ export class Sessions implements HostSessions {
     const byPending = new Map(
       queued.map((item) => [`pending:${item.id}`, item])
     )
-    if (order) {
-      const unique = new Set(order)
-      if (
-        unique.size !== order.length ||
-        order.length !== queued.length ||
-        !order.every((pendingId) => byPending.has(pendingId))
-      ) {
-        throw badRequest(
-          "pendingMessages must include every queued prompt exactly once"
-        )
-      }
+    type Planned = {
+      item?: (typeof queued)[number]
+      content: unknown
+      mode: "steer" | "followUp"
     }
-    const sorted = (order ?? queued.map((item) => `pending:${item.id}`)).map(
-      (pendingId) => byPending.get(pendingId)!
-    )
+    const plan: Planned[] = []
+    const withdraw: (typeof queued)[number][] = []
+    const named = new Set<string>()
+    let missed = 0
+
+    for (const pendingId of remove) {
+      const item = byPending.get(pendingId)
+      if (!item || named.has(pendingId)) continue
+      named.add(pendingId)
+      withdraw.push(item)
+    }
+    for (const edit of edits ?? []) {
+      if (edit.pendingId) {
+        if (named.has(edit.pendingId)) continue
+        const item = byPending.get(edit.pendingId)
+        if (!item) {
+          missed += 1
+          continue
+        }
+        named.add(edit.pendingId)
+        withdraw.push(item)
+        const content =
+          edit.text === undefined
+            ? item.content
+            : replaceContentText(item.content, edit.text)
+        if (contentIsEmpty(content)) continue
+        plan.push({ item, content, mode: edit.streamingBehavior ?? item.mode })
+        continue
+      }
+      const content = userContent(edit.text ?? "", edit.images ?? [])
+      if (contentIsEmpty(content)) continue
+      plan.push({ content, mode: edit.streamingBehavior ?? "followUp" })
+    }
+    for (const item of queued) {
+      if (named.has(`pending:${item.id}`)) continue
+      withdraw.push(item)
+      plan.push({ item, content: item.content, mode: item.mode })
+    }
+
     const conversation = await this.conversation(id)
-    const withdrawn: typeof sorted = []
-    for (const item of sorted) {
+    const withdrawn = new Set<SubmissionId>()
+    for (const item of withdraw) {
       const result = await this.#harness.abortSubmission(
         item.id,
         ctx,
         conversationIdOf(id)
       )
-      if (result === "aborted") withdrawn.push(item)
+      if (result === "aborted") withdrawn.add(item.id)
+      else if (edits) missed += 1
     }
-    for (const item of withdrawn) {
+    for (const planned of plan) {
+      if (planned.item && !withdrawn.has(planned.item.id)) continue
       await conversation.submit(
-        { type: "input", content: item.content as never, whenBusy: item.mode },
+        {
+          type: "input",
+          content: planned.content as never,
+          whenBusy: planned.mode,
+        },
         ctx
       )
     }
+    return { missed }
   }
 
   // ---------------------------------------------------------------------------
