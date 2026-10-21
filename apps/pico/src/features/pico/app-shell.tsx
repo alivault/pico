@@ -397,7 +397,7 @@ function useAppShellSessionWorkspaceView({
     displaySettingsStoreRef.current =
       createPicoStore<AppShellDisplaySettingsState>(
         {
-          autoScrollEnabled: true,
+          autoScrollEnabled: false,
           centerMessages: false,
           hideToolBlocks: false,
         },

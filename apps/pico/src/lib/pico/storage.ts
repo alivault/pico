@@ -424,8 +424,9 @@ export function readStoredCenterMessages() {
 }
 
 export function readStoredAutoScrollEnabled() {
-  const value = safeLocalStorageGetItem(AUTO_SCROLL_ENABLED_STORAGE_KEY)
-  return value == null ? true : value !== "0"
+  // Off by default, as in the shadcn MessageScroller: a new turn pins to the
+  // top and the reply grows past the bottom without moving the view.
+  return safeLocalStorageGetItem(AUTO_SCROLL_ENABLED_STORAGE_KEY) === "1"
 }
 
 export function readStoredRightSidebarOpen() {
