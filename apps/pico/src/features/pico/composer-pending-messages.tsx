@@ -1,341 +1,622 @@
 import * as React from "react"
-
-import type { PromptImage } from "@/lib/pico"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ImageIcon,
+  PlusIcon,
+  Trash2Icon,
+  Undo2Icon,
+} from "lucide-react"
 
-type PendingComposerMessage = {
-  pendingId: string
-  text: string
-  images: Array<PromptImage>
-  streamingBehavior: "steer" | "followUp"
-}
+import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
+import { cn } from "@/lib/utils"
+import {
+  appendQueueRow,
+  hasQueueChanges,
+  insertQueueRow,
+  isQueueRowChanged,
+  laneRows,
+  mergeQueueSession,
+  mostRecentQueueKey,
+  moveQueueRow,
+  queueRowsFromMessages,
+  queueSessionSavePlan,
+  type PendingQueueMessage,
+  type PendingQueueSaveRow,
+  type QueueEditRow,
+  type QueueEditSession,
+  type QueueLane,
+} from "@/features/pico/pending-queue"
 
-function groupPendingMessages(messages: Array<PendingComposerMessage>) {
-  return [
-    {
-      title: "Steer",
-      items: messages.filter(
-        (message) => message.streamingBehavior === "steer"
-      ),
-      emptyLabel: "Steer prompts will interrupt the current response.",
-    },
-    {
-      title: "Follow-up",
-      items: messages.filter(
-        (message) => message.streamingBehavior !== "steer"
-      ),
-      emptyLabel: "Follow-up prompts will run after the current response.",
-    },
-  ]
+export type ComposerPendingMessagesHandle = {
+  /** Start editing at the row queued last. False when the queue is empty. */
+  beginEditing: () => boolean
+  /**
+   * Enter on an empty composer: start a paused queue, or send the oldest
+   * follow-up as a steer now. False when there is nothing to do.
+   */
+  runEmptyEnter: () => boolean
 }
 
 type ComposerPendingMessagesProps = {
-  currentPendingMessages: Array<PendingComposerMessage>
+  currentPendingMessages: Array<PendingQueueMessage>
   canStartQueue: boolean
-  onEditPendingMessage: (pendingId: string, text: string) => void
-  onRemovePendingMessage: (pendingId: string) => void
-  onReorderPending: (pendingId: string, direction: -1 | 1) => void
+  isStreaming: boolean
+  onSavePendingQueue: (
+    rows: Array<PendingQueueSaveRow>,
+    removedPendingIds: Array<string>
+  ) => void
   onStartPendingQueue: () => void
+  onExitEditing: () => void
+  ref?: React.Ref<ComposerPendingMessagesHandle>
 }
 
-type PendingMessageEditState = {
-  editingPendingId: string | null
-  editText: string
-  editError: string | null
+const LANES: Array<{
+  lane: QueueLane
+  title: string
+  hint: string
+  readyIcon: string
+  laterIcon: string
+  boxClassName: string
+  titleClassName: string
+  selectedClassName: string
+}> = [
+  {
+    lane: "steer",
+    title: "Steer",
+    hint: "at the next turn",
+    readyIcon: "◆",
+    laterIcon: "◇",
+    boxClassName: "border-amber-500/40 bg-amber-500/5",
+    titleClassName: "text-amber-700 dark:text-amber-300",
+    selectedClassName: "bg-amber-500/10 ring-1 ring-amber-500/50",
+  },
+  {
+    lane: "followUp",
+    title: "Follow-up",
+    hint: "after the run",
+    readyIcon: "●",
+    laterIcon: "○",
+    boxClassName: "border-sky-500/40 bg-sky-500/5",
+    titleClassName: "text-sky-700 dark:text-sky-300",
+    selectedClassName: "bg-sky-500/10 ring-1 ring-sky-500/50",
+  },
+]
+
+function rowIcon(
+  row: QueueEditRow,
+  index: number,
+  lane: (typeof LANES)[number],
+  options: { selected: boolean; paused: boolean }
+) {
+  if (row.removed) return "×"
+  if (options.selected) return "›"
+  if (options.paused) return "⏸"
+  return index === 0 ? lane.readyIcon : lane.laterIcon
 }
 
-type PendingMessageEditAction =
-  | { type: "begin"; message: PendingComposerMessage }
-  | { type: "cancel" }
-  | { type: "text"; text: string }
-  | { type: "error"; error: string }
-
-const EMPTY_PENDING_MESSAGE_EDIT_STATE: PendingMessageEditState = {
-  editingPendingId: null,
-  editText: "",
-  editError: null,
+function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {
+  if (textarea.selectionStart !== textarea.selectionEnd) return false
+  return !textarea.value.slice(0, textarea.selectionStart).includes("\n")
 }
 
-function pendingMessageEditReducer(
-  state: PendingMessageEditState,
-  action: PendingMessageEditAction
-): PendingMessageEditState {
-  switch (action.type) {
-    case "begin":
-      return {
-        editingPendingId: action.message.pendingId,
-        editText: action.message.text,
-        editError: null,
-      }
-    case "cancel":
-      return EMPTY_PENDING_MESSAGE_EDIT_STATE
-    case "text":
-      return {
-        ...state,
-        editText: action.text,
-        editError: state.editError ? null : state.editError,
-      }
-    case "error":
-      return { ...state, editError: action.error }
-  }
+function isCaretOnLastLine(textarea: HTMLTextAreaElement) {
+  if (textarea.selectionStart !== textarea.selectionEnd) return false
+  return !textarea.value.slice(textarea.selectionEnd).includes("\n")
 }
 
 export const ComposerPendingMessages = React.memo(
   function ComposerPendingMessages({
     currentPendingMessages,
     canStartQueue,
-    onEditPendingMessage,
-    onRemovePendingMessage,
-    onReorderPending,
+    isStreaming,
+    onSavePendingQueue,
     onStartPendingQueue,
+    onExitEditing,
+    ref,
   }: ComposerPendingMessagesProps) {
-    const [editState, dispatchEditState] = React.useReducer(
-      pendingMessageEditReducer,
-      EMPTY_PENDING_MESSAGE_EDIT_STATE
+    const [session, setSession] = React.useState<QueueEditSession | null>(null)
+    const editorRef = React.useRef<HTMLTextAreaElement | null>(null)
+    // A move to the other lane mounts a new editor. Keep the focus and caret.
+    const attachEditor = React.useCallback(
+      (node: HTMLTextAreaElement | null) => {
+        // Keep the last editor on unmount, to read its caret.
+        if (!node) return
+        const previous = editorRef.current
+        editorRef.current = node
+        if (!previous || previous === node) return
+        if (previous.isConnected && previous !== document.activeElement) return
+        const { selectionStart, selectionEnd } = previous
+        node.focus({ preventScroll: true })
+        node.setSelectionRange(selectionStart, selectionEnd)
+        node.scrollIntoView({ block: "nearest" })
+      },
+      []
     )
-    const [openSections, setOpenSections] = React.useState<Array<string>>([])
-    const { editingPendingId, editText, editError } = editState
+    const sessionRef = React.useRef(session)
+    React.useLayoutEffect(() => {
+      sessionRef.current = session
+    }, [session])
 
-    const editingMessage = editingPendingId
-      ? currentPendingMessages.find(
-          (message) => message.pendingId === editingPendingId
-        )
+    // Keep an open session in step with prompts that were sent or queued.
+    React.useEffect(() => {
+      setSession((current) => {
+        if (!current) return current
+        const next = mergeQueueSession(current, currentPendingMessages)
+        return next.rows.length === 0 ? null : next
+      })
+    }, [currentPendingMessages])
+
+    const selectedKey = session?.selectedKey
+    const caret = session?.caret
+    React.useLayoutEffect(() => {
+      const editor = editorRef.current
+      if (!editor || !selectedKey) return
+      editor.focus({ preventScroll: true })
+      const position = caret === "start" ? 0 : editor.value.length
+      editor.setSelectionRange(position, position)
+      editor.scrollIntoView({ block: "nearest" })
+    }, [selectedKey, caret])
+
+    const begin = React.useCallback(
+      (key: string | undefined) => {
+        if (!key) return false
+        setSession({
+          rows: queueRowsFromMessages(currentPendingMessages),
+          selectedKey: key,
+          caret: "end",
+        })
+        return true
+      },
+      [currentPendingMessages]
+    )
+
+    const end = React.useCallback(() => {
+      setSession(null)
+      onExitEditing()
+    }, [onExitEditing])
+
+    const save = React.useCallback(() => {
+      const current = sessionRef.current
+      if (!current) return
+      if (hasQueueChanges(current)) {
+        const plan = queueSessionSavePlan(current)
+        onSavePendingQueue(plan.rows, plan.removedPendingIds)
+      }
+      end()
+    }, [end, onSavePendingQueue])
+
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        beginEditing: () => begin(mostRecentQueueKey(currentPendingMessages)),
+        runEmptyEnter: () => {
+          if (sessionRef.current || currentPendingMessages.length === 0) {
+            return false
+          }
+          if (canStartQueue) {
+            onStartPendingQueue()
+            return true
+          }
+          if (!isStreaming) return false
+
+          const rows = queueRowsFromMessages(currentPendingMessages)
+          const oldest = laneRows(rows, "followUp")[0]
+          if (!oldest) return false
+          const next = moveQueueRow(rows, oldest.key, -1)
+          if (!next) return false
+          onSavePendingQueue(
+            next.map((row) => ({
+              ...(row.pendingId ? { pendingId: row.pendingId } : {}),
+              text: row.text,
+              images: row.images,
+              streamingBehavior: row.lane,
+            })),
+            []
+          )
+          return true
+        },
+      }),
+      [
+        begin,
+        canStartQueue,
+        currentPendingMessages,
+        isStreaming,
+        onSavePendingQueue,
+        onStartPendingQueue,
+      ]
+    )
+
+    if (currentPendingMessages.length === 0 && !session) return null
+
+    const rows = session?.rows ?? queueRowsFromMessages(currentPendingMessages)
+    const unsaved = session ? hasQueueChanges(session) : false
+    const selectedRow = session
+      ? rows.find((row) => row.key === session.selectedKey)
       : undefined
 
-    React.useEffect(() => {
-      if (!editingPendingId) return
-      if (editingMessage) return
-      dispatchEditState({ type: "cancel" })
-    }, [editingMessage, editingPendingId])
-
-    if (currentPendingMessages.length === 0) {
-      return null
+    const updateSession = (
+      update: (current: QueueEditSession) => QueueEditSession | null
+    ) => {
+      setSession((current) => (current ? update(current) : current))
     }
 
-    const beginEdit = (message: PendingComposerMessage) => {
-      dispatchEditState({ type: "begin", message })
+    const select = (key: string, nextCaret: "start" | "end") => {
+      if (!session) {
+        begin(key)
+        return
+      }
+      updateSession((current) => ({
+        ...current,
+        selectedKey: key,
+        caret: nextCaret,
+      }))
     }
 
-    const cancelEdit = () => {
-      dispatchEditState({ type: "cancel" })
+    const selectAdjacent = (direction: -1 | 1) => {
+      if (!session) return false
+      const index = rows.findIndex((row) => row.key === session.selectedKey)
+      const target = rows[index + direction]
+      if (!target) return false
+      select(target.key, direction === -1 ? "end" : "start")
+      return true
     }
 
-    const saveEdit = (message: PendingComposerMessage) => {
-      if (!editText.trim() && message.images.length === 0) {
-        dispatchEditState({
-          type: "error",
-          error: "Enter a message or keep at least one image.",
-        })
+    const move = (key: string, direction: -1 | 1) => {
+      updateSession((current) => {
+        const next = moveQueueRow(current.rows, key, direction)
+        return next ? { ...current, rows: next, selectedKey: key } : current
+      })
+    }
+
+    const insert = (key: string, direction: -1 | 1) => {
+      updateSession((current) => {
+        const next = insertQueueRow(current.rows, key, direction)
+        return next
+          ? { rows: next.rows, selectedKey: next.key, caret: "end" }
+          : current
+      })
+    }
+
+    const append = (lane: QueueLane) => {
+      if (!session) {
+        const next = appendQueueRow(
+          queueRowsFromMessages(currentPendingMessages),
+          lane
+        )
+        setSession({ rows: next.rows, selectedKey: next.key, caret: "end" })
+        return
+      }
+      updateSession((current) => {
+        const next = appendQueueRow(current.rows, lane)
+        return { rows: next.rows, selectedKey: next.key, caret: "end" }
+      })
+    }
+
+    const toggleRemove = (key: string) => {
+      updateSession((current) => ({
+        ...current,
+        rows: current.rows.map((row) =>
+          row.key === key ? { ...row, removed: !row.removed } : row
+        ),
+      }))
+    }
+
+    const setText = (key: string, text: string) => {
+      updateSession((current) => ({
+        ...current,
+        rows: current.rows.map((row) =>
+          row.key === key ? { ...row, text } : row
+        ),
+      }))
+    }
+
+    const handleEditorKeyDown = (
+      event: React.KeyboardEvent<HTMLTextAreaElement>,
+      row: QueueEditRow
+    ) => {
+      if (event.nativeEvent.isComposing) return
+      const textarea = event.currentTarget
+      const arrow =
+        event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0
+      const handled = () => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+
+      if (arrow && event.altKey && !event.metaKey && !event.ctrlKey) {
+        handled()
+        if (event.shiftKey) insert(row.key, arrow)
+        else move(row.key, arrow)
         return
       }
 
-      onEditPendingMessage(message.pendingId, editText)
-      cancelEdit()
+      if (
+        arrow &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        (arrow === -1
+          ? isCaretOnFirstLine(textarea)
+          : isCaretOnLastLine(textarea))
+      ) {
+        if (selectAdjacent(arrow)) handled()
+        return
+      }
+
+      if (
+        event.code === "KeyX" &&
+        event.altKey &&
+        !event.metaKey &&
+        !event.ctrlKey
+      ) {
+        handled()
+        toggleRemove(row.key)
+        return
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        handled()
+        save()
+        return
+      }
+
+      if (event.key === "Escape") {
+        handled()
+        end()
+      }
     }
 
+    const firstLane = rows[0]?.lane
+    const selectedLane = selectedRow
+      ? laneRows(rows, selectedRow.lane)
+      : undefined
+
     return (
-      <Accordion
-        multiple
-        value={openSections}
-        onValueChange={setOpenSections}
-        className="rounded-2xl border bg-card"
+      <div
+        className="flex max-h-[min(45vh,420px)] flex-col gap-1.5 overflow-y-auto"
+        data-queue-editing={session ? "true" : undefined}
       >
-        <AccordionItem value="pending-prompts" className="border-0">
-          <div
-            className={`flex min-h-10 items-center gap-2 ${canStartQueue ? "pr-3" : ""}`}
-          >
-            <AccordionTrigger
-              headerClassName="min-w-0 flex-1 self-stretch"
-              className="min-h-10 items-center rounded-2xl px-3 py-2 hover:no-underline"
+        {LANES.map((lane) => {
+          const items = laneRows(rows, lane.lane)
+          if (items.length === 0 && !session) return null
+
+          return (
+            <section
+              key={lane.lane}
+              aria-label={`${lane.title} queue`}
+              className={cn(
+                "rounded-xl border px-1.5 pb-1.5",
+                lane.boxClassName
+              )}
             >
-              <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                <span className="truncate">Queue</span>
-                <Badge variant="outline" className="shrink-0">
-                  {currentPendingMessages.length}
-                </Badge>
+              <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
+                <span className={cn("font-medium", lane.titleClassName)}>
+                  {lane.title}
+                </span>
+                <span className="text-muted-foreground">
+                  {items.length} · {lane.hint}
+                </span>
+                <span className="ml-auto flex items-center gap-1">
+                  {!session && lane.lane === firstLane ? (
+                    <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
+                      <Kbd>Alt+↑</Kbd> edit
+                    </span>
+                  ) : null}
+                  {lane.lane === "followUp" && canStartQueue ? (
+                    <>
+                      <span className="text-muted-foreground">⏸ Paused</span>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={onStartPendingQueue}
+                      >
+                        Resume
+                      </Button>
+                    </>
+                  ) : null}
+                  {session ? (
+                    <Button
+                      size="icon-xs"
+                      variant="ghost"
+                      title={`Add a ${lane.title.toLowerCase()} row`}
+                      onClick={() => append(lane.lane)}
+                    >
+                      <PlusIcon />
+                    </Button>
+                  ) : null}
+                </span>
+              </div>
+
+              {items.length === 0 ? (
+                <div className="px-1.5 pb-1 text-xs text-muted-foreground">
+                  Empty. Move a row here with{" "}
+                  <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
+                </div>
+              ) : (
+                <ol className="flex flex-col gap-0.5">
+                  {items.map((row, index) => {
+                    const selected = row.key === session?.selectedKey
+                    const icon = rowIcon(row, index, lane, {
+                      selected,
+                      paused: canStartQueue,
+                    })
+                    const changed = session ? isQueueRowChanged(row) : false
+
+                    return (
+                      <li
+                        key={row.key}
+                        className={cn(
+                          "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
+                          selected
+                            ? lane.selectedClassName
+                            : "cursor-text hover:bg-foreground/5"
+                        )}
+                        onMouseDown={(event) => {
+                          if (selected) return
+                          event.preventDefault()
+                          select(row.key, "end")
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "w-3.5 shrink-0 text-center leading-6 select-none",
+                            row.removed
+                              ? "text-destructive"
+                              : lane.titleClassName
+                          )}
+                        >
+                          {icon}
+                        </span>
+
+                        <div className="min-w-0 flex-1">
+                          {selected ? (
+                            <textarea
+                              ref={attachEditor}
+                              value={row.text}
+                              rows={1}
+                              aria-label={`Edit ${lane.title.toLowerCase()} prompt ${index + 1}`}
+                              placeholder={
+                                row.images.length > 0
+                                  ? "Optional text for this image prompt"
+                                  : "Type a prompt"
+                              }
+                              className={cn(
+                                "block field-sizing-content max-h-60 min-h-6 w-full resize-none bg-transparent leading-6 outline-none placeholder:text-muted-foreground",
+                                row.removed && "line-through opacity-60"
+                              )}
+                              onChange={(event) =>
+                                setText(row.key, event.target.value)
+                              }
+                              onKeyDown={(event) =>
+                                handleEditorKeyDown(event, row)
+                              }
+                            />
+                          ) : (
+                            <div
+                              className={cn(
+                                "line-clamp-2 leading-6 break-words whitespace-pre-wrap",
+                                row.removed &&
+                                  "text-muted-foreground line-through",
+                                !row.text && "text-muted-foreground italic"
+                              )}
+                            >
+                              {row.text ||
+                                (row.images.length > 0
+                                  ? "Image prompt"
+                                  : "Empty prompt")}
+                            </div>
+                          )}
+
+                          {row.images.length > 0 ||
+                          (changed && (row.moved || row.isNew)) ? (
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              {row.images.length > 0 ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <ImageIcon className="size-3" />
+                                  {row.images.length}
+                                </span>
+                              ) : null}
+                              {row.isNew ? <span>new</span> : null}
+                              {row.moved && !row.isNew ? (
+                                <span>saves in new position</span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {selected ? (
+                          <span className="flex shrink-0 items-center">
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              title="Move up"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => move(row.key, -1)}
+                            >
+                              <ArrowUpIcon />
+                            </Button>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              title="Move down"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => move(row.key, 1)}
+                            >
+                              <ArrowDownIcon />
+                            </Button>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              title={row.removed ? "Keep" : "Remove"}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => toggleRemove(row.key)}
+                            >
+                              {row.removed ? <Undo2Icon /> : <Trash2Icon />}
+                            </Button>
+                          </span>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
+            </section>
+          )
+        })}
+
+        {session ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
+            <span className="hidden flex-wrap items-center gap-x-3 gap-y-1 md:flex">
+              <span className="inline-flex items-center gap-1">
+                <Kbd>↑↓</Kbd> select
               </span>
-            </AccordionTrigger>
-            {canStartQueue ? (
-              <Button size="sm" onClick={onStartPendingQueue}>
-                Start
-              </Button>
+              <span className="inline-flex items-center gap-1">
+                <Kbd>Alt+↑↓</Kbd> move
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Kbd>Shift+Alt+↑↓</Kbd> insert
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Kbd>Alt+X</Kbd> remove
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Kbd>Enter</Kbd> save
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Kbd>Esc</Kbd> cancel
+              </span>
+            </span>
+            {selectedRow && selectedLane ? (
+              <span>
+                {selectedRow.lane === "steer" ? "steer" : "follow-up"}{" "}
+                {selectedLane.indexOf(selectedRow) + 1}/{selectedLane.length}
+                {unsaved ? " • unsaved" : ""}
+              </span>
             ) : null}
+            <span className="ml-auto flex items-center gap-1">
+              <Button
+                size="xs"
+                variant="ghost"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={end}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="xs"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={save}
+              >
+                Save
+              </Button>
+            </span>
           </div>
-
-          <AccordionContent className="p-0">
-            <div className="max-h-[min(34vh,320px)] overflow-y-auto border-t">
-              {groupPendingMessages(currentPendingMessages).map((section) => (
-                <section
-                  key={section.title}
-                  className="border-border/70 not-first:border-t"
-                >
-                  <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card px-3 pt-3 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                    <span>{section.title}</span>
-                    <span>{section.items.length}</span>
-                  </div>
-
-                  <div className="flex flex-col gap-2 px-3 pb-3">
-                    {section.items.length > 0 ? (
-                      section.items.map((message, index) => {
-                        const isSteer = message.streamingBehavior === "steer"
-                        const moveUpDisabled = isSteer && index === 0
-                        const moveDownDisabled =
-                          !isSteer && index === section.items.length - 1
-
-                        return (
-                          <div
-                            key={message.pendingId}
-                            className="rounded-xl border bg-muted/25 p-2.5"
-                          >
-                            {editingPendingId === message.pendingId ? (
-                              <div className="space-y-2">
-                                <Textarea
-                                  value={editText}
-                                  className="min-h-20 resize-none text-base md:text-base"
-                                  placeholder={
-                                    message.images.length > 0
-                                      ? "Optional text for this image prompt"
-                                      : "Edit queued message"
-                                  }
-                                  aria-invalid={Boolean(editError)}
-                                  onChange={(event) => {
-                                    dispatchEditState({
-                                      type: "text",
-                                      text: event.target.value,
-                                    })
-                                  }}
-                                  onKeyDown={(event) => {
-                                    if (
-                                      (event.metaKey || event.ctrlKey) &&
-                                      event.key === "Enter"
-                                    ) {
-                                      event.preventDefault()
-                                      saveEdit(message)
-                                    }
-
-                                    if (event.key === "Escape") {
-                                      event.preventDefault()
-                                      cancelEdit()
-                                    }
-                                  }}
-                                />
-                                {editError ? (
-                                  <div className="text-xs text-destructive">
-                                    {editError}
-                                  </div>
-                                ) : null}
-                                {message.images.length > 0 ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {message.images.length} image
-                                    {message.images.length === 1
-                                      ? ""
-                                      : "s"}{" "}
-                                    kept
-                                  </div>
-                                ) : null}
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => saveEdit(message)}
-                                  >
-                                    Save
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={cancelEdit}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="line-clamp-3 text-sm">
-                                  {message.text ||
-                                    (isSteer
-                                      ? "Steer image prompt"
-                                      : "Follow-up image prompt")}
-                                </div>
-                                {message.images.length > 0 ? (
-                                  <div className="mt-2 text-xs text-muted-foreground">
-                                    {message.images.length} image
-                                    {message.images.length === 1 ? "" : "s"}
-                                  </div>
-                                ) : null}
-                                <div className="mt-2 flex items-center gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={moveUpDisabled}
-                                    title={
-                                      isSteer
-                                        ? "Move up"
-                                        : "Move up or promote to steer"
-                                    }
-                                    onClick={() =>
-                                      onReorderPending(message.pendingId, -1)
-                                    }
-                                  >
-                                    ↑
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={moveDownDisabled}
-                                    title={
-                                      isSteer
-                                        ? "Move down or demote to follow-up"
-                                        : "Move down"
-                                    }
-                                    onClick={() =>
-                                      onReorderPending(message.pendingId, 1)
-                                    }
-                                  >
-                                    ↓
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => beginEdit(message)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      onRemovePendingMessage(message.pendingId)
-                                    }
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-                        {section.emptyLabel}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+        ) : null}
+      </div>
     )
   }
 )

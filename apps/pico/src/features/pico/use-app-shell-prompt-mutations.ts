@@ -5,7 +5,6 @@ import { toast } from "sonner"
 import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
 import type {
   DirectoryResolveResponse,
-  PendingMessageRemoveResponse,
   PendingMessagesResponse,
   PromptResponse,
   SessionNewResponse,
@@ -30,6 +29,7 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
 import { MachineOfflineError } from "@/lib/pico/machine"
 import {
   DRAFT_DIRECTORY_STORAGE_KEY,
@@ -360,66 +360,6 @@ function buildOfflinePromptBody(item: OfflinePromptQueueItem) {
   }
 }
 
-function isPendingPromptNotFoundError(error: unknown) {
-  return (
-    error instanceof Error &&
-    error.message.toLowerCase().includes("pending prompt not found")
-  )
-}
-
-function movePendingComposerMessage(
-  messages: Array<PendingComposerMessage>,
-  pendingId: string,
-  direction: -1 | 1
-) {
-  const index = messages.findIndex((entry) => entry.pendingId === pendingId)
-  if (index === -1) return null
-
-  const item = messages[index]
-  if (!item) return null
-
-  const next = [...messages]
-  const targetIndex = index + direction
-  const target = next[targetIndex]
-
-  if (direction === -1) {
-    if (item.streamingBehavior === "followUp" && !target) {
-      next[index] = { ...item, streamingBehavior: "steer" }
-      return next
-    }
-
-    if (
-      item.streamingBehavior === "followUp" &&
-      target.streamingBehavior === "steer"
-    ) {
-      next[index] = { ...item, streamingBehavior: "steer" }
-      return next
-    }
-  }
-
-  if (direction === 1) {
-    if (item.streamingBehavior === "steer" && !target) {
-      next[index] = { ...item, streamingBehavior: "followUp" }
-      return next
-    }
-
-    if (
-      item.streamingBehavior === "steer" &&
-      target.streamingBehavior === "followUp"
-    ) {
-      next[index] = { ...item, streamingBehavior: "followUp" }
-      return next
-    }
-  }
-
-  if (!target) return null
-
-  const [movedItem] = next.splice(index, 1)
-  if (!movedItem) return null
-  next.splice(targetIndex, 0, movedItem)
-  return next
-}
-
 export function useAppShellPromptMutations({
   viewerContextId,
   activeSessionId,
@@ -529,21 +469,6 @@ export function useAppShellPromptMutations({
       updatePendingMessages((current) =>
         current.filter((entry) => entry.pendingId !== pendingId)
       )
-    },
-    [updatePendingMessages]
-  )
-
-  const restoreOptimisticPendingMessage = React.useCallback(
-    (message: PendingComposerMessage, index: number) => {
-      updatePendingMessages((current) => {
-        if (current.some((entry) => entry.pendingId === message.pendingId)) {
-          return current
-        }
-
-        const next = [...current]
-        next.splice(Math.max(0, Math.min(index, next.length)), 0, message)
-        return next
-      })
     },
     [updatePendingMessages]
   )
@@ -1544,13 +1469,19 @@ export function useAppShellPromptMutations({
     }
   }, [abortSessionMutation, viewerContextId])
 
-  const editPendingMessagesMutation = useMutation({
-    mutationFn: async (nextPendingMessages: Array<PendingComposerMessage>) => {
+  const savePendingQueueMutation = useMutation({
+    mutationFn: async ({
+      rows,
+      removedPendingIds,
+    }: {
+      rows: Array<PendingQueueSaveRow>
+      removedPendingIds: Array<string>
+    }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<PendingMessagesResponse>(
+      return await fetchJson<PendingMessagesResponse & { missed?: number }>(
         buildCurrentSessionRequestUrl("/api/pending-messages/reorder", {
           machineId,
           contextId: viewerContextId,
@@ -1560,7 +1491,25 @@ export function useAppShellPromptMutations({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingMessages: nextPendingMessages }),
+          body: JSON.stringify({
+            pendingMessages: rows.map((row) =>
+              row.pendingId
+                ? {
+                    pendingId: row.pendingId,
+                    text: row.text,
+                    streamingBehavior: row.streamingBehavior,
+                  }
+                : {
+                    text: row.text,
+                    images: row.images.map(({ mimeType, data }) => ({
+                      mimeType,
+                      data,
+                    })),
+                    streamingBehavior: row.streamingBehavior,
+                  }
+            ),
+            removedPendingIds,
+          }),
         }
       )
     },
@@ -1575,42 +1524,52 @@ export function useAppShellPromptMutations({
     },
   })
 
-  const editPendingMessage = React.useCallback(
-    async (pendingId: string, text: string) => {
+  /** Save a whole queue edit: text, order, lanes, new rows, and removals. */
+  const savePendingQueue = React.useCallback(
+    async (
+      rows: Array<PendingQueueSaveRow>,
+      removedPendingIds: Array<string>
+    ) => {
       if (!viewerContextId) return
+      if (rows.length === 0 && removedPendingIds.length === 0) return
 
       const previous = pendingMessagesRef.current
-      const existing = previous.find((entry) => entry.pendingId === pendingId)
-      if (!existing) return
-
-      if (!text.trim() && existing.images.length === 0) {
-        toast.error("Enter a message or keep at least one image")
-        return
-      }
-
-      const next = previous.map((entry) =>
-        entry.pendingId === pendingId ? { ...entry, text } : entry
-      )
-      updatePendingMessages((current) =>
-        current.map((entry) =>
-          entry.pendingId === pendingId ? { ...entry, text } : entry
-        )
+      updatePendingMessages(() =>
+        rows.map((row) => ({
+          pendingId: row.pendingId ?? createLocalPendingId(),
+          text: row.text,
+          images: row.images,
+          streamingBehavior: row.streamingBehavior,
+        }))
       )
 
       try {
-        await editPendingMessagesMutation.mutateAsync(next)
+        const response = await savePendingQueueMutation.mutateAsync({
+          rows,
+          removedPendingIds,
+        })
+        const nextPendingMessages = pendingMessagesFromResponse(response)
+        if (nextPendingMessages) {
+          updatePendingMessages(() => nextPendingMessages)
+        }
+        const missed = "missed" in response ? (response.missed ?? 0) : 0
+        if (missed > 0) {
+          toast.warning(
+            missed === 1
+              ? "1 queued prompt was sent before the save."
+              : `${missed} queued prompts were sent before the save.`
+          )
+        }
       } catch (error) {
         updatePendingMessages(() => previous)
         toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update pending prompt"
+          error instanceof Error ? error.message : "Failed to update the queue"
         )
       }
     },
     [
-      editPendingMessagesMutation,
       pendingMessagesRef,
+      savePendingQueueMutation,
       updatePendingMessages,
       viewerContextId,
     ]
@@ -1669,107 +1628,11 @@ export function useAppShellPromptMutations({
     viewerContextId,
   ])
 
-  const removePendingMessageMutation = useMutation({
-    mutationFn: async (pendingId: string) => {
-      if (!viewerContextId) {
-        throw new Error("Viewer context unavailable")
-      }
-
-      return await fetchJson<PendingMessageRemoveResponse>(
-        buildCurrentSessionRequestUrl("/api/pending-message/remove", {
-          machineId,
-          contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ pendingId }),
-        }
-      )
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.sessionTree(
-          viewerContextId,
-          picoSessionScopeKey(sessionStateRef.current)
-        ),
-        refetchType: "active",
-      })
-    },
-  })
-
-  const removePendingMessage = React.useCallback(
-    async (pendingId: string) => {
-      if (!viewerContextId) return
-
-      const previousIndex = pendingMessagesRef.current.findIndex(
-        (entry) => entry.pendingId === pendingId
-      )
-      const previousMessage = pendingMessagesRef.current[previousIndex]
-      removeOptimisticPendingMessage(pendingId)
-
-      try {
-        await removePendingMessageMutation.mutateAsync(pendingId)
-      } catch (error) {
-        if (isPendingPromptNotFoundError(error)) {
-          return
-        }
-
-        if (previousMessage) {
-          restoreOptimisticPendingMessage(previousMessage, previousIndex)
-        }
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to remove pending prompt"
-        )
-      }
-    },
-    [
-      removeOptimisticPendingMessage,
-      removePendingMessageMutation,
-      restoreOptimisticPendingMessage,
-      viewerContextId,
-    ]
-  )
-
-  const reorderPending = React.useCallback(
-    async (pendingId: string, direction: -1 | 1) => {
-      if (!viewerContextId) return
-      const previous = pendingMessagesRef.current
-      const next = movePendingComposerMessage(previous, pendingId, direction)
-      if (!next) return
-
-      updatePendingMessages(() => next)
-
-      try {
-        await editPendingMessagesMutation.mutateAsync(next)
-      } catch (error) {
-        updatePendingMessages(() => previous)
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update pending prompts"
-        )
-      }
-    },
-    [
-      editPendingMessagesMutation,
-      pendingMessagesRef,
-      updatePendingMessages,
-      viewerContextId,
-    ]
-  )
-
   return {
     abortSession,
     addDirectoryPath,
     createSession,
-    editPendingMessage,
-    removePendingMessage,
-    reorderPending,
+    savePendingQueue,
     startPendingQueue,
     submitPrompt,
   }

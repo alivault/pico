@@ -38,6 +38,7 @@ import {
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
 import {
   useMachineReadOnly,
   useMachines,
@@ -584,27 +585,11 @@ export const AppShellComposerController = React.memo(
       if (snapshotRef.current.disabled) return
       void actionsRef.current.abortSession()
     })
-    const onEditPendingMessage = useStableEvent(
-      (pendingId: string, text: string) => {
+    const onSavePendingQueue = useStableEvent(
+      (rows: Array<PendingQueueSaveRow>, removedPendingIds: Array<string>) => {
         if (snapshotRef.current.disabled) return
-        if (actionsRef.current.editPendingDraftFollowUp(pendingId, text)) return
-        void actionsRef.current.editPendingMessage(pendingId, text)
-      }
-    )
-    const onRemovePendingMessage = useStableEvent((pendingId: string) => {
-      if (snapshotRef.current.disabled) return
-      if (actionsRef.current.removePendingDraftFollowUp(pendingId)) return
-      void actionsRef.current.removePendingMessage(pendingId)
-    })
-    const onReorderPending = useStableEvent(
-      (pendingId: string, direction: -1 | 1) => {
-        if (snapshotRef.current.disabled) return
-        if (
-          actionsRef.current.reorderPendingDraftFollowUp(pendingId, direction)
-        ) {
-          return
-        }
-        void actionsRef.current.reorderPending(pendingId, direction)
+        const serverRows = actionsRef.current.savePendingDraftFollowUps(rows)
+        void actionsRef.current.savePendingQueue(serverRows, removedPendingIds)
       }
     )
     const onStartPendingQueue = useStableEvent(() => {
@@ -696,9 +681,7 @@ export const AppShellComposerController = React.memo(
         onRemoveComposerImage={onRemoveComposerImage}
         onSubmitPrompt={onSubmitPrompt}
         onAbort={onAbort}
-        onEditPendingMessage={onEditPendingMessage}
-        onRemovePendingMessage={onRemovePendingMessage}
-        onReorderPending={onReorderPending}
+        onSavePendingQueue={onSavePendingQueue}
         onStartPendingQueue={onStartPendingQueue}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
         onSelectModel={onSelectModel}

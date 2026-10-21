@@ -27,7 +27,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
-import { ComposerPendingMessages } from "@/features/pico/composer-pending-messages"
+import {
+  ComposerPendingMessages,
+  type ComposerPendingMessagesHandle,
+} from "@/features/pico/composer-pending-messages"
+import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
 import { ComposerPickers } from "@/features/pico/composer-pickers"
 import {
   appShortcut,
@@ -97,9 +101,10 @@ type ComposerPanelProps = {
   onRemoveComposerImage: (index: number) => void
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
-  onEditPendingMessage: (pendingId: string, text: string) => void
-  onRemovePendingMessage: (pendingId: string) => void
-  onReorderPending: (pendingId: string, direction: -1 | 1) => void
+  onSavePendingQueue: (
+    rows: Array<PendingQueueSaveRow>,
+    removedPendingIds: Array<string>
+  ) => void
   onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
   onSelectModel: (value: string) => void
@@ -130,6 +135,7 @@ type ComposerPromptEditorProps = {
   disabled?: boolean
   fileInputRef: React.RefObject<HTMLInputElement | null>
   promptRef: React.RefObject<HTMLTextAreaElement | null>
+  queueRef: React.RefObject<ComposerPendingMessagesHandle | null>
   displaySettingsStore: ComposerDisplaySettingsStore
   sessionStore: ComposerSessionStore
   onComposerTextChange: (value: string) => void
@@ -372,9 +378,7 @@ export function ComposerPanel({
   onRemoveComposerImage,
   onSubmitPrompt,
   onAbort,
-  onEditPendingMessage,
-  onRemovePendingMessage,
-  onReorderPending,
+  onSavePendingQueue,
   onStartPendingQueue,
   onRunBuiltinSlashCommand,
   onSelectModel,
@@ -386,6 +390,10 @@ export function ComposerPanel({
   ref?: React.Ref<ComposerPanelHandle>
 }) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const queueRef = React.useRef<ComposerPendingMessagesHandle | null>(null)
+  const focusPrompt = React.useCallback(() => {
+    promptRef.current?.focus()
+  }, [])
   const [pickerState, dispatchPickerState] = React.useReducer(
     composerPickerReducer,
     INITIAL_COMPOSER_PICKER_STATE
@@ -425,12 +433,13 @@ export function ComposerPanel({
         {topContent}
 
         <ComposerPendingMessages
+          ref={queueRef}
           currentPendingMessages={currentPendingMessages}
           canStartQueue={canStartPendingQueue}
-          onEditPendingMessage={onEditPendingMessage}
-          onRemovePendingMessage={onRemovePendingMessage}
-          onReorderPending={onReorderPending}
+          isStreaming={isStreaming}
+          onSavePendingQueue={onSavePendingQueue}
           onStartPendingQueue={onStartPendingQueue}
+          onExitEditing={focusPrompt}
         />
 
         <div className="overflow-visible rounded-[18px] border bg-card">
@@ -447,6 +456,7 @@ export function ComposerPanel({
             disabled={disabled}
             fileInputRef={fileInputRef}
             promptRef={promptRef}
+            queueRef={queueRef}
             displaySettingsStore={displaySettingsStore}
             sessionStore={sessionStore}
             onComposerTextChange={onComposerTextChange}
@@ -554,6 +564,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   disabled = false,
   fileInputRef,
   promptRef,
+  queueRef,
   displaySettingsStore,
   sessionStore,
   onComposerTextChange,
@@ -916,6 +927,21 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     }
 
     if (
+      event.key === "ArrowUp" &&
+      event.altKey &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !visibleCompletion &&
+      !slashMenuState &&
+      queueRef.current?.beginEditing()
+    ) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+
+    if (
       event.key === "Enter" &&
       !event.shiftKey &&
       !event.nativeEvent.isComposing
@@ -923,6 +949,18 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       if (visibleCompletion && selectedCompletionItem) {
         event.preventDefault()
         applyCompletion(selectedCompletionItem)
+        return
+      }
+
+      if (
+        !event.altKey &&
+        !draftText.trim() &&
+        !currentDraftSkill &&
+        composerImages.length === 0 &&
+        composerDiffLineComments.length === 0 &&
+        queueRef.current?.runEmptyEnter()
+      ) {
+        event.preventDefault()
         return
       }
 

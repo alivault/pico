@@ -6,6 +6,7 @@ import {
   type StreamingBehavior,
 } from "@/lib/pico"
 import type { GitCommitDiffMode } from "@/lib/pico/api"
+import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
 
 export type PendingComposerMessage = {
   pendingId: string
@@ -26,62 +27,6 @@ export function pendingDraftFollowUpId(
   index: number
 ) {
   return message.optimisticId || `pending-draft:${index}`
-}
-
-export function movePendingDraftFollowUpMessage(
-  messages: Array<PendingDraftFollowUp>,
-  pendingId: string,
-  direction: -1 | 1
-) {
-  const index = messages.findIndex(
-    (message, messageIndex) =>
-      pendingDraftFollowUpId(message, messageIndex) === pendingId
-  )
-  if (index === -1) return null
-
-  const item = messages[index]
-  if (!item) return null
-
-  const next = [...messages]
-  const targetIndex = index + direction
-  const target = next[targetIndex]
-
-  if (direction === -1) {
-    if (item.streamingBehavior === "followUp" && !target) {
-      next[index] = { ...item, streamingBehavior: "steer" }
-      return next
-    }
-
-    if (
-      item.streamingBehavior === "followUp" &&
-      target.streamingBehavior === "steer"
-    ) {
-      next[index] = { ...item, streamingBehavior: "steer" }
-      return next
-    }
-  }
-
-  if (direction === 1) {
-    if (item.streamingBehavior === "steer" && !target) {
-      next[index] = { ...item, streamingBehavior: "followUp" }
-      return next
-    }
-
-    if (
-      item.streamingBehavior === "steer" &&
-      target.streamingBehavior === "followUp"
-    ) {
-      next[index] = { ...item, streamingBehavior: "followUp" }
-      return next
-    }
-  }
-
-  if (!target) return null
-
-  const [movedItem] = next.splice(index, 1)
-  if (!movedItem) return null
-  next.splice(targetIndex, 0, movedItem)
-  return next
 }
 
 export type ComposerDiffLineComment = {
@@ -224,20 +169,16 @@ export type AppShellComposerActions = {
   abortSession: () => void | Promise<unknown>
   onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
   onRemoveComposerImage: (index: number) => void
-  editPendingDraftFollowUp: (pendingId: string, text: string) => boolean
-  editPendingMessage: (
-    pendingId: string,
-    text: string
-  ) => void | Promise<unknown>
   removeDiffLineComment: (id: string) => void
-  removePendingDraftFollowUp: (pendingId: string) => boolean
-  removePendingMessage: (pendingId: string) => void | Promise<unknown>
-  startPendingQueue: () => void | Promise<unknown>
-  reorderPending: (
-    pendingId: string,
-    direction: -1 | 1
+  /** Save the draft follow-up rows and return the rows for the server. */
+  savePendingDraftFollowUps: (
+    rows: Array<PendingQueueSaveRow>
+  ) => Array<PendingQueueSaveRow>
+  savePendingQueue: (
+    rows: Array<PendingQueueSaveRow>,
+    removedPendingIds: Array<string>
   ) => void | Promise<unknown>
-  reorderPendingDraftFollowUp: (pendingId: string, direction: -1 | 1) => boolean
+  startPendingQueue: () => void | Promise<unknown>
   runBuiltinSlashCommand: (
     name: string,
     args: string

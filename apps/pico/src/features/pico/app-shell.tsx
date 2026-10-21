@@ -56,7 +56,6 @@ import {
   createOptimisticDraftSessionState,
   createOptimisticPendingId,
   insertOptimisticUserItem,
-  movePendingDraftFollowUpMessage,
   pendingDraftFollowUpId,
   removeOptimisticUserItem,
   sameAppShellComposerSnapshot,
@@ -66,6 +65,7 @@ import {
   type PendingComposerMessage,
   type UserConversationItem,
 } from "@/features/pico/app-shell-composer-state"
+import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
 import {
   createConversationItemsStore,
   type ConversationItemsStore,
@@ -2510,9 +2510,7 @@ function useAppShellSessionWorkspaceView({
     abortSession,
     addDirectoryPath,
     createSession: requestCreateSession,
-    editPendingMessage,
-    removePendingMessage,
-    reorderPending,
+    savePendingQueue,
     startPendingQueue,
     submitPrompt,
   } = useAppShellPromptMutations({
@@ -2778,57 +2776,35 @@ function useAppShellSessionWorkspaceView({
     ? undefined
     : composerDraftSeed.skillName
 
-  const editPendingDraftFollowUp = (pendingId: string, text: string) => {
-    const existing = pendingDraftFollowUps.find(
-      (message, index) => pendingDraftFollowUpId(message, index) === pendingId
+  const savePendingDraftFollowUps = (
+    rows: Array<PendingQueueSaveRow>
+  ): Array<PendingQueueSaveRow> => {
+    if (pendingDraftFollowUps.length === 0) return rows
+
+    const drafts = new Map(
+      pendingDraftFollowUps.map((message, index) => [
+        pendingDraftFollowUpId(message, index),
+        message,
+      ])
     )
-    if (!existing) return false
-
-    if (!text.trim() && existing.images.length === 0) {
-      toast.error("Enter a message or keep at least one image")
-      return true
-    }
-
-    setPendingDraftFollowUps((current) =>
-      current.map((message, index) =>
-        pendingDraftFollowUpId(message, index) === pendingId
-          ? { ...message, message: text }
-          : message
-      )
+    // New rows join the drafts only while no session queue exists yet.
+    const draftOnly = pendingMessages.length === 0
+    const draftRows = rows.filter((row) =>
+      row.pendingId ? drafts.has(row.pendingId) : draftOnly
     )
-    return true
-  }
 
-  const removePendingDraftFollowUp = (pendingId: string) => {
-    if (
-      !pendingDraftFollowUps.some(
-        (message, index) => pendingDraftFollowUpId(message, index) === pendingId
-      )
-    ) {
-      return false
-    }
-
-    setPendingDraftFollowUps((current) =>
-      current.filter(
-        (message, index) => pendingDraftFollowUpId(message, index) !== pendingId
-      )
+    setPendingDraftFollowUps(
+      draftRows.map((row) => {
+        const existing = row.pendingId ? drafts.get(row.pendingId) : undefined
+        return {
+          ...existing,
+          message: row.text,
+          images: existing?.images ?? row.images,
+          streamingBehavior: row.streamingBehavior,
+        }
+      })
     )
-    return true
-  }
-
-  const reorderPendingDraftFollowUp = (
-    pendingId: string,
-    direction: -1 | 1
-  ) => {
-    const nextPendingDraftFollowUps = movePendingDraftFollowUpMessage(
-      pendingDraftFollowUps,
-      pendingId,
-      direction
-    )
-    if (!nextPendingDraftFollowUps) return false
-
-    setPendingDraftFollowUps(nextPendingDraftFollowUps)
-    return true
+    return rows.filter((row) => !draftRows.includes(row))
   }
 
   const setCompactWorkingState = React.useCallback(
@@ -3282,12 +3258,8 @@ function useAppShellSessionWorkspaceView({
         current.filter((_, imageIndex) => imageIndex !== index)
       )
     },
-    editPendingDraftFollowUp,
-    editPendingMessage,
-    removePendingDraftFollowUp,
-    removePendingMessage,
-    reorderPending,
-    reorderPendingDraftFollowUp,
+    savePendingDraftFollowUps,
+    savePendingQueue,
     startPendingQueue,
     runBuiltinSlashCommand,
     setModel,
