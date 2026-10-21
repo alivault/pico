@@ -1248,6 +1248,7 @@ export class Sessions implements HostSessions {
       ...(meta.worktree ? { worktree: meta.worktree } : {}),
       firstMessage: meta.firstMessage,
       cwd: meta.cwd,
+      directory: meta.group ?? meta.cwd,
       modified: iso(meta.modifiedAt),
       draft: false,
       streaming: busy,

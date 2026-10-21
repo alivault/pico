@@ -412,6 +412,11 @@ export function updateStateFromSync(
   const cwd = Object.prototype.hasOwnProperty.call(sync, "cwd")
     ? sync.cwd
     : base.cwd
+  const directory = Object.prototype.hasOwnProperty.call(sync, "directory")
+    ? sync.directory
+    : Object.prototype.hasOwnProperty.call(sync, "cwd")
+      ? undefined
+      : base.directory
   const modified = Object.prototype.hasOwnProperty.call(sync, "modified")
     ? sync.modified
     : base.modified
@@ -474,6 +479,7 @@ export function updateStateFromSync(
     previous.firstMessage === firstMessage &&
     previous.sessionFile === sessionFile &&
     previous.cwd === cwd &&
+    previous.directory === directory &&
     previous.modified === modified &&
     previous.model === model &&
     previous.thinkingLevel === thinkingLevel &&
@@ -504,6 +510,7 @@ export function updateStateFromSync(
     firstMessage,
     sessionFile,
     cwd,
+    directory,
     modified,
     model,
     thinkingLevel,

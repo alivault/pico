@@ -1195,6 +1195,7 @@ function useAppShellSessionWorkspaceView({
     sessionStore,
     (currentSessionState) => ({
       cwd: currentSessionState.cwd,
+      directory: currentSessionState.directory,
       draft: currentSessionState.draft,
       sessionFile: currentSessionState.sessionFile,
       sessionId: currentSessionState.sessionId,
@@ -2175,19 +2176,22 @@ function useAppShellSessionWorkspaceView({
     lastSyncedEditorTextRef,
   })
 
+  // The sidebar directory of the session. A worktree session works in its
+  // worktree, but belongs to the directory of the session that made it.
+  const sessionDirectory = (sessionState.directory ?? sessionState.cwd)?.trim()
+
   React.useEffect(() => {
-    const nextDirectory = sessionState.cwd?.trim()
-    if (!nextDirectory) return
+    if (!sessionDirectory) return
     machineLocalStorageSetItem(
       machineId,
       DRAFT_DIRECTORY_STORAGE_KEY,
-      nextDirectory
+      sessionDirectory
     )
-    setStoredDraftDirectory(nextDirectory)
-  }, [sessionState.cwd])
+    setStoredDraftDirectory(sessionDirectory)
+  }, [sessionDirectory])
 
   React.useEffect(() => {
-    const nextDirectory = sessionState.cwd?.trim()
+    const nextDirectory = sessionDirectory
     const nextSessionId = sessionState.sessionId?.trim()
     if (!sessionId || !nextSessionId || sessionState.draft || !nextDirectory) {
       return
@@ -2214,18 +2218,15 @@ function useAppShellSessionWorkspaceView({
       return nextDirectories
     })
   }, [
+    sessionDirectory,
     sessionId,
-    sessionState.cwd,
     sessionState.draft,
     sessionState.sessionId,
     sidebarStore,
   ])
 
   const defaultNewSessionDirectory =
-    sessionState.cwd?.trim() ||
-    baseSidebarDirectories[0] ||
-    storedDraftDirectory ||
-    ""
+    sessionDirectory || baseSidebarDirectories[0] || storedDraftDirectory || ""
   const newSessionDirectoryOptions = React.useMemo(() => {
     const nextOptions: Array<{ path: string; label: string }> = []
     const seen = new Set<string>()
@@ -2236,8 +2237,8 @@ function useAppShellSessionWorkspaceView({
       nextOptions.push({ path: normalizedPath, label })
     }
 
-    if (sessionState.cwd?.trim()) {
-      pushDirectoryOption(sessionState.cwd, "Current session directory")
+    if (sessionDirectory) {
+      pushDirectoryOption(sessionDirectory, "Current session directory")
     }
     if (storedDraftDirectory) {
       pushDirectoryOption(storedDraftDirectory, "Draft directory")
@@ -2247,7 +2248,7 @@ function useAppShellSessionWorkspaceView({
     }
 
     return nextOptions
-  }, [baseSidebarDirectories, sessionState.cwd, storedDraftDirectory])
+  }, [baseSidebarDirectories, sessionDirectory, storedDraftDirectory])
 
   const knownDirectories = React.useMemo(
     () =>

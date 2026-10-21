@@ -301,6 +301,8 @@ export type SessionState = {
   firstMessage: string
   sessionFile?: string
   cwd?: string
+  /** The sidebar directory, when it is not `cwd` (worktree sessions). */
+  directory?: string
   modified?: string
   model?: ModelOption
   thinkingLevel: string
@@ -373,6 +375,7 @@ export type StateSyncPayload = {
   sessionName?: string
   firstMessage?: string
   cwd?: string
+  directory?: string
   modified?: string
   uiState?: SessionUiState
 }

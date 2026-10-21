@@ -475,6 +475,7 @@ function sameSessionStateExceptConversation(
     left.firstMessage === right.firstMessage &&
     left.sessionFile === right.sessionFile &&
     left.cwd === right.cwd &&
+    left.directory === right.directory &&
     left.modified === right.modified &&
     left.model === right.model &&
     left.thinkingLevel === right.thinkingLevel &&
