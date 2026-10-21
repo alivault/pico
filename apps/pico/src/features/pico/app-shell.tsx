@@ -3271,7 +3271,11 @@ function useAppShellSessionWorkspaceView({
     runBuiltinSlashCommand,
     setModel,
     setThinkingLevel,
-    submitPrompt,
+    submitPrompt: (streamingBehavior) => {
+      // Follow the bottom after a send, also when the reader scrolled up.
+      conversationFrameRef.current?.scrollConversationToBottom()
+      return submitPrompt(streamingBehavior)
+    },
     syncComposerDraft,
     moveDraftToMachine: (targetMachine, directory) => {
       const text = serializeComposerDraft({

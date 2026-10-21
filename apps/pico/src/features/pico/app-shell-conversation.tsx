@@ -486,7 +486,6 @@ function ConversationGroupView({
     return (
       <MessageScrollerItem
         messageId={group.key}
-        scrollAnchor
         className={conversationItemClassName}
       >
         <ConversationUserGroupView
