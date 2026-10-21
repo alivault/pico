@@ -147,7 +147,11 @@ import {
 } from "@/features/pico/session-done-notifications"
 import { useAppShellPromptMutations } from "@/features/pico/use-app-shell-prompt-mutations"
 import { usePicoTheme } from "@/features/pico/use-pico-theme"
-import { useAppShellSessionMutations } from "@/features/pico/use-app-shell-session-mutations"
+import {
+  applyDirectoryIndexRename,
+  updateSessionsEventDirectoryIndexes,
+  useAppShellSessionMutations,
+} from "@/features/pico/use-app-shell-session-mutations"
 import { useAppShellSessionSync } from "@/features/pico/use-app-shell-session-sync"
 import {
   useAppShellShortcuts,
@@ -1337,6 +1341,24 @@ function useAppShellSessionWorkspaceView({
       })
     }
   )
+  // The server sends a new name (rename, auto name) in the session state at
+  // once. The sidebar index refreshes later, and not while the agent streams,
+  // so put the name in the sidebar entry now.
+  const activeSessionFile = sessionState.sessionFile
+  const activeSessionName = useSelector(sessionStore, (state) =>
+    state.sessionName?.trim()
+  )
+  React.useEffect(() => {
+    if (!activeSessionFile || !activeSessionName) return
+    sidebarStore.setDirectoryIndexDataByPath((current) =>
+      applyDirectoryIndexRename(current, activeSessionFile, activeSessionName)
+    )
+    sidebarStore.setSessionsEvent((current) =>
+      updateSessionsEventDirectoryIndexes(current, (indexes) =>
+        applyDirectoryIndexRename(indexes, activeSessionFile, activeSessionName)
+      )
+    )
+  }, [activeSessionFile, activeSessionName, sidebarStore])
   const activeSessionId =
     sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
   const currentSessionPinKey = sessionListEntryKey({

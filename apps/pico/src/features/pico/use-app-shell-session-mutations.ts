@@ -66,7 +66,7 @@ function sameStringArray(left: Array<string>, right: Array<string>) {
   return true
 }
 
-function applyDirectoryIndexRename(
+export function applyDirectoryIndexRename(
   current: DirectoryIndexDataByPath,
   targetPath: string,
   nextName: string
@@ -290,7 +290,7 @@ function restoreDirectoryIndexesForDirectories(
   return changed ? next : current
 }
 
-function updateSessionsEventDirectoryIndexes(
+export function updateSessionsEventDirectoryIndexes(
   current: SessionsEvent | null,
   updater: (indexes: DirectoryIndexDataByPath) => DirectoryIndexDataByPath
 ) {

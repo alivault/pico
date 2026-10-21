@@ -403,6 +403,8 @@ function useAppShellSidebarControllerView({
       }
 
       if (activeSidebarSessionStreaming) {
+        // Keep the old revision, so the index refreshes when streaming stops.
+        nextRevisions[directory] = previousRevision
         continue
       }
 
