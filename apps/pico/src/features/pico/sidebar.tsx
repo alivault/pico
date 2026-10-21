@@ -101,6 +101,7 @@ import {
   OtherMachineRenameDialog,
 } from "@/features/pico/other-machine-session-dialogs"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
+import { useSidebarSessionNumber } from "@/features/pico/sidebar-session-numbers"
 import {
   openMachine,
   openSession as openMachineSession,
@@ -724,6 +725,22 @@ function SidebarSessionItem({
       sourceDirectory: entry?.cwd || "",
     },
   })
+  const rowRef = React.useRef<HTMLDivElement | null>(null)
+  const { setNodeRef: setDraggableNodeRef } = draggable
+  const setRowRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      rowRef.current = node
+      setDraggableNodeRef(node)
+    },
+    [setDraggableNodeRef]
+  )
+  // While the app modifier is held, the row shows its Mod+1…9 number in
+  // place of its timestamp.
+  const sessionNumber = useSidebarSessionNumber(rowRef)
+  const sessionNumberLabel =
+    sessionNumber > 0
+      ? formatShortcutLabel(appShortcut(String(sessionNumber)))
+      : ""
 
   if (!entry) return null
   const timestamp =
@@ -828,9 +845,13 @@ function SidebarSessionItem({
             <span className="min-w-0 flex-1 truncate font-medium">
               {entry.title}
             </span>
-            {/* An invisible copy of the timestamp keeps space for the real
-                one, which sits on top of the row. */}
-            {hasTimestamp ? (
+            {/* An invisible copy of the timestamp (or of the number) keeps
+                space for the real one, which sits on top of the row. */}
+            {sessionNumber > 0 && !overlay ? (
+              <Kbd aria-hidden="true" className="invisible shrink-0">
+                {sessionNumberLabel}
+              </Kbd>
+            ) : hasTimestamp ? (
               <SidebarSessionTime
                 aria-hidden="true"
                 value={timestamp}
@@ -860,24 +881,29 @@ function SidebarSessionItem({
     </SidebarMenuButton>
   )
 
-  const sessionTrailingControls = hasTimestamp ? (
-    <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
-      <TitleTooltip
-        title={isMobile ? undefined : exactTimestamp}
-        side="right"
-        align="center"
-      >
-        <SidebarSessionTime
-          value={timestamp}
-          className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
-        />
-      </TitleTooltip>
-    </span>
-  ) : null
+  const sessionTrailingControls =
+    sessionNumber > 0 && !overlay ? (
+      <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
+        <Kbd>{sessionNumberLabel}</Kbd>
+      </span>
+    ) : hasTimestamp ? (
+      <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
+        <TitleTooltip
+          title={isMobile ? undefined : exactTimestamp}
+          side="right"
+          align="center"
+        >
+          <SidebarSessionTime
+            value={timestamp}
+            className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
+          />
+        </TitleTooltip>
+      </span>
+    ) : null
 
   const sessionRow = (
     <div
-      ref={draggable.setNodeRef}
+      ref={setRowRef}
       className={cn(
         "group/session relative",
         draggable.isDragging && !overlay && "opacity-40"

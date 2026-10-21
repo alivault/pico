@@ -11,6 +11,7 @@ import {
   type RightSidebarShortcutPane,
 } from "./keyboard-shortcuts"
 import { isInShownMachineShell } from "@/lib/pico/machine-context"
+import { getShownSidebarSessionItems } from "./sidebar-session-numbers"
 
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
 
@@ -121,17 +122,6 @@ function hasSelectedText(target: EventTarget | null) {
   }
 
   return false
-}
-
-// The session rows that the sidebar shows, in sidebar order. Rows in a
-// collapsed group are not shown, so they are skipped.
-function getShownSidebarSessionItems(root: ParentNode = document) {
-  return Array.from(
-    root.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
-  ).filter(
-    (element) =>
-      isInShownMachineShell(element) && element.getClientRects().length > 0
-  )
 }
 
 function isCurrentSidebarSessionItem(element: HTMLElement) {
