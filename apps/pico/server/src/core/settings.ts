@@ -5,8 +5,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
-import type { Profile } from "./profiles.ts"
-
 export type Transport = "auto" | "sse" | "websocket" | "websocket-cached"
 export type CacheRetention = "standard" | "long"
 
@@ -36,8 +34,6 @@ export type PicoSettingsData = {
   previewPorts: string
   /** Run the durable browser without a window. */
   browserHeadless: boolean
-  /** The user's tool profiles, added to the built-in ones by name. */
-  profiles: Record<string, Omit<Profile, "name">>
 }
 
 export const DEFAULT_SETTINGS: PicoSettingsData = {
@@ -55,7 +51,6 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   publicUrl: "",
   previewPorts: "4100-4199",
   browserHeadless: true,
-  profiles: {},
 }
 
 export class PicoSettings {

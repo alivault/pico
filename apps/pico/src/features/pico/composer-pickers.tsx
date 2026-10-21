@@ -26,7 +26,6 @@ import {
   appShortcut,
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
-import { ProfilePicker } from "@/features/pico/agent/profiles"
 import { modelLabel } from "@/features/pico/model-label"
 import {
   useSelector,
@@ -327,27 +326,6 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
   )
 })
 
-/** The tool profile of a running session. A draft has its own picker. */
-function SessionProfilePicker({
-  sessionStore,
-  viewerContextId,
-}: {
-  sessionStore: ComposerPickerSessionStore
-  viewerContextId: string
-}) {
-  const draft = useSelector(sessionStore, (state) => state.draft)
-  const sessionId = useSelector(sessionStore, (state) => state.sessionId)
-  const cwd = useSelector(sessionStore, (state) => state.cwd)
-  if (draft || !sessionId) return null
-  return (
-    <ProfilePicker
-      cwd={cwd}
-      sessionId={sessionId}
-      viewerContextId={viewerContextId}
-    />
-  )
-}
-
 export const ComposerPickers = React.memo(function ComposerPickers({
   activeSessionId,
   modelPickerOpen,
@@ -392,11 +370,6 @@ export const ComposerPickers = React.memo(function ComposerPickers({
           onSelectThinkingLevel={onSelectThinkingLevel}
           open={thinkingPickerOpen}
           sessionStore={sessionStore}
-        />
-
-        <SessionProfilePicker
-          sessionStore={sessionStore}
-          viewerContextId={viewerContextId}
         />
       </div>
 

@@ -46,7 +46,6 @@ import {
 import { useHasMachineGroups } from "@/features/pico/machines"
 import { openMachine } from "@/lib/pico/machine"
 import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
-import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
   ComposerPanel,
   type ComposerPanelHandle,
@@ -483,11 +482,6 @@ export function NewSessionComposerSelectors({
           viewerContextId={viewerContextId}
         />
       ) : null}
-
-      <ProfilePicker
-        cwd={selectedDirectory}
-        viewerContextId={viewerContextId}
-      />
 
       <Dialog
         open={createBranchOpen}

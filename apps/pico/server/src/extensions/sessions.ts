@@ -539,7 +539,6 @@ export function createSessionsExtension(host: HostBridge) {
         Type.String({ description: "provider/modelId, or a model id" })
       ),
       thinking: Type.Optional(Type.String()),
-      profile: Type.Optional(Type.String()),
       worktree: Type.Optional(
         Type.Union([
           Type.Boolean(),
@@ -583,7 +582,6 @@ export function createSessionsExtension(host: HostBridge) {
                 ...(args.cwd ? { cwd: args.cwd } : {}),
                 ...(args.model ? { model: args.model } : {}),
                 ...(args.thinking ? { thinking: args.thinking } : {}),
-                ...(args.profile ? { profile: args.profile } : {}),
                 requestId: callRequestId(api),
               },
             }
@@ -710,7 +708,6 @@ export function createSessionsExtension(host: HostBridge) {
           spawnedByCall: api.callId,
           ...(model ? { model } : {}),
           ...(args.thinking ? { thinkingLevel: args.thinking } : {}),
-          ...(args.profile ? { profile: args.profile } : {}),
           ...(args.name ? { name: args.name } : {}),
           ...(group ? { group } : {}),
           ...(worktree ? { worktree } : {}),

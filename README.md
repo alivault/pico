@@ -56,7 +56,6 @@ pnpm start import-pi         # import old Pi sessions (stop Pico first)
   diagrams, tables), timers and watches, background jobs, child sessions in
   git worktrees, Git and GitHub, LSP, browser automation, app previews, web
   access, and MCP.
-- **Tool profiles.** `full`, `research`, `read-only`, `review`, or your own.
 - **Notifications.** Web Push and ntfy when a run finishes or the agent asks
   a question.
 

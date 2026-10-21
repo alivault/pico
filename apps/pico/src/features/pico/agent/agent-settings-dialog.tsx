@@ -50,7 +50,7 @@ export type AgentSettings = {
   worktreeCopy: Array<string>
 }
 
-/** Extra sections, such as tool profiles and MCP, that other modules add. */
+/** Extra sections, such as MCP, that other modules add. */
 type ExtraSection = {
   key: string
   order: number

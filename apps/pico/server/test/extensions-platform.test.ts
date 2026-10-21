@@ -4,73 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
-import { applyProfile, findProfile } from "../src/core/profiles.ts"
 import { createMcpExtension } from "../src/extensions/mcp.ts"
-import { createTodoExtension } from "../src/extensions/todo.ts"
-import { createRenderExtension } from "../src/extensions/render.ts"
-import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
-
-void test("profiles select extensions and remove tools", async () => {
-  const dir = await tempDir()
-  const todo = createTodoExtension()
-  const render = createRenderExtension()
-  const { createCodingTools } = await import("@earendil-works/pi-durable/tools")
-  const coding = createCodingTools()
-  const harness = await openHarness(
-    join(dir, "db.sqlite"),
-    [coding, render, todo],
-    () => ({ text: "ok" }),
-    dir
-  )
-  try {
-    const conversation = await harness.createConversation(
-      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
-      ctx
-    )
-    const registry = {
-      snapshot: () => {
-        const extensions = [coding, render, todo]
-        return {
-          installed: () => extensions,
-          extension: (name: string) =>
-            extensions.find((extension) => extension.name === name),
-          tools: () =>
-            extensions.flatMap((extension) =>
-              (extension.tools ?? []).map((tool) => ({ tool, extension }))
-            ),
-        }
-      },
-      subscribe: () => () => undefined,
-    } as never
-    const names = async () =>
-      (await conversation.agent(ctx)).tools.map((tool) => tool.name).sort()
-    assert.ok((await names()).includes("bash"))
-    await applyProfile(conversation, registry, findProfile("read-only"), ctx)
-    const readOnly = await names()
-    assert.ok(readOnly.includes("read"))
-    assert.ok(readOnly.includes("bash"))
-    assert.ok(!readOnly.includes("write"))
-    assert.ok(!readOnly.includes("edit"))
-    assert.match(
-      (await conversation.agent(ctx)).instructions ?? "",
-      /read-only/
-    )
-    await applyProfile(
-      conversation,
-      registry,
-      findProfile("narrow", {
-        narrow: { description: "Only todo", extensions: ["todo"] },
-      }),
-      ctx
-    )
-    assert.deepEqual(await names(), ["todo"])
-    await applyProfile(conversation, registry, undefined, ctx)
-    assert.ok((await names()).includes("write"))
-    assert.equal((await conversation.agent(ctx)).instructions, undefined)
-  } finally {
-    await harness.close(ctx)
-  }
-})
+import { tempDir } from "./support.ts"
 
 /** A fake MCP server behind OAuth: discovery, registration, PKCE, tokens. */
 async function fakeOAuthMcp() {
