@@ -271,7 +271,7 @@ export function createApi(api: ApiContext) {
   router.get("/api/directory-sessions", (request) => {
     const directory = stringField(request.query.get("directory"))
     if (!directory) throw badRequest("directory is required")
-    const unread = viewers.unread(stringField(request.query.get("context")))
+    const unread = viewers.unread()
     const ids = sessions.directorySessions(directory)
     const offset = Math.min(
       ids.length,
@@ -298,10 +298,7 @@ export function createApi(api: ApiContext) {
     if (!directory) throw badRequest("directory is required")
     return {
       ok: true,
-      ...sessions.directoryIndex(
-        directory,
-        viewers.unread(stringField(request.query.get("context")))
-      ),
+      ...sessions.directoryIndex(directory, viewers.unread()),
     }
   })
 
@@ -312,7 +309,7 @@ export function createApi(api: ApiContext) {
       .filter(Boolean)
     if (directories.length === 0)
       throw badRequest("at least one directory is required")
-    const unread = viewers.unread(stringField(request.query.get("context")))
+    const unread = viewers.unread()
     return {
       ok: true,
       directories,
@@ -1625,20 +1622,9 @@ export function createApi(api: ApiContext) {
   router.post("/api/session/read-state", async (request) => {
     const body = await request.body<{ path?: string; unread?: boolean }>()
     const id = sessionFromPath(body.path)
-    const { contextId } = target(request)
     const unread = Boolean(body.unread)
-    viewers.setRead(contextId, id, !unread)
-    hub.push(
-      {
-        type: "session_status",
-        sessionPath: sessionPath(id),
-        sessionId: id,
-        sessionKey: sessionKey(id),
-        unread,
-        streaming: sessions.isBusy(id),
-      },
-      { contextId }
-    )
+    // The read state is global; Sessions tells every tab about the change.
+    viewers.setRead(id, !unread)
     return { ok: true, path: sessionPath(id), unread }
   })
 
@@ -1862,6 +1848,7 @@ function streamEvents(
     stream.send(payload, event.sequence)
   }
 
+  const detach = viewers.attach(contextId)
   const unsubscribe = hub.subscribe((event) => {
     if (!ready) pending.push(event)
     else deliver(event)
@@ -1890,7 +1877,7 @@ function streamEvents(
     const sessionsPayload = sessions.sessionsPayload({
       ...(session ? { activeSessionId: session } : {}),
       directories: sidebarDirectories,
-      unread: viewers.unread(contextId),
+      unread: viewers.unread(),
     })
     stream = new SseStream(request.raw, response)
     if (lastEventId !== undefined) {
@@ -1949,6 +1936,7 @@ function streamEvents(
     })
     .finally(() => {
       unsubscribe()
+      detach()
       releaseWatch?.()
     })
 }

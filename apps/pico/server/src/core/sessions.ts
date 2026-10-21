@@ -373,6 +373,19 @@ export class Sessions implements HostSessions {
     this.#runtime = runtime
     this.#hub = hub
     this.#viewers = viewers
+    // Read state is global: tell every tab and client about a change.
+    viewers.onReadChange((id, unread) => {
+      if (!this.#metas.has(id)) return
+      this.#hub.push({
+        type: "session_status",
+        sessionId: id,
+        sessionKey: sessionKey(id),
+        sessionPath: sessionPath(id),
+        streaming: this.isBusy(id),
+        unread,
+      })
+      this.#scheduleSessionsBroadcast()
+    })
   }
 
   get #harness() {
@@ -745,6 +758,7 @@ export class Sessions implements HostSessions {
         cwd: meta.cwd,
         busy: this.isBusy(id),
         needsInput: this.#needsInput.has(id),
+        unread: this.#viewers.isUnread(id),
         ...(meta.parent ? { parent: meta.parent } : {}),
         ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
         messageCount: meta.messageCount,
@@ -900,7 +914,7 @@ export class Sessions implements HostSessions {
     if (this.#sessionsTimer) return
     this.#sessionsTimer = setTimeout(() => {
       this.#sessionsTimer = undefined
-      this.#hub.push(this.sessionsPayload({}))
+      this.#hub.push(this.sessionsPayload({ unread: this.#viewers.unread() }))
     }, 200)
   }
 
@@ -1886,6 +1900,11 @@ export class Sessions implements HostSessions {
     this.#scheduleSessionsBroadcast()
     void this.publishStateIfWatched(id)
     return { name, source, ...(reason ? { reason } : {}) }
+  }
+
+  setRead(id: string, read: boolean) {
+    this.meta(id)
+    this.#viewers.setRead(id, read)
   }
 
   archive(id: string) {

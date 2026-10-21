@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
+import { mkdtemp, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
 
+import { Viewers } from "../src/core/viewers.ts"
 import { EventHub, eventMatches } from "../src/events.ts"
 import {
   cleanupCandidate,
@@ -159,4 +163,62 @@ void test("tool results keep their images", () => {
   assert.deepEqual(block?.type === "tool" ? block.images : undefined, [
     { mimeType: "image/png", data: "aGVsbG8=" },
   ])
+})
+
+void test("read state is global and an open tab keeps its session read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pico-viewers-"))
+  const file = join(dir, "viewers.json")
+  const viewers = new Viewers(file)
+  const changes: string[] = []
+  viewers.onReadChange((id, unread) => changes.push(`${id}:${unread}`))
+
+  viewers.selectSession("tab-a", "s1")
+  viewers.markDone("s2")
+  assert.deepEqual([...viewers.unread()], ["s2"])
+  // Read in one tab: read in all of them.
+  viewers.selectSession("tab-b", "s2")
+  assert.equal(viewers.isUnread("s2"), false)
+
+  // A closed tab that showed s1 does not keep it read; an open one does.
+  viewers.markDone("s1")
+  assert.equal(viewers.isUnread("s1"), true)
+  viewers.setRead("s1", true)
+  const detach = viewers.attach("tab-a")
+  viewers.markDone("s1")
+  assert.equal(viewers.isUnread("s1"), false)
+  detach()
+  viewers.markDone("s1")
+  assert.equal(viewers.isUnread("s1"), true)
+  assert.deepEqual(changes, [
+    "s2:true",
+    "s2:false",
+    "s1:true",
+    "s1:false",
+    "s1:true",
+  ])
+
+  viewers.flush()
+  assert.deepEqual([...new Viewers(file).unread()], ["s1"])
+  assert.equal(new Viewers(file).get("tab-b")?.selectedSession, "s2")
+})
+
+void test("viewer contexts from before global read state keep the newest unread list", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pico-viewers-"))
+  const file = join(dir, "viewers.json")
+  await writeFile(
+    file,
+    JSON.stringify({
+      old: { sidebarDirectories: [], unread: ["s1", "s2"], updatedAt: 1 },
+      new: {
+        selectedSession: "s3",
+        sidebarDirectories: ["/p"],
+        unread: ["s2"],
+        updatedAt: 2,
+      },
+    })
+  )
+  const viewers = new Viewers(file)
+  assert.deepEqual([...viewers.unread()], ["s2"])
+  assert.equal(viewers.get("new")?.selectedSession, "s3")
+  assert.deepEqual(viewers.get("new")?.sidebarDirectories, ["/p"])
 })

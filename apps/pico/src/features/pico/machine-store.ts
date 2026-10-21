@@ -28,7 +28,9 @@ export type MachineSessionSummary = {
   directory: string
   busy: boolean
   needsInput: boolean
-  /** The viewer contexts (browsers) that did not see the last run yet. */
+  /** Nobody has read the last run yet. The same for all clients. */
+  unread?: boolean
+  /** Servers before global read state: the viewer contexts that did not see it. */
   unreadBy?: Array<string>
   parent?: string
   lastMessageAt?: number

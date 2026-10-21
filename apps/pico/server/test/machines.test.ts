@@ -267,6 +267,11 @@ void test("the offline cache follows state patches and session lists", () => {
       ?.sessions[0]?.unreadBy,
     ["ctx"]
   )
+  assert.equal(
+    parseSummary({ sessions: [{ id: "s1", unread: true }] })?.sessions[0]
+      ?.unread,
+    true
+  )
 })
 
 /** Timers that run only when the test says so. */

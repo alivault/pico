@@ -49,6 +49,7 @@ function lastUser(messages: readonly Message[]) {
 /** A small session store on the Harness, in place of Pico's `Sessions`. */
 function fakeSessions(harness: Harness) {
   const metas = new Map<string, HostSessionMeta & { createdAt: number }>()
+  const unread = new Set<string>()
   const sessions = {
     has: (id: string | undefined): id is string => Boolean(id && metas.has(id)),
     current: (id: string | undefined) => id,
@@ -70,6 +71,7 @@ function fakeSessions(harness: Harness) {
           cwd: meta.cwd,
           busy: false,
           needsInput: false,
+          unread: unread.has(id),
           ...(meta.parent ? { parent: meta.parent } : {}),
           messageCount: 0,
         })),
@@ -126,11 +128,25 @@ function fakeSessions(harness: Harness) {
     },
     abort: async () => undefined,
     rename: (_id: string, name: string) => name,
+    setRead: (id: string, read: boolean) => {
+      if (read) unread.delete(id)
+      else unread.add(id)
+    },
+    archive: (id: string) => {
+      metas.get(id)!.archived = true
+    },
+    restore: (id: string) => {
+      delete metas.get(id)!.archived
+    },
+    archivedSessions: () =>
+      [...metas.entries()]
+        .filter(([, meta]) => meta.archived)
+        .map(([id, meta]) => ({ id, title: id, cwd: meta.cwd })),
     publishStateIfWatched: async () => undefined,
     extensionStateChanged: () => undefined,
     availableModels: () => [{ id: "test", provider: "test" }],
   }
-  return { sessions, metas }
+  return { sessions, metas, unread }
 }
 
 function bind(host: HostBridge, harness: Harness, dataDir: string) {
@@ -340,6 +356,90 @@ void test("the answer of a stopped run is not an earlier answer", async () => {
       await lastAnswer(harness, conversation.id, ctx),
       STOPPED_ANSWER
     )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("agents mark sessions read and archive them", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let other = ""
+  const script: Script = (messages) => {
+    const step = messages.filter((m) => m.role === "toolResult").length
+    const call = [
+      { name: "mark_sessions_read", arguments: { ids: [other] } },
+      { name: "mark_sessions_read", arguments: { ids: [other], unread: true } },
+      { name: "archive_sessions", arguments: { ids: [other, "s999"] } },
+      { name: "list_sessions", arguments: { scope: "archived" } },
+      { name: "archive_sessions", arguments: { ids: [other], restore: true } },
+    ][step]
+    return call ? { tools: [call] } : { text: "done" }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const self = await fake.sessions.create(dir)
+    other = await fake.sessions.create(dir)
+    fake.unread.add(other)
+    const conversation = (await harness.conversation(
+      conversationOf(self),
+      ctx
+    ))!
+    await (
+      await conversation.submit({ type: "input", content: "tidy" }, ctx)
+    ).wait(ctx)
+    const view = await conversation.context(ctx)
+    const results = view.entries
+      .filter((entry) => entry.kind === "pi.tool-result")
+      .map((entry) => JSON.stringify(entry.model))
+    assert.equal(results.length, 5)
+    assert.match(results[0]!, new RegExp(`Marked ${other} read`))
+    assert.match(results[1]!, new RegExp(`Marked ${other} unread`))
+    assert.match(results[2]!, new RegExp(`Archived ${other}`))
+    assert.match(results[2]!, /s999: Unknown session/)
+    assert.match(results[3]!, new RegExp(`${other} .*archived`))
+    assert.match(results[4]!, new RegExp(`Restored ${other}`))
+    assert.equal(fake.unread.has(other), true)
+    assert.equal(fake.metas.get(other)?.archived, undefined)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("an agent cannot archive itself", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let self = ""
+  const script: Script = (messages) =>
+    lastToolResult(messages)
+      ? { text: "done" }
+      : { tools: [{ name: "archive_sessions", arguments: { ids: [self] } }] }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    self = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(self),
+      ctx
+    ))!
+    await (
+      await conversation.submit({ type: "input", content: "go" }, ctx)
+    ).wait(ctx)
+    const view = await conversation.context(ctx)
+    const result = view.entries.find((entry) => entry.kind === "pi.tool-result")
+    assert.match(JSON.stringify(result?.model), /cannot archive itself/)
+    assert.equal(fake.metas.get(self)?.archived, undefined)
   } finally {
     await harness.close(ctx)
   }

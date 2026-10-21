@@ -65,7 +65,6 @@ export function localSummary(
   runtime: Runtime,
   viewers: Viewers
 ): MachineSummary {
-  const unreadBy = viewers.unreadBy()
   return {
     hostname: hostname(),
     version: VERSION,
@@ -82,9 +81,7 @@ export function localSummary(
           directory: meta.group ?? session.cwd,
           busy: session.busy,
           needsInput: session.needsInput,
-          ...(unreadBy.has(session.id)
-            ? { unreadBy: unreadBy.get(session.id)! }
-            : {}),
+          ...(viewers.isUnread(session.id) ? { unread: true } : {}),
           ...(session.parent ? { parent: session.parent } : {}),
           ...(session.lastMessageAt
             ? { lastMessageAt: session.lastMessageAt }
@@ -325,6 +322,27 @@ export function addMachineServerRoutes(
     await sessions.abort(id)
     return { ok: true, ...sessionInfo(id) }
   })
+
+  // Read state is global, so a hub agent changes it for every client.
+  router.post("/api/machine/session/read-state", async (request) => {
+    const body = await request.body<{ id?: unknown; unread?: unknown }>()
+    const id = requireSession(body.id)
+    viewers.setRead(id, body.unread !== true)
+    return { ok: true, sessionId: id, unread: body.unread === true }
+  })
+
+  router.post("/api/machine/session/archive", async (request) => {
+    const body = await request.body<{ id?: unknown; restore?: unknown }>()
+    const id = requireSession(body.id)
+    if (body.restore === true) sessions.restore(id)
+    else sessions.archive(id)
+    return { ok: true, sessionId: id, archived: body.restore !== true }
+  })
+
+  router.get("/api/machine/sessions/archived", () => ({
+    ok: true,
+    sessions: sessions.archivedSessions().slice(0, 50),
+  }))
 }
 
 /** The hub's view of its own runtime, as a machine. */

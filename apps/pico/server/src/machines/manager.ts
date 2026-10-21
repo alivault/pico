@@ -56,7 +56,12 @@ export type SessionStatusSummary = {
   directory: string
   busy: boolean
   needsInput: boolean
-  /** The viewer contexts (browsers) that did not see the last run yet. */
+  /** Nobody has read the last run yet. Read state is the same for all clients. */
+  unread?: boolean
+  /**
+   * The viewer contexts that did not see the last run yet. Only from servers
+   * before global read state.
+   */
   unreadBy?: string[]
   parent?: string
   lastMessageAt?: number
@@ -171,6 +176,7 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
                 : "",
           busy: entry.busy === true,
           needsInput: entry.needsInput === true,
+          ...(entry.unread === true ? { unread: true } : {}),
           ...(Array.isArray(entry.unreadBy)
             ? {
                 unreadBy: entry.unreadBy.filter(

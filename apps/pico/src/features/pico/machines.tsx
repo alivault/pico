@@ -103,12 +103,13 @@ export function MachineStateDot({
   )
 }
 
-/** A finished run that this browser did not see yet. */
+/** A finished run that nobody has read yet. */
 export function isMachineSessionUnread(session: MachineSessionSummary) {
   return (
     !session.busy &&
     !session.needsInput &&
-    Boolean(session.unreadBy?.includes(viewerContextIdForSummaries()))
+    (session.unread ??
+      Boolean(session.unreadBy?.includes(viewerContextIdForSummaries())))
   )
 }
 

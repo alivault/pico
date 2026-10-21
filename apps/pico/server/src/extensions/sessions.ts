@@ -258,6 +258,17 @@ type RemoteSession = {
   worktree?: { path: string; branch: string }
 }
 
+/** The state of a session for `list_sessions`. */
+function status(item: {
+  busy: boolean
+  needsInput: boolean
+  unread?: boolean
+}) {
+  if (item.needsInput) return "waiting for the user"
+  if (item.busy) return "working"
+  return item.unread ? "idle, unread" : "idle"
+}
+
 const MACHINE_PARAMETER = Type.Optional(
   Type.String({
     description:
@@ -999,6 +1010,7 @@ export function createSessionsExtension(host: HostBridge) {
           Type.Literal("children"),
           Type.Literal("directory"),
           Type.Literal("all"),
+          Type.Literal("archived"),
         ])
       ),
       machine: Type.Optional(
@@ -1016,6 +1028,26 @@ export function createSessionsExtension(host: HostBridge) {
       if (remote.target) {
         const { connection } = remote.target
         try {
+          if (args.scope === "archived") {
+            const archived = (await connection.request(
+              "GET",
+              "/api/machine/sessions/archived"
+            )) as {
+              sessions: Array<{ id: string; title: string; cwd: string }>
+            }
+            if (archived.sessions.length === 0)
+              return textResult(
+                `No archived sessions on ${connection.profile.label}.`
+              )
+            return textResult(
+              archived.sessions
+                .map(
+                  (item) =>
+                    `${remoteName(connection, item.id)} — ${item.title} [archived]\n  ${item.cwd}`
+                )
+                .join("\n")
+            )
+          }
           const result = (await connection.request(
             "GET",
             "/api/machine/sessions"
@@ -1026,6 +1058,7 @@ export function createSessionsExtension(host: HostBridge) {
               cwd: string
               busy: boolean
               needsInput: boolean
+              unread?: boolean
               lastMessagePreview?: string
             }>
           }
@@ -1035,7 +1068,7 @@ export function createSessionsExtension(host: HostBridge) {
             result.sessions
               .map(
                 (item) =>
-                  `${remoteName(connection, item.id)} — ${item.title} [${item.needsInput ? "waiting for the user" : item.busy ? "working" : "idle"}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+                  `${remoteName(connection, item.id)} — ${item.title} [${status(item)}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
               )
               .join("\n")
           )
@@ -1047,6 +1080,18 @@ export function createSessionsExtension(host: HostBridge) {
       }
       const self = sessionIdOf(api.conversationId)
       const scope = args.scope ?? "children"
+      if (scope === "archived") {
+        const archived = services.sessions.archivedSessions().slice(0, 50)
+        if (archived.length === 0) return textResult("No archived sessions.")
+        return textResult(
+          archived
+            .map(
+              (item) =>
+                `${item.id} — ${item.title} [archived${item.archivedAt ? ` ${item.archivedAt}` : ""}]\n  ${item.cwd}`
+            )
+            .join("\n")
+        )
+      }
       const meta = services.sessions.has(self)
         ? services.sessions.meta(self)
         : undefined
@@ -1064,7 +1109,7 @@ export function createSessionsExtension(host: HostBridge) {
         items
           .map(
             (item) =>
-              `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${item.needsInput ? "waiting for the user" : item.busy ? "working" : "idle"}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+              `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
           )
           .join("\n")
       )
@@ -1195,9 +1240,137 @@ export function createSessionsExtension(host: HostBridge) {
     },
   })
 
+  /**
+   * Run `action` for each ID, on this machine or a remote one. Returns one
+   * line for each session, so a bad ID does not stop the others.
+   */
+  const forEachSession = async (
+    services: HostServices,
+    ids: string[],
+    machine: string | undefined,
+    local: (id: string) => string | Promise<string>,
+    remote: (connection: RemoteConnection, id: string) => Promise<string>
+  ) => {
+    const lines: string[] = []
+    let failed = 0
+    for (const value of ids) {
+      try {
+        const target = remoteTarget(services, machine, value)
+        if (target) {
+          if (!target.id) throw new Error(`Unknown session: ${value}`)
+          lines.push(await remote(target.connection, target.id))
+        } else lines.push(await local(requireSession(services, value)))
+      } catch (error) {
+        failed += 1
+        lines.push(
+          `${value}: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    }
+    const text = lines.join("\n")
+    return failed === ids.length ? errorResult(text) : textResult(text)
+  }
+
+  const readStateTool = defineTool({
+    name: "mark_sessions_read",
+    description:
+      "Mark sessions as read (default) or unread. Read state is the same in every tab and client of the user.",
+    parameters: Type.Object({
+      ids: Type.Array(
+        Type.String({
+          description: "Session IDs; workbox:s12 is a session on workbox",
+        })
+      ),
+      unread: Type.Optional(
+        Type.Boolean({ description: "Mark them unread instead" })
+      ),
+      machine: MACHINE_PARAMETER,
+    }),
+    replay: "safe",
+    async execute(args, _api, context) {
+      const services = await host.ready(context.abortSignal)
+      const unread = args.unread === true
+      const word = unread ? "unread" : "read"
+      if (args.ids.length === 0) return errorResult("ids must not be empty.")
+      return forEachSession(
+        services,
+        args.ids,
+        args.machine,
+        (id) => {
+          services.sessions.setRead(id, !unread)
+          return `Marked ${id} ${word}.`
+        },
+        async (connection, id) => {
+          await connection.request("POST", "/api/machine/session/read-state", {
+            body: { id, unread },
+          })
+          return `Marked ${remoteName(connection, id)} ${word}.`
+        }
+      )
+    },
+  })
+
+  const archiveTool = defineTool({
+    name: "archive_sessions",
+    description:
+      "Archive sessions: hide them from the sidebar. They stay on disk. Set restore to show archived sessions again; list_sessions with scope archived lists them. A busy session cannot be archived.",
+    parameters: Type.Object({
+      ids: Type.Array(
+        Type.String({
+          description: "Session IDs; workbox:s12 is a session on workbox",
+        })
+      ),
+      restore: Type.Optional(
+        Type.Boolean({ description: "Restore archived sessions instead" })
+      ),
+      machine: MACHINE_PARAMETER,
+    }),
+    replay: "safe",
+    async execute(args, api, context) {
+      const services = await host.ready(context.abortSignal)
+      const restore = args.restore === true
+      const self = sessionIdOf(api.conversationId)
+      if (args.ids.length === 0) return errorResult("ids must not be empty.")
+      return forEachSession(
+        services,
+        args.ids,
+        args.machine,
+        (id) => {
+          if (restore) {
+            services.sessions.restore(id)
+            return `Restored ${id}.`
+          }
+          if (id === self) throw new Error("A session cannot archive itself.")
+          if (
+            services.sessions.has(self) &&
+            id === services.sessions.meta(self).parent
+          )
+            throw new Error("A session cannot archive its parent.")
+          services.sessions.archive(id)
+          return `Archived ${id}.`
+        },
+        async (connection, id) => {
+          await connection.request("POST", "/api/machine/session/archive", {
+            body: { id, restore },
+          })
+          return `${restore ? "Restored" : "Archived"} ${remoteName(connection, id)}.`
+        }
+      )
+    },
+  })
+
   return defineExtension({
     name: "sessions",
-    tools: [spawnTool, sendTool, readTool, listTool, waitTool, stopTool],
+    tools: [
+      spawnTool,
+      sendTool,
+      readTool,
+      listTool,
+      waitTool,
+      stopTool,
+      readStateTool,
+      archiveTool,
+    ],
     tasks: [ReportTask, RemoteReportTask],
   })
 }

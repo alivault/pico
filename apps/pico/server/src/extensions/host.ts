@@ -37,6 +37,18 @@ export type HostSessions = {
   /** Sessions for tools, newest activity first. */
   list(filter: { parent?: string; directory?: string }): HostSessionSummary[]
   rename(id: string, name: string): string
+  /** Mark a session read or unread for every client. */
+  setRead(id: string, read: boolean): void
+  /** Hide a session. It stays on disk and `restore` shows it again. */
+  archive(id: string): void
+  restore(id: string): void
+  /** Archived sessions, most recently archived first. */
+  archivedSessions(): Array<{
+    id: string
+    title: string
+    cwd: string
+    archivedAt?: string
+  }>
   availableModels(): Array<{ id: string; provider?: string }>
   publishStateIfWatched(id: string): Promise<void>
   /** Tell clients that a session's extension state changed. */
@@ -63,6 +75,8 @@ export type HostSessionSummary = {
   cwd: string
   busy: boolean
   needsInput: boolean
+  /** Nobody has read the last run yet. */
+  unread: boolean
   parent?: string
   worktreeBranch?: string
   messageCount: number

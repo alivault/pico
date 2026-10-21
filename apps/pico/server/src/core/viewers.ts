@@ -1,8 +1,10 @@
 /**
  * Viewer contexts: one per browser tab or window. A context selects a session
- * or a draft (a new session that has no prompt yet), keeps its sidebar
- * directories, and tracks which sessions it has not read. Contexts are saved,
- * so a reload returns to the same place.
+ * or a draft (a new session that has no prompt yet) and keeps its sidebar
+ * directories. Contexts are saved, so a reload returns to the same place.
+ *
+ * Read state is global: a session read in one tab or client is read in all of
+ * them. Agents can also change it.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
@@ -21,42 +23,73 @@ export type ViewerContext = {
   selectedSession?: string
   activeDraft?: DraftSelection
   sidebarDirectories: string[]
-  unread: string[]
   updatedAt: number
 }
+
+type StoredContext = Partial<ViewerContext> & { unread?: unknown }
+
+type StoredViewers = {
+  version: 2
+  contexts: Record<string, StoredContext>
+  unread: string[]
+}
+
+/** A session became read or unread. */
+export type ReadListener = (sessionId: string, unread: boolean) => void
 
 const MAX_CONTEXTS = 200
 
 export class Viewers {
   readonly #file: string
   readonly #contexts = new Map<string, ViewerContext>()
+  /** The sessions with a finished run that nobody has read. */
+  readonly #unread = new Set<string>()
+  /** The number of open event streams of each context. */
+  readonly #attached = new Map<string, number>()
   readonly #listeners = new Set<() => void>()
+  readonly #readListeners = new Set<ReadListener>()
   #saveTimer: NodeJS.Timeout | undefined
 
   constructor(file: string) {
     this.#file = file
+    let stored: unknown
     try {
-      const stored = JSON.parse(readFileSync(file, "utf8")) as Record<
-        string,
-        ViewerContext
-      >
-      for (const [id, context] of Object.entries(stored)) {
-        this.#contexts.set(id, {
-          ...(context.selectedSession
-            ? { selectedSession: context.selectedSession }
-            : {}),
-          ...(context.activeDraft ? { activeDraft: context.activeDraft } : {}),
-          sidebarDirectories: Array.isArray(context.sidebarDirectories)
-            ? context.sidebarDirectories
-            : [],
-          unread: Array.isArray(context.unread) ? context.unread : [],
-          updatedAt:
-            typeof context.updatedAt === "number" ? context.updatedAt : 0,
-        })
-      }
+      stored = JSON.parse(readFileSync(file, "utf8"))
     } catch {
-      // No saved contexts yet.
+      return // No saved contexts yet.
     }
+    if (!stored || typeof stored !== "object") return
+    const current = (stored as Partial<StoredViewers>).version === 2
+    const contexts = (
+      current ? ((stored as StoredViewers).contexts ?? {}) : stored
+    ) as Record<string, StoredContext>
+    for (const [id, context] of Object.entries(contexts)) {
+      if (!context || typeof context !== "object") continue
+      this.#contexts.set(id, {
+        ...(context.selectedSession
+          ? { selectedSession: context.selectedSession }
+          : {}),
+        ...(context.activeDraft ? { activeDraft: context.activeDraft } : {}),
+        sidebarDirectories: Array.isArray(context.sidebarDirectories)
+          ? context.sidebarDirectories
+          : [],
+        updatedAt:
+          typeof context.updatedAt === "number" ? context.updatedAt : 0,
+      })
+    }
+    const unread = current
+      ? (stored as StoredViewers).unread
+      : // Before version 2, each context had its own unread sessions. Keep
+        // those of the context used last: they are closest to what the user saw.
+        Object.values(contexts)
+          .filter((context) => context && typeof context === "object")
+          .sort(
+            (left, right) =>
+              (typeof right.updatedAt === "number" ? right.updatedAt : 0) -
+              (typeof left.updatedAt === "number" ? left.updatedAt : 0)
+          )[0]?.unread
+    if (Array.isArray(unread))
+      for (const id of unread) if (typeof id === "string") this.#unread.add(id)
   }
 
   get(id: string): ViewerContext | undefined {
@@ -66,7 +99,7 @@ export class Viewers {
   #ensure(id: string): ViewerContext {
     let context = this.#contexts.get(id)
     if (!context) {
-      context = { sidebarDirectories: [], unread: [], updatedAt: Date.now() }
+      context = { sidebarDirectories: [], updatedAt: Date.now() }
       this.#contexts.set(id, context)
     }
     context.updatedAt = Date.now()
@@ -85,9 +118,7 @@ export class Viewers {
   ) {
     const context = this.#ensure(id)
     if (selectedSession) {
-      context.unread = context.unread.filter(
-        (sessionId) => sessionId !== selectedSession
-      )
+      this.#setUnread(selectedSession, false)
       context.selectedSession = selectedSession
       delete context.activeDraft
     }
@@ -97,9 +128,25 @@ export class Viewers {
     return context
   }
 
+  /**
+   * An event stream of a context is open. A finished run is not unread while
+   * an open tab shows it. Call the returned function when the stream closes.
+   */
+  attach(id: string) {
+    this.#attached.set(id, (this.#attached.get(id) ?? 0) + 1)
+    let attached = true
+    return () => {
+      if (!attached) return
+      attached = false
+      const count = (this.#attached.get(id) ?? 1) - 1
+      if (count > 0) this.#attached.set(id, count)
+      else this.#attached.delete(id)
+    }
+  }
+
   selectSession(id: string, sessionId: string) {
     const context = this.#ensure(id)
-    context.unread = context.unread.filter((unread) => unread !== sessionId)
+    this.#setUnread(sessionId, false)
     context.selectedSession = sessionId
     delete context.activeDraft
     this.#save()
@@ -122,36 +169,39 @@ export class Viewers {
     this.#save()
   }
 
-  /** A finished run is unread everywhere it is not on screen. */
+  /** True when an open tab shows the session. */
+  isOnScreen(sessionId: string) {
+    for (const id of this.#attached.keys())
+      if (this.#contexts.get(id)?.selectedSession === sessionId) return true
+    return false
+  }
+
+  /** A finished run is unread, unless an open tab shows it. */
   markDone(sessionId: string) {
-    for (const context of this.#contexts.values()) {
-      if (context.selectedSession === sessionId) continue
-      if (!context.unread.includes(sessionId)) context.unread.push(sessionId)
-    }
+    if (this.isOnScreen(sessionId)) return
+    this.#setUnread(sessionId, true)
     this.#save()
   }
 
-  setRead(id: string, sessionId: string, read: boolean) {
-    const context = this.#ensure(id)
-    context.unread = context.unread.filter((unread) => unread !== sessionId)
-    if (!read) context.unread.push(sessionId)
+  /** Mark a session read or unread for all tabs and clients. */
+  setRead(sessionId: string, read: boolean) {
+    this.#setUnread(sessionId, !read)
     this.#save()
   }
 
-  unread(id: string | undefined): Set<string> {
-    return new Set(id ? (this.#contexts.get(id)?.unread ?? []) : [])
+  isUnread(sessionId: string) {
+    return this.#unread.has(sessionId)
   }
 
-  /** The contexts that have each unread session, for machine summaries. */
-  unreadBy(): Map<string, string[]> {
-    const result = new Map<string, string[]>()
-    for (const [id, context] of this.#contexts)
-      for (const sessionId of context.unread) {
-        const list = result.get(sessionId)
-        if (list) list.push(id)
-        else result.set(sessionId, [id])
-      }
-    return result
+  unread(): Set<string> {
+    return new Set(this.#unread)
+  }
+
+  #setUnread(sessionId: string, unread: boolean) {
+    if (this.#unread.has(sessionId) === unread) return
+    if (unread) this.#unread.add(sessionId)
+    else this.#unread.delete(sessionId)
+    for (const listener of this.#readListeners) listener(sessionId, unread)
   }
 
   /** Call `listener` after a change, for example of the unread sessions. */
@@ -162,12 +212,19 @@ export class Viewers {
     }
   }
 
-  /** Forget a session everywhere, for example after it was deleted. */
-  forget(sessionId: string) {
-    for (const context of this.#contexts.values()) {
-      context.unread = context.unread.filter((unread) => unread !== sessionId)
-      if (context.selectedSession === sessionId) delete context.selectedSession
+  /** Call `listener` when a session becomes read or unread. */
+  onReadChange(listener: ReadListener) {
+    this.#readListeners.add(listener)
+    return () => {
+      this.#readListeners.delete(listener)
     }
+  }
+
+  /** Forget a session everywhere, for example after it was archived. */
+  forget(sessionId: string) {
+    this.#unread.delete(sessionId)
+    for (const context of this.#contexts.values())
+      if (context.selectedSession === sessionId) delete context.selectedSession
     this.#save()
   }
 
@@ -189,13 +246,15 @@ export class Viewers {
     const entries = [...this.#contexts.entries()]
       .sort((left, right) => right[1].updatedAt - left[1].updatedAt)
       .slice(0, MAX_CONTEXTS)
+    const stored: StoredViewers = {
+      version: 2,
+      contexts: Object.fromEntries(entries),
+      unread: [...this.#unread],
+    }
     try {
       mkdirSync(dirname(this.#file), { recursive: true })
       const temporary = `${this.#file}.tmp`
-      writeFileSync(
-        temporary,
-        JSON.stringify(Object.fromEntries(entries), null, 2)
-      )
+      writeFileSync(temporary, JSON.stringify(stored, null, 2))
       renameSync(temporary, this.#file)
     } catch (error) {
       console.error("[pico] could not save viewer contexts:", error)
