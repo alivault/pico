@@ -17,6 +17,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -120,6 +121,7 @@ export function TextDialog({
   viewerContextId,
   refreshMs,
   scrollToEnd = true,
+  markdown = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -131,6 +133,8 @@ export function TextDialog({
   refreshMs?: number
   /** Show the end of the text first, as for a log. */
   scrollToEnd?: boolean
+  /** Render the text as Markdown. */
+  markdown?: boolean
 }) {
   const machineId = useMachineId()
   const query = useQuery({
@@ -174,14 +178,20 @@ export function TextDialog({
             />
           </DialogTitle>
         </DialogHeader>
-        <pre
-          ref={preRef}
-          className="max-h-[60vh] min-h-24 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5 whitespace-pre-wrap"
-        >
-          {query.isError
-            ? errorText(query.error)
-            : (query.data?.text ?? "Loading…") || "(empty)"}
-        </pre>
+        {markdown && query.data?.text ? (
+          <div className="max-h-[60vh] min-h-24 overflow-auto rounded-md border p-4">
+            <MarkdownBlock text={query.data.text} />
+          </div>
+        ) : (
+          <pre
+            ref={preRef}
+            className="max-h-[60vh] min-h-24 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5 whitespace-pre-wrap"
+          >
+            {query.isError
+              ? errorText(query.error)
+              : (query.data?.text ?? "Loading…") || "(empty)"}
+          </pre>
+        )}
       </DialogContent>
     </Dialog>
   )

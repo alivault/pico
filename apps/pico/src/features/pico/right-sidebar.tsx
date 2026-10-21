@@ -1223,6 +1223,7 @@ export function RightSidebar({
           <AgentPanel
             active={active && activeTab === "agent"}
             cwd={normalizedCwd}
+            onOpenFile={(path) => openFile(path, { pin: true })}
             sessionId={sessionId}
             viewerContextId={viewerContextId}
           />

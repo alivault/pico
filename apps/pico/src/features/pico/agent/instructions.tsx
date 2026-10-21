@@ -16,14 +16,21 @@ function instructionsOf(state: Record<string, unknown>) {
   return value && Array.isArray(value.files) ? value : undefined
 }
 
+/** The path from the session folder, for a file inside it. */
+function relativePath(path: string, cwd: string) {
+  const root = cwd.replace(/\/+$/, "")
+  return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : undefined
+}
+
 /** A short label: the path from the session folder, or the full path. */
 function labelOf(path: string, cwd: string) {
-  const root = cwd.replace(/\/+$/, "")
-  if (path.startsWith(`${root}/`)) return path.slice(root.length + 1)
+  const relative = relativePath(path, cwd)
+  if (relative) return relative
   return path.replace(/^\/home\/[^/]+(?=\/)|^\/Users\/[^/]+(?=\/)/, "~")
 }
 
 function InstructionsSection({
+  onOpenFile,
   sessionId,
   state,
   viewerContextId,
@@ -41,7 +48,12 @@ function InstructionsSection({
                 type="button"
                 aria-label={`Show ${path}`}
                 className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
-                onClick={() => setOpen(path)}
+                onClick={() => {
+                  // The file viewer reads only files in the session folder.
+                  const relative = relativePath(path, instructions.cwd)
+                  if (relative && onOpenFile) onOpenFile(relative)
+                  else setOpen(path)
+                }}
               >
                 <FileTextIcon
                   aria-hidden="true"
@@ -67,6 +79,7 @@ function InstructionsSection({
           sessionId={sessionId}
           viewerContextId={viewerContextId}
           scrollToEnd={false}
+          markdown
         />
       ) : null}
     </>

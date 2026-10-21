@@ -34,6 +34,8 @@ export type AgentSectionProps = {
   viewerContextId: string
   sessionId: string
   cwd?: string
+  /** Open a file of the session folder in the Files tab. */
+  onOpenFile?: (path: string) => void
 }
 
 export type AgentSection = {
@@ -104,11 +106,13 @@ function useOpenSections() {
 export function AgentPanel({
   active,
   cwd,
+  onOpenFile,
   sessionId,
   viewerContextId,
 }: {
   active: boolean
   cwd?: string
+  onOpenFile?: (path: string) => void
   sessionId?: string
   viewerContextId: string
 }) {
@@ -155,7 +159,13 @@ export function AgentPanel({
     )
   }
 
-  const props: AgentSectionProps = { cwd, sessionId, state, viewerContextId }
+  const props: AgentSectionProps = {
+    cwd,
+    onOpenFile,
+    sessionId,
+    state,
+    viewerContextId,
+  }
   return (
     <div className="h-full min-h-0 overflow-y-auto">
       {visible.map((section) => (
