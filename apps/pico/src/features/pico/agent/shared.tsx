@@ -119,6 +119,7 @@ export function TextDialog({
   sessionId,
   viewerContextId,
   refreshMs,
+  scrollToEnd = true,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -128,6 +129,8 @@ export function TextDialog({
   sessionId: string
   viewerContextId: string
   refreshMs?: number
+  /** Show the end of the text first, as for a log. */
+  scrollToEnd?: boolean
 }) {
   const machineId = useMachineId()
   const query = useQuery({
@@ -154,8 +157,8 @@ export function TextDialog({
   const preRef = React.useRef<HTMLPreElement>(null)
   React.useEffect(() => {
     const element = preRef.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [query.data?.text])
+    if (element && scrollToEnd) element.scrollTop = element.scrollHeight
+  }, [query.data?.text, scrollToEnd])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">

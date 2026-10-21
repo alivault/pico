@@ -1257,6 +1257,15 @@ export function createApi(api: ApiContext) {
     return { ok: true, id: scratchId, text }
   })
 
+  router.get("/api/session/instructions", async (request) => {
+    const id = requireSession(request)
+    const path = stringField(request.query.get("path"))
+    if (!path) throw badRequest("path is required")
+    const text = await sessions.instructionFile(id, path)
+    if (text === undefined) throw notFound(`No instruction file ${path}`)
+    return { ok: true, path, text }
+  })
+
   router.post("/api/session/preview/ensure", async (request) => {
     const id = requireSession(request)
     try {

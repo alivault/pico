@@ -607,6 +607,14 @@ export class Sessions implements HostSessions {
     const children = this.list({ parent: id })
     if (children.length > 0) state.children = children
     const meta = this.meta(id)
+    const instructions = await this.instructionFiles(id).catch(
+      (error: unknown) => {
+        console.warn("[pico] could not read the instruction files:", error)
+        return []
+      }
+    )
+    if (instructions.length > 0)
+      state.instructions = { cwd: meta.cwd, files: instructions }
     if (meta.parent || meta.worktree) {
       state.session = {
         ...(meta.parent && this.#metas.has(meta.parent)
@@ -616,6 +624,20 @@ export class Sessions implements HostSessions {
       }
     }
     return state
+  }
+
+  /** The context files (AGENTS.md) that the agent of a session loads. */
+  async instructionFiles(id: string) {
+    const files = (await this.#runtime.resources.get(this.meta(id).cwd))
+      .agentsFiles
+    return files.map(({ path }) => ({ path }))
+  }
+
+  /** The content of one context file that the agent of a session loads. */
+  async instructionFile(id: string, path: string) {
+    const files = (await this.#runtime.resources.get(this.meta(id).cwd))
+      .agentsFiles
+    return files.find((file) => file.path === path)?.content
   }
 
   /** Mark that the agent of a session waits, or no longer waits, for the user. */
