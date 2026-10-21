@@ -91,10 +91,10 @@ function ConversationLatestMessageButton({
       kbd={formatShortcutLabel(appShortcut("ArrowDown"))}
     >
       <Button
-        variant="secondary"
+        variant="outline"
         size="icon-lg"
         disabled={isDisabled}
-        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
+        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px]"
         aria-label="Jump to latest message"
         onClick={onClick}
       >
@@ -124,11 +124,11 @@ function ConversationPreviousMessageButton({
       kbd={formatShortcutLabel(appShortcut("ArrowLeft"))}
     >
       <Button
-        variant="secondary"
+        variant="outline"
         size="icon-lg"
         disabled={isDisabled}
         className={cn(
-          "rounded-full border-0 shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0",
+          "rounded-full shadow-[0_10px_24px_rgba(0,0,0,0.28)] disabled:pointer-events-none disabled:opacity-0",
           centerMessages
             ? "pointer-events-auto"
             : "absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
