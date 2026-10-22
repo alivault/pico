@@ -2820,6 +2820,11 @@ function useAppShellSessionWorkspaceView({
           label: COMPACT_WORKING_LABEL,
           cancelable: true,
         })
+        // Compaction adds no user message, so the scroller does not move.
+        // Show the working footer and the summary that follows it.
+        requestAnimationFrame(() => {
+          conversationFrameRef.current?.scrollConversationToBottom()
+        })
         return
       }
 
