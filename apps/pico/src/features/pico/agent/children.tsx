@@ -1,5 +1,5 @@
+import type * as React from "react"
 import {
-  ChevronRightIcon,
   GitForkIcon,
   MessageCircleQuestionIcon,
   SquareIcon,
@@ -22,7 +22,7 @@ import {
   type AgentSectionProps,
 } from "@/features/pico/agent/agent-panel"
 import { emitPicoEvent } from "@/features/pico/agent/events"
-import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
+import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import {
   postSessionJson,
   useSessionExtensions,
@@ -107,7 +107,7 @@ function ChildRow({
   return (
     <Item
       size="sm"
-      className="group/row items-start gap-1 p-0 hover:bg-muted/50"
+      className="group/row relative items-start p-0 hover:bg-muted/50"
     >
       <button
         type="button"
@@ -120,7 +120,14 @@ function ChildRow({
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
           <ChildStatus child={child} />
         </span>
-        <ItemContent className="min-w-0">
+        <ItemContent
+          className={cn("min-w-0", child.busy && FADE_UNDER_ACTIONS)}
+          style={
+            child.busy
+              ? ({ "--actions-width": "1.75rem" } as React.CSSProperties)
+              : undefined
+          }
+        >
           <ItemTitle className="block truncate">{child.title}</ItemTitle>
           <ItemDescription className="truncate">
             {childStatusText(child, now)}
@@ -135,16 +142,14 @@ function ChildRow({
             </span>
           ) : null}
         </ItemContent>
-        <ChevronRightIcon
-          className={cn(
-            "mt-1 size-4 shrink-0 text-muted-foreground",
-            REVEAL_ON_HOVER
-          )}
-          aria-hidden="true"
-        />
       </button>
       {child.busy ? (
-        <ItemActions className={cn("self-center pr-1", REVEAL_ON_HOVER)}>
+        <ItemActions
+          className={cn(
+            "absolute top-0.5 right-1 group-focus-within/row:opacity-100",
+            REVEAL_ON_HOVER
+          )}
+        >
           <IconAction
             label="Stop the child session"
             icon={<SquareIcon />}
