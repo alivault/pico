@@ -87,32 +87,28 @@ export function ImageLightbox({
   onIndexChange,
 }: ImageLightboxProps) {
   const canNavigate = Boolean(onIndexChange) && count > 1
-  const showPrevious = React.useCallback(() => {
+  function showPrevious() {
     onIndexChange?.((index - 1 + count) % count)
-  }, [count, index, onIndexChange])
-  const showNext = React.useCallback(() => {
+  }
+  function showNext() {
     onIndexChange?.((index + 1) % count)
-  }, [count, index, onIndexChange])
+  }
 
-  React.useEffect(() => {
-    if (!open || !canNavigate) return
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-        return
-      }
-      if (event.key === "ArrowLeft") {
-        event.preventDefault()
-        showPrevious()
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault()
-        showNext()
-      }
+  // The dialog popup stops keydown propagation, so handle the arrow keys on
+  // the popup and not on the window.
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!canNavigate) return
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return
     }
-
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [canNavigate, open, showNext, showPrevious])
+    if (event.key === "ArrowLeft") {
+      event.preventDefault()
+      showPrevious()
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault()
+      showNext()
+    }
+  }
 
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const imageRef = React.useRef<HTMLImageElement | null>(null)
@@ -340,6 +336,7 @@ export function ImageLightbox({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        onKeyDown={handleKeyDown}
         className={cn(
           "top-0 left-0 h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none bg-transparent p-0 shadow-none ring-0 sm:max-h-dvh sm:max-w-none dark:ring-0",
           className
