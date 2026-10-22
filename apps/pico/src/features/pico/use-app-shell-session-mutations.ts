@@ -573,7 +573,9 @@ export function useAppShellSessionMutations({
     if (!viewerContextId) return
     setCompactWorkingState(true)
     try {
-      await fetchJson(
+      // The request returns when compaction ends, so the working state shows
+      // for the whole compaction.
+      const response = await fetchJson<{ compacted?: boolean }>(
         buildRequestUrl("/api/slash-command", {
           machineId,
           contextId: viewerContextId,
@@ -585,6 +587,9 @@ export function useAppShellSessionMutations({
           body: JSON.stringify({ name: "compact", args: "" }),
         }
       )
+      if (response.compacted === false) {
+        toast.info("Nothing to compact yet")
+      }
     } catch (error) {
       if (!isCompactAbortRequested()) {
         toast.error(

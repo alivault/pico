@@ -24,7 +24,10 @@ import {
   shallowRecordEqual,
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
-import type { AppShellWorkingState } from "@/features/pico/app-shell-working-state"
+import {
+  COMPACT_WORKING_LABEL,
+  type AppShellWorkingState,
+} from "@/features/pico/app-shell-working-state"
 import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
 import {
   appShortcut,
@@ -41,6 +44,7 @@ import {
   useConversationHasAssistantOutput,
   useConversationHasMessages,
   useConversationItem,
+  usePendingCompactionRow,
   type ConversationItemsStore,
   type MutableAssistantMessagesStore,
   type RenderConversationGroupDescriptor,
@@ -489,6 +493,7 @@ function ConversationGroupView({
   hideFooter,
   hideThinking,
   hideToolBlocks,
+  messageId,
   store,
   workingFooter,
 }: {
@@ -497,13 +502,38 @@ function ConversationGroupView({
   hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
+  messageId: string
   store: ConversationItemsStore
   workingFooter?: React.ReactNode
 }) {
+  if (group.kind === "compaction") {
+    // The pending row and the summary row share this element, so keep the
+    // same element type at the root for both.
+    return (
+      <MessageScrollerItem
+        messageId={messageId}
+        scrollAnchor
+        className={conversationItemClassName}
+      >
+        {group.pending ? null : (
+          <ConversationAssistantGroupView
+            className={className}
+            groupKey={group.key}
+            hideFooter={hideFooter}
+            hideThinking={hideThinking}
+            hideToolBlocks={hideToolBlocks}
+            store={store}
+          />
+        )}
+        {workingFooter}
+      </MessageScrollerItem>
+    )
+  }
+
   if (group.kind === "user") {
     return (
       <MessageScrollerItem
-        messageId={group.key}
+        messageId={messageId}
         scrollAnchor
         className={conversationItemClassName}
       >
@@ -519,7 +549,7 @@ function ConversationGroupView({
 
   return (
     <MessageScrollerItem
-      messageId={group.key}
+      messageId={messageId}
       className={conversationItemClassName}
     >
       <ConversationAssistantGroupView
@@ -625,6 +655,7 @@ function ConversationAssistantGroupView({
 
 function AppShellConversationItemGroups({
   centerMessages,
+  compacting,
   conversationItemsStore,
   hideFooter,
   hideThinking,
@@ -632,6 +663,7 @@ function AppShellConversationItemGroups({
   workingFooter,
 }: {
   centerMessages: boolean
+  compacting: boolean
   conversationItemsStore: ConversationItemsStore
   hideFooter: boolean
   hideThinking: boolean
@@ -641,12 +673,14 @@ function AppShellConversationItemGroups({
   const conversationMessageColumnClassName = centerMessages
     ? "mx-auto w-full max-w-[80ch]"
     : "w-full"
-  const renderedConversationGroups = useConversationGroupDescriptors({
+  const conversationGroups = useConversationGroupDescriptors({
     store: conversationItemsStore,
     hideFooter,
     hideThinking,
     hideToolBlocks,
   })
+  const { groups: renderedConversationGroups, rowKey } =
+    usePendingCompactionRow(conversationGroups, compacting)
 
   if (renderedConversationGroups.length === 0) {
     return (
@@ -668,12 +702,13 @@ function AppShellConversationItemGroups({
     <>
       {renderedConversationGroups.map((group, index) => (
         <ConversationGroupView
-          key={group.key}
+          key={rowKey(group)}
           className={conversationMessageColumnClassName}
           group={group}
           hideFooter={hideFooter}
           hideThinking={hideThinking}
           hideToolBlocks={hideToolBlocks}
+          messageId={rowKey(group)}
           store={conversationItemsStore}
           workingFooter={index === lastGroupIndex ? workingFooter : null}
         />
@@ -820,16 +855,22 @@ function AppShellConversationMessageStack({
   hideToolBlocks,
   sessionStore,
   workingFooter,
+  workingStateStore,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideToolBlocks: boolean
   sessionStore: PicoStore<SessionState>
   workingFooter: React.ReactNode
+  workingStateStore: PicoStore<AppShellWorkingState | null>
 }) {
   const hideThinking = useSelector(
     sessionStore,
     (sessionState) => sessionState.hideThinkingBlock
+  )
+  const compacting = useSelector(
+    workingStateStore,
+    (workingState) => workingState?.label === COMPACT_WORKING_LABEL
   )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   if (!hasMessages) return null
@@ -837,6 +878,7 @@ function AppShellConversationMessageStack({
   return (
     <AppShellConversationItemGroups
       centerMessages={centerMessages}
+      compacting={compacting}
       conversationItemsStore={conversationItemsStore}
       hideFooter={false}
       hideThinking={hideThinking}
@@ -926,6 +968,7 @@ export const AppShellSessionConversation = React.memo(
               workingStateStore={workingStateStore}
             />
           }
+          workingStateStore={workingStateStore}
         />
       </AppShellConversationFrame>
     )

@@ -20,9 +20,24 @@ export type RenderConversationGroupDescriptor =
       key: string
       itemKeys: Array<string>
     }
+  | {
+      // A compaction summary is a turn boundary, so it gets its own row that
+      // the scroller treats as a new turn. A pending row stands in for the
+      // summary while compaction runs.
+      kind: "compaction"
+      key: string
+      pending: boolean
+    }
 
 function conversationItemKey(item: ConversationItem, index: number) {
   return item.renderKey || item.itemKey || `message-row:${index}`
+}
+
+function isCompactionItem(item: ConversationItem) {
+  return (
+    item.kind === "assistant" &&
+    item.blocks.some((block) => block.type === "compaction")
+  )
 }
 
 function groupConversationItemsForRender(options: {
@@ -54,6 +69,12 @@ function groupConversationItemsForRender(options: {
 
   options.items.forEach((item, index) => {
     const key = conversationItemKey(item, index)
+
+    if (isCompactionItem(item)) {
+      flushAssistantGroup()
+      groups.push({ kind: "compaction", key, pending: false })
+      return
+    }
 
     if (item.kind === "assistant") {
       if (!pendingAssistantGroup) {
@@ -97,11 +118,11 @@ function sameRenderConversationGroupDescriptor(
     return left.itemKey === right.itemKey
   }
 
-  if (left.kind !== "assistant" || right.kind !== "assistant") {
-    return false
+  if (left.kind === "compaction" && right.kind === "compaction") {
+    return left.pending === right.pending
   }
 
-  return true
+  return left.kind === "assistant" && right.kind === "assistant"
 }
 
 function reconcileRenderConversationGroupDescriptors(
@@ -209,9 +230,12 @@ export function createConversationItemsStore(
     )
     if (startIndex < 0) return itemKeys
 
+    const startItem = snapshot.items[startIndex]
+    if (startItem && isCompactionItem(startItem)) return [groupKey]
+
     for (let index = startIndex; index < snapshot.items.length; index += 1) {
       const item = snapshot.items[index]
-      if (!item || item.kind !== "assistant") break
+      if (!item || item.kind !== "assistant" || isCompactionItem(item)) break
       itemKeys.push(conversationItemKey(item, index))
     }
 
@@ -451,6 +475,76 @@ export function useConversationGroupDescriptors({
     })
 
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+type PendingCompactionRowState = {
+  phase: "idle" | "pending" | "resolved"
+  rowKey: string
+  baselineKey: string | null
+  count: number
+  rowKeysByGroupKey: Map<string, string>
+}
+
+function lastCompactionGroupKey(
+  groups: Array<RenderConversationGroupDescriptor>
+) {
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const group = groups[index]
+    if (group?.kind === "compaction") return group.key
+  }
+  return null
+}
+
+// While compaction runs, add a pending compaction row at the end. The
+// summary that arrives takes over the row key of the pending row, so React
+// keeps the same row element. The scroller anchors to the pending row as a
+// new turn and then keeps the summary in that place.
+export function usePendingCompactionRow(
+  groups: Array<RenderConversationGroupDescriptor>,
+  compacting: boolean
+) {
+  const stateRef = React.useRef<PendingCompactionRowState>({
+    phase: "idle",
+    rowKey: "",
+    baselineKey: null,
+    count: 0,
+    rowKeysByGroupKey: new Map(),
+  })
+  const state = stateRef.current
+  const lastKey = lastCompactionGroupKey(groups)
+
+  if (state.phase === "idle" && compacting) {
+    state.count += 1
+    state.phase = "pending"
+    state.rowKey = `compaction-pending:${state.count}`
+    state.baselineKey = lastKey
+  }
+  if (state.phase === "pending" && lastKey && lastKey !== state.baselineKey) {
+    state.rowKeysByGroupKey.set(lastKey, state.rowKey)
+    state.phase = "resolved"
+  }
+  if (state.phase !== "idle" && !compacting) {
+    state.phase = "idle"
+  }
+
+  const pendingRowKey = state.phase === "pending" ? state.rowKey : null
+  const renderedGroups = React.useMemo<
+    Array<RenderConversationGroupDescriptor>
+  >(
+    () =>
+      pendingRowKey
+        ? [...groups, { kind: "compaction", key: pendingRowKey, pending: true }]
+        : groups,
+    [groups, pendingRowKey]
+  )
+  const rowKeysByGroupKey = state.rowKeysByGroupKey
+  const rowKey = React.useCallback(
+    (group: RenderConversationGroupDescriptor) =>
+      rowKeysByGroupKey.get(group.key) ?? group.key,
+    [rowKeysByGroupKey]
+  )
+
+  return { groups: renderedGroups, rowKey }
 }
 
 export function useConversationItem(
