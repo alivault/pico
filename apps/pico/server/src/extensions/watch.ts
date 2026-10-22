@@ -254,7 +254,7 @@ function createWatchTask(host: HostBridge) {
       check: async (task, runtime, context) => {
         const checkpoint = task.state.checkpoint
         if (checkpoint.nextAt > runtime.now())
-          await runtime.sleep(checkpoint.nextAt, context)
+          return runtime.sleepUntil(checkpoint.nextAt, checkpoint, context)
         const input = task.input
         let result: CheckResult
         try {
@@ -296,7 +296,8 @@ function createWatchTask(host: HostBridge) {
             }
           }
           return {
-            status: "running",
+            status: "sleeping",
+            until: now + input.intervalMs,
             checkpoint: {
               phase: "check",
               nextAt: now + input.intervalMs,

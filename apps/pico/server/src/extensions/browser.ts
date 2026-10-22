@@ -31,6 +31,7 @@ export type BrowserState = {
 
 export const BrowserDoc = defineDoc<BrowserState>({
   kind: "pico.browser",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",

@@ -62,6 +62,7 @@ export type TimersState = {
 
 export const TimersDoc = defineDoc<TimersState>({
   kind: "pico.timers",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",
@@ -138,14 +139,12 @@ function createTimerTask(host: HostBridge) {
     version: 1,
     initial: (input) => ({ phase: "sleep", fireAt: input.at, runs: 0 }),
     phases: {
-      sleep: async (task, runtime, context) => {
+      // The first wait. Later waits sleep straight from `fire`.
+      sleep: (task, runtime, context) => {
         const checkpoint = task.state.checkpoint
-        await runtime.sleep(checkpoint.fireAt, context)
-        await runtime.commit(
-          () => ({
-            status: "running",
-            checkpoint: { ...checkpoint, phase: "fire" },
-          }),
+        return runtime.sleepUntil(
+          checkpoint.fireAt,
+          { ...checkpoint, phase: "fire" },
           context
         )
       },
@@ -177,8 +176,9 @@ function createTimerTask(host: HostBridge) {
           })
           return next
             ? {
-                status: "running",
-                checkpoint: { phase: "sleep", fireAt: next, runs: runs + 1 },
+                status: "sleeping",
+                until: next,
+                checkpoint: { phase: "fire", fireAt: next, runs: runs + 1 },
               }
             : {
                 status: "terminal",

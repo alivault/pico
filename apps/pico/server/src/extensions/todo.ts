@@ -37,6 +37,7 @@ export type TodoState = {
 
 export const TodoDoc = defineDoc<TodoState>({
   kind: "pico.todo",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "rewindable",

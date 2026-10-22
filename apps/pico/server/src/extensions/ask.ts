@@ -58,6 +58,7 @@ export type QuestionsState = { items: Record<string, Question> }
 
 export const QuestionsDoc = defineDoc<QuestionsState>({
   kind: "pico.questions",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",

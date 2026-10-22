@@ -33,6 +33,7 @@ export type PreviewState = {
 
 export const PreviewDoc = defineDoc<PreviewState>({
   kind: "pico.preview",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",

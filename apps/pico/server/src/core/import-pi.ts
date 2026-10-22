@@ -36,6 +36,7 @@ const ImportDoc = defineDoc<{
   >
 }>({
   kind: "pico.pi-imports",
+  checkpointWhen: () => false,
   version: 1,
   scope: "session",
   initial: () => ({ files: {} }),

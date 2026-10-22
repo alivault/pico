@@ -128,6 +128,7 @@ export type SessionMeta = {
 
 export const SessionDoc = defineDoc<SessionMeta>({
   kind: "pico.session",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",
@@ -314,6 +315,7 @@ type HeldItem = { id: number; mode: "steer" | "followUp"; content: JsonValue }
  */
 export const HeldQueueDoc = defineDoc<{ items: HeldItem[] }>({
   kind: "pico.queue",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",

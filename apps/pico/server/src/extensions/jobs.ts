@@ -61,6 +61,7 @@ export type JobsState = { items: Record<string, Job> }
 
 export const JobsDoc = defineDoc<JobsState>({
   kind: "pico.jobs",
+  checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
   history: "latest",
@@ -71,6 +72,7 @@ export const JobsDoc = defineDoc<JobsState>({
 /** Running jobs of every session, so a restart can find the lost ones. */
 export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
   kind: "pico.jobs.index",
+  checkpointWhen: () => false,
   version: 1,
   scope: "session",
   initial: () => ({ running: {} }),
