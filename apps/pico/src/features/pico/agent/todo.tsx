@@ -124,7 +124,7 @@ export function TodoList({
       {items.map((item) => (
         <li
           key={item.id}
-          className="group/row flex items-start gap-1.5 rounded-md px-1 py-1 text-sm hover:bg-muted/50"
+          className="group/row relative flex items-start gap-1.5 rounded-md px-1 py-1 text-sm hover:bg-muted/50"
         >
           {onChange ? (
             <StatusMenu item={item} onChange={onChange} />
@@ -136,7 +136,13 @@ export function TodoList({
               <StatusIcon status={item.status} />
             </span>
           )}
-          <span className={cn("min-w-0 flex-1", onChange && "pt-0.5")}>
+          <span
+            className={cn(
+              "min-w-0 flex-1",
+              onChange &&
+                "pt-0.5 group-focus-within/row:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)] group-hover/row:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)] [@media(hover:none)]:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)]"
+            )}
+          >
             <span
               className={cn(
                 item.status === "done" && "text-muted-foreground line-through",
@@ -156,7 +162,10 @@ export function TodoList({
               label="Remove item"
               icon={<XIcon />}
               tone="destructive"
-              className={cn("-my-1", REVEAL_ON_HOVER)}
+              className={cn(
+                "absolute top-0 right-1 group-focus-within/row:opacity-100",
+                REVEAL_ON_HOVER
+              )}
               onClick={() => onChange({ op: "remove", id: item.id })}
             />
           ) : null}
