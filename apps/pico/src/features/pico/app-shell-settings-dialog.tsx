@@ -297,15 +297,17 @@ function settingsCommandFilter(
   search: string,
   keywords?: Array<string>
 ) {
-  const query = search.trim().toLowerCase()
+  // Each search word must appear in the text. The default fuzzy match of
+  // cmdk matches almost every item for longer queries.
+  const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
 
-  if (!query) {
+  if (words.length === 0) {
     return 1
   }
 
   const searchableText = [value, ...(keywords ?? [])].join(" ").toLowerCase()
 
-  return searchableText.includes(query) ? 1 : 0
+  return words.every((word) => searchableText.includes(word)) ? 1 : 0
 }
 
 export type AppShellSettingsDialogHandle = {
@@ -839,6 +841,7 @@ function SettingsThemeBody({
       </div>
       <Command
         shouldFilter
+        filter={settingsCommandFilter}
         loop
         value={themeSelectionKey(selectedTheme)}
         onValueChange={(value) => {
