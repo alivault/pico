@@ -12,7 +12,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
+import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
@@ -94,7 +94,7 @@ function JobsSection({
       <Item
         key={job.id}
         size="sm"
-        className="group/row gap-2 px-1.5 py-1.5 hover:bg-muted/50"
+        className="group/row relative gap-2 px-1.5 py-1.5 hover:bg-muted/50"
       >
         <ItemMedia>
           <span
@@ -102,13 +102,26 @@ function JobsSection({
             aria-hidden="true"
           />
         </ItemMedia>
-        <ItemContent className="min-w-0">
+        <ItemContent
+          className={cn("min-w-0", FADE_UNDER_ACTIONS)}
+          style={
+            {
+              // Each action is 1.75rem wide, with a 0.125rem gap between.
+              "--actions-width": running ? "5.5rem" : "1.75rem",
+            } as React.CSSProperties
+          }
+        >
           <TitleTooltip title={job.command}>
             <ItemTitle className="block truncate">{job.name}</ItemTitle>
           </TitleTooltip>
           <ItemDescription>{statusText(job, now)}</ItemDescription>
         </ItemContent>
-        <ItemActions className={cn("gap-0.5", REVEAL_ON_HOVER)}>
+        <ItemActions
+          className={cn(
+            "absolute top-1/2 right-1.5 -translate-y-1/2 gap-0.5 group-focus-within/row:opacity-100",
+            REVEAL_ON_HOVER
+          )}
+        >
           {running ? (
             <IconAction
               label="Show in the terminal panel"

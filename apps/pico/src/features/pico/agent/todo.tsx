@@ -56,6 +56,13 @@ const STATUS_LABEL: Record<TodoStatus, string> = {
 export const REVEAL_ON_HOVER =
   "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
 
+/**
+ * Fades the right end of a row's text where hover actions overlay it. Set the
+ * width of the actions in the `--actions-width` CSS variable.
+ */
+export const FADE_UNDER_ACTIONS =
+  "group-focus-within/row:mask-[linear-gradient(to_left,transparent_var(--actions-width),black_calc(var(--actions-width)+1.75rem))] group-hover/row:mask-[linear-gradient(to_left,transparent_var(--actions-width),black_calc(var(--actions-width)+1.75rem))] [@media(hover:none)]:mask-[linear-gradient(to_left,transparent_var(--actions-width),black_calc(var(--actions-width)+1.75rem))]"
+
 function StatusIcon({ status }: { status: TodoStatus }) {
   switch (status) {
     case "done":
@@ -139,9 +146,13 @@ export function TodoList({
           <span
             className={cn(
               "min-w-0 flex-1",
-              onChange &&
-                "pt-0.5 group-focus-within/row:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)] group-hover/row:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)] [@media(hover:none)]:mask-[linear-gradient(to_left,transparent_1.75rem,black_3.5rem)]"
+              onChange && ["pt-0.5", FADE_UNDER_ACTIONS]
             )}
+            style={
+              onChange
+                ? ({ "--actions-width": "1.75rem" } as React.CSSProperties)
+                : undefined
+            }
           >
             <span
               className={cn(
