@@ -4,6 +4,7 @@ import * as React from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
+import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
 import { CheckIcon, CopyIcon } from "lucide-react"
 
@@ -25,6 +26,8 @@ const MARKDOWN_REHYPE_PLUGINS = [
   [rehypeSanitize, defaultSchema],
 ] satisfies NonNullable<ReactMarkdownProps["rehypePlugins"]>
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
+// User text keeps each line break, as typed in the prompt box.
+const MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [remarkGfm, remarkBreaks]
 
 type MarkdownFenceRange = {
   end: number
@@ -552,9 +555,13 @@ function getCodeBlockChild(children: React.ReactNode) {
 }
 
 export const MarkdownBlock = React.memo(function MarkdownBlock({
+  breaks = false,
+  className,
   streaming = false,
   text,
 }: {
+  breaks?: boolean
+  className?: string
   streaming?: boolean
   text: string
 }) {
@@ -567,10 +574,19 @@ export const MarkdownBlock = React.memo(function MarkdownBlock({
 
   return (
     <MarkdownRenderingContext value={renderingContext}>
-      <div className="prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2">
+      <div
+        className={cn(
+          "prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2",
+          className
+        )}
+      >
         <MemoizedReactMarkdown
           rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-          remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+          remarkPlugins={
+            breaks
+              ? MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
+              : MARKDOWN_REMARK_PLUGINS
+          }
           components={MARKDOWN_COMPONENTS}
         >
           {text}

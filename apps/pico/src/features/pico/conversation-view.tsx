@@ -2510,9 +2510,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           </div>
         ) : null}
         {item.text ? (
-          <div className="text-sm break-words whitespace-pre-wrap text-primary-foreground">
-            {item.text}
-          </div>
+          <MarkdownBlock breaks text={item.text} className="user-markdown" />
         ) : (
           <div className="text-sm text-primary-foreground/80">Image prompt</div>
         )}

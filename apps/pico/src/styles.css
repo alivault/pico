@@ -135,3 +135,34 @@
 .shiki .line ::selection {
   background: var(--code-selection);
 }
+
+/* Markdown in the user message bubble. The bubble uses the primary color, so
+   all prose colors follow the bubble text color. */
+.user-markdown {
+  --tw-prose-body: currentColor;
+  --tw-prose-headings: currentColor;
+  --tw-prose-lead: currentColor;
+  --tw-prose-links: currentColor;
+  --tw-prose-bold: currentColor;
+  --tw-prose-counters: currentColor;
+  --tw-prose-bullets: currentColor;
+  --tw-prose-hr: color-mix(in oklab, currentColor 35%, transparent);
+  --tw-prose-quotes: currentColor;
+  --tw-prose-quote-borders: color-mix(in oklab, currentColor 35%, transparent);
+  --tw-prose-captions: currentColor;
+  --tw-prose-kbd: currentColor;
+  --tw-prose-code: currentColor;
+  --tw-prose-th-borders: color-mix(in oklab, currentColor 35%, transparent);
+  --tw-prose-td-borders: color-mix(in oklab, currentColor 25%, transparent);
+  color: inherit;
+}
+
+.user-markdown :not(pre) > code {
+  background-color: color-mix(in oklab, currentColor 15%, transparent);
+  color: inherit;
+}
+
+.user-markdown .not-prose {
+  background-color: var(--background);
+  color: var(--foreground);
+}
