@@ -1595,7 +1595,9 @@ export class Sessions implements HostSessions {
       return { compacted: entryId !== undefined || submissionId !== undefined }
     }
     if (outcome.status === "aborted") throw conflict("Compaction cancelled")
-    throw conflict(outcome.error?.message ?? outcome.reason ?? "Compaction failed")
+    throw conflict(
+      outcome.error?.message ?? outcome.reason ?? "Compaction failed"
+    )
   }
 
   // ---------------------------------------------------------------------------
