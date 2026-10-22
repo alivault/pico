@@ -450,6 +450,12 @@ export function WaitingQuestionChip({
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches
+    // The message scroller follows the output or stays anchored to the last
+    // message, and scrolls back on the next resize. A wheel event is its
+    // signal that the reader scrolls, so it stops before we scroll.
+    element
+      .closest("[data-slot='message-scroller-viewport']")
+      ?.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
     element.scrollIntoView({
       block: "center",
       behavior: reduceMotion ? "auto" : "smooth",
