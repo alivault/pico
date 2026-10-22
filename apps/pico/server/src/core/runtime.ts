@@ -92,6 +92,7 @@ export async function openRuntime(
     createPicoCodingTools({
       ...(images ? { images } : {}),
       shellPrefix: () => currentPiSettings().getShellCommandPrefix(),
+      host,
     })
   )
   registry.install(createWebAccessExtension())

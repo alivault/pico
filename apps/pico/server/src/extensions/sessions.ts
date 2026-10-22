@@ -4,7 +4,13 @@
  * `spawn_session` makes a child: a normal Pico session with a `parent` link,
  * which the user can open in the web client. It is ownerless, so it outlives
  * the call that made it. Without `wait`, a background `pico.child-report` task
- * waits for the child and posts its answer back to the parent as a steer input.
+ * waits for the child and puts its answer in the parent's follow-up queue.
+ *
+ * Messages from a child never steer: they go into the parent's follow-up
+ * queue, in arrival order with the user's prompts, and each one is marked as
+ * a question or as finished work. A child has limited tools (see
+ * `core/profiles.ts`): the parent picks a profile and adds or removes tools.
+ * A child asks by ending its turn with a message that starts with `Question:`.
  *
  * Restarts: the tools are replay-safe. A rerun finds the child by the call ID
  * stored in the child's metadata (written in the commit that creates it), and
@@ -35,7 +41,8 @@ import {
   type HostBridge,
   type HostServices,
 } from "./host.ts"
-import { clip, errorResult, json, notifyAgent, textResult } from "./util.ts"
+import { allProfiles, findProfile, nameList } from "../core/profiles.ts"
+import { clip, errorResult, json, textResult } from "./util.ts"
 
 /** A session ID from `s123`, `123`, or `pico:s123`. */
 export function normalizeSessionId(value: string) {
@@ -159,6 +166,45 @@ async function within(promise: Promise<unknown>, ms: number | undefined) {
   return done
 }
 
+/** True when an answer asks something: a child ends its turn with `Question:`. */
+export function isQuestion(answer: string, needsInput: boolean) {
+  if (needsInput) return true
+  const text = answer.trim()
+  if (/^(?:[*_#>\s]*)question\b/i.test(text)) return true
+  const lastLine = text.split("\n").at(-1)?.trim() ?? ""
+  return /\?[*_)\s]*$/.test(lastLine)
+}
+
+/**
+ * The text of a message from another session for the follow-up queue,
+ * marked as a question or as finished work.
+ */
+export function reportMessage(input: {
+  /** `s12`, or `workbox:s12` for a remote session. */
+  name: string
+  title: string
+  answer: string
+  needsInput: boolean
+  child: boolean
+}) {
+  const who = `${input.child ? "child session" : "session"} ${input.name}`
+  const question = isQuestion(input.answer, input.needsInput)
+  const head = question
+    ? `[Question from ${who}] ${input.title}`
+    : `[Finished work from ${who}${input.answer === STOPPED_ANSWER ? ", stopped" : ""}] ${input.title}`
+  return [
+    head,
+    clip(input.answer, 12_000),
+    question
+      ? input.needsInput
+        ? `It waits for the user in its ask_user question. You can also answer with send_to_session (id ${input.name}).`
+        : `Answer it with send_to_session (id ${input.name}). To give it a tool, use send_to_session add.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 type ReportInput = {
   /** The session that gets the report, as a conversation ID. */
   parent: number
@@ -194,25 +240,26 @@ function createReportTask(host: HostBridge) {
       report: async (task, runtime, context) => {
         const { input } = task
         const services = await host.ready(runtime.signal)
-        const needsInput = services.sessions
-          .list({})
-          .find((session) => session.id === input.child)?.needsInput
-        await notifyAgent(
-          host,
-          (id) => runtime.conversation(id, context),
-          input.parent as unknown as ConversationId,
-          [
-            needsInput
-              ? `[Child session ${input.child} is waiting for the user] ${input.childTitle}`
-              : task.state.checkpoint.answer === STOPPED_ANSWER
-                ? `[Child session ${input.child} stopped] ${input.childTitle}`
-                : `[Child session ${input.child} finished] ${input.childTitle}`,
-            "Its answer:",
-            clip(task.state.checkpoint.answer, 12_000),
-          ].join("\n"),
-          `report:${input.child}:${input.key}`,
-          context
+        const needsInput = Boolean(
+          services.sessions
+            .list({})
+            .find((session) => session.id === input.child)?.needsInput
         )
+        const parent = sessionIdOf(input.parent as unknown as ConversationId)
+        if (services.sessions.has(parent))
+          await services.sessions.followUp(
+            parent,
+            reportMessage({
+              name: input.child,
+              title: input.childTitle,
+              answer: task.state.checkpoint.answer,
+              needsInput,
+              child:
+                services.sessions.has(input.child) &&
+                services.sessions.meta(input.child).parent === parent,
+            }),
+            `report:${input.child}:${input.key}`
+          )
         await runtime.commit(
           () => ({
             status: "terminal",
@@ -426,22 +473,19 @@ function createRemoteReportTask(host: HostBridge) {
         const label =
           services.machines?.find(input.machine)?.profile.label ?? input.machine
         const name = `${label}:${input.child}`
-        await notifyAgent(
-          host,
-          (id) => runtime.conversation(id, context),
-          input.parent as unknown as ConversationId,
-          [
-            checkpoint.needsInput
-              ? `[Session ${name} is waiting for the user] ${input.childTitle}`
-              : checkpoint.answer === STOPPED_ANSWER
-                ? `[Session ${name} stopped] ${input.childTitle}`
-                : `[Session ${name} finished] ${input.childTitle}`,
-            "Its answer:",
-            clip(checkpoint.answer, 12_000),
-          ].join("\n"),
-          `report:${input.machine}:${input.child}:${input.key}`,
-          context
-        )
+        const parent = sessionIdOf(input.parent as unknown as ConversationId)
+        if (services.sessions.has(parent))
+          await services.sessions.followUp(
+            parent,
+            reportMessage({
+              name,
+              title: input.childTitle,
+              answer: checkpoint.answer,
+              needsInput: checkpoint.needsInput,
+              child: false,
+            }),
+            `report:${input.machine}:${input.child}:${input.key}`
+          )
         await runtime.commit(
           () => ({
             status: "terminal",
@@ -538,8 +582,9 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. By default it runs in the background and its answer comes to you as a message when it finishes, also while you are busy (at your next turn boundary), so keep working instead of waiting; set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (finished work or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. Set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
+      "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user, notify, or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
       "Write the goal as a complete brief: the child does not see this conversation.",
     ].join(" "),
     parameters: Type.Object({
@@ -550,7 +595,27 @@ export function createSessionsExtension(host: HostBridge) {
         Type.String({ description: "provider/modelId, or a model id" })
       ),
       thinking: Type.Optional(Type.String()),
-      profile: Type.Optional(Type.String()),
+      profile: Type.Optional(
+        Type.String({
+          description:
+            "Tools profile: builder, researcher, reviewer, read-only, full (default), or a profile of the user",
+        })
+      ),
+      add: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Tools to give the child, also ask_user, notify, or spawn_session",
+        })
+      ),
+      remove: Type.Optional(
+        Type.Array(Type.String(), { description: "Tools to take away" })
+      ),
+      deny_commands: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Commands that the child's bash refuses, by their first words, for example `npm publish` or `git reset --hard`",
+        })
+      ),
       worktree: Type.Optional(
         Type.Union([
           Type.Boolean(),
@@ -662,6 +727,14 @@ export function createSessionsExtension(host: HostBridge) {
             services.sessions.meta(session.id).spawnedByCall === api.callId
         )?.id
       if (!child) {
+        if (args.profile && !findProfile(args.profile, settings.profiles))
+          return errorResult(
+            `Unknown profile: ${args.profile}. Profiles: ${allProfiles(
+              settings.profiles
+            )
+              .map((profile) => profile.name)
+              .join(", ")}.`
+          )
         if ((parentMeta.depth ?? 0) >= settings.maxSpawnDepth)
           return errorResult(
             `Child sessions may nest only ${settings.maxSpawnDepth} levels deep.`
@@ -721,7 +794,20 @@ export function createSessionsExtension(host: HostBridge) {
           spawnedByCall: api.callId,
           ...(model ? { model } : {}),
           ...(args.thinking ? { thinkingLevel: args.thinking } : {}),
-          ...(args.profile ? { profile: args.profile } : {}),
+          ...(args.profile
+            ? {
+                profile:
+                  findProfile(args.profile, settings.profiles)?.name ??
+                  args.profile,
+              }
+            : {}),
+          limits: {
+            ...(nameList(args.add) ? { add: nameList(args.add) } : {}),
+            ...(nameList(args.remove) ? { remove: nameList(args.remove) } : {}),
+            ...(nameList(args.deny_commands)
+              ? { denyCommands: nameList(args.deny_commands) }
+              : {}),
+          },
           ...(args.name ? { name: args.name } : {}),
           ...(group ? { group } : {}),
           ...(worktree ? { worktree } : {}),
@@ -794,6 +880,7 @@ export function createSessionsExtension(host: HostBridge) {
     description: [
       "Send a message to another session, for example a child session or a session that builds what you review.",
       "mode: followUp (default; after its current work) or steer (into its current work). With wait, the result is its answer; otherwise its answer comes to you as a message.",
+      "add and remove change the tools of your child session; for example add: ['ask_user'] answers a child that asked for a tool. A message to your parent always goes into its follow-up queue.",
     ].join(" "),
     parameters: Type.Object({
       id: Type.String(),
@@ -803,12 +890,26 @@ export function createSessionsExtension(host: HostBridge) {
       ),
       wait: Type.Optional(Type.Boolean()),
       timeout: Type.Optional(Type.Number()),
+      add: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Tools to give your child session",
+        })
+      ),
+      remove: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Tools to take away from your child session",
+        })
+      ),
       machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, api, context) {
       const services = await host.ready(context.abortSignal)
       const remote = resolveRemote(services, args.machine, args.id)
+      if ((args.add?.length || args.remove?.length) && remote.target)
+        return errorResult(
+          "add and remove work only for a child session on this machine."
+        )
       if (remote.error) return remote.error
       if (remote.target?.id) {
         const { connection, id } = remote.target
@@ -892,12 +993,48 @@ export function createSessionsExtension(host: HostBridge) {
       if (target === sessionIdOf(api.conversationId))
         return errorResult("A session cannot send a message to itself.")
       const from = sessionIdOf(api.conversationId)
-      await services.sessions.prompt(target, {
-        message: `[Message from session ${from}] ${args.message}`,
-        images: [],
-        streamingBehavior: args.mode ?? "followUp",
-        requestId: `send:${api.callId}`,
-      })
+      const toParent =
+        services.sessions.has(from) &&
+        services.sessions.meta(from).parent === target
+      let granted = ""
+      if (args.add?.length || args.remove?.length) {
+        if (services.sessions.meta(target).parent !== from)
+          return errorResult(
+            "add and remove work only for your own child sessions."
+          )
+        await services.sessions.changeLimits(target, {
+          ...(nameList(args.add) ? { add: nameList(args.add) } : {}),
+          ...(nameList(args.remove) ? { remove: nameList(args.remove) } : {}),
+        })
+        granted = [
+          args.add?.length ? `You now have: ${args.add.join(", ")}.` : "",
+          args.remove?.length
+            ? `You no longer have: ${args.remove.join(", ")}.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      }
+      if (toParent) {
+        await services.sessions.followUp(
+          target,
+          reportMessage({
+            name: from,
+            title: services.sessions.meta(from).name ?? from,
+            answer: args.message,
+            needsInput: false,
+            child: true,
+          }),
+          `send:${api.callId}`
+        )
+      } else {
+        await services.sessions.prompt(target, {
+          message: `[Message from session ${from}] ${granted ? `${granted} ` : ""}${args.message}`,
+          images: [],
+          streamingBehavior: args.mode ?? "followUp",
+          requestId: `send:${api.callId}`,
+        })
+      }
       const title =
         services.sessions.list({}).find((item) => item.id === target)?.title ??
         target

@@ -13,7 +13,7 @@ import {
   type ToolExecutionApi,
 } from "@earendil-works/pi-durable"
 
-import type { HostBridge } from "./host.ts"
+import { sessionIdOf, type HostBridge } from "./host.ts"
 import {
   clip,
   cwdOf,
@@ -389,6 +389,16 @@ export function createGitExtension(host: HostBridge) {
         const status = await gitStatus(cwd)
         if (!status.branch)
           return errorResult("HEAD is detached; switch to a branch first.")
+        const sessions = host.current?.sessions
+        const session = sessionIdOf(api.conversationId)
+        if (
+          (status.branch === "main" || status.branch === "master") &&
+          sessions?.has(session) &&
+          sessions.meta(session).parent
+        )
+          return errorResult(
+            `A child session cannot push to ${status.branch}. Ask your parent session: end your turn with a message that starts with "Question:".`
+          )
         const result = await git(
           cwd,
           [

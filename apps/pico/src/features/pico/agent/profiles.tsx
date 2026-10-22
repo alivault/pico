@@ -1,6 +1,16 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckIcon, ChevronDownIcon, LayersIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  EyeIcon,
+  HammerIcon,
+  ScanSearchIcon,
+  SlidersHorizontalIcon,
+  TelescopeIcon,
+  WrenchIcon,
+  type LucideIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -34,6 +44,28 @@ type Profile = {
 /** A profile name for display: "read-only" shows as "Read-only". */
 export function profileLabel(name: string) {
   return name ? name[0]!.toUpperCase() + name.slice(1) : name
+}
+
+const PROFILE_ICONS: Record<string, LucideIcon> = {
+  full: WrenchIcon,
+  builder: HammerIcon,
+  researcher: TelescopeIcon,
+  reviewer: ScanSearchIcon,
+  "read-only": EyeIcon,
+}
+
+/** The icon of a profile. The user's own profiles get the sliders icon. */
+function ProfileIcon({
+  name,
+  className,
+}: {
+  name: string
+  className?: string
+}) {
+  const Icon = PROFILE_ICONS[name] ?? SlidersHorizontalIcon
+  return (
+    <Icon className={cn("size-4 shrink-0", className)} aria-hidden="true" />
+  )
 }
 
 type ProfilesResponse = { ok: true; profiles: Array<Profile>; current: string }
@@ -113,7 +145,7 @@ function ProfilePickerView({
             />
           }
         >
-          <LayersIcon className="size-4 shrink-0" aria-hidden="true" />
+          <ProfileIcon name={current} />
           <span className="truncate">{profileLabel(current)}</span>
           <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
         </DropdownMenuTrigger>
@@ -124,6 +156,10 @@ function ProfilePickerView({
             key={profile.name}
             onClick={() => mutation.mutate(profile.name)}
           >
+            <ProfileIcon
+              name={profile.name}
+              className="mt-0.5 self-start text-muted-foreground"
+            />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="font-medium">{profileLabel(profile.name)}</span>
               <span className="text-xs text-muted-foreground">
@@ -153,7 +189,7 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
   const queryClient = useQueryClient()
   const query = useProfiles(viewerContextId)
   const [text, setText] = React.useState<string | null>(null)
-  const builtIn = new Set(["full", "research", "read-only", "review"])
+  const builtIn = new Set(Object.keys(PROFILE_ICONS))
   const custom = Object.fromEntries(
     (query.data?.profiles ?? [])
       .filter((profile) => !builtIn.has(profile.name) || false)
@@ -187,11 +223,19 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
       <div className="space-y-2 py-2 text-sm">
         <ul className="space-y-1">
           {(query.data?.profiles ?? []).map((profile) => (
-            <li key={profile.name} className="text-xs">
-              <span className="font-medium">{profileLabel(profile.name)}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                — {profile.description}
+            <li key={profile.name} className="flex items-start gap-1.5 text-xs">
+              <ProfileIcon
+                name={profile.name}
+                className="mt-px size-3.5 text-muted-foreground"
+              />
+              <span>
+                <span className="font-medium">
+                  {profileLabel(profile.name)}
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  — {profile.description}
+                </span>
               </span>
             </li>
           ))}

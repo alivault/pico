@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 
 import { applyProfile, findProfile } from "../src/core/profiles.ts"
+import { createAskExtension } from "../src/extensions/ask.ts"
 import { createMcpExtension } from "../src/extensions/mcp.ts"
 import { createTodoExtension } from "../src/extensions/todo.ts"
 import { createRenderExtension } from "../src/extensions/render.ts"
@@ -16,9 +17,10 @@ void test("profiles select extensions and remove tools", async () => {
   const render = createRenderExtension()
   const { createCodingTools } = await import("@earendil-works/pi-durable/tools")
   const coding = createCodingTools()
+  const ask = createAskExtension()
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [coding, render, todo],
+    [coding, render, todo, ask],
     () => ({ text: "ok" }),
     dir
   )
@@ -29,7 +31,7 @@ void test("profiles select extensions and remove tools", async () => {
     )
     const registry = {
       snapshot: () => {
-        const extensions = [coding, render, todo]
+        const extensions = [coding, render, todo, ask]
         return {
           installed: () => extensions,
           extension: (name: string) =>
@@ -67,6 +69,26 @@ void test("profiles select extensions and remove tools", async () => {
     await applyProfile(conversation, registry, undefined, ctx)
     assert.ok((await names()).includes("write"))
     assert.equal((await conversation.agent(ctx)).instructions, undefined)
+    // A child has no ask_user unless its parent adds it.
+    await applyProfile(conversation, registry, findProfile("reviewer"), ctx, {
+      child: { parent: "s1" },
+      limits: { remove: ["todo"], denyCommands: ["npm publish"] },
+    })
+    const child = await names()
+    assert.ok(!child.includes("ask_user"))
+    assert.ok(!child.includes("todo"))
+    assert.ok(!child.includes("write"))
+    const instructions = (await conversation.agent(ctx)).instructions ?? ""
+    assert.match(instructions, /reviewer/)
+    assert.match(instructions, /child session of session s1/)
+    assert.match(instructions, /ask_user/)
+    assert.match(instructions, /`npm publish`/)
+    assert.match(instructions, /Question:/)
+    await applyProfile(conversation, registry, findProfile("review"), ctx, {
+      child: { parent: "s1" },
+      limits: { add: ["ask_user"] },
+    })
+    assert.ok((await names()).includes("ask_user"))
   } finally {
     await harness.close(ctx)
   }

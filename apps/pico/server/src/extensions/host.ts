@@ -8,6 +8,7 @@
  */
 import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 
+import type { ToolLimits } from "../core/profiles.ts"
 import type { PicoSettingsData } from "../core/settings.ts"
 import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
@@ -32,6 +33,17 @@ export type HostSessions = {
     }
   ): Promise<{ queued: boolean }>
   abort(id: string): Promise<void>
+  /**
+   * Put a message in the follow-up queue of a session, after the queued
+   * prompts of the user. It never steers: the agent gets it when its run
+   * answers, and an idle session starts a run. A paused queue keeps it.
+   */
+  followUp(id: string, message: string, requestId: string): Promise<void>
+  /** Give tools to a session or take them away, and apply its profile again. */
+  changeLimits(
+    id: string,
+    change: { add?: string[]; remove?: string[] }
+  ): Promise<ToolLimits>
   /** Children that `spawn_session` made for a session. */
   children(id: string): string[]
   /** Sessions for tools, newest activity first. */
@@ -62,6 +74,7 @@ export type HostSessionMeta = {
   spawnedByCall?: string
   depth?: number
   profile?: string
+  limits?: ToolLimits
   group?: string
   worktree?: { repoRoot: string; path: string; branch: string }
   archived?: boolean
@@ -91,6 +104,8 @@ export type HostCreateOptions = {
   parent?: string
   spawnedByCall?: string
   profile?: string
+  /** Tool limits of a child session: added and removed tools, denied commands. */
+  limits?: ToolLimits
   name?: string
   /** Show the session under this directory in the sidebar. */
   group?: string

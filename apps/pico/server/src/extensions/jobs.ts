@@ -26,6 +26,7 @@ import {
   type Harness,
 } from "@earendil-works/pi-durable"
 
+import { childCommandRefusal } from "../core/coding-tools.ts"
 import {
   conversationOf,
   sessionIdOf,
@@ -425,6 +426,16 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           `This session already runs ${running.length} jobs. Stop one first.`
         )
       const cwd = args.cwd?.trim() || (await cwdOf(api, context))
+      const refusal = await childCommandRefusal(
+        host,
+        api.conversationId,
+        args.command,
+        cwd
+      )
+      if (refusal)
+        return errorResult(
+          `${refusal}. Ask your parent session: end your turn with a message that starts with "Question:".`
+        )
       const id = `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
       const job: Job = {
         id,

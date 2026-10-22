@@ -69,6 +69,7 @@ function bindHost(host: HostBridge, harness: Harness, dataDir: string) {
   host.bind({
     sessions: {
       current: (id: string | undefined) => id,
+      has: () => false,
       extensionStateChanged: () => undefined,
     } as unknown as HostServices["sessions"],
     events: { push: () => undefined },

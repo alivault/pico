@@ -82,6 +82,8 @@ function fakeSessions(harness: Harness) {
         spawnedByCall?: string
         name?: string
         worktree?: HostSessionMeta["worktree"]
+        limits?: HostSessionMeta["limits"]
+        profile?: string
       } = {}
     ) {
       const conversation = await harness.createConversation(
@@ -103,6 +105,8 @@ function fakeSessions(harness: Harness) {
           : {}),
         ...(options.name ? { name: options.name } : {}),
         ...(options.worktree ? { worktree: options.worktree } : {}),
+        ...(options.limits ? { limits: options.limits } : {}),
+        ...(options.profile ? { profile: options.profile } : {}),
       })
       return id
     },
@@ -125,6 +129,24 @@ function fakeSessions(harness: Harness) {
         ctx
       )
       return { queued: false }
+    },
+    async followUp(id: string, message: string, requestId: string) {
+      const conversation = await harness.conversation(conversationOf(id), ctx)
+      await conversation!.submit(
+        { type: "input", content: message, requestId, whenBusy: "followUp" },
+        ctx
+      )
+    },
+    async changeLimits(
+      id: string,
+      change: { add?: string[]; remove?: string[] }
+    ) {
+      const meta = metas.get(id)!
+      meta.limits = {
+        add: [...(meta.limits?.add ?? []), ...(change.add ?? [])],
+        remove: [...(meta.limits?.remove ?? []), ...(change.remove ?? [])],
+      }
+      return meta.limits
     },
     abort: async () => undefined,
     rename: (_id: string, name: string) => name,
@@ -185,7 +207,8 @@ void test("spawn_session starts a child and reports its answer back", async () =
     const user = lastUser(messages)
     if (user.startsWith("Compute the answer"))
       return { text: "The answer is 42." }
-    if (user.startsWith("[Child session")) return { text: "Thanks, child." }
+    if (user.startsWith("[Finished work from child session"))
+      return { text: "Thanks, child." }
     if (lastToolResult(messages)) return { text: "spawned" }
     return {
       tools: [
@@ -215,7 +238,9 @@ void test("spawn_session starts a child and reports its answer back", async () =
       const found = view.entries.find(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes("[Child session")
+          JSON.stringify(entry.model).includes(
+            "[Finished work from child session"
+          )
       )
       return found ? JSON.stringify(found.model) : undefined
     })
@@ -229,10 +254,74 @@ void test("spawn_session starts a child and reports its answer back", async () =
       view.entries.filter(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes("[Child session")
+          JSON.stringify(entry.model).includes(
+            "[Finished work from child session"
+          )
       ).length,
       1
     )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("a child's question goes to the parent's follow-up queue, marked as a question", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Pick a database"))
+      return { text: "Question: SQLite or Postgres?\nI recommend SQLite." }
+    if (user.startsWith("[Question from child session"))
+      return { text: "Use SQLite." }
+    if (lastToolResult(messages)) return { text: "spawned" }
+    return {
+      tools: [
+        {
+          name: "spawn_session",
+          arguments: {
+            goal: "Pick a database",
+            profile: "builder",
+            add: ["notify"],
+            remove: ["todo"],
+            deny_commands: ["npm publish"],
+          },
+        },
+      ],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    await conversation.submit({ type: "input", content: "delegate" }, ctx)
+    const report = await eventually(async () => {
+      const view = await conversation.context(ctx)
+      const found = view.entries.find(
+        (entry) =>
+          entry.kind === "pi.user" &&
+          JSON.stringify(entry.model).includes("[Question from child session")
+      )
+      return found ? JSON.stringify(found.model) : undefined
+    })
+    assert.match(report, /SQLite or Postgres/)
+    const child = fake.sessions.children(parent)[0]!
+    const meta = fake.metas.get(child)!
+    assert.equal(meta.profile, "builder")
+    assert.deepEqual(meta.limits, {
+      add: ["notify"],
+      remove: ["todo"],
+      denyCommands: ["npm publish"],
+    })
   } finally {
     await harness.close(ctx)
   }

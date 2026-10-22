@@ -57,7 +57,12 @@ import type {
   HostSessionSummary,
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
-import { allProfiles, applyProfile, findProfile } from "./profiles.ts"
+import {
+  allProfiles,
+  applyProfile,
+  findProfile,
+  type ToolLimits,
+} from "./profiles.ts"
 import { removeWorktree } from "../services/worktree.ts"
 import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
@@ -123,6 +128,8 @@ export type SessionMeta = {
   depth?: number
   /** Tool profile name; absent uses the default profile. */
   profile?: string
+  /** Tool limits that the parent set for a child session. */
+  limits?: ToolLimits
   /** The sidebar directory, when it is not `cwd` (worktree sessions). */
   group?: string
   /** The git worktree that this session made and works in. */
@@ -310,7 +317,13 @@ function inboxMessage(item: InboxItem): PendingMessage | undefined {
 }
 
 /** A queued prompt that Pico holds out of the inbox while the queue is paused. */
-type HeldItem = { id: number; mode: "steer" | "followUp"; content: JsonValue }
+type HeldItem = {
+  id: number
+  mode: "steer" | "followUp"
+  content: JsonValue
+  /** A follow-up from another session: it is held only one time. */
+  requestId?: string
+}
 
 /**
  * The paused queue. An abort, or an open queue edit, moves the queued prompts
@@ -1399,6 +1412,7 @@ export class Sessions implements HostSessions {
         ? { spawnedByCall: options.spawnedByCall }
         : {}),
       ...(options.profile ? { profile: options.profile } : {}),
+      ...(options.limits ? { limits: options.limits } : {}),
       ...(options.group && options.group !== cwd
         ? { group: options.group }
         : {}),
@@ -1420,13 +1434,18 @@ export class Sessions implements HostSessions {
     this.#docs.set(id, {})
     this.#transcripts.set(id, { entries: [] })
     this.#updateMeta(id, { family: id })
-    if (options.profile && options.profile !== "full") {
+    if (options.parent || (options.profile && options.profile !== "full")) {
       const profile = findProfile(
         options.profile,
         this.#runtime.settings.data.profiles
       )
-      if (profile)
-        await applyProfile(conversation, this.#runtime.registry, profile, ctx)
+      await applyProfile(
+        conversation,
+        this.#runtime.registry,
+        profile?.name === "full" ? undefined : profile,
+        ctx,
+        this.#toolOptions(meta)
+      )
     }
     this.#scheduleSessionsBroadcast()
     if (options.parent) this.extensionStateChanged(options.parent, "children")
@@ -1598,7 +1617,8 @@ export class Sessions implements HostSessions {
       conversation,
       this.#runtime.registry,
       profile.name === "full" ? undefined : profile,
-      ctx
+      ctx,
+      this.#toolOptions(this.meta(id))
     )
     this.#updateMeta(id, {
       profile: profile.name === "full" ? undefined : profile.name,
@@ -1606,6 +1626,88 @@ export class Sessions implements HostSessions {
     this.extensionStateChanged(id, "profile")
     void this.publishStateIfWatched(id)
     return profile.name
+  }
+
+  /** Give tools to a session or take them away, and apply its profile again. */
+  async changeLimits(
+    id: string,
+    change: { add?: string[]; remove?: string[] }
+  ): Promise<ToolLimits> {
+    const meta = this.meta(id)
+    const add = new Set(meta.limits?.add ?? [])
+    const remove = new Set(meta.limits?.remove ?? [])
+    for (const name of change.add ?? []) {
+      add.add(name)
+      remove.delete(name)
+    }
+    for (const name of change.remove ?? []) {
+      remove.add(name)
+      add.delete(name)
+    }
+    const limits: ToolLimits = {
+      ...(add.size > 0 ? { add: [...add] } : {}),
+      ...(remove.size > 0 ? { remove: [...remove] } : {}),
+      ...(meta.limits?.denyCommands
+        ? { denyCommands: meta.limits.denyCommands }
+        : {}),
+    }
+    this.#updateMeta(id, { limits })
+    const profile = findProfile(
+      meta.profile,
+      this.#runtime.settings.data.profiles
+    )
+    await applyProfile(
+      await this.conversation(id),
+      this.#runtime.registry,
+      profile?.name === "full" ? undefined : profile,
+      ctx,
+      this.#toolOptions({ ...meta, limits })
+    )
+    this.extensionStateChanged(id, "profile")
+    return limits
+  }
+
+  /** The child limits of a session, for `applyProfile`. */
+  #toolOptions(meta: SessionMeta) {
+    return {
+      ...(meta.parent ? { child: { parent: meta.parent } } : {}),
+      ...(meta.limits ? { limits: meta.limits } : {}),
+    }
+  }
+
+  /**
+   * Put a message from another session in the follow-up queue, after the
+   * user's queued prompts. It never steers. A paused queue holds it with the
+   * user's prompts, so it keeps its place.
+   */
+  async followUp(id: string, message: string, requestId: string) {
+    const target = this.current(id) ?? id
+    const meta = this.meta(target)
+    if (meta.archived) return
+    const held = await this.#heldItems(target)
+    if (held.length > 0) {
+      if (held.some((item) => item.requestId === requestId)) return
+      await this.#setHeld(target, [
+        ...held,
+        {
+          id: Math.max(Date.now(), ...held.map((item) => item.id + 1)),
+          mode: "followUp",
+          content: (await userContent(message, [])) as unknown as JsonValue,
+          requestId,
+        },
+      ])
+      return
+    }
+    const conversation = await this.conversation(target)
+    await conversation.submit(
+      {
+        type: "input",
+        content: await userContent(message, []),
+        whenBusy: "followUp",
+        requestId,
+      },
+      ctx
+    )
   }
 
   /** Change the todo list of a session from the web client. */
