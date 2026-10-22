@@ -561,14 +561,15 @@ export const ComposerPendingMessages = React.memo(
                             />
                           ) : (
                             <div
+                              title={row.text || undefined}
                               className={cn(
-                                "line-clamp-2 leading-6 break-words whitespace-pre-wrap",
+                                "truncate leading-6",
                                 row.removed &&
                                   "text-muted-foreground line-through",
                                 !row.text && "text-muted-foreground italic"
                               )}
                             >
-                              {row.text ||
+                              {row.text.replace(/\s+/g, " ").trim() ||
                                 (row.images.length > 0
                                   ? "Image prompt"
                                   : "Empty prompt")}
