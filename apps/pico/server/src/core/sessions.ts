@@ -36,6 +36,7 @@ import {
   type LiveState,
   type SubmissionId,
 } from "@earendil-works/pi-durable"
+import { resizeImage } from "@earendil-works/pi-coding-agent"
 
 import {
   cleanupCandidate,
@@ -242,10 +243,28 @@ function fnv1a(parts: string[]) {
   return hash.toString(16).padStart(16, "0")
 }
 
-function userContent(
+/**
+ * Shrink a prompt image to the model limits (2000 px, 4.5 MB). The API refuses
+ * images larger than this when a request has many images, so a large pasted
+ * screenshot would break the session later.
+ */
+async function fitImage(image: ImageContent): Promise<ImageContent> {
+  try {
+    const resized = await resizeImage(
+      Buffer.from(image.data, "base64"),
+      image.mimeType
+    )
+    if (!resized?.wasResized) return image
+    return { type: "image", mimeType: resized.mimeType, data: resized.data }
+  } catch {
+    return image
+  }
+}
+
+async function userContent(
   text: string,
   images: PromptImageInput[]
-): string | (TextContent | ImageContent)[] {
+): Promise<string | (TextContent | ImageContent)[]> {
   const valid = images.flatMap((image) => {
     let data = typeof image.data === "string" ? image.data.trim() : ""
     let mimeType =
@@ -259,7 +278,8 @@ function userContent(
     return [{ type: "image" as const, mimeType, data }]
   })
   if (valid.length === 0) return text
-  return [...(text ? [{ type: "text" as const, text }] : []), ...valid]
+  const fitted = await Promise.all(valid.map(fitImage))
+  return [...(text ? [{ type: "text" as const, text }] : []), ...fitted]
 }
 
 function pendingMessageOf(
@@ -1454,7 +1474,7 @@ export class Sessions implements HostSessions {
     const submission = await conversation.submit(
       {
         type: "input",
-        content: userContent(expanded, input.images),
+        content: await userContent(expanded, input.images),
         whenBusy: input.streamingBehavior ?? (busy ? "steer" : "followUp"),
         ...(input.requestId ? { requestId: input.requestId } : {}),
       },
@@ -1672,7 +1692,7 @@ export class Sessions implements HostSessions {
         })
         continue
       }
-      const content = userContent(edit.text ?? "", edit.images ?? [])
+      const content = await userContent(edit.text ?? "", edit.images ?? [])
       if (contentIsEmpty(content)) continue
       next.push({
         id: nextId++,
@@ -1766,7 +1786,7 @@ export class Sessions implements HostSessions {
         plan.push({ item, content, mode: edit.streamingBehavior ?? item.mode })
         continue
       }
-      const content = userContent(edit.text ?? "", edit.images ?? [])
+      const content = await userContent(edit.text ?? "", edit.images ?? [])
       if (contentIsEmpty(content)) continue
       plan.push({ content, mode: edit.streamingBehavior ?? "followUp" })
     }
