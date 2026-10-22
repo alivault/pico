@@ -731,8 +731,8 @@ export function createApi(api: ApiContext) {
     const id = requireSession(request)
     const args = String(body.args ?? "").trim()
     if (name === "compact") {
-      await sessions.compact(id, args || undefined)
-      return { ok: true }
+      const { compacted } = await sessions.compact(id, args || undefined)
+      return { ok: true, compacted }
     }
     await sessions.prompt(id, {
       message: args ? `/${name} ${args}` : `/${name}`,

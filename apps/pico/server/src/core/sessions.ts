@@ -1581,11 +1581,21 @@ export class Sessions implements HostSessions {
     }
   }
 
+  /**
+   * Compact the session and wait until compaction ends. `compacted` is false
+   * when there was nothing to compact.
+   */
   async compact(id: string, instructions: string | undefined) {
     const conversation = await this.conversation(id)
     const taskId = await conversation.compact(instructions, ctx)
     this.#markDirty(id, { live: true })
-    return taskId
+    const { outcome } = (await this.#harness.waitForTask(taskId, ctx)).state
+    if (outcome.status === "completed") {
+      const { entryId, submissionId } = outcome.result
+      return { compacted: entryId !== undefined || submissionId !== undefined }
+    }
+    if (outcome.status === "aborted") throw conflict("Compaction cancelled")
+    throw conflict(outcome.error?.message ?? outcome.reason ?? "Compaction failed")
   }
 
   // ---------------------------------------------------------------------------
