@@ -385,7 +385,7 @@ export function ImageLightbox({
               <Button
                 variant="ghost"
                 size="icon"
-                className="border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white"
+                className="rounded-full text-white hover:bg-white/15 hover:text-white"
               />
             }
           >
