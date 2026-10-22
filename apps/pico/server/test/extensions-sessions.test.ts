@@ -21,7 +21,9 @@ import {
   lastAnswer,
   normalizeSessionId,
   STOPPED_ANSWER,
+  waitingOn,
 } from "../src/extensions/sessions.ts"
+import { JobsDoc } from "../src/extensions/jobs.ts"
 import {
   createWorktree,
   removeWorktree,
@@ -207,8 +209,7 @@ void test("spawn_session starts a child and reports its answer back", async () =
     const user = lastUser(messages)
     if (user.startsWith("Compute the answer"))
       return { text: "The answer is 42." }
-    if (user.startsWith("[Finished work from child session"))
-      return { text: "Thanks, child." }
+    if (user.includes(": done]")) return { text: "Thanks, child." }
     if (lastToolResult(messages)) return { text: "spawned" }
     return {
       tools: [
@@ -238,9 +239,7 @@ void test("spawn_session starts a child and reports its answer back", async () =
       const found = view.entries.find(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes(
-            "[Finished work from child session"
-          )
+          JSON.stringify(entry.model).includes(": done]")
       )
       return found ? JSON.stringify(found.model) : undefined
     })
@@ -254,9 +253,7 @@ void test("spawn_session starts a child and reports its answer back", async () =
       view.entries.filter(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes(
-            "[Finished work from child session"
-          )
+          JSON.stringify(entry.model).includes(": done]")
       ).length,
       1
     )
@@ -272,8 +269,7 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
     const user = lastUser(messages)
     if (user.startsWith("Pick a database"))
       return { text: "Question: SQLite or Postgres?\nI recommend SQLite." }
-    if (user.startsWith("[Question from child session"))
-      return { text: "Use SQLite." }
+    if (user.includes(": question]")) return { text: "Use SQLite." }
     if (lastToolResult(messages)) return { text: "spawned" }
     return {
       tools: [
@@ -309,7 +305,7 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
       const found = view.entries.find(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes("[Question from child session")
+          JSON.stringify(entry.model).includes(": question]")
       )
       return found ? JSON.stringify(found.model) : undefined
     })
@@ -322,6 +318,93 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
       remove: ["todo"],
       denyCommands: ["npm publish"],
     })
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("a child that waits on a job sends nothing until it is done", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Build it")) return { text: "Started the build." }
+    if (user.startsWith("[Job")) return { text: "The build passed." }
+    if (user.includes(": done]")) return { text: "Thanks." }
+    if (lastToolResult(messages)) return { text: "spawned" }
+    return {
+      tools: [{ name: "spawn_session", arguments: { goal: "Build it" } }],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  const setJob = (id: string, status: "running" | "exited") =>
+    harness.commit(async (tx) => {
+      const draft = await tx.doc(JobsDoc, conversationOf(id))
+      draft.items.j1 = {
+        id: "j1",
+        name: "build",
+        command: "make",
+        cwd: dir,
+        status,
+        startedAt: Date.now(),
+        notifyOnExit: true,
+      }
+    }, ctx)
+  const create = fake.sessions.create.bind(fake.sessions)
+  fake.sessions.create = async (cwd, options) => {
+    const id = await create(cwd, options)
+    if (options?.parent) await setJob(id, "running")
+    return id
+  }
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    const reports = async () =>
+      (await conversation.context(ctx)).entries.filter(
+        (entry) =>
+          entry.kind === "pi.user" &&
+          JSON.stringify(entry.model).includes("[Child session")
+      )
+    await conversation.submit({ type: "input", content: "delegate" }, ctx)
+    const child = await eventually(
+      async () => fake.sessions.children(parent)[0]
+    )
+    const childConversation = (await harness.conversation(
+      conversationOf(child),
+      ctx
+    ))!
+    await eventually(async () =>
+      (await lastAnswer(harness, conversationOf(child), ctx)) ===
+      "Started the build."
+        ? true
+        : undefined
+    )
+    await new Promise((done) => setTimeout(done, 300))
+    assert.equal((await reports()).length, 0)
+    assert.equal(
+      await waitingOn(harness, conversationOf(child), ctx),
+      "a job (build)"
+    )
+    await setJob(child, "exited")
+    await childConversation.submit(
+      { type: "input", content: "[Job j1 exited]" },
+      ctx
+    )
+    const report = await eventually(async () => {
+      const found = (await reports())[0]
+      return found ? JSON.stringify(found.model) : undefined
+    }, 12_000)
+    assert.match(report, /: done\]/)
+    assert.match(report, /The build passed\./)
   } finally {
     await harness.close(ctx)
   }

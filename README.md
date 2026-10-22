@@ -61,8 +61,9 @@ pnpm start import-pi         # import old Pi sessions (stop Pico first)
 - **Safe child sessions.** A child gets a tool profile from its parent. It has
   no `ask_user`, `notify`, or `spawn_session` unless the parent grants them,
   and its bash refuses `git push` to main, `sudo`, and the commands that the
-  parent lists. Its questions and its finished work go into the parent's
-  follow-up queue.
+  parent lists. Each message from a child is a question, done, or waiting
+  (its turn ended on a timer, a watch, or a job). Questions and done go into
+  the parent's follow-up queue; waiting shows only in `list_sessions`.
 - **Notifications.** Web Push and ntfy when a run finishes or the agent asks
   a question.
 

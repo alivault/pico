@@ -2,7 +2,11 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { bashGuard } from "../src/core/profiles.ts"
-import { isQuestion, reportMessage } from "../src/extensions/sessions.ts"
+import {
+  childMessageKind,
+  isQuestion,
+  reportMessage,
+} from "../src/extensions/sessions.ts"
 
 const guard = (command: string, branch = "feature", denyCommands?: string[]) =>
   bashGuard(command, {
@@ -54,6 +58,15 @@ void test("child messages are marked as questions or finished work", () => {
   assert.ok(isQuestion("Done the part.\nShould I also update the docs?", false))
   assert.ok(isQuestion("All done.", true))
   assert.ok(!isQuestion("All done. The tests pass.", false))
+  assert.equal(
+    childMessageKind("Question: A or B?", false, "a job"),
+    "question"
+  )
+  assert.equal(
+    childMessageKind("Started the build.", false, "a job"),
+    "waiting"
+  )
+  assert.equal(childMessageKind("All done.", false, undefined), "done")
   const question = reportMessage({
     name: "s5",
     title: "Helper",
@@ -61,7 +74,7 @@ void test("child messages are marked as questions or finished work", () => {
     needsInput: false,
     child: true,
   })
-  assert.match(question, /^\[Question from child session s5\] Helper/)
+  assert.match(question, /^\[Child session s5: question\] Helper/)
   assert.match(question, /send_to_session/)
   const done = reportMessage({
     name: "s5",
@@ -70,5 +83,5 @@ void test("child messages are marked as questions or finished work", () => {
     needsInput: false,
     child: true,
   })
-  assert.match(done, /^\[Finished work from child session s5\] Helper/)
+  assert.match(done, /^\[Child session s5: done\] Helper/)
 })

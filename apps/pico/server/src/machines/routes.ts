@@ -25,6 +25,7 @@ import {
   lastAnswer,
   normalizeSessionId,
   transcriptText,
+  waitingOn,
 } from "../extensions/sessions.ts"
 import {
   ApiError,
@@ -195,11 +196,22 @@ export function addMachineServerRoutes(
     return HANDLED
   })
 
-  router.get("/api/machine/sessions", (request) => {
+  /** What an idle session waits on: a timer, a watch, or a job. */
+  const waitingOf = (id: string) =>
+    waitingOn(runtime.harness, conversationIdOf(id), BACKGROUND_CONTEXT)
+
+  router.get("/api/machine/sessions", async (request) => {
     const directory = stringField(request.query.get("directory"))
+    const list = sessions.list(directory ? { directory } : {}).slice(0, 50)
     return {
       ok: true,
-      sessions: sessions.list(directory ? { directory } : {}).slice(0, 50),
+      sessions: await Promise.all(
+        list.map(async (item) => {
+          if (item.busy || item.needsInput) return item
+          const waiting = await waitingOf(item.id)
+          return waiting ? { ...item, waiting } : item
+        })
+      ),
     }
   })
 
@@ -316,6 +328,7 @@ export function addMachineServerRoutes(
       ...sessionInfo(id),
       idle,
       ...(answer !== undefined ? { answer } : {}),
+      ...(idle ? { waiting: await waitingOf(id) } : {}),
     }
   })
 

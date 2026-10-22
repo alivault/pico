@@ -7,8 +7,9 @@
  * waits for the child and puts its answer in the parent's follow-up queue.
  *
  * Messages from a child never steer: they go into the parent's follow-up
- * queue, in arrival order with the user's prompts, and each one is marked as
- * a question or as finished work. A child has limited tools (see
+ * queue, in arrival order with the user's prompts. Each turn end of a child
+ * is a question, done, or waiting (it ended on a timer, a watch, or a job;
+ * see `childMessageKind`). Waiting sends nothing: `list_sessions` shows it. A child has limited tools (see
  * `core/profiles.ts`): the parent picks a profile and adds or removes tools.
  * A child asks by ending its turn with a message that starts with `Question:`.
  *
@@ -42,6 +43,8 @@ import {
   type HostServices,
 } from "./host.ts"
 import { allProfiles, findProfile, nameList } from "../core/profiles.ts"
+import { JobsDoc } from "./jobs.ts"
+import { TimersDoc } from "./schedule.ts"
 import { clip, errorResult, json, textResult } from "./util.ts"
 
 /** A session ID from `s123`, `123`, or `pico:s123`. */
@@ -176,8 +179,60 @@ export function isQuestion(answer: string, needsInput: boolean) {
 }
 
 /**
+ * What the end of a child's turn means:
+ * - `question`: it asks its parent (or waits in `ask_user`).
+ * - `waiting`: its turn ended on a timer, a watch, or a job, and it goes on
+ *   when that fires. The parent does not get a message for it.
+ * - `done`: the work is finished, or it stopped.
+ */
+export type ChildMessageKind = "question" | "done" | "waiting"
+
+export function childMessageKind(
+  answer: string,
+  needsInput: boolean,
+  waiting: string | undefined
+): ChildMessageKind {
+  if (isQuestion(answer, needsInput)) return "question"
+  return waiting ? "waiting" : "done"
+}
+
+/**
+ * What a session waits on when its turn ended: pending timers and watches,
+ * and running jobs that report their exit. Undefined when it waits on nothing.
+ */
+export async function waitingOn(
+  harness: Pick<Harness, "snapshot">,
+  conversationId: ConversationId,
+  context: Context
+) {
+  const [timers, jobs] = await Promise.all([
+    harness.snapshot(TimersDoc, conversationId, context),
+    harness.snapshot(JobsDoc, conversationId, context),
+  ])
+  const parts: string[] = []
+  const pending = Object.values(timers?.items ?? {}).filter(
+    (item) => item.status === "pending"
+  )
+  for (const kind of ["timer", "watch"] as const) {
+    const items = pending.filter((item) => item.kind === kind)
+    if (items.length > 0)
+      parts.push(
+        `${items.length === 1 ? `a ${kind}` : `${items.length} ${kind === "watch" ? "watches" : "timers"}`} (${items.map((item) => item.label).join(", ")})`
+      )
+  }
+  const running = Object.values(jobs?.items ?? {}).filter(
+    (job) => job.status === "running" && job.notifyOnExit
+  )
+  if (running.length > 0)
+    parts.push(
+      `${running.length === 1 ? "a job" : `${running.length} jobs`} (${running.map((job) => job.name).join(", ")})`
+    )
+  return parts.length > 0 ? parts.join(" and ") : undefined
+}
+
+/**
  * The text of a message from another session for the follow-up queue,
- * marked as a question or as finished work.
+ * marked as a question or as done.
  */
 export function reportMessage(input: {
   /** `s12`, or `workbox:s12` for a remote session. */
@@ -187,11 +242,11 @@ export function reportMessage(input: {
   needsInput: boolean
   child: boolean
 }) {
-  const who = `${input.child ? "child session" : "session"} ${input.name}`
+  const who = `${input.child ? "Child session" : "Session"} ${input.name}`
   const question = isQuestion(input.answer, input.needsInput)
   const head = question
-    ? `[Question from ${who}] ${input.title}`
-    : `[Finished work from ${who}${input.answer === STOPPED_ANSWER ? ", stopped" : ""}] ${input.title}`
+    ? `[${who}: question] ${input.title}`
+    : `[${who}: done${input.answer === STOPPED_ANSWER ? ", stopped" : ""}] ${input.title}`
   return [
     head,
     clip(input.answer, 12_000),
@@ -226,9 +281,31 @@ function createReportTask(host: HostBridge) {
         const services = await host.ready(runtime.signal)
         const child = conversationOf(task.input.child)
         const handle = await runtime.conversation(child, context)
-        if (handle) await handle.waitForIdle(context)
-        const answer =
-          (await lastAnswer(services.harness, child, context)) ?? "(no answer)"
+        let answer: string
+        // A turn that ends on a timer, a watch, or a job is `waiting`: wait
+        // until the child runs again and ends with a question or done.
+        for (;;) {
+          if (handle) await handle.waitForIdle(context)
+          answer =
+            (await lastAnswer(services.harness, child, context)) ??
+            "(no answer)"
+          const needsInput = Boolean(
+            services.sessions
+              .list({})
+              .find((session) => session.id === task.input.child)?.needsInput
+          )
+          const waiting = () => waitingOn(services.harness, child, context)
+          if (
+            !handle ||
+            childMessageKind(answer, needsInput, await waiting()) !== "waiting"
+          )
+            break
+          while (
+            !services.sessions.isBusy(task.input.child) &&
+            (await waiting())
+          )
+            await sleep(WAITING_POLL_MS, runtime.signal)
+        }
         await runtime.commit(
           () => ({
             status: "running",
@@ -302,17 +379,24 @@ type RemoteSession = {
   cwd: string
   busy: boolean
   needsInput: boolean
+  /** What the session waits on: a timer, a watch, or a job. */
+  waiting?: string
   worktree?: { path: string; branch: string }
 }
+
+/** How often a report task checks a waiting child. */
+const WAITING_POLL_MS = 3000
 
 /** The state of a session for `list_sessions`. */
 function status(item: {
   busy: boolean
   needsInput: boolean
   unread?: boolean
+  waiting?: string
 }) {
   if (item.needsInput) return "waiting for the user"
   if (item.busy) return "working"
+  if (item.waiting) return `waiting on ${item.waiting}`
   return item.unread ? "idle, unread" : "idle"
 }
 
@@ -451,7 +535,13 @@ function createRemoteReportTask(host: HostBridge) {
             if (result) {
               answer = result.answer ?? "(no answer)"
               needsInput = result.needsInput
-              break
+              if (
+                childMessageKind(answer, needsInput, result.waiting) !==
+                "waiting"
+              )
+                break
+              await sleep(WAITING_POLL_MS, runtime.signal)
+              continue
             }
           } catch (error) {
             if (runtime.signal.aborted) throw error
@@ -582,7 +672,7 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (finished work or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. Set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (done or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. A child whose turn ends on a timer, a watch, or a job is waiting: list_sessions shows it, and you get no message until it ends with done or a question. Set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
       "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user, notify, or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
       "Write the goal as a complete brief: the child does not see this conversation.",
@@ -1200,6 +1290,7 @@ export function createSessionsExtension(host: HostBridge) {
               needsInput: boolean
               unread?: boolean
               lastMessagePreview?: string
+              waiting?: string
             }>
           }
           if (result.sessions.length === 0)
@@ -1245,8 +1336,19 @@ export function createSessionsExtension(host: HostBridge) {
         )
         .slice(0, 50)
       if (items.length === 0) return textResult(`No sessions (${scope}).`)
+      const withWaiting = await Promise.all(
+        items.map(async (item) => {
+          if (item.busy || item.needsInput) return item
+          const waiting = await waitingOn(
+            services.harness,
+            conversationOf(item.id),
+            context
+          )
+          return waiting ? { ...item, waiting } : item
+        })
+      )
       return textResult(
-        items
+        withWaiting
           .map(
             (item) =>
               `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
@@ -1328,13 +1430,16 @@ export function createSessionsExtension(host: HostBridge) {
       }
       for (const id of ids) {
         const busy = services.sessions.isBusy(id)
+        const waiting = busy
+          ? undefined
+          : await waitingOn(services.harness, conversationOf(id), context)
         const answer = await lastAnswer(
           services.harness,
           conversationOf(id),
           context
         )
         parts.push(
-          `## ${id} (${busy ? "still working" : "idle"})\n${clip(answer ?? "(no answer)", 8000)}`
+          `## ${id} (${busy ? "still working" : waiting ? `idle, waiting on ${waiting}` : "idle"})\n${clip(answer ?? "(no answer)", 8000)}`
         )
       }
       return textResult(
