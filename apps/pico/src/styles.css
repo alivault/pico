@@ -157,6 +157,16 @@
   color: inherit;
 }
 
+/* The bubble padding sets the space around the text. Remove the outer margins
+   of the first and last blocks, like iMessage. */
+.user-markdown > :first-child {
+  margin-top: 0;
+}
+
+.user-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 .user-markdown :not(pre) > code {
   background-color: color-mix(in oklab, currentColor 15%, transparent);
   color: inherit;
