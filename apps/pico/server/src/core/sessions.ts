@@ -57,6 +57,7 @@ import type {
   HostSessionSummary,
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
+import { allProfiles, applyProfile, findProfile } from "./profiles.ts"
 import { removeWorktree } from "../services/worktree.ts"
 import { stateKinds, stateProviders } from "../extensions/util.ts"
 import { badRequest, conflict, notFound } from "../http.ts"
@@ -120,6 +121,8 @@ export type SessionMeta = {
   spawnedByCall?: string
   /** How many `spawn_session` levels are above this session. */
   depth?: number
+  /** Tool profile name; absent uses the default profile. */
+  profile?: string
   /** The sidebar directory, when it is not `cwd` (worktree sessions). */
   group?: string
   /** The git worktree that this session made and works in. */
@@ -713,6 +716,7 @@ export class Sessions implements HostSessions {
     )
     if (instructions.length > 0)
       state.instructions = { cwd: meta.cwd, files: instructions }
+    state.profile = meta.profile ?? "full"
     if (meta.parent || meta.worktree) {
       state.session = {
         ...(meta.parent && this.#metas.has(meta.parent)
@@ -1394,6 +1398,7 @@ export class Sessions implements HostSessions {
       ...(options.spawnedByCall
         ? { spawnedByCall: options.spawnedByCall }
         : {}),
+      ...(options.profile ? { profile: options.profile } : {}),
       ...(options.group && options.group !== cwd
         ? { group: options.group }
         : {}),
@@ -1415,6 +1420,14 @@ export class Sessions implements HostSessions {
     this.#docs.set(id, {})
     this.#transcripts.set(id, { entries: [] })
     this.#updateMeta(id, { family: id })
+    if (options.profile && options.profile !== "full") {
+      const profile = findProfile(
+        options.profile,
+        this.#runtime.settings.data.profiles
+      )
+      if (profile)
+        await applyProfile(conversation, this.#runtime.registry, profile, ctx)
+    }
     this.#scheduleSessionsBroadcast()
     if (options.parent) this.extensionStateChanged(options.parent, "children")
     return id
@@ -1569,6 +1582,30 @@ export class Sessions implements HostSessions {
       ctx
     )
     if (!answered) throw conflict("The question is already closed")
+  }
+
+  profiles() {
+    return allProfiles(this.#runtime.settings.data.profiles)
+  }
+
+  /** Give a session a tool profile; `full` clears it. */
+  async setProfile(id: string, name: string) {
+    this.meta(id)
+    const profile = findProfile(name, this.#runtime.settings.data.profiles)
+    if (!profile) throw badRequest(`Unknown profile: ${name}`)
+    const conversation = await this.conversation(id)
+    await applyProfile(
+      conversation,
+      this.#runtime.registry,
+      profile.name === "full" ? undefined : profile,
+      ctx
+    )
+    this.#updateMeta(id, {
+      profile: profile.name === "full" ? undefined : profile.name,
+    })
+    this.extensionStateChanged(id, "profile")
+    void this.publishStateIfWatched(id)
+    return profile.name
   }
 
   /** Change the todo list of a session from the web client. */

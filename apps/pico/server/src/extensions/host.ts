@@ -61,6 +61,7 @@ export type HostSessionMeta = {
   parent?: string
   spawnedByCall?: string
   depth?: number
+  profile?: string
   group?: string
   worktree?: { repoRoot: string; path: string; branch: string }
   archived?: boolean
@@ -89,6 +90,7 @@ export type HostCreateOptions = {
   thinkingLevel?: string
   parent?: string
   spawnedByCall?: string
+  profile?: string
   name?: string
   /** Show the session under this directory in the sidebar. */
   group?: string

@@ -237,6 +237,7 @@ export function createApi(api: ApiContext) {
         "preview",
         "push-notifications",
         "browser",
+        "tool-profiles",
         "machine-hub",
       ],
     },
@@ -449,6 +450,7 @@ export function createApi(api: ApiContext) {
           sessionCwd = worktree.cwd
         }
         id = await sessions.create(sessionCwd, {
+          ...(draft?.profile ? { profile: draft.profile } : {}),
           ...(worktree
             ? {
                 group: cwd,
@@ -1494,6 +1496,69 @@ export function createApi(api: ApiContext) {
     })
     response.end(body)
     return HANDLED
+  })
+
+  router.get("/api/profiles", (request) => {
+    const { contextId } = target(request)
+    const id = sessionOf(request)
+    return {
+      ok: true,
+      profiles: sessions.profiles(),
+      current: id
+        ? (sessions.meta(id).profile ?? "full")
+        : (viewers.get(contextId)?.activeDraft?.profile ?? "full"),
+    }
+  })
+
+  router.post("/api/session/profile", async (request) => {
+    const body = await request.body<{ profile?: unknown; cwd?: unknown }>()
+    const name = stringField(body.profile) ?? "full"
+    const id = sessionOf(request)
+    if (id) return { ok: true, profile: await sessions.setProfile(id, name) }
+    if (!sessions.profiles().some((profile) => profile.name === name))
+      throw badRequest(`Unknown profile: ${name}`)
+    const { contextId } = target(request)
+    const cwd =
+      typeof body.cwd === "string" && body.cwd.trim()
+        ? await files.canonicalDirectory(body.cwd)
+        : baseCwd(request)
+    ensureDraft(api, contextId, cwd)
+    viewers.updateDraft(contextId, {
+      profile: name === "full" ? undefined : name,
+    })
+    return { ok: true, profile: name }
+  })
+
+  router.post("/api/settings/profiles", async (request) => {
+    const body = await request.body<{ profiles?: unknown }>()
+    const value = body.profiles
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw badRequest("profiles must be an object of profiles by name")
+    const clean: Record<string, Record<string, unknown>> = {}
+    for (const [name, raw] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      if (!/^[a-z0-9][a-z0-9-_]{0,31}$/i.test(name))
+        throw badRequest(`Invalid profile name: ${name}`)
+      const profile = (raw ?? {}) as Record<string, unknown>
+      const list = (key: string) =>
+        Array.isArray(profile[key])
+          ? (profile[key] as unknown[]).filter(
+              (item): item is string => typeof item === "string"
+            )
+          : undefined
+      clean[name] = {
+        description:
+          typeof profile.description === "string" ? profile.description : name,
+        ...(list("extensions") ? { extensions: list("extensions") } : {}),
+        ...(list("removeTools") ? { removeTools: list("removeTools") } : {}),
+        ...(typeof profile.instructions === "string"
+          ? { instructions: profile.instructions }
+          : {}),
+      }
+    }
+    runtime.settings.update({ profiles: clean as never })
+    return { ok: true, profiles: sessions.profiles(), custom: clean }
   })
 
   router.get("/api/session/extensions", async (request) => {

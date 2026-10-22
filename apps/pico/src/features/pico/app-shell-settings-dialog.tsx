@@ -599,7 +599,7 @@ function getSettingsCommandGroups({
           id: "agent-settings",
           title: "Agent settings",
           description:
-            "Push notifications, child sessions, worktrees, previews, and MCP servers.",
+            "Push notifications, child sessions, worktrees, previews, tool profiles, and MCP servers.",
           valueLabel: "Open",
           keywords: [
             "agent",
@@ -608,6 +608,7 @@ function getSettingsCommandGroups({
             "ntfy",
             "worktree",
             "preview",
+            "profile",
             "mcp",
             "tools",
           ],

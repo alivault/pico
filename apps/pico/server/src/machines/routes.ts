@@ -210,6 +210,7 @@ export function addMachineServerRoutes(
       cwd?: unknown
       model?: unknown
       thinking?: unknown
+      profile?: unknown
       requestId?: unknown
     }>()
     const goal = stringField(body.goal)
@@ -228,10 +229,12 @@ export function addMachineServerRoutes(
       const model = parseModel(sessions, stringField(body.model))
       const name = stringField(body.name)
       const thinking = stringField(body.thinking)
+      const profile = stringField(body.profile)
       id = await sessions.create(cwd, {
         spawnedByCall: marker,
         ...(model ? { model } : {}),
         ...(thinking ? { thinkingLevel: thinking } : {}),
+        ...(profile ? { profile } : {}),
         ...(name ? { name } : {}),
       })
     }
